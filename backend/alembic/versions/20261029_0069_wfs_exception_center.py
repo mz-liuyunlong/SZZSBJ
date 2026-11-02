@@ -1,5 +1,7 @@
 """WFS exception center cases and event timelines."""
 
+from sqlalchemy import text
+
 from alembic import op
 
 revision = "20261029_0069_wfs_exception_center"
@@ -103,7 +105,28 @@ def upgrade():
     )
 
 
+EXCEPTION_TABLES = (
+    "evt_wfs_exception_actions",
+    "evt_wfs_exception_detections",
+    "ops_wfs_exception_cases",
+)
+
+
 def downgrade():
-    op.drop_table("evt_wfs_exception_actions")
-    op.drop_table("evt_wfs_exception_detections")
-    op.drop_table("ops_wfs_exception_cases")
+    # Data protection (DATABASE_MIGRATION_RULES): cases and their append-only timelines are
+    # business records. Never drop them while any row exists; an operator must back up and
+    # clear them under a separate, approved plan first. Empty tables may be dropped.
+    # Names resolve through search_path (public in production, a throwaway schema in tests).
+    conn = op.get_bind()
+    populated = [
+        table
+        for table in EXCEPTION_TABLES
+        if conn.scalar(text("select to_regclass(:name)"), {"name": table}) is not None
+        and conn.scalar(text(f'select exists (select 1 from "{table}" limit 1)'))
+    ]
+    if populated:
+        raise RuntimeError(
+            "WFS_EXCEPTION_DOWNGRADE_BLOCKED: tables contain data: " + ", ".join(populated)
+        )
+    for table in EXCEPTION_TABLES:
+        op.drop_table(table)

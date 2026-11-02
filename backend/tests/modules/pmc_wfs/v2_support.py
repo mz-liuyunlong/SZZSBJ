@@ -113,13 +113,13 @@ def engine_and_local_schema():
     (opt-in ``WFS_LOCAL_INTEGRATION=1``). Returns (engine, drop) where drop() removes it."""
     from sqlalchemy import event
 
-    from scripts.wfs_pending_local_schema import local_url
+    from tests.modules.pmc_wfs.schema_support import integration_target
 
-    url = local_url()
+    url, database = integration_target()
     schema = "wfs_v2_local_" + uuid4().hex
     admin = create_engine(url, hide_parameters=True)
     with admin.begin() as conn:
-        assert conn.scalar(text("select current_database()")) == "szzsbj_dev"
+        assert conn.scalar(text("select current_database()")) == database
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
     engine = create_engine(url, hide_parameters=True)
 

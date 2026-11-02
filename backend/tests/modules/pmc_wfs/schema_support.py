@@ -7,13 +7,47 @@ missing, inside the caller's connection (search_path = the throwaway schema).
 """
 
 import importlib.util
+import os
 from pathlib import Path
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import text
+from sqlalchemy.engine import URL, make_url
 
 VERSIONS = Path(__file__).resolve().parents[3] / "alembic" / "versions"
+
+# CI-only target: the throwaway PostgreSQL service of the WFS integration job (282-04).
+CI_DATABASE = "wfs_integration_ci"
+
+
+def integration_target() -> tuple[URL, str]:
+    """Database the opt-in WFS integration tests (``WFS_LOCAL_INTEGRATION=1``) may use.
+
+    Exactly two targets are accepted; anything else is refused before connecting:
+    - CI: ``WFS_CI_DATABASE_URL`` inside GitHub Actions (``CI`` and ``GITHUB_ACTIONS`` are
+      ``true``), pointing at the job's own service ``127.0.0.1:5432/wfs_integration_ci``;
+    - local: the verified development database (``scripts.wfs_pending_local_schema.local_url``,
+      unchanged guard).
+    Returns the URL and the database name callers assert after connecting.
+    """
+    ci_url = os.environ.get("WFS_CI_DATABASE_URL")
+    if ci_url:
+        if os.environ.get("CI") != "true" or os.environ.get("GITHUB_ACTIONS") != "true":
+            raise RuntimeError("WFS_CI_DATABASE_URL is accepted only inside the CI job")
+        url = make_url(ci_url)
+        if not (
+            url.drivername == "postgresql+psycopg"
+            and url.host == "127.0.0.1"
+            and url.port == 5432
+            and url.database == CI_DATABASE
+            and not url.query
+        ):
+            raise RuntimeError("Refusing database outside the CI-only WFS integration target")
+        return url, CI_DATABASE
+    from scripts.wfs_pending_local_schema import local_url
+
+    return local_url(), "szzsbj_dev"
 
 
 def run_migration(conn, filename: str, direction: str = "upgrade") -> None:
@@ -52,3 +86,50 @@ def bring_wfs_schema_to_head(conn) -> None:
         run_migration(conn, "20261029_0068_wfs_creation.py")
     run_migration(conn, "20261101_0072_wfs_pending_drafts.py")  # adopts a complete set
     ensure_manual_approval_columns(conn)
+
+
+def table_structure(conn, schema: str, tables) -> dict:
+    """Columns (type, nullability), PK / unique / FK (with ON DELETE) / check names and
+    definitions, and indexes (with partial predicate) of ``tables`` in ``schema``."""
+    import sqlalchemy as sa
+
+    inspector = sa.inspect(conn)
+    out = {}
+    for name in sorted(tables):
+        out[name] = {
+            "columns": {
+                c["name"]: (str(c["type"]), bool(c["nullable"]))
+                for c in inspector.get_columns(name, schema=schema)
+            },
+            "pk": (
+                inspector.get_pk_constraint(name, schema=schema)["name"],
+                tuple(inspector.get_pk_constraint(name, schema=schema)["constrained_columns"]),
+            ),
+            "unique": sorted(
+                (u["name"], tuple(u["column_names"]))
+                for u in inspector.get_unique_constraints(name, schema=schema)
+            ),
+            "fk": sorted(
+                (
+                    f["name"],
+                    tuple(f["constrained_columns"]),
+                    f["referred_table"],
+                    (f.get("options") or {}).get("ondelete"),
+                )
+                for f in inspector.get_foreign_keys(name, schema=schema)
+            ),
+            "check": sorted(
+                (k["name"], k["sqltext"])
+                for k in inspector.get_check_constraints(name, schema=schema)
+            ),
+            "indexes": sorted(
+                (
+                    i["name"],
+                    tuple(i["column_names"]),
+                    bool(i["unique"]),
+                    str((i.get("dialect_options") or {}).get("postgresql_where")),
+                )
+                for i in inspector.get_indexes(name, schema=schema)
+            ),
+        }
+    return out

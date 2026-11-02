@@ -32,8 +32,7 @@ from app.modules.pmc_wfs.models import WfsBoxAllocation, WfsDraft, WfsEvent
 from app.modules.pmc_wfs.router import service as dependency
 from app.modules.pmc_wfs.schemas import DraftCommand, IdentityCommand, PendingFilter, PendingQuery
 from app.modules.pmc_wfs.service import WfsService
-from scripts.wfs_pending_local_schema import local_url
-from tests.modules.pmc_wfs.schema_support import bring_wfs_schema_to_head
+from tests.modules.pmc_wfs.schema_support import bring_wfs_schema_to_head, integration_target
 
 MIGRATION_0072 = (
     Path(__file__).resolve().parents[3]
@@ -62,12 +61,12 @@ def engine():
     # schema inside the verified local development database, which CI does not have.
     if os.environ.get("WFS_LOCAL_INTEGRATION") != "1":
         pytest.skip("explicit local integration opt-in required (WFS_LOCAL_INTEGRATION=1)")
-    url = local_url()
+    url, database = integration_target()
     get_settings.cache_clear()
     schema = "wfs_test_" + uuid4().hex
     admin = create_engine(url, hide_parameters=True)
     with admin.begin() as c:
-        assert c.scalar(text("select current_database()")) == "szzsbj_dev"
+        assert c.scalar(text("select current_database()")) == database
         c.execute(text(f'CREATE SCHEMA "{schema}"'))
     db_engine = create_engine(url, hide_parameters=True)
 
@@ -675,13 +674,13 @@ def test_migration_0072_matches_orm_metadata():
     from app.db.base import Base
     from app.modules.pmc_wfs.repository import WFS_TABLES
 
-    url = local_url()
+    url, database = integration_target()
     token = uuid4().hex[:12]
     mig, orm = f"wfs_mig0072_{token}", f"wfs_orm0072_{token}"
     admin = create_engine(url, hide_parameters=True)
     try:
         with admin.begin() as c:
-            assert c.scalar(text("select current_database()")) == "szzsbj_dev"
+            assert c.scalar(text("select current_database()")) == database
             for schema in (mig, orm):
                 c.execute(text(f'CREATE SCHEMA "{schema}"'))
                 c.execute(text(f'SET LOCAL search_path TO "{schema}"'))

@@ -21,8 +21,10 @@ from app.modules.pmc_wfs.creation_models import WfsCreation, WfsCreationTicket
 from app.modules.pmc_wfs.lingxing_models import WfsBoardPublication, WfsShipmentBoardRow
 from app.modules.pmc_wfs.shipment_board_schemas import ShipmentBoardQuery
 from app.modules.pmc_wfs.shipment_board_service import ShipmentBoardService
-from scripts.wfs_pending_local_schema import local_url
-from tests.modules.pmc_wfs.schema_support import ensure_manual_approval_columns
+from tests.modules.pmc_wfs.schema_support import (
+    ensure_manual_approval_columns,
+    integration_target,
+)
 
 T0 = datetime(2026, 10, 16, 7, 23, 28, tzinfo=UTC)
 
@@ -47,12 +49,12 @@ def engine():
     # schema inside the verified local development database, which CI does not have.
     if os.environ.get("WFS_LOCAL_INTEGRATION") != "1":
         pytest.skip("explicit local integration opt-in required (WFS_LOCAL_INTEGRATION=1)")
-    url = local_url()
+    url, database = integration_target()
     get_settings.cache_clear()
     schema = "wfsboard_test_" + uuid4().hex
     admin = create_engine(url, hide_parameters=True)
     with admin.begin() as c:
-        assert c.scalar(text("select current_database()")) == "szzsbj_dev"
+        assert c.scalar(text("select current_database()")) == database
         c.execute(text(f'CREATE SCHEMA "{schema}"'))
     db_engine = create_engine(url, hide_parameters=True)
 
@@ -356,3 +358,76 @@ def test_products_skip_cancelled_cargos(db):
     assert svc.list(ShipmentBoardQuery()).total == 1
     assert svc.list(ShipmentBoardQuery()).items[0].status_label == "已取消"
     assert svc.products(ShipmentBoardQuery()).total == 0
+
+
+BOARD_TABLES = (
+    "ods_lingxing_wfs_cargos",
+    "ods_lingxing_wfs_cargo_goods",
+    "ods_lingxing_wfs_shipping_lists",
+    "gov_wfs_board_publications",
+    "mart_wfs_shipment_board",
+)
+
+
+def test_migration_0071_matches_orm_metadata():
+    """282-03: migration 0071 is frozen explicit DDL (no model import). It must create exactly
+    what the ORM models declare (columns, types, nullability, PK / unique / FK + ON DELETE /
+    check names, indexes incl. the partial unique index); downgrade refuses while any row
+    exists and drops all five tables once they are empty."""
+    if os.environ.get("WFS_LOCAL_INTEGRATION") != "1":
+        pytest.skip("explicit local integration opt-in required (WFS_LOCAL_INTEGRATION=1)")
+    from app.db.base import Base
+    from tests.modules.pmc_wfs.schema_support import run_migration, table_structure
+
+    register_productlist_sync_models()
+    url, database = integration_target()
+    token = uuid4().hex[:12]
+    mig, orm = f"wfs_mig0071_{token}", f"wfs_orm0071_{token}"
+    admin = create_engine(url, hide_parameters=True)
+    try:
+        with admin.begin() as c:
+            assert c.scalar(text("select current_database()")) == database
+            for schema in (mig, orm):
+                c.execute(text(f'CREATE SCHEMA "{schema}"'))
+                c.execute(text(f'SET LOCAL search_path TO "{schema}"'))
+                for ref in ("gov_integration_sync_runs", "ods_api_raw_request_refs"):
+                    c.execute(text(f'CREATE TABLE "{ref}" (id uuid PRIMARY KEY)'))
+        with admin.begin() as c:
+            c.execute(text(f'SET LOCAL search_path TO "{mig}"'))
+            run_migration(c, "20261030_0071_wfs_lingxing_board.py")
+        with admin.begin() as c:
+            c.execute(text(f'SET LOCAL search_path TO "{orm}"'))
+            Base.metadata.create_all(
+                c, tables=[Base.metadata.tables[name] for name in BOARD_TABLES]
+            )
+        with admin.connect() as c:
+            migrated = table_structure(c, mig, BOARD_TABLES)
+            declared = table_structure(c, orm, BOARD_TABLES)
+        assert migrated == declared
+        with admin.begin() as c:
+            c.execute(text(f'SET LOCAL search_path TO "{mig}"'))
+            c.execute(
+                text(
+                    "INSERT INTO gov_wfs_board_publications (id, source_account_ref, status,"
+                    " is_current, cargo_run_id, coverage_start, coverage_end,"
+                    " source_observed_at, published_at, builder_version, quality_report)"
+                    " VALUES (gen_random_uuid(), 'acct', 'published', false, gen_random_uuid(),"
+                    " DATE '2026-10-01', DATE '2026-10-31', now(), now(), 'fixture', '{}')"
+                )
+            )
+        with pytest.raises(RuntimeError, match="retain WFS evidence"):
+            with admin.begin() as c:
+                c.execute(text(f'SET LOCAL search_path TO "{mig}"'))
+                run_migration(c, "20261030_0071_wfs_lingxing_board.py", "downgrade")
+        with admin.begin() as c:
+            c.execute(text(f'SET LOCAL search_path TO "{mig}"'))
+            c.execute(text("DELETE FROM gov_wfs_board_publications"))
+            run_migration(c, "20261030_0071_wfs_lingxing_board.py", "downgrade")
+            left = [n for n in BOARD_TABLES if c.scalar(text("select to_regclass(:n)"), {"n": n})]
+            assert left == []
+    finally:
+        with admin.begin() as c:
+            for schema in (mig, orm):
+                assert schema.startswith("wfs_") and token in schema
+                c.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        admin.dispose()

@@ -82,3 +82,63 @@ def test_dedupe(db):
     second = _seed_case(db, account, order)
     assert first.id == second.id
     assert _svc(db, account).list(ExceptionQuery()).total == 1
+
+
+EXCEPTION_TABLES = (
+    "ops_wfs_exception_cases",
+    "evt_wfs_exception_detections",
+    "evt_wfs_exception_actions",
+)
+
+
+def test_migration_0069_downgrade_refuses_data_and_allows_empty():
+    """282-02: downgrading 0069 never drops exception cases or their timelines while any row
+    exists (RuntimeError naming the populated tables); empty tables are dropped."""
+    import os
+    from uuid import uuid4
+
+    from sqlalchemy import create_engine, text
+
+    from tests.modules.pmc_wfs.schema_support import integration_target, run_migration
+
+    if os.environ.get("WFS_LOCAL_INTEGRATION") != "1":
+        pytest.skip("explicit local integration opt-in required (WFS_LOCAL_INTEGRATION=1)")
+    url, database = integration_target()
+    schema = "wfs_mig0069_" + uuid4().hex[:12]
+    migration = "20261029_0069_wfs_exception_center.py"
+    admin = create_engine(url, hide_parameters=True)
+    try:
+        with admin.begin() as c:
+            assert c.scalar(text("select current_database()")) == database
+            c.execute(text(f'CREATE SCHEMA "{schema}"'))
+            c.execute(text(f'SET LOCAL search_path TO "{schema}"'))
+            run_migration(c, migration)
+            c.execute(
+                text(
+                    "INSERT INTO ops_wfs_exception_cases (id, dedupe_key, source_account_ref,"
+                    " store_id, shipment_id, rule_family, severity, status, summary,"
+                    " first_detected_at, created_at, updated_at) VALUES (gen_random_uuid(),"
+                    " 'k1', 'acct', 's1', 'WFS-1', 'arrival_overdue', 'LOW', 'OPEN', 'fixture',"
+                    " now(), now(), now())"
+                )
+            )
+        with pytest.raises(RuntimeError, match="WFS_EXCEPTION_DOWNGRADE_BLOCKED") as blocked:
+            with admin.begin() as c:
+                c.execute(text(f'SET LOCAL search_path TO "{schema}"'))
+                run_migration(c, migration, "downgrade")
+        assert "ops_wfs_exception_cases" in str(blocked.value)
+        with admin.begin() as c:
+            c.execute(text(f'SET LOCAL search_path TO "{schema}"'))
+            for table in EXCEPTION_TABLES:
+                assert c.scalar(text("select to_regclass(:n)"), {"n": table}), table
+            c.execute(text("DELETE FROM ops_wfs_exception_cases"))
+            run_migration(c, migration, "downgrade")
+            left = [
+                t for t in EXCEPTION_TABLES if c.scalar(text("select to_regclass(:n)"), {"n": t})
+            ]
+            assert left == []
+    finally:
+        with admin.begin() as c:
+            assert schema.startswith("wfs_mig0069_") and len(schema) == 24
+            c.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        admin.dispose()
