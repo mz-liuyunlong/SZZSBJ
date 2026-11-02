@@ -22,6 +22,7 @@ from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.data_pages.models import (
     ListingArchiveState,
+    ListingGptAnalysisLink,
     ListingManagementCurrentMart,
     ListingWfsFirstStock,
     ProductCustomTag,
@@ -122,19 +123,22 @@ def test_listing_page_and_real_api_with_isolated_postgres() -> None:
         session.commit()
 
     app = create_app()
-    app.dependency_overrides[get_optional_principal] = lambda: Principal(
-        user_id="1",
-        permissions=frozenset(
-            {
-                "page:products:listing-management:view",
-                "action:products:listing-management:manage-tags",
-                "action:products:listing-management:export",
-                "action:products:listing-management:archive",
-                "action:products:listing-management:restore",
-                "action:products:listing-management:edit-analysis-link",
-            }
-        ),
-    )
+
+    def principal_for_request(request: Request) -> Principal:
+        permissions = {"page:products:listing-management:view"}
+        if request.headers.get("authorization") != "Bearer synthetic-listing-viewer":
+            permissions.update(
+                {
+                    "action:products:listing-management:manage-tags",
+                    "action:products:listing-management:export",
+                    "action:products:listing-management:archive",
+                    "action:products:listing-management:restore",
+                    "action:products:listing-management:edit-analysis-link",
+                }
+            )
+        return Principal(user_id="1", permissions=frozenset(permissions))
+
+    app.dependency_overrides[get_optional_principal] = principal_for_request
 
     def account_scope(request: Request) -> frozenset[str]:
         account = (
@@ -257,7 +261,66 @@ def test_listing_page_and_real_api_with_isolated_postgres() -> None:
             check=False,
         )
         assert browser.returncode == 0, (browser.stdout + browser.stderr)[-6000:]
+        with TestClient(app) as viewer_client:
+            viewer_headers = {"Authorization": "Bearer synthetic-listing-viewer"}
+            assert (
+                viewer_client.get("/api/listings/walmart", headers=viewer_headers).status_code
+                == 200
+            )
+            assert (
+                viewer_client.post(
+                    f"/api/listings/walmart/{active_listing_id}/archive",
+                    json={"reason": "Synthetic forbidden write"},
+                    headers=viewer_headers,
+                ).status_code
+                == 403
+            )
+            assert (
+                viewer_client.post(
+                    f"/api/listings/walmart/{active_listing_id}/restore",
+                    headers=viewer_headers,
+                ).status_code
+                == 403
+            )
+            assert (
+                viewer_client.put(
+                    f"/api/listings/walmart/{active_listing_id}/gpt-analysis",
+                    json={"keyword_analysis_url": "https://example.invalid/forbidden"},
+                    headers=viewer_headers,
+                ).status_code
+                == 403
+            )
+            assert (
+                viewer_client.post(
+                    "/api/listings/tags/batch-set",
+                    json={
+                        "listing_ids": [str(active_listing_id)],
+                        "tag_ids": [],
+                        "mode": "replace",
+                    },
+                    headers=viewer_headers,
+                ).status_code
+                == 403
+            )
         with Session(engine) as session:
+            saved_link = session.scalar(
+                select(ListingGptAnalysisLink).where(
+                    ListingGptAnalysisLink.listing_id == active_listing_id
+                )
+            )
+            assert saved_link is not None
+            assert saved_link.keyword_analysis_url == "https://example.invalid/synthetic-keyword"
+            assert saved_link.ad_analysis_url == "https://example.invalid/synthetic-ad"
+            archive_state = session.scalar(
+                select(ListingArchiveState).where(
+                    ListingArchiveState.listing_id == active_listing_id
+                )
+            )
+            assert archive_state is not None
+            assert archive_state.is_archived is False
+            assert archive_state.archive_reason is None
+            assert archive_state.archived_at is not None
+            assert archive_state.restored_at is not None
             states = dict(
                 session.execute(
                     select(
