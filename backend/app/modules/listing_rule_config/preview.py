@@ -72,6 +72,7 @@ def basic_financial_candidate(
     *,
     cutoff: date,
     config: ListingGradeRuleConfig,
+    unconfirmed_account_ad_days: frozenset[date],
 ) -> tuple[str | None, int, int, Decimal | None]:
     """Diagnostic margin *only*, never proof that Daily Sales finished syncing.
 
@@ -99,6 +100,10 @@ def basic_financial_candidate(
     medium = list(qualified.values())
     short = [row for row in medium if row.business_date_la >= start_short]
     n_short, n_medium = len(short), len(medium)
+    if unconfirmed_account_ad_days.intersection(
+        start_medium + timedelta(days=offset) for offset in range(config.medium_days)
+    ):
+        return None, n_short, n_medium, None
     if n_short < config.short_min_valid_days or n_medium < config.medium_min_valid_days:
         return None, n_short, n_medium, None
 
@@ -175,6 +180,51 @@ class ListingEvaluationPreviewService:
 
     def __init__(self, session: Session) -> None:
         self.session = session
+        self._unconfirmed_ad_days_cache: dict[tuple[str, date, int], frozenset[date]] = {}
+
+    def _unconfirmed_account_ad_days(
+        self, accounts: set[str], *, cutoff: date, window_days: int
+    ) -> dict[str, frozenset[date]]:
+        missing = {
+            account
+            for account in accounts
+            if (account, cutoff, window_days) not in self._unconfirmed_ad_days_cache
+        }
+        if missing:
+            start = cutoff - timedelta(days=window_days - 1)
+            rows = self.session.execute(
+                select(
+                    DailySalesItemDayMart.source_account_ref,
+                    DailySalesItemDayMart.business_date_la,
+                    func.sum(
+                        func.coalesce(DailySalesItemDayMart.ad_spend_amount, ZERO)
+                        + DailySalesItemDayMart.sem_ad_spend_amount
+                    ),
+                )
+                .where(
+                    DailySalesItemDayMart.source_account_ref.in_(missing),
+                    DailySalesItemDayMart.business_date_la.between(start, cutoff),
+                )
+                .group_by(
+                    DailySalesItemDayMart.source_account_ref,
+                    DailySalesItemDayMart.business_date_la,
+                )
+            ).all()
+            days_in_window = {start + timedelta(days=offset) for offset in range(window_days)}
+            unconfirmed_by_account: dict[str, set[date]] = {
+                account: set(days_in_window) for account in missing
+            }
+            for account, business_day, total in rows:
+                if total is not None and total > ZERO:
+                    unconfirmed_by_account[account].discard(business_day)
+            for account, unconfirmed_days in unconfirmed_by_account.items():
+                self._unconfirmed_ad_days_cache[(account, cutoff, window_days)] = frozenset(
+                    unconfirmed_days
+                )
+        return {
+            account: self._unconfirmed_ad_days_cache[(account, cutoff, window_days)]
+            for account in accounts
+        }
 
     def evaluate(
         self,
@@ -291,6 +341,9 @@ class ListingEvaluationPreviewService:
             prior=prior,
             archive=archive,
             monitor_rows=monitor_rows,
+            unconfirmed_account_ad_days=self._unconfirmed_account_ad_days(
+                {listing.source_account_ref}, cutoff=cutoff, window_days=config.medium_days
+            )[listing.source_account_ref],
         )
 
     def evaluate_page(
@@ -301,7 +354,7 @@ class ListingEvaluationPreviewService:
         config: ListingGradeRuleConfig,
         rule_version: int,
     ) -> dict[UUID, ListingEvaluationPreview]:
-        """Read one bounded page of exact-identity evidence in five database queries."""
+        """Read one bounded page of exact-identity evidence plus account-day ad totals."""
         if not listings:
             return {}
         if len(listings) > 200 or len({row.id for row in listings}) != len(listings):
@@ -405,6 +458,11 @@ class ListingEvaluationPreviewService:
         monitor_by_key = defaultdict(list)
         for row in monitor_rows:
             monitor_by_key[(row.source_account_ref, row.store_id, row.item_id)].append(row)
+        unconfirmed_ad_days_by_account = self._unconfirmed_account_ad_days(
+            {listing.source_account_ref for listing in listings},
+            cutoff=cutoff,
+            window_days=config.medium_days,
+        )
 
         return {
             listing.id: self._from_evidence(
@@ -427,6 +485,9 @@ class ListingEvaluationPreviewService:
                 monitor_rows=monitor_by_key.get(
                     (listing.source_account_ref, listing.store_id, listing.item_id), []
                 ),
+                unconfirmed_account_ad_days=unconfirmed_ad_days_by_account[
+                    listing.source_account_ref
+                ],
             )
             for listing in listings
         }
@@ -443,6 +504,7 @@ class ListingEvaluationPreviewService:
         prior: date | None,
         archive: ListingArchiveState | None,
         monitor_rows: list[StandardizedWalmartMonitorListingObservation],
+        unconfirmed_account_ad_days: frozenset[date],
     ) -> ListingEvaluationPreview:
         archive_state_known = archive is not None
         archived = bool(archive is not None and archive.is_archived)
@@ -472,7 +534,10 @@ class ListingEvaluationPreviewService:
             row.captured_at.astimezone(LOS_ANGELES).date(): row for row in monitor_rows
         }
         grade, n_short, n_medium, margin = basic_financial_candidate(
-            sales, cutoff=cutoff, config=config
+            sales,
+            cutoff=cutoff,
+            config=config,
+            unconfirmed_account_ad_days=unconfirmed_account_ad_days,
         )
         stage, observed, low = stockout_candidate(
             stock,
@@ -569,6 +634,8 @@ class ListingEvaluationPreviewService:
         )
         if sales_valid30 < config.lifecycle.growth_min_valid_days_30:
             missing.append("SALES_TREND_VALID_DAYS_INSUFFICIENT")
+        if unconfirmed_account_ad_days:
+            missing.append("DAILY_SALES_ACCOUNT_DAY_AD_SPEND_UNCONFIRMED")
         if listing.lifecycle_status not in known_stages and stage not in known_stages:
             missing.append("LIFECYCLE_INITIAL_STATE_PENDING")
         if not archive_state_known or archive_event_after_cutoff:

@@ -6,6 +6,7 @@
 
 - 本轮评级与生命周期只覆盖 WFS；FBM 不参与。预览对非 WFS 不产生评级或阶段候选，不以 WFS 库存推断 FBM 断货。普通 Listing 浏览不因此排除 FBM。
 - 销售业务日结束后，美国时间次日 00:00 的最后一次查询必须成功，才能把该日无销售记录认作真实零销量；仅凭时钟到点或空结果不算完整。每次评级以洛杉矶执行日的 T-2 为截止业务日，直接使用“每日销售”已计算的多日销售额和利润。广告费和退款由每日销售处理，评级模块不再单独查询广告或退款，也不另建迟到退款重算门禁。
+- 评级窗口内任一账号业务日的每日销售广告费总和为 0，或当日缺少每日销售记录，均不生成该账号 Listing 的评级候选。合计使用 `ad_spend_amount + sem_ad_spend_amount`，不是逐 Listing 要求非零；正数仅解除这一项阻断，不等于同步完整性已获认证。
 - 人工生命周期调整优先于自动计算；需要权限、操作人、原因、时间及审计。负责人希望证据齐全后自动生效、执行时间可配置；本文件不批准在证据不齐或人工调整未受保护时启用正式发布与生产调度。
 - Listing 页的“上架时间”仅指**开始监测新 Listing 后首次观察到 WFS 库存至少为 1 的日期**，来源为 `listing_wfs_first_stock.launch_date_cn`，其观察时间记录在 `first_wfs_seen_at_utc`。已入监测但首次零库存的 Listing，即使随后 MART 出现旧来源日期，也继续等待首次 WFS 有货观察。旧 Listing 没有该证据时显示待核实；ERP 原始上架日期和标准化字段仍保留为来源数据，但不作为页面上架时间的兜底，不进行时区猜测或回填。
 - 负责人确认页面标签是人工维护。当前既有人工分配表与 MART 保留的历史 `tags_json` 均可能承载人工标签；`tags_json` 的逐条来源尚未核定，不能直接隐藏或删除历史值。跨店铺同 Item ID 是否共享仍待负责人确认，现有赋值粒度暂不改变。
@@ -25,7 +26,7 @@
 | E01 / 001,003,010,023 | Listing 身份、账号范围、当前阶段及等级；账号＋店铺＋Item ID | `data_pages/models.py::ListingManagementCurrentMart` 的 `source_account_ref/store_id/item_id/lifecycle_status/product_grade`；`listing_rule_config/preview.py` 按授权账号读取 | 源码可读；当前字段不是首次阶段的来源证明 | 阶段待确认；不因空阶段推断正式等级 |
 | E02 / 004,005,009,010,018 | 首次上架、测品、经营、清货及人工审批顺序；Listing＋事件时间 | 当前 MART 只保留 `lifecycle_status`；`evaluation.py::lifecycle_listing` 对流程阶段优先，但无完整事件流 | 历史事件来源待负责人决定 | 仅输出诊断候选及缺失原因；不写正式阶段 |
 | E03 / 013,014,020,025 | 每个 LA 业务日的销售量与金额，以及该日是否已完成采集；账号＋店铺＋Item ID＋可空 MSKU＋日期 | `DailySalesItemDayMart.business_date_la/sales_qty/sales_amount/sales_currency_code`；`preview.py::basic_financial_candidate` | 已有日 MART；逐日采集完成证明未核实 | 缺行与真实零销量分开；该日不计为有效财务日 |
-| E04 / 006,020,021,025 | 每日销售 T-2 结果已包含对应广告费 | `DailySalesItemDayMart.ad_spend_amount/sem_ad_spend_amount/ad_spend_currency_code/source_lineage_json`；广告事实仅用于每日销售自身的数据血缘 | 评级只读取每日销售；仍需确认其同步和计算成功 | 每日销售未完成时保持“待评级”，不为评级另查广告事实 |
+| E04 / 006,020,021,025 | 每日销售 T-2 结果已包含对应广告费 | `DailySalesItemDayMart.ad_spend_amount/sem_ad_spend_amount/ad_spend_currency_code/source_lineage_json`；试算按账号和 LA 业务日汇总两项广告费 | 零合计或缺日已被试算门禁拦截；正数不构成同步成功证明 | 任一窗口日零合计或缺日时返回 `DAILY_SALES_ACCOUNT_DAY_AD_SPEND_UNCONFIRMED`，不生成评级候选 |
 | E05 / 006,020,025 | 每日销售利润与成本状态可用 | Daily MART 的 `gross_profit_amount/cost_status/missing_cost_codes_json/calculation_warnings_json` | 计算字段存在；缺失或不完整的日不能当作有效财务日 | 保持“待评级”，不将 `null` 当零费用 |
 | E06 / 006,020,025 | 已入库退款按现有口径归到原订单日并进入利润计算 | `fact_walmart_refund_items`、`after_sales_refund_items`，Daily MART 的 `refund_amount/refund_currency_code` | 来源与计算路径存在；迟到退款仍可能改变历史利润 | 本轮不以退款逐日结算水位单独阻断多日评级，不新增迟到退款触发重算；保留数据质量问题的可见提示 |
 | E07 / 011,015,016 | WFS 每日零库存、有库存及缺快照可区分；账号＋店铺＋Item ID＋日期 | `WalmartListingInventoryDailyFact.snapshot_date_la/wfs_available_quantity/captured_at`；`preview.py::stockout_candidate` 要求连续观察到零 | 结构与诊断规则存在；历史覆盖率和采集成功水位未核实 | 缺快照不判为零库存，也不判连续断货 |

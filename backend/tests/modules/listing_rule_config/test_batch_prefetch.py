@@ -50,8 +50,11 @@ def test_page_prefetch_is_bounded_and_does_not_mix_account_or_msku(monkeypatch) 
         Rows([]),
         Rows([fact("synthetic-account-b", None)]),
     ]
-    session.execute.return_value.all.return_value = [
-        ("synthetic-account-a", "synthetic-store", "synthetic-item", None, date(2026, 1, 1))
+    session.execute.side_effect = [
+        Rows(
+            [("synthetic-account-a", "synthetic-store", "synthetic-item", None, date(2026, 1, 1))]
+        ),
+        Rows([("synthetic-account-a", date(2026, 1, 15), 3)]),
     ]
     captured = {}
 
@@ -69,7 +72,7 @@ def test_page_prefetch_is_bounded_and_does_not_mix_account_or_msku(monkeypatch) 
 
     assert result == {first.id: first.id, second.id: second.id}
     assert session.scalars.call_count == 4
-    assert session.execute.call_count == 1
+    assert session.execute.call_count == 2
     assert len(captured[first.id]["sales"]) == 1
     assert len(captured[second.id]["sales"]) == 1
     assert len(captured[first.id]["stock"]) == 1

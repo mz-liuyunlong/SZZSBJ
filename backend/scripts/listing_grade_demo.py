@@ -47,7 +47,13 @@ def demo_result(scenario: str, *, cutoff: date) -> dict[str, object]:
         )
         for offset in range(config.medium_days)
     ]
-    result = grade_listing(cutoff=cutoff, stage=stage, days=days, config=config)
+    result = grade_listing(
+        cutoff=cutoff,
+        stage=stage,
+        days=days,
+        unconfirmed_account_ad_days=frozenset(),
+        config=config,
+    )
 
     def amount(value: Decimal | None) -> str | None:
         return str(value) if value is not None else None

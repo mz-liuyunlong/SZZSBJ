@@ -83,14 +83,16 @@ def grade_listing(
     cutoff: date,
     stage: str | None,
     days: list[FinancialDay],
+    unconfirmed_account_ad_days: frozenset[date],
     config: ListingGradeRuleConfig,
 ) -> GradeResult:
-    """Calculate weighted profitability only from complete, confirmed Daily Sales days."""
+    """Calculate only when each account business day has positive total ad spend."""
     window_start = cutoff - timedelta(days=config.medium_days - 1)
     by_day = {d.day: d for d in days if window_start <= d.day <= cutoff}
     medium_dates = [window_start + timedelta(days=i) for i in range(config.medium_days)]
     short_dates = medium_dates[-config.short_days :]
-    valid = {d for d, row in by_day.items() if row.valid}
+    unconfirmed_ad_dates = unconfirmed_account_ad_days.intersection(medium_dates)
+    valid = {d for d, row in by_day.items() if row.valid and d not in unconfirmed_ad_dates}
     mdates = [d for d in medium_dates if d in valid]
     sdates = [d for d in short_dates if d in valid]
 
@@ -110,6 +112,8 @@ def grade_listing(
     weighted = None
     if stage in {"清货期", "已归档"} or stage not in config.included_stages:
         grade, reason = "不参与评级", "生命周期未纳入评级范围"
+    elif unconfirmed_ad_dates:
+        reason = "账号业务日广告费为零或缺少当日数据：每日销售广告数据待同步"
     elif len(sdates) < config.short_min_valid_days or len(mdates) < config.medium_min_valid_days:
         reason = "财务或广告未确认完整：有效日期不足"
     elif ss == ZERO and sp < ZERO:

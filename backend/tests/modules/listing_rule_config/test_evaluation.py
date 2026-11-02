@@ -24,7 +24,13 @@ def test_grade_never_counts_unconfirmed_ads_as_zero() -> None:
         FinancialDay(_day(i), Decimal(100), Decimal(15), "complete", upstream_confirmed=False)
         for i in range(14)
     ]
-    value = grade_listing(cutoff=CUTOFF, stage="稳定期", days=days, config=CFG)
+    value = grade_listing(
+        cutoff=CUTOFF,
+        stage="稳定期",
+        days=days,
+        unconfirmed_account_ad_days=frozenset(),
+        config=CFG,
+    )
     assert value.grade == "待评级"
     assert value.valid_medium == 0
 
@@ -34,7 +40,13 @@ def test_grade_requires_both_window_sample_minima() -> None:
         FinancialDay(_day(i), Decimal(100), Decimal(15), "complete", upstream_confirmed=True)
         for i in range(8, 14)
     ]
-    value = grade_listing(cutoff=CUTOFF, stage="启动期", days=days, config=CFG)
+    value = grade_listing(
+        cutoff=CUTOFF,
+        stage="启动期",
+        days=days,
+        unconfirmed_account_ad_days=frozenset(),
+        config=CFG,
+    )
     assert value.grade == "待评级"
     assert value.valid_short == 0
 
@@ -44,9 +56,32 @@ def test_grade_exact_boundary_and_nonzero_denominator() -> None:
         FinancialDay(_day(i), Decimal(100), Decimal(15), "complete", upstream_confirmed=True)
         for i in range(14)
     ]
-    value = grade_listing(cutoff=CUTOFF, stage="稳定期", days=days, config=CFG)
+    value = grade_listing(
+        cutoff=CUTOFF,
+        stage="稳定期",
+        days=days,
+        unconfirmed_account_ad_days=frozenset(),
+        config=CFG,
+    )
     assert value.grade == "B"
     assert value.weighted_margin == Decimal(15)
+
+
+def test_one_account_day_with_zero_ad_spend_blocks_the_whole_rating() -> None:
+    days = [
+        FinancialDay(_day(i), Decimal(100), Decimal(15), "complete", upstream_confirmed=True)
+        for i in range(14)
+    ]
+    value = grade_listing(
+        cutoff=CUTOFF,
+        stage="稳定期",
+        days=days,
+        unconfirmed_account_ad_days=frozenset({_day(3)}),
+        config=CFG,
+    )
+    assert value.grade == "待评级"
+    assert _day(3) in value.invalid_dates
+    assert "广告费为零或缺少当日数据" in value.reason
 
 
 def test_zero_sales_losses_generate_special_d() -> None:
@@ -54,7 +89,13 @@ def test_zero_sales_losses_generate_special_d() -> None:
         FinancialDay(_day(i), Decimal(0), Decimal(-4), "complete", upstream_confirmed=True)
         for i in range(14)
     ]
-    value = grade_listing(cutoff=CUTOFF, stage="稳定期", days=days, config=CFG)
+    value = grade_listing(
+        cutoff=CUTOFF,
+        stage="稳定期",
+        days=days,
+        unconfirmed_account_ad_days=frozenset(),
+        config=CFG,
+    )
     assert value.grade == "D"
     assert value.weighted_margin is None
 
@@ -64,7 +105,16 @@ def test_clearance_excluded_even_if_profitable() -> None:
         FinancialDay(_day(i), Decimal(100), Decimal(30), "complete", upstream_confirmed=True)
         for i in range(14)
     ]
-    assert grade_listing(cutoff=CUTOFF, stage="清货期", days=days, config=CFG).grade == "不参与评级"
+    assert (
+        grade_listing(
+            cutoff=CUTOFF,
+            stage="清货期",
+            days=days,
+            unconfirmed_account_ad_days=frozenset(),
+            config=CFG,
+        ).grade
+        == "不参与评级"
+    )
 
 
 def test_new_listing_never_classed_stockout_without_prior_effective_stock() -> None:
