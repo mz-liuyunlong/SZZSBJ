@@ -334,6 +334,60 @@ jobs:
           engine.dispose()
           PY
 
+  walmart-gateway-ledger-postgresql:
+    name: Walmart gateway ledger PostgreSQL (FOR UPDATE concurrency)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_DB: walmart_ledger_test
+          POSTGRES_USER: walmart_ledger_test
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U walmart_ledger_test -d walmart_ledger_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      TEST_DATABASE_URL: postgresql+psycopg://walmart_ledger_test:local_ci_only@127.0.0.1:5432/walmart_ledger_test
+      WALMART_LEDGER_PG_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Migrate to head and run the ledger / audit persistence suite against PostgreSQL 14
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run alembic upgrade head
+          uv run pytest -q -rs --junitxml=walmart-ledger-junit.xml \
+            tests/modules/walmart_scf/test_persistence.py
+      - name: Fail if any PostgreSQL ledger test was skipped
+        working-directory: backend
+        run: |
+          uv run python - <<'PY'
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse("walmart-ledger-junit.xml").getroot()
+          suite = root if root.tag == "testsuite" else root.find("testsuite")
+          skipped = int(suite.get("skipped", "0"))
+          ran = {case.get("name") for case in suite.iter("testcase")}
+          required = {
+              "test_postgres_concurrent_claims_serialize_on_the_row",
+              "test_postgres_concurrent_finish_and_resolve_apply_exactly_once",
+              "test_migration_0069_matches_orm_metadata[postgresql]",
+          }
+          assert skipped == 0, f"{skipped} test(s) skipped: the PostgreSQL ledger suite must run in CI"
+          assert required <= ran, f"missing PostgreSQL ledger tests: {sorted(required - ran)}"
+          print(f"ok: {len(ran)} tests ran against PostgreSQL, 0 skipped")
+          PY
+
   pmc-0043-postgresql-14:
     name: PMC 0043 PostgreSQL 14 compatibility
     runs-on: ubuntu-latest
@@ -549,3 +603,28 @@ jobs:
           OPERATION_LOG_POSTGRES_TESTS: "1"
         run: |
           uv run pytest -q tests/modules/operation_logs/test_postgresql_integration.py
+
+  walmart-scf-python310:
+    name: Walmart SCF Python 3.10 deploy ZIP and protocol smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup actual Tencent-compatible Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Build isolated 3.10 cloud ZIP (manylinux2014 wheels)
+        run: |
+          python -m pip install --disable-pip-version-check --only-binary=:all: --platform manylinux2014_x86_64 --implementation cp --python-version 310 --target "$RUNNER_TEMP/walmart-scf-stage" -r backend/scf-direct-readonly-requirements.txt
+          python backend/scripts/check_walmart_scf_glibc.py --stage "$RUNNER_TEMP/walmart-scf-stage" --max-glibc 2.17
+          python backend/scripts/build_walmart_scf_direct_bundle.py --stage "$RUNNER_TEMP/walmart-scf-stage" --output backend/dist/walmart-scf-v3-py310.zip
+      - name: Smoke test extracted ZIP (v1 plus four signed v3 read contracts)
+        run: |
+          python backend/scripts/test_walmart_scf_direct_bundle.py backend/dist/walmart-scf-v3-py310.zip
+      - name: Upload tested Tencent SCF ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: walmart-scf-v3-direct-readonly-py310
+          path: backend/dist/walmart-scf-v3-py310.zip
+          if-no-files-found: error
+          retention-days: 7
