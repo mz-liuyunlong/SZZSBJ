@@ -107,8 +107,9 @@
 
 ## 已有本地验证
 
-- 合入最新 main 后，Node 24 前端全量 Vitest：78 个文件、349 项通过；ESLint 无错误、1 条现存非 Listing 警告；TypeScript／Vite 构建通过。限制为 2 worker 后全量通过。
-- 合入最新 main 后从 `backend/` 运行全量 pytest：2354 项通过、140 项跳过、2 条警告（现存 Pydantic 弃用及新主线未注册的 pytest integration 标记）；新合成分页测试先复现时间归属失败，修复后连同首次 WFS 有货定向测试共 11 项通过。跳过项不计为通过。
+- 合入最新 `main` 的 AI Skill 迁移链后新增无表结构变更的 0072 汇合节点；隔离 PostgreSQL 16 从空库以及从原 Listing 0071 数据库升级至唯一 Head `20261102_0072_list_skill_merge` 均通过；真实 FastAPI + Playwright 的 Listing 页面验收通过 1 项。合并后的后端全量 pytest 为 2378 通过、144 跳过；Node 24 前端全量 Vitest 为 79 个文件、361 项通过，完整 Playwright 为 28 通过、8 跳过；构建、Ruff、rule-pack 均通过。跳过项不计通过。
+- 前一版 main 基线下，Node 24 前端全量 Vitest：78 个文件、349 项通过；ESLint 无错误、1 条现存非 Listing 警告；TypeScript／Vite 构建通过。限制为 2 worker 后全量通过。
+- 前一版 main 基线下从 `backend/` 运行全量 pytest：2354 项通过、140 项跳过、2 条警告（现存 Pydantic 弃用及新主线未注册的 pytest integration 标记）；新合成分页测试先复现时间归属失败，修复后连同首次 WFS 有货定向测试共 11 项通过。跳过项不计为通过。
 - 迁移 0069／0070／合并 Head 0071 仅在隔离 PostgreSQL 执行过；0070→0071 已在含合成 Listing 数据的库验证，空库→0071 与真实 FastAPI + Playwright 验收通过；隔离库验证双账号标签列表各只见本账号定义、JSONB 精确匹配逗号／引号／`%`，以及历史同账号重名时迁移原子失败、解除合成冲突后无损成功。生产数据库仅执行了限时只读聚合核验，未迁移、未写入。
 - 完整页面 E2E（含真实 IAM 权限矩阵、所有写操作和性能）与生产只读验收仍未完成；当前已覆盖 GPT 链接、归档／恢复、页面排序、标签分配与清空主要操作。
 - Listing 页面 opt-in E2E 已在隔离 PostgreSQL 16 的空库升级至合并 Head 0071 后以 Node 24 运行，1 项通过；首次零库存、首次有货日期 fill-only、旧 Listing 无日期、旧近90天列配置迁移、跨页勾选后导出、SKU/MSKU 列头升降序、批量标签分配与清空、GPT 链接持久化、归档和恢复后的当前状态均已在真实 FastAPI／页面／数据库核对。前端 Listing API 连接真实本地 FastAPI，`/api/auth/me` 使用合成身份以避免连接生产 IAM。运行需要 `APP_ENV=test`、`LISTING_LIVE_TEST_DATABASE_URL` 指向新建的 `pr277_listing_*` 本地 Unix-socket 库和 Playwright。此证据不覆盖完整 IAM/性能/生产只读验收。
