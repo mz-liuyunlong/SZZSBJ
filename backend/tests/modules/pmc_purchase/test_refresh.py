@@ -898,7 +898,15 @@ def test_failed_receipt_runs_ignored_and_rule_or_account_errors(session: Session
 # --- R-9 (owner 2026-11-02): store-less line, remark ItemID decides the store -------------------
 
 
-def _r9_listing(session: Session, store_id: str, item_id: str, local_sku: str = "SKU-A") -> None:
+def _r9_listing(
+    session: Session,
+    store_id: str,
+    item_id: str,
+    local_sku: str = "SKU-A",
+    *,
+    status: str = "PUBLISHED",
+    fulfillment_type: str = "1",
+) -> None:
     session.add(
         WalmartListingDimension(
             id=uuid4(),
@@ -908,7 +916,8 @@ def _r9_listing(session: Session, store_id: str, item_id: str, local_sku: str = 
             msku=f"MSKU-{item_id}",
             local_sku=local_sku,
             gtin="00012345678929",
-            fulfillment_type="1",
+            standard_status=status,
+            fulfillment_type=fulfillment_type,
             synced_at=NOW,
         )
     )
@@ -986,3 +995,24 @@ def test_r9_storeless_line_without_a_listed_remark_id_stays_unattributed(session
     assert (row.store_id, row.store_attributed, row.overdue_days) == (None, False, 0)
     assert row.source_lineage_json["item_id_evidence"]["store_from_remark"] is None
     assert row.source_lineage_json["item_id_evidence"]["unverified_ids"] == ["19990261033"]
+
+
+def test_r9a_among_several_stores_only_the_published_wfs_listing_counts(session: Session) -> None:
+    """PO261016016 / JJ8040 on 2026-11-02: 19990261033 is UNPUBLISHED + non-WFS on one store
+    and PUBLISHED + WFS on another — the sellable one wins, no conflict."""
+    _r9_listing(
+        session, "999000111", "19990261033", "JJ8040", status="UNPUBLISHED", fulfillment_type="0"
+    )
+    _r9_listing(session, STORE, "19990261033", "JJ8040")
+    _r9_storeless_line(session, "19990261033")
+    session.commit()
+
+    PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
+    row = _board(session)[("PO-R9", "LR9", "")]
+    assert (row.item_id, row.item_id_match_status, row.store_id, row.store_attributed) == (
+        "19990261033",
+        "matched",
+        STORE,
+        True,
+    )
+    assert row.source_lineage_json["item_id_evidence"]["store_from_remark"] == STORE
