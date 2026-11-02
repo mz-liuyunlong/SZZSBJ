@@ -86,10 +86,18 @@ def upgrade() -> None:
     # Preserve connector grants for immutable revisions after re-binding.
     op.create_table(
         "ai_skill_revision_grants",
-        sa.Column("revision_id", postgresql.UUID(as_uuid=True),
-                  sa.ForeignKey("ai_skill_revisions.id", ondelete="RESTRICT"), nullable=False),
-        sa.Column("connector_id", postgresql.UUID(as_uuid=True),
-                  sa.ForeignKey("biz_connectors.id", ondelete="RESTRICT"), nullable=False),
+        sa.Column(
+            "revision_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ai_skill_revisions.id", ondelete="RESTRICT"),
+            nullable=False,
+        ),
+        sa.Column(
+            "connector_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("biz_connectors.id", ondelete="RESTRICT"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("revision_id", "connector_id"),
     )
     op.create_table(
@@ -198,8 +206,11 @@ def downgrade() -> None:
     # alone does not authorize deleting these records.
     conn = op.get_bind()
     for table in (
-        "ai_skill_documents", "ai_skill_bindings", "ai_skill_revision_grants",
-        "ai_skill_revisions", "ai_skill_library",
+        "ai_skill_documents",
+        "ai_skill_bindings",
+        "ai_skill_revision_grants",
+        "ai_skill_revisions",
+        "ai_skill_library",
     ):
         if conn.execute(sa.text(f"SELECT EXISTS (SELECT 1 FROM {table})")).scalar_one():
             raise RuntimeError("0071 rollback blocked: Skill records exist in " + table)
