@@ -8,12 +8,15 @@ as the provider invoice. No secrets or prompts are logged.
 from __future__ import annotations
 
 import time
+from collections.abc import Awaitable, Callable
 from decimal import Decimal
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import text
 
 from app.db.session import get_session_factory
+from app.integrations.llm.assistant_web_stream import generate_assistant_stream
 from app.integrations.llm.openai_provider import failed_call_reservation, generate_text
 
 MODEL = "gpt-6-luna"
@@ -110,18 +113,77 @@ def select_active_connector(session, scene: str, connector_id: UUID | None = Non
     raise AIUnavailable("AI_MODEL_NOT_CONFIGURED")
 
 
-def select_published_skill(session, connector_id: UUID, scene: str):
+def _select_legacy_published_skill(session, connector_id: UUID, scene: str):
     """Only load a published Skill belonging to the selected OpenAI connector."""
     return (
         session.execute(
             text("""SELECT id, instructions, runtime_instructions FROM ai_runtime_skill_versions
-            WHERE connector_id=:connector AND scene=:scene AND status='published'
+            WHERE connector_id=:connector AND scene=:scene AND status='published' AND deleted_at IS NULL
             ORDER BY version DESC LIMIT 1"""),
             {"connector": connector_id, "scene": scene},
         )
         .mappings()
         .first()
     )
+
+
+def select_published_skill(session, connector_id: UUID, scene: str):
+    """Return the explicitly bound library revision; fall back to old Skills."""
+    bound = (
+        session.execute(
+            text("""SELECT b.revision_id AS assigned_id,v.id,v.instructions,v.runtime_instructions,
+            v.status,s.deleted_at FROM ai_skill_bindings b
+            LEFT JOIN ai_skill_revisions v ON v.id=b.revision_id
+            LEFT JOIN ai_skill_library s ON s.id=v.skill_id
+            WHERE b.connector_id=:connector AND b.scene=:scene"""),
+            {"connector": connector_id, "scene": scene},
+        )
+        .mappings()
+        .first()
+    )
+    # Keep the legacy query for backward-compatibility and existing tests.
+    legacy = _select_legacy_published_skill(session, connector_id, scene)
+    if bound is None:
+        return legacy
+    if bound["id"] is None or bound["status"] != "published" or bound["deleted_at"] is not None:
+        return None
+    return bound
+
+
+def select_pinned_skill(session, skill_version_id: str, scene: str, connector_id: UUID):
+    """Allow previously pinned published/retired versions to finish safely."""
+    newer = (
+        session.execute(
+            text("""SELECT v.id,s.scene,v.status,v.instructions,v.runtime_instructions
+          FROM ai_skill_revisions v JOIN ai_skill_library s ON s.id=v.skill_id
+          JOIN ai_skill_revision_grants g ON g.revision_id=v.id
+          WHERE v.id=CAST(:id AS uuid) AND g.connector_id=:connector"""),
+            {"id": skill_version_id, "connector": connector_id},
+        )
+        .mappings()
+        .first()
+    )
+    if newer is not None:
+        if newer["status"] not in ("published", "retired") or newer["scene"] != scene:
+            raise AIUnavailable("AI_SKILL_VERSION_INVALID")
+        return newer
+    legacy = (
+        session.execute(
+            text("""SELECT instructions,runtime_instructions,scene,connector_id,status
+          FROM ai_runtime_skill_versions WHERE id=CAST(:id AS uuid)"""),
+            {"id": skill_version_id},
+        )
+        .mappings()
+        .first()
+    )
+    if (
+        legacy is None
+        or legacy["scene"] != scene
+        or legacy["connector_id"] != connector_id
+        or legacy["status"] not in ("published", "retired")
+    ):
+        raise AIUnavailable("AI_SKILL_VERSION_INVALID")
+    return legacy
 
 
 async def invoke(
@@ -134,6 +196,9 @@ async def invoke(
     connector_id: UUID | None = None,
     visual_parts: list[dict[str, str]] | None = None,
     visual_token_reserve: int = 0,
+    on_event: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None,
+    allow_web_search: bool = False,
+    stream_metadata: dict[str, Any] | None = None,
 ) -> tuple[str, int, int]:
     if scene not in SCENES or not prompt.strip() or len(prompt) > 10000:
         raise AIUnavailable("AI_REQUEST_INVALID")
@@ -145,26 +210,9 @@ async def invoke(
         # A queued keyword job pins its service and Skill version at enqueue time.
         # Other interactive scenes select the published Skill for this same service.
         if skill_version_id is not None:
-            skill = (
-                session.execute(
-                    text("""SELECT instructions, runtime_instructions, scene, connector_id, status
-                  FROM ai_runtime_skill_versions WHERE id=CAST(:id AS uuid)"""),
-                    {"id": skill_version_id},
-                )
-                .mappings()
-                .first()
-            )
-            if (
-                skill is None
-                or skill["scene"] != scene
-                or skill["connector_id"] != row["id"]
-                or skill["status"] not in ("published", "retired")
-            ):
-                raise AIUnavailable("AI_SKILL_VERSION_INVALID")
-        elif connector_id is None:
-            skill = select_published_skill(session, row["id"], scene)
+            skill = select_pinned_skill(session, skill_version_id, scene, row["id"])
         else:
-            skill = None
+            skill = select_published_skill(session, row["id"], scene)
         if skill is not None:
             instructions = resolve_runtime_instructions(
                 skill["instructions"], skill.get("runtime_instructions")
@@ -209,6 +257,8 @@ async def invoke(
                 ).scalar_one()
             )
         )
+        if allow_web_search and on_event is not None and scene == "ai_assistant":
+            reservation += Decimal("0.02")  # two max web calls, USD 0.01 each
         if spent + reservation > budget:
             raise AIUnavailable("AI_MONTHLY_LIMIT")
         session.execute(
@@ -226,13 +276,26 @@ async def invoke(
         )
         session.commit()
     try:
-        result, inp, out = await generate_text(
-            api_key=credential,
-            model=MODEL,
-            prompt=prompt,
-            max_output_tokens=max_out,
-            visual_parts=visual_parts,
-        )
+        if on_event is not None and scene == "ai_assistant":
+            result, inp, out, searched, sources, web_count = await generate_assistant_stream(
+                api_key=credential,
+                model=MODEL,
+                prompt=prompt,
+                max_output_tokens=max_out,
+                visual_parts=visual_parts,
+                allow_web_search=allow_web_search,
+                on_event=on_event,
+            )
+            if stream_metadata is not None:
+                stream_metadata.update(searched=searched, sources=sources)
+        else:
+            result, inp, out = await generate_text(
+                api_key=credential,
+                model=MODEL,
+                prompt=prompt,
+                max_output_tokens=max_out,
+                visual_parts=visual_parts,
+            )
     except Exception as exc:
         failed_cost, failure_code = failed_call_reservation(
             reservation, getattr(exc, "status_code", None)
@@ -251,6 +314,8 @@ async def invoke(
             session.commit()
         raise AIUnavailable(failure_code) from None
     actual = (Decimal(inp) * in_rate + Decimal(out) * out_rate) / Decimal(1000000)
+    if on_event is not None and scene == "ai_assistant" and allow_web_search:
+        actual += Decimal(web_count) * Decimal("0.01")
     with get_session_factory()() as session:
         session.execute(
             text("""UPDATE biz_ai_usage SET status='success',input_tokens=:input,
