@@ -86,6 +86,8 @@ def require_data_page_org_scope(
 
     Unreviewed endpoints deny rather than bypass the owner filter.
     """
+    # Avoid reusing a stale owner filter if a dependency override reuses a Session.
+    session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
     owner_refs = resolve_business_owner_refs(session, principal)
     if owner_refs is None:
         return
