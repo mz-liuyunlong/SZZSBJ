@@ -74,7 +74,8 @@ class WalmartDirectReadOnlyTransport:
                 timeout=self._timeout, follow_redirects=False, trust_env=False
             ) as client:
                 with client.stream(
-                    "POST", WALMART_HOST + "/v3/token",
+                    "POST",
+                    WALMART_HOST + "/v3/token",
                     data={"grant_type": "client_credentials"},
                     headers={
                         "Authorization": "Basic " + basic,
@@ -90,7 +91,8 @@ class WalmartDirectReadOnlyTransport:
                     raise TransportRejected("WALMART_TOKEN_INVALID")
                 wants_pdf = request.response_kind == "pdf"
                 with client.stream(
-                    "GET", WALMART_HOST + request.path,
+                    "GET",
+                    WALMART_HOST + request.path,
                     params=dict(request.query),
                     headers={
                         "WM_SEC.ACCESS_TOKEN": token,

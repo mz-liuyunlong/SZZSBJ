@@ -32,8 +32,8 @@ from app.integrations.walmart.contract_signing import (
     ReplayStore,
 )
 from app.integrations.walmart.contracts import ContractRegistry
-from app.integrations.walmart.feeds_catalog import feed_monitor_registry
 from app.integrations.walmart.direct_readonly_transport import WalmartDirectReadOnlyTransport
+from app.integrations.walmart.feeds_catalog import feed_monitor_registry
 from app.integrations.walmart.https_transport import WalmartHttpsTransport
 from app.integrations.walmart.marketplace_catalog import marketplace_read_registry
 from app.integrations.walmart.operations_catalog import operations_read_registry
@@ -123,7 +123,9 @@ def _transport_from_env(
         if os.environ.get(DIRECT_APPROVED_ENV) != "1" or write_mode:
             raise ValueError("WALMART_DIRECT_WRITE_DENIED")
         return WalmartDirectReadOnlyTransport(
-            bound_store=store, secret_resolver=secrets, timeout=12.0,
+            bound_store=store,
+            secret_resolver=secrets,
+            timeout=12.0,
             pass_provider_errors=signed,
         )
     if mode not in ("", "private-proxy"):
@@ -132,7 +134,8 @@ def _transport_from_env(
     if not isinstance(mapping, dict) or set(mapping) != {store}:
         raise ValueError("WALMART_EGRESS_MISSING")
     return WalmartHttpsTransport(
-        proxy_by_store=mapping, secret_resolver=secrets,
+        proxy_by_store=mapping,
+        secret_resolver=secrets,
         timeout=90.0 if (write_mode or signed) else 12.0,
         pass_provider_errors=write_mode or signed,
     )
