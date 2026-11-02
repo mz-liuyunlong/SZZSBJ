@@ -223,6 +223,105 @@ def test_listing_page_and_real_api_with_isolated_postgres() -> None:
                 ).all()
             )
             assert states == {"synthetic-a": True, "synthetic-b": False}
+            valid_tag = session.scalar(
+                select(ProductCustomTag).where(ProductCustomTag.source_account_ref == "synthetic-a")
+            )
+            assert valid_tag is not None
+            valid_tag_id = valid_tag.id
+            second_store_listing = ListingManagementCurrentMart(
+                source_account_ref="synthetic-a",
+                store_id="synthetic-other-store",
+                item_id="SYNTHETIC-LISTING-A",
+                local_sku="SYNTHETIC-LISTING-A",
+                listing_status="在线",
+                calculated_at=datetime.now(UTC),
+            )
+            session.add(second_store_listing)
+            session.commit()
+            second_store_listing_id = second_store_listing.id
+
+        with TestClient(app) as client:
+            mixed_tag_ids = client.post(
+                "/api/listings/tags/batch-set",
+                json={
+                    "listing_ids": [str(active_listing_id)],
+                    "tag_ids": [str(valid_tag_id), str(foreign_id)],
+                    "tag_values": ["SyntheticMustNotBeCreated"],
+                    "mode": "replace",
+                },
+            )
+            assert mixed_tag_ids.status_code == 422
+            with Session(engine) as session:
+                assert not session.scalar(select(ProductCustomTagAssignment.id).limit(1))
+                assert not session.scalar(
+                    select(ProductCustomTag.id).where(
+                        ProductCustomTag.name == "SyntheticMustNotBeCreated"
+                    )
+                )
+
+            shared_item = client.post(
+                "/api/listings/tags/batch-set",
+                json={
+                    "listing_ids": [str(active_listing_id), str(second_store_listing_id)],
+                    "tag_ids": [str(valid_tag_id)],
+                    "mode": "replace",
+                },
+            )
+            assert shared_item.status_code == 200, shared_item.text
+            with Session(engine) as session:
+                assignments = session.scalars(select(ProductCustomTagAssignment)).all()
+                assert len(assignments) == 1
+                assert assignments[0].source_account_ref == "synthetic-a"
+                assert assignments[0].item_id == "SYNTHETIC-LISTING-A"
+                assert assignments[0].tag_id == valid_tag_id
+            refreshed = client.get("/api/listings/walmart")
+            assert refreshed.status_code == 200, refreshed.text
+            shared_rows = [
+                row
+                for row in refreshed.json()["data"]["items"]
+                if row["item_id"] == "SYNTHETIC-LISTING-A"
+            ]
+            assert {row["store_id"] for row in shared_rows} == {
+                "synthetic-store",
+                "synthetic-other-store",
+            }
+            assert all(row["tags"] == ["SyntheticTag"] for row in shared_rows)
+
+            # Equal SKU sort values must still produce stable, non-overlapping pages.
+            sorted_pages = [
+                client.get(
+                    "/api/listings/walmart",
+                    params={"page": page, "page_size": 1, "sort_field": "sku"},
+                )
+                for page in (1, 2, 3)
+            ]
+            assert all(response.status_code == 200 for response in sorted_pages)
+            paged_ids = [response.json()["data"]["items"][0]["id"] for response in sorted_pages]
+            assert len(set(paged_ids)) == 3
+            assert set(paged_ids) == {
+                str(active_listing_id),
+                str(second_store_listing_id),
+                next(
+                    row["id"]
+                    for row in refreshed.json()["data"]["items"]
+                    if row["item_id"] == "SYNTHETIC-LISTING-A2"
+                ),
+            }
+
+            cleared = client.post(
+                "/api/listings/tags/batch-set",
+                json={
+                    "listing_ids": [str(active_listing_id), str(second_store_listing_id)],
+                    "mode": "replace",
+                },
+            )
+            assert cleared.status_code == 200, cleared.text
+            with Session(engine) as session:
+                assert not session.scalar(select(ProductCustomTagAssignment.id).limit(1))
+            cleared_rows = client.get("/api/listings/walmart").json()["data"]["items"]
+            assert all(
+                row["tags"] == [] for row in cleared_rows if row["item_id"] == "SYNTHETIC-LISTING-A"
+            )
     finally:
         server.should_exit = True
         thread.join(timeout=10)
