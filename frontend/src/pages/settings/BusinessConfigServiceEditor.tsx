@@ -94,8 +94,8 @@ export default function BusinessConfigServiceEditor({
       daily_limit: connector?.config.daily_limit ?? 100,
       monthly_budget_usd: Number(connector?.config.monthly_budget_usd ?? 50),
       max_output_tokens: connector?.config.max_output_tokens ?? 1024,
-      input_price_per_million: OPENAI_INPUT_USD_PER_MTOK,
-      output_price_per_million: OPENAI_OUTPUT_USD_PER_MTOK,
+      input_price_per_million: Number(connector?.config.input_price_per_million ?? OPENAI_INPUT_USD_PER_MTOK),
+      output_price_per_million: Number(connector?.config.output_price_per_million ?? OPENAI_OUTPUT_USD_PER_MTOK),
       draft_category: draft?.category ?? (categories.find((entry) => entry.value === preferredCategory)?.value ?? "ai"),
       provider: draft?.provider ?? "OpenAI",
       instanceKey: draft?.instanceKey ?? "",
@@ -163,8 +163,8 @@ export default function BusinessConfigServiceEditor({
           daily_limit: data.daily_limit,
           monthly_budget_usd: data.monthly_budget_usd ?? 0,
           max_output_tokens: data.max_output_tokens,
-          input_price_per_million: data.choice === "openai" ? OPENAI_INPUT_USD_PER_MTOK : (data.input_price_per_million ?? 0),
-          output_price_per_million: data.choice === "openai" ? OPENAI_OUTPUT_USD_PER_MTOK : (data.output_price_per_million ?? 0),
+          input_price_per_million: data.input_price_per_million ?? 0,
+          output_price_per_million: data.output_price_per_million ?? 0,
         };
         if (data.choice === "openai" && !skillBindingsReady) {
           messageApi.error("Skill 绑定尚未读取成功；为避免覆盖旧配置，已阻止保存");
@@ -282,10 +282,10 @@ export default function BusinessConfigServiceEditor({
               <span className="business-config__editor-chip">自动配置 · 只读</span>
             </div>
             <div className="business-config__editor-prices">
-              <div><span>输入 Token</span><strong>${OPENAI_INPUT_USD_PER_MTOK.toFixed(2)}</strong><small>USD / 100 万 Token</small></div>
-              <div><span>输出 Token</span><strong>${OPENAI_OUTPUT_USD_PER_MTOK.toFixed(2)}</strong><small>USD / 100 万 Token</small></div>
+              <div><span>输入 Token</span><strong>${Number(connector?.config.input_price_per_million ?? OPENAI_INPUT_USD_PER_MTOK).toFixed(2)}</strong><small>USD / 100 万 Token</small></div>
+              <div><span>输出 Token</span><strong>${Number(connector?.config.output_price_per_million ?? OPENAI_OUTPUT_USD_PER_MTOK).toFixed(2)}</strong><small>USD / 100 万 Token</small></div>
             </div>
-            <p className="business-config__editor-price-note">此处用于系统内部费用估算；长上下文、缓存、服务层级及供应商实际账单可能不同。价格由系统维护，不能在表单中修改。</p>
+            <p className="business-config__editor-price-note">此处用于系统内部费用估算；长上下文、缓存、服务层级及供应商实际账单可能不同。编辑时保留连接器已保存的单价；价格调整须通过另行批准的计费配置流程。</p>
             <Form.Item name="input_price_per_million" hidden><InputNumber /></Form.Item>
             <Form.Item name="output_price_per_million" hidden><InputNumber /></Form.Item>
             <Form.Item name="max_output_tokens" label="单次最大输出 Token">

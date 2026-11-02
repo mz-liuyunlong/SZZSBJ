@@ -1,5 +1,7 @@
 import {
   BellOutlined,
+  TableOutlined,
+  AppstoreOutlined,
   ApiOutlined,
   BarChartOutlined,
   CloudOutlined,
@@ -16,6 +18,7 @@ import {
   Modal,
   Empty,
   Input,
+  Select,
   Segmented,
   Popconfirm,
   Space,
@@ -80,6 +83,9 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const [section, setSection] = useState<Section>("connections");
   const [category, setCategory] = useState<Category>("all");
+  const [keyword, setKeyword] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [usageRange, setUsageRange] = useState<UsageRange>(7);
   const [config, setConfig] = useState<DecodoConfig | null>(null);
   const [usageRows, setUsageRows] = useState<DecodoUsageDay[]>([]);
@@ -278,9 +284,11 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
       updated: labelDate(item.updatedAt), draft: item,
     })),
   ];
-  const filteredRows = rows.filter(
-    (item) => category === "all" || item.category === category
-  );
+  const filteredRows = rows.filter((item) => (
+    (category === "all" || item.category === category) &&
+    (statusFilter === "all" || item.state === statusFilter || (statusFilter === "未配置" && item.state === "草稿")) &&
+    [item.name, item.subtitle, item.purpose].join(" ").toLowerCase().includes(keyword.toLowerCase().trim())
+  ));
   const categoriesCount = (key: Category) => key === "all" ? rows.length : rows.filter((item) => item.category === key).length;
   const columns: ColumnsType<ServiceRow> = [
     { title: "服务 / 配置名称", key: "name", width: 245,
@@ -365,12 +373,37 @@ section === "connections" ? (
               </div>
 
               <Card className="business-config__list-card" title={category === "all" ? "全部服务" : BUSINESS_CONFIG_CATEGORIES.find((item) => item.key === category)?.label}
-                >
+                extra={<Space><span className="business-config__muted">{filteredRows.length} 个实例</span>{canEdit && <Button size="small" icon={<PlusOutlined />} onClick={() => openServiceEditor()}>新增配置</Button>}</Space>}>
+                <div className="business-config__filters">
+                  <Input.Search aria-label="搜索服务配置" allowClear placeholder="搜索服务名称、实例、业务用途"
+                    value={keyword} onChange={(event) => setKeyword(event.target.value)} className="business-config__search" />
+                  <Select aria-label="状态筛选" value={statusFilter} onChange={setStatusFilter} className="business-config__status-filter"
+                    options={[{ value: "all", label: "全部状态" }, { value: "已启用", label: "已启用" }, { value: "已停用", label: "已停用" }, { value: "未配置", label: "未配置" }]} />
+                  <span className="business-config__filter-spacer" />
+                  <Segmented value={viewMode} onChange={(value) => setViewMode(value as ViewMode)}
+                    options={[{ label: <TableOutlined />, value: "table" }, { label: <AppstoreOutlined />, value: "cards" }]} />
+                </div>
 
                 {liveError && <Alert type="warning" showIcon message="飞书与 AI 连接暂时无法读取" description="已保留 Decodo 数据和现有设计草稿，请检查后端服务及测试库。"
                   action={<Button size="small" onClick={() => void refreshConnectors()}>重试</Button>} />}
+                {viewMode === "table" ? (
                   <Table<ServiceRow> rowKey="key" size="small" loading={configLoading || liveLoading} dataSource={filteredRows} columns={columns}
                     locale={{ emptyText: <Empty description="该分类暂无服务配置" /> }} pagination={false} scroll={{ x: 970 }} />
+                ) : (
+                  <div className="business-config__cards">
+                    {filteredRows.map((item) => <div key={item.key} className="business-config__instance">
+                      <div className="business-config__instance-head">
+                        <span className="business-config__service-avatar">{item.decodo ? "DE" : item.category === "ai" ? "AI" : "飞"}</span>
+                        <div><strong>{item.name}</strong><span className="business-config__subline">{item.subtitle}</span></div>
+                        <Tag color={item.state === "已启用" ? "success" : "default"}>{item.state}</Tag>
+                      </div>
+                      <p>{item.purpose}</p><div className="business-config__instance-meta"><span>{item.billing}</span><span>{item.updated}</span></div>
+                      <Space><Button size="small" onClick={() => item.decodo ? setDetailsOpen(true) : openServiceEditor(item.connector, item.draft)}>详情</Button>
+                        {canEdit && <Button size="small" onClick={() => item.decodo ? openEditor() : openServiceEditor(item.connector, item.draft)}>编辑</Button>}</Space>
+                    </div>)}
+                    {filteredRows.length === 0 && <Empty description="该分类暂无服务配置" />}
+                  </div>
+                )}
                 <div className="business-config__list-footer">共 {filteredRows.length} 条配置 · 飞书和 AI 以实际后端状态为准，草稿未建立真实连接</div>
               </Card>
             </div>
