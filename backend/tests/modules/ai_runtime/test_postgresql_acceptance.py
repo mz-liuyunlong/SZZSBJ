@@ -25,8 +25,8 @@ from app.modules.ai_runtime import keyword_routes
 from app.modules.ai_runtime.provider import (
     resolve_runtime_instructions,
     select_active_connector,
-    select_published_skill,
     select_pinned_skill,
+    select_published_skill,
 )
 
 pytestmark = pytest.mark.skipif(
