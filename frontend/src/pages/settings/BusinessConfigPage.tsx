@@ -380,7 +380,7 @@ section === "connections" ? (
                   <Select aria-label="状态筛选" value={statusFilter} onChange={setStatusFilter} className="business-config__status-filter"
                     options={[{ value: "all", label: "全部状态" }, { value: "已启用", label: "已启用" }, { value: "已停用", label: "已停用" }, { value: "未配置", label: "未配置" }]} />
                   <span className="business-config__filter-spacer" />
-                  <Segmented value={viewMode} onChange={(value) => setViewMode(value as ViewMode)}
+                  <Segmented aria-label="服务视图切换" value={viewMode} onChange={(value) => setViewMode(value as ViewMode)}
                     options={[{ label: <TableOutlined />, value: "table" }, { label: <AppstoreOutlined />, value: "cards" }]} />
                 </div>
 
