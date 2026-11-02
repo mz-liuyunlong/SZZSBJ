@@ -50,6 +50,21 @@ def integration_target() -> tuple[URL, str]:
     return local_url(), "szzsbj_dev"
 
 
+def is_ci_write_target(env: str, url) -> bool:
+    """True only for the CI integration job's own throwaway database in ``APP_ENV=test``:
+    ``postgresql+psycopg://…@127.0.0.1:5432/wfs_integration_ci`` with no query string.
+    Used by ``conftest.py`` to let the two app write guards accept exactly that database
+    while the job runs; every other (env, url) still goes to the real guards."""
+    return (
+        env == "test"
+        and url.drivername == "postgresql+psycopg"
+        and url.host == "127.0.0.1"
+        and url.port == 5432
+        and url.database == CI_DATABASE
+        and not url.query
+    )
+
+
 def run_migration(conn, filename: str, direction: str = "upgrade") -> None:
     spec = importlib.util.spec_from_file_location(f"wfs_mig_{filename[:13]}", VERSIONS / filename)
     assert spec is not None and spec.loader is not None
