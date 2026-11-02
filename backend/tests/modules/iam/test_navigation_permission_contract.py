@@ -16,6 +16,7 @@ PAGE = re.compile(r"\bpage\('([^']+)', '([^']+)',")
 VIEW = re.compile(r"viewPermissionKey:\s*'([^']+)'")
 STATUS = re.compile(r"status:\s*'(disabled|hidden)'")
 
+
 # The backend page catalog remains the permission authority. The navigation
 # is read-only input for an automated drift check; never execute TypeScript.
 def test_active_navigation_pages_have_registered_backend_permissions() -> None:
@@ -33,11 +34,7 @@ def test_active_navigation_pages_have_registered_backend_permissions() -> None:
         required_key = (
             override.group(1)
             if override
-            else "page:"
-            + group_key.replace("_", "-")
-            + ":"
-            + local_key.replace("_", "-")
-            + ":view"
+            else "page:" + group_key.replace("_", "-") + ":" + local_key.replace("_", "-") + ":view"
         )
         if required_key not in PERMISSION_KEYS:
             missing.append(f"{group_key}_{local_key}: {required_key}")
