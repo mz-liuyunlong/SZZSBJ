@@ -1,7 +1,7 @@
 """Pure Listing grade and lifecycle evaluators, independent of persistence and jobs.
 
 Inputs are LA-calendar-day evidence. Incomplete days never become zero business days.
-Callers MUST provide external proof of advertising/financial completeness.
+Callers must confirm the Daily Sales result is complete for each business day.
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ def grade_listing(
     days: list[FinancialDay],
     config: ListingGradeRuleConfig,
 ) -> GradeResult:
-    """Calculate weighted profitability only from complete, independently confirmed days."""
+    """Calculate weighted profitability only from complete, confirmed Daily Sales days."""
     window_start = cutoff - timedelta(days=config.medium_days - 1)
     by_day = {d.day: d for d in days if window_start <= d.day <= cutoff}
     medium_dates = [window_start + timedelta(days=i) for i in range(config.medium_days)]

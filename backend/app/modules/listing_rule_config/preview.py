@@ -73,7 +73,7 @@ def basic_financial_candidate(
     cutoff: date,
     config: ListingGradeRuleConfig,
 ) -> tuple[str | None, int, int, Decimal | None]:
-    """Diagnostic margin *only*, never evidence of ad/fee finalization.
+    """Diagnostic margin *only*, never proof that Daily Sales finished syncing.
 
     The MART contains no trusted zero-business-day publication marker: absent
     rows do not become zero dates. Missing currency is excluded, not assumed USD.
