@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
 from app.core.auth import Principal
-from app.modules.iam.permission_catalog_v2 import MODULE_NAMES
+from app.modules.iam.permission_catalog_v2 import MODULE_NAMES, PERMISSION_DEFINITIONS
 from app.modules.iam.rbac_repository import RbacRepository
 from app.modules.iam.rbac_schemas import (
     AuditEventRead,
@@ -61,6 +61,29 @@ class RbacService:
 
     def permission_catalog(self) -> PermissionCatalogRead:
         rows = self.repository.list_permission_catalog_rows()
+        declared = {str(row["permission_key"]) for row in rows}
+        disabled = self.repository.disabled_declared_permission_keys()
+        # Surface declared but not yet persisted permissions without writing on GET.
+        # Persist them only if an authorized role editor explicitly selects them.
+        rows = [
+            *rows,
+            *[
+                {
+                    "permission_key": item.permission_key,
+                    "name": item.name,
+                    "description": item.description,
+                    "permission_type": item.permission_type,
+                    "module_key": item.module_key,
+                    "page_key": item.page_key,
+                    "action_key": item.action_key,
+                    "field_key": item.field_key,
+                    "risk_level": item.risk_level,
+                    "sort_order": item.sort_order,
+                }
+                for item in PERMISSION_DEFINITIONS
+                if item.permission_key not in declared and item.permission_key not in disabled
+            ],
+        ]
         page_rows = {str(row["page_key"]): row for row in rows if row["permission_type"] == "page"}
         child_rows: dict[str, dict[str, list[dict[str, Any]]]] = {}
         for row in rows:
@@ -530,6 +553,13 @@ class RbacService:
     def _validated_permission_keys(self, permission_keys: list[str]) -> tuple[str, ...]:
         normalized = tuple(dict.fromkeys(item.strip() for item in permission_keys if item.strip()))
         existing = self.repository.existing_permission_keys(normalized)
+        missing = set(normalized) - existing
+        declared = {item.permission_key for item in PERMISSION_DEFINITIONS}
+        if missing & declared:
+            # Safe insertion is part of the role transaction; on conflict do nothing
+            # so deliberately disabled keys stay disabled.
+            self.repository.register_declared_permissions(missing & declared)
+            existing = self.repository.existing_permission_keys(normalized)
         invalid = sorted(set(normalized) - existing)
         if invalid:
             raise ApiError(

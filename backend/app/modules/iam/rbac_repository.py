@@ -40,6 +40,59 @@ class RbacRepository:
             ).mappings()
         )
 
+    def disabled_declared_permission_keys(self) -> set[str]:
+        """Disabled definitions must not reappear as automatically assignable grants."""
+        return {
+            str(key)
+            for key in self.session.execute(
+                text(
+                    """
+                    select permission_key from app_permissions
+                    where permission_type in ('page', 'action', 'field')
+                      and is_active = false
+                    """
+                )
+            ).scalars()
+        }
+
+    def register_declared_permissions(self, permission_keys: Iterable[str]) -> None:
+        """Lazy, insert-only registration; never grants roles or reactivates disabled keys."""
+        from app.modules.iam.permission_catalog_v2 import PERMISSION_DEFINITIONS
+
+        requested = set(permission_keys)
+        for item in PERMISSION_DEFINITIONS:
+            if item.permission_key not in requested:
+                continue
+            self.session.execute(
+                text(
+                    """
+                    insert into app_permissions (
+                        permission_key, name, group_key, description,
+                        permission_type, module_key, page_key, action_key, field_key,
+                        risk_level, sort_order, is_active, created_at, updated_at
+                    ) values (
+                        :permission_key, :name, :group_key, :description,
+                        :permission_type, :module_key, :page_key, :action_key, :field_key,
+                        :risk_level, :sort_order, true, now(), now()
+                    )
+                    on conflict (permission_key) do nothing
+                    """
+                ),
+                {
+                    "permission_key": item.permission_key,
+                    "name": item.name,
+                    "group_key": item.module_key,
+                    "description": item.description,
+                    "permission_type": item.permission_type,
+                    "module_key": item.module_key,
+                    "page_key": item.page_key,
+                    "action_key": item.action_key,
+                    "field_key": item.field_key,
+                    "risk_level": item.risk_level,
+                    "sort_order": item.sort_order,
+                },
+            )
+
     def list_roles(self) -> list[Mapping[str, Any]]:
         return list(
             self.session.execute(
