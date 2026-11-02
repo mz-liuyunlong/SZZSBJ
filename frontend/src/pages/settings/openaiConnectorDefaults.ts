@@ -7,3 +7,14 @@ export const OPENAI_FIXED_MODEL = "gpt-6-luna" as const;
 export const OPENAI_INPUT_USD_PER_MTOK = 0.10;
 export const OPENAI_OUTPUT_USD_PER_MTOK = 0.50;
 export const OPENAI_DEFAULT_SCENES = ["keyword_launch", "ai_assistant", "listing_optimization"] as const;
+
+/** Preserve persisted per-connector billing parameters on ordinary edits. */
+export function resolveOpenAIBillingRates(config?: {
+  input_price_per_million?: number | null;
+  output_price_per_million?: number | null;
+}) {
+  return {
+    input_price_per_million: config?.input_price_per_million ?? OPENAI_INPUT_USD_PER_MTOK,
+    output_price_per_million: config?.output_price_per_million ?? OPENAI_OUTPUT_USD_PER_MTOK,
+  };
+}
