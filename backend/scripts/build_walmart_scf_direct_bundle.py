@@ -2,7 +2,8 @@
 
 Usage (under Python 3.10):
     python -m pip install -r backend/scf-direct-readonly-requirements.txt --target /tmp/scf-stage
-    python backend/scripts/build_walmart_scf_direct_bundle.py --stage /tmp/scf-stage --output backend/dist/scf.zip
+    python backend/scripts/build_walmart_scf_direct_bundle.py \
+        --stage /tmp/scf-stage --output backend/dist/scf.zip
 
 The target directory must contain only wheel dependencies before this command.
 The script intentionally shadows app/__init__.py, whose full backend bootstrap
