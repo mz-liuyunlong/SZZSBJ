@@ -55,7 +55,9 @@ test("manual SKU application creates an auditable mock task without backend writ
  await prepare(page);
  await page.goto("/#/products/clearance-center");
  await expect(page.getByRole("heading",{name:"WFS 清货中心"})).toBeVisible();
- await page.getByRole("button",{name:/申请\s*SKU/}).click();
+ const applySkuButton=page.locator(".clearance-toolbar").getByRole("button",{name:/申请\s*SKU/});
+ await expect(applySkuButton).toHaveCount(1);
+ await applySkuButton.click();
  const chooser=page.getByRole("dialog",{name:"运营主动申请清货"});
  await expect(chooser).toBeVisible();
  const sku=chooser.locator(".ant-table-row").filter({hasText:"DEMO-SKU-101"});
