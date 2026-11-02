@@ -78,6 +78,28 @@ describe("business configuration V2", () => {
     expect(mocks.fetchConfig).toHaveBeenCalledTimes(1);
   });
 
+  it("restores search, status filter and view control without removing services", async () => {
+    render(<BusinessConfigPage page={page} />);
+    expect(await screen.findByText("Decodo Scraper API")).toBeInTheDocument();
+    const search = screen.getByRole("searchbox", { name: "搜索服务配置" });
+    fireEvent.change(search, { target: { value: "no-matching-service" } });
+    expect(screen.queryByText("Decodo Scraper API")).not.toBeInTheDocument();
+    expect(screen.getByText("该分类暂无服务配置")).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: "Decodo" } });
+    expect(screen.getByText("Decodo Scraper API")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "状态筛选" })).toBeInTheDocument();
+    expect(screen.getByLabelText("服务视图切换")).toBeInTheDocument();
+  });
+
+  it("does not expose edit actions to a read-only user", async () => {
+    mocks.currentUser.mockResolvedValue({ isSuperAdmin: false });
+    render(<BusinessConfigPage page={page} />);
+    expect(await screen.findByText("Decodo Scraper API")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.currentUser).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "新增服务配置" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "编辑" })).not.toBeInTheDocument();
+  });
+
   it("uses the requested 30-day window in the real usage API", async () => {
     render(<BusinessConfigPage page={page} />);
     fireEvent.click(screen.getByRole("tab", { name: /用量与费用/ }));
