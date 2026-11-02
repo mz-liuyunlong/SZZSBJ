@@ -151,7 +151,7 @@ def test_la_t_minus_two_in_summer_and_winter() -> None:
     ) == date(2026, 12, 23)
 
 
-def test_fbm_lifecycle_with_valid_sales_and_no_wfs_inventory() -> None:
+def test_fbm_lifecycle_is_excluded_even_with_valid_sales() -> None:
     days = [BusinessDay(_day(i), None, Decimal("2")) for i in range(30)]
     result = lifecycle_listing(
         cutoff=CUTOFF,
@@ -161,8 +161,22 @@ def test_fbm_lifecycle_with_valid_sales_and_no_wfs_inventory() -> None:
         config=CFG,
         fulfillment_type="0",
     )
-    assert result.stage in {"启动期", "稳定期"}
-    assert result.stage != "断货期"
+    assert result.stage == "待确认"
+    assert not result.evidence_complete
+    assert "非WFS不参与" in result.reason
+
+
+def test_existing_fbm_stage_is_not_recalculated() -> None:
+    result = lifecycle_listing(
+        cutoff=CUTOFF,
+        previous_stage="稳定期",
+        days=[BusinessDay(_day(i), None, Decimal("2")) for i in range(30)],
+        first_effective_stock=False,
+        config=CFG,
+        fulfillment_type="0",
+    )
+    assert result.stage == "稳定期"
+    assert not result.evidence_complete
 
 
 def test_initial_lifecycle_missing_sales_stays_pending() -> None:

@@ -201,32 +201,27 @@ def lifecycle_listing(
     Pre-commercial, clearance and archive statuses require workflow events.
     A historical stockout stage and repair counters must come from snapshots.
     """
+    if fulfillment_type != "1":
+        return LifecycleResult(
+            previous_stage or "待确认", "非WFS不参与本轮生命周期计算", 0, 0, False
+        )
     if previous_stage in {"测品期", "打品期", "清货期", "已归档"}:
         return LifecycleResult(previous_stage, "流程/审批状态优先", 0, 0, True)
-    if fulfillment_type not in {"0", "1"}:
-        return LifecycleResult(
-            previous_stage or "待确认", "履约方式未知，禁止套用WFS/FBM库存规则", 0, 0, False
-        )
-    is_wfs = fulfillment_type == "1"
     by_day = {d.day: d for d in days if d.day <= cutoff}
     today = by_day.get(cutoff)
     consecutive = 0
     cursor = cutoff
     # Inventory strictly above zero is low-stock, not out-of-stock.
-    while is_wfs and first_effective_stock and cursor in by_day:
+    while first_effective_stock and cursor in by_day:
         obs = by_day[cursor]
         if obs.wfs_qty is None or obs.wfs_qty != ZERO:
             break
         consecutive += 1
         cursor -= timedelta(days=1)
     recent = [by_day.get(cutoff - timedelta(days=i)) for i in range(30)]
-    valid_stock30 = sum(
-        1
-        for row in recent
-        if row is not None and (row.wfs_qty if is_wfs else row.available_qty) is not None
-    )
+    valid_stock30 = sum(1 for row in recent if row is not None and row.wfs_qty is not None)
     valid_sales30 = sum(1 for row in recent if row is not None and row.sales_qty is not None)
-    if is_wfs and (today is None or today.wfs_qty is None):
+    if today is None or today.wfs_qty is None:
         return LifecycleResult(
             previous_stage or "待确认",
             "WFS当日库存快照缺失，不能当作零库存",
@@ -234,24 +229,12 @@ def lifecycle_listing(
             consecutive,
             False,
         )
-    if not is_wfs and (today is None or today.sales_qty is None):
-        return LifecycleResult(
-            previous_stage or "待确认",
-            "FBM当日经营记录缺失，不使用WFS库存推断",
-            valid_stock30,
-            0,
-            False,
-        )
-    if (
-        is_wfs
-        and first_effective_stock
-        and consecutive >= config.inventory_repair.stockout_consecutive_days
-    ):
+    if first_effective_stock and consecutive >= config.inventory_repair.stockout_consecutive_days:
         return LifecycleResult(
             "断货期", "连续WFS零库存达到断货门槛", valid_stock30, consecutive, True
         )
     if previous_stage is None:
-        if valid_sales30 >= 7 and (not is_wfs or first_effective_stock):
+        if valid_sales30 >= 7 and first_effective_stock:
             previous_stage = "启动期"
         else:
             return LifecycleResult(
@@ -263,7 +246,7 @@ def lifecycle_listing(
             )
 
     if previous_stage == "断货期":
-        if not first_effective_stock or (is_wfs and today.wfs_qty == ZERO):
+        if not first_effective_stock or today.wfs_qty == ZERO:
             return LifecycleResult(
                 "断货期", "历史断货尚未证实恢复", valid_stock30, consecutive, False
             )
@@ -289,7 +272,7 @@ def lifecycle_listing(
         if "stockout" in repair_reasons and (
             repair_stock_valid_days is None
             or repair_stock_valid_days < config.inventory_repair.stockout_repair_valid_days
-            or (is_wfs and today.wfs_qty == ZERO)
+            or today.wfs_qty == ZERO
         ):
             return LifecycleResult(
                 "修复期", "库存修复验收尚未完成", valid_stock30, consecutive, True
