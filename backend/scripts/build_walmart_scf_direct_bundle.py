@@ -8,6 +8,7 @@ The target directory must contain only wheel dependencies before this command.
 The script intentionally shadows app/__init__.py, whose full backend bootstrap
 is NOT part of the cloud function.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -50,7 +51,11 @@ def main() -> None:
     args = parser.parse_args()
     repo = pathlib.Path(__file__).resolve().parents[2]
     stage = args.stage.resolve()
-    if not stage.is_dir() or not (stage / "httpx").is_dir() or not (stage / "cryptography").is_dir():
+    if (
+        not stage.is_dir()
+        or not (stage / "httpx").is_dir()
+        or not (stage / "cryptography").is_dir()
+    ):
         raise SystemExit("SCF_DEPENDENCIES_MISSING")
     if stage == repo or repo in stage.parents:
         raise SystemExit("SCF_STAGE_MUST_BE_OUTSIDE_REPO")
@@ -60,7 +65,11 @@ def main() -> None:
 
     # Explicit source allowlist, no backend/__init__ side effects or live secrets.
     manifest = {"runtime": "python3.10", "handler": "index.main_handler", "modules": {}}
-    for init in ("app/__init__.py", "app/integrations/__init__.py", "app/integrations/walmart/__init__.py"):
+    for init in (
+        "app/__init__.py",
+        "app/integrations/__init__.py",
+        "app/integrations/walmart/__init__.py",
+    ):
         dest = stage / init
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text('"""Dedicated SCF deployment package."""\n', encoding="utf-8")
@@ -79,18 +88,25 @@ def main() -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     if stage == out or stage in out.parents:
         raise SystemExit("SCF_ZIP_MUST_BE_OUTSIDE_STAGE")
-    banned = (".env", ".pem", ".key", ".pyc", ".p12", ".pfx")
+    banned = (".env", ".key", ".pyc", ".p12", ".pfx")
+    allowed_ca = pathlib.PurePosixPath("certifi/cacert.pem")
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for path in sorted(stage.rglob("*")):
             if not path.is_file():
                 continue
             relative = path.relative_to(stage)
-            if "__pycache__" in relative.parts or any(str(relative).endswith(x) for x in banned):
+            if (
+                "__pycache__" in relative.parts
+                or any(str(relative).endswith(x) for x in banned)
+                or (relative.suffix.lower() == ".pem" and relative != allowed_ca)
+            ):
                 raise SystemExit("SCF_UNEXPECTED_SENSITIVE_FILE")
             info = zipfile.ZipInfo(relative.as_posix(), ZIP_TIMESTAMP)
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
-            archive.writestr(info, path.read_bytes(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+            archive.writestr(
+                info, path.read_bytes(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9
+            )
     if out.stat().st_size > MAX_ZIP_BYTES:
         out.unlink()
         raise SystemExit("SCF_BUNDLE_SIZE_EXCEEDED")

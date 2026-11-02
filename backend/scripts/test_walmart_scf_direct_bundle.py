@@ -2,6 +2,7 @@
 
 No credentials, cloud accounts, network requests or production writes are used.
 """
+
 from __future__ import annotations
 
 import pathlib
@@ -10,7 +11,7 @@ import sys
 import tempfile
 import zipfile
 
-SMOKE = r'''
+SMOKE = r"""
 import json
 import os
 import time
@@ -146,7 +147,8 @@ def main() -> None:
         with zipfile.ZipFile(archive) as bundle:
             names = bundle.namelist()
             if len(names) != len(set(names)) or any(
-                pathlib.PurePosixPath(name).is_absolute() or ".." in pathlib.PurePosixPath(name).parts
+                pathlib.PurePosixPath(name).is_absolute()
+                or ".." in pathlib.PurePosixPath(name).parts
                 for name in names
             ):
                 raise SystemExit("SCF_ZIP_UNSAFE")
