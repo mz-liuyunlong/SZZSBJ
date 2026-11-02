@@ -58,7 +58,6 @@ def authorized_department_ids(
     return department_ids
 
 
-
 # Session-local marker is populated only for reviewed DATA-PAGES endpoints.
 # Never store this in a global cache: permissions are evaluated per request.
 ORG_OWNER_SCOPE_SESSION_KEY = "szzsbj_org_scoped_owner_refs"
@@ -118,9 +117,7 @@ def resolve_business_owner_refs(
     ).bindparams(bindparam("department_ids", expanding=True))
     owners = frozenset(
         str(value)
-        for value in session.execute(
-            query, {"department_ids": sorted(departments)}
-        ).scalars()
+        for value in session.execute(query, {"department_ids": sorted(departments)}).scalars()
     )
     if not owners:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)

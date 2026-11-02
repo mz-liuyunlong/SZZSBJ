@@ -172,9 +172,7 @@ class DailySalesRepository:
 
     def __init__(self, session: Session) -> None:
         self.session = session
-        self.org_owner_refs: frozenset[str] | None = session.info.get(
-            ORG_OWNER_SCOPE_SESSION_KEY
-        )
+        self.org_owner_refs: frozenset[str] | None = session.info.get(ORG_OWNER_SCOPE_SESSION_KEY)
 
     def _inventory_snapshot_table_ready(self) -> bool:
         """Return whether the inventory snapshot migration is already applied.
@@ -723,9 +721,7 @@ class OrderProfitRepository:
 
     def __init__(self, session: Session) -> None:
         self.session = session
-        self.org_owner_refs: frozenset[str] | None = session.info.get(
-            ORG_OWNER_SCOPE_SESSION_KEY
-        )
+        self.org_owner_refs: frozenset[str] | None = session.info.get(ORG_OWNER_SCOPE_SESSION_KEY)
 
     def list_order_profit(
         self,
@@ -870,9 +866,7 @@ class ListingManagementRepository:
 
     def __init__(self, session: Session) -> None:
         self.session = session
-        self.org_owner_refs: frozenset[str] | None = session.info.get(
-            ORG_OWNER_SCOPE_SESSION_KEY
-        )
+        self.org_owner_refs: frozenset[str] | None = session.info.get(ORG_OWNER_SCOPE_SESSION_KEY)
 
     def list_listings(
         self,
@@ -1271,7 +1265,10 @@ class ListingManagementRepository:
             statement = statement.where(
                 or_(
                     owner_lookup.c.owner_uid.in_(self.org_owner_refs),
-                    ListingManagementCurrentMart.owner_ref.in_(self.org_owner_refs),
+                    and_(
+                        owner_lookup.c.owner_uid.is_(None),
+                        ListingManagementCurrentMart.owner_ref.in_(self.org_owner_refs),
+                    ),
                 )
             )
 

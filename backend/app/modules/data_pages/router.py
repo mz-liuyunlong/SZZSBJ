@@ -96,9 +96,7 @@ def require_data_page_org_scope(
     session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owner_refs
 
 
-router = APIRouter(
-    tags=["DATA-PAGES"], dependencies=[Depends(require_data_page_org_scope)]
-)
+router = APIRouter(tags=["DATA-PAGES"], dependencies=[Depends(require_data_page_org_scope)])
 db_session = Annotated[Session, Depends(get_db_session)]
 source_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
 _DAILY_SALES_REGISTRY = DATA_PAGE_API_REGISTRY["daily_sales"]
