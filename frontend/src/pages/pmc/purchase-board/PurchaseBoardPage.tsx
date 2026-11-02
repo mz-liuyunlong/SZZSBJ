@@ -237,6 +237,7 @@ function PurchaseBoardPage({ page, preferenceScope = "anonymous" }: PurchaseBoar
                 rows={overdueRows}
                 loading={overdueQuery.isFetching}
                 thresholdDays={overdueQuery.data?.thresholdDays ?? null}
+                counts={overdueQuery.data?.counts}
                 currentPage={currentPage}
                 pageSize={pageSize}
                 onPageChange={(nextPage, nextPageSize) => {

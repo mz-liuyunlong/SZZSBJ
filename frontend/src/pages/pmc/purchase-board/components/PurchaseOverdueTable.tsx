@@ -6,8 +6,9 @@
  * (both sources are fetched completely, see ``usePurchaseOverdueRows``) and sorted by
  * overdue days, then pending days, descending.
  */
-import { Table, Tag, Typography } from "antd";
+import { Alert, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import type { OverdueSourceCount } from "@/pages/pmc/purchase-board/purchaseBoardQueries";
 import type { PurchaseOverdueRow } from "@/pages/pmc/purchase-board/purchaseOverdueRows";
 
 const dash = <Typography.Text type="secondary">—</Typography.Text>;
@@ -68,6 +69,8 @@ interface PurchaseOverdueTableProps {
   rows: PurchaseOverdueRow[];
   loading: boolean;
   thresholdDays: number | null;
+  /** Per-source fetch counts; a truncated source shows a notice instead of silently dropping rows. */
+  counts?: { orders: OverdueSourceCount; plans: OverdueSourceCount };
   currentPage: number;
   pageSize: number;
   onPageChange: (page: number, pageSize: number) => void;
@@ -78,17 +81,33 @@ function PurchaseOverdueTable({
   rows,
   loading,
   thresholdDays,
+  counts,
   currentPage,
   pageSize,
   onPageChange,
   onOpenOrder,
 }: PurchaseOverdueTableProps) {
   const orders = rows.filter((row) => row.kind === "order").length;
+  const truncatedNotes = counts
+    ? [
+      counts.orders.truncated && `待下单采购单仅显示前 ${counts.orders.shown.toLocaleString()} 条，共 ${counts.orders.total.toLocaleString()} 条`,
+      counts.plans.truncated && `未转单计划仅显示前 ${counts.plans.shown.toLocaleString()} 条，共 ${counts.plans.total.toLocaleString()} 条`,
+    ].filter((note): note is string => Boolean(note))
+    : [];
   return (
     <div className="purchase-board__overdue">
+      {truncatedNotes.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          className="purchase-board__overdue-truncated"
+          message={`${truncatedNotes.join("；")}。请用负责人、关键词等筛选缩小范围。`}
+        />
+      )}
       <Typography.Paragraph type="secondary" className="purchase-board__hint">
         待采购超时：已审批、尚未真正下出去的采购需求，包含待下单采购单 {orders} 行与未转单计划 {rows.length - orders} 行，
         超时阈值 {thresholdDays === null ? "—" : `${thresholdDays} 天`}（规则表 s2_pending_days）；未归属店铺的计划不计超时。
+        采购单按明细行列出（一个采购单有多行时，行数会多于卡片上的采购单数）；未转单计划不受看板筛选（负责人、关键词等）影响。
       </Typography.Paragraph>
       <Table<PurchaseOverdueRow>
         rowKey="key"

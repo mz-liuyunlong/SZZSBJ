@@ -16,6 +16,7 @@ import {
   listPendingPurchasePlans,
   listPurchaseBoard,
 } from "@/pages/pmc/purchase-board/purchaseBoardApi";
+import { daysSince, overdueRowFromOrder } from "@/pages/pmc/purchase-board/purchaseOverdueRows";
 import type {
   PurchaseBoardFilters,
   PurchaseBoardRow,
@@ -398,11 +399,48 @@ describe("PurchaseBoardPage", () => {
     expect(screen.getByText(/共 2 条待采购超时/)).toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "仅看超时" })).not.toBeInTheDocument();
     expect(screen.queryByText("待采购计划（已审批未转单）")).not.toBeInTheDocument();
+    // Reviewer notes 3 + 4: lines vs. card count, and plans ignore the board filters.
+    expect(screen.getByText(/采购单按明细行列出/)).toBeInTheDocument();
+    expect(screen.getByText(/未转单计划不受看板筛选/)).toBeInTheDocument();
+    // Nothing was truncated, so no truncation notice.
+    expect(screen.queryByText(/仅显示前/)).not.toBeInTheDocument();
 
     // Turning the card off brings the normal board table back.
     fireEvent.click(screen.getByRole("button", { name: "待采购超时：6" }));
     await waitFor(() => expect(screen.queryByText("未转单计划")).not.toBeInTheDocument());
     expect(await screen.findAllByTestId("board-row")).not.toHaveLength(0);
+  });
+
+  it("says so when a 待采购超时 source is truncated instead of silently dropping rows", async () => {
+    vi.mocked(listPurchaseBoard).mockImplementation(async (_filters, page) => ({
+      rows: [{ ...row, id: `PO1::L${page}::P1`, orderItemId: `L${page}` }],
+      total: 9999,
+      meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: 9999 },
+    }));
+    await renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "待采购超时：6" }));
+    // 25 pages is the cap; every page returned one row of 9,999.
+    expect(await screen.findByText(/待下单采购单仅显示前 25 条，共 9.?999 条/)).toBeInTheDocument();
+    expect(screen.queryByText(/未转单计划仅显示前/)).not.toBeInTheDocument();
+    // The fetch stops at the cap: page 25 is the last page ever requested (the query may run
+    // more than once, e.g. a refetch, so the call count itself is not asserted).
+    const pages = vi.mocked(listPurchaseBoard).mock.calls
+      .filter((call) => call[4] === "purchase_overdue")
+      .map((call) => call[1]);
+    expect(Math.max(...pages)).toBe(25);
+  });
+
+  it("counts pending days for order lines in Beijing calendar days, not UTC", () => {
+    // 2026-11-01T23:30Z is 2026-11-02 07:30 in Beijing: UTC still says 11-01.
+    const beijing0730 = new Date("2026-11-01T23:30:00Z");
+    expect(daysSince("2026-11-01", beijing0730)).toBe(1);
+    expect(daysSince("2026-11-02", beijing0730)).toBe(0);
+    // 2026-11-02T16:30Z is 11-03 00:30 in Beijing.
+    expect(daysSince("2026-11-01", new Date("2026-11-02T16:30:00Z"))).toBe(2);
+    expect(daysSince(null, beijing0730)).toBeNull();
+    const line = overdueRowFromOrder({ ...row, stage: { ...row.stage, stageStart: "2026-10-26" } }, beijing0730);
+    expect(line.pendingDays).toBe(7);
   });
 
   it("opens the pending-plan drill-down from the header action", async () => {
