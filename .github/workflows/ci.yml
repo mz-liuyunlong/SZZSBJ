@@ -114,6 +114,37 @@ jobs:
         run: |
           bash scripts/ci-preflight.sh backend
 
+  ad-sp-recovery-postgresql:
+    name: SP ad recovery PostgreSQL integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ad_sp_recovery_ci
+          POSTGRES_USER: ad_sp_recovery_ci
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ad_sp_recovery_ci -d ad_sp_recovery_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      AD_SP_RECOVERY_TEST_POSTGRES_URL: postgresql+psycopg://ad_sp_recovery_ci:local_ci_only@127.0.0.1:5432/ad_sp_recovery_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Run SP cost recovery in isolated PostgreSQL transaction
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run pytest -q tests/test_data_pages_ad_spend_recovery_postgres.py
+
   iam-auth-postgresql:
     name: IAM auth PostgreSQL integration
     runs-on: ubuntu-latest
