@@ -155,8 +155,10 @@ def select_pinned_skill(session, skill_version_id: str, scene: str, connector_id
     newer = (
         session.execute(
             text("""SELECT v.id,s.scene,v.status,v.instructions,v.runtime_instructions
-          FROM ai_skill_revisions v JOIN ai_skill_library s ON s.id=v.skill_id WHERE v.id=CAST(:id AS uuid)"""),
-            {"id": skill_version_id},
+          FROM ai_skill_revisions v JOIN ai_skill_library s ON s.id=v.skill_id
+          JOIN ai_skill_revision_grants g ON g.revision_id=v.id
+          WHERE v.id=CAST(:id AS uuid) AND g.connector_id=:connector"""),
+            {"id": skill_version_id, "connector": connector_id},
         )
         .mappings()
         .first()

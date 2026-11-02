@@ -264,6 +264,11 @@ def save_bindings(connector_id: UUID, body: BindingsWrite, request: Request, pri
                         message="绑定必须选择该场景已发布的 Skill",
                     )
             session.execute(
+                text("""INSERT INTO ai_skill_revision_grants(revision_id,connector_id)
+                  VALUES (:revision,:connector) ON CONFLICT DO NOTHING"""),
+                {"revision": revision, "connector": connector_id},
+            )
+            session.execute(
                 text("""INSERT INTO ai_skill_bindings(connector_id,scene,revision_id)
               VALUES (:connector,:scene,:revision)
               ON CONFLICT(connector_id,scene) DO UPDATE SET revision_id=EXCLUDED.revision_id"""),
@@ -408,6 +413,16 @@ def publish(skill_id: UUID, revision_id: UUID, request: Request, principal: admi
                 status_code=422,
                 message="请填写最多 3000 字的精简运行指令",
             ) from None
+        # Preserve the connector grant for queued jobs pinned to retired revisions.
+        # Only connectors explicitly bound to the prior published revision inherit.
+        session.execute(
+            text("""INSERT INTO ai_skill_revision_grants(revision_id,connector_id)
+              SELECT :new_rev, connector_id FROM ai_skill_bindings
+              WHERE revision_id IN (SELECT id FROM ai_skill_revisions
+                WHERE skill_id=:sid AND status='published')
+              ON CONFLICT DO NOTHING"""),
+            {"new_rev": revision_id, "sid": skill_id},
+        )
         # Atomic upgrade: bound scenes track the latest published revision,
         # while previously pinned jobs keep their immutable old revision ID.
         session.execute(

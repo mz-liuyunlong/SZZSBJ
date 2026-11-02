@@ -26,6 +26,7 @@ from app.modules.ai_runtime.provider import (
     resolve_runtime_instructions,
     select_active_connector,
     select_published_skill,
+    select_pinned_skill,
 )
 
 pytestmark = pytest.mark.skipif(
@@ -171,3 +172,32 @@ def test_job_account_and_owner_isolation_and_idempotency(db, monkeypatch) -> Non
     assert db.scalar(text("SELECT status FROM ai_runtime_jobs WHERE id=:id"), {"id": job_id}) == (
         "cancelled"
     )
+
+
+
+def test_library_revision_pins_never_cross_connector(db) -> None:
+    from app.modules.ai_runtime.provider import AIUnavailable
+
+    first = _connector(db, "Pin scope A")
+    second = _connector(db, "Pin scope B")
+    skill_id, revision_id = uuid4(), uuid4()
+    db.execute(
+        text("""INSERT INTO ai_skill_library(id,slug,name,scene,description,created_by)
+          VALUES (:id,:slug,'Pinned','keyword_launch','synthetic','synthetic')"""),
+        {"id": skill_id, "slug": "test-" + skill_id.hex},
+    )
+    db.execute(
+        text("""INSERT INTO ai_skill_revisions
+          (id,skill_id,version,status,instructions,runtime_instructions,created_by)
+          VALUES (:id,:sid,1,'retired','historical','run A','synthetic')"""),
+        {"id": revision_id, "sid": skill_id},
+    )
+    db.execute(
+        text("""INSERT INTO ai_skill_revision_grants(revision_id,connector_id)
+          VALUES (:id,:connector)"""),
+        {"id": revision_id, "connector": first},
+    )
+    assert select_pinned_skill(db, str(revision_id), "keyword_launch", first)["runtime_instructions"] == "run A"
+    with pytest.raises(AIUnavailable) as denied:
+        select_pinned_skill(db, str(revision_id), "keyword_launch", second)
+    assert denied.value.code == "AI_SKILL_VERSION_INVALID"
