@@ -30,7 +30,7 @@ function makeColumn<T>(
     key,dataIndex:key,
     title:<ResizableColumnTitle label={label} width={width} minWidth={Math.min(width,110)} onWidthChange={n=>onWidth(tab+":"+key,n)}/>,
     width,ellipsis:false,
-    fixed:key==="identity"||key==="id"?"left":key==="action"?"right":undefined,
+    fixed:key==="action"?"right":(tab==="analysis"&&(key==="identity"||key==="sku"))||(tab==="management"&&(key==="id"||key==="item"))?"left":undefined,
     onHeaderCell:()=>({className:"report-table-resizable-header-cell"}),
     render:(_,row)=>render(row),
   };

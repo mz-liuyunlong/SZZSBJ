@@ -27,6 +27,7 @@ test("clearance uses one native page, shared table and mock only",async({page})=
  }
  await expect(page.locator("iframe")).toHaveCount(0);
  await expect(page.locator(".clearance-main-card .ant-pro-table")).toHaveCount(1);
+ await expect(page.locator(".clearance-main-card .ant-table-thead th.ant-table-cell-fix-left")).toHaveCount(2);
  await expect(page.getByText("数据周期：",{exact:true})).toBeVisible();
  await expect(page.locator(".clearance-period-segmented .ant-segmented-item-selected")).toContainText("30天");
  await expect(page.getByText("7 / 14 / 30 日均销量")).toHaveCount(0);
@@ -42,6 +43,7 @@ test("clearance uses one native page, shared table and mock only",async({page})=
  await expect(page.getByRole("heading",{name:"清货规则配置"})).toBeVisible();
  await expect(page.getByText("影响预览确认后才保存",{exact:false})).toBeVisible();
  await page.getByRole("tab",{name:/清货管理/}).click();
+ await expect(page.locator(".clearance-main-card .ant-table-thead th.ant-table-cell-fix-left")).toHaveCount(2);
  await expect(page.getByRole("button",{name:"任务详情"}).first()).toBeVisible();
  await page.getByRole("button",{name:"申请 SKU"}).click();
  await expect(page.getByRole("dialog",{name:"运营主动申请清货"})).toBeVisible();
@@ -53,7 +55,7 @@ test("manual SKU application creates an auditable mock task without backend writ
  await prepare(page);
  await page.goto("/#/products/clearance-center");
  await expect(page.getByRole("heading",{name:"WFS 清货中心"})).toBeVisible();
- await page.getByRole("button",{name:"申请 SKU",exact:true}).click();
+ await page.getByRole("button",{name:/申请\s*SKU/}).click();
  const chooser=page.getByRole("dialog",{name:"运营主动申请清货"});
  await expect(chooser).toBeVisible();
  const sku=chooser.locator(".ant-table-row").filter({hasText:"DEMO-SKU-101"});
