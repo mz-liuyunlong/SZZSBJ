@@ -928,13 +928,7 @@ class ListingManagementRepository:
             "sales30Days": ListingManagementCurrentMart.sales_30d,
             "listPrice": projection.effective_strike_price_amount,
             "salePrice": projection.effective_sale_price_amount,
-            "listedAt": func.coalesce(
-                func.to_char(
-                    func.timezone("UTC", ListingManagementCurrentMart.listing_start_at_utc),
-                    "YYYY-MM-DD",
-                ),
-                func.substring(WalmartListingDimension.listing_start_source_raw, 1, 10),
-            ),
+            "listedAt": ListingWfsFirstStock.launch_date_cn,
             "rating": projection.effective_average_rating,
             "reviewCount": projection.effective_review_count,
             "wfsAvailableInventory": ListingManagementCurrentMart.wfs_available_quantity,

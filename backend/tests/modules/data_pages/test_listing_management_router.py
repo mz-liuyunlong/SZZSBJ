@@ -325,6 +325,15 @@ def test_restored_listing_does_not_expose_stale_archive_reason() -> None:
     assert archived.archive_reason == "current synthetic reason"
 
 
+def test_listing_tags_keep_legacy_business_owned_values() -> None:
+    service = ListingManagementService(MagicMock(spec=Session))
+    listing = SimpleNamespace(
+        **{**_listing_item().model_dump(), "tags_json": [{"name": "legacy-manual"}]}
+    )
+    assert service._to_read(listing).tags == ["legacy-manual"]
+    assert service._to_read(listing, custom_tags=["manual-tag"]).tags == ["manual-tag"]
+
+
 def test_listing_management_route_fails_closed_for_auth_permission_and_scope() -> None:
     assert TestClient(create_app()).get("/api/listings/walmart").status_code == 401
 
@@ -748,6 +757,7 @@ def test_listing_server_sort_uses_monitor_projection() -> None:
         ("salePrice", "effective_sale_price_amount"),
         ("listPrice", "effective_strike_price_amount"),
         ("rating", "effective_average_rating"),
+        ("listedAt", "launch_date_cn"),
         ("checkedAt", "monitor_observed_at"),
     ):
         repository.list_listings(

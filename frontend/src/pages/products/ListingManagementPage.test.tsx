@@ -92,17 +92,15 @@ describe("ListingManagementPage acceptance contract", () => {
   it("restores the 30-day sales column in a saved legacy column selection", () => {
     expect(migrateListingColumnKeys(["store", "sales90Days"])).toEqual(["store", "sales30Days"]);
     expect(migrateListingColumnKeys(["sales90Days", "sales30Days"])).toEqual(["sales30Days"]);
+    expect(migrateListingColumnKeys(["listedAt", "firstWfsAvailableAt"])).toEqual(["listedAt"]);
     const current = ["store", "sales30Days"];
     expect(migrateListingColumnKeys(current)).toBe(current);
     expect(migrateListingColumnWidths({ store: 120, sales90Days: 160 })).toEqual({ store: 120, sales30Days: 160 });
     expect(migrateListingColumnWidths({ sales90Days: 160, sales30Days: 140 })).toEqual({ sales30Days: 140 });
   });
 
-  it("shows the raw Listing date only when normalized time is missing", () => {
-    expect(toListingStartText("2026-09-08T16:31:47Z")).toBe("2026-09-08");
-    expect(toListingStartText(null, "2026-09-08 09:31:47")).toBe("2026-09-08");
-    expect(toListingStartText(null, "2026-09-08")).toBe("2026-09-08");
-    expect(toListingStartText(null, "unverified")).toBe("unverified");
+  it("shows the first WFS stock date as the sole listing start date", () => {
+    expect(toListingStartText("2026-09-08")).toBe("2026-09-08");
     expect(toListingStartText(null)).toBe("");
   });
 
@@ -111,7 +109,7 @@ describe("ListingManagementPage acceptance contract", () => {
     expect(new Set(listingManagementMockData.map((row) => row.id)).size).toBe(100);
     expect(listingColumnFields.map((field) => field.title)).toEqual([
       "图片", "商品ID/本地品名", "SKU/MSKU", "店铺", "负责人", "平台标题", "平台类目",
-      "划线价", "在售价", "产品状态", "生命周期", "发货方式", "GPT分析", "平台上架时间", "首次WFS有货日", "类目", "WFS可售库存",
+      "划线价", "在售价", "产品状态", "生命周期", "发货方式", "GPT分析", "上架时间", "类目", "WFS可售库存",
       "在途库存", "近30天销量", "近30天广告费", "停用原因", "Listing状态", "购物车状态",
       "Walmart卖家", "是否被跟卖", "监控检查时间", "数据更新时间", "监控来源", "监控时效", "监控状态", "监控错误码", "监控图片数", "评分", "评论数", "品牌", "标签", "GTIN",
       "产品等级",

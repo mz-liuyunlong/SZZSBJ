@@ -41,7 +41,6 @@ const minColumnWidths: Record<string, number> = {
   fulfillmentMethod: 120,
   gptAnalysis: 96,
   listedAt: 140,
-  firstWfsAvailableAt: 150,
   category: 120,
   wfsAvailableInventory: 140,
   inboundInventory: 130,
@@ -369,18 +368,10 @@ function ListingManagementTable({
       sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => (
-        <Tooltip title={`日期来源：${row.listingDateSource || "未知"}${row.listingStartRaw ? `；ERP原始值：${row.listingStartRaw}` : ""}`}>
+        <Tooltip title={`日期来源：${row.listingDateSource || "未知"}`}>
           <span>{row.listedAt || "待核实"}</span>
         </Tooltip>
       ),
-    },
-    firstWfsAvailableAt: {
-      key: "firstWfsAvailableAt",
-      dataIndex: "firstWfsAvailableAt",
-      title: title("firstWfsAvailableAt", fieldTitle.firstWfsAvailableAt),
-      width: columnWidths.firstWfsAvailableAt,
-      onHeaderCell: headerCell,
-      render: (_, row) => row.firstWfsAvailableAt || "-",
     },
     category: {
       key: "category",

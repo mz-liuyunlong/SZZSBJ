@@ -11,6 +11,7 @@ from fastapi import Request
 from sqlalchemy.orm import Session
 
 from app.modules.listing_rule_config.preview import (
+    ListingEvaluationPreviewService,
     archive_has_post_cutoff_event,
     basic_financial_candidate,
     lifecycle_allows_grade,
@@ -84,6 +85,29 @@ def test_stockout_requires_prior_stock_and_wfs_fulfillment():
         {"prior_effective_stock": True, "fulfillment_type": "1", "currently_archived": True},
     ):
         assert stockout_candidate(rows, cutoff=CUTOFF, **kwargs)[0] is None
+
+
+def test_fbm_is_excluded_from_listing_evaluation() -> None:
+    listing = SimpleNamespace(
+        id=UUID(int=1),
+        fulfillment_type="0",
+        lifecycle_status="启动期",
+        product_grade=None,
+    )
+    result = ListingEvaluationPreviewService._from_evidence(
+        listing=listing,
+        cutoff=CUTOFF,
+        config=ListingGradeRuleConfig(),
+        rule_version=1,
+        sales=[],
+        stock=[],
+        prior=None,
+        archive=None,
+        monitor_rows=[],
+    )
+    assert result.grade_candidate is None
+    assert result.lifecycle_candidate is None
+    assert result.missing_evidence == ["NON_WFS_EXCLUDED"]
 
 
 def test_openapi_contains_preview_route():

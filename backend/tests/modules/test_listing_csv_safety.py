@@ -1,7 +1,9 @@
 """CSV exports must never execute untrusted Listing text in spreadsheet software."""
 
-from datetime import datetime, timedelta, timezone
+import csv
+from datetime import date
 from decimal import Decimal
+from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import UUID
@@ -48,17 +50,61 @@ def test_listing_csv_list_text_formula_prefixes_are_escaped(value: list[str]) ->
     assert ListingManagementService._csv_value(value).startswith("'")
 
 
-def test_listing_csv_start_date_matches_raw_display_fallback() -> None:
-    assert ListingManagementService._listing_start_csv_value(None, "2026-01-15 09:31:47") == (
-        "2026-01-15"
+def test_listing_csv_start_date_uses_only_first_observed_wfs_stock() -> None:
+    service = ListingManagementService(MagicMock())
+    service.tag_repository.tags_for_listing_rows = MagicMock(return_value={})
+    service.repository.archive_states_for_listing_rows = MagicMock(return_value={})
+    listing = SimpleNamespace(
+        id=UUID(int=1),
+        source_account_ref="account",
+        item_id="item",
     )
-    assert ListingManagementService._listing_start_csv_value(None, "unverified") == "unverified"
-    assert (
-        ListingManagementService._listing_start_csv_value(
-            datetime(2026, 1, 16, 0, 30, tzinfo=timezone(timedelta(hours=8))), None
+    service._to_read = lambda *_args, **_kwargs: SimpleNamespace(
+        launch_date_cn=date(2026, 1, 15),
+        listing_start_source_raw="2026-01-10 09:31:47",
+    )
+    assert list(
+        csv.reader(
+            StringIO(
+                service.export_listing_csv(
+                    ListingManagementQuery(),
+                    frozenset({"account"}),
+                    columns="listed_at",
+                    _rows=[listing],
+                )
+            )
         )
-        == "2026-01-15"
+    ) == [["上架时间"], ["2026-01-15"]]
+
+    service._to_read = lambda *_args, **_kwargs: SimpleNamespace(
+        launch_date_cn=None,
+        listing_start_source_raw="2026-01-10 09:31:47",
     )
+    assert list(
+        csv.reader(
+            StringIO(
+                service.export_listing_csv(
+                    ListingManagementQuery(),
+                    frozenset({"account"}),
+                    columns="listed_at",
+                    _rows=[listing],
+                )
+            )
+        )
+    ) == [["上架时间"], [""]]
+
+
+def test_listing_csv_removed_date_column_does_not_export_every_column() -> None:
+    service = ListingManagementService(MagicMock())
+    service.tag_repository.tags_for_listing_rows = MagicMock(return_value={})
+    service.repository.archive_states_for_listing_rows = MagicMock(return_value={})
+    with pytest.raises(ValueError, match="Listing导出列无效"):
+        service.export_listing_csv(
+            ListingManagementQuery(),
+            frozenset({"account"}),
+            columns="listing_start_source_raw",
+            _rows=[],
+        )
 
 
 def test_large_listing_export_streams_all_rows_with_one_header() -> None:

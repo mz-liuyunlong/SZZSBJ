@@ -457,6 +457,17 @@ class ListingEvaluationPreviewService:
         )
         if archive_event_after_cutoff:
             archived = False
+        if listing.fulfillment_type != "1":
+            return ListingEvaluationPreview(
+                listing_id=listing.id,
+                cutoff_la=cutoff,
+                current_lifecycle=listing.lifecycle_status,
+                current_grade=listing.product_grade,
+                currently_archived=archived,
+                rule_version=rule_version or 0,
+                rule_source="database" if rule_version else "default",
+                missing_evidence=["NON_WFS_EXCLUDED"],
+            )
         monitor_by_day = {
             row.captured_at.astimezone(LOS_ANGELES).date(): row for row in monitor_rows
         }

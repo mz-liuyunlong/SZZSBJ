@@ -84,7 +84,8 @@ _ENROLL_SQL = text(
 )
 
 # A monitored identity remains eligible across an initial 0-stock snapshot.
-# The update is atomic and fill-only; a historical corrected MART value wins.
+# The update is atomic and fill-only; an unrelated ERP start date does not
+# replace the first observed WFS-stock instant for a newly monitored Listing.
 _FIRST_STOCK_SQL = text(
     """
     UPDATE listing_wfs_first_stock AS f
@@ -110,10 +111,8 @@ _FIRST_STOCK_SQL = text(
           WHERE m.source_account_ref = :account
             AND m.store_id = :store_id
             AND m.item_id = :item_id
-            AND (
-                m.listing_start_at_utc IS NOT NULL
-                OR (m.msku IS NOT NULL AND trim(m.msku) <> :msku)
-            )
+            AND m.msku IS NOT NULL
+            AND trim(m.msku) <> :msku
       )
     """
 ).bindparams(

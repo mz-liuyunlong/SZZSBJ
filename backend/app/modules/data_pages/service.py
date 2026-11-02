@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import re
 from collections.abc import Iterator, Sequence
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from io import StringIO
 
@@ -813,16 +813,8 @@ class ListingManagementService:
             (
                 "listed_at",
                 "上架时间",
-                lambda item: self._listing_start_csv_value(
-                    item.listing_start_at_utc, item.listing_start_source_raw
-                ),
+                lambda item: item.launch_date_cn,
             ),
-            (
-                "listing_start_source_raw",
-                "ERP原始上架时间",
-                lambda item: item.listing_start_source_raw,
-            ),
-            ("first_wfs_available_at", "首次WFS有货日", lambda item: item.launch_date_cn),
             ("monitor_observed_at", "监控检查时间", lambda item: item.monitor_observed_at),
             ("monitor_source", "监控来源", lambda item: item.monitor_source),
             ("monitor_outcome", "监控状态", lambda item: item.monitor_outcome),
@@ -851,6 +843,8 @@ class ListingManagementService:
         requested_keys = [
             key.strip() for key in (columns or "").split(",") if key.strip() in set(available_keys)
         ]
+        if columns and not requested_keys:
+            raise ValueError("Listing导出列无效")
         selected_keys = requested_keys or available_keys
         selected_key_set = set(selected_keys)
         selected_columns = [
@@ -918,25 +912,6 @@ class ListingManagementService:
             yield (
                 "\ufeff" + self.export_listing_csv(query, account_refs, columns=columns, _rows=[])
             ).encode("utf-8")
-
-    @staticmethod
-    def _listing_start_csv_value(normalized_value: object, source_raw: object = None) -> object:
-        if isinstance(normalized_value, datetime):
-            aware_value = (
-                normalized_value.astimezone(UTC)
-                if normalized_value.tzinfo is not None
-                else normalized_value
-            )
-            return aware_value.date().isoformat()
-        if isinstance(normalized_value, date):
-            return normalized_value.isoformat()
-        if normalized_value is not None and str(normalized_value).strip():
-            return str(normalized_value).strip()[:10]
-        if source_raw is not None:
-            raw = str(source_raw).strip()
-            match = re.match(r"^(\d{4}-\d{2}-\d{2})", raw)
-            return match.group(1) if match else raw
-        return ""
 
     @staticmethod
     def _csv_value(value: object) -> str:

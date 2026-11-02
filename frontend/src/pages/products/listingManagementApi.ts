@@ -205,17 +205,8 @@ export interface ListingManagementParams {
 
 const numberValue = (value: string | null | undefined) => Number(value ?? 0);
 
-export const toListingStartText = (normalizedValue: string | null, sourceRawValue: string | null = null): string => {
-  if (!normalizedValue) {
-    const raw = sourceRawValue?.trim() ?? "";
-    return /^(\d{4}-\d{2}-\d{2})/.exec(raw)?.[1] ?? raw;
-  }
-  // The API field is explicitly UTC. Normalize offset-aware timestamps to UTC;
-  // preserve date-only payloads instead of guessing their original timezone.
-  if (/^\d{4}-\d{2}-\d{2}$/.test(normalizedValue)) return normalizedValue;
-  const parsed = new Date(normalizedValue);
-  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
-};
+export const toListingStartText = (firstWfsStockDate: string | null | undefined): string =>
+  firstWfsStockDate ?? "";
 
 const toCheckedText = (value: string): string => value.replace("T", " ").slice(0, 16);
 
@@ -240,7 +231,7 @@ const normalizeBuyBoxStatus = (value: string | null) => {
 export const safeListingImageUrls = (urls: Array<string | null | undefined>): string[] =>
   urls.filter((url): url is string => typeof url === "string" && /^https:\/\//i.test(url));
 
-const toListingRow = (item: BackendListingItem): ListingManagementRow => {
+export const toListingRow = (item: BackendListingItem): ListingManagementRow => {
   const monitorImages = safeListingImageUrls(item.monitor_image_urls ?? []);
   return {
   id: item.id,
@@ -264,11 +255,8 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => {
   productStatus: item.disabled_reason ? "停用" : "启用",
   lifecycle: item.lifecycle_status ?? "待计算",
   fulfillmentMethod: item.fulfillment_type_name?.trim() || item.fulfillment_type?.trim() || "待确认",
-  listedAt: toListingStartText(item.listing_start_at_utc, item.listing_start_source_raw),
-  listingDateSource: item.listing_start_at_utc ? "平台标准化日期" : item.listing_start_source_raw ? "原始日期待核实" : "未知",
-  listingStartRaw: item.listing_start_source_raw ?? "",
-  firstWfsAvailableAt: item.launch_date_cn ?? "",
-  firstWfsObservedAt: item.first_wfs_seen_at_utc ?? "",
+  listedAt: toListingStartText(item.launch_date_cn),
+  listingDateSource: item.launch_date_cn ? "新 Listing 首次 WFS 有货观察" : "尚无首次 WFS 有货观察",
   category: item.category ?? "-",
   wfsAvailableInventory: numberValue(item.wfs_available_quantity),
   wfsAvailableInventoryKnown: item.wfs_available_quantity != null,

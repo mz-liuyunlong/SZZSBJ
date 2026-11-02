@@ -23,9 +23,6 @@ export interface ListingManagementRow {
   fulfillmentMethod: string;
   listedAt: string;
   listingDateSource?: string;
-  listingStartRaw?: string;
-  firstWfsAvailableAt?: string;
-  firstWfsObservedAt?: string;
   category: string;
   wfsAvailableInventory: number;
   wfsAvailableInventoryKnown?: boolean;
@@ -73,8 +70,7 @@ export const listingColumnFields = [
   { key: "lifecycle", title: "生命周期" },
   { key: "fulfillmentMethod", title: "发货方式" },
   { key: "gptAnalysis", title: "GPT分析" },
-  { key: "listedAt", title: "平台上架时间" },
-  { key: "firstWfsAvailableAt", title: "首次WFS有货日" },
+  { key: "listedAt", title: "上架时间" },
   { key: "category", title: "类目" },
   { key: "wfsAvailableInventory", title: "WFS可售库存" },
   { key: "inboundInventory", title: "在途库存" },
@@ -105,8 +101,10 @@ export const listingColumnFields = [
 export const fixedListingColumnKeys = ["image", "productIdName", "skuMsku"];
 
 export const migrateListingColumnKeys = (keys: string[]): string[] => {
-  if (!keys.includes("sales90Days")) return keys;
-  return [...new Set(keys.map((key) => key === "sales90Days" ? "sales30Days" : key))];
+  if (!keys.includes("sales90Days") && !keys.includes("firstWfsAvailableAt")) return keys;
+  return [...new Set(keys
+    .filter((key) => key !== "firstWfsAvailableAt")
+    .map((key) => key === "sales90Days" ? "sales30Days" : key))];
 };
 
 export const migrateListingColumnWidths = (widths: Record<string, number>): Record<string, number> => {

@@ -1,22 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { safeListingImageUrls, toListingStartText } from "@/pages/products/listingManagementApi";
+import { safeListingImageUrls, toListingRow, toListingStartText } from "@/pages/products/listingManagementApi";
 import { listingColumnFields } from "@/pages/products/listingManagementData";
 
 describe("toListingStartText", () => {
-  it("uses normalized UTC date when reliable normalized time exists", () => {
-    expect(toListingStartText("2026-09-08T16:31:47Z")).toBe("2026-09-08");
+  it("shows only the first observed WFS stock date", () => {
     expect(toListingStartText("2026-09-08")).toBe("2026-09-08");
     expect(toListingStartText(null)).toBe("");
-    expect(toListingStartText("2026-09-09T00:31:47+08:00")).toBe("2026-09-08");
-    expect(toListingStartText("2026-09-08")).toBe("2026-09-08");
+    expect(toListingStartText(undefined)).toBe("");
   });
 
-  it("shows the raw date prefix without parsing or using WFS launch evidence", () => {
-    expect(toListingStartText(null, "2026-09-01 12:00:00")).toBe("2026-09-01");
-    expect(toListingStartText(null, "2026-08-21")).toBe("2026-08-21");
-    expect(toListingStartText(null, null)).toBe("");
-    expect(toListingStartText(null, "unverified")).toBe("unverified");
-    expect(toListingStartText("2026-09-08T16:31:47Z", "2026-08-21")).toBe("2026-09-08");
+  it("does not use an ERP date when no first WFS stock was observed", () => {
+    const item = {
+      launch_date_cn: null,
+      listing_start_at_utc: "2026-09-08T16:31:47Z",
+      listing_start_source_raw: "2026-09-01 12:00:00",
+      calculated_at: "2026-09-09T00:00:00Z",
+    } as Parameters<typeof toListingRow>[0];
+    expect(toListingRow(item).listedAt).toBe("");
+    expect(toListingRow({ ...item, launch_date_cn: "2026-09-10" }).listedAt).toBe("2026-09-10");
   });
 });
 
