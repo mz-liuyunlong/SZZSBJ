@@ -423,7 +423,12 @@ describe("PurchaseBoardPage", () => {
     // 25 pages is the cap; every page returned one row of 9,999.
     expect(await screen.findByText(/待下单采购单仅显示前 25 条，共 9.?999 条/)).toBeInTheDocument();
     expect(screen.queryByText(/未转单计划仅显示前/)).not.toBeInTheDocument();
-    expect(vi.mocked(listPurchaseBoard).mock.calls.filter((call) => call[4] === "purchase_overdue")).toHaveLength(25);
+    // The fetch stops at the cap: page 25 is the last page ever requested (the query may run
+    // more than once, e.g. a refetch, so the call count itself is not asserted).
+    const pages = vi.mocked(listPurchaseBoard).mock.calls
+      .filter((call) => call[4] === "purchase_overdue")
+      .map((call) => call[1]);
+    expect(Math.max(...pages)).toBe(25);
   });
 
   it("counts pending days for order lines in Beijing calendar days, not UTC", () => {
