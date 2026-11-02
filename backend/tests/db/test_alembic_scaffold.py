@@ -98,7 +98,9 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         IAM_GATEWAY_MERGE_REVISION,
         SKILL_0071_REVISION,
     }
-    assert script.get_revision(IAM_OWNER_BINDINGS_REVISION).down_revision == IAM_SKILL_MERGE_REVISION
+    assert (
+        script.get_revision(IAM_OWNER_BINDINGS_REVISION).down_revision == IAM_SKILL_MERGE_REVISION
+    )
     assert (
         script.get_revision(WALMART_MONITOR_PROJECTION_HEAD_REVISION).down_revision
         == LISTING_EVALUATION_REVISION

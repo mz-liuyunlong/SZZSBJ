@@ -27,6 +27,7 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
 from app.modules.data_pages.models import (
     DailySalesItemDayMart,
     ListingArchiveState,
@@ -171,6 +172,9 @@ class DailySalesRepository:
 
     def __init__(self, session: Session) -> None:
         self.session = session
+        self.org_owner_refs: frozenset[str] | None = session.info.get(
+            ORG_OWNER_SCOPE_SESSION_KEY
+        )
 
     def _inventory_snapshot_table_ready(self) -> bool:
         """Return whether the inventory snapshot migration is already applied.
@@ -663,6 +667,8 @@ class DailySalesRepository:
         statement = select(DailySalesItemDayMart).where(
             DailySalesItemDayMart.source_account_ref.in_(account_refs)
         )
+        if self.org_owner_refs is not None:
+            statement = statement.where(DailySalesItemDayMart.owner_ref.in_(self.org_owner_refs))
         if start_date is not None:
             statement = statement.where(DailySalesItemDayMart.business_date_la >= start_date)
         if end_date is not None:
@@ -717,6 +723,9 @@ class OrderProfitRepository:
 
     def __init__(self, session: Session) -> None:
         self.session = session
+        self.org_owner_refs: frozenset[str] | None = session.info.get(
+            ORG_OWNER_SCOPE_SESSION_KEY
+        )
 
     def list_order_profit(
         self,
@@ -839,6 +848,10 @@ class OrderProfitRepository:
         statement = select(OrderProfitSkuDayMart).where(
             OrderProfitSkuDayMart.source_account_ref.in_(account_refs)
         )
+        if self.org_owner_refs is not None:
+            # Profit MART rows can aggregate multiple owners. Do not expose them
+            # until a reviewed owner-safe allocation exists.
+            raise PermissionError("Organization-scoped order profit is not yet audited")
         if start_date is not None:
             statement = statement.where(OrderProfitSkuDayMart.business_date_la >= start_date)
         if end_date is not None:
@@ -857,6 +870,9 @@ class ListingManagementRepository:
 
     def __init__(self, session: Session) -> None:
         self.session = session
+        self.org_owner_refs: frozenset[str] | None = session.info.get(
+            ORG_OWNER_SCOPE_SESSION_KEY
+        )
 
     def list_listings(
         self,
@@ -1251,6 +1267,13 @@ class ListingManagementRepository:
             )
             .where(ListingManagementCurrentMart.source_account_ref.in_(account_refs))
         )
+        if self.org_owner_refs is not None:
+            statement = statement.where(
+                or_(
+                    owner_lookup.c.owner_uid.in_(self.org_owner_refs),
+                    ListingManagementCurrentMart.owner_ref.in_(self.org_owner_refs),
+                )
+            )
 
         archive_status_values = _csv_values(archive_status)
         if archive_status_values:

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode, ErrorEnvelope, SuccessEnvelope, success_response
-from app.core.auth import Principal
+from app.core.auth import Principal, require_principal
 from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.data_pages.daily_sales_export import (
@@ -59,8 +59,44 @@ from app.modules.data_pages.service import (
     OrderProfitService,
 )
 from app.modules.integration_sync.dependencies import require_source_account_scope
+from app.modules.iam.organization_access import (
+    ORG_OWNER_SCOPE_SESSION_KEY,
+    resolve_business_owner_refs,
+)
 
-router = APIRouter(tags=["DATA-PAGES"])
+_ORG_SCOPED_READS = frozenset(
+    {
+        "/api/data-pages/filter-options",
+        "/api/sales/daily-sales",
+        "/api/sales/daily-sales/export",
+        "/api/listings/walmart",
+        "/api/listings/walmart/summary",
+        "/api/listings/walmart/filter-options",
+        "/api/listings/walmart/export",
+    }
+)
+
+
+def require_data_page_org_scope(
+    request: Request,
+    principal: Annotated[Principal, Depends(require_principal)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    """Restrict all DATA-PAGES routes once an org grant exists.
+
+    Unreviewed endpoints deny rather than bypass the owner filter.
+    """
+    owner_refs = resolve_business_owner_refs(session, principal)
+    if owner_refs is None:
+        return
+    if request.method != "GET" or request.url.path not in _ORG_SCOPED_READS:
+        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
+    session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owner_refs
+
+
+router = APIRouter(
+    tags=["DATA-PAGES"], dependencies=[Depends(require_data_page_org_scope)]
+)
 db_session = Annotated[Session, Depends(get_db_session)]
 source_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
 _DAILY_SALES_REGISTRY = DATA_PAGE_API_REGISTRY["daily_sales"]

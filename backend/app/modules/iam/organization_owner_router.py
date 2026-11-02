@@ -69,15 +69,21 @@ def set_owner_binding(
             message="未找到最新有效飞书员工，无法建立负责人绑定",
         )
     session.execute(text("SELECT pg_advisory_xact_lock(52712404)"))
-    previous = session.execute(
-        text("""
+    previous = (
+        session.execute(
+            text("""
         SELECT feishu_open_id, is_active FROM iam_org_owner_bindings
         WHERE owner_ref = :owner_ref FOR UPDATE
         """),
-        {"owner_ref": owner_ref},
-    ).mappings().first()
+            {"owner_ref": owner_ref},
+        )
+        .mappings()
+        .first()
+    )
     if previous and previous["is_active"] and previous["feishu_open_id"] == current:
-        return success_response(request, data={"owner_ref": owner_ref, "unchanged": True}, meta=None)
+        return success_response(
+            request, data={"owner_ref": owner_ref, "unchanged": True}, meta=None
+        )
     session.execute(
         text("""
         INSERT INTO iam_org_owner_bindings (owner_ref, feishu_open_id, is_active, reviewed_by)
@@ -114,13 +120,17 @@ def revoke_owner_binding(
     session: db_session,
 ):
     session.execute(text("SELECT pg_advisory_xact_lock(52712404)"))
-    previous = session.execute(
-        text("""
+    previous = (
+        session.execute(
+            text("""
         SELECT feishu_open_id, is_active FROM iam_org_owner_bindings
         WHERE owner_ref = :owner_ref FOR UPDATE
         """),
-        {"owner_ref": owner_ref},
-    ).mappings().first()
+            {"owner_ref": owner_ref},
+        )
+        .mappings()
+        .first()
+    )
     if not previous or not previous["is_active"]:
         raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
     session.execute(
