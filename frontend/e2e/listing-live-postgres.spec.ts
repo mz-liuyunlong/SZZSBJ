@@ -239,12 +239,29 @@ test("Listing page persists GPT links, archive state, tags, and scoped CSV", asy
   expect(crossPageCsv.trim().split(/\r?\n/)).toHaveLength(3);
   expect(crossPageCsv).not.toContain("SYNTHETIC-LISTING-B");
 
+  let rejectOneArchive = true;
+  await page.route("**/api/listings/walmart/*/archive", async (route) => {
+    const url = new URL(route.request().url());
+    if (rejectOneArchive) {
+      rejectOneArchive = false;
+      await route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
+      return;
+    }
+    await route.continue({ url: new URL(url.pathname + url.search, api).toString() });
+  });
   await page.getByRole("button", { name: "批量操作" }).click();
   await page.getByRole("menuitem", { name: "批量归档" }).click();
   const batchArchiveDialog = page.getByRole("dialog", { name: "批量归档 2 个 Listing" });
   await batchArchiveDialog.getByPlaceholder(/请输入归档原因/).fill("Synthetic cross-page archive");
   await batchArchiveDialog.getByRole("button", { name: "确认批量归档" }).click();
   await expect(batchArchiveDialog).toHaveCount(0);
+  await expect(page.getByText("已选择 1 项")).toBeVisible();
+  await page.getByRole("button", { name: "批量操作" }).click();
+  await page.getByRole("menuitem", { name: "批量归档" }).click();
+  const retryArchiveDialog = page.getByRole("dialog", { name: "批量归档 1 个 Listing" });
+  await retryArchiveDialog.getByPlaceholder(/请输入归档原因/).fill("Synthetic cross-page archive");
+  await retryArchiveDialog.getByRole("button", { name: "确认批量归档" }).click();
+  await expect(retryArchiveDialog).toHaveCount(0);
   await expect(page.getByText("已选择 2 项")).toHaveCount(0);
   await archiveFilter.click();
   await page.getByRole("option", { name: "已归档" }).click();
@@ -254,11 +271,27 @@ test("Listing page persists GPT links, archive state, tags, and scoped CSV", asy
   await expect(page.locator(".ant-table-tbody .ant-table-row")).toHaveCount(2);
   await page.locator(".ant-table-tbody .ant-table-row").nth(0).getByRole("checkbox").check();
   await page.locator(".ant-table-tbody .ant-table-row").nth(1).getByRole("checkbox").check();
+  let rejectOneRestore = true;
+  await page.route("**/api/listings/walmart/*/restore", async (route) => {
+    const url = new URL(route.request().url());
+    if (rejectOneRestore) {
+      rejectOneRestore = false;
+      await route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
+      return;
+    }
+    await route.continue({ url: new URL(url.pathname + url.search, api).toString() });
+  });
   await page.getByRole("button", { name: "批量操作" }).click();
   await page.getByRole("menuitem", { name: "批量恢复" }).click();
   const batchRestoreDialog = page.getByRole("dialog", { name: "批量恢复 2 个 Listing" });
   await batchRestoreDialog.getByRole("button", { name: "确认恢复" }).click();
   await expect(batchRestoreDialog).toHaveCount(0);
+  await expect(page.getByText("已选择 1 项")).toBeVisible();
+  await page.getByRole("button", { name: "批量操作" }).click();
+  await page.getByRole("menuitem", { name: "批量恢复" }).click();
+  const retryRestoreDialog = page.getByRole("dialog", { name: "批量恢复 1 个 Listing" });
+  await retryRestoreDialog.getByRole("button", { name: "确认恢复" }).click();
+  await expect(retryRestoreDialog).toHaveCount(0);
   await expect(page.locator(".ant-table-tbody .ant-table-row")).toHaveCount(0);
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.locator(".ant-table-tbody .ant-table-row")).toHaveCount(0);
