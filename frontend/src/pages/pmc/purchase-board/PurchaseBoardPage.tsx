@@ -22,13 +22,16 @@ import PurchaseBoardSummaryCards, {
 import PurchaseBoardTable from "@/pages/pmc/purchase-board/components/PurchaseBoardTable";
 import PurchaseBoardToolbar from "@/pages/pmc/purchase-board/components/PurchaseBoardToolbar";
 import PurchaseOrderDetailModal from "@/pages/pmc/purchase-board/components/PurchaseOrderDetailModal";
+import PurchaseOverdueTable from "@/pages/pmc/purchase-board/components/PurchaseOverdueTable";
 import { purchaseBoardErrorText } from "@/pages/pmc/purchase-board/purchaseBoardDisplay";
+import { mergeOverdueRows } from "@/pages/pmc/purchase-board/purchaseOverdueRows";
 import {
   usePendingPurchasePlansQuery,
   usePurchaseBoardListQuery,
   usePurchaseBoardOwnerOptionsQuery,
   usePurchaseBoardSummaryQuery,
   usePurchaseOrderDetailQuery,
+  usePurchaseOverdueRows,
 } from "@/pages/pmc/purchase-board/purchaseBoardQueries";
 import {
   PURCHASE_BOARD_MAX_PAGE_SIZE,
@@ -119,6 +122,15 @@ function PurchaseBoardPage({ page, preferenceScope = "anonymous" }: PurchaseBoar
     pendingOpen,
   );
 
+  const overdueMode = activeCard === "purchase_overdue";
+  const overdueQuery = usePurchaseOverdueRows(filters, cardRequest, overdueMode);
+  const overdueRows = useMemo(
+    () => (overdueQuery.data
+      ? mergeOverdueRows(overdueQuery.data.orders.rows, overdueQuery.data.plans.rows)
+      : []),
+    [overdueQuery.data],
+  );
+
   const rows = listQuery.data?.rows ?? [];
   const total = listQuery.data?.total ?? 0;
   const isRequesting = listQuery.isFetching || summaryQuery.isFetching;
@@ -156,14 +168,12 @@ function PurchaseBoardPage({ page, preferenceScope = "anonymous" }: PurchaseBoar
     wfsNotReady: filters.wfsNotReady,
   };
 
-  const listErrorText = listQuery.error ? purchaseBoardErrorText(listQuery.error) : undefined;
-  const overduePlans = summaryQuery.data?.purchaseOverduePlans ?? 0;
+  const shownError = overdueMode ? overdueQuery.error : listQuery.error;
+  const listErrorText = shownError ? purchaseBoardErrorText(shownError) : undefined;
   const emptyText = listErrorText
-    ?? (activeCard === "purchase_overdue"
-      ? `没有超时的待下单采购单；${overduePlans} 条已审批未转单的计划不进主表，见右上角「待采购计划」（已为你打开，仅看超时）。`
-      : filters.keyword || filters.batchValues?.length
-        ? "当前搜索条件下没有匹配的采购单明细。"
-        : "当前筛选下没有采购单明细；若刚接入，请等待 DWS 刷新完成。");
+    ?? (filters.keyword || filters.batchValues?.length
+      ? "当前搜索条件下没有匹配的采购单明细。"
+      : "当前筛选下没有采购单明细；若刚接入，请等待 DWS 刷新完成。");
 
   return (
     <PageShell
@@ -204,49 +214,58 @@ function PurchaseBoardPage({ page, preferenceScope = "anonymous" }: PurchaseBoar
             summary={summaryQuery.data}
             activeKey={activeCard}
             onCardClick={(key) => {
-              const turningOn = activeCard !== key;
-              setActiveCard(turningOn ? key : undefined);
+              // 待采购超时 shows its orders and unconverted plans as one list in the
+              // board body (PurchaseOverdueTable), never in a drawer.
+              setActiveCard(activeCard === key ? undefined : key);
               setCurrentPage(1);
               setCardRequest((current) => current + 1);
-              if (key === "purchase_overdue" && turningOn) {
-                // The card counts S2-overdue orders *and* approved-but-unconverted plans;
-                // the latter never appear in the main table, so open their drill-down.
-                setPendingOverdueOnly(true);
-                setPendingPage(1);
-                setPendingOpen(true);
-              }
             }}
           />
 
           {listErrorText && (
             <Alert
               className="purchase-board__error"
-              type={listQuery.error && (listQuery.error as { status?: number }).status === 403 ? "warning" : "error"}
+              type={shownError && (shownError as { status?: number }).status === 403 ? "warning" : "error"}
               showIcon
               message={listErrorText}
             />
           )}
 
           <div className="purchase-board__table-wrap">
-            <PurchaseBoardTable
-              rows={rows}
-              total={total}
-              appliedColumnKeys={columnPreference.appliedColumnKeys}
-              columnWidths={columnPreference.columnWidths}
-              currentPage={currentPage}
-              pageSize={pageSize}
-              emptyText={emptyText}
-              onColumnWidthChange={(key, width) => persistColumns({
-                ...columnPreference,
-                columnWidths: { ...columnPreference.columnWidths, [key]: width },
-              })}
-              onCurrentPageChange={setCurrentPage}
-              onPageSizeChange={(next) => {
-                setPageSize(Math.min(next, PURCHASE_BOARD_MAX_PAGE_SIZE));
-                setCurrentPage(1);
-              }}
-              onOpenDetail={(row) => setDetailOrderSn(row.purchaseOrderSn)}
-            />
+            {overdueMode ? (
+              <PurchaseOverdueTable
+                rows={overdueRows}
+                loading={overdueQuery.isFetching}
+                thresholdDays={overdueQuery.data?.thresholdDays ?? null}
+                currentPage={currentPage}
+                pageSize={pageSize}
+                onPageChange={(nextPage, nextPageSize) => {
+                  setCurrentPage(nextPageSize !== pageSize ? 1 : nextPage);
+                  setPageSize(Math.min(nextPageSize, PURCHASE_BOARD_MAX_PAGE_SIZE));
+                }}
+                onOpenOrder={setDetailOrderSn}
+              />
+            ) : (
+              <PurchaseBoardTable
+                rows={rows}
+                total={total}
+                appliedColumnKeys={columnPreference.appliedColumnKeys}
+                columnWidths={columnPreference.columnWidths}
+                currentPage={currentPage}
+                pageSize={pageSize}
+                emptyText={emptyText}
+                onColumnWidthChange={(key, width) => persistColumns({
+                  ...columnPreference,
+                  columnWidths: { ...columnPreference.columnWidths, [key]: width },
+                })}
+                onCurrentPageChange={setCurrentPage}
+                onPageSizeChange={(next) => {
+                  setPageSize(Math.min(next, PURCHASE_BOARD_MAX_PAGE_SIZE));
+                  setCurrentPage(1);
+                }}
+                onOpenDetail={(row) => setDetailOrderSn(row.purchaseOrderSn)}
+              />
+            )}
           </div>
         </Card>
 

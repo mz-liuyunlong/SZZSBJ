@@ -35,7 +35,55 @@ export const purchaseBoardKeys = {
     ["pmc-purchase-board", "pending-plans", page, pageSize, overdueOnly] as const
   ),
   owners: ["pmc-purchase-board", "owners"] as const,
+  overdue: (filters: PurchaseBoardFilters, cardRequest: number) => (
+    ["pmc-purchase-board", "purchase-overdue", filterKey(filters), cardRequest] as const
+  ),
 };
+
+const OVERDUE_FETCH_PAGE_SIZE = 200;
+const OVERDUE_FETCH_MAX_PAGES = 25; // 5,000 rows per source; far above real volumes.
+
+/** Every page of a paged source, sequentially, bounded. */
+async function fetchAllPages<T>(
+  fetchPage: (page: number) => Promise<{ rows: T[]; total: number }>,
+): Promise<{ rows: T[]; total: number; truncated: boolean }> {
+  const rows: T[] = [];
+  let total = 0;
+  for (let page = 1; page <= OVERDUE_FETCH_MAX_PAGES; page += 1) {
+    const result = await fetchPage(page);
+    total = result.total;
+    rows.push(...result.rows);
+    if (rows.length >= total || result.rows.length === 0) return { rows, total, truncated: false };
+  }
+  return { rows, total, truncated: rows.length < total };
+}
+
+/**
+ * 待采购超时 card: S2-overdue purchase-order lines (board filters apply) and overdue
+ * approved-but-unconverted plans, both complete, for one merged list in the board body.
+ */
+export function usePurchaseOverdueRows(filters: PurchaseBoardFilters, cardRequest: number, enabled: boolean) {
+  return useQuery({
+    queryKey: purchaseBoardKeys.overdue(filters, cardRequest),
+    queryFn: async ({ signal }) => {
+      let thresholdDays: number | null = null;
+      const [orders, plans] = await Promise.all([
+        fetchAllPages((page) => listPurchaseBoard(filters, page, OVERDUE_FETCH_PAGE_SIZE, signal, "purchase_overdue")),
+        fetchAllPages(async (page) => {
+          const result = await listPendingPurchasePlans(
+            { page, pageSize: OVERDUE_FETCH_PAGE_SIZE, overdueOnly: true },
+            signal,
+          );
+          thresholdDays = result.thresholdDays;
+          return result;
+        }),
+      ]);
+      return { orders, plans, thresholdDays };
+    },
+    staleTime: SERVER_STATE_STALE_TIME.list,
+    enabled,
+  });
+}
 
 export function usePurchaseBoardListQuery(
   filters: PurchaseBoardFilters,

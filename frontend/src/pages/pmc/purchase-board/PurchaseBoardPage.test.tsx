@@ -378,21 +378,31 @@ describe("PurchaseBoardPage", () => {
     expect(within(dialog).getByText("PO0 12 天")).toBeInTheDocument();
   });
 
-  it("opens the pending-plan drill-down (overdue only) when the purchase-overdue card is clicked", async () => {
+  it("shows overdue purchase orders and unconverted plans as one list in the board body", async () => {
     await renderPage();
-    // No S2-overdue order lines come back for the card filter.
-    vi.mocked(listPurchaseBoard).mockResolvedValue({
-      rows: [], total: 0, meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: 0 },
-    });
 
     fireEvent.click(screen.getByRole("button", { name: "待采购超时：6" }));
-    await waitFor(() => expect(lastListSummaryFilter()).toBe("purchase_overdue"));
-    // The plans counted by the card live in the drawer, not in the main table.
+    // Both sources are fetched completely (page size 200) for the merged list.
     await waitFor(() => expect(listPendingPurchasePlans).toHaveBeenCalled());
-    expect(vi.mocked(listPendingPurchasePlans).mock.calls.at(-1)?.[0]).toMatchObject({ page: 1, overdueOnly: true });
-    expect(screen.getByRole("switch", { name: "仅看超时" })).toBeChecked();
+    expect(vi.mocked(listPendingPurchasePlans).mock.calls.at(-1)?.[0]).toMatchObject({
+      page: 1, pageSize: 200, overdueOnly: true,
+    });
+    await waitFor(() => expect(lastListSummaryFilter()).toBe("purchase_overdue"));
+    expect(lastListCall()?.[2]).toBe(200);
+
+    // One list, two kinds of rows, no drawer.
     expect(await screen.findByText("P3")).toBeInTheDocument();
-    expect(await screen.findByText(/4 条已审批未转单的计划不进主表/)).toBeInTheDocument();
+    expect(screen.getByText("未转单计划")).toBeInTheDocument();
+    expect(screen.getByText("待下单采购单")).toBeInTheDocument();
+    expect(screen.getByText("超时 7 天")).toBeInTheDocument();
+    expect(screen.getByText(/共 2 条待采购超时/)).toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "仅看超时" })).not.toBeInTheDocument();
+    expect(screen.queryByText("待采购计划（已审批未转单）")).not.toBeInTheDocument();
+
+    // Turning the card off brings the normal board table back.
+    fireEvent.click(screen.getByRole("button", { name: "待采购超时：6" }));
+    await waitFor(() => expect(screen.queryByText("未转单计划")).not.toBeInTheDocument());
+    expect(await screen.findAllByTestId("board-row")).not.toHaveLength(0);
   });
 
   it("opens the pending-plan drill-down from the header action", async () => {
