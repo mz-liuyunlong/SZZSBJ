@@ -110,6 +110,7 @@ export function ItemIdCell({ row }: { row: PurchaseBoardRow }) {
       <Tag color={itemIdSourceColors[itemId.source]}>{itemIdSourceLabels[itemId.source]}</Tag>
       {itemId.identities.map((identity) => <span className="purchase-board__itemid-line" key={identity.itemId}>
         <WalmartItemLink itemId={identity.itemId} />{identity.msku ? <span>{identity.msku}</span> : null}
+        {identity.storeId ? <Typography.Text type="secondary">店铺 {identity.storeId}</Typography.Text> : null}
         {identity.skuMismatch && <SkuMismatchTag localSku={identity.localSku} sku={row.sku} />}
       </span>)}
     </span>;

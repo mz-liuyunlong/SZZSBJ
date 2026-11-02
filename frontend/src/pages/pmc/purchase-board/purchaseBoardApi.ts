@@ -48,7 +48,7 @@ interface BackendOwnerRef {
 }
 
 interface BackendItemIdRef {
-  identities?: { item_id: string; msku: string | null; gtin: string | null; fulfillment_type: string | null; local_sku?: string | null; sku_mismatch?: boolean }[];
+  identities?: { item_id: string; msku: string | null; gtin: string | null; fulfillment_type: string | null; local_sku?: string | null; sku_mismatch?: boolean; store_id?: string | null }[];
   item_id: string | null;
   source: PurchaseBoardItemIdSource;
   source_ref: string | null;
@@ -264,6 +264,7 @@ const mapItemId = (item: BackendItemIdRef): PurchaseItemIdRef => ({
     fulfillmentType: value.fulfillment_type,
     localSku: value.local_sku ?? null,
     skuMismatch: value.sku_mismatch === true,
+    storeId: value.store_id ?? null,
   })),
   itemId: item.item_id,
   source: item.source,
