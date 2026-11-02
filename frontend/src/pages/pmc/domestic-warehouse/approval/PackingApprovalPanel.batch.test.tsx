@@ -4,6 +4,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+
+// Three approvals, two modals and a result dialog in one flow: on a loaded machine this
+// exceeded the 15 s default (Mac 2026-11-02) while passing in CI. Same allowance as
+// PurchaseBoardPage.test.tsx.
+vi.setConfig({ testTimeout: 45_000 });
 import { decidePacking, type ApprovalCandidate, type PackingOrder } from "./packingApprovalApi";
 import PackingApprovalPanel from "./PackingApprovalPanel";
 
