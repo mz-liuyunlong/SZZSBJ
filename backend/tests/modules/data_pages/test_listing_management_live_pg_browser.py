@@ -1,5 +1,6 @@
 """Opt-in Listing page acceptance against a disposable PostgreSQL database."""
 
+import csv
 import os
 import socket
 import subprocess
@@ -7,6 +8,7 @@ import threading
 import time
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from io import StringIO
 from pathlib import Path
 from uuid import uuid4
 
@@ -240,6 +242,18 @@ def test_listing_page_and_real_api_with_isolated_postgres(
         assert tags.status_code == 200, tags.text
         assert len(tags.json()["data"]["items"]) == 1
         assert tags.json()["data"]["items"][0]["is_active"] is False
+        inactive_tag_id = tags.json()["data"]["items"][0]["id"]
+        inactive_assignment = client.post(
+            "/api/listings/tags/batch-set",
+            json={
+                "listing_ids": [str(active_listing_id)],
+                "tag_ids": [inactive_tag_id],
+                "mode": "replace",
+            },
+        )
+        assert inactive_assignment.status_code == 422
+        with Session(engine) as session:
+            assert not session.scalar(select(ProductCustomTagAssignment.id).limit(1))
         export = client.get("/api/listings/walmart/export", params={"columns": "sku"})
         assert export.status_code == 200, export.text
         assert "SYNTHETIC-LISTING-A" in export.text
@@ -512,6 +526,41 @@ def test_listing_page_and_real_api_with_isolated_postgres(
                 headers={"authorization": "Bearer synthetic-listing-b"},
             )
             assert foreign_read.status_code == 404
+
+            # Exercise the real PostgreSQL cursor and HTTP stream past the old
+            # 10,000-row export limit, scoped to one synthetic account.
+            with Session(engine) as session:
+                session.execute(
+                    text(
+                        """insert into mart_listing_management_current
+                           (id, source_account_ref, store_id, item_id, local_sku,
+                            sales_7d, sales_14d, sales_30d,
+                            calculated_at, created_at, updated_at)
+                           select gen_random_uuid(), 'synthetic-a', 'synthetic-store',
+                                  'SYNTHETIC-EXPORT-' || lpad(n::text, 5, '0'),
+                                  'SYNTHETIC-EXPORT-' || lpad(n::text, 5, '0'),
+                                  0, 0, 0,
+                                  :now, :now, :now
+                           from generate_series(0, 10000) as n"""
+                    ),
+                    {"now": datetime.now(UTC)},
+                )
+                session.commit()
+            large_export = client.get(
+                "/api/listings/walmart/export",
+                params={
+                    "columns": "sku",
+                    "search_field": "sku",
+                    "keyword": "SYNTHETIC-EXPORT-",
+                },
+            )
+            assert large_export.status_code == 200, large_export.text[:500]
+            exported = list(csv.reader(StringIO(large_export.content.decode("utf-8-sig"))))
+            assert exported[0] == ["SKU"]
+            assert len(exported) == 10_002
+            assert {row[0] for row in exported[1:]} == {
+                f"SYNTHETIC-EXPORT-{index:05d}" for index in range(10_001)
+            }
     finally:
         server.should_exit = True
         thread.join(timeout=10)
