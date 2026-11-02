@@ -951,7 +951,7 @@ class ListingManagementRepository:
             ]
         else:
             order_columns = [
-                func.coalesce(ListingManagementCurrentMart.wfs_available_quantity, 0).desc(),
+                ListingManagementCurrentMart.wfs_available_quantity.desc().nulls_last(),
                 ListingManagementCurrentMart.store_name.asc(),
                 ListingManagementCurrentMart.local_sku.asc(),
                 ListingManagementCurrentMart.item_id.asc(),

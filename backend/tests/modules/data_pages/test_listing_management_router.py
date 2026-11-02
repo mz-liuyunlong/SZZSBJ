@@ -764,6 +764,25 @@ def test_listing_server_sort_uses_monitor_projection() -> None:
         assert "mart_listing_management_current.id ASC" in order_by
 
 
+def test_listing_default_sort_places_unknown_inventory_after_known_zero() -> None:
+    session = MagicMock(spec=Session)
+    session.scalar.return_value = 0
+    session.execute.return_value.all.return_value = []
+
+    ListingManagementRepository(session).list_listings(
+        account_refs=frozenset({"synthetic-account"}),
+        store_id=None,
+        search_field="sku",
+        keyword="",
+        page=1,
+        page_size=50,
+    )
+
+    order_by = str(session.execute.call_args.args[0]).split("ORDER BY")[-1]
+    assert "wfs_available_quantity DESC NULLS LAST" in order_by
+    assert "mart_listing_management_current.id ASC" in order_by
+
+
 def test_listing_post_export_keeps_batch_ids_out_of_url_and_requires_action_permission(
     monkeypatch: Any,
 ) -> None:
