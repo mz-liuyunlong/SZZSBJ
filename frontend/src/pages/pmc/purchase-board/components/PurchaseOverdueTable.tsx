@@ -8,6 +8,7 @@
  */
 import { Alert, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import ReportTableShell from "@/components/report-table/ReportTableShell";
 import type { OverdueSourceCount } from "@/pages/pmc/purchase-board/purchaseBoardQueries";
 import type { PurchaseOverdueRow } from "@/pages/pmc/purchase-board/purchaseOverdueRows";
 
@@ -109,24 +110,30 @@ function PurchaseOverdueTable({
         超时阈值 {thresholdDays === null ? "—" : `${thresholdDays} 天`}（规则表 s2_pending_days）；未归属店铺的计划不计超时。
         采购单按明细行列出（一个采购单有多行时，行数会多于卡片上的采购单数）；未转单计划不受看板筛选（负责人、关键词等）影响。
       </Typography.Paragraph>
-      <Table<PurchaseOverdueRow>
-        rowKey="key"
-        size="small"
-        loading={loading}
-        columns={columns(onOpenOrder)}
-        dataSource={rows}
-        scroll={{ x: 1360 }}
-        locale={{ emptyText: "当前没有待采购超时的采购单或计划。" }}
-        pagination={{
-          current: currentPage,
-          pageSize,
-          total: rows.length,
-          showSizeChanger: true,
-          pageSizeOptions: ["50", "100", "200"],
-          showTotal: (count) => `共 ${count.toLocaleString()} 条待采购超时`,
-          onChange: onPageChange,
-        }}
-      />
+      {/* Same frame as the main board table: fixed header, scrolling body, pagination
+          always visible at the bottom (Rocky 2026-11-02: the pager was pushed off-screen). */}
+      <ReportTableShell label="待采购超时表格" className="purchase-board__table-shell">
+        <Table<PurchaseOverdueRow>
+          rowKey="key"
+          size="small"
+          bordered
+          loading={loading}
+          columns={columns(onOpenOrder)}
+          dataSource={rows}
+          scroll={{ x: 1360, y: "100%" }}
+          locale={{ emptyText: "当前没有待采购超时的采购单或计划。" }}
+          pagination={{
+            current: currentPage,
+            pageSize,
+            total: rows.length,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            pageSizeOptions: ["50", "100", "200"],
+            showTotal: (count) => `共 ${count.toLocaleString()} 条待采购超时`,
+            onChange: onPageChange,
+          }}
+        />
+      </ReportTableShell>
     </div>
   );
 }
