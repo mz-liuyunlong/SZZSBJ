@@ -124,12 +124,7 @@ for key, params in samples.items():
     assert main_handler(modified, None)["success"] is False
 
 # A write-shaped signed request cannot be executed in read-only direct mode.
-from app.integrations.walmart.wfs_write_catalog import WFS_WRITE_KEYS, wfs_write_registry
-for op in wfs_write_registry(approved_keys=WFS_WRITE_KEYS).values():
-    if op.method == "GET":
-        continue
-    assert scf_runtime._max_risk_from_env(False) == "read"
-    break
+assert scf_runtime._max_risk_from_env(False) == "read"
 assert len([p for p in requests if p[0] == "GET"]) == 5  # v1 + four v3
 print("SCF_PY310_ZIP_SMOKE_OK: v1 + v3 four reads, signature replay/store checks, no writes")
 """

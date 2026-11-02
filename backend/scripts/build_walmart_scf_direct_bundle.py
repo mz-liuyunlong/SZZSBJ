@@ -97,9 +97,8 @@ def main() -> None:
             relative = path.relative_to(stage)
             if "__pycache__" in relative.parts or relative.suffix == ".pyc":
                 continue
-            if (
-                any(str(relative).endswith(suffix) for suffix in banned)
-                or (relative.suffix.lower() == ".pem" and relative != allowed_ca)
+            if any(str(relative).endswith(suffix) for suffix in banned) or (
+                relative.suffix.lower() == ".pem" and relative != allowed_ca
             ):
                 raise SystemExit("SCF_UNEXPECTED_SENSITIVE_FILE")
             info = zipfile.ZipInfo(relative.as_posix(), ZIP_TIMESTAMP)
