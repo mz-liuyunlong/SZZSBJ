@@ -18,7 +18,12 @@ from app.core.auth import PREVIEW_PRINCIPAL_ID, Principal
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
 from app.integrations.walmart.planner import STORE_ROUTES
-from app.integrations.walmart.remote_dispatch import ALLOWED_KEYS, STORES, parse_routes
+from app.integrations.walmart.remote_dispatch import (
+    ALLOWED_KEYS,
+    REMOTE_COLLECTION_STORES,
+    STORES,
+    parse_routes,
+)
 from app.modules.data_pages.models import LingxingStoreDimension
 from app.modules.iam.rbac_repository import RbacRepository
 from app.modules.integration_sync.dependencies import require_source_account_scope
@@ -156,7 +161,7 @@ def create_job(
         )
     except Exception:
         raise ApiError(code="REMOTE_ROUTES_UNAVAILABLE", status_code=503) from None
-    if store not in routes or store not in allowed or not allowed <= STORES:
+    if store not in routes or store not in allowed or not allowed <= REMOTE_COLLECTION_STORES:
         raise ApiError(code="REMOTE_STORE_DISABLED", status_code=503)
     if len(set(payload.operations)) != len(payload.operations):
         raise ApiError(code="REMOTE_OPERATION_INVALID", status_code=422)

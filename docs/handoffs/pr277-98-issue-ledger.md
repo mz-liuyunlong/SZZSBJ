@@ -40,7 +40,7 @@
 | LM-032 | 跟卖状态未知显示为“否” | PR基线 `d1e90a30` 将 null 映射为“待确认”；`26db3c67` 校验 CSV 三态，`b7dfa8c7` 修复详情提示 | 待真实页面和监控来源验收 |
 | LM-033 | 产品启停状态与Listing在线状态混用 | 前端仍用 Listing `disabled_reason` 推导产品启停；产品管理另有 `product.status` | 负责人本轮明确暂缓；当前混合口径不算已修复 |
 | LM-034 | 产品类型筛选实际使用类目 | 后端 `product_type` 实际过滤 `effective_category`；产品管理另有 `product.product_type` | 负责人本轮明确暂缓；当前类目筛选不算产品类型已修复 |
-| LM-035 | 已有上架日期来源未被前端使用 | 负责人重新定义页面上架时间为新 Listing 首次 WFS 有货观察日；前端改读 `launch_date_cn`，旧来源日期仅保留在 API 供溯源 | 隔离 PostgreSQL 0070 + 真实 FastAPI + Playwright 已验证新 Listing 首次 WFS 有货日期显示，旧 Listing 无观察证据仍为空；真实采集链路与生产只读验收待完成 |
+| LM-035 | 已有上架日期来源未被前端使用 | 负责人重新定义页面上架时间为新 Listing 首次 WFS 有货观察日；前端改读 `launch_date_cn`，旧来源日期仅保留在 API 供溯源 | 隔离 PostgreSQL 0071 + 真实 FastAPI + Playwright 已验证新 Listing 首次 WFS 有货日期显示，旧 Listing 无观察证据仍为空；真实采集链路与生产只读验收待完成 |
 | LM-036 | 价格统一显示美元符号 | `79368ea7` 修复列表，`b7dfa8c7` 修复详情的币种未知展示并补测试 | 待隔离数据库、CSV及真实页面验收 |
 | LM-037 | 检查时间展示的是MART计算时间 | PR基线 `d1e90a30` 分离 monitor_observed_at 与 calculated_at | 待监控成功时间和时区证据验收 |
 | LM-038 | 监控图片未成为表格优先来源 | PR基线 `d1e90a30` 优先监控图片、回退旧图、只允许 HTTPS | 待图片失效及多图真实页面验收 |
@@ -75,16 +75,16 @@
 | LM-067 | C/D正式跟进任务没有闭环 | 数据源或业务口径待负责人确认 | 先完成接口数据源决策和获批 PRP；正式写入／发布不得提前启用 |
 | LM-068 | 提醒时间及逾期通知未实际执行 | 数据源或业务口径待负责人确认 | 先完成接口数据源决策和获批 PRP；正式写入／发布不得提前启用 |
 | LM-069 | 配置页说明与真实功能状态不一致 | `2a32308d` 的配置读取返回试算、调度、发布运行标志，原抽屉展示运行状态 | 待真实页面与部署配置验收 |
-| LM-070 | 验证范围不足以证明全页面正确 | opt-in 隔离 PostgreSQL 0070 + 真实 FastAPI + Playwright 验收：双账号 Listing 读隔离、跨页排序、零库存在线统计、归档未知筛选、标签停用后重新启用及刷新恢复、跨账号标签修改拒绝、页面完整 CSV 与单行已选 CSV 下载、合成账号切换后无旧账号数据；本轮新建隔离 PostgreSQL 16 空库并升级至 0070，真实 FastAPI + Playwright 通过 1 项，新增首次 WFS 有货日期在 API／页面显示且旧 Listing 保持未知的验收 | 仍需完整权限矩阵、真实页面归档/GPT 操作、批量搜索、性能与生产只读版本验收；浏览器身份接口使用合成用户响应，不能视为完整 IAM E2E |
+| LM-070 | 验证范围不足以证明全页面正确 | opt-in 隔离 PostgreSQL 0071 + 真实 FastAPI + Playwright 验收：双账号 Listing 读隔离、跨页排序、零库存在线统计、归档未知筛选、标签停用后重新启用及刷新恢复、跨账号标签修改拒绝、页面完整 CSV 与单行已选 CSV 下载、合成账号切换后无旧账号数据；本轮新建隔离 PostgreSQL 16 空库并升级至 0070，真实 FastAPI + Playwright 通过 1 项，新增首次 WFS 有货日期在 API／页面显示且旧 Listing 保持未知的验收 | 仍需完整权限矩阵、真实页面归档/GPT 操作、批量搜索、性能与生产只读版本验收；浏览器身份接口使用合成用户响应，不能视为完整 IAM E2E |
 | LM-071 | 监控RAW的字段没有全量盘点 | 新增 `docs/data-sources/listing-monitor-raw-key-inventory.md`：只读盘点监控端当前运行库中解析结果的 30 个顶层键及嵌套结构，区分 L3/L9 展示字段与受限 RAW 证据 | 生产接收端覆盖率、投递对账和字段质量仍待获授权的只读核验 |
 | LM-072 | 监控商品图片列表没有展示 | 本地修复与定向测试：`79368ea7` | 待隔离数据库／真实页面验收，不能视为完成 |
 | LM-073 | 真实监控采集时间未进入页面 | PR基线 `d1e90a30` 返回 observed_at 并显示监控年龄 | 待成功观察与失败观察的语义验收 |
 | LM-074 | 监控结果失败原因在页面不可见 | PR基线 `d1e90a30` 返回监控来源、结果及安全错误码 | 待失败事件与当前业务值的关系验收 |
 | LM-075 | 本地品名和监控标题的优先级不清 | PR基线 `d1e90a30` 将本地品名和平台标题分列显示 | 待来源权威性与页面验收 |
-| LM-076 | 上架时间仅依赖旧字段 | 负责人定义为新 Listing 首次 WFS 有货观察日；页面、排序、CSV 改用 `listing_wfs_first_stock.launch_date_cn` | 隔离 PostgreSQL 0070 + 真实 FastAPI + Playwright 已验证日期展示和旧 Listing 空值；真实监控来源及生产只读验收待完成 |
+| LM-076 | 上架时间仅依赖旧字段 | 负责人定义为新 Listing 首次 WFS 有货观察日；页面、排序、CSV 改用 `listing_wfs_first_stock.launch_date_cn` | 隔离 PostgreSQL 0071 + 真实 FastAPI + Playwright 已验证日期展示和旧 Listing 空值；真实监控来源及生产只读验收待完成 |
 | LM-077 | 上架日期、首次可售、WFS首库存概念混淆 | 页面仅保留一个“上架时间”，定义为开始监测后首次 WFS 有货观察日 | 不声称这等同平台首次上架或历史首次可售；保留观察时间证据 |
 | LM-078 | 日期直接截取字符串前10位 | 页面展示和 CSV 不再截取 ERP 原始字符串；仅展示已记录的首次 WFS 有货日期 | 隔离 PostgreSQL 0070 + 真实页面验证日期来自首个 WFS 有货观察；原始来源字段保持不变，生产只读验收待完成 |
-| LM-079 | 新Listing的标准上架时间常规同步不填 | 首次 WFS 有货已有独立 fill-only 观察记录；页面不再要求 `listing_start_at_utc` 非空；`efa3d5d7` 修复同一 Listing 跨分页重复时后页有货被错误归到前页抓取时间，合成分页回归及隔离 PostgreSQL 0070 + 页面验证通过 | 老 Listing 不回填，也不伪造 UTC；真实监测记录的完整性仍需验证 |
+| LM-079 | 新Listing的标准上架时间常规同步不填 | 首次 WFS 有货已有独立 fill-only 观察记录；页面不再要求 `listing_start_at_utc` 非空；`efa3d5d7` 修复同一 Listing 跨分页重复时后页有货被错误归到前页抓取时间，合成分页回归及隔离 PostgreSQL 0071 + 页面验证通过 | 老 Listing 不回填，也不伪造 UTC；真实监测记录的完整性仍需验证 |
 | LM-080 | 监控来源与时效不可追溯 | 数据源或业务口径待负责人确认 | 先完成接口数据源决策和获批 PRP；正式写入／发布不得提前启用 |
 | LM-081 | 查看权限可执行归档、标签和GPT链接写操作 | 本地修复与定向测试：`577635c2` | 待隔离数据库／真实页面验收，不能视为完成 |
 | LM-082 | 删除共享标签可能删除跨账号关联 | `79368ea7` 增加账号限定和软删除；0070 拆分历史共享定义，不能归属的活动定义触发门禁；隔离 PostgreSQL 验证失败回滚及双账号定义／关联正确拆分 | 待生产前只读预检和未归属标签的负责人映射 |
@@ -107,12 +107,12 @@
 
 ## 已有本地验证
 
-- 本轮 Node 24 前端全量 Vitest：78 个文件、347 项通过；ESLint 无错误、1 条现存非 Listing 警告；TypeScript／Vite 构建通过。默认并行曾导致无关页面超时，限制为 2 worker 后全量通过。
-- 本轮从 `backend/` 运行全量 pytest：2225 项通过、136 项跳过、1 条现存 Pydantic 弃用警告；新合成分页测试先复现时间归属失败，修复后连同首次 WFS 有货定向测试共 11 项通过。跳过项不计为通过。
-- 迁移 0069／0070 仅在隔离 PostgreSQL 执行过；隔离库验证双账号标签列表各只见本账号定义、JSONB 精确匹配逗号／引号／`%`，以及历史同账号重名时迁移原子失败、解除合成冲突后无损成功。生产数据库仅执行了限时只读聚合核验，未迁移、未写入。
+- 合入最新 main 后，Node 24 前端全量 Vitest：78 个文件、349 项通过；ESLint 无错误、1 条现存非 Listing 警告；TypeScript／Vite 构建通过。限制为 2 worker 后全量通过。
+- 合入最新 main 后从 `backend/` 运行全量 pytest：2354 项通过、140 项跳过、2 条警告（现存 Pydantic 弃用及新主线未注册的 pytest integration 标记）；新合成分页测试先复现时间归属失败，修复后连同首次 WFS 有货定向测试共 11 项通过。跳过项不计为通过。
+- 迁移 0069／0070／合并 Head 0071 仅在隔离 PostgreSQL 执行过；0070→0071 已在含合成 Listing 数据的库验证，空库→0071 与真实 FastAPI + Playwright 验收通过；隔离库验证双账号标签列表各只见本账号定义、JSONB 精确匹配逗号／引号／`%`，以及历史同账号重名时迁移原子失败、解除合成冲突后无损成功。生产数据库仅执行了限时只读聚合核验，未迁移、未写入。
 - 完整页面 E2E（含真实 IAM 权限矩阵、所有写操作和性能）与生产只读验收仍未完成。
-- 新增 Listing 页面 opt-in E2E 已在隔离 PostgreSQL 16 的空库升级至 0070 后实际运行，1 项通过；首次零库存、首次有货日期 fill-only、旧 Listing 无日期的 API／页面行为均已验证。前端 Listing API 连接真实本地 FastAPI，`/api/auth/me` 使用合成身份以避免连接生产 IAM。运行需要 `APP_ENV=test`、`LISTING_LIVE_TEST_DATABASE_URL` 指向新建的 `pr277_listing_*` 本地 Unix-socket 库和 Playwright；本次隔离 E2E 使用本机 Node 22，项目指定 Node 24 的全量页面回归仍以此前结果为准。此证据不覆盖完整 IAM/性能/生产只读验收。
-- Node 24 全量 Playwright：28 项通过、8 项隔离环境未配置而跳过；Listing 的真实 FastAPI + 隔离 PostgreSQL opt-in 项已另外单独执行并通过，跳过项不计为通过。
+- 新增 Listing 页面 opt-in E2E 已在隔离 PostgreSQL 16 的空库升级至合并 Head 0071 后实际运行，1 项通过；首次零库存、首次有货日期 fill-only、旧 Listing 无日期的 API／页面行为均已验证。前端 Listing API 连接真实本地 FastAPI，`/api/auth/me` 使用合成身份以避免连接生产 IAM。运行需要 `APP_ENV=test`、`LISTING_LIVE_TEST_DATABASE_URL` 指向新建的 `pr277_listing_*` 本地 Unix-socket 库和 Playwright；本次隔离 E2E 使用本机 Node 22，项目指定 Node 24 的全量页面回归仍以此前结果为准。此证据不覆盖完整 IAM/性能/生产只读验收。
+- 合入最新 main 后 Node 24 全量 Playwright：28 项通过、8 项隔离环境未配置而跳过；Listing 的真实 FastAPI + 隔离 PostgreSQL opt-in 项已另外单独执行并通过，跳过项不计为通过。
 - Rule pack 本轮通过；项目专名误报已在 `6e27ebf3` 狭窄修正。生产只读核验发现业务日覆盖与同步成功水位缺口，不能据此认证正式评级或启用发布。
 
 ## 安全边界

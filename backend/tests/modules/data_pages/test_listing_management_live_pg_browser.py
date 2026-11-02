@@ -32,7 +32,7 @@ from app.modules.integration_sync.wfs_first_stock import observe_first_wfs_stock
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("LISTING_LIVE_TEST_DATABASE_URL"),
-    reason="Requires a disposable PostgreSQL database migrated to 0070",
+    reason="Requires a disposable PostgreSQL database migrated to current head",
 )
 
 

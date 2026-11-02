@@ -68,12 +68,12 @@ def request_store_token(
 def store_token_invoker(
     *, cloud_api: Any, store_code: str, authorized_stores: frozenset[str]
 ) -> StoreToken:
-    """Caller obtains cloud_api through existing STS RefreshingScfApi."""
+    """Call a separately deployed, per-store broker (never the read-only executor)."""
     if not _STORE.fullmatch(store_code) or store_code not in authorized_stores:
         raise TokenClientRejected("TOKEN_STORE_NOT_AUTHORIZED")
     invoker = TencentScfInvoker(
         cloud_api,
-        function_name="szzsbj-walmart-" + store_code.lower() + "-executor",
+        function_name="szzsbj-walmart-" + store_code.lower() + "-token-broker",
         qualifier="stable",
     )
     return request_store_token(store_code, invoker=invoker, authorized_stores=authorized_stores)
