@@ -106,3 +106,42 @@ def test_citation_restricts_unsafe_links() -> None:
     assert not subject.is_public_source("javascript:alert(1)")
     assert not subject.is_public_source("file:///etc/passwd")
     assert not subject.is_public_source("http://example.com")
+
+
+@pytest.mark.asyncio
+async def test_failed_stream_is_rejected_instead_of_reporting_partial_success(monkeypatch) -> None:
+    class MockResponses:
+        async def create(self, **kwargs):
+            async def stream():
+                yield event("response.output_text.delta", delta="partial")
+                yield event("response.failed")
+
+            return stream()
+
+    class MockClient:
+        def __init__(self, **kwargs):
+            self.responses = MockResponses()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+    monkeypatch.setattr(subject, "AsyncOpenAI", MockClient)
+    received = []
+
+    async def emit(kind, data):
+        received.append((kind, data))
+
+    with pytest.raises(RuntimeError, match="AI_RESPONSE_NOT_COMPLETED"):
+        await subject.generate_assistant_stream(
+            api_key="test-placeholder",
+            model="gpt-6-luna",
+            prompt="test",
+            max_output_tokens=128,
+            visual_parts=None,
+            allow_web_search=False,
+            on_event=emit,
+        )
+    assert received == [("delta", {"text": "partial"})]
