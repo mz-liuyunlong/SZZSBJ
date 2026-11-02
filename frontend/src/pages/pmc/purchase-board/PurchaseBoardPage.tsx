@@ -22,10 +22,9 @@ import PurchaseBoardSummaryCards, {
 import PurchaseBoardTable from "@/pages/pmc/purchase-board/components/PurchaseBoardTable";
 import PurchaseBoardToolbar from "@/pages/pmc/purchase-board/components/PurchaseBoardToolbar";
 import PurchaseOrderDetailModal from "@/pages/pmc/purchase-board/components/PurchaseOrderDetailModal";
-import PurchaseOverdueTable, {
-  mergeOverdueRows,
-} from "@/pages/pmc/purchase-board/components/PurchaseOverdueTable";
+import PurchaseOverdueTable from "@/pages/pmc/purchase-board/components/PurchaseOverdueTable";
 import { purchaseBoardErrorText } from "@/pages/pmc/purchase-board/purchaseBoardDisplay";
+import { mergeOverdueRows } from "@/pages/pmc/purchase-board/purchaseOverdueRows";
 import {
   usePendingPurchasePlansQuery,
   usePurchaseBoardListQuery,
