@@ -226,3 +226,15 @@ def test_blank_store_prefers_the_local_sku_before_the_msku_fallback():
         )
         == []
     )
+
+
+def test_attach_looks_up_in_bounded_row_batches(monkeypatch):
+    from app.modules.pmc_domestic import board_item_ids
+
+    sizes: list[int] = []
+    monkeypatch.setattr(
+        board_item_ids, "_attach_batch", lambda _session, rows, _accounts: sizes.append(len(rows))
+    )
+    rows = [object()] * (2 * board_item_ids.ATTACH_ROW_BATCH + 50)
+    board_item_ids.attach_board_item_ids(None, rows, frozenset({"primary"}))
+    assert sizes == [board_item_ids.ATTACH_ROW_BATCH, board_item_ids.ATTACH_ROW_BATCH, 50]

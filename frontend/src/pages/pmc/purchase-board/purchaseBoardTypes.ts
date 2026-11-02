@@ -120,7 +120,7 @@ export interface PurchaseOwnerRef {
 }
 
 export interface PurchaseItemIdRef {
-  identities?: { itemId: string; msku: string | null; gtin: string | null; fulfillmentType: string | null }[];
+  identities?: { itemId: string; msku: string | null; gtin: string | null; fulfillmentType: string | null; localSku?: string | null; skuMismatch?: boolean }[];
   itemId: string | null;
   source: PurchaseBoardItemIdSource;
   sourceRef: string | null;

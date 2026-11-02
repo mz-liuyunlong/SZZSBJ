@@ -45,22 +45,6 @@ def item_ids_plan_then_line(
     return extract_remark_item_ids([*line_texts, *plan_texts])
 
 
-def validated_remark_item_ids(
-    plan_texts: Sequence[str | None],
-    line_texts: Sequence[str | None],
-    listing_item_ids: Sequence[str],
-) -> list[str]:
-    """Legacy purchase semantics: merge both remarks, keep all SKU-verified identities.
-
-    Stable line-first order follows the source document. Multiple valid identities
-    do not split quantities and are not an attribution error.
-    """
-    allowed = set(listing_item_ids)
-    return [
-        value for value in extract_remark_item_ids([*line_texts, *plan_texts]) if value in allowed
-    ]
-
-
 def resolve_purchase_board_item_id(
     *,
     plan_texts: Sequence[str | None],

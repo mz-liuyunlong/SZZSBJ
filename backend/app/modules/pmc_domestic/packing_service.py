@@ -358,18 +358,7 @@ class PackingService:
         return EditOptions(
             candidate=candidate,
             cross_store_proof_available=candidate.available_quantity is not None,
-            listings=[
-                ListingChoice(
-                    store_id=r.store_id,
-                    store_name=stores.get(r.store_id),
-                    item_id=r.item_id,
-                    gtin=r.gtin,
-                    msku=r.msku,
-                    listing_version=listing_version(r),
-                    cross_store=r.store_id != candidate.store_id,
-                )
-                for r in self.listing_rows(candidate)
-            ],
+            listings=[listing_choice(r, candidate, stores) for r in self.listing_rows(candidate)],
         )
 
     def final_candidate(self, candidate, cmd):
@@ -545,3 +534,25 @@ class PackingService:
 
     def all_candidates(self, accounts):
         return self._apply_pending_edits(self._base_candidates(accounts), accounts)
+
+
+def listing_choice(row, candidate, stores) -> ListingChoice:
+    """One target-Listing option for the edit dialog.
+
+    ``sku_mismatch``: the listing has its own local SKU and it is not the row SKU. Such a
+    listing only appears because its ItemID is the one attributed to the row
+    (``listing_rows`` matches local SKU *or* the attributed ItemID); it stays selectable
+    and the dialog shows a warning.
+    """
+    local = (row.local_sku or "").strip() if isinstance(row.local_sku, str) else ""
+    return ListingChoice(
+        store_id=row.store_id,
+        store_name=stores.get(row.store_id),
+        item_id=row.item_id,
+        gtin=row.gtin,
+        msku=row.msku,
+        listing_version=listing_version(row),
+        cross_store=row.store_id != candidate.store_id,
+        local_sku=local or None,
+        sku_mismatch=bool(local) and local != (candidate.sku or "").strip(),
+    )

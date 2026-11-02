@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_BUSINESS_PATH } from "@/router/routeResolver";
 import { DOMESTIC_APPROVER_NAMES } from "./packingApproveConfirm";
-import { getPackingEditOptions, approvalErrorText, type ApprovalCandidate, type DecisionKind, type ListingChoice } from "./packingApprovalApi";
+import { getPackingEditOptions, approvalErrorText, listingChoiceLabel, listingSkuMismatchText, type ApprovalCandidate, type DecisionKind, type ListingChoice } from "./packingApprovalApi";
 
 export interface DecisionValues { qty?: number; customs: "default" | "declare" | "skip"; rwh?: string; note?: string; target?: string; edit_reason?: string; operatorName?: string; passcode?: string }
 const choiceKey = (r: ListingChoice) => JSON.stringify([r.store_id, r.item_id, r.listing_version]);
@@ -57,9 +57,10 @@ export default function PackingDecisionModal({ row, kind, busy, scope, onCancel,
       {kind === "approve" ? <>
         <Form.Item label="目标店铺 / ItemID" name="target" rules={[{ required: true, message: "请选择同SKU的有效商品" }]}>
           <Select loading={options.isFetching} showSearch optionFilterProp="label" placeholder="选 WFS 且带链接的在线商品"
-            options={choices.map((r) => ({ value: choiceKey(r), label: `${r.store_name ?? r.store_id} / ${r.item_id}${r.cross_store ? "（跨店铺）" : ""}`, disabled: r.cross_store && !options.data?.data.cross_store_proof_available }))} />
+            options={choices.map((r) => ({ value: choiceKey(r), label: listingChoiceLabel(r), disabled: r.cross_store && !options.data?.data.cross_store_proof_available }))} />
         </Form.Item>
         <Descriptions size="small" column={1} items={[{ key: "gtin", label: "GTIN（跟随Listing）", children: chosen?.gtin ?? "—" }, { key: "msku", label: "MSKU（跟随Listing）", children: chosen?.msku ?? "—" }]} />
+        {chosen?.sku_mismatch && <Alert type="warning" message={listingSkuMismatchText(chosen, row?.sku)} />}
         {chosen?.cross_store && <Alert type="info" message="以原入库单为分配依据，SKU与库存来源不变；仅调整目标店铺，不改写领星库存归属。" />}
         {edited && <Alert type="warning" message="已更换目标身份，原计划比例建议仅供参考，请重新确认数量；共享库存上限不变。" />}
         {chosen && chosen.gtin !== row?.gtin && <Alert type="warning" message="GTIN发生变化，仓库需要重新核对商品标签" />}

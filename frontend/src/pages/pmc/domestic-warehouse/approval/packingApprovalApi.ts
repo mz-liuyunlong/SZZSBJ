@@ -65,7 +65,13 @@ export function approvalErrorText(error: unknown) {
   return "打包审批服务请求失败，请重试；未确认成功前请勿重复创建其他审批。";
 }
 
-export interface ListingChoice { store_id: string; store_name: string | null; item_id: string; gtin: string | null; msku: string | null; listing_version: string; cross_store: boolean }
+export interface ListingChoice { store_id: string; store_name: string | null; item_id: string; gtin: string | null; msku: string | null; listing_version: string; cross_store: boolean; local_sku?: string | null; sku_mismatch?: boolean }
+/** Option label in the target-Listing select; flags cross-store and a differing local SKU. */
+export const listingChoiceLabel = (r: ListingChoice) =>
+  `${r.store_name ?? r.store_id} / ${r.item_id}${r.cross_store ? "（跨店铺）" : ""}${r.sku_mismatch ? "（SKU 不一致）" : ""}`;
+/** Warning shown when the chosen Listing's own local SKU differs from the row SKU. */
+export const listingSkuMismatchText = (r: ListingChoice, sku: string | null | undefined) =>
+  `所选 Listing 的本地 SKU（${r.local_sku ?? "—"}）与本行 SKU（${sku ?? "—"}）不一致：它是按备注 ItemID 带出的，请确认后再保存。`;
 export interface PackingEditOptions { candidate: ApprovalCandidate; listings: ListingChoice[]; cross_store_proof_available: boolean }
 export const getPackingEditOptions = (row: ApprovalCandidate, signal?: AbortSignal) => backendRequest<PackingEditOptions>(`${prefix}/pending/${encodeURIComponent(row.id)}/edit-options?${new URLSearchParams({ source_account_ref: row.source_account_ref })}`, { signal });
 
