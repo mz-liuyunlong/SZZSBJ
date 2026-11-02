@@ -334,6 +334,7 @@ def preview_feishu_organization(
         meta=None,
     )
 
+
 @router.get("/api/settings/rbac/diagnostics")
 def read_permission_diagnostics(
     request: Request,
@@ -346,9 +347,7 @@ def read_permission_diagnostics(
     from app.modules.iam.permission_catalog_v2 import PERMISSION_DEFINITIONS
 
     declared = {item.permission_key for item in PERMISSION_DEFINITIONS}
-    rows = session.execute(
-        text("SELECT permission_key, is_active FROM app_permissions")
-    ).all()
+    rows = session.execute(text("SELECT permission_key, is_active FROM app_permissions")).all()
     stored = {str(key) for key, _active in rows}
     disabled = {str(key) for key, active in rows if not active}
     orphan_rows = session.execute(
