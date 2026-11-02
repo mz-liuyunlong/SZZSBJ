@@ -177,6 +177,28 @@ def test_listing_page_and_real_api_with_isolated_postgres(
             "SYNTHETIC-LISTING-A",
             "SYNTHETIC-LISTING-A2",
         }
+        batch_search = {
+            "filters": {"search_field": "sku"},
+            "batch_values": [f"SYNTHETIC-NO-MATCH-{index:04d}-%_'\"" for index in range(999)]
+            + ["SYNTHETIC-LISTING-A"],
+        }
+        batch_rows = client.post("/api/listings/walmart/search", json=batch_search)
+        assert batch_rows.status_code == 200, batch_rows.text
+        assert batch_rows.json()["meta"]["total"] == 1
+        assert [row["local_sku"] for row in batch_rows.json()["data"]["items"]] == [
+            "SYNTHETIC-LISTING-A"
+        ]
+        batch_summary = client.post("/api/listings/walmart/summary/search", json=batch_search)
+        assert batch_summary.status_code == 200, batch_summary.text
+        assert batch_summary.json()["data"]["total"] == 1
+        batch_export = client.post(
+            "/api/listings/walmart/export/search",
+            json={**batch_search, "columns": ["sku"]},
+        )
+        assert batch_export.status_code == 200, batch_export.text
+        assert "SYNTHETIC-LISTING-A" in batch_export.text
+        assert "SYNTHETIC-LISTING-A2" not in batch_export.text
+        assert "SYNTHETIC-LISTING-B" not in batch_export.text
         listed_dates = {
             row["local_sku"]: row["launch_date_cn"] for row in listing.json()["data"]["items"]
         }
