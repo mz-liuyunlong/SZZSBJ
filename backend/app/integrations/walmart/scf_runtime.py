@@ -33,6 +33,7 @@ from app.integrations.walmart.contract_signing import (
 )
 from app.integrations.walmart.contracts import ContractRegistry
 from app.integrations.walmart.feeds_catalog import feed_monitor_registry
+from app.integrations.walmart.direct_readonly_transport import WalmartDirectReadOnlyTransport
 from app.integrations.walmart.https_transport import WalmartHttpsTransport
 from app.integrations.walmart.marketplace_catalog import marketplace_read_registry
 from app.integrations.walmart.operations_catalog import operations_read_registry
@@ -48,6 +49,8 @@ LIVE_MODE_READ_ONLY = "owner-approved-read-only"
 LIVE_MODE_READ_WRITE = "owner-approved-read-write"
 PUBLIC_KEYS_ENV = "SZZSBJ_WALMART_CONTRACT_PUBLIC_KEYS"
 MAX_RISK_ENV = "SZZSBJ_WALMART_MAX_RISK"
+EGRESS_MODE_ENV = "SZZSBJ_WALMART_EGRESS_MODE"
+DIRECT_APPROVED_ENV = "SZZSBJ_WALMART_DIRECT_PUBLIC_APPROVED"
 # Tencent SCF exports the function's own name; the owner may pin it explicitly instead.
 FUNCTION_NAME_ENV = "SZZSBJ_WALMART_FUNCTION_NAME"
 _SCF_FUNCTION_NAME_ENV = "SCF_FUNCTIONNAME"
@@ -104,6 +107,35 @@ def _max_risk_from_env(write_mode: bool) -> str:
     if value not in RISK_LEVELS:
         raise ValueError("WALMART_RISK_CEILING_INVALID")
     return "write" if value == "write" and write_mode else "read"
+
+
+def _transport_from_env(
+    *, store: str, secrets: TencentSsmResolver, signed: bool, write_mode: bool
+) -> WalmartHttpsTransport | WalmartDirectReadOnlyTransport:
+    """Keep private proxy as default. Direct public egress is explicitly read-only.
+
+    Existing SCF v1 functions used direct-public-readonly. A v3 signed GET may use
+    that same approved network path; a non-GET is denied in the executor *and*
+    in WalmartDirectReadOnlyTransport, regardless of the signed contract.
+    """
+    mode = os.environ.get(EGRESS_MODE_ENV, "").strip()
+    if mode == "direct-public-readonly":
+        if os.environ.get(DIRECT_APPROVED_ENV) != "1" or write_mode:
+            raise ValueError("WALMART_DIRECT_WRITE_DENIED")
+        return WalmartDirectReadOnlyTransport(
+            bound_store=store, secret_resolver=secrets, timeout=12.0,
+            pass_provider_errors=signed,
+        )
+    if mode not in ("", "private-proxy"):
+        raise ValueError("WALMART_EGRESS_NOT_APPROVED")
+    mapping = json.loads(os.environ.get("SZZSBJ_WALMART_PRIVATE_PROXIES", "{}"))
+    if not isinstance(mapping, dict) or set(mapping) != {store}:
+        raise ValueError("WALMART_EGRESS_MISSING")
+    return WalmartHttpsTransport(
+        proxy_by_store=mapping, secret_resolver=secrets,
+        timeout=90.0 if (write_mode or signed) else 12.0,
+        pass_provider_errors=write_mode or signed,
+    )
 
 
 class ReadOnlyStorePolicy:
@@ -238,9 +270,6 @@ def main_handler(event: object, context: object) -> dict[str, Any]:
                 for item in os.environ.get("SZZSBJ_WALMART_APPROVED_WRITE_KEYS", "").split(",")
                 if item.strip()
             )
-        mapping = json.loads(os.environ.get("SZZSBJ_WALMART_PRIVATE_PROXIES", "{}"))
-        if not isinstance(mapping, dict) or set(mapping) != {store}:
-            raise ValueError("WALMART_EGRESS_MISSING")
         # v3 rebuilds the operation from the signed contract; the legacy registry is only
         # needed for v1/v2 events.
         registry = ContractRegistry(()) if signed else _load_registry(approved, approved_write)
@@ -249,11 +278,8 @@ def main_handler(event: object, context: object) -> dict[str, Any]:
             approved_stores=frozenset({store}),
             version=os.environ.get("SZZSBJ_WALMART_SECRET_VERSION", "v1"),
         )
-        transport = WalmartHttpsTransport(
-            proxy_by_store=mapping,
-            secret_resolver=secrets,
-            timeout=90.0 if (write_mode or signed) else 12.0,
-            pass_provider_errors=write_mode or signed,
+        transport = _transport_from_env(
+            store=store, secrets=secrets, signed=signed, write_mode=write_mode
         )
         policy: ReadOnlyStorePolicy | StoreWritePolicy
         if write_mode:
