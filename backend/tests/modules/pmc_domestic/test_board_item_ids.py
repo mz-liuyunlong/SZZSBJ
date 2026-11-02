@@ -194,3 +194,35 @@ def test_attach_reads_current_remarks_for_the_row_store():
     assert row.item_identities[0].gtin == "004"
     assert row.identity_status == "multiple"
     engine.dispose()
+
+
+def test_blank_store_prefers_the_local_sku_before_the_msku_fallback():
+    # 288-01: same order as the shared rule. The SKU is listed (local SKU) on one store;
+    # another store only has a blank-local-SKU listing with the line MSKU. The local-SKU
+    # match decides, instead of the two together making the store ambiguous.
+    listings = [
+        ("S1", "20000000021", "YC1", "00000000000017", "YC1-1Z"),
+        ("S2", "20000000022", None, "00000000000024", "YC1-1A"),
+    ]
+    found = resolve_store_item_ids(
+        store_id=None,
+        sku="YC1",
+        lines=[(None, [None], [])],
+        plans={},
+        listings=listings,
+        line_mskus=["YC1-1A"],
+    )
+    assert [item_id for item_id, _gtin in found] == ["20000000021"]
+    # A listing whose local SKU differs is never an MSKU fallback match.
+    other = [("S2", "20000000023", "OTHER", None, "YC1-1A")]
+    assert (
+        resolve_store_item_ids(
+            store_id=None,
+            sku="YC1",
+            lines=[(None, [None], [])],
+            plans={},
+            listings=other,
+            line_mskus=["YC1-1A"],
+        )
+        == []
+    )

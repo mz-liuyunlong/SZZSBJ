@@ -71,12 +71,14 @@ def resolve_store_item_ids(
         )
         return [(found.item_id, found.gtin) for found in resolution.identities]
     # No store on the row (inbound-only): a remark id or the SKU listed on exactly one
-    # store decides the store.
-    same_sku = [
-        item
-        for item in listings
-        if (item[2] or "").strip() == sku or (not (item[2] or "").strip() and _msku(item) in mskus)
-    ]
+    # store decides the store. Same order as the shared rule: listings whose local SKU is
+    # the row SKU first; the MSKU fallback only when there is none, and only among
+    # listings with a blank local SKU.
+    same_sku = [item for item in listings if (item[2] or "").strip() == sku]
+    if not same_sku:
+        same_sku = [
+            item for item in listings if not (item[2] or "").strip() and _msku(item) in mskus
+        ]
     remark_hits = [item for item_id in remark_ids for item in listings if item[1] == item_id]
     if remark_hits:
         return _single_store(remark_hits, listings)
