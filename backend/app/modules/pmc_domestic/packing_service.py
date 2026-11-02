@@ -454,18 +454,7 @@ class PackingService:
         return EditOptions(
             candidate=candidate,
             cross_store_proof_available=candidate.available_quantity is not None,
-            listings=[
-                ListingChoice(
-                    store_id=r.store_id,
-                    store_name=stores.get(r.store_id),
-                    item_id=r.item_id,
-                    gtin=r.gtin,
-                    msku=r.msku,
-                    listing_version=listing_version(r),
-                    cross_store=r.store_id != candidate.store_id,
-                )
-                for r in self.listing_rows(candidate)
-            ],
+            listings=[listing_choice(r, candidate, stores) for r in self.listing_rows(candidate)],
         )
 
     # --- target Listing resolution (modify form, approve) ---------------------------
@@ -485,8 +474,7 @@ class PackingService:
         cross-store target needs the shared-stock proof.
         """
         blocked = list(listing_blocked_reasons(listing))
-        local_sku = (listing.local_sku or "").strip()
-        if local_sku and local_sku != candidate.sku:
+        if listing_sku_mismatch(listing, candidate.sku):
             blocked.append("SKU_MISMATCH")
         cross = candidate.store_id is not None and listing.store_id != candidate.store_id
         if cross and candidate.available_quantity is None:
@@ -753,3 +741,33 @@ class PackingService:
 
     def all_candidates(self, accounts):
         return self._apply_pending_edits(self._base_candidates(accounts), accounts)
+
+
+def listing_choice(row, candidate, stores) -> ListingChoice:
+    """One target-Listing option for the edit dialog.
+
+    ``sku_mismatch``: the listing has its own local SKU and it is not the row SKU. Such a
+    listing only appears because its ItemID is the one attributed to the row
+    (``listing_rows`` matches local SKU *or* the attributed ItemID). It is listed
+    and the dialog shows it disabled with the reason; ``final_candidate`` refuses it with
+    ``SKU_MISMATCH`` (owner decision 2026-11-02).
+    """
+    local = (row.local_sku or "").strip() if isinstance(row.local_sku, str) else ""
+    mismatch = listing_sku_mismatch(row, candidate.sku)
+    return ListingChoice(
+        store_id=row.store_id,
+        store_name=stores.get(row.store_id),
+        item_id=row.item_id,
+        gtin=row.gtin,
+        msku=row.msku,
+        listing_version=listing_version(row),
+        cross_store=row.store_id != candidate.store_id,
+        local_sku=local or None,
+        sku_mismatch=mismatch,
+    )
+
+
+def listing_sku_mismatch(listing, sku) -> bool:
+    """The Listing records its own local SKU and it is not ``sku`` (blank = no opinion)."""
+    local = (listing.local_sku or "").strip() if isinstance(listing.local_sku, str) else ""
+    return bool(local) and local != (sku or "").strip()

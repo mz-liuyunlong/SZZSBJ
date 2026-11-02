@@ -109,11 +109,25 @@ def sku_mismatch_ids(
     return out
 
 
+# Rows per lookup batch. Each batch issues the same three or four ``IN (...)`` queries,
+# so every IN list stays bounded (orders / SKUs <= rows x their purchase orders, remark
+# ids and MSKUs grow with those) whatever the caller passes; a board page is <= 200 rows.
+ATTACH_ROW_BATCH = 200
+
+
 def attach_board_item_ids(
     session: Session, rows: Sequence[BoardItemRow], accounts: frozenset[str]
 ) -> None:
-    """Fill ItemID and GTIN for the current page. Nothing is written back to a table."""
+    """Fill ItemID and GTIN for the given rows (a board page), batch by batch.
 
+    Nothing is written back to a table.
+    """
+
+    for start in range(0, len(rows), ATTACH_ROW_BATCH):
+        _attach_batch(session, rows[start : start + ATTACH_ROW_BATCH], accounts)
+
+
+def _attach_batch(session: Session, rows: Sequence[BoardItemRow], accounts: frozenset[str]) -> None:
     pairs = {
         (row.source_account_ref, sn, row.sku)
         for row in rows

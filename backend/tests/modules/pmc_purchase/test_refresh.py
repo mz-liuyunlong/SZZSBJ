@@ -893,3 +893,126 @@ def test_failed_receipt_runs_ignored_and_rule_or_account_errors(session: Session
         )
     # after a failed refresh the previous DWS rows are still there (rollback, no delete)
     assert session.scalar(select(func.count()).select_from(DwsPurchaseBoard)) == 1
+
+
+# --- R-9 (owner 2026-11-02): store-less line, remark ItemID decides the store -------------------
+
+
+def _r9_listing(
+    session: Session,
+    store_id: str,
+    item_id: str,
+    local_sku: str = "SKU-A",
+    *,
+    status: str = "PUBLISHED",
+    fulfillment_type: str = "1",
+) -> None:
+    session.add(
+        WalmartListingDimension(
+            id=uuid4(),
+            source_account_ref=ACCOUNT,
+            store_id=store_id,
+            item_id=item_id,
+            msku=f"MSKU-{item_id}",
+            local_sku=local_sku,
+            gtin="00012345678929",
+            standard_status=status,
+            fulfillment_type=fulfillment_type,
+            synced_at=NOW,
+        )
+    )
+
+
+def _r9_storeless_line(session: Session, remark: str) -> None:
+    # Lingxing shows store "-" (sid 0): no plan, remark on the line, ordered 20 days ago.
+    _order(session, "PO-R9", order_date=TODAY - timedelta(days=20))
+    _line(
+        session,
+        "PO-R9",
+        "LR9",
+        plan_sn=None,
+        plan_key="",
+        plan_found=False,
+        store_id=None,
+        store_attributed=False,
+        store_matched=False,
+        remark_item_id=remark,
+    )
+
+
+def test_r9_storeless_line_takes_store_and_item_from_a_remark_id_listed_on_one_store(
+    session: Session,
+) -> None:
+    _r9_listing(session, STORE, "19990261033", local_sku="JJ8040")
+    _r9_storeless_line(session, "19990261033")
+    session.commit()
+
+    PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
+    row = _board(session)[("PO-R9", "LR9", "")]
+    assert (row.item_id, row.item_id_source, row.item_id_match_status) == (
+        "19990261033",
+        "from_plan_remark",
+        "matched",
+    )
+    assert (row.store_id, row.store_attributed) == (STORE, True)
+    assert row.store_name == "Store A"
+    # The row now has a store, so arrival overdue is computed like any attributed line.
+    assert (row.stage_code, row.overdue_days) == ("S3", 8)
+    evidence = row.source_lineage_json["item_id_evidence"]
+    assert evidence["store_from_remark"] == STORE
+    assert evidence["remark_store_conflict"] == []
+    # The listing's local SKU (JJ8040) is not the line SKU (SKU-A): flagged, still attributed.
+    assert row.source_lineage_json["item_identities"][0]["sku_mismatch"] is True
+
+
+def test_r9_storeless_line_with_a_remark_id_on_several_stores_is_a_conflict(
+    session: Session,
+) -> None:
+    _r9_listing(session, STORE, "19990261033")
+    _r9_listing(session, "999000111", "19990261033")
+    _r9_storeless_line(session, "19990261033")
+    session.commit()
+
+    PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
+    row = _board(session)[("PO-R9", "LR9", "")]
+    assert (row.item_id, row.item_id_match_status) == (None, "conflict")
+    assert (row.store_id, row.store_attributed, row.overdue_days) == (None, False, 0)
+    identities = row.source_lineage_json["item_identities"]
+    assert sorted(item["store_id"] for item in identities) == sorted([STORE, "999000111"])
+    assert all(item["item_id"] == "19990261033" for item in identities)
+    assert row.source_lineage_json["item_id_evidence"]["remark_store_conflict"] == sorted(
+        [STORE, "999000111"]
+    )
+
+
+def test_r9_storeless_line_without_a_listed_remark_id_stays_unattributed(session: Session) -> None:
+    _r9_storeless_line(session, "19990261033")  # no listing carries this id
+    session.commit()
+
+    PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
+    row = _board(session)[("PO-R9", "LR9", "")]
+    assert row.item_id is None
+    assert (row.store_id, row.store_attributed, row.overdue_days) == (None, False, 0)
+    assert row.source_lineage_json["item_id_evidence"]["store_from_remark"] is None
+    assert row.source_lineage_json["item_id_evidence"]["unverified_ids"] == ["19990261033"]
+
+
+def test_r9a_among_several_stores_only_the_published_wfs_listing_counts(session: Session) -> None:
+    """PO261016016 / JJ8040 on 2026-11-02: 19990261033 is UNPUBLISHED + non-WFS on one store
+    and PUBLISHED + WFS on another — the sellable one wins, no conflict."""
+    _r9_listing(
+        session, "999000111", "19990261033", "JJ8040", status="UNPUBLISHED", fulfillment_type="0"
+    )
+    _r9_listing(session, STORE, "19990261033", "JJ8040")
+    _r9_storeless_line(session, "19990261033")
+    session.commit()
+
+    PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
+    row = _board(session)[("PO-R9", "LR9", "")]
+    assert (row.item_id, row.item_id_match_status, row.store_id, row.store_attributed) == (
+        "19990261033",
+        "matched",
+        STORE,
+        True,
+    )
+    assert row.source_lineage_json["item_id_evidence"]["store_from_remark"] == STORE
