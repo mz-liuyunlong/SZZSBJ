@@ -57,6 +57,17 @@ test("Listing page persists GPT links, archive state, tags, and scoped CSV", asy
   await expect(page.getByRole("row").filter({ has: page.getByText("SYNTHETIC-LISTING-A2", { exact: true }) })
     .getByText("2026-10-14", { exact: true })).toBeVisible();
   await expect(page.getByText("SYNTHETIC-LISTING-B", { exact: true })).toHaveCount(0);
+  await page.getByRole("row").filter({
+    has: page.getByText("SYNTHETIC-LISTING-A", { exact: true }),
+  }).getByRole("button", { name: "详情" }).click();
+  await page.getByRole("dialog", { name: "Listing 详情" })
+    .getByRole("button", { name: "经营分析" }).click();
+  const analysisDialog = page.getByRole("dialog", { name: "Listing经营分析中心" });
+  await expect(analysisDialog).toContainText("已核实字段概览");
+  await expect(analysisDialog).toContainText("未知数据不会视为零");
+  await expect(analysisDialog).toContainText("暂不展示示例数字或模拟事件");
+  await expect(analysisDialog).not.toContainText("Multipurpose Storage Bags");
+  await analysisDialog.getByRole("button", { name: "关闭" }).click();
   const skuHeader = page.getByRole("columnheader", { name: /SKU\/MSKU/ }).locator(".ant-table-column-sorters");
   const ascendingSort = page.waitForResponse((response) => {
     const url = new URL(response.url());
