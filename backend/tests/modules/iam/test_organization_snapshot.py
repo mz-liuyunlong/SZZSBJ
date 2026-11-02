@@ -72,10 +72,6 @@ def test_unknown_department_parent_is_rejected() -> None:
 
 def test_employee_without_visible_department_is_rejected() -> None:
     departments, _users = _source()
-    users = (
-        FeishuDirectoryUser(
-            name="员工", open_id="ou-1", department_ids=("od-unavailable",)
-        ),
-    )
+    users = (FeishuDirectoryUser(name="员工", open_id="ou-1", department_ids=("od-unavailable",)),)
     with pytest.raises(ValueError, match="outside"):
         canonical_snapshot(departments, users)

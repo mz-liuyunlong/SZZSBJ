@@ -139,6 +139,7 @@ class RbacService:
     ) -> RbacRoleRead:
         permission_keys = self._validated_permission_keys(payload.permission_keys)
         self._assert_actor_can_grant(actor, permission_keys)
+        self._register_missing_permissions(permission_keys)
         self.iam_repository.create_role(
             role_key=payload.role_key,
             name=payload.name.strip(),
@@ -181,6 +182,7 @@ class RbacService:
 
         permission_keys = self._validated_permission_keys(payload.permission_keys)
         self._assert_actor_can_grant(actor, permission_keys)
+        self._register_missing_permissions(permission_keys)
         updated = self.repository.set_role_permissions(
             role_key=role_key,
             permission_keys=permission_keys,
@@ -553,14 +555,9 @@ class RbacService:
     def _validated_permission_keys(self, permission_keys: list[str]) -> tuple[str, ...]:
         normalized = tuple(dict.fromkeys(item.strip() for item in permission_keys if item.strip()))
         existing = self.repository.existing_permission_keys(normalized)
-        missing = set(normalized) - existing
+        disabled = self.repository.disabled_declared_permission_keys()
         declared = {item.permission_key for item in PERMISSION_DEFINITIONS}
-        if missing & declared:
-            # Safe insertion is part of the role transaction; on conflict do nothing
-            # so deliberately disabled keys stay disabled.
-            self.repository.register_declared_permissions(missing & declared)
-            existing = self.repository.existing_permission_keys(normalized)
-        invalid = sorted(set(normalized) - existing)
+        invalid = sorted(set(normalized) - (existing | (declared - disabled)))
         if invalid:
             raise ApiError(
                 code=ErrorCode.VALIDATION_ERROR,
@@ -569,6 +566,23 @@ class RbacService:
                 details={"invalid_permission_keys": invalid},
             )
         return normalized
+
+    def _register_missing_permissions(self, keys: tuple[str, ...]) -> None:
+        """Insert reviewed definitions only after grant authorization, in the role transaction."""
+        existing = self.repository.existing_permission_keys(keys)
+        missing = set(keys) - existing
+        if not missing:
+            return
+        self.repository.register_declared_permissions(missing)
+        # Do not turn a disabled key into a grant even if another writer changed it.
+        remaining = missing - self.repository.existing_permission_keys(keys)
+        if remaining:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=422,
+                message="权限已停用或登记失败，请刷新权限目录",
+                details={"invalid_permission_keys": sorted(remaining)},
+            )
 
     def _validated_role_keys(self, role_keys: list[str]) -> tuple[str, ...]:
         normalized = tuple(dict.fromkeys(item.strip() for item in role_keys if item.strip()))
@@ -602,7 +616,15 @@ class RbacService:
             return
         actor_permissions = self._actor_permissions(actor)
         missing = sorted(set(permission_keys) - actor_permissions)
-        high_risk = sorted(self.repository.high_risk_permission_keys(permission_keys))
+        requested = set(permission_keys)
+        high_risk = sorted(
+            self.repository.high_risk_permission_keys(permission_keys)
+            | {
+                item.permission_key
+                for item in PERMISSION_DEFINITIONS
+                if item.risk_level == "high" and item.permission_key in requested
+            }
+        )
         if missing or high_risk:
             raise ApiError(
                 code=ErrorCode.FORBIDDEN,

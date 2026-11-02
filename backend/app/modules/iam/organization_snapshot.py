@@ -33,9 +33,7 @@ def canonical_snapshot(
             }
         )
     # Reject incomplete or corrupted department trees before a single DB write.
-    parents = {
-        str(row["department_id"]): str(row["parent_department_id"]) for row in dept_rows
-    }
+    parents = {str(row["department_id"]): str(row["parent_department_id"]) for row in dept_rows}
     for department_id in parents:
         current = department_id
         visited: set[str] = set()
