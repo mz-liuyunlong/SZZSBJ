@@ -410,7 +410,6 @@ def test_publishing_updates_only_existing_bindings_and_keeps_old_grants(db, monk
         select_pinned_skill(db, str(new), "keyword_launch", unbound)
 
 
-
 def test_skill_binding_null_unbind_rebind_keeps_historical_grants(db, monkeypatch) -> None:
     from contextlib import nullcontext
 
