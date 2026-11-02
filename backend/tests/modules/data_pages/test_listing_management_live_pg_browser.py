@@ -12,13 +12,11 @@ from uuid import uuid4
 
 import pytest
 import uvicorn
-from fastapi import Request
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, delete, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
-from app.core.auth import Principal, get_optional_principal
 from app.core.config import get_settings
 from app.db import session as database_session
 from app.db.session import get_db_session
@@ -32,7 +30,6 @@ from app.modules.data_pages.models import (
     ProductCustomTagAssignment,
 )
 from app.modules.iam.security import token_hash
-from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.integration_sync.models import IntegrationInterface, IntegrationSyncConfig
 from app.modules.integration_sync.wfs_first_stock import observe_first_wfs_stock
 
@@ -50,6 +47,9 @@ def test_listing_page_and_real_api_with_isolated_postgres(
     assert url.database and url.database.startswith("pr277_listing_")
     assert url.query.get("host", "").startswith("/tmp/szzsbj-pr277-pg.")
     engine = create_engine(url)
+    monkeypatch.setenv("TEST_DATABASE_URL", url.render_as_string(hide_password=False))
+    get_settings.cache_clear()
+    database_session.dispose_engine()
     with Session(engine) as session:
         assert not session.scalar(select(ListingManagementCurrentMart.id).limit(1)), (
             "Use a fresh disposable DB"
@@ -129,33 +129,8 @@ def test_listing_page_and_real_api_with_isolated_postgres(
         )
         session.commit()
 
+    _seed_real_iam(engine)
     app = create_app()
-
-    def principal_for_request(request: Request) -> Principal:
-        permissions = {"page:products:listing-management:view"}
-        if request.headers.get("authorization") != "Bearer synthetic-listing-viewer":
-            permissions.update(
-                {
-                    "action:products:listing-management:manage-tags",
-                    "action:products:listing-management:export",
-                    "action:products:listing-management:archive",
-                    "action:products:listing-management:restore",
-                    "action:products:listing-management:edit-analysis-link",
-                }
-            )
-        return Principal(user_id="1", permissions=frozenset(permissions))
-
-    app.dependency_overrides[get_optional_principal] = principal_for_request
-
-    def account_scope(request: Request) -> frozenset[str]:
-        account = (
-            "synthetic-b"
-            if request.headers.get("authorization") == "Bearer synthetic-listing-b"
-            else "synthetic-a"
-        )
-        return frozenset({account})
-
-    app.dependency_overrides[require_source_account_scope] = account_scope
 
     def db_session():
         with Session(engine) as session:
@@ -181,7 +156,20 @@ def test_listing_page_and_real_api_with_isolated_postgres(
         return {"seeded": 49}
 
     app.add_api_route("/__listing_test__/seed_extra", seed_cross_page_rows, methods=["POST"])
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Authorization": "Bearer synthetic-listing-a"}) as client:
+        with TestClient(app) as anonymous:
+            assert anonymous.get("/api/listings/walmart").status_code == 401
+        me = client.get("/api/auth/me")
+        assert me.status_code == 200, me.text
+        assert me.json()["data"]["username"] == "synthetic_listing_9277001"
+        scoped_b = client.get(
+            "/api/listings/walmart",
+            headers={"Authorization": "Bearer synthetic-listing-b"},
+        )
+        assert scoped_b.status_code == 200, scoped_b.text
+        assert [row["source_account_ref"] for row in scoped_b.json()["data"]["items"]] == [
+            "synthetic-b"
+        ]
         listing = client.get("/api/listings/walmart")
         assert listing.status_code == 200, listing.text
         assert listing.json()["meta"]["total"] == 2
@@ -380,7 +368,7 @@ def test_listing_page_and_real_api_with_isolated_postgres(
             session.commit()
             second_store_listing_id = second_store_listing.id
 
-        with TestClient(app) as client:
+        with TestClient(app, headers={"Authorization": "Bearer synthetic-listing-a"}) as client:
             mixed_tag_ids = client.post(
                 "/api/listings/tags/batch-set",
                 json={
@@ -502,7 +490,6 @@ def test_listing_page_and_real_api_with_isolated_postgres(
                 headers={"authorization": "Bearer synthetic-listing-b"},
             )
             assert foreign_read.status_code == 404
-        _assert_real_iam_account_isolation(engine, url, active_listing_id, monkeypatch)
     finally:
         server.should_exit = True
         thread.join(timeout=10)
@@ -513,12 +500,11 @@ def test_listing_page_and_real_api_with_isolated_postgres(
         engine.dispose()
 
 
-def _assert_real_iam_account_isolation(
-    engine, url, listing_id, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Exercise persisted IAM sessions, permissions and account scopes without stubs."""
+def _seed_real_iam(engine) -> None:
+    """Seed test-only IAM sessions and account scopes in the disposable database."""
     now = datetime.now(UTC)
-    role_id = uuid4()
+    manager_role_id = uuid4()
+    viewer_role_id = uuid4()
     with Session(engine) as session:
         interface = IntegrationInterface(
             provider="synthetic",
@@ -536,37 +522,57 @@ def _assert_real_iam_account_isolation(
             IntegrationSyncConfig(interface_id=interface.id, source_account_ref=account)
             for account in ("synthetic-a", "synthetic-b")
         )
-        permission = "page:products:listing-management:view"
-        session.execute(
-            text(
-                """insert into app_permissions
-                   (permission_key, name, group_key, permission_type, risk_level,
-                    sort_order, is_active, created_at, updated_at)
-                   values (:permission, :permission, 'synthetic', 'legacy', 'normal',
-                           0, true, :now, :now)
-                   on conflict (permission_key) do nothing"""
-            ),
-            {"permission": permission, "now": now},
+        permissions = (
+            "page:products:listing-management:view",
+            "action:products:listing-management:manage-tags",
+            "action:products:listing-management:export",
+            "action:products:listing-management:archive",
+            "action:products:listing-management:restore",
+            "action:products:listing-management:edit-analysis-link",
         )
-        session.execute(
-            text(
-                """insert into app_roles
-                   (id, role_key, name, is_system, created_at, updated_at, version)
-                   values (:id, 'synthetic-listing-reader', 'Synthetic Listing Reader',
-                           0, :now, :now, 1)"""
-            ),
-            {"id": role_id, "now": now},
-        )
+        for permission in permissions:
+            session.execute(
+                text(
+                    """insert into app_permissions
+                       (permission_key, name, group_key, permission_type, risk_level,
+                        sort_order, is_active, created_at, updated_at)
+                       values (:permission, :permission, 'synthetic', 'legacy', 'normal',
+                               0, true, :now, :now)
+                       on conflict (permission_key) do nothing"""
+                ),
+                {"permission": permission, "now": now},
+            )
+        for role_id, role_key in (
+            (manager_role_id, "synthetic-listing-manager"),
+            (viewer_role_id, "synthetic-listing-viewer"),
+        ):
+            session.execute(
+                text(
+                    """insert into app_roles
+                       (id, role_key, name, is_system, created_at, updated_at, version)
+                       values (:id, :role_key, :role_key, 0, :now, :now, 1)"""
+                ),
+                {"id": role_id, "role_key": role_key, "now": now},
+            )
+        for permission in permissions:
+            session.execute(
+                text(
+                    """insert into app_role_permissions (role_id, permission_key, created_at)
+                       values (:role_id, :permission, :now)"""
+                ),
+                {"role_id": manager_role_id, "permission": permission, "now": now},
+            )
         session.execute(
             text(
                 """insert into app_role_permissions (role_id, permission_key, created_at)
                    values (:role_id, :permission, :now)"""
             ),
-            {"role_id": role_id, "permission": permission, "now": now},
+            {"role_id": viewer_role_id, "permission": permissions[0], "now": now},
         )
-        for user_id, account, token in (
-            (9277001, "synthetic-a", "synthetic-listing-a"),
-            (9277002, "synthetic-b", "synthetic-listing-b"),
+        for user_id, account, token, role_id in (
+            (9277001, "synthetic-a", "synthetic-listing-a", manager_role_id),
+            (9277002, "synthetic-b", "synthetic-listing-b", manager_role_id),
+            (9277003, "synthetic-a", "synthetic-listing-viewer", viewer_role_id),
         ):
             session.execute(
                 text(
@@ -608,38 +614,3 @@ def _assert_real_iam_account_isolation(
                 },
             )
         session.commit()
-
-    monkeypatch.setenv("TEST_DATABASE_URL", url.render_as_string(hide_password=False))
-    get_settings.cache_clear()
-    database_session.dispose_engine()
-    try:
-        with TestClient(create_app()) as client:
-            assert client.get("/api/listings/walmart").status_code == 401
-            for account, token in (
-                ("synthetic-a", "synthetic-listing-a"),
-                ("synthetic-b", "synthetic-listing-b"),
-            ):
-                headers = {"Authorization": f"Bearer {token}"}
-                me = client.get("/api/auth/me", headers=headers)
-                assert me.status_code == 200, me.text
-                assert permission in me.json()["data"]["permissions"]
-                response = client.get("/api/listings/walmart", headers=headers)
-                assert response.status_code == 200, response.text
-                assert response.json()["meta"]["total"] >= 1
-                assert all(
-                    row["source_account_ref"] == account for row in response.json()["data"]["items"]
-                )
-            foreign = client.get(
-                f"/api/listings/walmart/{listing_id}/gpt-analysis",
-                headers={"Authorization": "Bearer synthetic-listing-b"},
-            )
-            assert foreign.status_code == 404
-            denied_write = client.post(
-                f"/api/listings/walmart/{listing_id}/archive",
-                json={"reason": "Synthetic forbidden write"},
-                headers={"Authorization": "Bearer synthetic-listing-a"},
-            )
-            assert denied_write.status_code == 403
-    finally:
-        database_session.dispose_engine()
-        get_settings.cache_clear()
