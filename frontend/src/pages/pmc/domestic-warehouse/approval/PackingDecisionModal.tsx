@@ -40,7 +40,15 @@ interface Props {
 export default function PackingDecisionModal({ row, kind, busy, onCancel, onSubmit }: Props) {
   const [form] = Form.useForm<DecisionValues>();
   const [lines, setLines] = useState<LineState[]>([]);
-  const nextKey = useRef(2);
+  // Reset the lines when another row (or decision kind) is opened: adjust state while
+  // rendering instead of in an effect (react-hooks/set-state-in-effect).
+  const [shown, setShown] = useState<{ row: ApprovalCandidate | null; kind: DecisionKind }>({ row: null, kind });
+  if (shown.row !== row || shown.kind !== kind) {
+    setShown({ row, kind });
+    const restored = initialLines(row);
+    const preselect = !!row && kind === "approve" && !row.split_lines?.length && !!row.item_id;
+    setLines(preselect ? restored.map((line) => (line.key === 1 ? { ...line, searching: true } : line)) : restored);
+  }
   const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const aborts = useRef<Record<number, AbortController>>({});
   const reason = Form.useWatch("edit_reason", form);
@@ -48,14 +56,11 @@ export default function PackingDecisionModal({ row, kind, busy, onCancel, onSubm
     if (!row) return undefined;
     form.resetFields();
     form.setFieldsValue({ customs: row.manual_customs ?? "default" });
-    const restored = initialLines(row);
-    nextKey.current = restored.length + 1;
-    setLines(restored);
     if (kind !== "approve" || row.split_lines?.length || !row.item_id) return undefined;
-    // Pre-select the row's current identity by looking it up like a typed search.
+    // Pre-select the row's current identity by looking it up like a typed search
+    // (line 1 was already marked "searching" when the row was opened).
     const controller = new AbortController();
     const currentItem = row.item_id;
-    setLines((current) => current.map((line) => (line.key === 1 ? { ...line, searching: true } : line)));
     searchPackingListings(row, currentItem, controller.signal)
       .then((result) => {
         const items = result.data.items;
@@ -93,7 +98,7 @@ export default function PackingDecisionModal({ row, kind, busy, onCancel, onSubm
     const line = lines.find((item) => item.key === key);
     patch(key, { hit: line?.options.find((hit) => hitKey(hit) === value) });
   };
-  const addLine = () => setLines((current) => (current.length >= MAX_SPLIT_LINES ? current : [...current, { key: nextKey.current++, options: [], searching: false }]));
+  const addLine = () => setLines((current) => (current.length >= MAX_SPLIT_LINES ? current : [...current, { key: Math.max(0, ...current.map((line) => line.key)) + 1, options: [], searching: false }]));
   const removeLine = (key: number) => setLines((current) => (current.length <= 1 ? current : current.filter((line) => line.key !== key)));
 
   const available = row?.available_quantity ?? 0;
