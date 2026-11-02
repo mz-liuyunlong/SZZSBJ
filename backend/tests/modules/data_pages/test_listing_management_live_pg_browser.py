@@ -23,6 +23,7 @@ from app.modules.data_pages.models import (
     ListingArchiveState,
     ListingManagementCurrentMart,
     ProductCustomTag,
+    ProductCustomTagAssignment,
 )
 from app.modules.integration_sync.dependencies import require_source_account_scope
 
@@ -74,9 +75,10 @@ def test_listing_page_and_real_api_with_isolated_postgres() -> None:
             )
         )
         assert active_listing is not None
+        active_listing_id = active_listing.id
         session.add(
             ListingArchiveState(
-                listing_id=active_listing.id,
+                listing_id=active_listing_id,
                 source_account_ref="synthetic-a",
                 store_id="synthetic-store",
                 item_id="SYNTHETIC-LISTING-A",
@@ -167,6 +169,23 @@ def test_listing_page_and_real_api_with_isolated_postgres() -> None:
             foreign_id = foreign_tag.id
         denied = client.patch(f"/api/listings/tags/{foreign_id}", json={"is_active": True})
         assert denied.status_code == 422
+        invalid_batch = client.post(
+            "/api/listings/tags/batch-set",
+            json={
+                "listing_ids": [str(active_listing_id)],
+                "tag_ids": [str(foreign_id)],
+                "tag_values": ["SyntheticMustNotBeCreated"],
+                "mode": "replace",
+            },
+        )
+        assert invalid_batch.status_code == 422
+        with Session(engine) as session:
+            assert not session.scalar(select(ProductCustomTagAssignment.id).limit(1))
+            assert not session.scalar(
+                select(ProductCustomTag.id).where(
+                    ProductCustomTag.name == "SyntheticMustNotBeCreated"
+                )
+            )
 
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
