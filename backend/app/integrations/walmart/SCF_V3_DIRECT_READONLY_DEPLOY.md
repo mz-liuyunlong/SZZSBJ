@@ -16,7 +16,7 @@ Status: **code-only development branch**, not deployed. Production `stable`, SSM
 - v3 accepts audited, reviewed contracts generated on the server, **not arbitrary Walmart URLs** or a blanket grant to all public API endpoints. Main server must separately authorize operations and store scope.
 
 ## Blocking prerequisites before deployment
-1. Produce and verify a complete, reproducible **Python 3.10-compatible** SCF ZIP. The repository's backend `pyproject.toml` targets Python >=3.13, so copying the backend directory or using its default lockfile is **not** a verified runtime package. Validate module syntax/imports in a real Python 3.10 interpreter and pin compatible third-party wheels (notably `cryptography`, `httpx`); verify SCF handler and cold-start dependencies.
+1. Download the CI-built `walmart-scf-v3-direct-readonly-py310` artifact after its dedicated **Python 3.10** job passes. It contains the full ZIP with pinned dependencies and an `index.main_handler` entrypoint; CI compiles the allowed source modules under 3.10 and runs isolated extracted-ZIP v1/v3 smoke tests. The normal backend CI still targets Python 3.13. **Cloud cold start and real SSM/networking remain unverified until test deployment.**
 2. Inspect **all actual deployed store functions**, not just the historical eight. Legacy source lists nine store codes, including CN2603; owner must approve final exact inventory. Confirm function name, bound store, SSM role, region, and direct-public egress separately per store.
 3. Review direct-public security exception against the project private-egress default. This branch honors the established **read-only** exception; it does **not** authorize WFS creation or other writes. If writes are needed, deliver a separately approved private-egress deployment with durable replay/audit and additional acceptance.
 4. Package only reviewed modules needed by the cloud handler, preserve `main_handler` module path, compare dependency inventory, check compatibility with 60-second SCF timeout. Do **not** change current production `stable`, remove existing code, or modify SSM secrets to make tests pass.
@@ -33,3 +33,9 @@ ruff format --check app/integrations/walmart/direct_readonly_transport.py app/in
 ```
 
 This checklist does not assert a successful live rollout or blanket API readiness.
+
+## Reproducible Python 3.10 bundle
+
+CI runs `.github/workflows/ci.yml` job `walmart-scf-python310`, which creates and uploads `szzsbj-walmart-scf-v3-py310.zip`. Use `index.main_handler` as the SCF handler. The ZIP is a complete, **isolated Python 3.10** package with only reviewed SCF modules and pinned `cryptography==44.0.3`, `httpx==0.28.1`; its `app/__init__.py` is intentionally inert to avoid backend startup hooks. The CI smoke test runs *from the extracted ZIP* and checks legacy v1 inventory and all four v3 GET operations with synthetic credentials and mocked HTTPS. This does not exercise Tencent Cloud, live Walmart data, or production traffic.
+
+**Do not paste individual files into the old function** and do not replace `stable` before a dedicated test-function acceptance. The existing per-store CAM/SSM role and network approval remain prerequisites. This read-only bundle cannot create/cancel WFS shipments and should never be configured with `owner-approved-read-write`.

@@ -603,3 +603,27 @@ jobs:
           OPERATION_LOG_POSTGRES_TESTS: "1"
         run: |
           uv run pytest -q tests/modules/operation_logs/test_postgresql_integration.py
+
+  walmart-scf-python310:
+    name: Walmart SCF Python 3.10 deploy ZIP and protocol smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup actual Tencent-compatible Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Build isolated 3.10 cloud ZIP (pinned dependencies)
+        run: |
+          python -m pip install --disable-pip-version-check --target "$RUNNER_TEMP/szzsbj-scf-stage" -r backend/scf-direct-readonly-requirements.txt
+          python backend/scripts/build_walmart_scf_direct_bundle.py --stage "$RUNNER_TEMP/szzsbj-scf-stage" --output backend/dist/szzsbj-walmart-scf-v3-py310.zip
+      - name: Smoke test extracted ZIP (v1 plus four signed v3 read contracts)
+        run: |
+          python backend/scripts/test_walmart_scf_direct_bundle.py backend/dist/szzsbj-walmart-scf-v3-py310.zip
+      - name: Upload tested Tencent SCF ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: walmart-scf-v3-direct-readonly-py310
+          path: backend/dist/szzsbj-walmart-scf-v3-py310.zip
+          if-no-files-found: error
+          retention-days: 7
