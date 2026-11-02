@@ -18,9 +18,7 @@ def _source():
 def test_multi_department_partial_visibility_refused() -> None:
     departments, _ = _source()
     users = (
-        FeishuDirectoryUser(
-            name="A", open_id="ou-a", department_ids=("od-a", "od-invisible")
-        ),
+        FeishuDirectoryUser(name="A", open_id="ou-a", department_ids=("od-a", "od-invisible")),
     )
     with pytest.raises(ValueError, match="outside"):
         canonical_snapshot(departments, users)
@@ -31,7 +29,9 @@ def test_identical_snapshot_returns_previous_run_without_writes() -> None:
     digest, _, _ = canonical_snapshot(departments, users)
     session = MagicMock()
     session.execute.return_value.mappings.return_value.first.return_value = {
-        "id": "existing-run", "snapshot_hash": digest, "department_count": 1,
+        "id": "existing-run",
+        "snapshot_hash": digest,
+        "department_count": 1,
         "employee_count": 1,
     }
     run_id = apply_snapshot(
@@ -50,7 +50,9 @@ def test_large_visibility_drop_requires_explicit_confirmation() -> None:
     digest, _, _ = canonical_snapshot(departments, users)
     session = MagicMock()
     session.execute.return_value.mappings.return_value.first.return_value = {
-        "id": "old-run", "snapshot_hash": "a" * 64, "department_count": 5,
+        "id": "old-run",
+        "snapshot_hash": "a" * 64,
+        "department_count": 5,
         "employee_count": 10,
     }
     with pytest.raises(ValueError, match="over 20%"):

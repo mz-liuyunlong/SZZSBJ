@@ -105,10 +105,7 @@ def apply_snapshot(
     if previous and not allow_large_reduction:
         old_dept_count = int(previous["department_count"])
         old_user_count = int(previous["employee_count"])
-        if (
-            len(dept_rows) * 5 < old_dept_count * 4
-            or len(user_rows) * 5 < old_user_count * 4
-        ):
+        if len(dept_rows) * 5 < old_dept_count * 4 or len(user_rows) * 5 < old_user_count * 4:
             raise ValueError("Feishu directory shrank over 20%; explicit confirmation required")
 
     run_id = uuid4()
