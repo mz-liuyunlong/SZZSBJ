@@ -333,3 +333,42 @@ def preview_feishu_organization(
         },
         meta=None,
     )
+
+@router.get("/api/settings/rbac/diagnostics")
+def read_permission_diagnostics(
+    request: Request,
+    _: Annotated[Principal, Depends(require_super_admin)],
+    session: db_session,
+) -> dict:
+    """Read-only catalog drift diagnostics. No registration, grants, or commits."""
+    from sqlalchemy import text
+
+    from app.modules.iam.permission_catalog_v2 import PERMISSION_DEFINITIONS
+
+    declared = {item.permission_key for item in PERMISSION_DEFINITIONS}
+    rows = session.execute(
+        text("SELECT permission_key, is_active FROM app_permissions")
+    ).all()
+    stored = {str(key) for key, _active in rows}
+    disabled = {str(key) for key, active in rows if not active}
+    orphan_rows = session.execute(
+        text(
+            """
+            SELECT DISTINCT rp.permission_key
+            FROM app_role_permissions rp
+            LEFT JOIN app_permissions p ON p.permission_key = rp.permission_key
+            WHERE p.permission_key IS NULL OR p.is_active = false
+            """
+        )
+    ).scalars()
+    return success_response(
+        request,
+        data={
+            "declared_not_stored": sorted(declared - stored),
+            "stored_not_declared": sorted(stored - declared),
+            "disabled_declared": sorted(disabled & declared),
+            "orphan_or_disabled_grants": sorted(str(key) for key in orphan_rows),
+            "read_only": True,
+        },
+        meta=None,
+    )
