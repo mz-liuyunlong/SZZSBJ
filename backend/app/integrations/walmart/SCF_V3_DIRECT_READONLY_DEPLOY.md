@@ -36,6 +36,12 @@ This checklist does not assert a successful live rollout or blanket API readines
 
 ## Reproducible Python 3.10 bundle
 
-CI runs `.github/workflows/ci.yml` job `walmart-scf-python310`, which creates and uploads `walmart-scf-v3-py310.zip`. Use `index.main_handler` as the SCF handler. The ZIP is a complete, **isolated Python 3.10** package with only reviewed SCF modules and pinned `cryptography==44.0.3`, `httpx==0.28.1`; its `app/__init__.py` is intentionally inert to avoid backend startup hooks. The CI smoke test runs *from the extracted ZIP* and checks legacy v1 inventory and all four v3 GET operations with synthetic credentials and mocked HTTPS. This does not exercise Tencent Cloud, live Walmart data, or production traffic.
+CI runs `.github/workflows/ci.yml` job `walmart-scf-python310`, which creates and uploads `walmart-scf-v3-py310.zip`. Use `index.main_handler` as the SCF handler. The ZIP is a complete, **isolated Python 3.10** package with only reviewed SCF modules and pinned `cryptography==42.0.8`, `httpx==0.28.1`; its `app/__init__.py` is intentionally inert to avoid backend startup hooks. The CI smoke test runs *from the extracted ZIP* and checks legacy v1 inventory and all four v3 GET operations with synthetic credentials and mocked HTTPS. This does not exercise Tencent Cloud, live Walmart data, or production traffic.
 
 **Do not paste individual files into the old function** and do not replace `stable` before a dedicated test-function acceptance. The existing per-store CAM/SSM role and network approval remain prerequisites. This read-only bundle cannot create/cancel WFS shipments and should never be configured with `owner-approved-read-write`.
+
+## 2026-11-02 Tencent Cloud GLIBC import failure follow-up
+
+The first merged ZIP (PR #292) bootstrapped Python 3.10 successfully under the GitHub Ubuntu runner, but Tencent SCF returned `ImportError: /lib64/libc.so.6: version GLIBC_2.33 not found` when loading `cryptography.hazmat.bindings._rust`. This is a **binary runtime dependency incompatibility**, not an entrypoint or SSM issue. The new build explicitly targets `manylinux2014_x86_64` wheels and pins `cryptography==42.0.8`, which publishes compatible Python abi3 wheels. CI now checks every included native `.so` for glibc symbol requirements no higher than 2.17, then executes the extracted ZIP smoke on Python 3.10.
+
+Cloud verification remains mandatory: upload the **new** artifact to HK2613 `$LATEST` only and execute `{\"operation\":\"health\"}`. Keep `stable` on old version and do not change secrets or networking until health and read-only calls pass. A green CI is not proof of actual Tencent runtime compatibility.
