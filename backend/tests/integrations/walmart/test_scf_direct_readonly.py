@@ -75,6 +75,7 @@ def test_direct_transport_can_call_approved_get_without_proxy(monkeypatch):
 @pytest.mark.parametrize("denied", [
     request("POST", "/v3/fulfillment/inbound-shipments", body={"x": 1}),
     request("DELETE", "/v3/fulfillment/inbound-shipments/abc"),
+    request("PATCH", "/v3/fulfillment/inbound-shipments/abc"),
     request("GET", "https://example.com/v3/wfs/inventory"),
     request("GET", "/v3/../token"),
 ])
