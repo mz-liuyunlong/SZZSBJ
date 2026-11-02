@@ -6,7 +6,7 @@ import type { ReactNode, ButtonHTMLAttributes, InputHTMLAttributes, TextareaHTML
 import type { NavigationPage } from '@/config/navigation';
 import AIAssistantPage from './AIAssistantPage';
 const requestMock = vi.hoisted(() => vi.fn());
-vi.mock('@/api/backendApi',()=>({backendRequest:requestMock}));
+vi.mock('./assistantStream',()=>({requestAssistantStream:requestMock}));
 
 
 vi.mock('@/components/page/PageShell', () => ({
@@ -43,7 +43,12 @@ const page={key:'ai_center_assistant',title:'AI助手'} as NavigationPage;
 beforeEach(()=>{
   window.localStorage.clear();
   requestMock.mockReset();
-  requestMock.mockResolvedValue({data:{chat_id:"00000000-0000-0000-0000-000000000001",response:"已连接模型服务，当前缺少真实利润数据。"}});
+  requestMock.mockImplementation(async (_body: unknown, onSignal: (signal: unknown) => void) => {
+    onSignal({type:'thinking'});
+    onSignal({type:'delta',text:'已连接模型服务，当前缺少真实利润数据。'});
+    onSignal({type:'done',data:{chat_id:'00000000-0000-0000-0000-000000000001',
+      response:'已连接模型服务，当前缺少真实利润数据。',searched:false,sources:[],input_tokens:4,output_tokens:8}});
+  });
 });
 afterEach(cleanup);
 function mount(){return render(<AIAssistantPage page={page} preferenceScope="ai-v7-test"/>);}
@@ -87,8 +92,7 @@ describe('AI assistant V7 inside existing MainLayout',()=>{
     expect(screen.getByText('report.csv')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
     await waitFor(()=>expect(requestMock).toHaveBeenCalledTimes(1));
-    const request=requestMock.mock.calls[0][1] as {body:string};
-    const payload=JSON.parse(request.body) as {
+    const payload=requestMock.mock.calls[0][0] as {
       message:string;attachments:Array<{name:string;content_base64:string}>
     };
     expect(payload.attachments[0]).toEqual({
@@ -118,6 +122,39 @@ it('persists the server chat id across page reloads', async () => {
   fireEvent.change(screen.getByRole('textbox', { name: '输入问题' }), { target: { value: '继续追问' } });
   fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
   await waitFor(() => expect(requestMock).toHaveBeenCalledTimes(2));
-  const request = requestMock.mock.calls[1][1] as { body: string };
-  expect(JSON.parse(request.body).chat_id).toBe(chatId);
+  const request = requestMock.mock.calls[1][0] as { chat_id: string };
+  expect(request.chat_id).toBe(chatId);
+});
+
+
+it('moves outgoing attachments out of the composer after sending', async () => {
+  mount();
+  const report = new File(['sample'],'report.csv',{type:'text/csv'});
+  Object.defineProperty(report,'arrayBuffer',{value:async()=>new TextEncoder().encode('sample').buffer});
+  fireEvent.change(screen.getByLabelText('选择文件'),{target:{files:[report]}});
+  expect(screen.getByRole('button',{name:'移除 report.csv'})).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+  await waitFor(()=>expect(requestMock).toHaveBeenCalledTimes(1));
+  await waitFor(()=>expect(screen.queryByRole('button',{name:'移除 report.csv'})).not.toBeInTheDocument());
+  expect(screen.getByText('report.csv')).toBeInTheDocument();
+});
+
+it('shows live web status only when streaming reports a real search', async () => {
+  let finish: (()=>void) | undefined;
+  requestMock.mockImplementation(async (_payload: unknown, onSignal: (event: unknown) => void) => {
+    onSignal({type:'thinking'});
+    onSignal({type:'searching'});
+    await new Promise<void>(resolve=>{finish=resolve;});
+    onSignal({type:'delta',text:'## 搜索结果\n\n已核对。'});
+    onSignal({type:'done',data:{chat_id:'00000000-0000-0000-0000-000000000002',
+      response:'## 搜索结果\n\n已核对。',searched:true,
+      sources:[{title:'来源',url:'https://example.com'}],input_tokens:3,output_tokens:5}});
+  });
+  mount();
+  fireEvent.change(screen.getByRole('textbox',{name:'输入问题'}),{target:{value:'今天有什么新消息？'}});
+  fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+  expect(await screen.findByRole('status')).toHaveTextContent('正在联网搜索');
+  finish?.();
+  expect(await screen.findByRole('heading',{name:'搜索结果'})).toBeInTheDocument();
+  expect(screen.getByRole('link',{name:'来源'})).toHaveAttribute('href','https://example.com');
 });
