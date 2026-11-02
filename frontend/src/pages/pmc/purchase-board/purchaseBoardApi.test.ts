@@ -191,8 +191,8 @@ describe("purchaseBoardApi mapping", () => {
     ));
     const result = await listPurchaseBoard(createInitialPurchaseBoardFilters(), 1, 50);
     expect(result.rows[0].itemId.identities).toEqual([
-      { itemId: "19051502014", msku: "M1", gtin: null, fulfillmentType: "1", localSku: "SKU-Z", skuMismatch: true },
-      { itemId: "33333333333", msku: "M2", gtin: null, fulfillmentType: "1", localSku: null, skuMismatch: false },
+      { itemId: "19051502014", msku: "M1", gtin: null, fulfillmentType: "1", localSku: "SKU-Z", skuMismatch: true, storeId: null },
+      { itemId: "33333333333", msku: "M2", gtin: null, fulfillmentType: "1", localSku: null, skuMismatch: false, storeId: null },
     ]);
   });
 

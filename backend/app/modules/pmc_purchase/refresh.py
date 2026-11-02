@@ -25,7 +25,11 @@ Scope (rules v4, PRP §7, gate3-plan G3-D, Rocky 2026-09-23 "按之前的来"):
   identity. Multiple values do not duplicate quantities or imply conflict. Without
   verified remarks, show the same-store listing found by local SKU, or by the purchase
   line's MSKU when the listing's local SKU is blank; preserve existing packing fallback.
-* ``sid = 0`` rows keep ``store_attributed = False``: no overdue, no cycle sample.
+* ``sid = 0`` rows (no store in Lingxing): owner decision 2026-11-02 (R-9) — a remark ItemID
+  that the listing dimension carries on **exactly one** store attributes both the ItemID and
+  that store (the board row then gets a store, and overdue is computed); on several stores
+  the ids are shown with ``conflict`` and the store stays blank; with no listing (or no
+  remark id) the row stays unattributed as before. Cycle samples still follow the DWD flag.
 * Manual layer is read, never written; DWD is never written.
 
 The refresher commits after a successful run and rolls back on any error. It never
@@ -86,6 +90,7 @@ from app.modules.pmc_purchase.models import (
 )
 from app.modules.pmc_purchase.remark_item_ids import (
     OdsRemarkTexts,
+    extract_remark_item_ids,
     line_msku_for,
     line_texts_for,
     load_ods_remark_texts,
@@ -200,6 +205,11 @@ class _ListingIndex:
         if not store_id:
             return []
         return list(self.by_store.get(store_id, ()))
+
+    def stores_for_items(self, item_ids: Iterable[str]) -> list[str]:
+        """Every store that lists any of ``item_ids`` (sorted, unique)."""
+        wanted = {item_id for item_id in item_ids if item_id}
+        return sorted({store for (store, item_id) in self.by_item if item_id in wanted})
 
     def for_line(self, store_id: str | None, sku: str | None, msku: str | None) -> _Listing | None:
         """Scalar fallback for the pre-attribution pass.
@@ -684,16 +694,41 @@ class PmcPurchaseDwsRefresher:
         line_texts = line_texts_for(ods_remarks, line, fallback_item_id=line.remark_item_id)
         store_id = line.store_id or (plan.store_id if plan else None)
         line_msku = line_msku_for(ods_remarks, line)
+        remark_texts = [*line_texts, *plan_texts]
+        # R-9 (owner 2026-11-02): no store on the line → the remark ItemID decides the
+        # store when the listing dimension carries it on exactly one store.
+        store_from_remark: str | None = None
+        remark_store_conflict: list[str] = []
+        if not store_id:
+            stores_found = listings.stores_for_items(extract_remark_item_ids(remark_texts))
+            if len(stores_found) == 1:
+                store_from_remark = stores_found[0]
+                store_id = store_from_remark
+            elif len(stores_found) > 1:
+                remark_store_conflict = stores_found
         # One shared rule with the domestic boards (item_id_resolution): remark ids are
         # verified by store, a differing listing local SKU is flagged, blank local SKUs
         # fall back to the purchase line's MSKU. Legacy order: line texts, then plan texts.
         resolution = resolve_item_identities(
             store_id=store_id,
             sku=line.sku,
-            remark_texts=[*line_texts, *plan_texts],
+            remark_texts=remark_texts,
             line_mskus=[line_msku] if line_msku else (),
             listings=listings.candidates_for(store_id),
         )
+        if store_from_remark is not None:
+            # The remark id was found on this store by construction; recompute the stage
+            # now that the row has a store (overdue applies), same as a Lingxing-attributed line.
+            stage = classify_order_stage(
+                order_status=order.status,
+                order_create_date=order.create_date,
+                order_date=order.order_date,
+                arrival=fact.arrival,
+                sku_cycle_days=sku_threshold,
+                store_attributed=True,
+                today=today,
+                thresholds=thresholds,
+            )
         remark_ids = resolution.item_ids if resolution.source == "remark" else []
         selected_ids = resolution.item_ids
         sku_mismatch = sorted(resolution.sku_mismatch_ids)
@@ -715,7 +750,30 @@ class PmcPurchaseDwsRefresher:
             )
             source_ref = line.plan_sn if remark_ids else None
             matched_at, remark_conflict = self.now, False
+        elif remark_store_conflict:
+            # R-9: the remark id(s) exist on several stores and the line names none →
+            # list every such listing, no store, flagged as a conflict for a human to settle.
+            identities = [
+                {
+                    "item_id": candidate.item_id,
+                    "msku": candidate.msku,
+                    "gtin": candidate.gtin,
+                    "fulfillment_type": candidate.fulfillment_type,
+                    "local_sku": candidate.local_sku,
+                    "sku_mismatch": bool((candidate.local_sku or "").strip())
+                    and (candidate.local_sku or "").strip() != (line.sku or "").strip(),
+                    "store_id": candidate.store_id,
+                }
+                for store in remark_store_conflict
+                for candidate in listings.candidates_for(store)
+                if candidate.item_id in set(extract_remark_item_ids(remark_texts))
+            ]
+            attribution = ItemIdAttribution(None, "from_plan_remark")
+            source_ref = line.plan_sn
+            matched_at, remark_conflict = self.now, True
         listing = self._listing_for(line, attribution.item_id, listings)
+        if listing is None and store_from_remark and attribution.item_id:
+            listing = listings.by_item.get((store_from_remark, attribution.item_id))
         product = products.get(line.sku or "")
         wfs_flag = wfs_not_ready(attribution.source, listing.fulfillment_type if listing else None)
         if identities:
@@ -754,6 +812,8 @@ class PmcPurchaseDwsRefresher:
                 "line_msku": line_msku,
                 "sku_mismatch": sku_mismatch,
                 "unverified_ids": list(resolution.unverified_remark_ids),
+                "store_from_remark": store_from_remark,
+                "remark_store_conflict": remark_store_conflict,
             },
         }
         row = DwsPurchaseBoard(
@@ -778,9 +838,11 @@ class PmcPurchaseDwsRefresher:
             overdue_days=stage.overdue_days,
             alert_due_since=stage.alert_due_since,
             stage_start_estimated=stage.start_estimated,
-            store_id=line.store_id,
-            store_name=stores.get(line.store_id) if line.store_id else None,
-            store_attributed=line.store_attributed,
+            store_id=store_from_remark or line.store_id,
+            store_name=stores.get(store_from_remark or line.store_id)
+            if (store_from_remark or line.store_id)
+            else None,
+            store_attributed=line.store_attributed or store_from_remark is not None,
             sku=line.sku,
             product_name=line.product_name or (plan.product_name if plan else None),
             msku=listing.msku if listing else None,
