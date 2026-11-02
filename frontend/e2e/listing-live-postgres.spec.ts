@@ -8,6 +8,7 @@ test("Listing page persists GPT links, archive state, tags, and scoped CSV", asy
   test.setTimeout(90_000);
   const errors: string[] = [];
   let listingReads = 0;
+  let failNextListingRead = false;
   page.on("pageerror", (error) => errors.push(error.message));
   await page.addInitScript(() => {
     if (!localStorage.getItem("szzsbj_auth_token")) {
@@ -39,7 +40,14 @@ test("Listing page persists GPT links, archive state, tags, and scoped CSV", asy
   }));
   await page.route("**/api/listings/**", async (route) => {
     const url = new URL(route.request().url());
-    if (url.pathname === "/api/listings/walmart") listingReads += 1;
+    if (url.pathname === "/api/listings/walmart") {
+      listingReads += 1;
+      if (failNextListingRead) {
+        failNextListingRead = false;
+        await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
+        return;
+      }
+    }
     await route.continue({ url: new URL(url.pathname + url.search, api).toString() });
   });
 
@@ -69,6 +77,16 @@ test("Listing page persists GPT links, archive state, tags, and scoped CSV", asy
   await skuHeader.click();
   expect((await descendingSort).status()).toBe(200);
   await expect(page.locator(".ant-table-tbody .ant-table-row").first()).toContainText("SYNTHETIC-LISTING-A2");
+
+  failNextListingRead = true;
+  await page.getByRole("button", { name: /^在售商品：/ }).click();
+  const retryLoad = page.getByRole("button", { name: /数据加载失败，点击重试/ });
+  await expect(retryLoad).toBeVisible();
+  await expect(page.getByText("SYNTHETIC-LISTING-A2", { exact: true }).first()).toBeVisible();
+  await retryLoad.click();
+  await expect(retryLoad).toHaveCount(0);
+  await page.getByRole("button", { name: /^Listing总数：/ }).click();
+  await expect(page.getByText("SYNTHETIC-LISTING-A", { exact: true }).first()).toBeVisible();
 
   const archiveFilter = page.getByRole("combobox", { name: "归档状态" });
   await archiveFilter.click();
@@ -163,21 +181,30 @@ test("Listing page persists GPT links, archive state, tags, and scoped CSV", asy
   await page.getByRole("button", { name: /确\s*认\s*归\s*档/ }).click();
   const archiveDialog = page.getByRole("dialog", { name: "填写归档原因" });
   await archiveDialog.getByPlaceholder(/请输入归档原因/).fill("Synthetic archive reason");
+  const summaryAfterArchive = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === "/api/listings/walmart/summary");
   await archiveDialog.getByRole("button", { name: /确\s*认\s*归\s*档/ }).click();
+  expect((await summaryAfterArchive).status()).toBe(200);
   await expect(archiveDialog).toHaveCount(0);
+  await page.reload({ waitUntil: "domcontentloaded" });
   await archiveFilter.click();
   await page.getByRole("option", { name: "已归档" }).click();
   await page.getByRole("button", { name: "确定" }).click();
   const archivedRow = page.getByRole("row").filter({ has: page.getByText("SYNTHETIC-LISTING-A", { exact: true }) });
   await expect(archivedRow.getByText("Synthetic archive reason")).toBeVisible();
   await archivedRow.getByRole("button", { name: "恢复" }).click();
+  const summaryAfterRestore = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === "/api/listings/walmart/summary");
   await page.getByRole("button", { name: /确\s*认\s*恢\s*复/ }).click();
+  expect((await summaryAfterRestore).status()).toBe(200);
   await expect(archivedRow).toHaveCount(0);
   await archiveFilter.click();
   await page.getByRole("button", { name: "清空" }).click();
   await page.getByRole("button", { name: "确定" }).click();
   await expect(page.getByRole("row").filter({ has: page.getByText("SYNTHETIC-LISTING-A", { exact: true }) })).toBeVisible();
   await expect(page.getByText("Synthetic archive reason")).toHaveCount(0);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("row").filter({ has: page.getByText("SYNTHETIC-LISTING-A", { exact: true }) })).toBeVisible();
   await page.getByRole("button", { name: "下载" }).click();
   const exportDialog = page.getByRole("dialog", { name: /导出数据/ });
   const download = page.waitForEvent("download");
