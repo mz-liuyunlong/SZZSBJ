@@ -10,6 +10,8 @@ import {
   fixedListingColumnKeys,
   listingColumnFields,
   listingManagementMockData,
+  migrateListingColumnKeys,
+  migrateListingColumnWidths,
   type ListingManagementRow,
 } from "@/pages/products/listingManagementData";
 
@@ -87,6 +89,15 @@ afterEach(() => {
 });
 
 describe("ListingManagementPage acceptance contract", () => {
+  it("restores the 30-day sales column in a saved legacy column selection", () => {
+    expect(migrateListingColumnKeys(["store", "sales90Days"])).toEqual(["store", "sales30Days"]);
+    expect(migrateListingColumnKeys(["sales90Days", "sales30Days"])).toEqual(["sales30Days"]);
+    const current = ["store", "sales30Days"];
+    expect(migrateListingColumnKeys(current)).toBe(current);
+    expect(migrateListingColumnWidths({ store: 120, sales90Days: 160 })).toEqual({ store: 120, sales30Days: 160 });
+    expect(migrateListingColumnWidths({ sales90Days: 160, sales30Days: 140 })).toEqual({ sales30Days: 140 });
+  });
+
   it("shows the raw Listing date only when normalized time is missing", () => {
     expect(toListingStartText("2026-09-08T16:31:47Z")).toBe("2026-09-08");
     expect(toListingStartText(null, "2026-09-08 09:31:47")).toBe("2026-09-08");

@@ -56,6 +56,8 @@ import { clearResourceCache } from "@/shared/preload/resourceCache";
 import {
   fixedListingColumnKeys,
   listingColumnFields,
+  migrateListingColumnKeys,
+  migrateListingColumnWidths,
   type ListingManagementRow,
 } from "@/pages/products/listingManagementData";
 
@@ -341,10 +343,13 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
   );
 
   useEffect(() => {
-    setAppliedColumnKeys((current) => (
-      current.includes("gptAnalysis") ? current : [...current, "gptAnalysis"]
-    ));
-  }, [setAppliedColumnKeys]);
+    setAppliedColumnKeys((current) => {
+      const migrated = migrateListingColumnKeys(current);
+      return migrated.includes("gptAnalysis") ? migrated : [...migrated, "gptAnalysis"];
+    });
+    setSavedTemplateKeys(migrateListingColumnKeys);
+    setColumnWidths(migrateListingColumnWidths);
+  }, [setAppliedColumnKeys, setSavedTemplateKeys, setColumnWidths]);
 
 
   const reloadListingTags = useCallback(async (options: { showError?: boolean } = {}) => {

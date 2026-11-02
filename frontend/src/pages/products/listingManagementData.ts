@@ -104,6 +104,17 @@ export const listingColumnFields = [
 
 export const fixedListingColumnKeys = ["image", "productIdName", "skuMsku"];
 
+export const migrateListingColumnKeys = (keys: string[]): string[] => {
+  if (!keys.includes("sales90Days")) return keys;
+  return [...new Set(keys.map((key) => key === "sales90Days" ? "sales30Days" : key))];
+};
+
+export const migrateListingColumnWidths = (widths: Record<string, number>): Record<string, number> => {
+  if (!("sales90Days" in widths)) return widths;
+  const { sales90Days, ...current } = widths;
+  return { ...current, sales30Days: current.sales30Days ?? sales90Days };
+};
+
 export const listingStores = ["美国一店", "美国二店", "加拿大店", "验收测试"];
 export const listingOwners = ["林晓", "陈宁", "周琳", "赵明"];
 export const listingProductTypes = ["常规产品", "季节产品", "组合产品"];
