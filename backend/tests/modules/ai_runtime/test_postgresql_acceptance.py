@@ -174,7 +174,6 @@ def test_job_account_and_owner_isolation_and_idempotency(db, monkeypatch) -> Non
     )
 
 
-
 def test_library_revision_pins_never_cross_connector(db) -> None:
     from app.modules.ai_runtime.provider import AIUnavailable
 
@@ -197,7 +196,10 @@ def test_library_revision_pins_never_cross_connector(db) -> None:
           VALUES (:id,:connector)"""),
         {"id": revision_id, "connector": first},
     )
-    assert select_pinned_skill(db, str(revision_id), "keyword_launch", first)["runtime_instructions"] == "run A"
+    assert (
+        select_pinned_skill(db, str(revision_id), "keyword_launch", first)["runtime_instructions"]
+        == "run A"
+    )
     with pytest.raises(AIUnavailable) as denied:
         select_pinned_skill(db, str(revision_id), "keyword_launch", second)
     assert denied.value.code == "AI_SKILL_VERSION_INVALID"
@@ -218,8 +220,13 @@ def test_0071_real_historical_migration_preserves_jobs_and_blocks_populated_roll
     assert parsed.database == "ai_runtime_ci"
     assert parsed.username == "ai_runtime_ci"
     name = "szzsbj_ai_hist_" + uuid4().hex[:18]
-    admin = dict(host=parsed.host, port=parsed.port, user=parsed.username,
-                 password=parsed.password, dbname=parsed.database)
+    admin = dict(
+        host=parsed.host,
+        port=parsed.port,
+        user=parsed.username,
+        password=parsed.password,
+        dbname=parsed.database,
+    )
     with psycopg.connect(**admin, autocommit=True) as cx:
         cx.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
 
@@ -233,7 +240,11 @@ def test_0071_real_historical_migration_preserves_jobs_and_blocks_populated_roll
     def migrate(operation: str, revision: str) -> None:
         result = subprocess.run(
             [sys.executable, "-m", "alembic", operation, revision],
-            cwd=root, env=env, text=True, capture_output=True, check=False,
+            cwd=root,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
         )
         assert result.returncode == 0, result.stdout + result.stderr
 
@@ -261,8 +272,11 @@ def test_0071_real_historical_migration_preserves_jobs_and_blocks_populated_roll
                       VALUES (:id,:connector,'keyword_launch',:v,:status,
                        :instructions,:runtime,'test',:deleted)"""),
                     {
-                        "id": ident, "connector": connector, "v": n,
-                        "status": status, "instructions": "historical " + str(n),
+                        "id": ident,
+                        "connector": connector,
+                        "v": n,
+                        "status": status,
+                        "instructions": "historical " + str(n),
                         "runtime": "execute " + str(n),
                         "deleted": "2026-10-30 00:00:00+00" if n == 4 else None,
                     },
@@ -273,36 +287,53 @@ def test_0071_real_historical_migration_preserves_jobs_and_blocks_populated_roll
                   VALUES (:id,'synthetic',:product,'test','historical-queued',
                     CAST(:payload AS jsonb))"""),
                 {
-                    "id": job_id, "product": uuid4(),
-                    "payload": json.dumps({
-                        "connector_id": str(connector), "skill_version_id": str(ids[0]),
-                    }),
+                    "id": job_id,
+                    "product": uuid4(),
+                    "payload": json.dumps(
+                        {
+                            "connector_id": str(connector),
+                            "skill_version_id": str(ids[0]),
+                        }
+                    ),
                 },
             )
         migrate("upgrade", "head")
         with engine.begin() as cx:
-            rows = cx.execute(text("""SELECT v.version,v.status
+            rows = cx.execute(
+                text("""SELECT v.version,v.status
               FROM ai_skill_revisions v JOIN ai_skill_library s ON v.skill_id=s.id
-              WHERE s.scene='keyword_launch' ORDER BY v.version""")).all()
+              WHERE s.scene='keyword_launch' ORDER BY v.version""")
+            ).all()
             assert rows == [(1, "published"), (2, "draft"), (3, "retired")]
             assert cx.scalar(text("SELECT count(*) FROM ai_skill_revision_grants")) == 2
             assert cx.scalar(text("SELECT count(*) FROM ai_skill_bindings")) == 1
             assert cx.scalar(text("SELECT count(*) FROM ai_runtime_skill_versions")) == 4
-            job = cx.execute(text("SELECT status,input_json FROM ai_runtime_jobs WHERE id=:id"),
-                             {"id": job_id}).one()
+            job = cx.execute(
+                text("SELECT status,input_json FROM ai_runtime_jobs WHERE id=:id"), {"id": job_id}
+            ).one()
             assert job.status == "queued"
             assert job.input_json["skill_version_id"] == str(ids[0])
             assert job.input_json["connector_id"] == str(connector)
-            pinned = cx.execute(text("""SELECT count(*) FROM ai_skill_revision_grants
-              WHERE connector_id=:connector"""), {"connector": other}).scalar_one()
+            pinned = cx.execute(
+                text("""SELECT count(*) FROM ai_skill_revision_grants
+              WHERE connector_id=:connector"""),
+                {"connector": other},
+            ).scalar_one()
             assert pinned == 0
         result = subprocess.run(
             [sys.executable, "-m", "alembic", "downgrade", "20261102_0070_ai_skill_soft_delete"],
-            cwd=root, env=env, capture_output=True, text=True, check=False,
+            cwd=root,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         assert result.returncode != 0
         with engine.begin() as cx:
-            assert cx.scalar(text("SELECT version_num FROM alembic_version")) == "20261102_0071_skill_lib"
+            assert (
+                cx.scalar(text("SELECT version_num FROM alembic_version"))
+                == "20261102_0071_skill_lib"
+            )
             assert cx.scalar(text("SELECT count(*) FROM ai_skill_revisions")) == 3
         engine.dispose()
     finally:
