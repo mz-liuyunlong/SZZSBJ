@@ -192,40 +192,36 @@ class _Listing:
 class _ListingIndex:
     by_item: dict[tuple[str, str], _Listing]
     by_store_sku: dict[tuple[str, str], _Listing]
-    # (store_id, msku) -> listing, for lines whose listing has no local SKU yet.
-    by_store_msku: dict[tuple[str, str], _Listing] = field(default_factory=dict)
+    # store_id -> every listing of that store, in the shape the shared rule consumes.
+    by_store: dict[str, list[ListingCandidate]] = field(default_factory=dict)
 
     def candidates_for(self, store_id: str | None) -> list[ListingCandidate]:
         """Every listing of one store, in the shape the shared rule consumes."""
         if not store_id:
             return []
-        return [
-            ListingCandidate(
-                store_id=store,
-                item_id=listing.item_id,
-                local_sku=listing.local_sku,
-                gtin=listing.gtin,
-                msku=listing.msku,
-                fulfillment_type=listing.fulfillment_type,
-            )
-            for (store, _item), listing in self.by_item.items()
-            if store == store_id
-        ]
+        return list(self.by_store.get(store_id, ()))
 
     def for_line(self, store_id: str | None, sku: str | None, msku: str | None) -> _Listing | None:
-        """Scalar fallback for the pre-attribution pass: a unique store listing by local
-        SKU, else by purchase-line MSKU (blank local SKU)."""
+        """Scalar fallback for the pre-attribution pass.
+
+        It applies the shared rule (``resolve_item_identities``, no remark texts) so the
+        pre-attribution and the final attribution cannot drift: a store listing by local
+        SKU, else by purchase-line MSKU **only among listings with a blank local SKU**.
+        A listing is returned only when the rule yields exactly one ItemID; several
+        candidates are left unmatched instead of picking one.
+        """
         if not store_id:
             return None
-        key_sku = (sku or "").strip()
-        if key_sku:
-            found = self.by_store_sku.get((store_id, key_sku))
-            if found is not None:
-                return found
-        key_msku = (msku or "").strip()
-        if key_msku:
-            return self.by_store_msku.get((store_id, key_msku))
-        return None
+        resolution = resolve_item_identities(
+            store_id=store_id,
+            sku=sku,
+            remark_texts=(),
+            line_mskus=[msku] if msku else (),
+            listings=self.candidates_for(store_id),
+        )
+        if len(resolution.identities) != 1:
+            return None
+        return self.by_item.get((store_id, resolution.identities[0].item_id))
 
 
 @dataclass(frozen=True, slots=True)
@@ -468,7 +464,7 @@ class PmcPurchaseDwsRefresher:
 
         by_item: dict[tuple[str, str], _Listing] = {}
         grouped: dict[tuple[str, str], dict[str, _Listing]] = defaultdict(dict)
-        grouped_msku: dict[tuple[str, str], dict[str, _Listing]] = defaultdict(dict)
+        by_store: dict[str, list[ListingCandidate]] = defaultdict(list)
         rows = self.session.scalars(
             select(WalmartListingDimension).where(
                 WalmartListingDimension.source_account_ref == account
@@ -483,20 +479,23 @@ class PmcPurchaseDwsRefresher:
             local_sku = (row.local_sku or "").strip()
             if local_sku:
                 grouped[(row.store_id, local_sku)][item_id] = listing
-            msku = (row.msku or "").strip()
-            if msku:
-                grouped_msku[(row.store_id, msku)][item_id] = listing
+        for (store, _item), listing in by_item.items():
+            by_store[store].append(
+                ListingCandidate(
+                    store_id=store,
+                    item_id=listing.item_id,
+                    local_sku=listing.local_sku,
+                    gtin=listing.gtin,
+                    msku=listing.msku,
+                    fulfillment_type=listing.fulfillment_type,
+                )
+            )
         by_store_sku = {
             key: next(iter(matches.values()))
             for key, matches in grouped.items()
             if len(matches) == 1
         }
-        by_store_msku = {
-            key: next(iter(matches.values()))
-            for key, matches in grouped_msku.items()
-            if len(matches) == 1
-        }
-        return _ListingIndex(by_item, by_store_sku, by_store_msku)
+        return _ListingIndex(by_item, by_store_sku, dict(by_store))
 
     def _products(self, account: str) -> dict[str, _Product]:
         out: dict[str, _Product] = {}
