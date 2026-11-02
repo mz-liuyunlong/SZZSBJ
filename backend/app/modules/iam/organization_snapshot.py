@@ -62,7 +62,7 @@ def canonical_snapshot(
         memberships = employee["department_ids"]
         if not memberships:
             raise ValueError("Feishu employee has no department membership")
-        if not any(value in seen_depts or value == "0" for value in memberships):
+        if any(value not in seen_depts and value != "0" for value in memberships):
             raise ValueError("Feishu employee is outside the visible department tree")
 
     dept_rows.sort(key=lambda row: str(row["department_id"]))
@@ -81,11 +81,36 @@ def apply_snapshot(
     departments: tuple[dict[str, str], ...],
     users: tuple[FeishuDirectoryUser, ...],
     requested_by: str,
+    allow_large_reduction: bool = False,
 ) -> str:
     """Explicit transaction only; never deletes absent users or grants permissions."""
     digest, dept_rows, user_rows = canonical_snapshot(departments, users)
     if not dept_rows or not user_rows or digest != expected_hash:
         raise ValueError("Feishu snapshot empty or changed since preview")
+    # Serialize two administrators applying concurrent snapshots, avoiding stale
+    # baselines and duplicate writes. The lock is transaction-scoped.
+    session.execute(text("SELECT pg_advisory_xact_lock(52712403)"))
+    previous = (
+        session.execute(
+            text("""
+            SELECT id, snapshot_hash, department_count, employee_count
+            FROM iam_feishu_org_sync_runs ORDER BY applied_at DESC, id DESC LIMIT 1
+            """)
+        )
+        .mappings()
+        .first()
+    )
+    if previous and previous["snapshot_hash"] == digest:
+        return str(previous["id"])
+    if previous and not allow_large_reduction:
+        old_dept_count = int(previous["department_count"])
+        old_user_count = int(previous["employee_count"])
+        if (
+            len(dept_rows) * 5 < old_dept_count * 4
+            or len(user_rows) * 5 < old_user_count * 4
+        ):
+            raise ValueError("Feishu directory shrank over 20%; explicit confirmation required")
+
     run_id = uuid4()
     session.execute(
         text("""

@@ -26,6 +26,7 @@ org_view = Annotated[Principal, Depends(require_permission("page:settings:organi
 
 class ApplySnapshotRequest(BaseModel):
     expected_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    allow_large_reduction: bool = False
 
 
 def _read_feishu():
@@ -34,7 +35,7 @@ def _read_feishu():
 
 
 @router.get("/api/settings/organization/sync-preview")
-def preview_organization_sync(request: Request, _: admin_principal):
+def preview_organization_sync(request: Request, _: admin_principal, session: db_session):
     """Hash the current Feishu view before an independently confirmed write."""
     departments, users = _read_feishu()
     digest, normalized_departments, normalized_users = canonical_snapshot(departments, users)
@@ -44,6 +45,23 @@ def preview_organization_sync(request: Request, _: admin_principal):
             status_code=409,
             message="飞书返回空组织或员工数据，拒绝同步",
         )
+    previous = (
+        session.execute(
+            text("""
+            SELECT department_count, employee_count FROM iam_feishu_org_sync_runs
+            ORDER BY applied_at DESC, id DESC LIMIT 1
+            """)
+        )
+        .mappings()
+        .first()
+    )
+    large_reduction = bool(
+        previous
+        and (
+            len(normalized_departments) * 5 < int(previous["department_count"]) * 4
+            or len(normalized_users) * 5 < int(previous["employee_count"]) * 4
+        )
+    )
     return success_response(
         request,
         data={
@@ -51,6 +69,7 @@ def preview_organization_sync(request: Request, _: admin_principal):
             "department_count": len(normalized_departments),
             "employee_count": len(normalized_users),
             "requires_confirmation": True,
+            "large_reduction": large_reduction,
         },
         meta=None,
     )
@@ -72,6 +91,7 @@ def apply_organization_sync(
             departments=departments,
             users=users,
             requested_by=str(principal.user_id),
+            allow_large_reduction=payload.allow_large_reduction,
         )
     except ValueError as exc:
         session.rollback()

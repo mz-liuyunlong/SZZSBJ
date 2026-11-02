@@ -27,6 +27,7 @@ interface SyncPreview {
   snapshot_hash: string;
   department_count: number;
   employee_count: number;
+  large_reduction: boolean;
 }
 interface OrganizationPageProps {
   canSync: boolean;
@@ -51,14 +52,17 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
       const preview = result.data;
       Modal.confirm({
         title: "确认同步飞书组织架构？",
-        content: `本次包含 ${preview.department_count} 个部门、${preview.employee_count} 名员工。仅更新组织快照，不创建账号或更改角色权限。`,
+        content: `本次包含 ${preview.department_count} 个部门、${preview.employee_count} 名员工。${preview.large_reduction ? "警告：较上次同步减少超过20%，请确认飞书通讯录授权范围未缩小。" : ""}仅更新组织快照，不创建账号或更改角色权限。`,
         okText: "确认写入",
         cancelText: "取消",
         onOk: async () => {
           try {
             await backendRequest("/api/settings/organization/sync-apply", {
               method: "POST",
-              body: JSON.stringify({ expected_hash: preview.snapshot_hash }),
+              body: JSON.stringify({
+                expected_hash: preview.snapshot_hash,
+                allow_large_reduction: preview.large_reduction,
+              }),
             });
             const saved = await backendRequest<DirectoryPreview>(
               "/api/settings/organization/snapshot",
