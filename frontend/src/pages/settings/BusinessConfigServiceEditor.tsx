@@ -1,6 +1,6 @@
 import { Alert, Button, Form, Input, InputNumber, Modal, Select, Space, Switch, message } from "antd";
 import { useEffect, useState } from "react";
-import { OPENAI_DEFAULT_SCENES, OPENAI_FIXED_MODEL, OPENAI_INPUT_USD_PER_MTOK, OPENAI_OUTPUT_USD_PER_MTOK } from "./openaiConnectorDefaults";
+import { OPENAI_DEFAULT_SCENES, OPENAI_FIXED_MODEL, OPENAI_INPUT_USD_PER_MTOK, OPENAI_OUTPUT_USD_PER_MTOK, resolveOpenAIBillingRates } from "./openaiConnectorDefaults";
 import "./BusinessConfigServiceEditor.css";
 import { backendRequest } from "@/api/backendApi";
 import SkillBindingPicker from "./SkillBindingPicker";
@@ -94,8 +94,8 @@ export default function BusinessConfigServiceEditor({
       daily_limit: connector?.config.daily_limit ?? 100,
       monthly_budget_usd: Number(connector?.config.monthly_budget_usd ?? 50),
       max_output_tokens: connector?.config.max_output_tokens ?? 1024,
-      input_price_per_million: Number(connector?.config.input_price_per_million ?? OPENAI_INPUT_USD_PER_MTOK),
-      output_price_per_million: Number(connector?.config.output_price_per_million ?? OPENAI_OUTPUT_USD_PER_MTOK),
+      input_price_per_million: resolveOpenAIBillingRates(connector?.config).input_price_per_million,
+      output_price_per_million: resolveOpenAIBillingRates(connector?.config).output_price_per_million,
       draft_category: draft?.category ?? (categories.find((entry) => entry.value === preferredCategory)?.value ?? "ai"),
       provider: draft?.provider ?? "OpenAI",
       instanceKey: draft?.instanceKey ?? "",
