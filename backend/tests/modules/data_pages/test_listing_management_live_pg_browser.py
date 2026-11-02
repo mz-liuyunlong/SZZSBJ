@@ -5,19 +5,22 @@ import socket
 import subprocess
 import threading
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 import uvicorn
 from fastapi import Request
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, delete, select
+from sqlalchemy import create_engine, delete, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, get_optional_principal
+from app.core.config import get_settings
+from app.db import session as database_session
 from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.data_pages.models import (
@@ -28,7 +31,9 @@ from app.modules.data_pages.models import (
     ProductCustomTag,
     ProductCustomTagAssignment,
 )
+from app.modules.iam.security import token_hash
 from app.modules.integration_sync.dependencies import require_source_account_scope
+from app.modules.integration_sync.models import IntegrationInterface, IntegrationSyncConfig
 from app.modules.integration_sync.wfs_first_stock import observe_first_wfs_stock
 
 pytestmark = pytest.mark.skipif(
@@ -37,7 +42,9 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_listing_page_and_real_api_with_isolated_postgres() -> None:
+def test_listing_page_and_real_api_with_isolated_postgres(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     url = make_url(os.environ["LISTING_LIVE_TEST_DATABASE_URL"])
     assert os.getenv("APP_ENV") == "test"
     assert url.database and url.database.startswith("pr277_listing_")
@@ -495,9 +502,144 @@ def test_listing_page_and_real_api_with_isolated_postgres() -> None:
                 headers={"authorization": "Bearer synthetic-listing-b"},
             )
             assert foreign_read.status_code == 404
+        _assert_real_iam_account_isolation(engine, url, active_listing_id, monkeypatch)
     finally:
         server.should_exit = True
         thread.join(timeout=10)
         listener.close()
         app.dependency_overrides.clear()
+        database_session.dispose_engine()
+        get_settings.cache_clear()
         engine.dispose()
+
+
+def _assert_real_iam_account_isolation(
+    engine, url, listing_id, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exercise persisted IAM sessions, permissions and account scopes without stubs."""
+    now = datetime.now(UTC)
+    role_id = uuid4()
+    with Session(engine) as session:
+        interface = IntegrationInterface(
+            provider="synthetic",
+            interface_key="synthetic-listing-scope",
+            display_name="Synthetic Listing Scope",
+            method="POST",
+            endpoint_path="/synthetic/listing-scope",
+            request_kind="offset_page",
+            handler_key="synthetic-listing-scope",
+            contract_version="test",
+        )
+        session.add(interface)
+        session.flush()
+        session.add_all(
+            IntegrationSyncConfig(interface_id=interface.id, source_account_ref=account)
+            for account in ("synthetic-a", "synthetic-b")
+        )
+        permission = "page:products:listing-management:view"
+        session.execute(
+            text(
+                """insert into app_permissions
+                   (permission_key, name, group_key, permission_type, risk_level,
+                    sort_order, is_active, created_at, updated_at)
+                   values (:permission, :permission, 'synthetic', 'legacy', 'normal',
+                           0, true, :now, :now)
+                   on conflict (permission_key) do nothing"""
+            ),
+            {"permission": permission, "now": now},
+        )
+        session.execute(
+            text(
+                """insert into app_roles
+                   (id, role_key, name, is_system, created_at, updated_at, version)
+                   values (:id, 'synthetic-listing-reader', 'Synthetic Listing Reader',
+                           0, :now, :now, 1)"""
+            ),
+            {"id": role_id, "now": now},
+        )
+        session.execute(
+            text(
+                """insert into app_role_permissions (role_id, permission_key, created_at)
+                   values (:role_id, :permission, :now)"""
+            ),
+            {"role_id": role_id, "permission": permission, "now": now},
+        )
+        for user_id, account, token in (
+            (9277001, "synthetic-a", "synthetic-listing-a"),
+            (9277002, "synthetic-b", "synthetic-listing-b"),
+        ):
+            session.execute(
+                text(
+                    """insert into app_users
+                       (id, username, password_hash, is_active, is_super_admin,
+                        display_name, created_at, updated_at)
+                       values (:id, :username, 'synthetic-unused', 1, 0,
+                               :username, :now, :now)"""
+                ),
+                {"id": user_id, "username": f"synthetic_listing_{user_id}", "now": now},
+            )
+            session.execute(
+                text(
+                    """insert into app_user_roles (user_id, role_id, created_at)
+                       values (:user_id, :role_id, :now)"""
+                ),
+                {"user_id": user_id, "role_id": role_id, "now": now},
+            )
+            session.execute(
+                text(
+                    """insert into app_user_data_scopes
+                       (user_id, scope_type, scope_value, created_at)
+                       values (:user_id, 'source_account', :account, :now)"""
+                ),
+                {"user_id": user_id, "account": account, "now": now},
+            )
+            session.execute(
+                text(
+                    """insert into app_sessions
+                       (id, user_id, token_hash, created_at, expires_at, last_seen_at)
+                       values (:id, :user_id, :token_hash, :now, :expires_at, :now)"""
+                ),
+                {
+                    "id": uuid4(),
+                    "user_id": user_id,
+                    "token_hash": token_hash(token),
+                    "now": now,
+                    "expires_at": now + timedelta(hours=1),
+                },
+            )
+        session.commit()
+
+    monkeypatch.setenv("TEST_DATABASE_URL", url.render_as_string(hide_password=False))
+    get_settings.cache_clear()
+    database_session.dispose_engine()
+    try:
+        with TestClient(create_app()) as client:
+            assert client.get("/api/listings/walmart").status_code == 401
+            for account, token in (
+                ("synthetic-a", "synthetic-listing-a"),
+                ("synthetic-b", "synthetic-listing-b"),
+            ):
+                headers = {"Authorization": f"Bearer {token}"}
+                me = client.get("/api/auth/me", headers=headers)
+                assert me.status_code == 200, me.text
+                assert permission in me.json()["data"]["permissions"]
+                response = client.get("/api/listings/walmart", headers=headers)
+                assert response.status_code == 200, response.text
+                assert response.json()["meta"]["total"] >= 1
+                assert all(
+                    row["source_account_ref"] == account for row in response.json()["data"]["items"]
+                )
+            foreign = client.get(
+                f"/api/listings/walmart/{listing_id}/gpt-analysis",
+                headers={"Authorization": "Bearer synthetic-listing-b"},
+            )
+            assert foreign.status_code == 404
+            denied_write = client.post(
+                f"/api/listings/walmart/{listing_id}/archive",
+                json={"reason": "Synthetic forbidden write"},
+                headers={"Authorization": "Bearer synthetic-listing-a"},
+            )
+            assert denied_write.status_code == 403
+    finally:
+        database_session.dispose_engine()
+        get_settings.cache_clear()
