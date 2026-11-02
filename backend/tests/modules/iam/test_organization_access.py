@@ -12,10 +12,13 @@ def test_organization_scope_allows_super_admin_without_query() -> None:
         def execute(self, *_args, **_kwargs):
             raise AssertionError("super admin must not need scope query")
 
-    assert authorized_department_ids(
-        NoDbCalls(),
-        Principal(user_id="1", permissions=frozenset({"*"})),
-    ) is None
+    assert (
+        authorized_department_ids(
+            NoDbCalls(),
+            Principal(user_id="1", permissions=frozenset({"*"})),
+        )
+        is None
+    )
 
 
 def test_organization_scope_rejects_unknown_principal() -> None:

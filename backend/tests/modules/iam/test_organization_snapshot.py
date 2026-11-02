@@ -54,3 +54,28 @@ def test_changed_hash_does_not_write(monkeypatch) -> None:
             users=users,
             requested_by="1",
         )
+
+
+def test_department_cycles_are_rejected_before_persistence() -> None:
+    departments, users = _source()
+    broken = ({**departments[0], "parent_department_id": "od-a"},)
+    with pytest.raises(ValueError, match="Cycle"):
+        canonical_snapshot(broken, users)
+
+
+def test_unknown_department_parent_is_rejected() -> None:
+    departments, users = _source()
+    broken = ({**departments[0], "parent_department_id": "od-missing"},)
+    with pytest.raises(ValueError, match="incomplete"):
+        canonical_snapshot(broken, users)
+
+
+def test_employee_without_visible_department_is_rejected() -> None:
+    departments, _users = _source()
+    users = (
+        FeishuDirectoryUser(
+            name="员工", open_id="ou-1", department_ids=("od-unavailable",)
+        ),
+    )
+    with pytest.raises(ValueError, match="outside"):
+        canonical_snapshot(departments, users)

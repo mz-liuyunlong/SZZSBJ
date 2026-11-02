@@ -32,6 +32,22 @@ def canonical_snapshot(
                 "leader_user_id": str(item.get("leader_user_id") or ""),
             }
         )
+    # Reject incomplete or corrupted department trees before a single DB write.
+    parents = {
+        str(row["department_id"]): str(row["parent_department_id"]) for row in dept_rows
+    }
+    for department_id in parents:
+        current = department_id
+        visited: set[str] = set()
+        while current != "0":
+            if current in visited:
+                raise ValueError("Cycle detected in Feishu department hierarchy")
+            visited.add(current)
+            parent = parents.get(current)
+            if parent is None:
+                raise ValueError("Feishu department hierarchy is incomplete")
+            current = parent
+
     users_by_id: dict[str, dict[str, object]] = {}
     for user in users:
         if not user.open_id or user.open_id in users_by_id:
@@ -44,6 +60,13 @@ def canonical_snapshot(
             "is_frozen": user.is_frozen,
             "is_resigned": user.is_resigned,
         }
+    for employee in users_by_id.values():
+        memberships = employee["department_ids"]
+        if not memberships:
+            raise ValueError("Feishu employee has no department membership")
+        if not any(value in seen_depts or value == "0" for value in memberships):
+            raise ValueError("Feishu employee is outside the visible department tree")
+
     dept_rows.sort(key=lambda row: str(row["department_id"]))
     user_rows = [users_by_id[key] for key in sorted(users_by_id)]
     payload = {"departments": dept_rows, "users": user_rows}
