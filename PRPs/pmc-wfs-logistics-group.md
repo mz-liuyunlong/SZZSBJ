@@ -47,7 +47,7 @@
 
 ### Out of scope
 
-- 第二期：生成货件草稿、探测（inbound-preview）、建货件 + 取箱唛、取消 / 改数量 / 补运单号、换箱规、换店铺 / 作废 PK（全部是 Walmart 或国内仓写入）；分支 `pmc/wfs-creation-walmart` 的 3 个提交整体留到第二期。
+- 第二期：箱规写回领星、生成货件草稿、探测（inbound-preview）、建货件 + 取箱唛、取消 / 改数量 / 补运单号、换箱规、换店铺 / 作废 PK（全部是 Walmart 或国内仓写入）；分支 `pmc/wfs-creation-walmart` 的 3 个提交整体留到第二期。
 - WFS 设置页（D 组）。第一期阈值用 8088 当前值作为**版本化常量**（`rule_version=WFS-RULES-20261010`），D 组设置表上线后改为读配置。
 - 通知（钉钉 / 飞书 / 企业微信）、申诉 / 复议数据（等 Walmart Dispute 数据）、POD。
 - 开启任何定时同步、生产迁移执行、权限授予——均须单独票据 + Rocky 书面批准（§1.1 末段）。
@@ -78,7 +78,7 @@
 | S6 | 国内仓系统打包单、装箱行、打包完成、作废 | NEW_SYSTEM_OWNED（上游国内仓） | `ops_domestic_packing_orders` / `_box_sets` / `_box_lines` | main 已有；WFS 只读，不改国内仓数据 |
 | S7 | WFS 草稿 / 箱段占用 / 创建记录 | NEW_SYSTEM_OWNED | 分支 `ops_wfs_creation_*`、0072 草稿表 | 第一期只读（用于“已在草稿”状态）；写入第二期 |
 | S8 | 众壹物流（运单详情 + 轨迹：签收完成、开船、到港、派送预约、计费重） | REBUILD_SYNC（新集成） | 拟 `raw_carrier_zhongyi_*` → `ods_carrier_zhongyi_orders` / `_tracks` | **NEED_OWNER_DECISION**：新外部集成；凭证目前只在 Mac `.secrets/logistics/6995/`；无按日期列表接口，须以 S2 运单号驱动 |
-| S9 | Walmart v3 入库数据（inbound-shipments：签收日 `actualDeliveryDate`；inbound-shipment-items：逐 GTIN 收货 / 破损；inventory-log Receipt：首批 / 末批上架） | REBUILD_SYNC（新入库） | 拟 `raw_walmart_wfs_*` → `ods_walmart_wfs_inbound_shipments` / `_items` / `_receipts` | **NEED_OWNER_DECISION**：见 §6.2 |
+| S9 | Walmart v3 入库数据（采集已在跑，2026-11-02 已有店铺拉完）（inbound-shipments：签收日 `actualDeliveryDate`；inbound-shipment-items：逐 GTIN 收货 / 破损；inventory-log Receipt：首批 / 末批上架） | REBUILD_SYNC（新入库） | 拟 `raw_walmart_wfs_*` → `ods_walmart_wfs_inbound_shipments` / `_items` / `_receipts` | **NEED_OWNER_DECISION**：见 §6.2 |
 | S10 | 异常案件处理（状态 / 负责人 / 记录） | NEW_SYSTEM_OWNED | 分支 `ops_wfs_exception_cases`、`evt_wfs_exception_*` | 分支已有；是否第一期开放见 D-3 |
 | S11 | 8088 demo JSON、审批服务 `/pmc-api/wfs/state`、众壹接口面板 | ARCHIVE_ONLY | — | 只作对数参照，不进在线接口 |
 
@@ -91,10 +91,32 @@
 - **没有任何代码把这些 CSV 写进 PostgreSQL**（全库无 `raw_walmart_wfs*` / `ods_walmart_*inbound*` 表）；`walmart_monitor` 的 RAW 表是商品监控，不含入库数据。
 - 开关 `SZZSBJ_WALMART_REMOTE_COLLECTION_ENABLED` 默认关；读 key 还需 `SZZSBJ_WALMART_APPROVED_READ_KEYS` 加 `inbound_shipments,inbound_shipment_items`（`INTEGRATION.md` 136 行，10-31 实测未批）。
 
+**2026-11-02 更新（Rocky）**：Walmart 一店一服务器采集正在跑，已有店铺拉完（部署 AI 回执显示 HK2612 / HK2613 / HK2614 成功），其余店铺进行中。也就是说 **Walmart 原始数据已经有了，缺的只是“文件 → 数据库”这一步**。
+
 待负责人 / Rocky 确认（**D-1**）：
-- 方案 A（推荐，第一期 b）：新增 RAW 入库任务，只读 `archive_root/daily/<run>/<store>/` 中已校验的 CSV（不再调 Walmart），按文件 checksum 幂等落 `raw_walmart_wfs_*`，解析成 ODS；看板 / 异常从 ODS 取签收日、Receipt、逐 GTIN 收货与破损。不新增任何 Walmart 调用；采集本身仍按红线逐次批准。
-- 方案 B（第一期 a 先上线）：不接 Walmart。相关列显示“暂无 Walmart 数据”，不推算、不造示例（8088 在 10-08～10-15 就是这样跑的，见 `PMC-NOWM-20261008-01`）。依赖 Walmart 签收日的两条异常（“沃尔玛签收 · 未开始上架”“收货长期未完成”）在第一期 a 用“首批 Receipt 视同签收”也不可用，只能先停用并在页面写明。
-- 建议：A + B 并行——先按 B 上线，A 作为下一张单。
+- 方案 A（推荐，第一期内完成）：新增 RAW 入库任务，只读采集已校验的 CSV（服务器上是 `archive_root/daily/<run>/<store>/`，本地 5173 用 `features/pmc-wfs-shipment/data/daily/<日期>/walmart/<store_id>/` 同一份文件回放），按文件 checksum 幂等落 `raw_walmart_wfs_*`，解析成 ODS；看板 / 异常从 ODS 取签收日、Receipt、逐 GTIN 收货与破损。**不新增任何 Walmart 调用**；采集本身仍按红线逐次批准。拉完几家店就入几家，未拉到的店铺页面显示“该店铺 Walmart 数据未接入”（与 8088 一致）。
+- 方案 B（兜底）：A 来不及时先不接 Walmart，相关列显示“暂无 Walmart 数据”，不推算、不造示例；依赖 Walmart 签收日的异常先停用并在页面写明。
+- 建议：按 A 做（数据已在路上，本地可直接回放对数）；若 8443 上线时服务器入库任务还没批准，先以 B 状态上线，入库批准后无需改页面即可补齐。
+
+### 6.4 发货单 / 出库 / 打包单归属规则（8088 `build_from_daily.py` + `arrival_rules.py`）
+
+| 问题 | 8088 规则（照搬） |
+|---|---|
+| SP 发货单属于哪个货件 | SP 的 `shipping_goods` 每一行带 `cargo_code`，**按行归属**到货件；一个货件可挂多张 SP（领星货件 `shipping_list_codes`），一张 SP 可装多个货件 |
+| 货件的实际发货量 | 只取 `cargo_code` = 本货件的 SP 商品行 `shipments_num` 求和；SP 上没有 → 领星货件 `shipments_num`；仍为 0 → 用申报量 `declare_num` 作基准（标“按申报”） |
+| 货件是否已发货 | 有任一状态“已发货”的 SP；或没有任何 SP 关联且状态不是“待补发货信息”（外部 / 海外仓直发货件） |
+| 实际发货时间 / 实际出库时间 | 发货 = SP `delivery_time`；出库 = SP `actual_delivery_time`（8088 标“待核实”，默认隐藏列） |
+| 到仓日 | 到仓按 SP 整柜算；货件到仓 = 其已发货 SP 的实际到仓与货件自己的 Walmart 签收取**最早**；都没有实际 → 各已发货 SP 的预计到仓取**最晚** |
+| 物流费用 | SP 级（运输费 + 其他费），不拆到货件；头程分摊只在商品行 = `per_first_let_cost × 发货量` |
+| 打包单（PK）→ 货件 | 本系统建的货件按创建记录关联 PK；领星侧外部创建（无 SP、2026-08-01 后创建、未取消）标“外部创建 · 待关联” |
+| PK ↔ OWS 对账 | **不恢复**（Rocky 2026-11-02） |
+| 物流页一行 | 一行 = 一张 SP；多个运单号合并一行并标“n 单合并”；运单号缺失单独提示 |
+
+### 6.5 Rocky 2026-11-02 补充口径
+
+- **操作人不写死**：8088 里“只有吴贤玲能提交 / Rocky 能批准”的姓名白名单不搬；正式系统一律按权限（8443 权限设置）控制。
+- **待发货超时提醒**：打包完成后满 **3 天** 还没生成货件 → 待发货页标红并进提醒；阈值可在设置里改（设置页归 D 组，第一期先用常量 3，配置项名 `wfs.pending_packing_overdue_days`）。
+- **箱规写回领星**：要做（领星产品箱规，名称按日期如“11月2日箱规”），属领星写入，放第二期并单独出票、Rocky 批准。
 
 ### 6.3 业务规则（以 8088 为准）
 
@@ -159,7 +181,8 @@
 - C. 异常中心：规则引擎实算（§6.3 可用的 4 条），去重键沿用分支 `source_account_ref + store_id + shipment_id + rule_family + item_key`；不可用规则在页面列“待接入 Walmart / 众壹数据”。
 - D. 待发货：按 `packRows` 补行状态 / 按店铺汇总；写入入口按 D-2 关闭。
 - E. 物流：新建 `pmc_logistics` 只读模块（读 S2 + S3），物流总览 + 异常与提醒（第一期 a 可用：合同超时 / 即将超时（以领星实际发货、到货时间）、实际费用未录入、预计到港缺失、运单号缺失、渠道与目的地区不符）。
-- F. 第一期 b（决策后另开单）：S9 Walmart CSV → RAW 入库；S8 众壹集成；补齐剩余异常。
+- F. Walmart CSV → RAW 入库（S9，D-1 方案 A，本地用 daily 回放）；补齐依赖 Walmart 的 3 类异常。
+- G. 众壹集成（S8，D-5 决定后）；补齐“货代已签收 · WFS 未收货”。
 
 **本地数据（§1.1 第 4 步，不在 Mac 调真实接口）**：分支的 `run_pmc_wfs_board_once.py` 会真实调领星，Mac 上不能用。新增 `backend/scripts/replay_pmc_wfs_daily.py`：读 `features/pmc-wfs-shipment/data/daily/<日期>/lingxing/*.csv`（与 8088 同一份），按 RAW 回放写本地 ODS → 发布 MART。5173 与 8088 用同一天数据逐项对比，附差异表（货件数、状态分布、每张货件发货 / 已收 / 到仓日 / 可售日 / 桶、异常类型计数）。
 
@@ -204,7 +227,7 @@ npx playwright test e2e/wfs-v2-live.spec.ts e2e/logistics-live.spec.ts
 
 | # | 问题 | 建议 |
 |---|---|---|
-| D-1 | Walmart v3 数据怎么进库（§6.2） | 先按 B 上线（不接，页面如实写“暂无”），A（读已校验 CSV 落 RAW，不新增调用）作为下一单 |
+| D-1 | Walmart v3 数据怎么进库（§6.2；数据已在采集） | 按 A：读已校验 CSV 落 RAW，不新增任何 Walmart 调用；服务器入库未批准前以 B 状态上线 |
 | D-2 | 分支里的写入代码（草稿 / 创建 / 网关）第一期怎么处理 | 代码随分支合入，但第一期不注册路由、开关默认关，前端不显示按钮 |
 | D-3 | 异常中心第一期是否开放“处理状态 / 负责人 / 处理记录”（只写本系统，不碰外部） | 开放（8088 已在用，分支已实现）；若坚持纯只读则隐藏处理按钮 |
 | D-4 | 第一期领星数据刷新方式 | 上线时先手工一次性运行；定时同步另出票据由 Rocky 批准 |
