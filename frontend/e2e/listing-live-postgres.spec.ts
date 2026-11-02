@@ -192,6 +192,33 @@ test("Listing page persists GPT links, archive state, tags, and scoped CSV", asy
   await expect(page.getByText("SYNTHETIC-LISTING-A", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "标签管理" }).click();
   await expect(page.getByRole("dialog", { name: "自定义标签管理" }).getByRole("button", { name: "启用" })).toBeVisible();
+  expect((await (await page.request.post(`${api}/__listing_test__/seed_extra`)).json()).seeded).toBe(49);
+  await page.evaluate(() => {
+    localStorage.setItem("szzsbj_auth_token", "synthetic-listing-a");
+    const prefix = "szzsbj:page-state:listing-management:synthetic-listing-user-a:";
+    sessionStorage.setItem(`${prefix}pageSize`, "50");
+    sessionStorage.setItem(`${prefix}currentPage`, "1");
+    sessionStorage.setItem(`${prefix}appliedColumnKeys`, JSON.stringify(["skuMsku", "sales90Days"]));
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("columnheader", { name: "近30天销量" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "近90天销量" })).toHaveCount(0);
+  await expect(page.locator(".ant-table-tbody .ant-table-row")).toHaveCount(50);
+  await page.locator(".ant-table-tbody .ant-table-row").first().getByRole("checkbox").check();
+  await expect(page.getByText("已选择 1 项")).toBeVisible();
+  await page.locator(".ant-pagination-item-2").click();
+  await expect(page.locator(".ant-table-tbody .ant-table-row")).toHaveCount(1);
+  await expect(page.getByText("已选择 1 项")).toBeVisible();
+  await page.locator(".ant-table-tbody .ant-table-row").first().getByRole("checkbox").check();
+  await expect(page.getByText("已选择 2 项")).toBeVisible();
+  await page.getByRole("button", { name: "批量操作" }).click();
+  await page.getByRole("menuitem", { name: "导出已选" }).click();
+  const crossPageDownload = page.waitForEvent("download");
+  await page.getByRole("dialog", { name: /导出数据/ }).getByRole("button", { name: /导\s*出/ }).click();
+  const crossPageCsv = await readFile(await (await crossPageDownload).path(), "utf-8");
+  expect(crossPageCsv.trim().split(/\r?\n/)).toHaveLength(3);
+  expect(crossPageCsv).not.toContain("SYNTHETIC-LISTING-B");
+
   expect(listingReads).toBeGreaterThanOrEqual(2);
   expect(errors).toEqual([]);
 });

@@ -28,7 +28,7 @@ interface CapturedTableProps {
   virtual?: boolean;
   listItemHeight?: number;
   rowSelection?: { fixed?: boolean };
-  onChange?: (_pagination: unknown, _filters: unknown, sorter: { columnKey: string; order: "ascend" | "descend" | null }) => void;
+  onChange?: (_pagination: unknown, _filters: unknown, sorter: { columnKey: string; order: "ascend" | "descend" | null }, extra: { action: "sort" | "paginate" }) => void;
   summary?: () => ReactNode;
 }
 
@@ -175,9 +175,12 @@ describe("ListingManagementPage acceptance contract", () => {
     expect(capturedTableProps?.columns.find((column) => column.key === "salePrice")?.sortOrder).toBeNull();
     expect(priceSorter).toBe(true);
     expect(dateSorter).toBe(true);
-    capturedTableProps?.onChange?.({}, {}, { columnKey: "skuMsku", order: "ascend" });
+    capturedTableProps?.onChange?.({}, {}, { columnKey: "skuMsku", order: "ascend" }, { action: "sort" });
     expect(onSortChange).toHaveBeenCalledWith("skuMsku", "desc");
-    capturedTableProps?.onChange?.({}, {}, { columnKey: "salePrice", order: "descend" });
+    onSortChange.mockClear();
+    capturedTableProps?.onChange?.({}, {}, { columnKey: "skuMsku", order: "ascend" }, { action: "paginate" });
+    expect(onSortChange).not.toHaveBeenCalled();
+    capturedTableProps?.onChange?.({}, {}, { columnKey: "salePrice", order: "descend" }, { action: "sort" });
     expect(onSortChange).toHaveBeenCalledWith("salePrice", "desc");
 
     expect(Array.from(screen.getByLabelText("每页条数").querySelectorAll("option"))

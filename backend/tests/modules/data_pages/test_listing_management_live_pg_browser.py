@@ -13,7 +13,7 @@ import pytest
 import uvicorn
 from fastapi import Request
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, delete, select
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
@@ -155,6 +155,25 @@ def test_listing_page_and_real_api_with_isolated_postgres() -> None:
             yield session
 
     app.dependency_overrides[get_db_session] = db_session
+
+    def seed_cross_page_rows() -> dict[str, int]:
+        # Test-only endpoint for adding a second page after the first browser flow.
+        with Session(engine) as session:
+            session.add_all(
+                ListingManagementCurrentMart(
+                    source_account_ref="synthetic-a",
+                    store_id="synthetic-store",
+                    item_id=f"SYNTHETIC-LISTING-Z{index:02d}",
+                    local_sku=f"SYNTHETIC-LISTING-Z{index:02d}",
+                    listing_status="离线",
+                    calculated_at=datetime.now(UTC),
+                )
+                for index in range(49)
+            )
+            session.commit()
+        return {"seeded": 49}
+
+    app.add_api_route("/__listing_test__/seed_extra", seed_cross_page_rows, methods=["POST"])
     with TestClient(app) as client:
         listing = client.get("/api/listings/walmart")
         assert listing.status_code == 200, listing.text
@@ -261,6 +280,13 @@ def test_listing_page_and_real_api_with_isolated_postgres() -> None:
             check=False,
         )
         assert browser.returncode == 0, (browser.stdout + browser.stderr)[-6000:]
+        with Session(engine) as session:
+            session.execute(
+                delete(ListingManagementCurrentMart).where(
+                    ListingManagementCurrentMart.item_id.like("SYNTHETIC-LISTING-Z%")
+                )
+            )
+            session.commit()
         with TestClient(app) as viewer_client:
             viewer_headers = {"Authorization": "Bearer synthetic-listing-viewer"}
             assert (

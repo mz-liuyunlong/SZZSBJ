@@ -665,8 +665,8 @@ function ListingManagementTable({
     >
       <ProTable<ListingManagementRow>
         rowKey="id"
-        onChange={(_, __, sorter) => {
-          if (Array.isArray(sorter)) return;
+        onChange={(_, __, sorter, extra) => {
+          if (extra.action !== "sort" || Array.isArray(sorter)) return;
           const field = String(sorter.columnKey ?? "");
           // ProTable can report `ascend` again after dataSource refresh; use the
           // controlled page state to advance the same column's sort direction.
