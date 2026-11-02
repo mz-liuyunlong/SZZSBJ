@@ -26,8 +26,8 @@ const expected = {
     "warehouse_inventory_age",
   ],
   operations: [
+    "operations_log",
     "operations_plan",
-    "operations_calendar",
   ],
 };
 
@@ -57,6 +57,14 @@ describe("secondary menu cleanup", () => {
       expect(keys).toEqual(expectedKeys);
     },
   );
+
+  it("restores operation logs and hides calendar only in the secondary menu", () => {
+    expect(SECONDARY_MENU_HIDDEN_PAGE_KEYS.has("operations_log")).toBe(false);
+    expect(SECONDARY_MENU_HIDDEN_PAGE_KEYS.has("operations_calendar")).toBe(true);
+    const pages = navigation.flatMap((group) => group.children);
+    expect(pages.find((page) => page.key === "operations_log")?.path).toBe("/operations/log");
+    expect(pages.find((page) => page.key === "operations_calendar")?.path).toBe("/operations/calendar");
+  });
 
   it("preserves the original page route metadata", () => {
     const pages = navigation.flatMap(
