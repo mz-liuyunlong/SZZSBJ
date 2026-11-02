@@ -5,7 +5,7 @@
 - 目标 method/path：`POST /api/finance/cashflow/imports`、`GET /api/finance/cashflow/imports`、`POST /api/finance/cashflow/imports/{import_id}/void`、`GET /api/finance/cashflow/lines`
 - 业务用途：财务每周二 15:00 前把公司全部现金流账户（中行 ×4：两家主体各一个人民币户与一个外币户、深通村镇银座、派安盈 ×2、万里汇、PingPong 专用户 USD / CNH + 店铺户）的原始导出文件一次性上传；系统按**文件内容**识别账户、解析成标准化流水、去重入库、留原件。它是「结算对账」（到账侧）与后续「现金状况」的唯一到账 / 流水来源。
 - 接口总体状态：**READY_FOR_PRP**
-- 是否包含 NEED_OWNER_DECISION：否
+- 是否包含 NEED_OWNER_DECISION：否（数据源本身无待定项；实现层面的 4 项待负责人批准事项集中在 §8，不阻塞本文档合并，实现 PR 开工前必须定）
 - 负责人批准状态：待确认（本文件由 Rocky 2026-10-31 18:06 确认后提交；技术负责人审阅后在本节记录批准）
 - 关联证据：
   - 业务原型（Rocky 侧工作区，不在仓库）：财务 Demo v5.5.0 ⑥ 现金状况 / ⑨ 数据导入「现金流账户报表」（2026-10-29 起，`features/finance/drafts/bank_parsers.py`、`build_cash.py`、`fin_ingest_uploads.py`），已用 2026-10 的真实导出跑通并由财务在用；各账户行数等 control totals 明细保存在 Rocky 侧工作区归档，不写入本仓库。
@@ -35,7 +35,7 @@
 |---|---|---|---|---|---|
 | A 现金账户主数据 | L7 DIM | `dim_finance_cash_accounts` | `NEW_SYSTEM_OWNED` | 财务 / Rocky 确认的账户清单（§3 表 A） | migration 种子；字段：account_key、display_name、entity（法人主体）、currency_code、kind（对公 / 平台 / 对公外币）、provider（boc / shenzhen_rural_bank / payoneer / worldfirst / pingpong）、account_no_last4、identity_hint（识别用：账号 / 用户编号 / 子账户 Id，**只存识别所需、不存完整卡号以外的敏感项**）、is_active、effective_from。 |
 | B 导入批次 | L1 Landing | `landing_finance_cashflow_imports` | `NEW_SYSTEM_OWNED` | 本接口 | 一次上传 = 一批；记录 uploader（principal）、上传时间、文件数、识别结果、状态（received / parsed / voided / failed）、request_id；`void` 只改状态并写审计，不删行。 |
-| C 原始文件 | L2 RAW | `raw_finance_cashflow_files` | `ARCHIVE_ONLY` | 银行 / 平台导出原件 | 原件字节（bytea，默认方案；负责人可改为受控目录 + 路径）、sha256、size、原文件名、识别出的 account_key、表头声明区间（有则记）、解析器版本；append-only；同 sha256 重复上传返回已有记录不重存。不进入任何业务 API 响应。 |
+| C 原始文件 | L2 RAW | `raw_finance_cashflow_files` | `ARCHIVE_ONLY` | 银行 / 平台导出原件 | 原件存储方式（**待负责人批准**，见 §8）：建议 bytea，备选受控目录 + 路径；sha256、size、原文件名、识别出的 account_key、表头声明区间（有则记）、解析器版本；append-only；同 sha256 重复上传返回已有记录不重存。不进入任何业务 API 响应。 |
 | D 标准化流水 | L3 Standardized | `std_finance_cashflow_lines` | `NEW_SYSTEM_OWNED` | 由 C 经确定性解析得到 | 字段见 §4；`line_uid` 唯一（account_key + 指纹）；重复导入同一行 = 以最新文件为准（更新 raw_file_id 引用，不新增）；金额 `numeric(18,4)` + currency_code，文件中的数字按字符串转 Decimal、不经 float；业务日期 + 来源时间 + 来源时区；对方户名 / 卡号尾号为敏感字段。 |
 | E PingPong 非本主体店铺行 | L2 only | （留在 C 的原件里） | `ARCHIVE_ONLY` | 同 C | 只保留 PingPong 导出中用户编号 = 本公司专用户（Rocky 2026-10-29 19:53：其他主体店铺到账即归集，不入系统）的行进入 D；其余行不解析入 D，但原件完整留存，可回放。 |
 | F 解析 / 去重 / 质量结果 | L12 Audit | `dq_run_finance_cashflow_import` 或复用 B 的 JSON 字段 | `NEW_SYSTEM_OWNED` | 解析器 | 每批：识别到的账户、行数、去重行数、余额链校验结果（期初 = 首行余额 − 金额、逐行连续）、表头区间 vs 实际首末笔、拒绝原因（PDF / 不认识的表头 / 未登记账号）。 |
@@ -89,8 +89,8 @@ PDF（回单 / 招行流水）一律拒绝并给出中文原因；招商银行�
 
 ## 5. 权限与敏感性
 
-- 页面：`page:data-center:data-import:view`（既有）。本期不新增导航项。
-- 功能：`action:data-center:data-import:finance-cashflow-upload`（高风险 = 否，但写审计）、`action:data-center:data-import:finance-cashflow-void`（高风险 = 是，需二次确认 + 审计）。
+- 上传入口与页面权限（**待负责人批准**，见 §8）：业务方（Rocky 2026-11-01）要求放在「财务 → 数据导入」独立标签，格式与「数据中心 → 数据导入」一致（导入任务 / 导入模板 / 导入历史 / 失败记录）；备选为既有「数据中心 → 数据导入」。导航调整需改导航规范，由财务菜单调整的单独文档 PR 提交负责人审批，**本文件不作最终决定**。下文与登记表中的 `page:data-center:data-import:view`、`action:data-center:data-import:*` 为**暂定 key**，入口批准后统一改名。
+- 功能（暂定 key）：`action:data-center:data-import:finance-cashflow-upload`（高风险 = 否，但写审计）、`action:data-center:data-import:finance-cashflow-void`（高风险 = 是，需二次确认 + 审计）。
 - 读取流水：`page:finance:settlement-reconciliation:view` 的读 API 复用本期的 `GET /lines`，字段权限 `field:finance:settlement-reconciliation:counterparty` 控制对方户名 / 尾号；未授权时字段不返回（不是返回空串）。
 - 数据范围：按**法人主体 / 账户**而非店铺；data scope 资源 = `finance_cash_account`，角色默认 none → fail closed。
 - 上传者限定：财务角色与超级管理员；运营角色不可见上传入口也不可调用。
@@ -107,7 +107,16 @@ PDF（回单 / 招行流水）一律拒绝并给出中文原因；招商银行�
 
 - 不存在旧库依赖，无退出条件。
 - 原子性：**按文件原子**——一个文件内全有或全无（识别失败、解析报错、校验不过 → 该文件整体拒绝并给原因）；同一批里的其他文件互不影响、照常入库；返回每文件结果。银行导出模板改版即表现为该文件被拒绝。派安盈时区折算口径必须在规则文档固定；PingPong 用户编号变更需改表 A。
-- 负责人可改的默认选择（不构成 NEED_OWNER_DECISION）：① 原件存 bytea 还是受控目录；② 上传入口放数据中心 → 数据导入（本决策）还是财务一级菜单（需改导航规范）。
+- 接口与同步状态：登记表中本决策相关行全部为 `planned`；本 PR 及后续实现 PR **不得自动生成任何生产同步配置**（不建 `gov_integration_*` 配置、不建定时任务、不做历史回填），本模块也没有外部接口。
+
+## 8. 待负责人批准事项（实现 PR 开工前必须定，本文档不作最终决定）
+
+| # | 事项 | 建议 | 备选 |
+|---|---|---|---|
+| 1 | 原件存储方式 | `bytea`（随库备份、与行血缘同事务） | 受控目录 + 路径 + sha256 |
+| 2 | 上传入口 / 页面权限 | 财务 → 数据导入（业务方 2026-11-01 要求；与数据中心数据导入同格式） | 数据中心 → 数据导入（既有） |
+| 3 | 单文件大小上限 | 10 MB（Demo 实际单文件 < 1 MB），写进配置 | 负责人指定 |
+| 4 | 中行 xls 解析依赖 | 新增 `xlrd`（纯 Python，BSD） | 不加依赖，要求财务把中行导出另存为 xlsx |
 
 ## 负责人决定
 

@@ -3,7 +3,7 @@
 - Status: Draft
 - Owner Approval Required: Yes
 - Implementation authorization state: Not authorized（本 PRP 获批后另发执行 Prompt 才能开实现分支）
-- Main execution role: Backend Engineer（含数据中心 → 数据导入页最小前端接线）
+- Main execution role: Backend Engineer（含数据导入页最小前端接线；入口位置待负责人批准，见 §15）
 - Source Decision: `docs/data-sources/decisions/finance-cashflow-statement-import-decision.md`（READY_FOR_PRP，负责人批准待确认）
 - Business rules: `docs/business-rules/finance-cashflow-import-rules.md`
 - Branch（实现时）: `feat/finance-cashflow-import`
@@ -12,7 +12,7 @@
 
 ## 1. Goal
 
-财务在数据中心 → 数据导入 一次性上传全部现金流账户的原始导出文件（xls / xlsx / csv，多文件），系统按内容识别账户、解析为标准化流水、去重入库、留存原件与质量结果，并提供只读流水查询接口。完成态：财务周二上传后，`GET /api/finance/cashflow/lines` 能按账户 / 日期返回当周流水，`GET /imports` 能看到每批识别结果与覆盖区间；原件可回放；没有任何外部 API 调用。
+财务在「数据导入」页（入口位置待负责人批准，见 §15）一次性上传全部现金流账户的原始导出文件（xls / xlsx / csv，多文件），系统按内容识别账户、解析为标准化流水、去重入库、留存原件与质量结果，并提供只读流水查询接口。完成态：财务周二上传后，`GET /api/finance/cashflow/lines` 能按账户 / 日期返回当周流水，`GET /imports` 能看到每批识别结果与覆盖区间；原件可回放；没有任何外部 API 调用。
 
 ## 2. Why
 
@@ -25,11 +25,11 @@
 
 ### In scope
 
-- [ ] Alembic migration（接当前 head `20261029_0068_walmart_remote_jobs` 之后的最新 head）：`dim_finance_cash_accounts`（含种子 11 条：中行 ×4、银座、派安盈 ×2、万里汇、PingPong ×3）、`landing_finance_cashflow_imports`、`raw_finance_cashflow_files`、`std_finance_cashflow_lines`、`dq_run_finance_cashflow_import`。
+- [ ] Alembic migration（实现时接 main 的**最新单一 head**，不写死 revision；2026-11-02 main 已含 `20261031_0069_walmart_gateway_ledger`，#282 合并后还会变）：`dim_finance_cash_accounts`（含种子 11 条：中行 ×4、银座、派安盈 ×2、万里汇、PingPong ×3）、`landing_finance_cashflow_imports`、`raw_finance_cashflow_files`、`std_finance_cashflow_lines`、`dq_run_finance_cashflow_import`。
 - [ ] 新模块 `backend/app/modules/finance_cashflow/`：models / schemas / parsers（boc_xls、shenzhen_rural_bank_xlsx、payoneer_csv、worldfirst_xlsx、pingpong_xlsx）/ detector / service / repository / router。
 - [ ] 接口：`POST /api/finance/cashflow/imports`（请求体 + `X-File-Name`，多文件 = 多次调用归入同一 `X-Import-Id`，与 operation_plans 一致）、`GET /api/finance/cashflow/imports`、`GET /api/finance/cashflow/imports/{import_id}`、`POST /api/finance/cashflow/imports/{import_id}/void`、`GET /api/finance/cashflow/lines`、`GET /api/finance/cashflow/accounts`。
 - [ ] IAM：`rbac_schemas.ScopeType` 新增 `finance_cash_account`；角色数据范围界面（设置 → 角色管理 → 数据范围）增加「现金账户」资源的勾选；权限目录登记上述 action / field key。
-- [ ] 依赖清单：xlsx 沿用 `operation_plans` 的标准库解析方式（zipfile + ElementTree，不新增依赖）；csv 标准库；**xls（中行导出）需新增 `xlrd`（纯 Python，BSD）**——若负责人不接受新依赖，则改为要求财务把中行导出另存为 xlsx 上传，二选一在 PRP 批准时定；上传沿用 `operation_plans` 的请求体 + `X-File-Name` 方案（多文件 = 多次调用归入同一 `X-Import-Id`），不引入 multipart 依赖。
+- [ ] 依赖清单：xlsx 沿用 `operation_plans` 的标准库解析方式（zipfile + ElementTree，不新增依赖）；csv 标准库；**xls（中行导出）解析依赖待负责人批准**：建议新增 `xlrd`（纯 Python，BSD），备选为不加依赖、要求财务把中行导出另存为 xlsx 上传（见 §15）；上传沿用 `operation_plans` 的请求体 + `X-File-Name` 方案（多文件 = 多次调用归入同一 `X-Import-Id`），不引入 multipart 依赖。
 - [ ] 权限：页面 `page:data-center:data-import:view`；功能 `action:data-center:data-import:finance-cashflow-upload`、`action:data-center:data-import:finance-cashflow-void`（high）；字段 `field:finance:settlement-reconciliation:counterparty`；data scope 资源 `finance_cash_account`（none → fail closed）；全部登记进 `permission_catalog_v2`。
 - [ ] 前端：`frontend/src/pages/data-center/DataImportPage.tsx` 把「现金流账户报表」来源从 mock 接成真实 API（上传多文件、每文件识别结果、覆盖区间、去重数、作废需二次确认）；其余来源保持 mock 不动。
 - [ ] 文档：`docs/api/finance-cashflow-import.md`、`docs/sop/data-center/finance-cashflow-import.md`、`DATA_INTERFACE_REGISTRY.md` 状态更新、`CODEX_HANDOFF.md`。
@@ -48,8 +48,10 @@
 
 ## 4. Navigation / Page
 
+入口位置**待负责人批准**（§15 第 2 项）。业务方要求的方案：
+
 ```text
-一级导航：数据中心
+一级导航：财务（业务方要求，待批准）｜数据中心（既有，备选）
 二级导航：数据导入（既有，frontend/src/config/navigation.ts key data_center.data_import）
 页面路径：/data-center/data-import
 页面状态：building（本 PRP 实现后由负责人改 ready）
@@ -91,7 +93,7 @@ sensitive or critical domains: 财务 / 敏感数据（个人户名、卡号尾�
 POST /api/finance/cashflow/imports
   request: 文件字节（单文件 + X-File-Name；多文件 = 多次调用，用 X-Import-Id 归入同一 import_id）
   response: { import_id, files:[{file_id, file_name, sha256, size, account_key|null, account_display, detected_note, rows_parsed, rows_new, rows_duplicate, declared_range_from, declared_range_to, dq:{balance_chain_ok, warnings[]}, status: received|parsed|rejected, reject_reason}] }
-  errors: 401/403（权限 / scope）、413（超过大小上限，上限写进配置）、415（不支持的类型）、422（整批参数错）
+  errors: 401/403（权限 / scope）、413（超过大小上限；上限待负责人批准，建议 10 MB，写进配置）、415（不支持的类型）、422（整批参数错）
 GET /api/finance/cashflow/imports?from&to&status&page
 GET /api/finance/cashflow/imports/{import_id}
 POST /api/finance/cashflow/imports/{import_id}/void  body:{reason}（high-risk）
@@ -153,6 +155,7 @@ bash scripts/ci-preflight.sh
 不修改 old-system；不连接生产数据库；不修改 .env；不调用任何银行 / 平台 API；不部署；不重启服务
 不把真实导出文件、真实户名 / 账号 / 金额写进测试、日志、文档或 PR
 不改既有 operation_plans / integration_sync 行为；不改导航规范
+不自动生成任何生产同步配置（不建 gov_integration_* 配置、不建定时任务、不做历史回填）；登记表相关行保持 planned，直到实现 PR 经负责人验收
 ```
 
 ## 13. Rollback Plan
@@ -175,6 +178,9 @@ bash scripts/ci-preflight.sh
 
 ## 15. Open items for owner
 
-1. 原件存 bytea（默认）还是受控目录。
-2. 上传入口留在数据中心（默认）还是财务一级菜单。
-3. 上传文件大小上限（Demo 单文件 < 1 MB；建议 10 MB）。
+以下 4 项**待负责人批准**，本 PRP 不作最终决定（详见决策文件 §8）：
+
+1. 原件存储：建议 bytea，备选受控目录。
+2. 上传入口 / 页面权限：业务方（Rocky 2026-11-01）要求「财务 → 数据导入」独立标签、与数据中心数据导入同格式；备选既有「数据中心 → 数据导入」。批准后权限 key 统一改名，导航随财务菜单调整的文档 PR 一起改。
+3. 单文件大小上限：建议 10 MB（Demo 单文件 < 1 MB）。
+4. 中行 xls：建议新增 `xlrd`，备选要求另存为 xlsx。
