@@ -257,12 +257,12 @@ def test_0071_real_historical_migration_preserves_jobs_and_blocks_populated_roll
         ids = [uuid4() for _ in range(4)]
         statuses = ["published", "draft", "retired", "published"]
         with engine.begin() as cx:
-            for cid in (connector, other):
+            for cid, name_value in ((connector, "historical-A"), (other, "historical-B")):
                 cx.execute(
                     text("""INSERT INTO biz_connectors
                       (id,kind,name,enabled,config,created_by,updated_by)
-                      VALUES (:id,'openai','synthetic',true,'{}'::jsonb,'test','test')"""),
-                    {"id": cid},
+                      VALUES (:id,'openai',:name,true,'{}'::jsonb,'test','test')"""),
+                    {"id": cid, "name": name_value},
                 )
             for n, (ident, status) in enumerate(zip(ids, statuses, strict=True), 1):
                 cx.execute(
@@ -341,9 +341,7 @@ def test_0071_real_historical_migration_preserves_jobs_and_blocks_populated_roll
             cx.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(name)))
 
 
-def test_publishing_updates_only_existing_bindings_and_keeps_old_grants(
-    db, monkeypatch
-) -> None:
+def test_publishing_updates_only_existing_bindings_and_keeps_old_grants(db, monkeypatch) -> None:
     from contextlib import nullcontext
 
     from app.modules.ai_runtime import skill_library_routes
