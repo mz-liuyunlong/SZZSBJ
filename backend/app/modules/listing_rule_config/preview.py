@@ -24,6 +24,7 @@ from app.modules.data_pages.models import (
     ListingManagementCurrentMart,
     WalmartListingInventoryDailyFact,
 )
+from app.modules.integration_sync.models import IntegrationSyncRun, IntegrationSyncRunEvent
 from app.modules.listing_rule_config.evaluation import BusinessDay, lifecycle_listing
 from app.modules.listing_rule_config.models import ListingGradeRuleVersion
 from app.modules.listing_rule_config.schemas import ListingGradeRuleConfig
@@ -182,6 +183,48 @@ class ListingEvaluationPreviewService:
         self.session = session
         self._unconfirmed_ad_days_cache: dict[tuple[str, date, int], frozenset[date]] = {}
 
+    def _confirmed_daily_sales_days(
+        self, accounts: set[str], *, start: date, cutoff: date
+    ) -> dict[str, set[date]]:
+        date_text = IntegrationSyncRunEvent.safe_details["business_date"].astext
+        rows = self.session.execute(
+            select(
+                IntegrationSyncRun.source_account_ref,
+                date_text,
+                IntegrationSyncRunEvent.message_code,
+                IntegrationSyncRunEvent.occurred_at,
+            )
+            .join(IntegrationSyncRun, IntegrationSyncRun.id == IntegrationSyncRunEvent.run_id)
+            .where(
+                IntegrationSyncRun.source_account_ref.in_(accounts),
+                IntegrationSyncRun.interface_key == "saleStatPageList",
+                IntegrationSyncRunEvent.message_code.in_(
+                    ("SYNC_SALESTAT_DAY_PENDING", "SYNC_SALESTAT_DAY_VALIDATED")
+                ),
+                date_text.between(start.isoformat(), cutoff.isoformat()),
+            )
+            .order_by(
+                IntegrationSyncRun.source_account_ref,
+                date_text,
+                IntegrationSyncRunEvent.occurred_at.desc(),
+                IntegrationSyncRunEvent.id.desc(),
+            )
+        ).all()
+        confirmed: dict[str, set[date]] = {account: set() for account in accounts}
+        seen: set[tuple[str, date]] = set()
+        for account, day_text, message_code, occurred_at in rows:
+            business_day = date.fromisoformat(day_text)
+            key = (account, business_day)
+            if key in seen:
+                continue
+            seen.add(key)
+            if (
+                message_code == "SYNC_SALESTAT_DAY_VALIDATED"
+                and occurred_at.astimezone(LOS_ANGELES).date() > business_day
+            ):
+                confirmed[account].add(business_day)
+        return confirmed
+
     def _unconfirmed_account_ad_days(
         self, accounts: set[str], *, cutoff: date, window_days: int
     ) -> dict[str, frozenset[date]]:
@@ -211,13 +254,17 @@ class ListingEvaluationPreviewService:
                 )
             ).all()
             days_in_window = {start + timedelta(days=offset) for offset in range(window_days)}
-            unconfirmed_by_account: dict[str, set[date]] = {
-                account: set(days_in_window) for account in missing
-            }
+            positive_by_account: dict[str, set[date]] = {account: set() for account in missing}
             for account, business_day, total in rows:
                 if total is not None and total > ZERO:
-                    unconfirmed_by_account[account].discard(business_day)
-            for account, unconfirmed_days in unconfirmed_by_account.items():
+                    positive_by_account[account].add(business_day)
+            confirmed_by_account = self._confirmed_daily_sales_days(
+                missing, start=start, cutoff=cutoff
+            )
+            for account in missing:
+                unconfirmed_days = days_in_window - (
+                    positive_by_account[account] & confirmed_by_account[account]
+                )
                 self._unconfirmed_ad_days_cache[(account, cutoff, window_days)] = frozenset(
                     unconfirmed_days
                 )

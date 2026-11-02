@@ -113,13 +113,65 @@ def test_account_day_ad_total_is_scoped_and_includes_sem() -> None:
             )
         )
     with Session(engine) as session:
-        unconfirmed = ListingEvaluationPreviewService(session)._unconfirmed_account_ad_days(
+        service = ListingEvaluationPreviewService(session)
+        service._confirmed_daily_sales_days = MagicMock(
+            return_value={
+                "synthetic-a": {CUTOFF - timedelta(days=1)},
+                "synthetic-b": {CUTOFF},
+            }
+        )
+        unconfirmed = service._unconfirmed_account_ad_days(
             {"synthetic-a", "synthetic-b"}, cutoff=CUTOFF, window_days=3
         )
     assert unconfirmed == {
         "synthetic-a": frozenset({CUTOFF, CUTOFF - timedelta(days=2)}),
         "synthetic-b": frozenset({CUTOFF - timedelta(days=1), CUTOFF - timedelta(days=2)}),
     }
+    with Session(engine) as session:
+        service = ListingEvaluationPreviewService(session)
+        service._confirmed_daily_sales_days = MagicMock(return_value={"synthetic-a": set()})
+        without_completion_event = service._unconfirmed_account_ad_days(
+            {"synthetic-a"}, cutoff=CUTOFF, window_days=3
+        )
+    assert without_completion_event["synthetic-a"] == frozenset(
+        {CUTOFF, CUTOFF - timedelta(days=1), CUTOFF - timedelta(days=2)}
+    )
+
+
+def test_daily_sales_completion_requires_next_day_and_latest_validated_event() -> None:
+    session = MagicMock(spec=Session)
+    session.execute.return_value.all.return_value = [
+        (
+            "synthetic-a",
+            "2026-01-14",
+            "SYNC_SALESTAT_DAY_PENDING",
+            datetime(2026, 1, 15, 11, tzinfo=UTC),
+        ),
+        (
+            "synthetic-a",
+            "2026-01-14",
+            "SYNC_SALESTAT_DAY_VALIDATED",
+            datetime(2026, 1, 15, 9, tzinfo=UTC),
+        ),
+        (
+            "synthetic-a",
+            "2026-01-13",
+            "SYNC_SALESTAT_DAY_VALIDATED",
+            datetime(2026, 1, 14, 9, tzinfo=UTC),
+        ),
+        (
+            "synthetic-b",
+            "2026-01-14",
+            "SYNC_SALESTAT_DAY_VALIDATED",
+            datetime(2026, 1, 14, 20, tzinfo=UTC),
+        ),
+    ]
+    confirmed = ListingEvaluationPreviewService(session)._confirmed_daily_sales_days(
+        {"synthetic-a", "synthetic-b"},
+        start=date(2026, 1, 13),
+        cutoff=date(2026, 1, 14),
+    )
+    assert confirmed == {"synthetic-a": {date(2026, 1, 13)}, "synthetic-b": set()}
 
 
 def test_grade_candidate_honors_configured_lifecycle_scope() -> None:

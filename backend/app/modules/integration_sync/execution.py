@@ -393,6 +393,15 @@ class SyncRunExecutionService:
 
         with data_pages_client() as client:
             for business_date in days:
+                if run.interface_key == "saleStatPageList":
+                    self._event(
+                        run.id,
+                        "running",
+                        "running",
+                        "SYNC_SALESTAT_DAY_PENDING",
+                        safe_details={"business_date": business_date.isoformat()},
+                    )
+                    self.session.commit()
                 runner = DataPagesRealSyncRunner(
                     session=self.session,
                     client=client,
@@ -458,6 +467,15 @@ class SyncRunExecutionService:
                     + summary.mart_order_profit_rows
                     + summary.mart_listing_rows
                 )
+                if run.interface_key == "saleStatPageList":
+                    self._event(
+                        run.id,
+                        "running",
+                        "running",
+                        "SYNC_SALESTAT_DAY_VALIDATED",
+                        safe_details={"business_date": business_date.isoformat()},
+                    )
+                    self.session.commit()
                 self._heartbeat_data_pages_lock(run.id)
 
         completed = self.repository.get_run_for_update(run.id)

@@ -516,7 +516,7 @@ def test_data_pages_mart_failure_rolls_back_day_and_continues(
     )
     repository.get_config.return_value = SimpleNamespace(page_size=100)
     repository.get_run_for_update.return_value = run
-    repository.next_event_sequence.side_effect = [2, 3]
+    repository.next_event_sequence.side_effect = [2, 3, 4, 5, 6]
     service._data_pages_business_dates_for_run = MagicMock(return_value=(first_day, second_day))
     service._heartbeat_data_pages_lock = MagicMock()
     successful_summary = SimpleNamespace(
@@ -573,10 +573,16 @@ def test_data_pages_mart_failure_rolls_back_day_and_continues(
     assert run.records_written == 3  # Only validated MART rows are published
     assert service._heartbeat_data_pages_lock.call_count == 1
     events = [call.args[0] for call in repository.add_event.call_args_list]
-    assert events[0].message_code == "DATA_PAGES_MART_PROFIT_INVARIANT_FAILED"
-    assert events[0].safe_details == {"business_date": first_day.isoformat()}
-    assert events[1].message_code == "SYNC_CAPTURE_SUCCEEDED_WITH_FINANCIAL_ANOMALIES"
-    assert events[1].safe_details == {"failed_capture_dates": 0, "pending_financial_dates": 1}
+    assert [event.message_code for event in events] == [
+        "SYNC_SALESTAT_DAY_PENDING",
+        "DATA_PAGES_MART_PROFIT_INVARIANT_FAILED",
+        "SYNC_SALESTAT_DAY_PENDING",
+        "SYNC_SALESTAT_DAY_VALIDATED",
+        "SYNC_CAPTURE_SUCCEEDED_WITH_FINANCIAL_ANOMALIES",
+    ]
+    assert events[1].safe_details == {"business_date": first_day.isoformat()}
+    assert events[3].safe_details == {"business_date": second_day.isoformat()}
+    assert events[4].safe_details == {"failed_capture_dates": 0, "pending_financial_dates": 1}
     repository.record_business_anomaly.assert_called_once()
     assert (
         repository.record_business_anomaly.call_args.kwargs["error_code"]
