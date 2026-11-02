@@ -45,7 +45,7 @@ case "$MODE" in
   all)
     rules
     [[ ! -f backend/pyproject.toml ]] || backend
-    [[ ! -f frontend/package.json ]] || frontend
+    [[ ! -f "$ROOT/frontend/package.json" ]] || frontend
     ;;
   *) echo "Usage: bash scripts/ci-preflight.sh [rules|backend|frontend|all]" >&2; exit 2 ;;
 esac
