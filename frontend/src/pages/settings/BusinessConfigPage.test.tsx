@@ -81,7 +81,7 @@ describe("business configuration V2", () => {
   it("restores search, status filter and view control without removing services", async () => {
     render(<BusinessConfigPage page={page} />);
     expect(await screen.findByText("Decodo Scraper API")).toBeInTheDocument();
-    const search = screen.getByRole("searchbox", { name: "搜索服务配置" });
+    const search = screen.getByLabelText("搜索服务配置");
     fireEvent.change(search, { target: { value: "no-matching-service" } });
     expect(screen.queryByText("Decodo Scraper API")).not.toBeInTheDocument();
     expect(screen.getByText("该分类暂无服务配置")).toBeInTheDocument();
