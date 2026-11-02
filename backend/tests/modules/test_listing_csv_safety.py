@@ -13,7 +13,16 @@ from app.modules.data_pages.service import ListingManagementService
 
 
 def test_listing_csv_text_formula_prefixes_are_escaped() -> None:
-    for payload in ("=1+1", "+SUM(1,2)", "-1+2", "@SUM(1,2)", "  =HYPERLINK(1,2)"):
+    for payload in (
+        "=1+1",
+        "+SUM(1,2)",
+        "-1+2",
+        "@SUM(1,2)",
+        "  =HYPERLINK(1,2)",
+        "\ufeff=HYPERLINK(1,2)",
+        "\u200b =1+1",
+        " \ufeff\u200b =1+1",
+    ):
         assert ListingManagementService._csv_value(payload).startswith("'")
 
 

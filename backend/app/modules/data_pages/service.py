@@ -950,7 +950,7 @@ class ListingManagementService:
             value = "、".join(str(item) for item in value if item is not None)
         result = str(value)
         # Prevent spreadsheet formula execution in untrusted textual CSV fields.
-        if result.lstrip().startswith(("=", "+", "-", "@")) or (
+        if re.match(r"^[\s\ufeff\u200b]*[=+\-@]", result) or (
             result and result[0] in ("\t", "\r", "\n")
         ):
             return "'" + result
