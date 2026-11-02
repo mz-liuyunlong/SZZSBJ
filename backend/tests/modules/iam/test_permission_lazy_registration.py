@@ -13,6 +13,7 @@ from app.modules.iam.rbac_service import RbacService
 def _service():
     service = RbacService(MagicMock())
     service.repository.disabled_declared_permission_keys = MagicMock(return_value=set())
+    service.repository.register_declared_permissions = MagicMock()
     return service
 
 
@@ -52,7 +53,7 @@ def test_missing_declared_key_validation_is_read_only() -> None:
 def test_new_key_is_registered_after_authorized_grant() -> None:
     service = _service()
     key = "page:settings:organization:view"
-    service.repository.existing_permission_keys = MagicMock(side_effect=[set(), set(), {key}])
+    service.repository.existing_permission_keys = MagicMock(side_effect=[set(), {key}])
     authorized = Principal(user_id="1", permissions=frozenset({"*"}))
     service._assert_actor_can_grant(authorized, (key,))
     service._register_missing_permissions((key,))
