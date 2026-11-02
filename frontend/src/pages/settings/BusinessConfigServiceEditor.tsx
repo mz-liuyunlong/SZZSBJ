@@ -48,7 +48,6 @@ export default function BusinessConfigServiceEditor({
 }: Props) {
   const [form] = Form.useForm<ServiceForm>();
   const [saving, setSaving] = useState(false);
-  const [billingRatesValid, setBillingRatesValid] = useState(true);
   const [savedConnectorId,setSavedConnectorId]=useState<string>();
   const [skillBindings,setSkillBindings]=useState<Record<string,string|null>>({});
   const [skillBindingsReady,setSkillBindingsReady]=useState(true);
@@ -83,9 +82,7 @@ export default function BusinessConfigServiceEditor({
     let rates;
     try {
       rates = resolveOpenAIBillingRates(connector?.config);
-      setBillingRatesValid(true);
     } catch {
-      setBillingRatesValid(false);
       messageApi.error("已保存的 OpenAI 单价格式无效，已阻止编辑保存以保护原计费配置");
       return;
     }
@@ -129,9 +126,13 @@ export default function BusinessConfigServiceEditor({
     } catch {
       return;
     }
-    if (data.choice === "openai" && !billingRatesValid) {
-      messageApi.error("现有计费单价无效，禁止保存覆盖");
-      return;
+    if (data.choice === "openai") {
+      try {
+        resolveOpenAIBillingRates(connector?.config);
+      } catch {
+        messageApi.error("现有计费单价无效，禁止保存覆盖");
+        return;
+      }
     }
     setSaving(true);
     try {
