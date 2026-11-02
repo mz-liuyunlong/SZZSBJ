@@ -55,6 +55,7 @@ import LiveBusinessConnectors from "@/pages/settings/LiveBusinessConnectors";
 type Section = "connections" | "skills" | "usage" | "policies" | "notifications";
 type Category = "all" | "crawler" | "ai" | "communication" | "bots" | "commerce" | "erp" | "logistics";
 type UsageRange = 7 | 30;
+type ViewMode = "table" | "cards";
 
 const BUSINESS_CONFIG_CATEGORIES: ReadonlyArray<{ key: Category; label: string }> = [
   { key: "all", label: "全部服务" },
@@ -85,7 +86,7 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
   const [category, setCategory] = useState<Category>("all");
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [usageRange, setUsageRange] = useState<UsageRange>(7);
   const [config, setConfig] = useState<DecodoConfig | null>(null);
   const [usageRows, setUsageRows] = useState<DecodoUsageDay[]>([]);

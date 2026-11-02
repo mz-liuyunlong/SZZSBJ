@@ -29,3 +29,46 @@ describe("OpenAI billing persistence", () => {
     });
   });
 });
+
+describe("OpenAI billing API string/number contract", () => {
+  it("accepts persisted numeric strings without changing the cost values", () => {
+    expect(resolveOpenAIBillingRates({
+      input_price_per_million: "2.40",
+      output_price_per_million: "9.50",
+    })).toEqual({
+      input_price_per_million: 2.4,
+      output_price_per_million: 9.5,
+    });
+  });
+  it("accepts numeric values and retains both numeric and string zero", () => {
+    expect(resolveOpenAIBillingRates({
+      input_price_per_million: 1.25,
+      output_price_per_million: 3.75,
+    })).toEqual({
+      input_price_per_million: 1.25,
+      output_price_per_million: 3.75,
+    });
+    expect(resolveOpenAIBillingRates({
+      input_price_per_million: "0",
+      output_price_per_million: 0,
+    })).toEqual({
+      input_price_per_million: 0,
+      output_price_per_million: 0,
+    });
+  });
+  it("defaults only missing values, never existing valid prices", () => {
+    expect(resolveOpenAIBillingRates({
+      input_price_per_million: "2.4",
+    })).toEqual({
+      input_price_per_million: 2.4,
+      output_price_per_million: OPENAI_OUTPUT_USD_PER_MTOK,
+    });
+  });
+  it("rejects invalid prices rather than silently replacing saved settings", () => {
+    for (const invalid of ["", " ", "NaN", "-2", "Infinity"]) {
+      expect(() => resolveOpenAIBillingRates({
+        input_price_per_million: invalid,
+      })).toThrow("INVALID_OPENAI_BILLING_PRICE");
+    }
+  });
+});

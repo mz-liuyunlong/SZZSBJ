@@ -48,6 +48,7 @@ export default function BusinessConfigServiceEditor({
 }: Props) {
   const [form] = Form.useForm<ServiceForm>();
   const [saving, setSaving] = useState(false);
+  const [billingRatesValid, setBillingRatesValid] = useState(true);
   const [savedConnectorId,setSavedConnectorId]=useState<string>();
   const [skillBindings,setSkillBindings]=useState<Record<string,string|null>>({});
   const [skillBindingsReady,setSkillBindingsReady]=useState(true);
@@ -79,6 +80,15 @@ export default function BusinessConfigServiceEditor({
 
   useEffect(() => {
     if (!open) return;
+    let rates;
+    try {
+      rates = resolveOpenAIBillingRates(connector?.config);
+      setBillingRatesValid(true);
+    } catch {
+      setBillingRatesValid(false);
+      messageApi.error("已保存的 OpenAI 单价格式无效，已阻止编辑保存以保护原计费配置");
+      return;
+    }
     const base: ServiceForm = {
       choice: connector?.kind ?? (draft ? "draft" : preferredCategory === "bots" ? "feishu_webhook" : preferredCategory === "ai" ? "openai" : "feishu_webhook"),
       kind: connector?.kind ?? "feishu_webhook",
@@ -94,8 +104,8 @@ export default function BusinessConfigServiceEditor({
       daily_limit: connector?.config.daily_limit ?? 100,
       monthly_budget_usd: Number(connector?.config.monthly_budget_usd ?? 0),
       max_output_tokens: connector?.config.max_output_tokens ?? 1024,
-      input_price_per_million: resolveOpenAIBillingRates(connector?.config).input_price_per_million,
-      output_price_per_million: resolveOpenAIBillingRates(connector?.config).output_price_per_million,
+      input_price_per_million: rates.input_price_per_million,
+      output_price_per_million: rates.output_price_per_million,
       draft_category: draft?.category ?? (categories.find((entry) => entry.value === preferredCategory)?.value ?? "ai"),
       provider: draft?.provider ?? "OpenAI",
       instanceKey: draft?.instanceKey ?? "",
@@ -105,7 +115,7 @@ export default function BusinessConfigServiceEditor({
       dailyBudget: draft?.dailyBudget ?? 0,
     };
     form.setFieldsValue(base);
-  }, [open, connector, draft, preferredCategory, form]);
+  }, [open, connector, draft, preferredCategory, form, messageApi]);
 
   const close = () => {
     setSkillBindings({});setSavedConnectorId(undefined);
@@ -117,6 +127,10 @@ export default function BusinessConfigServiceEditor({
     try {
       data = await form.validateFields();
     } catch {
+      return;
+    }
+    if (data.choice === "openai" && !billingRatesValid) {
+      messageApi.error("现有计费单价无效，禁止保存覆盖");
       return;
     }
     setSaving(true);

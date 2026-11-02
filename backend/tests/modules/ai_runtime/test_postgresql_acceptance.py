@@ -374,29 +374,128 @@ def test_publishing_updates_only_existing_bindings_and_keeps_old_grants(db, monk
             {"revision": old, "connector": connector},
         )
     monkeypatch.setattr(
-        skill_library_routes, "get_session_factory",
+        skill_library_routes,
+        "get_session_factory",
         lambda: lambda: nullcontext(db),
     )
     monkeypatch.setattr(
-        skill_library_routes, "success_response",
+        skill_library_routes,
+        "success_response",
         lambda request, data: data,
     )
     skill_library_routes.publish(
         sid, new, request=None, principal=SimpleNamespace(user_id="synthetic")
     )
     for connector in (first, second):
-        assert db.scalar(
-            text("""SELECT revision_id FROM ai_skill_bindings
+        assert (
+            db.scalar(
+                text("""SELECT revision_id FROM ai_skill_bindings
               WHERE connector_id=:connector AND scene='keyword_launch'"""),
-            {"connector": connector},
-        ) == new
+                {"connector": connector},
+            )
+            == new
+        )
         for rid in (old, new):
             assert select_pinned_skill(db, str(rid), "keyword_launch", connector)
-    assert db.scalar(
-        text("SELECT count(*) FROM ai_skill_bindings WHERE connector_id=:id"),
-        {"id": unbound},
-    ) == 0
+    assert (
+        db.scalar(
+            text("SELECT count(*) FROM ai_skill_bindings WHERE connector_id=:id"),
+            {"id": unbound},
+        )
+        == 0
+    )
     from app.modules.ai_runtime.provider import AIUnavailable
 
     with pytest.raises(AIUnavailable):
         select_pinned_skill(db, str(new), "keyword_launch", unbound)
+
+
+
+def test_skill_binding_null_unbind_rebind_keeps_historical_grants(db, monkeypatch) -> None:
+    from contextlib import nullcontext
+
+    from app.modules.ai_runtime import skill_library_routes
+    from app.modules.ai_runtime.provider import AIUnavailable
+    from app.modules.ai_runtime.skill_library_routes import BindingsWrite
+
+    connector = _connector(db, "Skill binding lifecycle A")
+    foreign = _connector(db, "Skill binding lifecycle B")
+    skill_id, first_revision, next_revision = uuid4(), uuid4(), uuid4()
+    db.execute(
+        text("""INSERT INTO ai_skill_library(id,slug,name,scene,description,created_by)
+          VALUES (:id,:slug,'Lifecycle','keyword_launch','synthetic','synthetic')"""),
+        {"id": skill_id, "slug": "binding-" + skill_id.hex},
+    )
+    for rev, version in ((first_revision, 1), (next_revision, 2)):
+        db.execute(
+            text("""INSERT INTO ai_skill_revisions
+              (id,skill_id,version,status,instructions,runtime_instructions,created_by)
+              VALUES (:id,:skill,:version,'published','historical','short','synthetic')"""),
+            {"id": rev, "skill": skill_id, "version": version},
+        )
+    monkeypatch.setattr(
+        skill_library_routes,
+        "get_session_factory",
+        lambda: lambda: nullcontext(db),
+    )
+    monkeypatch.setattr(
+        skill_library_routes,
+        "success_response",
+        lambda request, data: data,
+    )
+
+    def bind(revision):
+        return skill_library_routes.save_bindings(
+            connector,
+            BindingsWrite(bindings={"keyword_launch": revision}),
+            request=None,
+            principal=SimpleNamespace(user_id="synthetic"),
+        )
+
+    def assigned():
+        return db.scalar(
+            text("""SELECT revision_id FROM ai_skill_bindings
+              WHERE connector_id=:connector AND scene='keyword_launch'"""),
+            {"connector": connector},
+        )
+
+    def granted(revision):
+        return db.scalar(
+            text("""SELECT count(*) FROM ai_skill_revision_grants
+              WHERE revision_id=:revision AND connector_id=:connector"""),
+            {"revision": revision, "connector": connector},
+        )
+
+    # Empty initial assignment stores NULL only in the binding table.
+    assert bind(None) == {"ok": True}
+    assert assigned() is None
+    assert db.scalar(text("SELECT count(*) FROM ai_skill_revision_grants")) == 0
+
+    # A published revision can be assigned, then unassigned without revocation.
+    assert bind(first_revision) == {"ok": True}
+    assert assigned() == first_revision
+    assert granted(first_revision) == 1
+    db.execute(
+        text("UPDATE ai_skill_revisions SET status='retired' WHERE id=:revision"),
+        {"revision": first_revision},
+    )
+    assert bind(None) == {"ok": True}
+    assert assigned() is None
+    assert granted(first_revision) == 1
+    assert select_pinned_skill(db, str(first_revision), "keyword_launch", connector)
+
+    # Reassignment follows currently published revisions; no legacy grant is deleted.
+    assert bind(next_revision) == {"ok": True}
+    assert assigned() == next_revision
+    assert granted(next_revision) == 1
+    assert granted(first_revision) == 1
+    assert bind(None) == {"ok": True}
+    assert bind(next_revision) == {"ok": True}
+    assert assigned() == next_revision
+    assert granted(next_revision) == 1
+    assert select_pinned_skill(db, str(first_revision), "keyword_launch", connector)
+
+    for revision in (first_revision, next_revision):
+        with pytest.raises(AIUnavailable) as denied:
+            select_pinned_skill(db, str(revision), "keyword_launch", foreign)
+        assert denied.value.code == "AI_SKILL_VERSION_INVALID"

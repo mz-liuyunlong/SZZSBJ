@@ -263,11 +263,11 @@ def save_bindings(connector_id: UUID, body: BindingsWrite, request: Request, pri
                         status_code=422,
                         message="绑定必须选择该场景已发布的 Skill",
                     )
-            session.execute(
-                text("""INSERT INTO ai_skill_revision_grants(revision_id,connector_id)
+                session.execute(
+                    text("""INSERT INTO ai_skill_revision_grants(revision_id,connector_id)
                   VALUES (:revision,:connector) ON CONFLICT DO NOTHING"""),
-                {"revision": revision, "connector": connector_id},
-            )
+                    {"revision": revision, "connector": connector_id},
+                )
             session.execute(
                 text("""INSERT INTO ai_skill_bindings(connector_id,scene,revision_id)
               VALUES (:connector,:scene,:revision)
