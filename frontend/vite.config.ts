@@ -8,6 +8,8 @@ export default defineConfig({
   test: {
     exclude: [...configDefaults.exclude, 'e2e/**'],
     testTimeout: 15_000,
+    fileParallelism: false,
+    maxWorkers: 1,
     hookTimeout: 15_000,
   },
   server: {

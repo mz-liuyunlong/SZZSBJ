@@ -36,7 +36,7 @@ from tests.db.test_domestic_chain_postgresql import (
     _version,
 )
 
-REVISION = "20261102_iam_gateway_merge"
+REVISION = "20261102_iam_skill_merge"
 PREVIOUS = "20261027_0061_merge_purchase_main"
 
 
