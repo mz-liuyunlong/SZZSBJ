@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session_factory
+from app.modules.integration_sync.data_pages_ad_spend_recovery import recover_standard_ad_spend
 from app.modules.integration_sync.data_pages_business_rules_v4 import DataPagesRealSyncRunner
 from app.modules.integration_sync.data_pages_mart_invariants import (
     DataPagesMartInvariantError,
@@ -414,6 +415,42 @@ class SyncRunExecutionService:
                         return
                     source_committed = bool(getattr(runner, "_source_fact_commit_completed", False))
                     if source_committed:
+                        # An independent SEM attribution failure must not strand standard
+                        # SP ad costs in a stale Daily Sales snapshot. Recover only the
+                        # already-existing sales rows, keeping SEM pending for review.
+                        sp_recovery_status = "not_applicable"
+                        if (
+                            run.interface_key == "walmartAdItemSpList"
+                            and error.code == "DATA_PAGES_SEM_SPEND_UNATTRIBUTED"
+                        ):
+                            try:
+                                recover_standard_ad_spend(
+                                    self.session,
+                                    active_run.source_account_ref,
+                                    error.business_date or business_date,
+                                )
+                                self.session.commit()
+                                sp_recovery_status = "recovered"
+                            except Exception:
+                                self.session.rollback()
+                                sp_recovery_status = "failed"
+                            # Record a durable audit event even when SP recovery rolled back.
+                            active_run = self.repository.get_run_for_update(run.id)
+                            if active_run is None or active_run.status != "running":
+                                return
+                            self._event(
+                                active_run.id,
+                                "running",
+                                "running",
+                                "DATA_PAGES_SP_AD_SPEND_RECOVERED"
+                                if sp_recovery_status == "recovered"
+                                else "DATA_PAGES_SP_AD_SPEND_RECOVERY_FAILED",
+                                safe_details={
+                                    "business_date": (
+                                        error.business_date or business_date
+                                    ).isoformat(),
+                                },
+                            )
                         mart_failures.append(error)
                         # Capture is durable even when the financial MART is rolled back.
                         # Count those source rows exactly once; do not count failed MART writes.
@@ -431,6 +468,9 @@ class SyncRunExecutionService:
                             if source_committed
                             else "source_processing",
                             "financial_status": "pending" if source_committed else "not_ready",
+                            "sp_recovery_status": sp_recovery_status
+                            if source_committed
+                            else "not_applicable",
                         },
                     )
                     if error.code == "DATA_PAGES_CONFIRMED_SAMPLE_EXCEEDS_SALESTAT":

@@ -12,12 +12,18 @@ import json
 import re
 from collections import Counter
 from collections.abc import Mapping
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from app.integrations.walmart.client import WalmartClient, WalmartResult
 from app.integrations.walmart.collector import CollectorConfig, WalmartReadCollector
-from app.integrations.walmart.contracts import ContractRegistry, Operation, PreparedRequest
+from app.integrations.walmart.contracts import (
+    ContractRegistry,
+    Operation,
+    PreparedRequest,
+    with_authorization,
+)
 from app.integrations.walmart.feeds_catalog import feed_monitor_registry
 from app.integrations.walmart.marketplace_catalog import marketplace_read_registry
 from app.integrations.walmart.operations_catalog import operations_read_registry
@@ -25,6 +31,7 @@ from app.integrations.walmart.pagination import PageContract, collect_read_pages
 from app.integrations.walmart.returns_catalog import returns_read_registry
 from app.integrations.walmart.source_catalog_data import load_source_catalog
 from app.integrations.walmart.wfs_catalog import wfs_registry
+from app.integrations.walmart.wfs_write_catalog import WFS_WRITE_KEYS, wfs_write_registry
 
 MAX_CONTRACT_BYTES = 2 * 1024 * 1024
 
@@ -33,7 +40,49 @@ class WalmartIntegrationError(ValueError):
     """Stable failure codes only; never include contract contents or secrets."""
 
 
-def _builtins(approved_keys: frozenset[str]) -> dict[str, Operation]:
+# Catalog family -> business permission for its read operations (protocol v3).
+_READ_FAMILIES: tuple[tuple[Any, str], ...] = (
+    (wfs_registry, "wfs"),
+    (feed_monitor_registry, "feeds"),
+    (marketplace_read_registry, "marketplace"),
+    (returns_read_registry, "returns"),
+    (operations_read_registry, "operations"),
+)
+WFS_WRITE_PERMISSION = "action:walmart:wfs:shipments:write"
+WFS_CANCEL_PERMISSION = "action:walmart:wfs:shipments:cancel"
+_WRITE_PERMISSIONS = {"wfs_inbound_shipment_cancel": WFS_CANCEL_PERMISSION}
+
+
+@lru_cache(maxsize=1)
+def reviewed_registry() -> ContractRegistry:
+    """Every reviewed built-in contract, enabled, with family and business permission.
+
+    This is the protocol-v3 registry: being in it means "implemented and contract-checked";
+    whether a caller may use an operation is decided by the server-side authorizer (its
+    ``permission`` plus store scope), not by per-operation environment allowlists. The
+    historical capability catalog stays discovery-only and never becomes an operation.
+    """
+    operations: dict[str, Operation] = {}
+    for factory, family in _READ_FAMILIES:
+        keys = frozenset(factory().keys())
+        for key, operation in factory(approved_keys=keys)._operations.items():
+            if key in operations or operation.is_write:
+                raise WalmartIntegrationError("WALMART_OPERATION_COLLISION")
+            operations[key] = with_authorization(
+                operation, family=family, permission=f"action:walmart:{family}:read"
+            )
+    for key, operation in wfs_write_registry(approved_keys=WFS_WRITE_KEYS)._operations.items():
+        if key in operations or not operation.is_write:
+            raise WalmartIntegrationError("WALMART_OPERATION_COLLISION")
+        operations[key] = with_authorization(
+            operation, family="wfs", permission=_WRITE_PERMISSIONS.get(key, WFS_WRITE_PERMISSION)
+        )
+    return ContractRegistry(tuple(operations.values()))
+
+
+def _builtins(
+    approved_keys: frozenset[str], approved_write_keys: frozenset[str] = frozenset()
+) -> dict[str, Operation]:
     factories = (
         wfs_registry,
         feed_monitor_registry,
@@ -49,6 +98,12 @@ def _builtins(approved_keys: frozenset[str]) -> dict[str, Operation]:
             if key in operations:
                 raise WalmartIntegrationError("WALMART_OPERATION_COLLISION")
             operations[key] = operation
+    # Write contracts are only ever enabled through the explicit write approval set.
+    write_accepted = approved_write_keys.intersection(WFS_WRITE_KEYS)
+    for key, operation in wfs_write_registry(approved_keys=write_accepted)._operations.items():
+        if key in operations:
+            raise WalmartIntegrationError("WALMART_OPERATION_COLLISION")
+        operations[key] = operation
     return operations
 
 
@@ -57,19 +112,29 @@ def load_unified_registry(
     *,
     contract_file: str | None = None,
     contract_sha256: str | None = None,
+    approved_write_keys: frozenset[str] = frozenset(),
 ) -> ContractRegistry:
     """Build a single registry; no live requests or implicit approvals.
 
     An additional owner-reviewed OpenAPI 3.x snapshot can provide more
     operations without editing the SDK. Its exact bytes MUST be SHA256-pinned.
     A snapshot may refine a built-in operation only if method/path are equal.
-    No write operation can be approved through this read-only factory.
+    ``approved_keys`` never enables a write; writes are enabled only through
+    ``approved_write_keys`` (reviewed WFS write contracts), and a key listed in
+    both sets is rejected.
     """
     if not isinstance(approved_keys, frozenset) or not all(
         isinstance(key, str) for key in approved_keys
     ):
         raise WalmartIntegrationError("WALMART_APPROVED_KEYS_INVALID")
-    merged = _builtins(approved_keys)
+    if not isinstance(approved_write_keys, frozenset) or not all(
+        isinstance(key, str) for key in approved_write_keys
+    ):
+        raise WalmartIntegrationError("WALMART_APPROVED_KEYS_INVALID")
+    if approved_write_keys - WFS_WRITE_KEYS or approved_keys & WFS_WRITE_KEYS:
+        # A write key is never a read approval, and only reviewed WFS writes can be enabled.
+        raise WalmartIntegrationError("WALMART_WRITE_NOT_AUTHORIZED")
+    merged = _builtins(approved_keys, approved_write_keys)
     if contract_file is not None or contract_sha256 is not None:
         if (
             not contract_file
@@ -110,7 +175,9 @@ def load_unified_registry(
     unknown = approved_keys.difference(merged)
     if unknown:
         raise WalmartIntegrationError("WALMART_APPROVED_OPERATION_UNKNOWN")
-    if any(op.enabled and op.is_write for op in merged.values()):
+    if any(
+        op.enabled and op.is_write and op.key not in approved_write_keys for op in merged.values()
+    ):
         raise WalmartIntegrationError("WALMART_WRITE_NOT_AUTHORIZED")
     return ContractRegistry(tuple(merged.values()))
 
@@ -194,4 +261,52 @@ class WalmartReadAPI:
             from_date=from_date,
             to_date=to_date,
             gtin_items=gtin_items,
+        )
+
+
+class WalmartWriteAPI:
+    """Business-facing write entry point: mutating operations only, approval_ref mandatory.
+
+    The gateway re-checks store, operation and approval inside the cloud executor; this
+    class only guarantees that a write can never be issued through the read API by
+    accident and that every call carries an audit reference.
+    """
+
+    def __init__(self, client: WalmartClient) -> None:
+        self._client = client
+
+    def prepare(
+        self,
+        store_code: str,
+        operation: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        body: Any = None,
+    ) -> PreparedRequest:
+        request = self._client.prepare(
+            store_code, operation, params=params, body=body, allow_writes=True
+        )
+        if not request.is_write:
+            raise WalmartIntegrationError("WALMART_WRITE_API_READ_OPERATION")
+        return request
+
+    def call(
+        self,
+        store_code: str,
+        operation: str,
+        *,
+        approval_ref: str,
+        params: Mapping[str, Any] | None = None,
+        body: Any = None,
+    ) -> WalmartResult:
+        if not isinstance(approval_ref, str) or not 1 <= len(approval_ref) <= 128:
+            raise WalmartIntegrationError("WALMART_WRITE_APPROVAL_REQUIRED")
+        self.prepare(store_code, operation, params=params, body=body)
+        return self._client.call(
+            store_code,
+            operation,
+            params=params,
+            body=body,
+            allow_writes=True,
+            approval_ref=approval_ref,
         )

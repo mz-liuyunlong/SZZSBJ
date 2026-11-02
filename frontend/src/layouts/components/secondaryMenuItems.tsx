@@ -38,7 +38,7 @@ export const SECONDARY_MENU_HIDDEN_PAGE_KEYS =
 
     // Operations
     "operations_todo",
-    "operations_log",
+    "operations_calendar",
     "operations_promotion_center",
   ]);
 
