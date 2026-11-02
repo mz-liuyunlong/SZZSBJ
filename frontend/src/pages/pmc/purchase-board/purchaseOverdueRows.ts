@@ -3,6 +3,7 @@
  * one list (Rocky 2026-11-01). Kept out of the table component so the component file only
  * exports components (react-refresh/only-export-components).
  */
+import { BUSINESS_TIME_ZONE } from "@/shared/formatters/date";
 import type {
   PendingPurchasePlan,
   PurchaseBoardRow,
@@ -26,11 +27,24 @@ export interface PurchaseOverdueRow {
   remarkItemId: string | null;
 }
 
-const daysSince = (iso: string | null, today: Date) => {
+const businessDay = new Intl.DateTimeFormat("en-CA", {
+  timeZone: BUSINESS_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/**
+ * Whole days from ``iso``'s date to today, both as calendar days in Asia/Shanghai
+ * (the backend counts business days there; a UTC "today" is one day short between
+ * 00:00 and 08:00 Beijing time). The board API returns no pending-days field for
+ * order lines, so this is computed here.
+ */
+export const daysSince = (iso: string | null, today: Date) => {
   if (!iso) return null;
-  const start = new Date(`${iso.slice(0, 10)}T00:00:00Z`).getTime();
+  const start = Date.parse(`${iso.slice(0, 10)}T00:00:00Z`);
   if (Number.isNaN(start)) return null;
-  const now = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const now = Date.parse(`${businessDay.format(today)}T00:00:00Z`);
   return Math.max(0, Math.round((now - start) / 86_400_000));
 };
 

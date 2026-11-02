@@ -43,7 +43,13 @@ export const purchaseBoardKeys = {
 const OVERDUE_FETCH_PAGE_SIZE = 200;
 const OVERDUE_FETCH_MAX_PAGES = 25; // 5,000 rows per source; far above real volumes.
 
-/** Every page of a paged source, sequentially, bounded. */
+export interface OverdueSourceCount {
+  shown: number;
+  total: number;
+  truncated: boolean;
+}
+
+/** Every page of a paged source, sequentially, bounded (``truncated`` when the cap is hit). */
 async function fetchAllPages<T>(
   fetchPage: (page: number) => Promise<{ rows: T[]; total: number }>,
 ): Promise<{ rows: T[]; total: number; truncated: boolean }> {
@@ -78,7 +84,12 @@ export function usePurchaseOverdueRows(filters: PurchaseBoardFilters, cardReques
           return result;
         }),
       ]);
-      return { orders, plans, thresholdDays };
+      const count = (source: { rows: unknown[]; total: number; truncated: boolean }): OverdueSourceCount => ({
+        shown: source.rows.length,
+        total: source.total,
+        truncated: source.truncated,
+      });
+      return { orders, plans, thresholdDays, counts: { orders: count(orders), plans: count(plans) } };
     },
     staleTime: SERVER_STATE_STALE_TIME.list,
     enabled,
