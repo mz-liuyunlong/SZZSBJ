@@ -1,24 +1,26 @@
 import {
-  ApiOutlined,
+  BellOutlined,
+  TableOutlined,
   AppstoreOutlined,
+  ApiOutlined,
   BarChartOutlined,
   CloudOutlined,
   LinkOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
   SettingOutlined,
-  TableOutlined,
 } from "@ant-design/icons";
 import {
   Alert,
   Button,
   Card,
   Drawer,
+  Modal,
   Empty,
   Input,
+  Select,
   Segmented,
   Popconfirm,
-  Select,
   Space,
   Statistic,
   Switch,
@@ -43,15 +45,17 @@ import {
 import "@/pages/settings/BusinessConfigPage.css";
 import BusinessConfigDraftManager from "@/pages/settings/BusinessConfigDraftManager";
 import BusinessConfigServiceEditor from "@/pages/settings/BusinessConfigServiceEditor";
+import SkillLibraryPanel from "@/pages/settings/SkillLibraryPanel";
 import { listBusinessConnectors, testBusinessConnector, type BusinessConnector } from "@/api/businessConnectorsApi";
 import { readBrowserDrafts, type ServiceDraft } from "@/pages/settings/businessConfigDrafts";
 import { PlusOutlined } from "@ant-design/icons";
+import NotificationRulesPanel from "@/pages/settings/NotificationRulesPanel";
 import LiveBusinessConnectors from "@/pages/settings/LiveBusinessConnectors";
 
-type Section = "connections" | "usage" | "policies";
+type Section = "connections" | "skills" | "usage" | "policies" | "notifications";
 type Category = "all" | "crawler" | "ai" | "communication" | "bots" | "commerce" | "erp" | "logistics";
-type ViewMode = "table" | "cards";
 type UsageRange = 7 | 30;
+type ViewMode = "table" | "cards";
 
 const BUSINESS_CONFIG_CATEGORIES: ReadonlyArray<{ key: Category; label: string }> = [
   { key: "all", label: "全部服务" },
@@ -327,22 +331,27 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
               <p>第三方服务统一接入、调用统计与使用策略管理</p>
             </div>
             <Space>
-              <Button icon={<ReloadOutlined />} loading={configLoading || usageLoading || liveLoading}
-                onClick={() => { void loadConfig(); void loadUsage(usageRange); void refreshConnectors(); }}>刷新数据</Button>
               {canEdit && <Button icon={<PlusOutlined />} type="primary" onClick={() => openServiceEditor()}>新增服务配置</Button>}
             </Space>
           </section>
+          {isLocalMode && <Alert type="warning" showIcon message="Decodo 处于本地 SQLite 测试模式" description="本地测试环境中 Decodo 配置只读，不允许编辑授权信息。" />}
           <div className="business-config__tabs">
             <Tabs activeKey={section} onChange={(key) => setSection(key as Section)} items={[
               { key: "connections", label: <span><LinkOutlined /> 服务配置</span> },
+              { key: "skills", label: <span>Skill 管理</span> },
               { key: "usage", label: <span><BarChartOutlined /> 用量与费用</span> },
               { key: "policies", label: <span><SettingOutlined /> 使用策略</span> },
+              { key: "notifications", label: <span><BellOutlined /> 通知规则</span> },
             ]} />
           </div>
 
-          {section === "connections" ? (
+          {section === "notifications" ? (
             <div className="business-config__body">
-              <Alert className="business-config__intro-note" type="info" showIcon message="真实连接与安全配置" description={isLocalMode ? "Decodo 处于本地 SQLite 测试模式，密钥由本机环境管理。飞书和 AI 使用独立的服务端配置，未迁移数据库前无法保存。" : "显示真实 Decodo、飞书群和 AI 连接；未接入服务仅以草稿标识，不展示虚构凭据或费用。"} />
+              <NotificationRulesPanel canManage={canEdit} />
+            </div>
+          ) : (
+section === "connections" ? (
+            <div className="business-config__body">
               {configError ? <Alert showIcon type="error" message="Decodo 配置读取失败" description="请检查登录、权限、后端服务及数据库版本；未读取到真实配置时不显示虚拟实例。" action={<Button size="small" onClick={() => void loadConfig()}>重试</Button>} /> : null}
               <div className="business-config__stats">
                 <Card><Statistic title="已接入服务" value={(config ? 1 : 0) + live.length} prefix={<LinkOutlined />} /><span>实际接入的服务实例</span></Card>
@@ -372,7 +381,7 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
                   <Select aria-label="状态筛选" value={statusFilter} onChange={setStatusFilter} className="business-config__status-filter"
                     options={[{ value: "all", label: "全部状态" }, { value: "已启用", label: "已启用" }, { value: "已停用", label: "已停用" }, { value: "未配置", label: "未配置" }]} />
                   <span className="business-config__filter-spacer" />
-                  <Segmented value={viewMode} onChange={(value) => setViewMode(value as ViewMode)}
+                  <Segmented aria-label="服务视图切换" value={viewMode} onChange={(value) => setViewMode(value as ViewMode)}
                     options={[{ label: <TableOutlined />, value: "table" }, { label: <AppstoreOutlined />, value: "cards" }]} />
                 </div>
 
@@ -399,10 +408,10 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
                 <div className="business-config__list-footer">共 {filteredRows.length} 条配置 · 飞书和 AI 以实际后端状态为准，草稿未建立真实连接</div>
               </Card>
             </div>
+          ) : section === "skills" ? (
+            <SkillLibraryPanel canEdit={canEdit} />
           ) : section === "usage" ? (
             <div className="business-config__body">
-              <Alert type="info" showIcon message="用量数据为真实接口统计，暂不包含供应商计费金额"
-                description="当前 Decodo 按实际发起的请求尝试计数（含失败）；官方计费请求可能不同。暂不提供没有计价依据的美元估算。" />
               <div className="business-config__usage-toolbar">
                 <Space>
                   <Segmented value={usageRange} onChange={(value) => { setUsageLoading(true); setUsageRange(value as UsageRange); }}
@@ -457,7 +466,6 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
             </div>
           ) : (
             <div className="business-config__body">
-              <Alert type="info" showIcon message="按服务管理实际策略" description="Decodo 使用现有配置，飞书通知路由与模板通过服务端管理；其他未接入业务策略仍标识为草稿。" />
               <Card title="Decodo 当前策略" className="business-config__policy-card" loading={configLoading}>
                 {configError ? <Alert showIcon type="error" message="配置状态读取失败" /> : config ? (
                   <div className="business-config__policy-grid">
@@ -471,9 +479,10 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
                   </div>
                 ) : <Empty description="尚未读取到 Decodo 配置" />}
               </Card>
-              <Card className="business-config__related-panel"><LiveBusinessConnectors section="policies" canManage={canEdit} category="all" keyword="" status="all" /></Card>
+
               <Card><BusinessConfigDraftManager section="policies" category="all" keyword="" status="all" canManage={canEdit}/></Card>
             </div>
+          )
           )}
         </div>
       </PageShell>
@@ -495,9 +504,9 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
           {isLocalMode && <Alert type="warning" showIcon message="本地测试模式使用后端环境变量，不能在此编辑真实授权。" />}
         </div>
       </Drawer>
-      <Drawer className="business-config__drawer" title="Decodo · 编辑配置" width={520} open={drawerOpen}
-        destroyOnHidden maskClosable={!saving} closable={!saving} onClose={() => setDrawerOpen(false)}
-        extra={<Space><Button disabled={saving} onClick={() => setDrawerOpen(false)}>取消</Button>
+      <Modal className="business-config__editor-modal" title="Decodo · 编辑配置" width={720} centered open={drawerOpen}
+        destroyOnHidden maskClosable={!saving} closable={!saving} onCancel={() => setDrawerOpen(false)}
+        footer={<Space><Button disabled={saving} onClick={() => setDrawerOpen(false)}>取消</Button>
           <Button type="primary" loading={saving} onClick={() => void save()}>保存配置</Button></Space>}>
         <Alert showIcon type="info" message="已有凭据不会回显" description="仅在需要轮换密钥时填写新的 Basic Authorization；留空表示沿用已保存的凭据。" />
         <div className="business-config__form">
@@ -509,7 +518,7 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
           <div className="business-config__switch-line"><span>启用 Decodo</span><Switch checked={draftEnabled} onChange={setDraftEnabled} /></div>
           <div className="business-config__form-note">此保存操作会更新真实的 Decodo 服务配置；不运行采集、重试或历史同步。</div>
         </div>
-      </Drawer>
+      </Modal>
     </>
   );
 }

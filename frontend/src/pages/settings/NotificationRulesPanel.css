@@ -1,0 +1,31 @@
+.nr-panel{border:1px solid #e5eaf3;border-radius:9px}
+.nr-panel>.ant-card-head{min-height:60px}
+.nr-panel .ant-card-head-title{font-size:15px;font-weight:700}
+.nr-modal .ant-modal-content{padding:0;border-radius:12px;overflow:hidden}
+.nr-modal .ant-modal-header{padding:17px 23px;margin:0;border-bottom:1px solid #edf0f4}
+.nr-modal .ant-modal-title{font-size:16px}
+.nr-modal .ant-modal-body{padding:0 24px;max-height:min(680px,calc(100vh - 180px));min-height:350px;overflow-y:auto;overscroll-behavior:contain}
+.nr-modal .ant-modal-footer{padding:14px 24px;margin:0;border-top:1px solid #edf0f4}
+.nr-editor .ant-tabs-nav{position:sticky;top:0;background:#fff;z-index:2;margin-bottom:18px}
+.nr-section{display:flex;flex-direction:column;gap:12px;padding:0 0 25px;min-width:0}
+.nr-section>label,.nr-section .nr-pair label{font-size:12px;color:#344054;font-weight:600}
+.nr-section .ant-select{min-width:0}
+.nr-section>.ant-input-number{width:100%}
+.nr-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.nr-pair>div{display:flex;flex-direction:column;gap:8px;min-width:0}
+.nr-pair .ant-input-number{width:100%}
+.nr-scope-row,.nr-sample{display:flex;align-items:center;gap:12px}
+.nr-scope-row>.ant-typography,.nr-sample>.ant-typography{width:120px;flex:0 0 120px;font-size:12px}
+.nr-sample .ant-input,.nr-sample .ant-select,.nr-sample .ant-input-number{flex:1;width:100%}
+.nr-conditions{display:flex;flex-direction:column;gap:12px;min-width:0}
+.nr-group{border:1px solid #e5eaf3;background:#fbfcfe;border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.nr-group-head{display:flex;justify-content:space-between;align-items:center}
+.nr-condition{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}
+.nr-condition-value{flex:1.4 1 145px;min-width:140px}
+.nr-receivers{display:flex;flex-direction:column;gap:16px;min-width:0}
+.nr-receivers>div{display:flex;flex-direction:column;gap:8px}
+.nr-receivers .ant-checkbox-group{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.nr-receivers .ant-checkbox-group-item{margin:0;font-size:12px}
+.nr-preview{background:#f8fafc;border:1px solid #edf0f4;padding:14px;border-radius:8px}
+.nr-preview pre{white-space:pre-wrap;word-break:break-word;font-size:12px;margin:8px 0 0}
+@media(max-width:750px){.nr-pair{grid-template-columns:1fr}.nr-modal .ant-modal-body{padding:0 14px}.nr-receivers .ant-checkbox-group{grid-template-columns:repeat(2,minmax(0,1fr))}.nr-condition-value{flex:1 1 150px}}
