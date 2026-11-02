@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
+import { clearPageStateCache } from "@/shared/page-state/pageStateCache";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -263,6 +264,8 @@ afterEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   sessionStorage.clear();
+  // Page state (active card, drawer toggles) also lives in an in-memory cache.
+  clearPageStateCache();
 });
 
 describe("PurchaseBoardPage", () => {
@@ -373,6 +376,23 @@ describe("PurchaseBoardPage", () => {
     expect(within(dialog).getByText("19051502014", { selector: "td" })).toBeInTheDocument();
     expect(within(dialog).getByText("PO-1 1 天").tagName).toBe("DEL");
     expect(within(dialog).getByText("PO0 12 天")).toBeInTheDocument();
+  });
+
+  it("opens the pending-plan drill-down (overdue only) when the purchase-overdue card is clicked", async () => {
+    await renderPage();
+    // No S2-overdue order lines come back for the card filter.
+    vi.mocked(listPurchaseBoard).mockResolvedValue({
+      rows: [], total: 0, meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: 0 },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "待采购超时：6" }));
+    await waitFor(() => expect(lastListSummaryFilter()).toBe("purchase_overdue"));
+    // The plans counted by the card live in the drawer, not in the main table.
+    await waitFor(() => expect(listPendingPurchasePlans).toHaveBeenCalled());
+    expect(vi.mocked(listPendingPurchasePlans).mock.calls.at(-1)?.[0]).toMatchObject({ page: 1, overdueOnly: true });
+    expect(screen.getByRole("switch", { name: "仅看超时" })).toBeChecked();
+    expect(await screen.findByText("P3")).toBeInTheDocument();
+    expect(await screen.findByText(/4 条已审批未转单的计划不进主表/)).toBeInTheDocument();
   });
 
   it("opens the pending-plan drill-down from the header action", async () => {

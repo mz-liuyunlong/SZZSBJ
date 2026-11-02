@@ -31,6 +31,8 @@ WFS_WALMART_MERGE_HEAD_REVISION = "20261030_0070_merge_wfs_walmart_remote"
 WFS_BOARD_REVISION = "20261030_0071_wfs_lingxing_board"
 WFS_PENDING_DRAFTS_REVISION = "20261101_0072_wfs_pending_drafts"
 WFS_MANUAL_APPROVAL_REVISION = "20261101_0073_wfs_creation_manual_approval"
+WALMART_GATEWAY_LEDGER_REVISION = "20261031_0069_walmart_gateway_ledger"
+WFS_GATEWAY_MERGE_HEAD_REVISION = "20261102_0074_merge_wfs_walmart_gateway"
 WFS_DETECTION_HEAD_REVISION = "20261026_0061_wfs_fee_detection_evidence"
 SYNC_ANOMALY_HEAD_REVISION = "20261027_0062_sync_anomaly_center"
 AI_RUNTIME_PREVIOUS_REVISION = "20261027_0063_ai_runtime"
@@ -77,7 +79,11 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20261026_0055_purchase_board_draft_no",
         LISTING_INTEGRATION_HEAD_REVISION,
     }
-    assert script.get_heads() == [WFS_MANUAL_APPROVAL_REVISION]
+    assert script.get_heads() == [WFS_GATEWAY_MERGE_HEAD_REVISION]
+    assert set(script.get_revision(WFS_GATEWAY_MERGE_HEAD_REVISION).down_revision) == {
+        WALMART_GATEWAY_LEDGER_REVISION,
+        WFS_MANUAL_APPROVAL_REVISION,
+    }
     assert (
         script.get_revision(WFS_MANUAL_APPROVAL_REVISION).down_revision
         == WFS_PENDING_DRAFTS_REVISION
@@ -91,6 +97,10 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     assert script.get_revision(WALMART_REMOTE_HEAD_REVISION).down_revision == FINAL_HEAD_REVISION
     assert script.get_revision(WFS_HEAD_REVISION).down_revision == "20261029_0068_wfs_creation"
     assert script.get_revision("20261029_0068_wfs_creation").down_revision == FINAL_HEAD_REVISION
+    assert (
+        script.get_revision(WALMART_GATEWAY_LEDGER_REVISION).down_revision
+        == WALMART_REMOTE_HEAD_REVISION
+    )
     assert (
         script.get_revision(WALMART_MONITOR_PROJECTION_HEAD_REVISION).down_revision
         == LISTING_EVALUATION_REVISION
@@ -359,6 +369,6 @@ def test_revision_files_have_unique_ids_and_form_one_connected_graph() -> None:
                     revisions.append(ast.literal_eval(node.value))
     assert len(revisions) == len(set(revisions)), "duplicate full Alembic revision ID"
     script = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
-    assert script.get_heads() == [WFS_MANUAL_APPROVAL_REVISION]
+    assert script.get_heads() == [WFS_GATEWAY_MERGE_HEAD_REVISION]
     assert len(script.get_bases()) == 1
     assert {item.revision for item in script.walk_revisions()} == set(revisions)

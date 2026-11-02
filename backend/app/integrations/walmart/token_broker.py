@@ -108,6 +108,15 @@ def scf_token_handler(event: object, context: object) -> dict[str, Any]:
     if os.getenv("SZZSBJ_WALMART_TOKEN_BROKER_ENABLED") != "1":
         return {"success": False, "status": "TOKEN_BROKER_DISABLED"}
     store = os.getenv("SZZSBJ_WALMART_BOUND_STORE", "")
+    if (
+        not _STORE.fullmatch(store)
+        or not isinstance(event, dict)
+        or set(event) != {"version", "operation", "store_code"}
+        or event.get("version") != 1
+        or event.get("operation") != "issue_store_token"
+        or event.get("store_code") != store
+    ):
+        return {"success": False, "status": "TOKEN_REQUEST_DENIED"}
     try:
         # Lazy import isolates the SSM secret resolver from the main server.
         from app.integrations.walmart.tencent_api import TemporaryTencentIdentity, TencentApiClient
