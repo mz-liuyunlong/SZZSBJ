@@ -1,0 +1,141 @@
+/**
+ * 待采购超时 (card): one list in the board body.
+ *
+ * Rocky 2026-11-01: 待下单采购单 and 未转单计划 are the same state ("已审批、还没真正下出去"),
+ * so both are shown together here instead of in a drawer. Rows are merged client-side
+ * (both sources are fetched completely, see ``usePurchaseOverdueRows``) and sorted by
+ * overdue days, then pending days, descending.
+ */
+import { Alert, Table, Tag, Typography } from "antd";
+import type { ColumnsType } from "antd/es/table";
+import ReportTableShell from "@/components/report-table/ReportTableShell";
+import type { OverdueSourceCount } from "@/pages/pmc/purchase-board/purchaseBoardQueries";
+import type { PurchaseOverdueRow } from "@/pages/pmc/purchase-board/purchaseOverdueRows";
+
+const dash = <Typography.Text type="secondary">—</Typography.Text>;
+
+const columns = (onOpenOrder: (orderSn: string) => void): ColumnsType<PurchaseOverdueRow> => [
+  {
+    key: "kind",
+    title: "类型",
+    width: 110,
+    render: (_, row) => (row.kind === "order" ? <Tag color="blue">待下单采购单</Tag> : <Tag>未转单计划</Tag>),
+  },
+  {
+    key: "docSn",
+    title: "单号",
+    width: 150,
+    render: (_, row) => (
+      row.kind === "order"
+        ? <Typography.Link onClick={() => onOpenOrder(row.docSn)}>{row.docSn}</Typography.Link>
+        : row.docSn
+    ),
+  },
+  { key: "sku", title: "SKU", dataIndex: "sku", width: 110, render: (value: string | null) => value ?? dash },
+  { key: "productName", title: "产品名", dataIndex: "productName", ellipsis: true, width: 200, render: (value: string | null) => value ?? dash },
+  {
+    key: "store",
+    title: "店铺",
+    width: 170,
+    render: (_, row) => (row.store.attributed ? row.store.name ?? row.store.id ?? dash : <Typography.Text type="warning">未归属店铺</Typography.Text>),
+  },
+  { key: "quantity", title: "数量", dataIndex: "quantity", width: 80, render: (value: number | null) => value ?? dash },
+  { key: "created", title: "创建日期", dataIndex: "createdDate", width: 110, render: (value: string | null) => (value ? value.slice(0, 10) : dash) },
+  {
+    key: "pending",
+    title: "待采购天数",
+    width: 110,
+    render: (_, row) => (
+      row.pendingDays === null
+        ? dash
+        : (
+          <span>
+            {row.pendingDays} 天
+            {row.pendingEstimated && <Typography.Text type="secondary">（估算）</Typography.Text>}
+          </span>
+        )
+    ),
+  },
+  {
+    key: "overdue",
+    title: "超时",
+    width: 100,
+    render: (_, row) => (row.overdueDays > 0 ? <Tag color="red">超时 {row.overdueDays} 天</Tag> : <Tag>未超时</Tag>),
+  },
+  { key: "owner", title: "负责人", dataIndex: "ownerName", width: 90, render: (value: string | null) => value ?? dash },
+  { key: "remark", title: "备注 ItemID", dataIndex: "remarkItemId", width: 130, render: (value: string | null) => value ?? dash },
+];
+
+interface PurchaseOverdueTableProps {
+  rows: PurchaseOverdueRow[];
+  loading: boolean;
+  thresholdDays: number | null;
+  /** Per-source fetch counts; a truncated source shows a notice instead of silently dropping rows. */
+  counts?: { orders: OverdueSourceCount; plans: OverdueSourceCount };
+  currentPage: number;
+  pageSize: number;
+  onPageChange: (page: number, pageSize: number) => void;
+  onOpenOrder: (orderSn: string) => void;
+}
+
+function PurchaseOverdueTable({
+  rows,
+  loading,
+  thresholdDays,
+  counts,
+  currentPage,
+  pageSize,
+  onPageChange,
+  onOpenOrder,
+}: PurchaseOverdueTableProps) {
+  const orders = rows.filter((row) => row.kind === "order").length;
+  const truncatedNotes = counts
+    ? [
+      counts.orders.truncated && `待下单采购单仅显示前 ${counts.orders.shown.toLocaleString()} 条，共 ${counts.orders.total.toLocaleString()} 条`,
+      counts.plans.truncated && `未转单计划仅显示前 ${counts.plans.shown.toLocaleString()} 条，共 ${counts.plans.total.toLocaleString()} 条`,
+    ].filter((note): note is string => Boolean(note))
+    : [];
+  return (
+    <div className="purchase-board__overdue">
+      {truncatedNotes.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          className="purchase-board__overdue-truncated"
+          message={`${truncatedNotes.join("；")}。请用负责人、关键词等筛选缩小范围。`}
+        />
+      )}
+      <Typography.Paragraph type="secondary" className="purchase-board__hint">
+        待采购超时：已审批、尚未真正下出去的采购需求，包含待下单采购单 {orders} 行与未转单计划 {rows.length - orders} 行，
+        超时阈值 {thresholdDays === null ? "—" : `${thresholdDays} 天`}（规则表 s2_pending_days）；未归属店铺的计划不计超时。
+        采购单按明细行列出（一个采购单有多行时，行数会多于卡片上的采购单数）；未转单计划不受看板筛选（负责人、关键词等）影响。
+      </Typography.Paragraph>
+      {/* Same frame as the main board table: fixed header, scrolling body, pagination
+          always visible at the bottom (Rocky 2026-11-02: the pager was pushed off-screen). */}
+      <ReportTableShell label="待采购超时表格" className="purchase-board__table-shell">
+        <Table<PurchaseOverdueRow>
+          rowKey="key"
+          size="small"
+          bordered
+          loading={loading}
+          columns={columns(onOpenOrder)}
+          dataSource={rows}
+          scroll={{ x: 1360, y: "100%" }}
+          locale={{ emptyText: "当前没有待采购超时的采购单或计划。" }}
+          pagination={{
+            current: currentPage,
+            pageSize,
+            total: rows.length,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            pageSizeOptions: ["50", "100", "200"],
+            showTotal: (count) => `共 ${count.toLocaleString()} 条待采购超时`,
+            onChange: onPageChange,
+          }}
+        />
+      </ReportTableShell>
+    </div>
+  );
+}
+
+export default PurchaseOverdueTable;
