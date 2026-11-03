@@ -25,8 +25,8 @@ def test_organization_and_walmart_remote_are_registered() -> None:
 
 def test_runtime_api_and_field_permissions_are_discovered_without_grants() -> None:
     from app.core.auth import Principal
-    from app.core.permissions import has_permission
     from app.core.permission_policy_v2 import permission_for_request
+    from app.core.permissions import has_permission
     from app.modules.iam.permission_catalog_v2 import (
         all_permission_definitions,
         register_runtime_permission_key,
