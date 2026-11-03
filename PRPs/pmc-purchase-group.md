@@ -3,10 +3,10 @@
 状态：`Draft`（待项目负责人 mz-liuyunlong 确认；PRP 不等于批准开发）
 
 - 起草：PMC A 采购组代码 AI · 2026-11-02 · 需求方 Rocky
-- 流程：`NEW SZZSBJ/AGENTS.md` §1.1（8088 业务逻辑为准 → PRP 经刘云龙确认 → 5173 开发 → PR + CI → 审核 AI → Rocky 5173 验收合并 → 刘云龙发布 8443）；本仓库 §11 / §11.1
+- 流程：本地 DEMO 工作区 `AGENTS.md` §1.1（8088 业务逻辑为准 → PRP 经刘云龙确认 → 5173 开发 → PR + CI → 审核 AI → Rocky 5173 验收合并 → 刘云龙发布 8443）；本仓库 §11 / §11.1
 - 数据源决策：`docs/data-sources/decisions/pmc-purchase-group-decision.md`（A 采购看板 `READY_FOR_PRP`；B 自动补货 `BLOCKED_BY_OWNER_DECISION`）
 - 业务来源（需求以此为准，不入仓库代码）：Rocky Mac `features/pmc-purchase/drafts/`（8088 采购看板）、`features/pmc-replenishment/`（8088 自动补货：`drafts/build_from_daily.py`、`drafts/src/app.jsx`、`review_server/server.py`、`context/decisions.md` 第 1–88 条、`context/solution-v1-for-yunlong.md`）；PMC 决策 R-4 ~ R-10
-- 关联：`PRPs/pmc-purchase-board.md`（PMC-PURCHASE-1，已 Approved）、#288（ItemID 规则 v2）、#296（待采购超时主表内联）、#282（WFS 货件 ODS）
+- 关联：`PRPs/pmc-purchase-board.md`（PMC-PURCHASE-1，已 Approved）、#288（ItemID 规则 v2，`origin/pmc/purchase-itemid-rule` ba15384）、#296（待采购超时主表内联）、#282（WFS 货件 ODS）
 - 分期：**一期只读**（本 PRP 申请批准的范围）；二期 2a 本系统两层审批、2b 写入领星 `createPurchasePlan`（**只标出，不纳入一期**，各自另出 PRP / 票据）
 
 ---
@@ -19,7 +19,7 @@
 | D2 | 补货依赖数据接入顺序（原 Y3）：Walmart 期初可售 / 入库中、WFS 货件与 SP 发货单（#282）、众壹轨迹 | a 等各板块先接、补货只复用；b 补货自己接 | a。一期先做引擎和页面，缺的数据集页面标「未接入」 |
 | D3 | 日销用的每日库存 / 销量来源 | a 复用 `fact_walmart_listing_inventory_daily` + `fact_walmart_sales_item_daily`；b 另接 inventory-log | a，实现前只读核实 8 店 × 90 天覆盖 |
 | D4 | 补货采购交期口径 | a 按 8088（首次收货日 − 下单日）；b 读 `dws_purchase_sku_cycle`（累计 ≥50% 收货日，含人工基准） | 一期 a（与 8088 对数 0 差），详情并列显示 b；统一口径另议 |
-| D5 | 补货供应归属顺序 | a 按 8088（人工对照表 → 备注 ItemID → 店铺内唯一 → SKU 全店唯一）；b 改用 #288 共享规则 | a（采购看板仍按 #288，两处不混用） |
+| D5 | 补货供应归属顺序（**风险：两套 ItemID 归属规则并存**，见 §6.1.6） | a 补货按 8088（人工对照表 → 备注 ItemID → 店铺内唯一 → SKU 全店唯一），采购看板仍按 #288 v2；b 补货也统一到 #288 v2（`purchase.remark.store.v2`）；c 统一到 8088，采购看板也一起改回 8088 顺序 | 待刘云龙选定。任一方案下页面都标注本页用的是哪套规则 |
 | D6 | 人工对照表 `manual_item_map.csv` | a 一次性迁入 `manual_pmc_item_map`；b 不迁（R-10：新草稿自带 ItemID） | a，否则 8088 靠对照表归上的供应（09-29 时约 3,700 件：采购计划 2,070、采购单 1,178、待下单 454、惠州 60）在正式系统变「待归属」 |
 | D7 | 8088 草稿号 / 台账 / 审批 / 写入回执迁移与切换 | a 切换日一次性迁入，之后正式系统唯一发号；b 正式系统从新号段起 | a。切换前正式系统只影子计算、不发号，防同号双发 |
 | D8 | 归档判断旧系统兜底 | a 取消（本期命中 0）；b 保留（变成读旧库） | a |
@@ -57,7 +57,7 @@
 - [ ] **二期 2a**：本系统两层审批（产品负责人 → 运营负责人林翔）、批注规则、改量 / 改写入店铺、管理员改量 / 退回重审、回传表导入
 - [ ] **二期 2b**：写领星 `createPurchasePlan`（只传 sku / quantity_plan / sid 字符串 / 产品备注 `ITEMID:<11位> | 草稿:<草稿号>`）、`planCancel`、失败不自动重试先查重；需写接口登记 + 契约 + Rocky 逐单书面批准
 - [ ] 飞书通知（8088 `notify_feishu.py` 默认 dry-run）
-- [ ] A5「小罗」定时清理任务（新增定时任务，单独票据）
+- [ ] A5 领星负责人清理（写领星，R7a / R7b 单独票据；定时任务 8443 上线后另批）
 - [ ] 新增任何外部数据同步（D2 = a 时）；Walmart / 领星真实调用；开启定时
 - [ ] 海外仓扣减出差额草稿（decisions 第 69 条在 8088 页面未实现，8088 只提示「海外仓 N（未计入）」，一期照 8088）
 - [ ] PMC 总看板、库存过剩、生命周期、Amazon、紧急补货
@@ -132,6 +132,8 @@ data scope：无行级限制
 不计：海外仓（只按 SKU 提示）、作废 / 关闭、CLOSED / CANCELLED 货件、Walmart Received 不另算。
 
 #### 6.1.6 供应归属（D5，按 8088）
+> **风险：两套 ItemID 归属规则并存。** 采购看板已按 #288 v2（`item_id_resolution`，`purchase.remark.store.v2` + R-9 / R-9a）归属；本节补货按 8088 顺序归属。两者对同一采购单 / 计划可能归到不同 ItemID，采购看板与补货的供应数会对不上。可选：a 补货按 8088（采购看板不动）；b 补货也统一到 #288 v2；c 统一到 8088，采购看板也一起改。等刘云龙选定（D5）。不论选哪个，采购看板和补货页面都要在表头 / 说明里标注本页用的归属规则（如「ItemID 归属：#288 v2」或「ItemID 归属：8088」）。依据原文与快照 sha256 见决策文档附录。
+
 人工对照表（SKU + 单号）→ 人工对照表（SKU，只填了一个 ItemID 时）→ 备注 11 位 ItemID（须为该店在售）→ 店铺内唯一在售 ItemID → SKU 在全部店铺只有 1 个在售 ItemID。批次所在店铺没上架但别店在售 → 照样计入该 ItemID。都不中 → 列「待归属」，不计入。
 - 货件 / 发货单（已发货未上架、收货中）：数量取领星 WFS 货件商品行的发货数（`shipments_num`）；ItemID = 该货件店铺（`store_id`）下 MSKU 对应的 Listing，MSKU 对不上再用 GTIN；对不上的进「待归属」。SP 发货单不单独计数量，只用来定到仓日（实际到仓 / 预计到仓）、查验与轨迹；一个货件挂多个 SP 时取已发货 SP 的最早实际到仓，没有实际再取预计最晚（`arrival_rules.cargo_arrival`）。未发货的货件不计（货还在国内仓，按国内仓算，避免重复）。
 - 国内仓出库：惠州「可用 + 锁定」按 `seller_id` + SKU 走上面的归属顺序；已出库发走的货进入货件那一段，不在国内仓重复计。
@@ -163,7 +165,7 @@ data scope：无行级限制
 - A2 搜索：类型「草稿号 / 计划号」匹配草稿号或计划号（包含匹配，同其他类型；批量最多 200 个）。
 - A3 不改：ItemID 按 #288 `item_id_resolution`（`purchase.remark.store.v2`）+ R-9 / R-9a；S2 / S3 阈值、到仓 50%、审批周期、交期不稳定等口径与 8088 一致，已在 PMC-PURCHASE-1 实现。
 - A4 隐藏「小罗」（Rocky 2026-11-02 定：照搬 8088）：负责人、采购员、供应商三个字段里名字为「小罗」的不显示、不进负责人筛选项；同一行有多个负责人时去掉小罗后取第一个。名单做成配置（`pmc_purchase_hidden_names`，默认 [小罗]），不写死在前端。
-- A5 「小罗」定时清理任务（Rocky 要求，**不在一期**）：属新增定时任务，按开发铁律第 2、5 条是高风险改动，单独出票、Rocky 书面批准后才做。清理对象待 Rocky 一句话确认：a 只清本系统显示（A4 已覆盖，无需定时）；b 定期把领星产品负责人里的小罗去掉（领星写入，做法同 R3 去郑跃鹏：`/erp/sc/routing/storage/product/set`，先 1 个验证只改负责人、其他字段不变）。
+- A5 领星产品负责人去掉名单人员（Rocky 2026-11-02 选 b，**不在一期代码范围**）：名单可配置，现为 11507967 郑跃鹏、10885607 小罗（API 操作人账号；`product/set` 不带 `product_duty_uids` 时会被领星自动追加）。属领星写入，做法同 R3~R6：R7a 只读全库出清单 → Rocky 按数量书面批准 → R7b 受控写（只传 sku + 保留负责人 + `is_append_product_duty=0`，先改 1 个逐字段比对，非负责人字段有变化即恢复并停；只剩名单人员的产品不改只报）。8443 上线前每周拉数后人工跑一次 R7a→R7b；改成定时任务等 8443 上线后另出票、Rocky 书面批准。**这是领星写操作**：须先登记写接口（`/erp/sc/routing/storage/product/set`）、签写入合同，每次操作都要 Rocky 书面批准；不在第一阶段范围内，一期代码不调用任何领星写接口。
 
 ### 6.3 表（D1，命名按现有 ODS / DWD / DWS / manual_ 习惯）
 

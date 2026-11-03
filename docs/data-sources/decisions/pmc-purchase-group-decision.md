@@ -9,7 +9,7 @@
 - 接口总体状态：A = `READY_FOR_PRP`；B = `BLOCKED_BY_OWNER_DECISION`
 - 是否包含 NEED_OWNER_DECISION：是（只在 B）
 - 负责人批准状态：待确认（mz-liuyunlong）
-- 关联证据：`PRPs/pmc-purchase-board.md`、`docs/data-sources/decisions/pmc-purchase-board-decision.md`、#288（`origin/pmc/purchase-itemid-rule` 6fdba9b）、Mac `features/pmc-replenishment/`（8088 Demo：`drafts/build_from_daily.py`、`drafts/src/app.jsx`、`review_server/server.py`、`context/decisions.md`、`context/solution-v1-for-yunlong.md`）、Mac `features/pmc-purchase/drafts/`（8088 采购看板）
+- 关联证据：`PRPs/pmc-purchase-board.md`、`docs/data-sources/decisions/pmc-purchase-board-decision.md`、#288（`origin/pmc/purchase-itemid-rule` ba15384）、Mac `features/pmc-replenishment/`（8088 Demo：`drafts/build_from_daily.py`、`drafts/src/app.jsx`、`review_server/server.py`、`context/decisions.md`、`context/solution-v1-for-yunlong.md`）、Mac `features/pmc-purchase/drafts/`（8088 采购看板）
 - 决策文件路径：`docs/data-sources/decisions/pmc-purchase-group-decision.md`
 - 后续接口 PRP：`PRPs/pmc-purchase-group.md`
 
@@ -95,7 +95,7 @@
 - 推荐长期策略：B 的供应数据随 WFS（#282）、物流、Walmart 只读同步接入后复用；正式系统成为唯一发号与审批方
 - 旧库退出条件：不适用（不读旧库）
 - 迁移或同步边界：只迁 8088 的发号 / 台账 / 审批 / 回执（一次性、只追加）；不迁每周拉数原始文件
-- 主要风险：同号双发；供应口径缺项导致建议量偏大；交期口径不一致
+- 主要风险：两套 ItemID 归属规则并存（采购看板 #288 v2，补货 8088；方案 a / b / c 见 PRP §0 D5，待刘云龙选定，页面须标注各自规则）；同号双发；供应口径缺项导致建议量偏大；交期口径不一致
 - 待负责人决定：见 PRP §0（D1 ~ D9）
 - PRP 必须引用的结论：A1 计划备注优先；A3 维持 #288；B 一期只读、不写领星
 
@@ -109,3 +109,132 @@
 - 批准人：
 - 批准日期：
 - 备注：
+
+## 附录 A：所依据的 8088 规则与公式
+
+8088 Demo 源码不在本仓库（在 Rocky Mac 本地 DEMO 工作区的 `features/` 目录）。下表记录 2026-11-02 取摘录时的文件快照 sha256，可按 `shasum -a 256 <路径>` 对照；路径相对本地 DEMO 工作区 `features/`。摘录与快照不符时以快照为准重新核对。
+
+| 文件 | sha256 | 用途 |
+|---|---|---|
+| `pmc-replenishment/drafts/build_from_daily.py` | `e9906a75ba8414e98419a6163f4f3f232679763f64aad7484486a195392c628b` | 交期、日销、供应、出草稿条件 |
+| `pmc-replenishment/drafts/src/app.jsx` | `cd448ed3f6e02960ca65637ace3ef44a13171c57e12b4ac531ee5b94547f6d15` | 页面 calc() 建议量公式 |
+| `pmc-replenishment/context/decisions.md` | `eb42ab2f38ad2ebfe1b3ae09a5e5dbe63cc1ef359d981ca51efef691c6db53b4` | 补货业务决策 |
+| `pmc-replenishment/review_server/server.py` | `df25d244efa57f2775d2eb1238637acaf013532c7e69661e43f4a63dbd5535d3` | 审批 / 发号接口 |
+| `pmc-replenishment/data/rounds_approved.json` | `b3954eeb1148f65371a4e4f4dab636a9dcbcaad69798072dc8e402c6696ff601` | 期次批准 |
+| `pmc-purchase/drafts/build_from_daily.py` | `0d50ec39323d044c58dcadf05b8ac1bd8aec4819c8f9020f6f0a75c51fe259af` | 8088 采购看板数据 |
+| `pmc-purchase/drafts/demo-v2.html` | `0057dfcc2e87f7130b7c16aa852550acfde261d3ebf70b26115ff1ee39a15316` | 8088 采购看板页面 |
+| `tools/ops_report/arrival_rules.py` | `b076eda9969aa8aa89da824d5980c6131913ffa967ba33874828fd705893bc55` | 到仓 / 可售日口径 |
+| `pmc-overview/context/decisions.md` | `57dcb15101c93d2d345e4f0793a0f52a8308eab493cbc3e88b3b06dfddc6211b` | R-4 ~ R-10（#288 规则 v2） |
+
+### 附录 A-1 `pmc-replenishment/drafts/build_from_daily.py` 第 219–246 行（采购交期）
+
+```python
+# ---------- 采购交期（采购看板规则：到仓日期 − 下单日期；<2 天剔除；近 5 单有效样本平均，≥2 样本才用）----------
+orders = {r['order_sn']: r for r in load('purchase/purchase_orders.csv')}
+recv_orders = {r['order_sn']: r for r in load('purchase/receipt_orders.csv')}
+first_recv = {}
+for it in load('purchase/receipt_order_items.csv'):
+    ro = recv_orders.get(it['receipt_order_sn'])
+    if not ro:
+        continue
+    po, t = ro['business_order_sn'], dd(it['receive_time'] or ro['receive_time'])
+    if po and t:
+        k = (po, it['sku'])
+        if k not in first_recv or t < first_recv[k]:
+            first_recv[k] = t
+po_items = load('purchase/purchase_order_items.csv')
+lead_samples = collections.defaultdict(dict)
+for it in po_items:
+    o = orders.get(it['order_sn'])
+    if not o or o['status'] == '-1' or it['sid'] in ('0', '') or it['is_delete'] not in ('0', ''):
+        continue
+    od, rv = dd(o['order_time']) or dd(o['create_time']), first_recv.get((it['order_sn'], it['sku']))
+    if od and rv:
+        lead_samples[it['sku']][it['order_sn']] = {'po': it['order_sn'], 'order': iso(od), 'recv': iso(rv), 'days': (rv - od).days}
+lead = {}
+for sku, m in lead_samples.items():
+    lst = sorted(m.values(), key=lambda x: x['order'], reverse=True)
+    valid = [x for x in lst if x['days'] >= 2][:5]
+    lead[sku] = {'avg': round(sum(x['days'] for x in valid) / len(valid), 1) if len(valid) >= 2 else None, 'n': len(valid),
+                 'samples': [dict(x, excluded=x['days'] < 2) for x in lst[:5]]}
+```
+
+### 附录 A-2 `pmc-replenishment/drafts/src/app.jsx` 第 125–188 行（`calc()`）
+
+```javascript
+function calc(it,P,ov){
+  // 日销 = 最近 30 个有货日的销量 ÷ 有货日天数，最长回看 90 天（Rocky 2026-09-27，取代 20 / 10 / 5 天窗口）
+  const s=it.sales, LB=s.daily.length; let inN=0,salesN=0,lastIn=-1,firstIdx=LB;
+  // 有货日 = 当天期初 WFS 可售 ≥ instockMin（默认 5；Rocky 2026-09-30：库存 1–4 件的日子销量被库存卡住，不算有货日）；没有 start 字段的旧数据退回原口径
+  const instock=s.start?s.start.map(v=>v>=P.instockMin?1:0):s.instock;
+  for(let i=LB-1;i>=0&&inN<30;i--){ if(instock[i]){ if(lastIn<0) lastIn=i; inN++; salesN+=s.daily[i]; firstIdx=i; } }
+  const maxStart=s.start?Math.max(0,...s.start):0;
+  const tailStock=lastIn<0&&maxStart>0&&maxStart<P.instockMin;        // 尾货：90 天里最多只有 1–4 件，从没到过阈值
+  const n30=inN, N=lastIn>=0?LB-firstIdx:0;            // n30 = 用到的有货日数；N = 回看跨度（天）
+  const daily=inN>0?salesN/inN:0;
+  const oosDays=lastIn>=0?LB-1-lastIn:null;             // 距最后一个有货日的天数（null = 近 90 天无库存）
+  const noStock90=lastIn<0;
+  const leadP=it.lead.avg!=null?it.lead.avg:(it.cg_delivery>0?it.cg_delivery:P.leadFallback);
+  const L=P.approve+leadP+P.pack+P.transport+P.shelf;
+  const R=ov[it.key]??P.cycle;
+  const tail=P.pack+P.transport+P.shelf;
+  const r0stores=it.stores.length;
+  const bs=[{kind:"wfs",qty:it.wm.available,date:TODAY,src:`Walmart wfs/inventory availableUnits${r0stores>1?"（"+it.stores.map(x=>x.name.split("-")[0]+" "+x.available).join(" + ")+"）":""}`}];
+  it.batches.forEach(b=>{ let date="",note="",overdue=false;
+    if(b.kind==="receiving"){ date=TODAY; note=b.cargo_status==="INBOUND_GAP"?`Walmart 入库中差额（已收货待上架 / 货件已关闭库存未转可售）：${b.how}`:`货件 ${b.cargo} 发货 ${b.shipped} / 已上架 ${b.putaway}，首批上架 ${b.first}`; }
+    else if(b.kind==="shipped"){ const sell=b.arrival?addDays(b.arrival,P.shelf):""; overdue=!!sell&&sell<TODAY; date=sell?maxD(sell,TODAY):""; note=`货件 ${b.cargo} · ${b.sp||"无 SP"} · 到仓 ${b.arrival||"—"}（${b.arrival_src}）${overdue?` · 已过可售日 ${sell}`:""}`; }
+    else if(b.kind==="domestic"){ date=addDays(TODAY,tail); note=`惠州 可用 ${b.valid} + 锁定 ${b.lock} · ${b.how}`; }
+    else if(b.kind==="po"){ date=addDays(maxD(addDays(b.order,leadP),TODAY),tail); note=`${b.po} 下单 ${b.order} · ${b.how}`; }
+    else if(b.kind==="po_pending"){ date=addDays(TODAY,leadP+tail); note=`${b.po} 待下单 · ${b.how}`; }
+    else if(b.kind==="plan"){ date=addDays(maxD(addDays(b.created,P.approve),TODAY),leadP+tail); note=`${b.plan} ${b.status} · 创建 ${b.created} · ${b.how}`; }
+    bs.push({...b,date,note:(b.store&&r0stores>1?`【${b.store}】`:"")+note,overdue}); });
+  const supply=sum(bs,b=>b.qty);
+  const target=daily*(L+R+P.safety);
+  const gap=target-supply; const suggestRaw=gap>0?Math.ceil(gap):0;
+  // 单次封顶（Rocky 2026-09-28）：有货日不足 capDays 天的，建议量最多 capQty 件，不允许单次超出
+  const capOn=inN<P.capDays, capped=capOn&&suggestRaw>P.capQty; const suggest=capped?P.capQty:suggestRaw;
+  let boxed=null; if(it.box>0&&suggest>0){ const n=Math.floor(suggest/it.box), rem=suggest-n*it.box; boxed=Math.max(1,(rem>=it.box/2?n+1:n))*it.box; if(capOn&&boxed>P.capQty) boxed=n>0?n*it.box:null; }   // 封顶时取整不得超过封顶量（向下取整箱；一箱都超则不取整）   // 不足半箱向下、满半箱向上；向下到 0 箱则至少 1 箱（向下会断货则向上）
+  // 断货时间线：现有可售（WFS 可售 + 收货中余量）按日销往后推，各批次按预计可售日加入
+  let sellout=null,gapDays=0,resume=null;
+  const future=bs.filter(b=>b.date&&b.date>TODAY&&b.qty>0).sort((a,b)=>a.date<b.date?-1:1);
+  const next=future[0]?.date||"";
+  if(daily>0){ let stock=sum(bs.filter(b=>b.date===TODAY),b=>b.qty); const arr={}; future.forEach(b=>{ const t=daysBetween(TODAY,b.date); arr[t]=(arr[t]||0)+b.qty; });
+    for(let t=0;t<=400;t++){ if(t>0) stock+=arr[t]||0; stock-=daily; if(stock<0){ sellout=addDays(TODAY,t); const t2=Object.keys(arr).map(Number).filter(x=>x>t).sort((a,b)=>a-b)[0]; resume=t2!=null?addDays(TODAY,t2):null; gapDays=t2!=null?t2-t:null; break; } } }
+  const flags=[];
+  if(it.archived) flags.push(["已归档 · 不出草稿",'default',`${it.archived.src}${it.archived.at?" "+it.archived.at:""}`]);   // 决策 #82
+  if(bs.some(b=>b.overdue)) flags.push(["已过可售日未上架",'red',sum(bs.filter(b=>b.overdue),b=>b.qty)+" 件"]);
+  if(bs.some(b=>b.inspected)) flags.push(["被查验",'volcano',"物流轨迹出现查验，周期无法评估"]);
+  if(bs.some(b=>b.overdue&&b.no_track)) flags.push(["超期无物流轨迹",'red',""]);
+  const tagBad=(it.tags||[]).filter(t=>EXCLUDE_TAGS.includes(t));
+  // 第 78 条：领星里补货周期 R 天内已有采购计划（待审批 / 待采购 / 已完成，不含作废 / 驳回）→ 不出草稿；读的是领星实际存在的计划，写入失败下一轮自动再出
+  const blockPlans=(it.plans_recent||[]).filter(pl=>daysBetween(pl.created,TODAY)<=R);
+  if(blockPlans.length) flags.push([`${R} 天内已有采购计划`,'blue',blockPlans.map(pl=>`${pl.plan} ${pl.status} · ${pl.created} 建 · ${fmt(pl.qty)} 件（${pl.how}）`).join('；')]);
+  if(tagBad.length) flags.push([`标签 ${tagBad.join(" / ")}`,'default',"领星产品标签为历史产品 / 其他用途，不出采购计划草稿（Rocky 2026-09-28）；库存 / 在途照常计入"]);
+  if(it.listing&&it.listing!=="PUBLISHED") flags.push([`Listing ${it.listing}`,'magenta',"Walmart 在线商品状态异常（领星 Walmart 在线商品 status），不出草稿；库存 / 在途照常计入"]);
+  if(capped) flags.push([`单次封顶 ${P.capQty}`,'orange',`有货日只有 ${inN} 天（< ${P.capDays}），按公式建议 ${suggestRaw} 件，单次最多补 ${P.capQty} 件`]);
+  // 利润下限（Rocky 2026-10-10 23:12 定 5%）：近 30 天利润率 < 5% 且近 7 天利润率 < 5%（或近 7 天无销售）→ 标红"低利润 · 建议不补"；草稿照出，只提示不改量，跑几周再定要不要不出草稿
+  const PMF=P.lowMargin??5; const lowM=it.pm&&it.pm.margin!=null&&it.pm.margin<PMF&&(!it.pm.p7||it.pm.p7.margin==null||it.pm.p7.margin<PMF);
+  if(lowM) flags.unshift([`低利润 · 建议不补`,'red',`近 30 天利润率 ${pct(it.pm.margin)}、近 7 天 ${it.pm.p7&&it.pm.p7.margin!=null?pct(it.pm.p7.margin):"无销售"}，都低于 ${PMF}%（第 261010 期复盘：低于 5% 的 18 张否了 17 张）；只提示，不改建议量`]);
+  if(tailStock) flags.push([`尾货 <${P.instockMin} 件`,'default',`近 90 天库存最多 ${maxStart} 件，从没到过 ${P.instockMin} 件，算不出日销；卖完即止`]);
+  else if(noStock90) flags.push(["近 90 天无库存",'default',`90 天里没有一天期初库存 ≥ ${P.instockMin} 件，算不出日销，人工处理`]);
+  if(it.wm.available>0&&it.wm.available<P.instockMin) flags.push([`库存 ${it.wm.available} 件（<${P.instockMin} 视同断货）`,'red',"WFS 可售低于有货日阈值，按断货处理"]);
+  else if(n30<30) flags.push([`有库存天数 ${n30} 天`,'gold',`近 90 天只有 ${n30} 个有货日，用这 ${n30} 天算日销`]);
+  if(oosDays>0&&daily>0) flags.push([`已断货 ${oosDays} 天`,'red',`最后一个有货日 ${addDays(TODAY,-oosDays-1)}`]);
+  if(it.lead.avg==null) flags.push(["采购交期无样本",'default',`有效样本 ${it.lead.n}，${it.cg_delivery>0?`用领星产品采购交期 ${it.cg_delivery} 天`:`领星也没填，用兜底 ${P.leadFallback} 天`}`]);
+  if(it.owner_count>1) flags.push(["多个负责人",'orange',`${it.owner}（Rocky：一个产品只有一个负责人）`]);
+  if(it.box_missing_after_ship) flags.push(["缺默认箱规",'orange',"已发过货仍无默认箱规 → 提醒中台和采购"]);
+  if(it.overseas_sku) flags.push([`海外仓 ${fmt(it.overseas_sku)}（未计入）`,'default',"海外仓库存未分店铺，无法归属 ItemID"]);
+  return {...it,n30,N,salesN,inN,daily,oosDays,noStock90,tail:tailStock,maxStart,instock,leadP,leadSrc:it.lead.avg!=null?"real":(it.cg_delivery>0?"lx":"fallback"),L,R,bs,supply,target,gap,suggest,suggestRaw,capOn,capped,boxed,sellout,gapDays,resume,next,newArrive:addDays(TODAY,L),flags,blockPlans,isDraft:FROZEN?!!DRAFT_IDS[it.item_id]:(daily>0&&suggest>=P.minQty&&(!it.listing||it.listing==="PUBLISHED")&&!tagBad.length&&!blockPlans.length&&!it.archived),tagBad,belowMin:daily>0&&suggest>0&&suggest<P.minQty,draftId:draftIdOf(it.item_id)};
+}
+```
+
+### 附录 A-3 `pmc-replenishment/context/decisions.md` 第 64 / 69 / 71 / 75 / 79 / 86 条（原文）
+
+| # | 项 | 结论 |
+|---|---|---|
+| 86 | 拉数与审批节奏（Rocky 2026-10-10 14:16） | 拉数时间由 Rocky 定（一般周六或周日），拉完即生成草稿；审批截止 = 数据日之后的第一个周一（本期数据日 10-10 周六 → 周一 10-12 审完）。页面不再写"每周五凌晨拉数 / 周五 08:00 前生成"。 |
+| 64 | 拉数方式（过渡期） | 先**人工跑**：Rocky 周四晚在终端手动跑 run_scheduled.sh + 采购计划草稿刷新 + 箱规核对；系统每周四 19:46（北京时间）推送提醒（Cowork 定时任务「周四晚 · 手动跑每周拉数提醒」）。票据 v10e 未执行、**暂缓**；Mac 上 launchd 任务仍是周三 / 周六且无权限，是否停用由 Rocky 决定 |
+| 69 | 海外仓与草稿（修订第 68 条） | 海外仓仍不计入有效供应，但出草稿时先扣：分给该 ItemID 的海外仓件数 = 同 SKU 海外仓可用按「断货最早先用」分配；**采购量 = 建议量 − 海外仓分配**，≥50 件（箱规取整）出草稿、并提示海外仓先补入，<50 件不出草稿只提示。都需要时人工分摊。海外仓发 WFS 识别 = 发货单物流商 WFS（6899）；这类货件不套众壹轨迹规则（pmc-overview 第 17–22 条） |
+| 71 | 日销口径修订（取代第 3、23、30 条的窗口写法，Rocky 2026-09-27） | **日销 = 最近 30 个有货日的销量 ÷ 有货日天数，最长回看 90 天**（每周拉数的 Walmart inventory-log 就是 90 天）。有货日不足 30 天有几天算几天，标「有库存天数 X 天」（不再叫「销售数据不足」）；90 天里没有一天有货 → 标「近 90 天无库存」，算不出日销、不出草稿、人工处理。断货天数 = 距最后一个有货日。取消 20 / 10 / 5 天备用窗口（按日历取窗口会把断货期算进去：YC00347 断货 13 天被判日销 0 / 滞销，同类 55 个）。20260925：有日销 483、近 90 天无库存 486、有货不足 30 天 282；本轮草稿 78 → 159、建议合计 17,017 → 32,342 件（断货中的 ItemID 有了日销，多出的草稿要人工过：季节品 / 停售品可能不该补） |
+| 75 | 有货日最低库存 5 件（Rocky 2026-09-30，修订第 71 条的有货日定义） | **有货日 = 当天期初 WFS 可售 ≥ instockMin（默认 5，规则设置可改）**，期初 = 前一天日终（inventory-log 倒推），多店铺同 ItemID 按合并库存判。库存 1–4 件的日子销量被库存卡住，不算有货日、销量也不进分子。同口径：**WFS 可售 < 5 视同断货**（总看板「已断货」= 日销 > 0 且可售 < 5，草稿页标「库存 N 件（<5 视同断货）」）；90 天最多只有 1–4 件、从没到过阈值的标「尾货 <5 件」（不是真断货，卖完即止，不出草稿）。模拟依据：09-29 数据 90 天里 1–4 件的低库存日占全部有货日 22.6%（439 个 ItemID）；改后 84 个 ItemID 日销上升 >20%、5 个下降；极端例 20090553004 日销 5.3 → 35.7。结果：草稿 95 → 112、总看板 93 → 108，已断货 184，近 90 天无库存 506（含尾货）。备选（先不做）：阈值改 max(5, 1 天日销)。 |
+| 79 | 首批写入后的三条口径（Rocky 2026-09-30 讨论定，同日实现进 Demo） | ① **领星备注只写两段钥匙**：产品备注 = `ITEMID:<11位> | 草稿:<草稿号>`（如 `ITEMID:20299665653 | 草稿:CG260929-030`），不写表头备注（批次备注），不写建议量 / 审批量 / 理由 / 参数 / 超封顶提示——采购员不需要知道运营批准超封顶；一次创建写完，不再调 planModifyRemark。已建的 PP260930007 / 008 备注不改。审批理由、计算快照、参数、广告利润等全部存本系统台账（正式系统 draft 表）。② **草稿号 ↔ 领星计划号双向核对**（每周拉数后构建时自动跑）：正向——每张「已写入」草稿按 plan_sn 在 purchase_plans.csv 里找，找不到 → 「写入未确认」；找到但备注草稿号不是它 → 「计划号对不上」；数量 / 店铺与审批不一致 → 「领星已改量」记新值；状态变化回填。反向——领星里所有备注带 `草稿:` 的计划，草稿号必须在登记表且状态「已写入」，对不上的列出人工处理（防复制计划）。没带 `草稿:` 的新计划 = 人工计划，单独列，第 78 条照样拦草稿。页面「写入核对」只在有异常时显示三类数。前提：v10h（拉到当天计划）。③ **历史草稿看法**：不加 Tab、不加筛选，列表永远只显示最新一轮；某个 ItemID 的历史在它的抽屉里看「补货历史」时间线，一条 = `轮次 · 草稿号 · 建议 N → 审批 M（产品负责人 / 运营负责人）· 计划号 · 状态`，点开看当时快照和批注；**只追到「已转采购单（已采购）」为止**，不追到货 / 上架。**冻结时点 = 发号那一刻**：发草稿号时把计算快照（日销 / 供应 / 参数 / 建议量）写进台账，此后同轮重算不改快照（页面标「按当前参数重算为 N」），审批 / 计划号是往这一行补字段；不通过的下一轮新号新行；重算冒出的新草稿正常发号标「补发」。09-25 / 09-28 两轮不倒补，历史从 260929 轮起。 |
