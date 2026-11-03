@@ -47,13 +47,14 @@ REVIEW_ROW_KINDS = ("order", "unassigned", "reconcile_diff")
 INVENTORY_CATEGORIES = ("loss", "non_loss", "claim", "unclassified", "lx_adjust", "unknown")
 UNASSIGNED_STATUSES = ("pending", "assigned", "void")
 RECONCILE_STATUSES = ("ok", "reconcile_failed", "unassigned_pending")
-ADJUSTMENT_KINDS = ("cost", "amount", "assign_item", "note")
+ADJUSTMENT_KINDS = ("cost", "amount", "assign_item", "assign_store", "note")
 ADJUSTMENT_STATUSES = ("active", "revoked")
 REVIEW_STAGES = ("first", "final")
 REVIEW_DECISIONS = ("pass", "reject")
 MONTH_CLOSE_STATUSES = ("closed", "reopened")
 POST_CLOSE_DIFF_STATUSES = ("open", "acknowledged", "resolved_by_reopen")
-STORE_MAPPING_STATUSES = ("mapped", "unmapped")
+# manual_assigned: an unmapped movement that finance assigned to a store (PRP §8.4)
+STORE_MAPPING_STATUSES = ("mapped", "unmapped", "manual_assigned")
 
 
 def utc_now() -> datetime:
@@ -398,7 +399,7 @@ class InventoryMovementLine(_FxColumns, _Timestamps, Base):
             _in("store_mapping_status", STORE_MAPPING_STATUSES), name="inv_move_store_mapping"
         ),
         CheckConstraint(
-            "(store_mapping_status = 'mapped') = (store_id IS NOT NULL)",
+            "(store_mapping_status IN ('mapped', 'manual_assigned')) = (store_id IS NOT NULL)",
             name="inv_move_store_id_matches_mapping",
         ),
         Index("ix_fact_inventory_movement_lines_month", "store_id", "movement_month", "category"),
@@ -409,6 +410,9 @@ class InventoryMovementLine(_FxColumns, _Timestamps, Base):
     # ods_lingxing_wfs_cost_valuation_flow.id (is_current = true at calculation time)
     source_flow_id: Mapped[UUID] = mapped_column(nullable=False)
     source_sync_batch_id: Mapped[UUID | None] = mapped_column()
+    # flow row_hash: with the business fields it forms content_hash (PRP §8.1 / §8.9)
+    source_row_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     store_code: Mapped[str] = mapped_column(String(128), nullable=False)
     store_id: Mapped[str | None] = mapped_column(String(128))
     store_mapping_status: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -445,8 +449,11 @@ class SettlementUnassignedAmount(_Timestamps, Base):
         CheckConstraint(_first_of_month("bill_month"), name="unassigned_bill_month_first_day"),
         CheckConstraint(_in("status", UNASSIGNED_STATUSES), name="unassigned_status"),
         CheckConstraint(
-            "status <> 'assigned' OR assigned_item_id IS NOT NULL",
-            name="unassigned_assigned_has_item",
+            "status <> 'assigned' OR assigned_item_id IS NOT NULL OR assigned_store_id IS NOT NULL",
+            name="unassigned_assigned_has_target",
+        ),
+        CheckConstraint(
+            "amount_usd IS NOT NULL OR amount_cny IS NOT NULL", name="unassigned_amount_present"
         ),
     )
 
@@ -456,11 +463,20 @@ class SettlementUnassignedAmount(_Timestamps, Base):
     bill_month: Mapped[date] = mapped_column(Date, nullable=False)
     source_kind: Mapped[str] = mapped_column(String(64), nullable=False)
     source_ref: Mapped[str] = mapped_column(String(255), nullable=False)
-    amount_usd: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    # USD is NULL when the 待指定 is a ¥ inventory value and the month has no FX rate
+    amount_usd: Mapped[Decimal | None] = mapped_column(MONEY)
+    amount_cny: Mapped[Decimal | None] = mapped_column(MONEY)
+    reason: Mapped[str] = mapped_column(
+        String(32), default="unassigned", server_default=text("'unassigned'"), nullable=False
+    )
+    detail: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default=text("'{}'::jsonb"), nullable=False
+    )
     status: Mapped[str] = mapped_column(
         String(16), default="pending", server_default=text("'pending'"), nullable=False
     )
     assigned_item_id: Mapped[str | None] = mapped_column(String(128))
+    assigned_store_id: Mapped[str | None] = mapped_column(String(128))
     adjustment_id: Mapped[UUID | None] = mapped_column()
     note: Mapped[str | None] = mapped_column(Text)
     calc_version: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -607,6 +623,9 @@ class SettlementReconcileStoreMonth(_Timestamps, Base):
     diff_usd: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     ad_daily_vs_settlement_diff_usd: Mapped[Decimal | None] = mapped_column(MONEY)
     cross_month_disposal_fee_usd: Mapped[Decimal | None] = mapped_column(MONEY)
+    inbound_freight_lx_vs_settlement_diff_usd: Mapped[Decimal | None] = mapped_column(MONEY)
+    # hash of the whole store-month result: unchanged → no new calc_version (PRP §8.1)
+    result_hash: Mapped[str | None] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(24), nullable=False)
     fx_status: Mapped[str] = mapped_column(
         String(16), default="missing", server_default=text("'missing'"), nullable=False
