@@ -25,6 +25,8 @@ def has_permission(principal: Principal, permission_key: str) -> bool:
 
 
 def has_any_permission(principal: Principal, permission_keys: tuple[str, ...]) -> bool:
+    for permission_key in permission_keys:
+        register_runtime_permission_key(permission_key)
     return "*" in principal.permissions or any(
         permission_key in principal.permissions for permission_key in permission_keys
     )
@@ -59,6 +61,8 @@ def require_any_permission(*permission_keys: str) -> Callable[..., Principal]:
     normalized = tuple(dict.fromkeys(permission_keys))
     if not normalized or any(not item or item != item.strip() for item in normalized):
         raise ValueError("permission_keys must contain canonical non-empty values")
+    for permission_key in normalized:
+        register_runtime_permission_key(permission_key)
 
     def dependency(
         principal: Annotated[Principal, Depends(require_principal)],
