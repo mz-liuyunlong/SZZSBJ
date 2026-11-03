@@ -114,7 +114,7 @@ def grade_listing(
     if not ignore_stage and (stage in {"清货期", "已归档"} or stage not in config.included_stages):
         grade, reason = "不参与评级", "生命周期未纳入评级范围"
     elif unconfirmed_ad_dates:
-        reason = "账号业务日广告费为零或缺少当日数据：每日销售广告数据待同步"
+        reason = "账号业务日广告报表为零或缺失，或每日销售完成证据不足"
     elif len(sdates) < config.short_min_valid_days or len(mdates) < config.medium_min_valid_days:
         reason = "财务或广告未确认完整：有效日期不足"
     elif ss == ZERO and sp < ZERO:

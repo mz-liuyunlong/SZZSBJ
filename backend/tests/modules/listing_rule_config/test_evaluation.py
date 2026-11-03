@@ -81,7 +81,7 @@ def test_one_account_day_with_zero_ad_spend_blocks_the_whole_rating() -> None:
     )
     assert value.grade == "待评级"
     assert _day(3) in value.invalid_dates
-    assert "广告费为零或缺少当日数据" in value.reason
+    assert "账号业务日广告报表为零或缺失" in value.reason
 
 
 def test_zero_sales_losses_generate_special_d() -> None:

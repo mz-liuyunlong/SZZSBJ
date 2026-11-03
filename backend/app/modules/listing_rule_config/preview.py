@@ -22,6 +22,7 @@ from app.modules.data_pages.models import (
     DailySalesItemDayMart,
     ListingArchiveState,
     ListingManagementCurrentMart,
+    WalmartAdItemSpDailyFact,
     WalmartListingInventoryDailyFact,
 )
 from app.modules.integration_sync.models import IntegrationSyncRun, IntegrationSyncRunEvent
@@ -215,20 +216,17 @@ class ListingEvaluationPreviewService:
             start = cutoff - timedelta(days=window_days - 1)
             rows = self.session.execute(
                 select(
-                    DailySalesItemDayMart.source_account_ref,
-                    DailySalesItemDayMart.business_date_la,
-                    func.sum(
-                        func.coalesce(DailySalesItemDayMart.ad_spend_amount, ZERO)
-                        + DailySalesItemDayMart.sem_ad_spend_amount
-                    ),
+                    WalmartAdItemSpDailyFact.source_account_ref,
+                    WalmartAdItemSpDailyFact.business_date_la,
+                    func.sum(func.coalesce(WalmartAdItemSpDailyFact.ad_spend_amount, ZERO)),
                 )
                 .where(
-                    DailySalesItemDayMart.source_account_ref.in_(missing),
-                    DailySalesItemDayMart.business_date_la.between(start, cutoff),
+                    WalmartAdItemSpDailyFact.source_account_ref.in_(missing),
+                    WalmartAdItemSpDailyFact.business_date_la.between(start, cutoff),
                 )
                 .group_by(
-                    DailySalesItemDayMart.source_account_ref,
-                    DailySalesItemDayMart.business_date_la,
+                    WalmartAdItemSpDailyFact.source_account_ref,
+                    WalmartAdItemSpDailyFact.business_date_la,
                 )
             ).all()
             days_in_window = {start + timedelta(days=offset) for offset in range(window_days)}
@@ -379,7 +377,7 @@ class ListingEvaluationPreviewService:
         config: ListingGradeRuleConfig,
         rule_version: int,
     ) -> dict[UUID, ListingEvaluationPreview]:
-        """Read one bounded page of exact-identity evidence plus account-day ad totals."""
+        """Read exact-identity evidence plus all account-day ad report rows."""
         if not listings:
             return {}
         if len(listings) > 200 or len({row.id for row in listings}) != len(listings):

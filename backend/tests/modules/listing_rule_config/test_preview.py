@@ -127,31 +127,32 @@ def test_wfs_preview_reports_account_day_ad_blocker() -> None:
     assert "DAILY_SALES_ACCOUNT_DAY_AD_SPEND_UNCONFIRMED" in result.missing_evidence
 
 
-def test_account_day_ad_total_is_scoped_and_includes_sem() -> None:
+def test_account_day_ad_report_total_uses_all_source_rows() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     with engine.begin() as connection:
         connection.execute(
             text(
-                "CREATE TABLE mart_daily_sales_item_day ("
+                "CREATE TABLE fact_walmart_ad_item_sp_daily ("
                 "source_account_ref TEXT, business_date_la DATE, "
-                "ad_spend_amount NUMERIC, sem_ad_spend_amount NUMERIC)"
+                "ad_spend_amount NUMERIC, item_id TEXT)"
             )
         )
         connection.execute(
             text(
-                "INSERT INTO mart_daily_sales_item_day VALUES "
-                "('synthetic-a', '2026-10-24', 0, 0), "
-                "('synthetic-a', '2026-10-23', 0, 0), "
-                "('synthetic-a', '2026-10-23', 0, 3), "
-                "('synthetic-b', '2026-10-24', 5, 0), "
-                "('synthetic-b', '2026-10-23', 0, 0)"
+                "INSERT INTO fact_walmart_ad_item_sp_daily VALUES "
+                "('synthetic-a', '2026-10-24', 0, 'synthetic-item'), "
+                "('synthetic-a', '2026-10-24', 2, NULL), "
+                "('synthetic-a', '2026-10-23', 0, 'synthetic-item'), "
+                "('synthetic-a', '2026-10-23', 3, 'synthetic-other'), "
+                "('synthetic-b', '2026-10-24', 5, NULL), "
+                "('synthetic-b', '2026-10-23', 0, 'synthetic-item')"
             )
         )
     with Session(engine) as session:
         service = ListingEvaluationPreviewService(session)
         service._confirmed_daily_sales_days = MagicMock(
             return_value={
-                "synthetic-a": {CUTOFF - timedelta(days=1)},
+                "synthetic-a": {CUTOFF, CUTOFF - timedelta(days=1)},
                 "synthetic-b": {CUTOFF},
             }
         )
@@ -159,7 +160,7 @@ def test_account_day_ad_total_is_scoped_and_includes_sem() -> None:
             {"synthetic-a", "synthetic-b"}, cutoff=CUTOFF, window_days=3
         )
     assert unconfirmed == {
-        "synthetic-a": frozenset({CUTOFF, CUTOFF - timedelta(days=2)}),
+        "synthetic-a": frozenset({CUTOFF - timedelta(days=2)}),
         "synthetic-b": frozenset({CUTOFF - timedelta(days=1), CUTOFF - timedelta(days=2)}),
     }
     with Session(engine) as session:
