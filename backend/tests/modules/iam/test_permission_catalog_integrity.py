@@ -24,6 +24,8 @@ def test_organization_and_walmart_remote_are_registered() -> None:
 
 
 def test_runtime_api_and_field_permissions_are_discovered_without_grants() -> None:
+    from app.core.auth import Principal
+    from app.core.permissions import has_permission
     from app.core.permission_policy_v2 import permission_for_request
     from app.modules.iam.permission_catalog_v2 import (
         all_permission_definitions,
@@ -31,11 +33,13 @@ def test_runtime_api_and_field_permissions_are_discovered_without_grants() -> No
     )
 
     action_key = permission_for_request(
-        "POST", "/api/ads/campaigns/pause", "page:ads:campaigns:view"
+        "POST", "/api/listings/tags", "page:products:listing-management:view"
     )
+    principal = Principal(user_id="42", permissions=frozenset())
+    assert not has_permission(principal, "action:ads:campaigns:pause")
     action = register_runtime_permission_key("action:ads:campaigns:pause")
     field = register_runtime_permission_key("field:finance:profit-center:net-profit")
-    assert action_key == "page:ads:campaigns:view"
+    assert action_key == "action:products:listing-management:manage-tags"
     assert action is not None and action.risk_level == "high"
     assert field is not None and field.risk_level == "high"
     keys = {item.permission_key for item in all_permission_definitions()}
