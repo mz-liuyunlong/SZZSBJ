@@ -175,6 +175,7 @@ _RULES: tuple[RequestPermissionRule, ...] = (
         "action:pmc:purchase-board:override",
     ),
     RequestPermissionRule(None, "/api/pmc/purchase", "page:pmc:purchase-board:view"),
+    RequestPermissionRule(None, "/api/pmc/overview", "page:pmc:overview:view"),
     RequestPermissionRule(None, "/api/pmc/domestic", "page:pmc:domestic-warehouse-board:view"),
     RequestPermissionRule(
         "POST",

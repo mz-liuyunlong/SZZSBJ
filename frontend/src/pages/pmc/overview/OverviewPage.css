@@ -1,0 +1,141 @@
+/* PMC 总看板 layout; shares tokens with the purchase board (scrolling page, sticky table header). */
+.pmc-overview {
+  width: 100%;
+  min-width: 0;
+}
+
+.pmc-overview__page-card {
+  position: relative;
+  border: 1px solid #dce3ed;
+  border-radius: 14px;
+}
+
+.pmc-overview__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.pmc-overview__title-row h1 {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+
+.pmc-overview__title-row p {
+  max-width: 760px;
+  margin: 0;
+  color: #667085;
+}
+
+.pmc-overview__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.pmc-overview__error {
+  margin-bottom: 12px;
+}
+
+.pmc-overview__cards {
+  margin-bottom: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+
+.pmc-overview__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.pmc-overview__switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.pmc-overview__shell-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  margin: 8px 0;
+}
+
+.pmc-overview__mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.pmc-overview__neg {
+  color: #d92d20;
+}
+
+.pmc-overview__warn {
+  color: #b54708;
+}
+
+.pmc-overview__row-risk > td {
+  background: #fff7f6;
+}
+
+.pmc-overview__row-hl > td {
+  background: #fffaeb;
+}
+
+.pmc-overview__foot {
+  margin-top: 12px;
+  color: #475467;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.pmc-overview__kv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px 16px;
+}
+
+.pmc-overview__kv {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pmc-overview__kv > span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.pmc-overview__note {
+  margin-bottom: 6px;
+}
+
+.pmc-overview__formula > div {
+  margin-bottom: 6px;
+}
+
+.pmc-overview__set-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 8px 24px;
+}
+
+.pmc-overview__set-group {
+  grid-column: 1 / -1;
+}
+
+.pmc-overview__set-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f2f4f7;
+}

@@ -192,6 +192,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
         "PMC",
         100,
         (
+            _page("pmc", "overview", "总看板", 5),
             _page("pmc", "purchase_board", "采购看板", 10),
             _page("pmc", "domestic_warehouse_board", "国内仓看板", 20),
         ),
@@ -430,6 +431,7 @@ LEGACY_PERMISSION_MAPPINGS: dict[str, tuple[str, ...]] = {
     "sales:daily-sales:read": (page_permission_key("sales_daily_sales"),),
     "aftersales:refund-management:read": (page_permission_key("aftersales_refund_management"),),
     "warehouse:wfs-fee-alert:read": (page_permission_key("warehouse_wfs_fee_alert"),),
+    "pmc:overview:read": (page_permission_key("pmc_overview"),),
     "pmc:purchase:read": (page_permission_key("pmc_purchase_board"),),
     "pmc:domestic-batch:read": (page_permission_key("pmc_domestic_warehouse_board"),),
     "operations:plan:read": (page_permission_key("operations_plan"),),

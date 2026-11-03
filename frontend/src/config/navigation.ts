@@ -272,6 +272,15 @@ export const navigation: NavigationGroup[] = [
     title: 'PMC',
     icon: createElement(DeploymentUnitOutlined, { 'aria-hidden': true }),
     children: [
+      // PRP pmc-overview §6: 总看板 first under PMC; 5173 reads one 8088 data-day snapshot (read-only).
+      page('pmc', 'overview', '总看板', '/pmc/overview', {
+        status: 'testing',
+        source: 'pending',
+        sourceTables: ['pmc_overview_snapshot_8088'],
+        readOnly: true,
+        permissionKey: 'pmc:overview:read',
+        viewPermissionKey: 'page:pmc:overview:view',
+      }),
       page('pmc', 'purchase_board', '采购看板', '/pmc/purchase-board', {
         status: 'testing',
         source: 'new_postgres',
