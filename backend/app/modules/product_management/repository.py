@@ -9,6 +9,7 @@ from sqlalchemy import Select, and_, case, func, nulls_last, or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
 from app.modules.product_management.models import (
     ManualProductTag,
     ManualProductTagAssignment,
@@ -72,6 +73,10 @@ class ProductManagementRepository:
 
     def __init__(self, session: Session) -> None:
         self.session = session
+        info = getattr(session, "info", None)
+        self.org_owner_refs: frozenset[str] | None = (
+            info.get(ORG_OWNER_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
 
     def list_projections(
         self,
@@ -110,6 +115,7 @@ class ProductManagementRepository:
             issue_code=issue_code,
             pricing_ready_account_refs=pricing_ready_account_refs,
             invalid_pricing_rule_account_refs=invalid_pricing_rule_account_refs,
+            org_owner_refs=self.org_owner_refs,
         )
         effective_sku = func.coalesce(Product.sku, LingxingSkuIdentity.lingxing_sku_code)
         effective_name = func.coalesce(
@@ -201,6 +207,7 @@ class ProductManagementRepository:
             issue_code=None,
             pricing_ready_account_refs=pricing_ready_account_refs,
             invalid_pricing_rule_account_refs=invalid_pricing_rule_account_refs,
+            org_owner_refs=self.org_owner_refs,
         )
         projections = (
             filtered.with_only_columns(
@@ -290,14 +297,17 @@ class ProductManagementRepository:
     def get_projection(
         self, sku_id: UUID, account_refs: frozenset[str]
     ) -> ProductManagementProjection | None:
-        row = self.session.execute(
-            self._projection().where(
-                LingxingSkuIdentity.id == sku_id,
-                LingxingSkuIdentity.source_account_ref.in_(account_refs),
-                LingxingSkuIdentity.is_active.is_(True),
-                or_(Product.id.is_(None), Product.deleted_at.is_(None)),
+        statement = self._projection().where(
+            LingxingSkuIdentity.id == sku_id,
+            LingxingSkuIdentity.source_account_ref.in_(account_refs),
+            LingxingSkuIdentity.is_active.is_(True),
+            or_(Product.id.is_(None), Product.deleted_at.is_(None)),
+        )
+        if self.org_owner_refs is not None:
+            statement = statement.where(
+                LingxingSkuProductInfoCurrent.owner_uid.in_(self.org_owner_refs)
             )
-        ).first()
+        row = self.session.execute(statement).first()
         return None if row is None else tuple(row)
 
     def list_internal_tags(
@@ -512,6 +522,7 @@ class ProductManagementRepository:
             issue_code=None,
             pricing_ready_account_refs=pricing_ready_account_refs,
             invalid_pricing_rule_account_refs=invalid_pricing_rule_account_refs,
+            org_owner_refs=self.org_owner_refs,
         )
         base = (
             filtered.with_only_columns(
@@ -794,6 +805,7 @@ class ProductManagementRepository:
         issue_code: str | None = None,
         pricing_ready_account_refs: frozenset[str] = frozenset(),
         invalid_pricing_rule_account_refs: frozenset[str] = frozenset(),
+        org_owner_refs: frozenset[str] | None = None,
     ) -> Select[
         tuple[
             LingxingSkuIdentity,
@@ -815,6 +827,8 @@ class ProductManagementRepository:
             LingxingSkuIdentity.is_active.is_(True),
             or_(Product.id.is_(None), Product.deleted_at.is_(None)),
         )
+        if org_owner_refs is not None:
+            statement = statement.where(LingxingSkuProductInfoCurrent.owner_uid.in_(org_owner_refs))
         if sku is not None:
             statement = statement.where(effective_sku.contains(sku, autoescape=True))
         if sku_batch:

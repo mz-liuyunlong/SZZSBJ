@@ -27,7 +27,9 @@ def _session(owners=None):
 
 
 def _sql(statement):
-    return str(statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    return str(
+        statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
 
 
 def test_daily_sales_sql_requires_granted_owner() -> None:
@@ -118,12 +120,14 @@ def test_scoped_reviewed_routes_install_owner_filter(path: str) -> None:
 
 
 def test_unscoped_request_clears_stale_scope() -> None:
-    request = Request({
-        "type": "http",
-        "method": "GET",
-        "path": "/api/sales/daily-sales",
-        "headers": [],
-    })
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/sales/daily-sales",
+            "headers": [],
+        }
+    )
     principal = Principal(user_id="5", permissions=frozenset({"products:read"}))
     session = _session({"stale"})
     with patch("app.modules.data_pages.router.resolve_business_owner_refs", return_value=None):

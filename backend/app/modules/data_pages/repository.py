@@ -172,7 +172,10 @@ class DailySalesRepository:
 
     def __init__(self, session: Session) -> None:
         self.session = session
-        self.org_owner_refs: frozenset[str] | None = session.info.get(ORG_OWNER_SCOPE_SESSION_KEY)
+        info = getattr(session, "info", None)
+        self.org_owner_refs: frozenset[str] | None = (
+            info.get(ORG_OWNER_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
 
     def _inventory_snapshot_table_ready(self) -> bool:
         """Return whether the inventory snapshot migration is already applied.
@@ -721,7 +724,10 @@ class OrderProfitRepository:
 
     def __init__(self, session: Session) -> None:
         self.session = session
-        self.org_owner_refs: frozenset[str] | None = session.info.get(ORG_OWNER_SCOPE_SESSION_KEY)
+        info = getattr(session, "info", None)
+        self.org_owner_refs: frozenset[str] | None = (
+            info.get(ORG_OWNER_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
 
     def list_order_profit(
         self,
@@ -866,7 +872,10 @@ class ListingManagementRepository:
 
     def __init__(self, session: Session) -> None:
         self.session = session
-        self.org_owner_refs: frozenset[str] | None = session.info.get(ORG_OWNER_SCOPE_SESSION_KEY)
+        info = getattr(session, "info", None)
+        self.org_owner_refs: frozenset[str] | None = (
+            info.get(ORG_OWNER_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
 
     def list_listings(
         self,

@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
@@ -6,10 +7,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
 
-from app.core.api import ErrorEnvelope, SuccessEnvelope, get_request_id, success_response
-from app.core.auth import Principal
+from app.core.api import ApiError, ErrorCode, ErrorEnvelope, SuccessEnvelope, get_request_id, success_response
+from app.core.auth import Principal, require_principal
 from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
+from app.modules.iam.organization_access import (
+    ORG_OWNER_SCOPE_SESSION_KEY,
+    resolve_business_owner_refs,
+)
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.product_management.field_access import (
     LOGISTICS_COST_PERMISSION,
@@ -40,7 +45,40 @@ from app.modules.product_management.schemas import (
 from app.modules.product_management.service import ProductManagementService
 from app.modules.products.dependencies import require_product_scope
 
-router = APIRouter(tags=["Product Management BFF"])
+_ORG_REVIEWED_PRODUCT_READS = frozenset(
+    {
+        "/api/product-management/skus",
+        "/api/product-management/skus/summary",
+        "/api/product-management/skus/export",
+    }
+)
+
+
+def require_product_management_org_scope(
+    request: Request,
+    principal: Annotated[Principal, Depends(require_principal)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    """Apply reviewed owner scopes and deny unreviewed product endpoints."""
+    session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
+    owners = resolve_business_owner_refs(session, principal)
+    if owners is None:
+        return
+    detail_path = re.fullmatch(
+        r"/api/product-management/skus/[0-9A-Fa-f-]{36}(/pricing-breakdown)?",
+        request.url.path,
+    )
+    if request.method != "GET" or (
+        request.url.path not in _ORG_REVIEWED_PRODUCT_READS and detail_path is None
+    ):
+        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
+    session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owners
+
+
+router = APIRouter(
+    tags=["Product Management BFF"],
+    dependencies=[Depends(require_product_management_org_scope)],
+)
 db_session = Annotated[Session, Depends(get_db_session)]
 source_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
 read_principal = Annotated[Principal, Depends(require_permission("products:read"))]
