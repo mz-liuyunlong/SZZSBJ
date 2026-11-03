@@ -46,6 +46,36 @@ def _business_owner_exists(session: Session, owner_ref: str) -> bool:
     )
 
 
+@router.get("/api/settings/organization/owner-candidates")
+def list_owner_candidates(request: Request, _: admin_principal, session: db_session):
+    rows = session.execute(
+        text("""
+        SELECT candidates.owner_ref, b.feishu_open_id, e.name AS employee_name,
+               coalesce(b.is_active, false) AS is_active
+        FROM (
+            SELECT owner_ref FROM (
+                SELECT owner_uid AS owner_ref
+                FROM dwd_lingxing_sku_product_info_current
+                WHERE owner_uid IS NOT NULL AND trim(owner_uid) <> ''
+                UNION
+                SELECT owner_ref FROM mart_daily_sales_item_day
+                WHERE owner_ref IS NOT NULL AND trim(owner_ref) <> ''
+                UNION
+                SELECT owner_uid AS owner_ref FROM dws_purchase_board
+                WHERE owner_uid IS NOT NULL AND trim(owner_uid) <> ''
+                UNION
+                SELECT owner_ref FROM mart_listing_management_current
+                WHERE owner_ref IS NOT NULL AND trim(owner_ref) <> ''
+            ) business_owners
+        ) candidates
+        LEFT JOIN iam_org_owner_bindings b ON b.owner_ref = candidates.owner_ref
+        LEFT JOIN iam_feishu_employees e ON e.open_id = b.feishu_open_id
+        ORDER BY candidates.owner_ref
+        """)
+    ).mappings()
+    return success_response(request, data=[dict(row) for row in rows], meta=None)
+
+
 @router.get("/api/settings/organization/owner-bindings")
 def list_owner_bindings(request: Request, _: admin_principal, session: db_session):
     rows = session.execute(
