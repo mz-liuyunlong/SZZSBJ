@@ -8,6 +8,7 @@ from sqlalchemy.engine import URL, Connection
 import app.models.raw_lingxing_api  # noqa: F401  # Register approved RAW metadata.
 import app.modules.data_pages.business_models  # noqa: F401  # Register sample/refund business models.
 import app.modules.data_pages.models  # noqa: F401  # Register DATA-PAGES DIM/FACT/MART.
+import app.modules.finance.settlement_profit_models  # noqa: F401  # Settlement profit V2.
 import app.modules.integration_sync.models  # noqa: F401  # Register sync governance/ODS.
 import app.modules.keyword_planning.models  # noqa: F401
 import app.modules.listing_rule_config.models  # noqa: F401  # Register Listing rule metadata.
