@@ -168,7 +168,7 @@ def days_between(start: date | None, end: date | None) -> int | None:
 
 
 def parse_draft_remark(remark: object) -> str | None:
-    """Extract the draft number from a purchase order line remark (采购备注)."""
+    """Extract the draft number (``草稿:CG…``) from a plan or purchase order line remark."""
 
     if not isinstance(remark, str):
         return None

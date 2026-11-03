@@ -191,6 +191,81 @@ def test_order_line_parses_draft_no_from_purchase_remark() -> None:
     )  # Both remarks are retained for DWS; scalar cannot pick one.
 
 
+def test_draft_no_prefers_linked_plan_remark_like_8088() -> None:
+    # 8088: the draft number lives in the Lingxing plan remark; the order line usually has none.
+    plan_row = Plan(RUN_1, T1, remark="ITEMID:19051502014 | 草稿:CG261102-087")
+    plans_by_sn = {p.plan_sn: p for p in build_plans([plan_row])[0]}
+    _, [line], _ = build_orders(
+        [Order(RUN_1, T1)],
+        [Item(RUN_1, T1, remark="10.28已分配采购")],
+        plans_by_sn,
+        ods_plans_by_sn=_ods_plans(plan_row),
+    )
+    assert line.draft_no == "CG261102-087"
+
+
+def test_draft_no_plan_remark_wins_over_line_remark() -> None:
+    plan_row = Plan(RUN_1, T1, plan_remark="草稿:CG261025-040")
+    plans_by_sn = {p.plan_sn: p for p in build_plans([plan_row])[0]}
+    _, [line], _ = build_orders(
+        [Order(RUN_1, T1)],
+        [Item(RUN_1, T1, remark="草稿:CG261017-039")],
+        plans_by_sn,
+        ods_plans_by_sn=_ods_plans(plan_row),
+    )
+    assert line.draft_no == "CG261025-040"
+
+
+def test_draft_no_none_when_neither_remark_has_one() -> None:
+    plan_row = Plan(RUN_1, T1, remark="ITEMID:19051502014")
+    plans_by_sn = {p.plan_sn: p for p in build_plans([plan_row])[0]}
+    _, [line], _ = build_orders(
+        [Order(RUN_1, T1)],
+        [Item(RUN_1, T1, remark="普通备注")],
+        plans_by_sn,
+        ods_plans_by_sn=_ods_plans(plan_row),
+    )
+    assert line.draft_no is None
+
+
+def test_merged_line_takes_each_plans_own_draft_no() -> None:
+    plan_rows = [
+        Plan(
+            RUN_1,
+            T1,
+            plan_sn="P1",
+            quantity_plan=60,
+            remark="ITEMID:11111111111 | 草稿:CG261020-001",
+        ),
+        Plan(
+            RUN_1,
+            T1,
+            plan_sn="P2",
+            quantity_plan=40,
+            remark="ITEMID:22222222222 | 草稿:CG261020-002",
+        ),
+    ]
+    plans, _ = build_plans(plan_rows)
+    item = Item(
+        RUN_1,
+        T1,
+        plan_sn="P1",
+        quantity_real=80,
+        amount=Decimal("400.0000"),
+        payload_json={"relation_purchase_plan": [{"plan_sn": "P2"}, {"plan_sn": "P1"}]},
+    )
+    _, lines, _ = build_orders(
+        [Order(RUN_1, T1)],
+        [item],
+        {p.plan_sn: p for p in plans},
+        ods_plans_by_sn=_ods_plans(*plan_rows),
+    )
+    assert [(ln.plan_sn, ln.draft_no) for ln in lines] == [
+        ("P1", "CG261020-001"),
+        ("P2", "CG261020-002"),
+    ]
+
+
 def test_merged_line_is_split_across_plans_by_plan_quantity() -> None:
     plans, _ = build_plans(
         [

@@ -411,6 +411,31 @@ def _remark_item_id_for_line(
     return single_remark_item_id(plan_texts, line_texts)
 
 
+def _draft_no_for_line(
+    item: OdsOrderItemLike,
+    plan_sn: str | None,
+    ods_plans_by_sn: Mapping[tuple[str, str], OdsPlanLike],
+) -> str | None:
+    """Draft number: the linked plan's remark first (8088 rule), then the line remark.
+
+    Drafts are written into the Lingxing *plan* remark (``ITEMID:<id> | 草稿:CG…``); a
+    purchase order created from that plan usually does not copy it onto the line.
+    """
+
+    if plan_sn:
+        ods_plan = ods_plans_by_sn.get((item.source_account_ref, plan_sn))
+        if ods_plan is not None:
+            for text in plan_texts_from_ods_plan(ods_plan):
+                draft = parse_draft_remark(text)
+                if draft:
+                    return draft
+    for text in line_texts_from_ods_item(item):
+        draft = parse_draft_remark(text)
+        if draft:
+            return draft
+    return None
+
+
 def build_orders(
     ods_orders: Sequence[OdsOrderLike],
     ods_items: Sequence[OdsOrderItemLike],
@@ -448,7 +473,6 @@ def build_orders(
             item.quantity_real if item.quantity_real is not None else (item.quantity_plan or 0)
         )
         line_count_by_order[(item.source_account_ref, item.order_sn)] += 1
-        draft_no = parse_draft_remark(item.remark)
 
         if not plan_sns:
             counts["without_plan"] += 1
@@ -462,7 +486,7 @@ def build_orders(
                     quantity=quantity,
                     amount=item.amount,
                     remark_item_id=_remark_item_id_for_line(item, None, ods_plans_by_sn),
-                    draft_no=draft_no,
+                    draft_no=_draft_no_for_line(item, None, ods_plans_by_sn),
                     plan_found=False,
                 )
             )
@@ -492,7 +516,7 @@ def build_orders(
                     remark_item_id=_remark_item_id_for_line(
                         item, allocation.plan_sn, ods_plans_by_sn
                     ),
-                    draft_no=draft_no,
+                    draft_no=_draft_no_for_line(item, allocation.plan_sn, ods_plans_by_sn),
                     plan_found=plan is not None,
                 )
             )

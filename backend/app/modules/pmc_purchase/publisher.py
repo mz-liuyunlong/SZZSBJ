@@ -85,6 +85,7 @@ LINE_LINEAGE_FIELDS: dict[str, str] = {
     "store_id": "$.data[].item_list[].sid",
     "quantity_allocated": "$.data[].item_list[].quantity_real",
     "amount_allocated": "$.data[].item_list[].amount",
+    # 草稿号先取关联计划的备注（另一个 ODS 源），没有再取本行备注；这里只记采购单一侧的路径。
     "draft_no": "$.data[].item_list[].remark",
 }
 

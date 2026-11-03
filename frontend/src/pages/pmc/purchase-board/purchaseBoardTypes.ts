@@ -15,7 +15,7 @@ export type PurchaseBoardStatusFilter =
   | "s0"
   | "unattributed";
 
-export type PurchaseBoardSearchType = "sku" | "item_id" | "gtin" | "msku" | "order_sn";
+export type PurchaseBoardSearchType = "sku" | "item_id" | "gtin" | "msku" | "order_sn" | "draft_plan";
 
 export type PurchaseBoardItemIdSource =
   | "from_system_plan"
@@ -214,6 +214,8 @@ export interface PurchaseReadMeta {
   freshnessAt: string | null;
   ruleVersion: number | null;
   total: number | null;
+  /** 负责人里不显示的名字（8088 同款，如「小罗」），由后端配置下发。 */
+  hiddenOwnerNames: string[];
 }
 
 export interface PurchaseBoardListResult {
@@ -290,6 +292,7 @@ export interface PendingPurchasePlan {
   productName: string | null;
   quantityPlan: number | null;
   remarkItemId: string | null;
+  draftNo: string | null;
 }
 
 export interface PendingPurchasePlanListResult {
@@ -390,6 +393,7 @@ export const purchaseBoardSearchTypeOptions: { value: PurchaseBoardSearchType; l
   { value: "gtin", label: "GTIN" },
   { value: "msku", label: "MSKU" },
   { value: "order_sn", label: "采购单号" },
+  { value: "draft_plan", label: "草稿号 / 计划号" },
 ];
 
 export const purchaseBoardItemIdSourceOptions: {
