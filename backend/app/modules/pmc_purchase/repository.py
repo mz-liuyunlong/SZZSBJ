@@ -14,6 +14,7 @@ from sqlalchemy import Select, Text, and_, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.data_pages.models import LingxingStoreDimension
+from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
 from app.modules.pmc_purchase.calculations import AVERAGE_CYCLE_WINDOW_DAYS
 from app.modules.pmc_purchase.gate3_models import (
     DwdPurchasePlan,
@@ -58,6 +59,7 @@ _SORTS: dict[str, tuple[Any, ...]] = {
 class PmcPurchaseReadRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
+        self.org_owner_refs: frozenset[str] | None = session.info.get(ORG_OWNER_SCOPE_SESSION_KEY)
 
     # -- rules --
 
@@ -86,6 +88,8 @@ class PmcPurchaseReadRepository:
     ) -> list[Any]:
         b = DwsPurchaseBoard
         clauses: list[Any] = [b.source_account_ref.in_(sorted(accounts))]
+        if self.org_owner_refs is not None:
+            clauses.append(b.owner_uid.in_(self.org_owner_refs))
         if query.owner_uid:
             clauses.append(b.owner_uid.in_(query.owner_uid))
         if query.store_id:

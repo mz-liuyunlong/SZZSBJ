@@ -16,6 +16,7 @@ from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.pmc_purchase.registry import PMC_PURCHASE_API_REGISTRY
+from app.modules.pmc_purchase.router import require_pmc_purchase_org_scope
 from app.modules.pmc_purchase.schemas import (
     BoardListData,
     BoardRowRead,
@@ -38,6 +39,8 @@ ROUTES = [entry.route_path for entry in PMC_PURCHASE_API_REGISTRY.values()]
 
 def _app(*permissions: str, scoped: bool = True) -> FastAPI:
     application = create_app()
+    # Synthetic permission/source-account fixtures do not include a Feishu snapshot.
+    application.dependency_overrides[require_pmc_purchase_org_scope] = lambda: None
     application.dependency_overrides[get_optional_principal] = lambda: Principal(
         user_id="synthetic-user", permissions=frozenset(permissions)
     )

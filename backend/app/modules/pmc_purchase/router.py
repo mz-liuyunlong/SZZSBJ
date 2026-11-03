@@ -14,10 +14,14 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.api import ErrorEnvelope, SuccessEnvelope, get_request_id, success_response
-from app.core.auth import Principal
+from app.core.api import ApiError, ErrorCode, ErrorEnvelope, SuccessEnvelope, get_request_id, success_response
+from app.core.auth import Principal, require_principal
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
+from app.modules.iam.organization_access import (
+    ORG_OWNER_SCOPE_SESSION_KEY,
+    resolve_business_owner_refs,
+)
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.pmc_purchase.overrides import PmcPurchaseOverrideService
 from app.modules.pmc_purchase.schemas import (
@@ -40,7 +44,26 @@ from app.modules.pmc_purchase.service import PmcPurchaseReadService
 PERMISSION_READ = "pmc:purchase:read"
 PERMISSION_OVERRIDE = "pmc:purchase:override"
 
-router = APIRouter(prefix="/api/pmc/purchase", tags=["PMC Purchase Board"])
+def require_pmc_purchase_org_scope(
+    request: Request,
+    principal: Annotated[Principal, Depends(require_principal)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    """Owner-safe board rows only; mixed-owner aggregates stay unavailable."""
+    session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
+    owners = resolve_business_owner_refs(session, principal)
+    if owners is None:
+        return
+    if request.method != "GET" or request.url.path != "/api/pmc/purchase/board":
+        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
+    session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owners
+
+
+router = APIRouter(
+    prefix="/api/pmc/purchase",
+    tags=["PMC Purchase Board"],
+    dependencies=[Depends(require_pmc_purchase_org_scope)],
+)
 
 db_session = Annotated[Session, Depends(get_db_session)]
 source_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
