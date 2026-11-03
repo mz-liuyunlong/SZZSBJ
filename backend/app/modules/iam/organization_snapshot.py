@@ -74,6 +74,57 @@ def canonical_snapshot(
     return digest, dept_rows, user_rows
 
 
+def identity_set_diff(
+    session: Session,
+    *,
+    department_ids: set[str],
+    employee_ids: set[str],
+) -> dict[str, object]:
+    previous = (
+        session.execute(
+            text("""
+            SELECT id FROM iam_feishu_org_sync_runs
+            ORDER BY applied_at DESC, id DESC LIMIT 1
+            """)
+        ).mappings().first()
+    )
+    if previous is None:
+        return {
+            "has_previous": False,
+            "removed_department_ids": [],
+            "added_department_ids": sorted(department_ids),
+            "removed_employee_ids": [],
+            "added_employee_ids": sorted(employee_ids),
+            "department_retention_ratio": 1.0,
+            "employee_retention_ratio": 1.0,
+            "identity_replacement": False,
+        }
+    old_departments = {
+        str(value) for value in session.execute(
+            text("SELECT department_id FROM iam_feishu_departments WHERE last_seen_run_id = :run_id"),
+            {"run_id": previous["id"]},
+        ).scalars()
+    }
+    old_employees = {
+        str(value) for value in session.execute(
+            text("SELECT open_id FROM iam_feishu_employees WHERE last_seen_run_id = :run_id"),
+            {"run_id": previous["id"]},
+        ).scalars()
+    }
+    department_ratio = len(old_departments & department_ids) / max(len(old_departments), 1)
+    employee_ratio = len(old_employees & employee_ids) / max(len(old_employees), 1)
+    return {
+        "has_previous": True,
+        "removed_department_ids": sorted(old_departments - department_ids),
+        "added_department_ids": sorted(department_ids - old_departments),
+        "removed_employee_ids": sorted(old_employees - employee_ids),
+        "added_employee_ids": sorted(employee_ids - old_employees),
+        "department_retention_ratio": round(department_ratio, 4),
+        "employee_retention_ratio": round(employee_ratio, 4),
+        "identity_replacement": department_ratio < 0.8 or employee_ratio < 0.8,
+    }
+
+
 def apply_snapshot(
     session: Session,
     *,
@@ -82,6 +133,7 @@ def apply_snapshot(
     users: tuple[FeishuDirectoryUser, ...],
     requested_by: str,
     allow_large_reduction: bool = False,
+    allow_identity_replacement: bool = False,
 ) -> str:
     """Explicit transaction only; never deletes absent users or grants permissions."""
     digest, dept_rows, user_rows = canonical_snapshot(departments, users)
@@ -107,6 +159,13 @@ def apply_snapshot(
         old_user_count = int(previous["employee_count"])
         if len(dept_rows) * 5 < old_dept_count * 4 or len(user_rows) * 5 < old_user_count * 4:
             raise ValueError("Feishu directory shrank over 20%; explicit confirmation required")
+    identity_diff = identity_set_diff(
+        session,
+        department_ids={str(row["department_id"]) for row in dept_rows},
+        employee_ids={str(row["open_id"]) for row in user_rows},
+    )
+    if identity_diff["identity_replacement"] and not allow_identity_replacement:
+        raise ValueError("Feishu identity set changed over 20%; explicit confirmation required")
 
     run_id = uuid4()
     session.execute(

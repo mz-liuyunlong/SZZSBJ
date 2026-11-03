@@ -16,7 +16,11 @@ from app.core.permissions import require_permission, require_super_admin
 from app.db.session import get_db_session
 from app.modules.iam.feishu_directory_service import FeishuDirectoryService
 from app.modules.iam.organization_access import authorized_department_ids
-from app.modules.iam.organization_snapshot import apply_snapshot, canonical_snapshot
+from app.modules.iam.organization_snapshot import (
+    apply_snapshot,
+    canonical_snapshot,
+    identity_set_diff,
+)
 
 router = APIRouter(tags=["iam-organization"])
 db_session = Annotated[Session, Depends(get_db_session)]
@@ -27,6 +31,7 @@ org_view = Annotated[Principal, Depends(require_permission("page:settings:organi
 class ApplySnapshotRequest(BaseModel):
     expected_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     allow_large_reduction: bool = False
+    allow_identity_replacement: bool = False
 
 
 def _read_feishu():
@@ -55,6 +60,11 @@ def preview_organization_sync(request: Request, _: admin_principal, session: db_
         .mappings()
         .first()
     )
+    identity_diff = identity_set_diff(
+        session,
+        department_ids={str(row["department_id"]) for row in normalized_departments},
+        employee_ids={str(row["open_id"]) for row in normalized_users},
+    )
     large_reduction = bool(
         previous
         and (
@@ -70,6 +80,7 @@ def preview_organization_sync(request: Request, _: admin_principal, session: db_
             "employee_count": len(normalized_users),
             "requires_confirmation": True,
             "large_reduction": large_reduction,
+            **identity_diff,
         },
         meta=None,
     )
@@ -92,6 +103,7 @@ def apply_organization_sync(
             users=users,
             requested_by=str(principal.user_id),
             allow_large_reduction=payload.allow_large_reduction,
+            allow_identity_replacement=payload.allow_identity_replacement,
         )
     except ValueError as exc:
         session.rollback()

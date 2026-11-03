@@ -28,6 +28,13 @@ interface SyncPreview {
   department_count: number;
   employee_count: number;
   large_reduction: boolean;
+  identity_replacement: boolean;
+  removed_department_ids: string[];
+  added_department_ids: string[];
+  removed_employee_ids: string[];
+  added_employee_ids: string[];
+  department_retention_ratio: number;
+  employee_retention_ratio: number;
 }
 interface OrganizationPageProps {
   canSync: boolean;
@@ -50,29 +57,44 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
         "/api/settings/organization/sync-preview",
       );
       const preview = result.data;
-      Modal.confirm({
-        title: "确认同步飞书组织架构？",
-        content: `本次包含 ${preview.department_count} 个部门、${preview.employee_count} 名员工。${preview.large_reduction ? "警告：较上次同步减少超过20%，请确认飞书通讯录授权范围未缩小。" : ""}仅更新组织快照，不创建账号或更改角色权限。`,
-        okText: "确认写入",
-        cancelText: "取消",
-        onOk: async () => {
-          try {
-            await backendRequest("/api/settings/organization/sync-apply", {
-              method: "POST",
-              body: JSON.stringify({
-                expected_hash: preview.snapshot_hash,
-                allow_large_reduction: preview.large_reduction,
-              }),
-            });
-            const saved = await backendRequest<DirectoryPreview>(
-              "/api/settings/organization/snapshot",
-            );
-            setData(saved.data);
-            void notice.success("飞书组织架构已同步到快照");
-          } catch {
-            void notice.error("同步失败或数据已变化，请重新预览。");
-          }
-        },
+      await new Promise<void>((resolve) => {
+        Modal.confirm({
+          title: "确认同步飞书组织架构？",
+          width: 560,
+          content: (
+            <div>
+              <p>本次包含 {preview.department_count} 个部门、{preview.employee_count} 名员工。</p>
+              <p>部门身份保留率：{(preview.department_retention_ratio * 100).toFixed(1)}%；员工身份保留率：{(preview.employee_retention_ratio * 100).toFixed(1)}%。</p>
+              {(preview.large_reduction || preview.identity_replacement) && (
+                <Alert type="warning" showIcon message="组织身份变化异常，需要明确二次确认" description="请先核实飞书应用通讯录授权范围、部门和员工身份集合。同步不会自动创建账号或分配角色。" />
+              )}
+              <p>新增部门 {preview.added_department_ids.length}，移除部门 {preview.removed_department_ids.length}；新增员工 {preview.added_employee_ids.length}，移除员工 {preview.removed_employee_ids.length}。</p>
+            </div>
+          ),
+          okText: "确认写入快照",
+          cancelText: "取消",
+          onOk: async () => {
+            try {
+              await backendRequest("/api/settings/organization/sync-apply", {
+                method: "POST",
+                body: JSON.stringify({
+                  expected_hash: preview.snapshot_hash,
+                  allow_large_reduction: preview.large_reduction,
+                  allow_identity_replacement: preview.identity_replacement,
+                }),
+              });
+              const saved = await backendRequest<DirectoryPreview>(
+                "/api/settings/organization/snapshot",
+              );
+              setData(saved.data);
+              void notice.success("飞书组织架构已同步到快照");
+            } catch {
+              void notice.error("同步失败或数据已变化，请重新预览。");
+              throw new Error("Organization snapshot apply failed");
+            }
+          },
+          onCancel: () => resolve(),
+        });
       });
     } catch {
       void notice.error("无法预览飞书组织，请检查授权和应用配置。");

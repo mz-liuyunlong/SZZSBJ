@@ -45,6 +45,28 @@ def test_identical_snapshot_returns_previous_run_without_writes() -> None:
     assert session.execute.call_count == 2
 
 
+def test_identity_replacement_requires_explicit_confirmation() -> None:
+    departments, users = _source()
+    digest, _, _ = canonical_snapshot(departments, users)
+    session = MagicMock()
+    previous = {
+        "id": "old-run",
+        "snapshot_hash": "a" * 64,
+        "department_count": 1,
+        "employee_count": 1,
+    }
+    session.execute.return_value.mappings.return_value.first.return_value = previous
+    session.execute.return_value.scalars.return_value = ["different-id"]
+    with pytest.raises(ValueError, match="identity set changed"):
+        apply_snapshot(
+            session,
+            expected_hash=digest,
+            departments=departments,
+            users=users,
+            requested_by="admin",
+        )
+
+
 def test_large_visibility_drop_requires_explicit_confirmation() -> None:
     departments, users = _source()
     digest, _, _ = canonical_snapshot(departments, users)

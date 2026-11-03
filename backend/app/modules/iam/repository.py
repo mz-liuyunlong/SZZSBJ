@@ -249,6 +249,21 @@ class IamRepository:
                   and s.revoked_at is null
                   and s.expires_at > now()
                   and u.is_active = 1
+                  and (
+                    u.feishu_open_id is null
+                    or exists (
+                        select 1
+                        from iam_feishu_employees e
+                        where e.open_id = u.feishu_open_id
+                          and e.last_seen_run_id = (
+                              select id from iam_feishu_org_sync_runs
+                              order by applied_at desc, id desc limit 1
+                          )
+                          and e.is_active is true
+                          and e.is_resigned is not true
+                          and e.is_frozen is not true
+                    )
+                  )
                 group by u.id, u.is_super_admin
                 """
                 ),
