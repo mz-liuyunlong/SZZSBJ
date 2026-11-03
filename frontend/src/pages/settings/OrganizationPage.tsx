@@ -23,6 +23,14 @@ interface OwnerCandidate {
   employee_name: string | null;
   is_active: boolean;
 }
+interface OrganizationSyncRun {
+  id: string;
+  snapshot_hash: string;
+  department_count: number;
+  employee_count: number;
+  applied_at: string;
+  requested_by: string | null;
+}
 interface OwnerBindingEvent {
   id: string;
   owner_ref: string;
@@ -67,6 +75,7 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
   const [historyOwner, setHistoryOwner] = useState<string>();
   const [historyEvents, setHistoryEvents] = useState<OwnerBindingEvent[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [syncRuns, setSyncRuns] = useState<OrganizationSyncRun[]>([]);
   const [notice, noticeContext] = message.useMessage();
 
   const confirmSync = async () => {
@@ -107,7 +116,7 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
                 "/api/settings/organization/snapshot",
               );
               setData(saved.data);
-              await reloadOwnerCandidates();
+              await Promise.all([reloadOwnerCandidates(), reloadSyncRuns()]);
               void notice.success("飞书组织架构已同步到快照");
             } catch {
               void notice.error("同步失败或数据已变化，请重新预览。");
@@ -123,6 +132,13 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
     } finally {
       setSyncing(false);
     }
+  };
+
+  const reloadSyncRuns = async () => {
+    const response = await backendRequest<OrganizationSyncRun[]>(
+      "/api/settings/organization/sync-runs",
+    );
+    setSyncRuns(response.data);
   };
 
   const reloadOwnerCandidates = async () => {
@@ -172,10 +188,14 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
         setData(response.data);
         if (canSync) {
           try {
-            const owners = await backendRequest<OwnerCandidate[]>(
-              "/api/settings/organization/owner-candidates",
-            );
-            if (alive) setOwnerCandidates(owners.data);
+            const [owners, runs] = await Promise.all([
+              backendRequest<OwnerCandidate[]>("/api/settings/organization/owner-candidates"),
+              backendRequest<OrganizationSyncRun[]>("/api/settings/organization/sync-runs"),
+            ]);
+            if (alive) {
+              setOwnerCandidates(owners.data);
+              setSyncRuns(runs.data);
+            }
           } catch {
             if (alive) setError("负责人候选数据加载失败，请检查业务数据表和管理员权限。");
           }
@@ -282,6 +302,20 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
                   变更记录
                 </Button>
               ) },
+            ]} />
+        </Card>
+      )}
+      {canSync && (
+        <Card title="组织同步历史" style={{ marginTop: 16 }}
+          extra={<Button size="small" onClick={() => void reloadSyncRuns()}>刷新记录</Button>}>
+          <Table<OrganizationSyncRun> rowKey="id" size="small"
+            dataSource={syncRuns} pagination={{ pageSize: 8 }}
+            columns={[
+              { title: "同步时间", dataIndex: "applied_at" },
+              { title: "部门数", dataIndex: "department_count", width: 90 },
+              { title: "员工数", dataIndex: "employee_count", width: 90 },
+              { title: "操作人", dataIndex: "requested_by", width: 140 },
+              { title: "快照 SHA-256", dataIndex: "snapshot_hash", ellipsis: true },
             ]} />
         </Card>
       )}
