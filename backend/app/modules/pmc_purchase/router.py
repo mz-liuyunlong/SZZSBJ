@@ -51,6 +51,7 @@ from app.modules.pmc_purchase.service import PmcPurchaseReadService
 PERMISSION_READ = "pmc:purchase:read"
 PERMISSION_OVERRIDE = "pmc:purchase:override"
 
+
 def require_pmc_purchase_org_scope(
     request: Request,
     principal: Annotated[Principal, Depends(require_principal)],
