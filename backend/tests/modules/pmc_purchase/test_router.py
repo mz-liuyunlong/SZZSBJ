@@ -260,6 +260,7 @@ def test_order_detail_not_found_is_an_envelope(monkeypatch: Any) -> None:
     body = _envelope(TestClient(_app(READ)).get("/api/pmc/purchase/orders/NOPE"), 404)
     assert body["error"]["code"] == "NOT_FOUND"
 
+
 def test_org_scope_filters_purchase_order_detail() -> None:
     from sqlalchemy.dialects import postgresql
     from app.modules.pmc_purchase.repository import PmcPurchaseReadRepository
