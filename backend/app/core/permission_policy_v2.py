@@ -234,7 +234,7 @@ _RULES: tuple[RequestPermissionRule, ...] = (
     RequestPermissionRule(
         "GET",
         "/api/integrations/walmart-monitor/targets",
-        "integrations:walmart-monitor:read",
+        "page:data-center:walmart-monitoring:view",
         True,
     ),
     RequestPermissionRule(None, "/api/integrations/", "page:data-center:task-center:view"),
