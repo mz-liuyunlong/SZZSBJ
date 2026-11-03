@@ -2,12 +2,12 @@
 
 - Status: Approved for implementation (phase 1, read-only)
 - Decision date: 2026-11-03
-- Owner authorization: Rocky 2026-11-02 / 2026-11-03（WFS 物流板块上线；按 8088 业务逻辑上线；Walmart 数据用已校验文件，不新增 Walmart 调用）
+- Owner authorization: Rocky 2026-11-02 / 2026-11-03（WFS 物流板块上线；按 8088 业务逻辑上线；Walmart 数据用已校验文件，不新增 Walmart 调用）；PRP #298 由 Rocky 2026-11-03 批准（刘云龙授权 Rocky 为 PRP 负责人）：一期 a + b，D-1=A、S8 只读已校验文件、D-2 维持、D-3 开放、D-4 手工一次性运行、物流页一期用 `page:pmc:wfs:view`
 - Plan: `PRPs/pmc-wfs-logistics-group.md`（§6.2 D-1 方案 A、§6.4 归属规则）
 
 ## Purpose
 
-确定 WFS 货件看板、异常中心、待发货打包单第一期的数据来源和写入边界。第一期全部只读：不写 Walmart、不写领星、不改生产数据。
+确定 WFS 货件看板、异常中心、待发货打包单、物流看板第一期的数据来源和写入边界。第一期全部只读：不写 Walmart、不写领星、不改生产数据。
 
 ## Authoritative sources
 
@@ -30,14 +30,18 @@
 5. 异常中心：规则命中建单或刷新；不再命中由系统自动解决（留动作记录）；人工解决 / 关闭的案件系统不重开；测试货件（`PMC-TEST-`）不建单。
 6. 打包完成满 3 天仍有箱子未安排到货件标红；天数后续由 WFS 设置 `wfs.pending_packing_overdue_days` 修改，第一期固定 3。
 7. PK 与 OWS 关联对账不恢复；操作人不写死，由权限控制。
+8. 物流看板按 8088 `pmc-logistics`（`build_from_daily.py` + `app-a.jsx enrich`）：只看 2026-07-01 起的 SP，排除 `PMC-TEST-` 货件及其 SP；读当前发布版本的领星发货单 / 货件 + 当前已加载的渠道、众壹、Walmart 文件；数据日同规则 4。2026-11-02 回放：393 张 SP 全部派生字段与 8088 一致（异常 580 条、可索赔合计 350,938.2）。
+9. 物流渠道文件加载保留 `raw_json` 中的 `method_name` / `remark` / `enabled`（仓库代码 / 渠道代码）；此前加载的同一文件再次加载时只就地补这几个字段，不删不重建。
+10. D-2：#282 写入代码维持现状（`DisabledGateway`、`guard_write`、人工书面批准）；D-3：异常中心处理状态 / 负责人 / 记录开放，只写本系统；D-4：领星数据手工一次性运行。
 
 ## Approved implementation scope
 
-- 迁移 0076（文件登记 + 6 张 ODS 表），文件加载、看板事实、8088 规则移植、异常检测、看板 / 异常中心 / 待发货页面改造、本地回放脚本和测试。
+- 迁移 0076（文件登记 + 6 张 ODS 表，#302 占用），文件加载、看板事实、8088 规则移植、异常检测、看板 / 异常中心 / 待发货页面改造、本地回放脚本和测试。
+- 物流看板 `pmc_logistics`（`/api/pmc/logistics/board`、`/shipping-lists/{code}`，只读、按店铺数据范围过滤）与 5173 页面；无新迁移、无新权限键。
 
 ## Explicitly not approved
 
-- 任何 Walmart / 领星 / 众壹真实调用，生产迁移、生产数据加载、调度启用、部署或重启（由部署流程另行批准）。
+- 任何 Walmart / 领星 / 众壹真实调用，生产迁移、生产数据加载、调度启用、部署或重启（由部署流程另行批准）；服务器入库定时、领星定时同步另行出票。
 - 写回 Walmart（建货件、取消、改数量）与箱规写回领星：第二期，单独立项。
 
 ## Stop conditions
