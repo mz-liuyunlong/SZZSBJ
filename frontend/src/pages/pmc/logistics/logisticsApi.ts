@@ -284,23 +284,25 @@ export interface RulesView {
   today: string;
   thresholds: { key: string; value: number; unit: string; label: string }[];
   region_total: Record<string, number>;
-  cycles: {
-    channel_id: string;
-    channel: string;
-    provider: string;
-    method: string;
-    regions: string[];
-    toSail: number | null;
-    voyage: number | null;
-    days: number | null;
-    src: string;
-    sps: number;
-  }[];
-  contracts: { provider_id: string; provider: string; channel_id: string; channel: string; region: string; days: number; remind: number; sps: number }[];
-  fcs: { fc: string; addr: string; city: string; state: string; zip: string; region: string; n: number }[];
+  counts: Record<RuleSection, number>;
   editable: boolean;
   edit_hint: string;
 }
+export type RuleSection = "cycles" | "contracts" | "fcs";
+export interface CycleRow {
+  channel_id: string;
+  channel: string;
+  provider: string;
+  method: string;
+  regions: string[];
+  toSail: number | null;
+  voyage: number | null;
+  days: number | null;
+  src: string;
+  sps: number;
+}
+export interface ContractRow { provider_id: string; provider: string; channel_id: string; channel: string; region: string; days: number; remind: number; sps: number }
+export interface FcRow { fc: string; addr: string; city: string; state: string; zip: string; region: string; n: number }
 
 export interface LogisticsTrack {
   number: string;
@@ -356,5 +358,7 @@ export const getCarriers = (params: Params, signal?: AbortSignal) =>
 export const getCarrierOrder = (number: string, signal?: AbortSignal) =>
   get<{ today: string; order: CarrierOrder }>(`/carriers/${encodeURIComponent(number)}`, signal);
 export const getRules = (signal?: AbortSignal) => get<RulesView>("/rules", signal);
+export const getRuleList = <Row,>(section: RuleSection, params: Params, signal?: AbortSignal) =>
+  get<LogisticsList<Row, { all: number }>>(`/rules/${section}${toQuery(params)}`, signal);
 export const getShippingList = (code: string, signal?: AbortSignal) =>
   backendRequest<LogisticsDetail>(`${logisticsPrefix}/shipping-lists/${encodeURIComponent(code)}`, { signal });

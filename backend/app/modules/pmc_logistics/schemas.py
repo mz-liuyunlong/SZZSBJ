@@ -19,7 +19,7 @@ class _Query(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=50, ge=1, le=200)
+    page_size: int = Field(default=50, ge=1, le=1000)
     keyword: str = Field(default="", max_length=128)
 
 
@@ -52,6 +52,21 @@ class CarrierQuery(_Query):
     status: str | None = Field(default=None, max_length=32)
     store: str | None = Field(default=None, max_length=64)
     stale: bool = False
+
+
+RULE_SORTS = {
+    "cycles": ("channel", "provider", "toSail", "voyage", "days", "sps"),
+    "contracts": ("provider", "channel", "region", "days", "remind", "sps"),
+    "fcs": ("fc", "state", "region", "n"),
+}
+
+
+class RuleListQuery(_Query):
+    """Server-side paging for the 时效与阈值设置 tables; ``sort`` is checked per table."""
+
+    sort: str | None = Field(default=None, max_length=16)
+    order: Literal["asc", "desc"] = "asc"
+    region: str | None = Field(default=None, max_length=16)
 
 
 class LogisticsRuleSummary(BaseModel):
@@ -107,8 +122,6 @@ class LogisticsRulesView(BaseModel):
     today: date
     thresholds: list[dict[str, Any]]
     region_total: dict[str, int]
-    cycles: list[dict[str, Any]]
-    contracts: list[dict[str, Any]]
-    fcs: list[dict[str, Any]]
+    counts: dict[str, int]
     editable: bool = False
     edit_hint: str

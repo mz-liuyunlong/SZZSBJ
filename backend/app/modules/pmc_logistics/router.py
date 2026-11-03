@@ -1,7 +1,7 @@
 """物流看板 API (read-only): 8088 ``pmc-logistics`` over stored Lingxing / 众壹 / Walmart
 records. No provider calls, no writes."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Path, Query, Request
 from sqlalchemy.orm import Session
@@ -22,6 +22,7 @@ from app.modules.pmc_logistics.schemas import (
     LogisticsOptions,
     LogisticsRulesView,
     OverviewQuery,
+    RuleListQuery,
 )
 from app.modules.pmc_logistics.service import LogisticsService
 
@@ -156,6 +157,28 @@ def carrier_order(
 )
 def rules(request: Request, svc: Service):
     return success_response(request, data=svc.rules_view(), meta=meta(svc))
+
+
+@router.get(
+    "/rules/{section}",
+    response_model=SuccessEnvelope[LogisticsList, dict],
+    responses=ERRORS,
+    summary="时效与阈值设置表格（渠道分段 / 合同时效 / 目的仓，服务端分页，排序白名单）",
+)
+def rule_list(
+    request: Request,
+    svc: Service,
+    section: Annotated[Literal["cycles", "contracts", "fcs"], Path()],
+    q: Annotated[RuleListQuery, Query()],
+):
+    try:
+        data = svc.rule_list(section, q)
+    except ValueError:
+        raise ApiError(
+            code=ErrorCode.VALIDATION_ERROR, status_code=422, message="不支持按该列排序"
+        ) from None
+    assert data is not None  # section is validated by the path type
+    return success_response(request, data=data, meta=page_meta(svc, data))
 
 
 @router.get(

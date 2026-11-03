@@ -40,6 +40,7 @@ from app.modules.pmc_logistics.rules import (
     enrich_sp,
 )
 from app.modules.pmc_logistics.schemas import (
+    RULE_SORTS,
     AlertQuery,
     CarrierOrderDetail,
     CarrierQuery,
@@ -51,6 +52,7 @@ from app.modules.pmc_logistics.schemas import (
     LogisticsRulesView,
     Option,
     OverviewQuery,
+    RuleListQuery,
     SpFilters,
 )
 from app.modules.pmc_wfs.board_facts import source_tables_ready
@@ -636,11 +638,40 @@ class LogisticsService:
     # 时效与阈值设置（只读） -----------------------------------------------------------
 
     def rules_view(self) -> LogisticsRulesView:
-        snap = self.snapshot()
-        rules = snap.rules
-        rows = self._rows()
-        chans = {c["channel_id"]: c for c in snap.inputs.channels}
-        providers = snap.inputs.providers
+        tables = self._rule_tables()
+        return LogisticsRulesView(
+            today=self.snapshot().today,
+            thresholds=self._thresholds(),
+            region_total=dict(self.snapshot().rules.region_total),
+            counts={k: len(v) for k, v in tables.items()},
+            edit_hint=EDIT_HINT,
+        )
+
+    def rule_list(self, section: str, q: RuleListQuery) -> LogisticsList | None:
+        tables = self._rule_tables()
+        if section not in tables:
+            return None
+        if q.sort is not None and q.sort not in RULE_SORTS[section]:
+            raise ValueError(q.sort)
+        kw = q.keyword.strip().lower()
+        rows = [
+            r
+            for r in tables[section]
+            if (not kw or kw in " ".join(str(v) for v in r.values()).lower())
+            and (
+                not q.region or r.get("region") == q.region or q.region in (r.get("regions") or [])
+            )
+        ]
+        if q.sort:
+            key = q.sort
+            rows.sort(
+                key=lambda r: (r.get(key) is None, r.get(key) if r.get(key) is not None else 0),
+                reverse=q.order == "desc",
+            )
+        return self._page(rows, q, {"all": len(tables[section])})
+
+    def _thresholds(self) -> list[dict[str, Any]]:
+        rules = self.snapshot().rules
         thresholds = [
             ("remind_before", rules.remind_before, "天", "即将超时提醒：距合同时效剩余 ≤ N 天"),
             (
@@ -675,6 +706,14 @@ class LogisticsService:
             ),
             ("penalty_per_kg_day", rules.penalty_per_kg_day, "元/KG/天", "逾期赔付（合同）"),
         ]
+        return [{"key": k, "value": v, "unit": u, "label": label} for k, v, u, label in thresholds]
+
+    def _rule_tables(self) -> dict[str, list[dict[str, Any]]]:
+        snap = self.snapshot()
+        rules = snap.rules
+        rows = self._rows()
+        chans = {c["channel_id"]: c for c in snap.inputs.channels}
+        providers = snap.inputs.providers
         cycles = []
         for cid, c in rules.cycle.items():
             ch = chans.get(cid) or {}
@@ -711,17 +750,8 @@ class LogisticsService:
             }
             for c in rules.contract
         ]
-        return LogisticsRulesView(
-            today=snap.today,
-            thresholds=[
-                {"key": k, "value": v, "unit": u, "label": label} for k, v, u, label in thresholds
-            ],
-            region_total=dict(rules.region_total),
-            cycles=cycles,
-            contracts=contracts,
-            fcs=sorted(snap.inputs.fcs.values(), key=lambda f: f["fc"]),
-            edit_hint=EDIT_HINT,
-        )
+        fcs = sorted(snap.inputs.fcs.values(), key=lambda f: f["fc"])
+        return {"cycles": cycles, "contracts": contracts, "fcs": fcs}
 
     def detail(self, code: str) -> LogisticsDetail | None:
         snap = self.snapshot()

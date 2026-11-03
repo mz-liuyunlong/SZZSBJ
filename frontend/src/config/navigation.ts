@@ -305,10 +305,8 @@ export const navigation: NavigationGroup[] = [
         sidebarSection: 'pmc-logistics', ...LOGISTICS_PAGE,
         sourceTables: ['ods_lingxing_wfs_shipping_lists', 'ods_carrier_zhongyi_tracks', 'ods_walmart_wfs_receipts'],
       }),
-      page('pmc', 'logistics_settings', '时效与阈值设置', '/pmc/logistics/settings', {
-        sidebarSection: 'pmc-logistics', ...LOGISTICS_PAGE,
-        sourceTables: ['ods_lingxing_logistics_channels', 'ods_lingxing_wfs_shipping_lists'],
-      }),
+      // 时效与阈值设置 lives in PMC 设置 (Rocky 2026-11-03: PMC has one settings area). The page component
+      // is LogisticsRulesPage, routed by key: PMC 设置 registers it as page('pmc', 'logistics_settings', ...).
       page('pmc', 'logistics_carriers', '货代看板', '/pmc/logistics/carriers', {
         sidebarSection: 'pmc-logistics', ...LOGISTICS_PAGE,
         sourceTables: ['ods_carrier_zhongyi_orders', 'ods_carrier_zhongyi_tracks', 'ods_lingxing_wfs_shipping_lists'],

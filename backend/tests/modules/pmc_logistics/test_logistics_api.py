@@ -114,7 +114,24 @@ def test_options_alerts_forecast_rules():
     rules = client.get(f"{API}/rules").json()["data"]
     assert rules["editable"] is False
     assert {t["key"] for t in rules["thresholds"]} >= {"remind_before", "wm_receive_buffer"}
-    assert rules["contracts"] and rules["cycles"]
+    assert rules["counts"]["contracts"] and rules["counts"]["cycles"]
+
+
+def test_rule_tables_are_server_paginated_with_a_sort_whitelist():
+    client = _client(_service())
+    first = client.get(f"{API}/rules/contracts", params={"page_size": 2}).json()
+    data = first["data"]
+    assert len(data["items"]) == 2 and data["total"] == data["summary"]["all"] > 2
+    assert first["meta"]["total"] == data["total"]
+    desc = client.get(
+        f"{API}/rules/contracts", params={"sort": "days", "order": "desc", "page_size": 200}
+    ).json()["data"]["items"]
+    days = [c["days"] for c in desc]
+    assert days == sorted(days, reverse=True)
+    east = client.get(f"{API}/rules/contracts", params={"region": "美东"}).json()["data"]
+    assert {c["region"] for c in east["items"]} == {"美东"}
+    assert client.get(f"{API}/rules/contracts", params={"sort": "provider_id"}).status_code == 422
+    assert client.get(f"{API}/rules/nope").status_code == 422
 
 
 def test_carriers_empty_without_files_and_404_detail():

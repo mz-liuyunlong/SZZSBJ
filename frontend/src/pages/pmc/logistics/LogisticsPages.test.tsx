@@ -13,12 +13,14 @@ vi.mock("./logisticsApi", async (orig) => {
   return {
     ...real,
     getOptions: vi.fn(), getOverview: vi.fn(), getAlerts: vi.fn(), getForecast: vi.fn(),
-    getCarriers: vi.fn(), getCarrierOrder: vi.fn(), getRules: vi.fn(), getShippingList: vi.fn(),
+    getCarriers: vi.fn(), getCarrierOrder: vi.fn(), getRules: vi.fn(), getRuleList: vi.fn(), getShippingList: vi.fn(),
   };
 });
 
 const pmc = navigation.find((g) => g.key === "pmc")!;
-const pageOf = (key: string) => pmc.children.find((p) => p.key === key)!;
+const pageOf = (key: string) => pmc.children.find((p) => p.key === key)
+  // 时效与阈值设置 is registered by PMC 设置; render it by key here.
+  ?? { ...pmc.children.find((p) => p.key === "pmc_logistics")!, key, title: "时效与阈值设置", path: "/pmc/settings/logistics" };
 const ok = <T,>(data: T) => ({ success: true as const, data, error: null, meta: {}, request_id: "r" });
 
 const row = (code: string, over: Partial<api.OverviewRow> = {}): api.OverviewRow => ({
@@ -131,18 +133,22 @@ describe("物流 pages", () => {
     expect(screen.queryByText(/接口调用/)).not.toBeInTheDocument();
   });
 
-  it("时效与阈值设置 is read-only", async () => {
+  it("时效与阈值设置 is read-only and pages its tables on the server", async () => {
     vi.mocked(api.getRules).mockResolvedValue(ok({
       today: "2026-11-02",
       thresholds: [{ key: "wm_receive_buffer", value: 10, unit: "天", label: "到仓后 Walmart 接收上架缓冲" }],
-      region_total: { 美西: 50 },
-      cycles: [], contracts: [{ provider_id: "6995", provider: "众壹物流", channel_id: "1", channel: "美东直航", region: "美东", days: 48, remind: 3, sps: 4 }],
-      fcs: [], editable: false, edit_hint: "一期只读",
+      region_total: { 美西: 50 }, counts: { cycles: 0, contracts: 1, fcs: 0 }, editable: false, edit_hint: "一期只读",
     }) as never);
+    vi.mocked(api.getRuleList).mockImplementation(async (section) => list(
+      section === "contracts" ? [{ provider_id: "6995", provider: "众壹物流", channel_id: "1", channel: "美东直航", region: "美东", days: 48, remind: 3, sps: 4 }] : [],
+      { all: section === "contracts" ? 1 : 0 },
+    ) as never);
     renderPage("pmc_logistics_settings");
     await waitFor(() => expect(screen.getByText("到仓后 Walmart 接收上架缓冲")).toBeInTheDocument());
     expect(screen.getByText(/一期只读/)).toBeInTheDocument();
-    expect(screen.getByText("48")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("48")).toBeInTheDocument());
+    expect(vi.mocked(api.getRuleList).mock.calls.map((c) => c[0]).sort()).toEqual(["contracts", "cycles", "fcs"]);
+    expect(vi.mocked(api.getRuleList).mock.calls[0][1]).toMatchObject({ page: 1, page_size: 50 });
     expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
   });
 });

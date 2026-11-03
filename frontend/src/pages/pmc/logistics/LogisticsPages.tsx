@@ -1,4 +1,5 @@
-/** 物流 sidebar section (Rocky 2026-11-03): 物流总览 / 到货预测 / 异常与提醒 / 时效与阈值设置 / 货代看板. */
+/** 物流 sidebar section (Rocky 2026-11-03): 物流总览 / 到货预测 / 异常与提醒 / 货代看板.
+ * 时效与阈值设置 (pmc_logistics_settings) is registered under PMC 设置 and rendered here by key. */
 import type { NavigationPage } from "@/config/navigation";
 import LogisticsAlertsPage from "./LogisticsAlertsPage";
 import LogisticsCarriersPage from "./LogisticsCarriersPage";
