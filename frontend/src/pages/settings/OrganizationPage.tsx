@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Card, Empty, Input, Modal, Space, Spin, Table, Tree, Typography, message } from "antd";
+import { Alert, Button, Card, Empty, Input, Modal, Select, Space, Spin, Table, Tree, Typography, message } from "antd";
 import type { DataNode } from "antd/es/tree";
 import { backendRequest } from "@/api/backendApi";
 
@@ -16,6 +16,12 @@ interface Employee {
   is_active: boolean | null;
   is_resigned: boolean | null;
   is_frozen: boolean | null;
+}
+interface OwnerCandidate {
+  owner_ref: string;
+  feishu_open_id: string | null;
+  employee_name: string | null;
+  is_active: boolean;
 }
 interface DirectoryPreview {
   departments: Department[];
@@ -47,6 +53,8 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
   const [department, setDepartment] = useState<string>();
   const [search, setSearch] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [ownerCandidates, setOwnerCandidates] = useState<OwnerCandidate[]>([]);
+  const [ownerSaving, setOwnerSaving] = useState<string>();
   const [notice, noticeContext] = message.useMessage();
 
   const confirmSync = async () => {
@@ -104,14 +112,38 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
     }
   };
 
+  const reloadOwnerCandidates = async () => {
+    const response = await backendRequest<OwnerCandidate[]>("/api/settings/organization/owner-candidates");
+    setOwnerCandidates(response.data);
+  };
+
+  const bindOwner = async (ownerRef: string, openId: string | undefined) => {
+    if (!openId) {
+      await backendRequest(
+        `/api/settings/organization/owner-bindings/${encodeURIComponent(ownerRef)}`,
+        { method: "DELETE" },
+      );
+    } else {
+      await backendRequest(
+        `/api/settings/organization/owner-bindings/${encodeURIComponent(ownerRef)}`,
+        { method: "PUT", body: JSON.stringify({ feishu_open_id: openId }) },
+      );
+    }
+    await reloadOwnerCandidates();
+    void notice.success("负责人绑定已更新");
+  };
+
   useEffect(() => {
     let alive = true;
     void backendRequest<DirectoryPreview>("/api/settings/organization/snapshot")
       .then(response => { if (alive) setData(response.data); })
       .catch(() => { if (alive) setError("组织架构读取失败：请确认已授权部门数据范围，并检查组织同步状态。"); })
       .finally(() => { if (alive) setLoading(false); });
+    if (canSync) void reloadOwnerCandidates().catch(() => {
+      if (alive) void notice.error("负责人候选数据加载失败");
+    });
     return () => { alive = false; };
-  }, []);
+  }, [canSync]);
 
   const nodes = useMemo(() => {
     const departments = data?.departments ?? [];
@@ -168,6 +200,39 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
             ]} />
         </Card>
       </div>
+      {canSync && (
+        <Card title="领星业务负责人绑定" style={{ marginTop: 16 }}
+          extra={<Typography.Text type="secondary">仅使用已验证的业务 UID；变更会记录审计</Typography.Text>}>
+          <Table<OwnerCandidate> rowKey="owner_ref" size="small"
+            dataSource={ownerCandidates} pagination={{ pageSize: 10 }}
+            columns={[
+              { title: "领星负责人 UID", dataIndex: "owner_ref", width: 220 },
+              { title: "当前飞书员工", dataIndex: "employee_name", render: value => value || "未绑定" },
+              { title: "绑定飞书员工", width: 280, render: (_, row) => (
+                <Select
+                  allowClear
+                  showSearch
+                  optionFilterProp="label"
+                  placeholder="选择飞书在职员工"
+                  style={{ width: "100%" }}
+                  loading={ownerSaving === row.owner_ref}
+                  value={row.is_active ? row.feishu_open_id || undefined : undefined}
+                  options={(data?.users ?? [])
+                    .filter(user => user.is_active && !user.is_resigned && !user.is_frozen)
+                    .map(user => ({ value: user.open_id, label: user.name }))}
+                  onChange={async value => {
+                    setOwnerSaving(row.owner_ref);
+                    try { await bindOwner(row.owner_ref, value); }
+                    catch { void notice.error("负责人绑定失败，请确认 UID 和员工状态"); }
+                    finally { setOwnerSaving(undefined); }
+                  }}
+                />
+              ) },
+              { title: "状态", dataIndex: "is_active", width: 90,
+                render: value => value ? "已绑定" : "未绑定" },
+            ]} />
+        </Card>
+      )}
     </Spin>
   </div>;
 }
