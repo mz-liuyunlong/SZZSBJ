@@ -43,6 +43,7 @@ def test_missing_department_grant_requires_own_verified_owner_binding() -> None:
 
 def test_missing_department_grant_without_owner_binding_fails_closed() -> None:
     from unittest.mock import MagicMock, patch
+
     from app.core.auth import Principal
     from app.modules.iam.organization_access import resolve_business_owner_refs
 
