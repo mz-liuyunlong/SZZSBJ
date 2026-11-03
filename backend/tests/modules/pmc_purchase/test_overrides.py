@@ -310,10 +310,7 @@ def test_override_routes_openapi_and_permissions(monkeypatch: Any) -> None:
     )
     assert response.status_code == 201
     payload = response.json()
-    assert (
-        payload["success"] is True
-        and payload["data"]["override"]["operator_ref"] == "8"
-    )
+    assert payload["success"] is True and payload["data"]["override"]["operator_ref"] == "8"
     assert captured["request_id"] == "req-123" and captured["sku"] == "SKU-A"
     assert payload["meta"]["source_objects"] == [
         "manual_purchase_cycle_override",

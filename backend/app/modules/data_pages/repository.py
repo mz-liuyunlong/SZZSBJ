@@ -1510,12 +1510,12 @@ class ListingManagementRepository:
         archive_flag = func.coalesce(ListingArchiveState.is_archived, False)
         statement = (
             select(
-                func.coalesce(
-                    func.sum(case((archive_flag.is_(False), 1), else_=0)), 0
-                ).label("active_count"),
-                func.coalesce(
-                    func.sum(case((archive_flag.is_(True), 1), else_=0)), 0
-                ).label("archived_count"),
+                func.coalesce(func.sum(case((archive_flag.is_(False), 1), else_=0)), 0).label(
+                    "active_count"
+                ),
+                func.coalesce(func.sum(case((archive_flag.is_(True), 1), else_=0)), 0).label(
+                    "archived_count"
+                ),
             )
             .select_from(ListingManagementCurrentMart)
             .outerjoin(

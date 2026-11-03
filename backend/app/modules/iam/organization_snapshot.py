@@ -86,7 +86,9 @@ def identity_set_diff(
             SELECT id FROM iam_feishu_org_sync_runs
             ORDER BY applied_at DESC, id DESC LIMIT 1
             """)
-        ).mappings().first()
+        )
+        .mappings()
+        .first()
     )
     if previous is None:
         return {
@@ -100,13 +102,17 @@ def identity_set_diff(
             "identity_replacement": False,
         }
     old_departments = {
-        str(value) for value in session.execute(
-            text("SELECT department_id FROM iam_feishu_departments WHERE last_seen_run_id = :run_id"),
+        str(value)
+        for value in session.execute(
+            text(
+                "SELECT department_id FROM iam_feishu_departments WHERE last_seen_run_id = :run_id"
+            ),
             {"run_id": previous["id"]},
         ).scalars()
     }
     old_employees = {
-        str(value) for value in session.execute(
+        str(value)
+        for value in session.execute(
             text("SELECT open_id FROM iam_feishu_employees WHERE last_seen_run_id = :run_id"),
             {"run_id": previous["id"]},
         ).scalars()
