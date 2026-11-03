@@ -70,6 +70,14 @@ def _optional_decimal(value: object) -> Decimal | None:
     return _decimal(value)
 
 
+def _safe_monitor_error_code(value: str | None) -> str | None:
+    if value is None:
+        return None
+    if re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,127}", value):
+        return value
+    return "MONITOR_ERROR_UNCLASSIFIED"
+
+
 def _percent_ratio(numerator: Decimal, denominator: Decimal) -> Decimal | None:
     if not denominator:
         return None
@@ -816,6 +824,7 @@ class ListingManagementService:
                 lambda item: item.launch_date_cn,
             ),
             ("monitor_observed_at", "监控检查时间", lambda item: item.monitor_observed_at),
+            ("monitor_attempted_at", "最近监控尝试时间", lambda item: item.monitor_attempted_at),
             ("monitor_source", "监控来源", lambda item: item.monitor_source),
             ("monitor_outcome", "监控状态", lambda item: item.monitor_outcome),
             ("monitor_error_code", "监控错误码", lambda item: item.monitor_error_code),
@@ -1238,9 +1247,10 @@ class ListingManagementService:
             launch_date_cn=getattr(row, "launch_date_cn", None),
             first_wfs_seen_at_utc=getattr(row, "first_wfs_seen_at_utc", None),
             monitor_observed_at=getattr(row, "monitor_observed_at", None),
+            monitor_attempted_at=getattr(row, "monitor_attempted_at", None),
             monitor_source=getattr(row, "monitor_source", None),
             monitor_outcome=getattr(row, "monitor_outcome", None),
-            monitor_error_code=getattr(row, "monitor_error_code", None),
+            monitor_error_code=_safe_monitor_error_code(getattr(row, "monitor_error_code", None)),
             monitor_image_urls=getattr(row, "monitor_image_urls", None) or [],
             category=category,
             wfs_available_quantity=listing.wfs_available_quantity,

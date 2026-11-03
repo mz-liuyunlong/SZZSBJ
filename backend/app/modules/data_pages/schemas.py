@@ -406,6 +406,7 @@ class ListingManagementItemRead(StrictSchema):
     launch_date_cn: date | None = None
     first_wfs_seen_at_utc: datetime | None = None
     monitor_observed_at: datetime | None = None
+    monitor_attempted_at: datetime | None = None
     monitor_source: str | None = None
     monitor_outcome: str | None = None
     monitor_error_code: str | None = None

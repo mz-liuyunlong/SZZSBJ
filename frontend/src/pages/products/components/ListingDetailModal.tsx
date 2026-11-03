@@ -113,9 +113,23 @@ function ListingDetailModal({ row, onClose, onOpenAnalysis }: ListingDetailModal
           {monitorStale && <Tag color="orange">监控结果已超过48小时，需重新检查</Tag>}
           <div className="listing-management__governance-list">
             <div>
-              <Typography.Text strong>最近检查时间</Typography.Text>
+              <Typography.Text strong>上次成功观察时间</Typography.Text>
               <Typography.Text>{row.checkedAt}</Typography.Text>
             </div>
+            <div>
+              <Typography.Text strong>最近监控尝试</Typography.Text>
+              <Typography.Text>{row.monitorAttemptedAt || "未监控"}</Typography.Text>
+            </div>
+            <div>
+              <Typography.Text strong>尝试结果</Typography.Text>
+              <Typography.Text>{row.monitorStatus || "未监控"}</Typography.Text>
+            </div>
+            {row.monitorError && (
+              <div>
+                <Typography.Text strong>失败错误码</Typography.Text>
+                <Typography.Text>{row.monitorError}</Typography.Text>
+              </div>
+            )}
             <div>
               <Typography.Text strong>购物车监控</Typography.Text>
               <Typography.Text>{row.buyBoxStatus === "未拥有" ? "需要跟进 Buy Box 风险" : row.buyBoxStatus === "拥有" ? monitorStale ? "上次监控正常，需重新检查" : "当前正常" : "待确认"}</Typography.Text>

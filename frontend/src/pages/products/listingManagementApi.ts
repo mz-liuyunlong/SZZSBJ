@@ -34,6 +34,7 @@ interface BackendListingItem {
   launch_date_cn?: string | null;
   first_wfs_seen_at_utc?: string | null;
   monitor_observed_at?: string | null;
+  monitor_attempted_at?: string | null;
   monitor_source?: string | null;
   monitor_outcome?: string | null;
   monitor_error_code?: string | null;
@@ -271,6 +272,7 @@ export const toListingRow = (item: BackendListingItem): ListingManagementRow => 
   walmartSeller: item.walmart_seller ?? "待确认",
   resold: item.is_hijacked == null ? "待确认" : item.is_hijacked ? "是" : "否",
   checkedAt: item.monitor_observed_at ? toCheckedText(item.monitor_observed_at) : "未监控",
+  monitorAttemptedAt: item.monitor_attempted_at ? toCheckedText(item.monitor_attempted_at) : "未监控",
   dataUpdatedAt: toCheckedText(item.calculated_at),
   monitorSource: item.monitor_source ?? "未监控",
   monitorStatus: item.monitor_outcome ?? "未监控",

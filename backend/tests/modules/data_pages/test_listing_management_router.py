@@ -31,11 +31,19 @@ from app.modules.data_pages.schemas import (
     ListingTagBatchSetData,
     ListingTagRead,
 )
-from app.modules.data_pages.service import ListingManagementService
+from app.modules.data_pages.service import ListingManagementService, _safe_monitor_error_code
 from app.modules.integration_sync.dependencies import require_source_account_scope
 
 ALL_PERMISSIONS = frozenset({"page:products:listing-management:view"})
 NOW = datetime(2026, 9, 17, 8, 0, tzinfo=UTC)
+
+
+def test_monitor_error_code_does_not_expose_untrusted_text() -> None:
+    assert _safe_monitor_error_code("MONITOR_TIMEOUT") == "MONITOR_TIMEOUT"
+    assert (
+        _safe_monitor_error_code("token=https://example.invalid/secret")
+        == "MONITOR_ERROR_UNCLASSIFIED"
+    )
 
 
 def _app(*permissions: str) -> FastAPI:

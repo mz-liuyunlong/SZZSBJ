@@ -26,7 +26,7 @@ from sqlalchemy import (
     tuple_,
 )
 from sqlalchemy.exc import ProgrammingError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.modules.data_pages.models import (
@@ -41,7 +41,10 @@ from app.modules.data_pages.models import (
     WalmartListingDimension,
     WalmartListingInventoryDailyFact,
 )
-from app.modules.walmart_monitor.models import WalmartMonitorListingCurrent
+from app.modules.walmart_monitor.models import (
+    StandardizedWalmartMonitorListingObservation,
+    WalmartMonitorListingCurrent,
+)
 
 DAILY_SALES_SEARCH_COLUMNS: dict[str, ColumnElement[str | None]] = {
     "sku": DailySalesItemDayMart.local_sku,
@@ -107,6 +110,7 @@ class ListingManagementRowProjection:
     monitor_outcome: str | None = None
     monitor_error_code: str | None = None
     monitor_image_urls: list[str] | None = None
+    monitor_attempted_at: datetime | None = None
 
     def __getattr__(self, name: str) -> object:
         effective = f"effective_{name}"
@@ -157,6 +161,7 @@ def _listing_projection(row: Sequence[object]) -> ListingManagementRowProjection
         monitor_outcome=row[22],  # type: ignore[arg-type]
         monitor_error_code=row[23],  # type: ignore[arg-type]
         monitor_image_urls=row[24],  # type: ignore[arg-type]
+        monitor_attempted_at=row[25],  # type: ignore[arg-type]
     )
 
 
@@ -1314,6 +1319,25 @@ class ListingManagementRepository:
             WalmartMonitorListingCurrent.brand,
             ListingManagementCurrentMart.brand,
         )
+        latest_attempt = aliased(StandardizedWalmartMonitorListingObservation)
+        latest_attempt_id = (
+            select(StandardizedWalmartMonitorListingObservation.id)
+            .where(
+                StandardizedWalmartMonitorListingObservation.source_account_ref
+                == ListingManagementCurrentMart.source_account_ref,
+                StandardizedWalmartMonitorListingObservation.store_id
+                == ListingManagementCurrentMart.store_id,
+                StandardizedWalmartMonitorListingObservation.item_id
+                == ListingManagementCurrentMart.item_id,
+            )
+            .order_by(
+                StandardizedWalmartMonitorListingObservation.captured_at.desc(),
+                StandardizedWalmartMonitorListingObservation.id.desc(),
+            )
+            .limit(1)
+            .correlate(ListingManagementCurrentMart)
+            .scalar_subquery()
+        )
         statement = (
             select(
                 ListingManagementCurrentMart,
@@ -1337,10 +1361,11 @@ class ListingManagementRepository:
                 effective_review_count.label("effective_review_count"),
                 effective_brand.label("effective_brand"),
                 WalmartMonitorListingCurrent.observed_at.label("monitor_observed_at"),
-                WalmartMonitorListingCurrent.monitor_source.label("monitor_source"),
-                WalmartMonitorListingCurrent.monitor_outcome.label("monitor_outcome"),
-                WalmartMonitorListingCurrent.monitor_error_code.label("monitor_error_code"),
+                latest_attempt.monitor_source.label("monitor_source"),
+                latest_attempt.monitor_outcome.label("monitor_outcome"),
+                latest_attempt.monitor_error_code.label("monitor_error_code"),
                 WalmartMonitorListingCurrent.image_urls_json.label("monitor_image_urls"),
+                latest_attempt.captured_at.label("monitor_attempted_at"),
             )
             .outerjoin(
                 WalmartListingDimension,
@@ -1378,6 +1403,7 @@ class ListingManagementRepository:
                     WalmartMonitorListingCurrent.item_id == ListingManagementCurrentMart.item_id,
                 ),
             )
+            .outerjoin(latest_attempt, latest_attempt.id == latest_attempt_id)
             .where(ListingManagementCurrentMart.source_account_ref.in_(account_refs))
         )
 

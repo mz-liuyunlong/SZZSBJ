@@ -45,9 +45,22 @@ test("Listing page persists GPT links, archive state, tags, and scoped CSV", asy
     has: page.getByText("SYNTHETIC-LISTING-A2", { exact: true }),
   }).locator("td").nth(stockColumnIndex)).toHaveText("未同步");
   await expect(page.getByText("SYNTHETIC-LISTING-B", { exact: true })).toHaveCount(0);
-  await page.getByRole("row").filter({
+  const monitoredRow = page.getByRole("row").filter({
     has: page.getByText("SYNTHETIC-LISTING-A", { exact: true }),
-  }).getByRole("button", { name: "详情" }).click();
+  });
+  await expect(monitoredRow.getByText("SYNTHETIC-MONITOR-TITLE")).toBeVisible();
+  await expect(monitoredRow.getByText("SYNTHETIC_MONITOR_TIMEOUT")).toBeVisible();
+  await monitoredRow.getByRole("button", { name: "+1" }).click();
+  await expect(page.getByText("监控商品图片")).toBeVisible();
+  await monitoredRow.getByRole("button", { name: "详情" }).click();
+  const listingDetail = page.getByRole("dialog", { name: "Listing 详情" });
+  await listingDetail.getByRole("button", { name: "治理记录" }).click();
+  await expect(listingDetail).toContainText("上次成功观察时间");
+  await expect(listingDetail).toContainText("2026-10-10 09:00");
+  await expect(listingDetail).toContainText("最近监控尝试");
+  await expect(listingDetail).toContainText("2026-10-10 11:00");
+  await expect(listingDetail).toContainText("SYNTHETIC_MONITOR_TIMEOUT");
+  await expect(listingDetail).toContainText("监控结果已超过48小时");
   await page.getByRole("dialog", { name: "Listing 详情" })
     .getByRole("button", { name: "经营分析" }).click();
   const analysisDialog = page.getByRole("dialog", { name: "Listing经营分析中心" });
@@ -115,6 +128,8 @@ test("Listing page persists GPT links, archive state, tags, and scoped CSV", asy
   await selectedExportDialog.getByRole("button", { name: /导\s*出/ }).click();
   const selectedCsv = await readFile(await (await selectedDownload).path(), "utf-8");
   expect(selectedCsv).toContain("SYNTHETIC-LISTING-A");
+  expect(selectedCsv).toContain("SYNTHETIC_MONITOR_TIMEOUT");
+  expect(selectedCsv).toContain("最近监控尝试时间");
   expect(selectedCsv).not.toContain("SYNTHETIC-LISTING-A2");
   expect(selectedCsv).not.toContain("SYNTHETIC-LISTING-B");
   await selectedRow.getByRole("checkbox").uncheck();

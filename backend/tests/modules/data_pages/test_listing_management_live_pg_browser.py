@@ -34,6 +34,11 @@ from app.modules.data_pages.models import (
 from app.modules.iam.security import token_hash
 from app.modules.integration_sync.models import IntegrationInterface, IntegrationSyncConfig
 from app.modules.integration_sync.wfs_first_stock import observe_first_wfs_stock
+from app.modules.walmart_monitor.models import (
+    RawWalmartMonitorEvent,
+    StandardizedWalmartMonitorListingObservation,
+    WalmartMonitorListingCurrent,
+)
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("LISTING_LIVE_TEST_DATABASE_URL"),
@@ -120,6 +125,80 @@ def test_listing_page_and_real_api_with_isolated_postgres(
         )
         assert active_listing is not None
         active_listing_id = active_listing.id
+        successful_at = datetime(2026, 10, 10, 1, tzinfo=UTC)
+        failed_at = successful_at + timedelta(hours=2)
+        success_raw = RawWalmartMonitorEvent(
+            event_id="synthetic-monitor-success",
+            schema_version="walmart-monitor.raw.v1",
+            producer_instance_id="synthetic-monitor",
+            producer_check_id="synthetic-check-success",
+            captured_at=successful_at,
+            requested_provider="synthetic",
+            final_outcome="success",
+            target_count=1,
+            attempt_count=1,
+            raw_hash="a" * 64,
+            payload_bytes=2,
+            payload_json={},
+        )
+        failed_raw = RawWalmartMonitorEvent(
+            event_id="synthetic-monitor-failure",
+            schema_version="walmart-monitor.raw.v1",
+            producer_instance_id="synthetic-monitor",
+            producer_check_id="synthetic-check-failure",
+            captured_at=failed_at,
+            requested_provider="synthetic",
+            final_outcome="failed",
+            target_count=1,
+            attempt_count=1,
+            raw_hash="b" * 64,
+            payload_bytes=2,
+            payload_json={},
+        )
+        session.add_all([success_raw, failed_raw])
+        session.flush()
+        successful_observation = StandardizedWalmartMonitorListingObservation(
+            raw_event_id=success_raw.id,
+            source_account_ref="synthetic-a",
+            store_id="synthetic-store",
+            item_id="SYNTHETIC-LISTING-A",
+            captured_at=successful_at,
+            monitor_outcome="success",
+            monitor_source="synthetic-api",
+            title="SYNTHETIC-MONITOR-TITLE",
+            image_urls_json=[
+                "https://example.invalid/synthetic-one.jpg",
+                "https://example.invalid/synthetic-two.jpg",
+            ],
+            parser_version="synthetic-v1",
+        )
+        failed_observation = StandardizedWalmartMonitorListingObservation(
+            raw_event_id=failed_raw.id,
+            source_account_ref="synthetic-a",
+            store_id="synthetic-store",
+            item_id="SYNTHETIC-LISTING-A",
+            captured_at=failed_at,
+            monitor_outcome="failed",
+            monitor_source="synthetic-api",
+            monitor_error_code="SYNTHETIC_MONITOR_TIMEOUT",
+            parser_version="synthetic-v1",
+        )
+        session.add_all([successful_observation, failed_observation])
+        session.flush()
+        session.add(
+            WalmartMonitorListingCurrent(
+                source_account_ref="synthetic-a",
+                store_id="synthetic-store",
+                item_id="SYNTHETIC-LISTING-A",
+                source_observation_id=successful_observation.id,
+                source_raw_event_id=success_raw.id,
+                observed_at=successful_at,
+                monitor_outcome="success",
+                monitor_source="synthetic-api",
+                title="SYNTHETIC-MONITOR-TITLE",
+                image_urls_json=successful_observation.image_urls_json,
+            )
+        )
         session.add(
             ListingArchiveState(
                 listing_id=active_listing_id,
@@ -179,6 +258,17 @@ def test_listing_page_and_real_api_with_isolated_postgres(
             "SYNTHETIC-LISTING-A",
             "SYNTHETIC-LISTING-A2",
         }
+        monitored = next(
+            row
+            for row in listing.json()["data"]["items"]
+            if row["local_sku"] == "SYNTHETIC-LISTING-A"
+        )
+        assert monitored["title"] == "SYNTHETIC-MONITOR-TITLE"
+        assert datetime.fromisoformat(monitored["monitor_observed_at"]) == successful_at
+        assert datetime.fromisoformat(monitored["monitor_attempted_at"]) == failed_at
+        assert monitored["monitor_outcome"] == "failed"
+        assert monitored["monitor_error_code"] == "SYNTHETIC_MONITOR_TIMEOUT"
+        assert len(monitored["monitor_image_urls"]) == 2
         batch_search = {
             "filters": {"search_field": "sku"},
             "batch_values": [f"SYNTHETIC-NO-MATCH-{index:04d}-%_'\"" for index in range(999)]

@@ -131,6 +131,7 @@ const listingExportColumnGroups: ListExportColumnGroup[] = [
       { key: "upc", label: "UPC" },
       { key: "listed_at", label: "上架时间" },
       { key: "monitor_observed_at", label: "监控检查时间" },
+      { key: "monitor_attempted_at", label: "最近监控尝试时间" },
       { key: "monitor_source", label: "监控来源" },
       { key: "monitor_outcome", label: "监控状态" },
       { key: "monitor_error_code", label: "监控错误码" },

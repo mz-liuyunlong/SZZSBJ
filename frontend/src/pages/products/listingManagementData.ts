@@ -37,6 +37,7 @@ export interface ListingManagementRow {
   walmartSeller: string;
   resold: string;
   checkedAt: string;
+  monitorAttemptedAt?: string;
   dataUpdatedAt?: string;
   monitorSource?: string;
   monitorStatus?: string;
