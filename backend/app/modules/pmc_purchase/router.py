@@ -14,7 +14,14 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.api import ApiError, ErrorCode, ErrorEnvelope, SuccessEnvelope, get_request_id, success_response
+from app.core.api import (
+    ApiError,
+    ErrorCode,
+    ErrorEnvelope,
+    SuccessEnvelope,
+    get_request_id,
+    success_response,
+)
 from app.core.auth import Principal, require_principal
 from app.core.permissions import require_permission
 from app.db.session import get_db_session

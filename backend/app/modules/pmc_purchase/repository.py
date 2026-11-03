@@ -59,7 +59,9 @@ _SORTS: dict[str, tuple[Any, ...]] = {
 class PmcPurchaseReadRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
-        self.org_owner_refs: frozenset[str] | None = session.info.get(ORG_OWNER_SCOPE_SESSION_KEY)
+        self.org_owner_refs: frozenset[str] | None = session.info.get(
+            ORG_OWNER_SCOPE_SESSION_KEY
+        )
 
     # -- rules --
 

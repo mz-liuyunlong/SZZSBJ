@@ -1,5 +1,6 @@
 """PMC purchase board enforces Feishu-reviewed owner bounds on SQL."""
 
+from datetime import date
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,7 +20,7 @@ def test_board_query_is_restricted_by_owner_and_account() -> None:
     session.info = {ORG_OWNER_SCOPE_SESSION_KEY: frozenset({"owner-approved"})}
     repository = PmcPurchaseReadRepository(session)
     statement = repository._board_select(
-        BoardListQuery(), frozenset({"ACCOUNT1"}), __import__("datetime").date(2026, 11, 3)
+        BoardListQuery(), frozenset({"ACCOUNT1"}), date(2026, 11, 3)
     )
     sql = str(
         statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
