@@ -299,7 +299,8 @@ class PmcPurchaseReadRepository:
             statement = statement.where(
                 LingxingStoreDimension.store_id.in_(
                     select(DwsPurchaseBoard.store_id).where(
-                        DwsPurchaseBoard.source_account_ref == LingxingStoreDimension.source_account_ref,
+                        DwsPurchaseBoard.source_account_ref
+                        == LingxingStoreDimension.source_account_ref,
                         DwsPurchaseBoard.owner_uid.in_(self.org_owner_refs),
                         DwsPurchaseBoard.store_id.is_not(None),
                     )
