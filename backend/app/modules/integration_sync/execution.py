@@ -768,7 +768,7 @@ class SyncRunExecutionService:
                 page_size=page_size,
                 campaign_type=DATA_PAGES_DEFAULT_CAMPAIGN_TYPE,
                 max_advertisers=DATA_PAGES_DEFAULT_MAX_ADVERTISERS,
-                heartbeat=lambda: self._heartbeat_lock(run.id),
+                heartbeat=lambda: self._heartbeat_data_pages_lock(run.id),
             )
             stores = runner._fetch_offset_all(
                 "seller_list_multi_platform",
@@ -779,8 +779,20 @@ class SyncRunExecutionService:
 
             runner.summary.store_rows = runner._write_stores(stores)
             runner.summary.listing_rows = runner._write_listings(listings)
-            self._heartbeat_lock(run.id)
+            self._heartbeat_data_pages_lock(run.id)
             runner.summary.mart_listing_rows = runner._refresh_listing_mart()
+            if runner.listing_complete_day is not None and runner.summary.listing_skipped_rows == 0:
+                self._event(
+                    run.id,
+                    "running",
+                    "running",
+                    "SYNC_WFS_INVENTORY_DAY_VALIDATED",
+                    safe_details={
+                        "business_date": runner.listing_complete_day.isoformat(),
+                        "page_count": runner.listing_page_count,
+                        "row_count": runner.summary.listing_rows,
+                    },
+                )
             runner.session.commit()
 
         completed = self.repository.get_run_for_update(run.id)

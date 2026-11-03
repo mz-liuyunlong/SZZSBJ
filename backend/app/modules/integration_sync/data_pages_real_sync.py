@@ -427,6 +427,8 @@ class DataPagesRealSyncRunner:
         self.heartbeat = heartbeat
         self.summary = DataPagesRealSyncSummary(source_account_ref, business_date)
         self._listing_capture_by_row_id: dict[int, datetime] = {}
+        self.listing_complete_day: date | None = None
+        self.listing_page_count = 0
         self.store_ids: tuple[str, ...] = ()
         self.advertiser_ids: tuple[str, ...] = ()
 
@@ -541,11 +543,16 @@ class DataPagesRealSyncRunner:
         spec = DATA_PAGES_SYNC_INTERFACE_SPECS_BY_KEY[parser_key]
         if parser_key == "walmart_listing_list":
             self._listing_capture_by_row_id.clear()
+            self.listing_complete_day = None
+            self.listing_page_count = 0
         size = max(self.page_size, minimum_page_size)
         offset = 0
         page_no = 1
         rows: list[dict[str, Any]] = []
         previous_signature: str | None = None
+        listing_total: int | None = None
+        listing_total_consistent = True
+        listing_capture_dates: set[date] = set()
         while page_no <= spec.default_max_pages:
             response = self._request_page(
                 parser_key,
@@ -563,8 +570,17 @@ class DataPagesRealSyncRunner:
                 # Keep each row's actual capture time, not the first page's time.
                 for listing_row in current:
                     self._listing_capture_by_row_id[id(listing_row)] = response.pulled_at
+                self.listing_page_count = page_no
+                if response.pulled_at.utcoffset() is None:
+                    listing_total_consistent = False
+                else:
+                    listing_capture_dates.add(response.pulled_at.astimezone(LA_TZ).date())
             rows.extend(current)
             total = _total_of(response.response_json)
+            if parser_key == "walmart_listing_list":
+                if total is None or (listing_total is not None and total != listing_total):
+                    listing_total_consistent = False
+                listing_total = total
             if (
                 parser_key == "order_v2_list"
                 and total is not None
@@ -575,6 +591,20 @@ class DataPagesRealSyncRunner:
                 # explicitly reports more order rows. Never silently omit orders.
                 raise DataPagesRealSyncError("DATA_PAGES_ORDER_PAGINATION_INCOMPLETE")
             if not current or len(current) < size or (total and len(rows) >= total):
+                if parser_key == "walmart_listing_list":
+                    keys = [
+                        (_field(row, "store_id", "sid"), _field(row, "item_id", "itemId"))
+                        for row in rows
+                    ]
+                    if (
+                        listing_total_consistent
+                        and bool(rows)
+                        and listing_total == len(rows)
+                        and all(store and item for store, item in keys)
+                        and len(set(keys)) == len(keys)
+                        and len(listing_capture_dates) == 1
+                    ):
+                        self.listing_complete_day = next(iter(listing_capture_dates))
                 return rows
             offset += size
             page_no += 1
@@ -839,20 +869,20 @@ class DataPagesRealSyncRunner:
         # walmart/list is a current-state endpoint.
         # Snapshot it using the actual capture date in Los Angeles.
         # Never stamp a historical runner business_date onto current inventory.
-        captured_at = _now()
-        snapshot_date_la = captured_at.astimezone(LA_TZ).date()
-
+        fallback_captured_at = _now()
         count = 0
         for row in rows:
+            captured_at = self._listing_capture_by_row_id.get(id(row)) or fallback_captured_at
+            if captured_at.utcoffset() is None:
+                raise DataPagesRealSyncError("DATA_PAGES_LISTING_CAPTURE_TIME_INVALID")
+            snapshot_date_la = captured_at.astimezone(LA_TZ).date()
             item_id = _field(row, "item_id", "itemId")
             store_id = _field(row, "store_id", "sid")
             if not item_id or not store_id:
                 self.summary.listing_skipped_rows += 1
                 continue
             identity = listing_identity(store_id, item_id, _field(row, "msku"))
-            captured_listing_at = (
-                self._listing_capture_by_row_id.get(id(row)) if identity is not None else None
-            )
+            captured_listing_at = self._listing_capture_by_row_id.get(id(row)) if identity else None
             if captured_listing_at is not None:
                 observe_first_wfs_stock(
                     self.session,
