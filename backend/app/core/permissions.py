@@ -5,8 +5,8 @@ from fastapi import Depends, Request
 
 from app.core.api import ApiError, ErrorCode
 from app.core.auth import Principal, require_principal
-from app.modules.iam.permission_catalog_v2 import register_runtime_permission_key
 from app.core.permission_policy_v2 import permission_for_request
+from app.modules.iam.permission_catalog_v2 import register_runtime_permission_key
 
 
 # Explicit compatibility aliases for grants created before canonical RBAC v2 keys.
