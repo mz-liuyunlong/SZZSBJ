@@ -25,6 +25,7 @@ const ruleOptions: { value: RuleFamily; label: string }[] = [
   { value: "receiving_incomplete", label: "收货长期未完成" },
   { value: "closed_shortage_damage", label: "关闭后短少或破损" },
   { value: "appeal_deadline", label: "申诉临期提醒" },
+  { value: "carrier_delivered_unreceived", label: "货代已签收 · WFS未收货" },
 ];
 
 const statusOptions = [

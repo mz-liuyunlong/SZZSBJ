@@ -51,6 +51,19 @@ def draft_read(row):
     return DraftRead.model_validate({key: getattr(row, key) for key in DraftRead.model_fields})
 
 
+# 打包完成满 N 天未建货件标红（Rocky 2026-11-02）。Phase 1 uses the agreed default; the
+# setting ``wfs.pending_packing_overdue_days`` (WFS 设置, D组) replaces it when it exists.
+PENDING_OVERDUE_DAYS = 3
+BUSINESS_TZ = ZoneInfo("Asia/Shanghai")
+
+
+def packed_days(completed_at: datetime | None, today) -> int | None:
+    if completed_at is None:
+        return None
+    aware = completed_at if completed_at.tzinfo else completed_at.replace(tzinfo=ZoneInfo("UTC"))
+    return (today - aware.astimezone(BUSINESS_TZ).date()).days
+
+
 class WfsService:
     def __init__(self, session, accounts, stores):
         self.session, self.accounts, self.stores = session, accounts, stores
@@ -85,6 +98,7 @@ class WfsService:
         for hold in held:
             held_boxes[hold.box_line_id].add(hold.box_ordinal)
         result = []
+        today = datetime.now(BUSINESS_TZ).date()
         for raw, order in zip(orders, self.warehouse.read_rows(orders), strict=True):
             box = order.box_set
             reasons = []
@@ -108,6 +122,8 @@ class WfsService:
             }
             if not lines:
                 reasons.append("BOXES_REQUIRED")
+            days = packed_days(box.completed_at if box else None, today)
+            unplaced = sum(counts.values())
             result.append(
                 PendingRow(
                     order=order,
@@ -122,6 +138,8 @@ class WfsService:
                     available_units=sum(counts[r.id] * r.units_per_box for r in lines)
                     if not reasons
                     else 0,
+                    packed_days=days,
+                    overdue=days is not None and days >= PENDING_OVERDUE_DAYS and unplaced > 0,
                 )
             )
         return result
@@ -161,11 +179,12 @@ class WfsService:
             for row in rows
             if self._arrangement(row, query.arrangement)
             and self._creation_result(states.get(row.order.id), query.creation_result)
+            and (not query.only_overdue or row.overdue)
         ]
 
     def list(self, query):
         stmt = self.repo.query(query, self.accounts, self.stores)
-        if query.arrangement == "all" and query.creation_result == "all":
+        if query.arrangement == "all" and query.creation_result == "all" and not query.only_overdue:
             total = self.repo.count(stmt)
             orders = list(
                 self.session.scalars(
@@ -189,7 +208,7 @@ class WfsService:
         orders = list(self.session.scalars(self.repo.query(query, self.accounts, self.stores)))
         rows = (
             self._filter_rows(query, orders)
-            if query.arrangement != "all" or query.creation_result != "all"
+            if query.arrangement != "all" or query.creation_result != "all" or query.only_overdue
             else self.rows(orders)
         )
         all_orders = list(
@@ -208,6 +227,8 @@ class WfsService:
             filled_not_done=sum(o.id in sets for o in waiting),
             available_boxes=sum(r.available_boxes for r in rows),
             available_units=sum(r.available_units for r in rows),
+            overdue=sum(r.overdue for r in rows),
+            overdue_days=PENDING_OVERDUE_DAYS,
         )
 
     def options(self):

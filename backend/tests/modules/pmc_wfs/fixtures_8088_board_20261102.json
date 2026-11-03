@@ -1,0 +1,9373 @@
+{
+"expected": {
+"exceptions": [
+{
+"code": "3599594WFB",
+"desc": "创建 10 天仍未补发货信息 / 未关联发货单",
+"found": "2026-10-30",
+"qty": null,
+"real": "calc",
+"sev": "low",
+"store_id": "S05",
+"type": "创建后长期未发货"
+},
+{
+"code": "3133945WFB",
+"desc": "创建 20 天仍未补发货信息 / 未关联发货单",
+"found": "2026-10-20",
+"qty": null,
+"real": "calc",
+"sev": "low",
+"store_id": "S03",
+"type": "创建后长期未发货"
+},
+{
+"code": "3109752WFB",
+"desc": "创建 21 天仍未补发货信息 / 未关联发货单",
+"found": "2026-10-19",
+"qty": null,
+"real": "calc",
+"sev": "low",
+"store_id": "S02",
+"type": "创建后长期未发货"
+},
+{
+"code": "2071912WFB",
+"desc": "自沃尔玛签收 2026-09-30 起 33 天仍未收完（已收 23/36；1 个 SKU 差异超过 10 件：YC00049-1U 差 13）",
+"found": "2026-10-15",
+"qty": -13,
+"real": "real",
+"sev": "high",
+"store_id": "S06",
+"type": "收货长期未完成"
+},
+{
+"code": "2071756WFB",
+"desc": "已关闭，1 个 SKU 差异超过 10 件：YC00047-1U 发 490 / 正常 470（异常 20）",
+"found": "2026-11-02",
+"qty": -20,
+"real": "calc",
+"sev": "mid",
+"store_id": "S06",
+"type": "已关闭短少"
+},
+{
+"code": "2071461WFB",
+"desc": "自沃尔玛签收 2026-09-30 起 33 天仍未收完（已收 295/312；1 个 SKU 差异超过 10 件：JJ8015-1U 差 17）",
+"found": "2026-10-15",
+"qty": -17,
+"real": "real",
+"sev": "high",
+"store_id": "S06",
+"type": "收货长期未完成"
+},
+{
+"code": "1740201WFB",
+"desc": "已关闭，1 个 SKU 差异超过 10 件：JJ9002-1U 发 200 / 正常 187（异常 13）",
+"found": "2026-10-12",
+"qty": -13,
+"real": "calc",
+"sev": "mid",
+"store_id": "S06",
+"type": "已关闭短少"
+},
+{
+"code": "1698129WFB",
+"desc": "已关闭，1 个 SKU 差异超过 10 件：YC00118-1U 发 210 / 正常 186（异常 24）",
+"found": "2026-10-26",
+"qty": -24,
+"real": "calc",
+"sev": "mid",
+"store_id": "S06",
+"type": "已关闭短少"
+},
+{
+"code": "1696947WFB",
+"desc": "自沃尔玛签收 2026-10-18 起 15 天仍未收完（已收 184/291；2 个 SKU 差异超过 10 件：YC00625-1A 差 30、YC00168-1U 差 77）",
+"found": "2026-11-02",
+"qty": -107,
+"real": "real",
+"sev": "high",
+"store_id": "S03",
+"type": "收货长期未完成"
+},
+{
+"code": "1591534WFB",
+"desc": "已关闭，1 个 SKU 差异超过 10 件：YC00041-1U 发 300 / 正常 255（异常 45）",
+"found": "2026-11-01",
+"qty": -45,
+"real": "calc",
+"sev": "high",
+"store_id": "S06",
+"type": "已关闭短少"
+},
+{
+"code": "1371372WFB",
+"desc": "自沃尔玛签收 2026-10-11 起 22 天仍未收完（已收 256/384；1 个 SKU 差异超过 10 件：YC00019-1F 差 128）",
+"found": "2026-10-26",
+"qty": -128,
+"real": "real",
+"sev": "high",
+"store_id": "S05",
+"type": "收货长期未完成"
+},
+{
+"code": "0581728WFB",
+"desc": "已关闭，1 个 SKU 差异超过 10 件：JJ8006-1U 发 192 / 正常 176（异常 16）",
+"found": "2026-10-23",
+"qty": -16,
+"real": "calc",
+"sev": "mid",
+"store_id": "S06",
+"type": "已关闭短少"
+},
+{
+"code": "0264571WFB",
+"desc": "沃尔玛签收 2026-08-10 起 84 天仍未开始上架（沃尔玛无入库记录，领星已收 0）",
+"found": "2026-08-20",
+"qty": -42,
+"real": "real",
+"sev": "high",
+"store_id": "S02",
+"type": "沃尔玛签收·未开始上架"
+},
+{
+"code": "9438537WFA",
+"desc": "预计到仓 2026-08-11（实际到港+周期）已过 83 天，沃尔玛仍为在途待收货",
+"found": "2026-08-18",
+"qty": null,
+"real": "calc",
+"sev": "high",
+"store_id": "S01",
+"type": "预计到仓已过未签收"
+},
+{
+"code": "9210904WFA",
+"desc": "预计到仓 2026-08-30（实际开船+航程+周期）已过 64 天，沃尔玛仍为在途待收货",
+"found": "2026-09-06",
+"qty": null,
+"real": "calc",
+"sev": "high",
+"store_id": "S07",
+"type": "预计到仓已过未签收"
+},
+{
+"code": "8731285WFA",
+"desc": "预计到仓 2026-06-22（领星预计到货）已过 133 天，沃尔玛仍为在途待收货",
+"found": "2026-06-29",
+"qty": null,
+"real": "calc",
+"sev": "high",
+"store_id": "S08",
+"type": "预计到仓已过未签收"
+},
+{
+"code": "2071756WFB",
+"desc": "沃尔玛签收日 2026-09-24，今天是签收后第 39 天，申诉期内，距申诉截止（签收后第 50 天）剩 11 天；短少（单 SKU > 10 件）20 件",
+"found": "2026-10-04",
+"qty": -20,
+"real": "real",
+"sev": "mid",
+"store_id": "S06",
+"type": "申诉期内未处理"
+},
+{
+"code": "1740201WFB",
+"desc": "沃尔玛签收日 2026-09-11，今天是签收后第 52 天，申诉已过期；短少（单 SKU > 10 件）13 件",
+"found": "2026-09-21",
+"qty": -13,
+"real": "real",
+"sev": "low",
+"store_id": "S06",
+"type": "申诉已过期"
+},
+{
+"code": "1698129WFB",
+"desc": "沃尔玛签收日 2026-10-24，今天是签收后第 9 天，未到可申诉，距申诉截止（签收后第 50 天）剩 41 天；短少（单 SKU > 10 件）24 件",
+"found": "2026-11-03",
+"qty": -24,
+"real": "real",
+"sev": "mid",
+"store_id": "S06",
+"type": "申诉期内未处理"
+},
+{
+"code": "1591534WFB",
+"desc": "沃尔玛签收日 2026-10-19，今天是签收后第 14 天，申诉期内，距申诉截止（签收后第 50 天）剩 36 天；短少（单 SKU > 10 件）45 件",
+"found": "2026-10-29",
+"qty": -45,
+"real": "real",
+"sev": "mid",
+"store_id": "S06",
+"type": "申诉期内未处理"
+},
+{
+"code": "0581728WFB",
+"desc": "沃尔玛签收日 2026-09-22，今天是签收后第 41 天，申诉期内，距申诉截止（签收后第 50 天）剩 9 天；短少（单 SKU > 10 件）16 件",
+"found": "2026-10-02",
+"qty": -16,
+"real": "real",
+"sev": "mid",
+"store_id": "S06",
+"type": "申诉期内未处理"
+}
+],
+"items": [
+{
+"code": "3917442WFB",
+"items": [
+{
+"abn": 108,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00340-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 108,
+"wmRecv": 0
+},
+{
+"abn": 100,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00619-1Z",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 100,
+"wmRecv": 0
+},
+{
+"abn": 30,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC01281-1Z",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 30,
+"wmRecv": 0
+},
+{
+"abn": 30,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC01283-1Z",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 30,
+"wmRecv": 0
+}
+]
+},
+{
+"code": "3872182WFB",
+"items": [
+{
+"abn": 20,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00950-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 20,
+"wmRecv": 0
+},
+{
+"abn": 20,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00960-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 20,
+"wmRecv": 0
+},
+{
+"abn": 72,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC01285-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 72,
+"wmRecv": 0
+},
+{
+"abn": 26,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC01286-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 26,
+"wmRecv": 0
+},
+{
+"abn": 72,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC01287-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 72,
+"wmRecv": 0
+},
+{
+"abn": 26,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC01288-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 26,
+"wmRecv": 0
+}
+]
+},
+{
+"code": "3807685WFB",
+"items": [
+{
+"abn": 120,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00420-1U",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 120,
+"wmRecv": 0
+},
+{
+"abn": 195,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00504-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 195,
+"wmRecv": 0
+},
+{
+"abn": 120,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00638-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 120,
+"wmRecv": 0
+},
+{
+"abn": 30,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC01134-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 30,
+"wmRecv": 0
+}
+]
+},
+{
+"code": "3760870WFB",
+"items": [
+{
+"abn": 50,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00002-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 50,
+"wmRecv": 0
+}
+]
+},
+{
+"code": "3759761WFB",
+"items": [
+{
+"abn": 204,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "JJ5121-1D",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 204,
+"wmRecv": 0
+}
+]
+},
+{
+"code": "3640937WFB",
+"items": [
+{
+"abn": 6,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00017-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 6,
+"wmRecv": 0
+}
+]
+},
+{
+"code": "3599594WFB",
+"items": [
+{
+"abn": 35,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00122-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 35,
+"wmRecv": 0
+}
+]
+},
+{
+"code": "3349863WFB",
+"items": [
+{
+"abn": 100,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "JJ8039-1U",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 100,
+"wmRecv": 0
+}
+]
+},
+{
+"code": "3292441WFB",
+"items": [
+{
+"abn": 72,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00199-1U",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 72,
+"wmRecv": 0
+},
+{
+"abn": 90,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00499-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 90,
+"wmRecv": 0
+},
+{
+"abn": 16,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00971-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 16,
+"wmRecv": 0
+}
+]
+},
+{
+"code": "3278783WFB",
+"items": [
+{
+"abn": 100,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00046-1U",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 100,
+"wmRecv": 0
+},
+{
+"abn": 24,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00048-1U",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 24,
+"wmRecv": 0
+},
+{
+"abn": 20,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00784-1Z",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 20,
+"wmRecv": 0
+},
+{
+"abn": 30,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00836-1Z",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 30,
+"wmRecv": 0
+},
+{
+"abn": 20,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00867-1Z",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 20,
+"wmRecv": 0
+},
+{
+"abn": 50,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC01167-1B",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 50,
+"wmRecv": 0
+}
+]
+},
+{
+"code": "3133945WFB",
+"items": [
+{
+"abn": 10,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00408-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 10,
+"wmRecv": 0
+}
+]
+},
+{
+"code": "3116357WFB",
+"items": [
+{
+"abn": null,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00064-1U",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 0,
+"wmRecv": 0
+}
+]
+},
+{
+"code": "3109752WFB",
+"items": [
+{
+"abn": 1,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "JJ5102-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 1,
+"wmRecv": 0
+}
+]
+},
+{
+"code": "2329789WFB",
+"items": [
+{
+"abn": 208,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00568-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 208,
+"wmRecv": 0
+},
+{
+"abn": 210,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00578-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 210,
+"wmRecv": 0
+},
+{
+"abn": 100,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00631-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 100,
+"wmRecv": 0
+}
+]
+},
+{
+"code": "2284857WFB",
+"items": [
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 100,
+"msku": "YC00345-1A",
+"normal": 100,
+"over": 0,
+"put": null,
+"shipped": 100,
+"wmRecv": 100
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 102,
+"msku": "YC00569-1Z",
+"normal": 100,
+"over": 2,
+"put": 5,
+"shipped": 100,
+"wmRecv": 102
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 100,
+"msku": "YC00582-1A",
+"normal": 100,
+"over": 0,
+"put": null,
+"shipped": 100,
+"wmRecv": 100
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 20,
+"msku": "YC00627-1A",
+"normal": 20,
+"over": 0,
+"put": null,
+"shipped": 20,
+"wmRecv": 20
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 120,
+"msku": "YC00628-1A",
+"normal": 100,
+"over": 20,
+"put": null,
+"shipped": 100,
+"wmRecv": 140
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 100,
+"msku": "YC00629-1A",
+"normal": 100,
+"over": 0,
+"put": null,
+"shipped": 100,
+"wmRecv": 100
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 20,
+"msku": "YC00850-1C",
+"normal": 20,
+"over": 0,
+"put": null,
+"shipped": 20,
+"wmRecv": 20
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 20,
+"msku": "YC00851-1A",
+"normal": 20,
+"over": 0,
+"put": 3,
+"shipped": 20,
+"wmRecv": 20
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 150,
+"msku": "YC00857-1A",
+"normal": 150,
+"over": 0,
+"put": null,
+"shipped": 150,
+"wmRecv": 150
+}
+]
+},
+{
+"code": "2284199WFB",
+"items": [
+{
+"abn": 150,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00238-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 150,
+"wmRecv": 0
+},
+{
+"abn": 108,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00261-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 108,
+"wmRecv": 0
+},
+{
+"abn": 100,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00262-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 100,
+"wmRecv": 0
+},
+{
+"abn": 160,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00275-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 160,
+"wmRecv": 0
+},
+{
+"abn": 100,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00304-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 100,
+"wmRecv": 0
+},
+{
+"abn": 100,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00343-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 100,
+"wmRecv": 0
+},
+{
+"abn": 240,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00362-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 240,
+"wmRecv": 0
+},
+{
+"abn": 180,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00372-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 180,
+"wmRecv": 0
+},
+{
+"abn": 20,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00888-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 20,
+"wmRecv": 0
+},
+{
+"abn": 20,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00929-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 20,
+"wmRecv": 0
+}
+]
+},
+{
+"code": "2245432WFB",
+"items": [
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 100,
+"msku": "YC00356-1A",
+"normal": 100,
+"over": 0,
+"put": null,
+"shipped": 100,
+"wmRecv": 100
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 108,
+"msku": "YC00409-1A",
+"normal": 108,
+"over": 0,
+"put": null,
+"shipped": 108,
+"wmRecv": 108
+},
+{
+"abn": 12,
+"dmg": 0,
+"lxRecv": 192,
+"msku": "YC00453-1U",
+"normal": 192,
+"over": 0,
+"put": 12,
+"shipped": 204,
+"wmRecv": 192
+}
+]
+},
+{
+"code": "2244913WFB",
+"items": [
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 28,
+"msku": "YC00303-1U",
+"normal": 28,
+"over": 0,
+"put": 5,
+"shipped": 28,
+"wmRecv": 28
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 10,
+"msku": "YC00329-1A",
+"normal": 10,
+"over": 0,
+"put": null,
+"shipped": 10,
+"wmRecv": 10
+},
+{
+"abn": 2,
+"dmg": 0,
+"lxRecv": 70,
+"msku": "YC00504-1A",
+"normal": 70,
+"over": 0,
+"put": 22,
+"shipped": 72,
+"wmRecv": 70
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 16,
+"msku": "YC00547-1A",
+"normal": 16,
+"over": 0,
+"put": null,
+"shipped": 16,
+"wmRecv": 16
+}
+]
+},
+{
+"code": "2243495WFB",
+"items": [
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 8,
+"msku": "YC00043-1A",
+"normal": 8,
+"over": 0,
+"put": null,
+"shipped": 8,
+"wmRecv": 8
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 8,
+"msku": "YC00322-1A",
+"normal": 8,
+"over": 0,
+"put": null,
+"shipped": 8,
+"wmRecv": 8
+}
+]
+},
+{
+"code": "2071912WFB",
+"items": [
+{
+"abn": 13,
+"dmg": 0,
+"lxRecv": 23,
+"msku": "YC00049-1U",
+"normal": 23,
+"over": 0,
+"put": 23,
+"shipped": 36,
+"wmRecv": 23
+}
+]
+},
+{
+"code": "2071756WFB",
+"items": [
+{
+"abn": 20,
+"dmg": 0,
+"lxRecv": 470,
+"msku": "YC00047-1U",
+"normal": 470,
+"over": 0,
+"put": 470,
+"shipped": 490,
+"wmRecv": 470
+}
+]
+},
+{
+"code": "2071461WFB",
+"items": [
+{
+"abn": 17,
+"dmg": 0,
+"lxRecv": 295,
+"msku": "JJ8015-1U",
+"normal": 295,
+"over": 0,
+"put": 271,
+"shipped": 312,
+"wmRecv": 283
+}
+]
+},
+{
+"code": "1740201WFB",
+"items": [
+{
+"abn": 13,
+"dmg": 0,
+"lxRecv": 187,
+"msku": "JJ9002-1U",
+"normal": 187,
+"over": 0,
+"put": 185,
+"shipped": 200,
+"wmRecv": 187
+}
+]
+},
+{
+"code": "1698129WFB",
+"items": [
+{
+"abn": 24,
+"dmg": 0,
+"lxRecv": 186,
+"msku": "YC00118-1U",
+"normal": 186,
+"over": 0,
+"put": 195,
+"shipped": 210,
+"wmRecv": 186
+}
+]
+},
+{
+"code": "1697565WFB",
+"items": [
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 214,
+"msku": "YC00377-1B",
+"normal": 198,
+"over": 16,
+"put": 47,
+"shipped": 198,
+"wmRecv": 214
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 101,
+"msku": "YC00378-1A",
+"normal": 100,
+"over": 1,
+"put": 24,
+"shipped": 100,
+"wmRecv": 101
+},
+{
+"abn": 1,
+"dmg": 0,
+"lxRecv": 89,
+"msku": "YC00020-1A",
+"normal": 89,
+"over": 0,
+"put": 26,
+"shipped": 90,
+"wmRecv": 89
+}
+]
+},
+{
+"code": "1696947WFB",
+"items": [
+{
+"abn": 30,
+"dmg": 0,
+"lxRecv": 60,
+"msku": "YC00625-1A",
+"normal": 60,
+"over": 0,
+"put": 32,
+"shipped": 90,
+"wmRecv": 60
+},
+{
+"abn": 77,
+"dmg": 0,
+"lxRecv": 76,
+"msku": "YC00168-1U",
+"normal": 76,
+"over": 0,
+"put": 38,
+"shipped": 153,
+"wmRecv": 76
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 48,
+"msku": "YC00449-1U",
+"normal": 48,
+"over": 0,
+"put": 19,
+"shipped": 48,
+"wmRecv": 48
+}
+]
+},
+{
+"code": "1591534WFB",
+"items": [
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 312,
+"msku": "YC00036-1U",
+"normal": 312,
+"over": 0,
+"put": 312,
+"shipped": 312,
+"wmRecv": 312
+},
+{
+"abn": 45,
+"dmg": 0,
+"lxRecv": 255,
+"msku": "YC00041-1U",
+"normal": 255,
+"over": 0,
+"put": 239,
+"shipped": 300,
+"wmRecv": 224
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 160,
+"msku": "YC00605-1A",
+"normal": 160,
+"over": 0,
+"put": 160,
+"shipped": 160,
+"wmRecv": 160
+}
+]
+},
+{
+"code": "1440892WFB",
+"items": [
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 208,
+"msku": "YC00081-1U",
+"normal": 208,
+"over": 0,
+"put": 176,
+"shipped": 208,
+"wmRecv": 208
+}
+]
+},
+{
+"code": "1429383WFB",
+"items": [
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 384,
+"msku": "YC00019-1F",
+"normal": 384,
+"over": 0,
+"put": 220,
+"shipped": 384,
+"wmRecv": 384
+}
+]
+},
+{
+"code": "1371372WFB",
+"items": [
+{
+"abn": 128,
+"dmg": 0,
+"lxRecv": 256,
+"msku": "YC00019-1F",
+"normal": 256,
+"over": 0,
+"put": 95,
+"shipped": 384,
+"wmRecv": 256
+}
+]
+},
+{
+"code": "1176000WFB",
+"items": [
+{
+"abn": 16,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00417-1U",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 16,
+"wmRecv": 0
+}
+]
+},
+{
+"code": "0888154WFB",
+"items": [
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00009-1A",
+"normal": 1,
+"over": 0,
+"put": null,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00009-1B",
+"normal": 1,
+"over": 0,
+"put": null,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00009-1C",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00009-1D",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00009-1E",
+"normal": 1,
+"over": 0,
+"put": null,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00023-1A",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00023-1B",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00023-1C",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00023-1D",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00023-1E",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00039-1A",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00039-1B",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00039-1C",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00039-1D",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00039-1E",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00056-1A",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00056-1B",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00056-1C",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00056-1D",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00056-1E",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00069-1A",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00069-1B",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00069-1C",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00069-1D",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 1,
+"msku": "WY00069-1E",
+"normal": 1,
+"over": 0,
+"put": 1,
+"shipped": 1,
+"wmRecv": 1
+}
+]
+},
+{
+"code": "0581728WFB",
+"items": [
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 243,
+"msku": "JJ5033-1U",
+"normal": 243,
+"over": 0,
+"put": 243,
+"shipped": 243,
+"wmRecv": 243
+},
+{
+"abn": 16,
+"dmg": 0,
+"lxRecv": 176,
+"msku": "JJ8006-1U",
+"normal": 176,
+"over": 0,
+"put": 176,
+"shipped": 192,
+"wmRecv": 176
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 324,
+"msku": "JJ8014-1U",
+"normal": 324,
+"over": 0,
+"put": 324,
+"shipped": 324,
+"wmRecv": 324
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 108,
+"msku": "JJ8016-1U",
+"normal": 90,
+"over": 18,
+"put": 108,
+"shipped": 90,
+"wmRecv": 108
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 408,
+"msku": "YC00022-1U",
+"normal": 400,
+"over": 8,
+"put": 408,
+"shipped": 400,
+"wmRecv": 408
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 54,
+"msku": "YC00068-1U",
+"normal": 54,
+"over": 0,
+"put": 54,
+"shipped": 54,
+"wmRecv": 54
+}
+]
+},
+{
+"code": "0264571WFB",
+"items": [
+{
+"abn": 42,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "JJ5102-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 42,
+"wmRecv": 0
+}
+]
+},
+{
+"code": "9438537WFA",
+"items": [
+{
+"abn": 12,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00156-1C",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 12,
+"wmRecv": null
+},
+{
+"abn": 12,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00152-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 12,
+"wmRecv": null
+},
+{
+"abn": 20,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00160-1C",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 20,
+"wmRecv": null
+},
+{
+"abn": 12,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00159-1C",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 12,
+"wmRecv": null
+},
+{
+"abn": 20,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00158-1C",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 20,
+"wmRecv": null
+}
+]
+},
+{
+"code": "9210904WFA",
+"items": [
+{
+"abn": 4,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00265-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 4,
+"wmRecv": null
+}
+]
+},
+{
+"code": "8753571WFA",
+"items": [
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 710,
+"msku": "JJ2027-1A",
+"normal": 710,
+"over": 0,
+"put": null,
+"shipped": 710,
+"wmRecv": null
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 557,
+"msku": "YC00017-1A",
+"normal": 557,
+"over": 0,
+"put": null,
+"shipped": 557,
+"wmRecv": null
+},
+{
+"abn": 0,
+"dmg": 0,
+"lxRecv": 624,
+"msku": "YC00038-1A",
+"normal": 619,
+"over": 5,
+"put": null,
+"shipped": 619,
+"wmRecv": null
+}
+]
+},
+{
+"code": "8731285WFA",
+"items": [
+{
+"abn": 25,
+"dmg": 0,
+"lxRecv": 0,
+"msku": "YC00120-1A",
+"normal": 0,
+"over": 0,
+"put": null,
+"shipped": 25,
+"wmRecv": null
+}
+]
+}
+],
+"products": [
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 108,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b60",
+"code": "3917442WFB",
+"msku": "YC00340-1A"
+}
+],
+"inTransit": 108,
+"item_id": "20463308074",
+"key": "S01|20463308074",
+"mskus": [
+"YC00340-1A"
+],
+"next": "2026-12-18",
+"nextSell": "2026-12-28",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00340"
+],
+"store_id": "S01"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 100,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b60",
+"code": "3917442WFB",
+"msku": "YC00619-1Z"
+}
+],
+"inTransit": 100,
+"item_id": "20828217839",
+"key": "S01|20828217839",
+"mskus": [
+"YC00619-1Z"
+],
+"next": "2026-12-18",
+"nextSell": "2026-12-28",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00619"
+],
+"store_id": "S01"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 30,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b60",
+"code": "3917442WFB",
+"msku": "YC01281-1Z"
+}
+],
+"inTransit": 30,
+"item_id": "21146871517",
+"key": "S01|21146871517",
+"mskus": [
+"YC01281-1Z"
+],
+"next": "2026-12-18",
+"nextSell": "2026-12-28",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC01281"
+],
+"store_id": "S01"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 30,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b60",
+"code": "3917442WFB",
+"msku": "YC01283-1Z"
+}
+],
+"inTransit": 30,
+"item_id": "21192555229",
+"key": "S01|21192555229",
+"mskus": [
+"YC01283-1Z"
+],
+"next": "2026-12-18",
+"nextSell": "2026-12-28",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC01283"
+],
+"store_id": "S01"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 20,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b60",
+"code": "3872182WFB",
+"msku": "YC00950-1A"
+}
+],
+"inTransit": 20,
+"item_id": "21002454391",
+"key": "S02|21002454391",
+"mskus": [
+"YC00950-1A"
+],
+"next": "2026-12-19",
+"nextSell": "2026-12-29",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00950"
+],
+"store_id": "S02"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 20,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b60",
+"code": "3872182WFB",
+"msku": "YC00960-1A"
+}
+],
+"inTransit": 20,
+"item_id": "21020551657",
+"key": "S02|21020551657",
+"mskus": [
+"YC00960-1A"
+],
+"next": "2026-12-19",
+"nextSell": "2026-12-29",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00960"
+],
+"store_id": "S02"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 72,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b60",
+"code": "3872182WFB",
+"msku": "YC01285-1A"
+}
+],
+"inTransit": 72,
+"item_id": "21168417269",
+"key": "S02|21168417269",
+"mskus": [
+"YC01285-1A"
+],
+"next": "2026-12-19",
+"nextSell": "2026-12-29",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC01285"
+],
+"store_id": "S02"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 26,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b60",
+"code": "3872182WFB",
+"msku": "YC01286-1A"
+}
+],
+"inTransit": 26,
+"item_id": "21137558012",
+"key": "S02|21137558012",
+"mskus": [
+"YC01286-1A"
+],
+"next": "2026-12-19",
+"nextSell": "2026-12-29",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC01286"
+],
+"store_id": "S02"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 72,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b60",
+"code": "3872182WFB",
+"msku": "YC01287-1A"
+}
+],
+"inTransit": 72,
+"item_id": "21193260501",
+"key": "S02|21193260501",
+"mskus": [
+"YC01287-1A"
+],
+"next": "2026-12-19",
+"nextSell": "2026-12-29",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC01287"
+],
+"store_id": "S02"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 26,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b60",
+"code": "3872182WFB",
+"msku": "YC01288-1A"
+}
+],
+"inTransit": 26,
+"item_id": "21193210744",
+"key": "S02|21193210744",
+"mskus": [
+"YC01288-1A"
+],
+"next": "2026-12-19",
+"nextSell": "2026-12-29",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC01288"
+],
+"store_id": "S02"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 120,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b60",
+"code": "3807685WFB",
+"msku": "YC00420-1U"
+}
+],
+"inTransit": 120,
+"item_id": "20580654951",
+"key": "S03|20580654951",
+"mskus": [
+"YC00420-1U"
+],
+"next": "2026-12-17",
+"nextSell": "2026-12-27",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00420"
+],
+"store_id": "S03"
+},
+{
+"aShelf": 22,
+"aShip": 72,
+"aSign": 70,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 195,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b60",
+"code": "3807685WFB",
+"msku": "YC00504-1A"
+},
+{
+"bucket": "receiving",
+"code": "2244913WFB",
+"msku": "YC00504-1A"
+}
+],
+"inTransit": 195,
+"item_id": "20691700128",
+"key": "S03|20691700128",
+"mskus": [
+"YC00504-1A"
+],
+"next": "2026-12-17",
+"nextSell": "2026-12-27",
+"none": 0,
+"receiving": 2,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00504"
+],
+"store_id": "S03"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 120,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b60",
+"code": "3807685WFB",
+"msku": "YC00638-1A"
+}
+],
+"inTransit": 120,
+"item_id": "20900365076",
+"key": "S03|20900365076",
+"mskus": [
+"YC00638-1A"
+],
+"next": "2026-12-17",
+"nextSell": "2026-12-27",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00638"
+],
+"store_id": "S03"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 30,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b60",
+"code": "3807685WFB",
+"msku": "YC01134-1A"
+}
+],
+"inTransit": 30,
+"item_id": "21168804024",
+"key": "S03|21168804024",
+"mskus": [
+"YC01134-1A"
+],
+"next": "2026-12-17",
+"nextSell": "2026-12-27",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC01134"
+],
+"store_id": "S03"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 50,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "3760870WFB",
+"msku": "YC00002-1A"
+}
+],
+"inTransit": 50,
+"item_id": "20277220088",
+"key": "S01|20277220088",
+"mskus": [
+"YC00002-1A"
+],
+"next": "2026-10-30",
+"nextSell": "2026-11-09",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00002"
+],
+"store_id": "S01"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 204,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "3759761WFB",
+"msku": "JJ5121-1D"
+}
+],
+"inTransit": 204,
+"item_id": "18722450593",
+"key": "S04|18722450593",
+"mskus": [
+"JJ5121-1D"
+],
+"next": "2026-11-06",
+"nextSell": "2026-11-16",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"JJ5121"
+],
+"store_id": "S04"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 6,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b30",
+"code": "3640937WFB",
+"msku": "YC00017-1A"
+}
+],
+"inTransit": 6,
+"item_id": "20079371693",
+"key": "S02|20079371693",
+"mskus": [
+"YC00017-1A"
+],
+"next": "2026-11-21",
+"nextSell": "2026-12-01",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00017"
+],
+"store_id": "S02"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 100,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b30",
+"code": "3349863WFB",
+"msku": "JJ8039-1U"
+}
+],
+"inTransit": 100,
+"item_id": "20044457646",
+"key": "S06|20044457646",
+"mskus": [
+"JJ8039-1U"
+],
+"next": "2026-11-21",
+"nextSell": "2026-12-01",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"JJ8039"
+],
+"store_id": "S06"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 72,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b30",
+"code": "3292441WFB",
+"msku": "YC00199-1U"
+}
+],
+"inTransit": 72,
+"item_id": "20412760309",
+"key": "S03|20412760309",
+"mskus": [
+"YC00199-1U"
+],
+"next": "2026-11-20",
+"nextSell": "2026-11-30",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00199"
+],
+"store_id": "S03"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 90,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b30",
+"code": "3292441WFB",
+"msku": "YC00499-1A"
+}
+],
+"inTransit": 90,
+"item_id": "20748371655",
+"key": "S03|20748371655",
+"mskus": [
+"YC00499-1A"
+],
+"next": "2026-11-20",
+"nextSell": "2026-11-30",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00499"
+],
+"store_id": "S03"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 16,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b30",
+"code": "3292441WFB",
+"msku": "YC00971-1A"
+}
+],
+"inTransit": 16,
+"item_id": "21009750242",
+"key": "S03|21009750242",
+"mskus": [
+"YC00971-1A"
+],
+"next": "2026-11-20",
+"nextSell": "2026-11-30",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00971"
+],
+"store_id": "S03"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 100,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b30",
+"code": "3278783WFB",
+"msku": "YC00046-1U"
+}
+],
+"inTransit": 100,
+"item_id": "19982374121",
+"key": "S06|19982374121",
+"mskus": [
+"YC00046-1U"
+],
+"next": "2026-11-20",
+"nextSell": "2026-11-30",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00046"
+],
+"store_id": "S06"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 24,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b30",
+"code": "3278783WFB",
+"msku": "YC00048-1U"
+}
+],
+"inTransit": 24,
+"item_id": "19980672997",
+"key": "S06|19980672997",
+"mskus": [
+"YC00048-1U"
+],
+"next": "2026-11-20",
+"nextSell": "2026-11-30",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00048"
+],
+"store_id": "S06"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 20,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b30",
+"code": "3278783WFB",
+"msku": "YC00784-1Z"
+}
+],
+"inTransit": 20,
+"item_id": "21019301412",
+"key": "S06|21019301412",
+"mskus": [
+"YC00784-1Z"
+],
+"next": "2026-11-20",
+"nextSell": "2026-11-30",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00784"
+],
+"store_id": "S06"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 30,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b30",
+"code": "3278783WFB",
+"msku": "YC00836-1Z"
+}
+],
+"inTransit": 30,
+"item_id": "20942617732",
+"key": "S06|20942617732",
+"mskus": [
+"YC00836-1Z"
+],
+"next": "2026-11-20",
+"nextSell": "2026-11-30",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00836"
+],
+"store_id": "S06"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 20,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b30",
+"code": "3278783WFB",
+"msku": "YC00867-1Z"
+}
+],
+"inTransit": 20,
+"item_id": "20963309074",
+"key": "S06|20963309074",
+"mskus": [
+"YC00867-1Z"
+],
+"next": "2026-11-20",
+"nextSell": "2026-11-30",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00867"
+],
+"store_id": "S06"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 50,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b30",
+"code": "3278783WFB",
+"msku": "YC01167-1B"
+}
+],
+"inTransit": 50,
+"item_id": "21046824269",
+"key": "S06|21046824269",
+"mskus": [
+"YC01167-1B"
+],
+"next": "2026-11-20",
+"nextSell": "2026-11-30",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC01167"
+],
+"store_id": "S06"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 42,
+"detail": [
+{
+"bucket": "bOver",
+"code": "0264571WFB",
+"msku": "JJ5102-1A"
+}
+],
+"inTransit": 42,
+"item_id": "20014566358",
+"key": "S02|20014566358",
+"mskus": [
+"JJ5102-1A"
+],
+"next": "2026-08-10",
+"nextSell": "2026-08-20",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"JJ5102"
+],
+"store_id": "S02"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 208,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "2329789WFB",
+"msku": "YC00568-1A"
+}
+],
+"inTransit": 208,
+"item_id": "20812004116",
+"key": "S06|20812004116",
+"mskus": [
+"YC00568-1A"
+],
+"next": "2026-10-28",
+"nextSell": "2026-11-07",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00568"
+],
+"store_id": "S06"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 210,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "2329789WFB",
+"msku": "YC00578-1A"
+}
+],
+"inTransit": 210,
+"item_id": "20862213377",
+"key": "S06|20862213377",
+"mskus": [
+"YC00578-1A"
+],
+"next": "2026-10-28",
+"nextSell": "2026-11-07",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00578"
+],
+"store_id": "S06"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 100,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "2329789WFB",
+"msku": "YC00631-1A"
+}
+],
+"inTransit": 100,
+"item_id": "20841721262",
+"key": "S06|20841721262",
+"mskus": [
+"YC00631-1A"
+],
+"next": "2026-10-28",
+"nextSell": "2026-11-07",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00631"
+],
+"store_id": "S06"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 150,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "2284199WFB",
+"msku": "YC00238-1A"
+}
+],
+"inTransit": 150,
+"item_id": "20456360816",
+"key": "S07|20456360816",
+"mskus": [
+"YC00238-1A"
+],
+"next": "2026-10-28",
+"nextSell": "2026-11-07",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00238"
+],
+"store_id": "S07"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 108,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "2284199WFB",
+"msku": "YC00261-1A"
+}
+],
+"inTransit": 108,
+"item_id": "20580069436",
+"key": "S07|20580069436",
+"mskus": [
+"YC00261-1A"
+],
+"next": "2026-10-28",
+"nextSell": "2026-11-07",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00261"
+],
+"store_id": "S07"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 100,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "2284199WFB",
+"msku": "YC00262-1A"
+}
+],
+"inTransit": 100,
+"item_id": "20423800781",
+"key": "S07|20423800781",
+"mskus": [
+"YC00262-1A"
+],
+"next": "2026-10-28",
+"nextSell": "2026-11-07",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00262"
+],
+"store_id": "S07"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 160,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "2284199WFB",
+"msku": "YC00275-1A"
+}
+],
+"inTransit": 160,
+"item_id": "20374569300",
+"key": "S07|20374569300",
+"mskus": [
+"YC00275-1A"
+],
+"next": "2026-10-28",
+"nextSell": "2026-11-07",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00275"
+],
+"store_id": "S07"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 100,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "2284199WFB",
+"msku": "YC00304-1A"
+}
+],
+"inTransit": 100,
+"item_id": "20575605508",
+"key": "S07|20575605508",
+"mskus": [
+"YC00304-1A"
+],
+"next": "2026-10-28",
+"nextSell": "2026-11-07",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00304"
+],
+"store_id": "S07"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 100,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "2284199WFB",
+"msku": "YC00343-1A"
+}
+],
+"inTransit": 100,
+"item_id": "20656774899",
+"key": "S07|20656774899",
+"mskus": [
+"YC00343-1A"
+],
+"next": "2026-10-28",
+"nextSell": "2026-11-07",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00343"
+],
+"store_id": "S07"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 240,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "2284199WFB",
+"msku": "YC00362-1A"
+}
+],
+"inTransit": 240,
+"item_id": "20491455143",
+"key": "S07|20491455143",
+"mskus": [
+"YC00362-1A"
+],
+"next": "2026-10-28",
+"nextSell": "2026-11-07",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00362"
+],
+"store_id": "S07"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 180,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "2284199WFB",
+"msku": "YC00372-1A"
+}
+],
+"inTransit": 180,
+"item_id": "20574267393",
+"key": "S07|20574267393",
+"mskus": [
+"YC00372-1A"
+],
+"next": "2026-10-28",
+"nextSell": "2026-11-07",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00372"
+],
+"store_id": "S07"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 20,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "2284199WFB",
+"msku": "YC00888-1A"
+}
+],
+"inTransit": 20,
+"item_id": "20900659861",
+"key": "S07|20900659861",
+"mskus": [
+"YC00888-1A"
+],
+"next": "2026-10-28",
+"nextSell": "2026-11-07",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00888"
+],
+"store_id": "S07"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 20,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "2284199WFB",
+"msku": "YC00929-1A"
+}
+],
+"inTransit": 20,
+"item_id": "20934319703",
+"key": "S07|20934319703",
+"mskus": [
+"YC00929-1A"
+],
+"next": "2026-10-28",
+"nextSell": "2026-11-07",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00929"
+],
+"store_id": "S07"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 100,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "2245432WFB",
+"msku": "YC00356-1A"
+}
+],
+"inTransit": 100,
+"item_id": "20436151462",
+"key": "S03|20436151462",
+"mskus": [
+"YC00356-1A"
+],
+"next": "2026-10-27",
+"nextSell": "2026-11-06",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 100,
+"skus": [
+"YC00356"
+],
+"store_id": "S03"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 108,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "2245432WFB",
+"msku": "YC00409-1A"
+}
+],
+"inTransit": 108,
+"item_id": "20530262696",
+"key": "S03|20530262696",
+"mskus": [
+"YC00409-1A"
+],
+"next": "2026-10-27",
+"nextSell": "2026-11-06",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 108,
+"skus": [
+"YC00409"
+],
+"store_id": "S03"
+},
+{
+"aShelf": 12,
+"aShip": 204,
+"aSign": 192,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "receiving",
+"code": "2245432WFB",
+"msku": "YC00453-1U"
+}
+],
+"inTransit": 0,
+"item_id": "20655658090",
+"key": "S03|20655658090",
+"mskus": [
+"YC00453-1U"
+],
+"next": "",
+"nextSell": "",
+"none": 0,
+"receiving": 12,
+"ships": 0,
+"signedNP": 0,
+"skus": [
+"YC00453"
+],
+"store_id": "S03"
+},
+{
+"aShelf": 5,
+"aShip": 28,
+"aSign": 28,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "receiving",
+"code": "2244913WFB",
+"msku": "YC00303-1U"
+}
+],
+"inTransit": 0,
+"item_id": "20435154504",
+"key": "S03|20435154504",
+"mskus": [
+"YC00303-1U"
+],
+"next": "",
+"nextSell": "",
+"none": 0,
+"receiving": 0,
+"ships": 0,
+"signedNP": 0,
+"skus": [
+"YC00303"
+],
+"store_id": "S03"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 10,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "2244913WFB",
+"msku": "YC00329-1A"
+}
+],
+"inTransit": 10,
+"item_id": "20470269371",
+"key": "S03|20470269371",
+"mskus": [
+"YC00329-1A"
+],
+"next": "2026-10-27",
+"nextSell": "2026-11-06",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 10,
+"skus": [
+"YC00329"
+],
+"store_id": "S03"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 16,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "b15",
+"code": "2244913WFB",
+"msku": "YC00547-1A"
+}
+],
+"inTransit": 16,
+"item_id": "20893215074",
+"key": "S03|20893215074",
+"mskus": [
+"YC00547-1A"
+],
+"next": "2026-10-27",
+"nextSell": "2026-11-06",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 16,
+"skus": [
+"YC00547"
+],
+"store_id": "S03"
+},
+{
+"aShelf": 23,
+"aShip": 36,
+"aSign": 23,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "receiving",
+"code": "2071912WFB",
+"msku": "YC00049-1U"
+}
+],
+"inTransit": 0,
+"item_id": "19979850642",
+"key": "S06|19979850642",
+"mskus": [
+"YC00049-1U"
+],
+"next": "",
+"nextSell": "",
+"none": 0,
+"receiving": 13,
+"ships": 0,
+"signedNP": 0,
+"skus": [
+"YC00049"
+],
+"store_id": "S06"
+},
+{
+"aShelf": 271,
+"aShip": 312,
+"aSign": 283,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "receiving",
+"code": "2071461WFB",
+"msku": "JJ8015-1U"
+}
+],
+"inTransit": 0,
+"item_id": "19992467121",
+"key": "S06|19992467121",
+"mskus": [
+"JJ8015-1U"
+],
+"next": "",
+"nextSell": "",
+"none": 0,
+"receiving": 29,
+"ships": 0,
+"signedNP": 0,
+"skus": [
+"JJ8015"
+],
+"store_id": "S06"
+},
+{
+"aShelf": 47,
+"aShip": 198,
+"aSign": 214,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "receiving",
+"code": "1697565WFB",
+"msku": "YC00377-1B"
+}
+],
+"inTransit": 0,
+"item_id": "20866305698",
+"key": "S04|20866305698",
+"mskus": [
+"YC00377-1B"
+],
+"next": "",
+"nextSell": "",
+"none": 0,
+"receiving": -16,
+"ships": 0,
+"signedNP": 0,
+"skus": [
+"YC00377"
+],
+"store_id": "S04"
+},
+{
+"aShelf": 24,
+"aShip": 100,
+"aSign": 101,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "receiving",
+"code": "1697565WFB",
+"msku": "YC00378-1A"
+}
+],
+"inTransit": 0,
+"item_id": "20800559236",
+"key": "S04|20800559236",
+"mskus": [
+"YC00378-1A"
+],
+"next": "",
+"nextSell": "",
+"none": 0,
+"receiving": -1,
+"ships": 0,
+"signedNP": 0,
+"skus": [
+"YC00378"
+],
+"store_id": "S04"
+},
+{
+"aShelf": 26,
+"aShip": 90,
+"aSign": 89,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "receiving",
+"code": "1697565WFB",
+"msku": "YC00020-1A"
+}
+],
+"inTransit": 0,
+"item_id": "19906615272",
+"key": "S04|19906615272",
+"mskus": [
+"YC00020-1A"
+],
+"next": "",
+"nextSell": "",
+"none": 0,
+"receiving": 1,
+"ships": 0,
+"signedNP": 0,
+"skus": [
+"YC00020"
+],
+"store_id": "S04"
+},
+{
+"aShelf": 32,
+"aShip": 90,
+"aSign": 60,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "receiving",
+"code": "1696947WFB",
+"msku": "YC00625-1A"
+}
+],
+"inTransit": 0,
+"item_id": "20879720484",
+"key": "S03|20879720484",
+"mskus": [
+"YC00625-1A"
+],
+"next": "",
+"nextSell": "",
+"none": 0,
+"receiving": 30,
+"ships": 0,
+"signedNP": 0,
+"skus": [
+"YC00625"
+],
+"store_id": "S03"
+},
+{
+"aShelf": 38,
+"aShip": 153,
+"aSign": 76,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "receiving",
+"code": "1696947WFB",
+"msku": "YC00168-1U"
+}
+],
+"inTransit": 0,
+"item_id": "20318152544",
+"key": "S03|20318152544",
+"mskus": [
+"YC00168-1U"
+],
+"next": "",
+"nextSell": "",
+"none": 0,
+"receiving": 77,
+"ships": 0,
+"signedNP": 0,
+"skus": [
+"YC00168"
+],
+"store_id": "S03"
+},
+{
+"aShelf": 19,
+"aShip": 48,
+"aSign": 48,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "receiving",
+"code": "1696947WFB",
+"msku": "YC00449-1U"
+}
+],
+"inTransit": 0,
+"item_id": "20571101278",
+"key": "S03|20571101278",
+"mskus": [
+"YC00449-1U"
+],
+"next": "",
+"nextSell": "",
+"none": 0,
+"receiving": 0,
+"ships": 0,
+"signedNP": 0,
+"skus": [
+"YC00449"
+],
+"store_id": "S03"
+},
+{
+"aShelf": 95,
+"aShip": 384,
+"aSign": 256,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 0,
+"detail": [
+{
+"bucket": "receiving",
+"code": "1371372WFB",
+"msku": "YC00019-1F"
+}
+],
+"inTransit": 0,
+"item_id": "20240651178",
+"key": "S05|20240651178",
+"mskus": [
+"YC00019-1F"
+],
+"next": "",
+"nextSell": "",
+"none": 0,
+"receiving": 128,
+"ships": 0,
+"signedNP": 0,
+"skus": [
+"YC00019"
+],
+"store_id": "S05"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 16,
+"detail": [
+{
+"bucket": "bOver",
+"code": "1176000WFB",
+"msku": "YC00417-1U"
+}
+],
+"inTransit": 16,
+"item_id": "20563858461",
+"key": "S06|20563858461",
+"mskus": [
+"YC00417-1U"
+],
+"next": "2026-10-15",
+"nextSell": "2026-10-25",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00417"
+],
+"store_id": "S06"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 12,
+"detail": [
+{
+"bucket": "bOver",
+"code": "9438537WFA",
+"msku": "YC00156-1C"
+}
+],
+"inTransit": 12,
+"item_id": "20576452732",
+"key": "S01|20576452732",
+"mskus": [
+"YC00156-1C"
+],
+"next": "2026-08-11",
+"nextSell": "2026-08-21",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00156"
+],
+"store_id": "S01"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 12,
+"detail": [
+{
+"bucket": "bOver",
+"code": "9438537WFA",
+"msku": "YC00152-1A"
+}
+],
+"inTransit": 12,
+"item_id": "20594355287",
+"key": "S01|20594355287",
+"mskus": [
+"YC00152-1A"
+],
+"next": "2026-08-11",
+"nextSell": "2026-08-21",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00152"
+],
+"store_id": "S01"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 20,
+"detail": [
+{
+"bucket": "bOver",
+"code": "9438537WFA",
+"msku": "YC00160-1C"
+}
+],
+"inTransit": 20,
+"item_id": "20576452731",
+"key": "S01|20576452731",
+"mskus": [
+"YC00160-1C"
+],
+"next": "2026-08-11",
+"nextSell": "2026-08-21",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00160"
+],
+"store_id": "S01"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 12,
+"detail": [
+{
+"bucket": "bOver",
+"code": "9438537WFA",
+"msku": "YC00159-1C"
+}
+],
+"inTransit": 12,
+"item_id": "20514016296",
+"key": "S01|20514016296",
+"mskus": [
+"YC00159-1C"
+],
+"next": "2026-08-11",
+"nextSell": "2026-08-21",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00159"
+],
+"store_id": "S01"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 20,
+"detail": [
+{
+"bucket": "bOver",
+"code": "9438537WFA",
+"msku": "YC00158-1C"
+}
+],
+"inTransit": 20,
+"item_id": "20562108465",
+"key": "S01|20562108465",
+"mskus": [
+"YC00158-1C"
+],
+"next": "2026-08-11",
+"nextSell": "2026-08-21",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00158"
+],
+"store_id": "S01"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 4,
+"detail": [
+{
+"bucket": "bOver",
+"code": "9210904WFA",
+"msku": "YC00265-1A"
+}
+],
+"inTransit": 4,
+"item_id": "20495857072",
+"key": "S07|20495857072",
+"mskus": [
+"YC00265-1A"
+],
+"next": "2026-08-30",
+"nextSell": "2026-09-09",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00265"
+],
+"store_id": "S07"
+},
+{
+"aShelf": 0,
+"aShip": 0,
+"aSign": 0,
+"anom": 0,
+"b15": 0,
+"b30": 0,
+"b60": 0,
+"b60p": 0,
+"bOver": 25,
+"detail": [
+{
+"bucket": "bOver",
+"code": "8731285WFA",
+"msku": "YC00120-1A"
+}
+],
+"inTransit": 25,
+"item_id": "20002024925",
+"key": "S08|20002024925",
+"mskus": [
+"YC00120-1A"
+],
+"next": "2026-06-22",
+"nextSell": "2026-07-02",
+"none": 0,
+"receiving": 0,
+"ships": 1,
+"signedNP": 0,
+"skus": [
+"YC00120"
+],
+"store_id": "S08"
+}
+],
+"shipments": [
+{
+"ageDays": 4,
+"baseline": 268,
+"boxes": 16,
+"code": "3917442WFB",
+"d0": "",
+"d0Real": "",
+"dN": null,
+"delivered_at": "",
+"diff": -268,
+"eta": "2026-12-18",
+"etaPassed": null,
+"etaSrc": "region",
+"etaSrcL": "发货日+地区兜底",
+"external": false,
+"its": true,
+"region": "美西",
+"sellable": "2026-12-28",
+"sellableReal": false,
+"shipped": 268,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 5,
+"baseline": 236,
+"boxes": 18,
+"code": "3872182WFB",
+"d0": "",
+"d0Real": "",
+"dN": null,
+"delivered_at": "",
+"diff": -236,
+"eta": "2026-12-19",
+"etaPassed": null,
+"etaSrc": "region",
+"etaSrcL": "发货日+地区兜底",
+"external": false,
+"its": true,
+"region": "美西",
+"sellable": "2026-12-29",
+"sellableReal": false,
+"shipped": 236,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 6,
+"baseline": 465,
+"boxes": 22,
+"code": "3807685WFB",
+"d0": "",
+"d0Real": "",
+"dN": null,
+"delivered_at": "",
+"diff": -465,
+"eta": "2026-12-17",
+"etaPassed": null,
+"etaSrc": "region",
+"etaSrcL": "发货日+地区兜底",
+"external": false,
+"its": true,
+"region": "美西",
+"sellable": "2026-12-27",
+"sellableReal": false,
+"shipped": 465,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 7,
+"baseline": 50,
+"boxes": 2,
+"code": "3760870WFB",
+"d0": "2026-10-30",
+"d0Real": "2026-10-30",
+"dN": 3,
+"delivered_at": "",
+"diff": -50,
+"eta": "2026-10-30",
+"etaPassed": 3,
+"etaSrc": "real",
+"etaSrcL": "实际（Walmart 签收）",
+"external": false,
+"its": false,
+"region": "美中",
+"sellable": "2026-11-09",
+"sellableReal": false,
+"shipped": 50,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 7,
+"baseline": 204,
+"boxes": 17,
+"code": "3759761WFB",
+"d0": "",
+"d0Real": "",
+"dN": null,
+"delivered_at": "",
+"diff": -204,
+"eta": "2026-11-06",
+"etaPassed": null,
+"etaSrc": "plan",
+"etaSrcL": "领星预计到货",
+"external": false,
+"its": true,
+"region": "美西",
+"sellable": "2026-11-16",
+"sellableReal": false,
+"shipped": 204,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 10,
+"baseline": 6,
+"boxes": 1,
+"code": "3640937WFB",
+"d0": "",
+"d0Real": "",
+"dN": null,
+"delivered_at": "",
+"diff": -6,
+"eta": "2026-11-21",
+"etaPassed": null,
+"etaSrc": "plan",
+"etaSrcL": "实际开船+航程+周期",
+"external": false,
+"its": true,
+"region": "美西",
+"sellable": "2026-12-01",
+"sellableReal": false,
+"shipped": 6,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 10,
+"baseline": 35,
+"boxes": 0,
+"code": "3599594WFB",
+"d0": "",
+"d0Real": "",
+"dN": null,
+"delivered_at": "",
+"diff": -35,
+"eta": "",
+"etaPassed": null,
+"etaSrc": "",
+"etaSrcL": "无",
+"external": true,
+"its": true,
+"region": "美中",
+"sellable": "",
+"sellableReal": false,
+"shipped": 0,
+"shippedOut": false,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 16,
+"baseline": 100,
+"boxes": 25,
+"code": "3349863WFB",
+"d0": "",
+"d0Real": "",
+"dN": null,
+"delivered_at": "",
+"diff": -100,
+"eta": "2026-11-21",
+"etaPassed": null,
+"etaSrc": "plan",
+"etaSrcL": "实际开船+航程+周期",
+"external": false,
+"its": true,
+"region": "美西",
+"sellable": "2026-12-01",
+"sellableReal": false,
+"shipped": 100,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 17,
+"baseline": 178,
+"boxes": 13,
+"code": "3292441WFB",
+"d0": "",
+"d0Real": "",
+"dN": null,
+"delivered_at": "",
+"diff": -178,
+"eta": "2026-11-20",
+"etaPassed": null,
+"etaSrc": "plan",
+"etaSrcL": "实际开船+航程+周期",
+"external": false,
+"its": true,
+"region": "美西",
+"sellable": "2026-11-30",
+"sellableReal": false,
+"shipped": 178,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 17,
+"baseline": 244,
+"boxes": 14,
+"code": "3278783WFB",
+"d0": "",
+"d0Real": "",
+"dN": null,
+"delivered_at": "",
+"diff": -244,
+"eta": "2026-11-20",
+"etaPassed": null,
+"etaSrc": "plan",
+"etaSrcL": "实际开船+航程+周期",
+"external": false,
+"its": true,
+"region": "美西",
+"sellable": "2026-11-30",
+"sellableReal": false,
+"shipped": 244,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 20,
+"baseline": 10,
+"boxes": 0,
+"code": "3133945WFB",
+"d0": "",
+"d0Real": "",
+"dN": null,
+"delivered_at": "",
+"diff": -10,
+"eta": "",
+"etaPassed": null,
+"etaSrc": "",
+"etaSrcL": "无",
+"external": true,
+"its": false,
+"region": "美中",
+"sellable": "",
+"sellableReal": false,
+"shipped": 0,
+"shippedOut": false,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 20,
+"baseline": 0,
+"boxes": 0,
+"code": "3116357WFB",
+"d0": "",
+"d0Real": "",
+"dN": null,
+"delivered_at": "",
+"diff": 0,
+"eta": "",
+"etaPassed": null,
+"etaSrc": "",
+"etaSrcL": "无",
+"external": false,
+"its": false,
+"region": "美东",
+"sellable": "",
+"sellableReal": false,
+"shipped": 0,
+"shippedOut": true,
+"test": true,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 21,
+"baseline": 1,
+"boxes": 0,
+"code": "3109752WFB",
+"d0": "",
+"d0Real": "",
+"dN": null,
+"delivered_at": "",
+"diff": -1,
+"eta": "",
+"etaPassed": null,
+"etaSrc": "",
+"etaSrcL": "无",
+"external": true,
+"its": false,
+"region": "美东",
+"sellable": "",
+"sellableReal": false,
+"shipped": 0,
+"shippedOut": false,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 40,
+"baseline": 518,
+"boxes": 31,
+"code": "2329789WFB",
+"d0": "2026-10-30",
+"d0Real": "",
+"dN": 3,
+"delivered_at": "",
+"diff": -518,
+"eta": "2026-10-28",
+"etaPassed": 5,
+"etaSrc": "plan",
+"etaSrcL": "实际到港+周期",
+"external": false,
+"its": true,
+"region": "美西",
+"sellable": "2026-11-07",
+"sellableReal": false,
+"shipped": 518,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 41,
+"baseline": 710,
+"boxes": 42,
+"code": "2284857WFB",
+"d0": "2026-11-03",
+"d0Real": "2026-11-03",
+"dN": -1,
+"delivered_at": "2026-10-27 22:00",
+"diff": 22,
+"eta": "2026-10-27",
+"etaPassed": 6,
+"etaSrc": "real",
+"etaSrcL": "实际（众壹签收）",
+"external": false,
+"its": true,
+"region": "美西",
+"sellable": "2026-11-01",
+"sellableReal": true,
+"shipped": 710,
+"shippedOut": true,
+"test": false,
+"wmDone": true,
+"wmFirst": "2026-11-01",
+"wmLast": "2026-11-01",
+"wmReceiptUnits": 8,
+"wmReceiving": false
+},
+{
+"ageDays": 41,
+"baseline": 1178,
+"boxes": 49,
+"code": "2284199WFB",
+"d0": "2026-10-30",
+"d0Real": "",
+"dN": 3,
+"delivered_at": "",
+"diff": -1178,
+"eta": "2026-10-28",
+"etaPassed": 5,
+"etaSrc": "plan",
+"etaSrcL": "实际到港+周期",
+"external": false,
+"its": true,
+"region": "美西",
+"sellable": "2026-11-07",
+"sellableReal": false,
+"shipped": 1178,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 42,
+"baseline": 412,
+"boxes": 25,
+"code": "2245432WFB",
+"d0": "2026-10-30",
+"d0Real": "2026-10-30",
+"dN": 3,
+"delivered_at": "2026-10-27 22:00",
+"diff": -12,
+"eta": "2026-10-27",
+"etaPassed": 6,
+"etaSrc": "real",
+"etaSrcL": "实际（众壹签收）",
+"external": false,
+"its": true,
+"region": "美西",
+"sellable": "2026-11-01",
+"sellableReal": true,
+"shipped": 412,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "2026-11-01",
+"wmLast": "2026-11-01",
+"wmReceiptUnits": 12,
+"wmReceiving": true
+},
+{
+"ageDays": 42,
+"baseline": 126,
+"boxes": 4,
+"code": "2244913WFB",
+"d0": "2026-10-31",
+"d0Real": "2026-10-31",
+"dN": 2,
+"delivered_at": "",
+"diff": -2,
+"eta": "2026-10-27",
+"etaPassed": 6,
+"etaSrc": "real",
+"etaSrcL": "实际（众壹签收）",
+"external": false,
+"its": true,
+"region": "美西",
+"sellable": "2026-10-31",
+"sellableReal": true,
+"shipped": 126,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "2026-10-31",
+"wmLast": "2026-11-01",
+"wmReceiptUnits": 27,
+"wmReceiving": true
+},
+{
+"ageDays": 42,
+"baseline": 16,
+"boxes": 2,
+"code": "2243495WFB",
+"d0": "2026-10-30",
+"d0Real": "2026-10-30",
+"dN": 3,
+"delivered_at": "",
+"diff": 0,
+"eta": "2026-10-27",
+"etaPassed": 6,
+"etaSrc": "real",
+"etaSrcL": "实际（众壹签收）",
+"external": false,
+"its": true,
+"region": "美西",
+"sellable": "2026-11-06",
+"sellableReal": false,
+"shipped": 16,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 46,
+"baseline": 36,
+"boxes": 3,
+"code": "2071912WFB",
+"d0": "2026-09-30",
+"d0Real": "2026-09-30",
+"dN": 33,
+"delivered_at": "",
+"diff": -13,
+"eta": "2026-09-30",
+"etaPassed": 33,
+"etaSrc": "real",
+"etaSrcL": "实际（Walmart 签收）",
+"external": false,
+"its": false,
+"region": "美东",
+"sellable": "2026-10-11",
+"sellableReal": true,
+"shipped": 36,
+"shippedOut": true,
+"test": false,
+"wmDone": true,
+"wmFirst": "2026-10-11",
+"wmLast": "2026-10-23",
+"wmReceiptUnits": 23,
+"wmReceiving": true
+},
+{
+"ageDays": 46,
+"baseline": 490,
+"boxes": 49,
+"code": "2071756WFB",
+"d0": "2026-09-24",
+"d0Real": "2026-09-24",
+"dN": 39,
+"delivered_at": "",
+"diff": -20,
+"eta": "2026-09-24",
+"etaPassed": 39,
+"etaSrc": "real",
+"etaSrcL": "实际（Walmart 签收）",
+"external": false,
+"its": false,
+"region": "美东",
+"sellable": "2026-10-02",
+"sellableReal": true,
+"shipped": 490,
+"shippedOut": true,
+"test": false,
+"wmDone": true,
+"wmFirst": "2026-10-02",
+"wmLast": "2026-10-31",
+"wmReceiptUnits": 470,
+"wmReceiving": false
+},
+{
+"ageDays": 46,
+"baseline": 312,
+"boxes": 13,
+"code": "2071461WFB",
+"d0": "2026-09-30",
+"d0Real": "2026-09-30",
+"dN": 33,
+"delivered_at": "",
+"diff": -17,
+"eta": "2026-09-30",
+"etaPassed": 33,
+"etaSrc": "real",
+"etaSrcL": "实际（Walmart 签收）",
+"external": false,
+"its": false,
+"region": "美东",
+"sellable": "2026-10-11",
+"sellableReal": true,
+"shipped": 312,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "2026-10-11",
+"wmLast": "2026-10-26",
+"wmReceiptUnits": 271,
+"wmReceiving": true
+},
+{
+"ageDays": 54,
+"baseline": 200,
+"boxes": 20,
+"code": "1740201WFB",
+"d0": "2026-09-11",
+"d0Real": "2026-09-11",
+"dN": 52,
+"delivered_at": "",
+"diff": -13,
+"eta": "2026-09-11",
+"etaPassed": 52,
+"etaSrc": "real",
+"etaSrcL": "实际（Walmart 签收）",
+"external": false,
+"its": false,
+"region": "美东",
+"sellable": "2026-09-20",
+"sellableReal": true,
+"shipped": 200,
+"shippedOut": true,
+"test": false,
+"wmDone": true,
+"wmFirst": "2026-09-20",
+"wmLast": "2026-10-11",
+"wmReceiptUnits": 185,
+"wmReceiving": false
+},
+{
+"ageDays": 55,
+"baseline": 210,
+"boxes": 42,
+"code": "1698129WFB",
+"d0": "2026-10-24",
+"d0Real": "2026-10-24",
+"dN": 9,
+"delivered_at": "2026-10-20 22:00",
+"diff": -24,
+"eta": "2026-10-20",
+"etaPassed": 13,
+"etaSrc": "real",
+"etaSrcL": "实际（众壹签收）",
+"external": false,
+"its": false,
+"region": "美东",
+"sellable": "2026-10-24",
+"sellableReal": true,
+"shipped": 210,
+"shippedOut": true,
+"test": false,
+"wmDone": true,
+"wmFirst": "2026-10-24",
+"wmLast": "2026-10-24",
+"wmReceiptUnits": 195,
+"wmReceiving": false
+},
+{
+"ageDays": 55,
+"baseline": 388,
+"boxes": 23,
+"code": "1697565WFB",
+"d0": "2026-10-26",
+"d0Real": "2026-10-26",
+"dN": 7,
+"delivered_at": "2026-10-26 22:00",
+"diff": 16,
+"eta": "2026-10-26",
+"etaPassed": 7,
+"etaSrc": "real",
+"etaSrcL": "实际（众壹签收）",
+"external": false,
+"its": true,
+"region": "美东",
+"sellable": "2026-10-29",
+"sellableReal": true,
+"shipped": 388,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "2026-10-29",
+"wmLast": "2026-10-31",
+"wmReceiptUnits": 97,
+"wmReceiving": true
+},
+{
+"ageDays": 55,
+"baseline": 291,
+"boxes": 35,
+"code": "1696947WFB",
+"d0": "2026-10-18",
+"d0Real": "2026-10-18",
+"dN": 15,
+"delivered_at": "2026-10-15 22:00",
+"diff": -107,
+"eta": "2026-10-15",
+"etaPassed": 18,
+"etaSrc": "real",
+"etaSrcL": "实际（众壹签收）",
+"external": false,
+"its": true,
+"region": "美西",
+"sellable": "2026-10-19",
+"sellableReal": true,
+"shipped": 291,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "2026-10-19",
+"wmLast": "2026-10-28",
+"wmReceiptUnits": 89,
+"wmReceiving": true
+},
+{
+"ageDays": 58,
+"baseline": 772,
+"boxes": 31,
+"code": "1591534WFB",
+"d0": "2026-10-19",
+"d0Real": "2026-10-19",
+"dN": 14,
+"delivered_at": "2026-10-15 22:00",
+"diff": -45,
+"eta": "2026-10-15",
+"etaPassed": 18,
+"etaSrc": "real",
+"etaSrcL": "实际（众壹签收）",
+"external": false,
+"its": false,
+"region": "美东",
+"sellable": "2026-10-19",
+"sellableReal": true,
+"shipped": 772,
+"shippedOut": true,
+"test": false,
+"wmDone": true,
+"wmFirst": "2026-10-19",
+"wmLast": "2026-10-31",
+"wmReceiptUnits": 711,
+"wmReceiving": false
+},
+{
+"ageDays": 61,
+"baseline": 208,
+"boxes": 13,
+"code": "1440892WFB",
+"d0": "2026-09-08",
+"d0Real": "2026-09-08",
+"dN": 55,
+"delivered_at": "",
+"diff": 0,
+"eta": "2026-09-08",
+"etaPassed": 55,
+"etaSrc": "real",
+"etaSrcL": "实际（Walmart 签收）",
+"external": false,
+"its": true,
+"region": "美中",
+"sellable": "2026-09-26",
+"sellableReal": true,
+"shipped": 208,
+"shippedOut": true,
+"test": false,
+"wmDone": true,
+"wmFirst": "2026-09-26",
+"wmLast": "2026-11-01",
+"wmReceiptUnits": 176,
+"wmReceiving": false
+},
+{
+"ageDays": 61,
+"baseline": 384,
+"boxes": 24,
+"code": "1429383WFB",
+"d0": "2026-10-07",
+"d0Real": "2026-10-07",
+"dN": 26,
+"delivered_at": "2026-10-07 15:30",
+"diff": 0,
+"eta": "2026-10-07",
+"etaPassed": 26,
+"etaSrc": "real",
+"etaSrcL": "实际（众壹签收）",
+"external": false,
+"its": true,
+"region": "美东",
+"sellable": "2026-10-11",
+"sellableReal": true,
+"shipped": 384,
+"shippedOut": true,
+"test": false,
+"wmDone": true,
+"wmFirst": "2026-10-11",
+"wmLast": "2026-11-01",
+"wmReceiptUnits": 220,
+"wmReceiving": false
+},
+{
+"ageDays": 62,
+"baseline": 384,
+"boxes": 24,
+"code": "1371372WFB",
+"d0": "2026-10-11",
+"d0Real": "2026-10-11",
+"dN": 22,
+"delivered_at": "2026-10-07 22:00",
+"diff": -128,
+"eta": "2026-10-07",
+"etaPassed": 26,
+"etaSrc": "real",
+"etaSrcL": "实际（众壹签收）",
+"external": false,
+"its": true,
+"region": "美西",
+"sellable": "2026-10-27",
+"sellableReal": true,
+"shipped": 384,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "2026-10-27",
+"wmLast": "2026-11-01",
+"wmReceiptUnits": 95,
+"wmReceiving": true
+},
+{
+"ageDays": 67,
+"baseline": 16,
+"boxes": 2,
+"code": "1176000WFB",
+"d0": "2026-10-17",
+"d0Real": "",
+"dN": 16,
+"delivered_at": "",
+"diff": -16,
+"eta": "2026-10-15",
+"etaPassed": 18,
+"etaSrc": "real",
+"etaSrcL": "实际（众壹签收）",
+"external": false,
+"its": false,
+"region": "美东",
+"sellable": "2026-10-25",
+"sellableReal": false,
+"shipped": 16,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 74,
+"baseline": 25,
+"boxes": 0,
+"code": "0888154WFB",
+"d0": "2026-08-26",
+"d0Real": "2026-08-26",
+"dN": 68,
+"delivered_at": "",
+"diff": 0,
+"eta": "2026-08-26",
+"etaPassed": 68,
+"etaSrc": "real",
+"etaSrcL": "实际（Walmart 签收）",
+"external": false,
+"its": true,
+"region": "美中",
+"sellable": "2026-09-16",
+"sellableReal": true,
+"shipped": 25,
+"shippedOut": true,
+"test": false,
+"wmDone": true,
+"wmFirst": "2026-09-16",
+"wmLast": "2026-10-11",
+"wmReceiptUnits": 22,
+"wmReceiving": false
+},
+{
+"ageDays": 82,
+"baseline": 1303,
+"boxes": 97,
+"code": "0581728WFB",
+"d0": "2026-09-22",
+"d0Real": "2026-09-22",
+"dN": 41,
+"delivered_at": "2026-09-22 22:00",
+"diff": 10,
+"eta": "2026-09-22",
+"etaPassed": 41,
+"etaSrc": "real",
+"etaSrcL": "实际（众壹签收）",
+"external": false,
+"its": false,
+"region": "美中",
+"sellable": "2026-09-22",
+"sellableReal": true,
+"shipped": 1303,
+"shippedOut": true,
+"test": false,
+"wmDone": true,
+"wmFirst": "2026-09-22",
+"wmLast": "2026-10-07",
+"wmReceiptUnits": 1313,
+"wmReceiving": false
+},
+{
+"ageDays": 90,
+"baseline": 42,
+"boxes": 2,
+"code": "0264571WFB",
+"d0": "2026-08-10",
+"d0Real": "2026-08-10",
+"dN": 84,
+"delivered_at": "",
+"diff": -42,
+"eta": "2026-08-10",
+"etaPassed": 84,
+"etaSrc": "real",
+"etaSrcL": "实际（Walmart 签收）",
+"external": false,
+"its": false,
+"region": "美中",
+"sellable": "2026-08-20",
+"sellableReal": false,
+"shipped": 42,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 115,
+"baseline": 76,
+"boxes": 6,
+"code": "9438537WFA",
+"d0": "2026-08-13",
+"d0Real": "",
+"dN": 81,
+"delivered_at": "",
+"diff": -76,
+"eta": "2026-08-11",
+"etaPassed": 83,
+"etaSrc": "plan",
+"etaSrcL": "实际到港+周期",
+"external": false,
+"its": true,
+"region": "美西",
+"sellable": "2026-08-21",
+"sellableReal": false,
+"shipped": 76,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 123,
+"baseline": 4,
+"boxes": 1,
+"code": "9210904WFA",
+"d0": "2026-09-01",
+"d0Real": "",
+"dN": 62,
+"delivered_at": "",
+"diff": -4,
+"eta": "2026-08-30",
+"etaPassed": 64,
+"etaSrc": "plan",
+"etaSrcL": "实际开船+航程+周期",
+"external": false,
+"its": false,
+"region": "美东",
+"sellable": "2026-09-09",
+"sellableReal": false,
+"shipped": 4,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 139,
+"baseline": 1886,
+"boxes": 99,
+"code": "8753571WFA",
+"d0": "2026-06-25",
+"d0Real": "",
+"dN": 130,
+"delivered_at": "",
+"diff": 5,
+"eta": "2026-06-23",
+"etaPassed": 132,
+"etaSrc": "plan",
+"etaSrcL": "领星预计到货",
+"external": false,
+"its": false,
+"region": "美中",
+"sellable": "2026-07-03",
+"sellableReal": false,
+"shipped": 1886,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+},
+{
+"ageDays": 140,
+"baseline": 25,
+"boxes": 5,
+"code": "8731285WFA",
+"d0": "2026-06-24",
+"d0Real": "",
+"dN": 131,
+"delivered_at": "",
+"diff": -25,
+"eta": "2026-06-22",
+"etaPassed": 133,
+"etaSrc": "plan",
+"etaSrcL": "领星预计到货",
+"external": false,
+"its": false,
+"region": "美中",
+"sellable": "2026-07-02",
+"sellableReal": false,
+"shipped": 25,
+"shippedOut": true,
+"test": false,
+"wmDone": false,
+"wmFirst": "",
+"wmLast": "",
+"wmReceiptUnits": 0,
+"wmReceiving": false
+}
+]
+},
+"rows": [
+{
+"cargo_code": "3917442WFB",
+"created": "2026-10-29 11:05:02",
+"derived": {
+"arrival_date": "2026-12-18",
+"arrival_real": false,
+"arrival_source": "发货日+地区兜底",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": true,
+"region": "美西",
+"sellable_date": "2026-12-28",
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 16,
+"sp_goods": [
+{
+"boxes": 9,
+"msku": "YC00340-1A",
+"per_box": 12,
+"shipped": 108,
+"shipping_code": "SP202610290010013",
+"sku": "YC00340"
+},
+{
+"boxes": 5,
+"msku": "YC00619-1Z",
+"per_box": 20,
+"shipped": 100,
+"shipping_code": "SP202610290010013",
+"sku": "YC00619"
+},
+{
+"boxes": 1,
+"msku": "YC01281-1Z",
+"per_box": 30,
+"shipped": 30,
+"shipping_code": "SP202610290010013",
+"sku": "YC01281"
+},
+{
+"boxes": 1,
+"msku": "YC01283-1Z",
+"per_box": 30,
+"shipped": 30,
+"shipping_code": "SP202610290010013",
+"sku": "YC01283"
+}
+],
+"sp_shipped_units": 268,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00450053303779": 0,
+"00464801898660": 0,
+"00466245940097": 0,
+"00469624758078": 0
+},
+"walmart_item_received": {
+"00450053303779": 0,
+"00464801898660": 0,
+"00466245940097": 0,
+"00469624758078": 0
+},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": 0,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 108,
+"gtin": "00450053303779",
+"msku": "YC00340-1A",
+"product_name": "多功能床头壁挂式收纳架",
+"received_num": 0,
+"shipments_num": 108,
+"sku": "YC00340"
+},
+{
+"damaged_qty": 0,
+"declare_num": 100,
+"gtin": "00469624758078",
+"msku": "YC00619-1Z",
+"product_name": "通用洗碗机刀叉收纳篮",
+"received_num": 0,
+"shipments_num": 100,
+"sku": "YC00619"
+},
+{
+"damaged_qty": 0,
+"declare_num": 30,
+"gtin": "00464801898660",
+"msku": "YC01281-1Z",
+"product_name": "不锈钢双面砧板40x30cm",
+"received_num": 0,
+"shipments_num": 30,
+"sku": "YC01281"
+},
+{
+"damaged_qty": 0,
+"declare_num": 30,
+"gtin": "00466245940097",
+"msku": "YC01283-1Z",
+"product_name": "不锈钢双面砧板30x30cm",
+"received_num": 0,
+"shipments_num": 30,
+"sku": "YC01283"
+}
+],
+"in_bound_order_id": "NYT-1793243045638",
+"item_ids": {
+"YC00340-1A": "20463308074",
+"YC00619-1Z": "20828217839",
+"YC01281-1Z": "21146871517",
+"YC01283-1Z": "21192555229"
+},
+"shipping_codes": [
+"SP202610290010013"
+],
+"status": "AWAITING_DELIVERY",
+"store_id": "S01",
+"store_name": "店铺S01",
+"to_closed_at": null
+},
+{
+"cargo_code": "3872182WFB",
+"created": "2026-10-28 17:45:59",
+"derived": {
+"arrival_date": "2026-12-19",
+"arrival_real": false,
+"arrival_source": "发货日+地区兜底",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": true,
+"region": "美西",
+"sellable_date": "2026-12-29",
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 18,
+"sp_goods": [
+{
+"boxes": 1,
+"msku": "YC00950-1A",
+"per_box": 20,
+"shipped": 20,
+"shipping_code": "SP202610290010011",
+"sku": "YC00950"
+},
+{
+"boxes": 1,
+"msku": "YC00960-1A",
+"per_box": 20,
+"shipped": 20,
+"shipping_code": "SP202610290010011",
+"sku": "YC00960"
+},
+{
+"boxes": 6,
+"msku": "YC01285-1A",
+"per_box": 12,
+"shipped": 72,
+"shipping_code": "SP202610290010011",
+"sku": "YC01285"
+},
+{
+"boxes": 2,
+"msku": "YC01286-1A",
+"per_box": 13,
+"shipped": 26,
+"shipping_code": "SP202610290010011",
+"sku": "YC01286"
+},
+{
+"boxes": 6,
+"msku": "YC01287-1A",
+"per_box": 12,
+"shipped": 72,
+"shipping_code": "SP202610290010011",
+"sku": "YC01287"
+},
+{
+"boxes": 2,
+"msku": "YC01288-1A",
+"per_box": 13,
+"shipped": 26,
+"shipping_code": "SP202610290010011",
+"sku": "YC01288"
+}
+],
+"sp_shipped_units": 236,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00460905484723": 0,
+"00463941223158": 0,
+"00464027016091": 0,
+"00464765816311": 0,
+"00464765853781": 0,
+"00465529979464": 0
+},
+"walmart_item_received": {
+"00460905484723": 0,
+"00463941223158": 0,
+"00464027016091": 0,
+"00464765816311": 0,
+"00464765853781": 0,
+"00465529979464": 0
+},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": 0,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 20,
+"gtin": "00460905484723",
+"msku": "YC00950-1A",
+"product_name": "榨汁机搅拌刀",
+"received_num": 0,
+"shipments_num": 20,
+"sku": "YC00950"
+},
+{
+"damaged_qty": 0,
+"declare_num": 20,
+"gtin": "00463941223158",
+"msku": "YC00960-1A",
+"product_name": "水杯架多功能置物",
+"received_num": 0,
+"shipments_num": 20,
+"sku": "YC00960"
+},
+{
+"damaged_qty": 0,
+"declare_num": 72,
+"gtin": "00464027016091",
+"msku": "YC01285-1A",
+"product_name": "浅蓝瑜伽砖(2pc)",
+"received_num": 0,
+"shipments_num": 72,
+"sku": "YC01285"
+},
+{
+"damaged_qty": 0,
+"declare_num": 26,
+"gtin": "00464765816311",
+"msku": "YC01286-1A",
+"product_name": "黑色瑜伽砖(2pc)",
+"received_num": 0,
+"shipments_num": 26,
+"sku": "YC01286"
+},
+{
+"damaged_qty": 0,
+"declare_num": 72,
+"gtin": "00465529979464",
+"msku": "YC01287-1A",
+"product_name": "绿色瑜伽砖(2pc)",
+"received_num": 0,
+"shipments_num": 72,
+"sku": "YC01287"
+},
+{
+"damaged_qty": 0,
+"declare_num": 26,
+"gtin": "00464765853781",
+"msku": "YC01288-1A",
+"product_name": "紫色瑜伽砖(2pc)",
+"received_num": 0,
+"shipments_num": 26,
+"sku": "YC01288"
+}
+],
+"in_bound_order_id": "STL-1793180635995",
+"item_ids": {
+"YC00950-1A": "21002454391",
+"YC00960-1A": "21020551657",
+"YC01285-1A": "21168417269",
+"YC01286-1A": "21137558012",
+"YC01287-1A": "21193260501",
+"YC01288-1A": "21193210744"
+},
+"shipping_codes": [
+"SP202610290010011"
+],
+"status": "AWAITING_DELIVERY",
+"store_id": "S02",
+"store_name": "店铺S02",
+"to_closed_at": null
+},
+{
+"cargo_code": "3807685WFB",
+"created": "2026-10-27 14:27:11",
+"derived": {
+"arrival_date": "2026-12-17",
+"arrival_real": false,
+"arrival_source": "发货日+地区兜底",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": true,
+"region": "美西",
+"sellable_date": "2026-12-27",
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 22,
+"sp_goods": [
+{
+"boxes": 15,
+"msku": "YC00420-1U",
+"per_box": 8,
+"shipped": 120,
+"shipping_code": "SP202610270010012",
+"sku": "YC00420"
+},
+{
+"boxes": 3,
+"msku": "YC00504-1A",
+"per_box": 65,
+"shipped": 195,
+"shipping_code": "SP202610270010012",
+"sku": "YC00504"
+},
+{
+"boxes": 2,
+"msku": "YC00638-1A",
+"per_box": 60,
+"shipped": 120,
+"shipping_code": "SP202610270010012",
+"sku": "YC00638"
+},
+{
+"boxes": 2,
+"msku": "YC01134-1A",
+"per_box": 15,
+"shipped": 30,
+"shipping_code": "SP202610270010012",
+"sku": "YC01134"
+}
+],
+"sp_shipped_units": 465,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00451106399626": 0,
+"00463376050534": 0,
+"00468820940959": 0,
+"00469472036809": 0
+},
+"walmart_item_received": {
+"00451106399626": 0,
+"00463376050534": 0,
+"00468820940959": 0,
+"00469472036809": 0
+},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": 0,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 120,
+"gtin": "00469472036809",
+"msku": "YC00420-1U",
+"product_name": "马天尼酒杯套装(6个装)",
+"received_num": 0,
+"shipments_num": 120,
+"sku": "YC00420"
+},
+{
+"damaged_qty": 0,
+"declare_num": 195,
+"gtin": "00468820940959",
+"msku": "YC00504-1A",
+"product_name": "Q型挂钩带安全扣（36pcs）",
+"received_num": 0,
+"shipments_num": 195,
+"sku": "YC00504"
+},
+{
+"damaged_qty": 0,
+"declare_num": 120,
+"gtin": "00451106399626",
+"msku": "YC00638-1A",
+"product_name": "户外卡式绳索（8pcs）",
+"received_num": 0,
+"shipments_num": 120,
+"sku": "YC00638"
+},
+{
+"damaged_qty": 0,
+"declare_num": 30,
+"gtin": "00463376050534",
+"msku": "YC01134-1A",
+"product_name": "黑色鸡用喂食器（4pcs）",
+"received_num": 0,
+"shipments_num": 30,
+"sku": "YC01134"
+}
+],
+"in_bound_order_id": "AQD-1793082349767",
+"item_ids": {
+"YC00420-1U": "20580654951",
+"YC00504-1A": "20691700128",
+"YC00638-1A": "20900365076",
+"YC01134-1A": "21168804024"
+},
+"shipping_codes": [
+"SP202610270010012"
+],
+"status": "AWAITING_DELIVERY",
+"store_id": "S03",
+"store_name": "店铺S03",
+"to_closed_at": null
+},
+{
+"cargo_code": "3760870WFB",
+"created": "2026-10-26 18:24:26",
+"derived": {
+"arrival_date": "2026-10-30",
+"arrival_real": true,
+"arrival_source": "实际（Walmart 签收）",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": false,
+"region": "美中",
+"sellable_date": "2026-11-09",
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 2,
+"sp_goods": [
+{
+"boxes": 2,
+"msku": "YC00002-1A",
+"per_box": 40,
+"shipped": 50,
+"shipping_code": "SP202610270010003",
+"sku": "YC00002"
+}
+],
+"sp_shipped_units": 50,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00468158020880": 0
+},
+"walmart_item_received": {
+"00468158020880": 0
+},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": 0,
+"walmart_signed_date": "2026-10-30",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 50,
+"gtin": "00468158020880",
+"msku": "YC00002-1A",
+"product_name": "8寸正方形烤盘2个装黑色",
+"received_num": 0,
+"shipments_num": 50,
+"sku": "YC00002"
+}
+],
+"in_bound_order_id": "NYT-1793010119269",
+"item_ids": {
+"YC00002-1A": "20277220088"
+},
+"shipping_codes": [
+"SP202610270010003"
+],
+"status": "AWAITING_DELIVERY",
+"store_id": "S01",
+"store_name": "店铺S01",
+"to_closed_at": null
+},
+{
+"cargo_code": "3759761WFB",
+"created": "2026-10-26 17:22:09",
+"derived": {
+"arrival_date": "2026-11-06",
+"arrival_real": false,
+"arrival_source": "领星预计到货",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": true,
+"region": "美西",
+"sellable_date": "2026-11-16",
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 17,
+"sp_goods": [
+{
+"boxes": 17,
+"msku": "JJ5121-1D",
+"per_box": 12,
+"shipped": 204,
+"shipping_code": "SP202610260010003",
+"sku": "JJ5121"
+}
+],
+"sp_shipped_units": 204,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00739630133122": 0
+},
+"walmart_item_received": {
+"00739630133122": 0
+},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": 0,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 306,
+"gtin": "00739630133122",
+"msku": "JJ5121-1D",
+"product_name": "油汤分离器",
+"received_num": 0,
+"shipments_num": 204,
+"sku": "JJ5121"
+}
+],
+"in_bound_order_id": "RIN-1793006439827",
+"item_ids": {
+"JJ5121-1D": "18722450593"
+},
+"shipping_codes": [
+"SP202610260010003"
+],
+"status": "AWAITING_DELIVERY",
+"store_id": "S04",
+"store_name": "店铺S04",
+"to_closed_at": null
+},
+{
+"cargo_code": "3640937WFB",
+"created": "2026-10-23 15:46:31",
+"derived": {
+"arrival_date": "2026-11-21",
+"arrival_real": false,
+"arrival_source": "实际开船+航程+周期",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": true,
+"region": "美西",
+"sellable_date": "2026-12-01",
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 1,
+"sp_goods": [
+{
+"boxes": 1,
+"msku": "YC00017-1A",
+"per_box": 6,
+"shipped": 6,
+"shipping_code": "SP202610230010001",
+"sku": "YC00017"
+}
+],
+"sp_shipped_units": 6,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00465458027779": 0
+},
+"walmart_item_received": {
+"00465458027779": 0
+},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": 0,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 6,
+"gtin": "00465458027779",
+"msku": "YC00017-1A",
+"product_name": "不锈钢手动研磨器2PCS",
+"received_num": 0,
+"shipments_num": 6,
+"sku": "YC00017"
+}
+],
+"in_bound_order_id": "STL-1792741573461",
+"item_ids": {
+"YC00017-1A": "20079371693"
+},
+"shipping_codes": [
+"SP202610230010001"
+],
+"status": "AWAITING_DELIVERY",
+"store_id": "S02",
+"store_name": "店铺S02",
+"to_closed_at": null
+},
+{
+"cargo_code": "3599594WFB",
+"created": "2026-10-23 00:24:09",
+"derived": {
+"arrival_date": null,
+"arrival_real": false,
+"arrival_source": "无",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": true,
+"region": "美中",
+"sellable_date": null,
+"sellable_real": false,
+"shipped_out": false,
+"sp_boxes": 0,
+"sp_goods": [],
+"sp_shipped_units": 0,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00739630136161": 0
+},
+"walmart_item_received": {
+"00739630136161": 0
+},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": 0,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 35,
+"gtin": "00739630136161",
+"msku": "YC00122-1A",
+"product_name": "淡黄色除尘掸 (30pc)",
+"received_num": 0,
+"shipments_num": 0,
+"sku": "YC00122"
+}
+],
+"in_bound_order_id": "WMS-1792686212210",
+"item_ids": {
+"YC00122-1A": "20295304868"
+},
+"shipping_codes": [],
+"status": "PENDING_SHIPMENT_DETAILS",
+"store_id": "S05",
+"store_name": "店铺S05",
+"to_closed_at": null
+},
+{
+"cargo_code": "3349863WFB",
+"created": "2026-10-17 15:38:43",
+"derived": {
+"arrival_date": "2026-11-21",
+"arrival_real": false,
+"arrival_source": "实际开船+航程+周期",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": true,
+"region": "美西",
+"sellable_date": "2026-12-01",
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 25,
+"sp_goods": [
+{
+"boxes": 25,
+"msku": "JJ8039-1U",
+"per_box": 4,
+"shipped": 100,
+"shipping_code": "SP202610190010003",
+"sku": "JJ8039"
+}
+],
+"sp_shipped_units": 100,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00465385526109": 0
+},
+"walmart_item_received": {
+"00465385526109": 0
+},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": 0,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 100,
+"gtin": "00465385526109",
+"msku": "JJ8039-1U",
+"product_name": "沥水架",
+"received_num": 0,
+"shipments_num": 100,
+"sku": "JJ8039"
+}
+],
+"in_bound_order_id": "RIT-1792222707447",
+"item_ids": {
+"JJ8039-1U": "20044457646"
+},
+"shipping_codes": [
+"SP202610190010003"
+],
+"status": "AWAITING_DELIVERY",
+"store_id": "S06",
+"store_name": "店铺S06",
+"to_closed_at": null
+},
+{
+"cargo_code": "3292441WFB",
+"created": "2026-10-16 15:23:28",
+"derived": {
+"arrival_date": "2026-11-20",
+"arrival_real": false,
+"arrival_source": "实际开船+航程+周期",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": true,
+"region": "美西",
+"sellable_date": "2026-11-30",
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 13,
+"sp_goods": [
+{
+"boxes": 6,
+"msku": "YC00199-1U",
+"per_box": 12,
+"shipped": 72,
+"shipping_code": "SP202610160010009",
+"sku": "YC00199"
+},
+{
+"boxes": 6,
+"msku": "YC00499-1A",
+"per_box": 15,
+"shipped": 90,
+"shipping_code": "SP202610160010009",
+"sku": "YC00499"
+},
+{
+"boxes": 1,
+"msku": "YC00971-1A",
+"per_box": 16,
+"shipped": 16,
+"shipping_code": "SP202610160010009",
+"sku": "YC00971"
+}
+],
+"sp_shipped_units": 178,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00460105769644": 0,
+"00462812077111": 0,
+"00468180516542": 0
+},
+"walmart_item_received": {
+"00460105769644": 0,
+"00462812077111": 0,
+"00468180516542": 0
+},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": 0,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 72,
+"gtin": "00468180516542",
+"msku": "YC00199-1U",
+"product_name": "2pc卫生纸篮",
+"received_num": 0,
+"shipments_num": 72,
+"sku": "YC00199"
+},
+{
+"damaged_qty": 0,
+"declare_num": 90,
+"gtin": "00460105769644",
+"msku": "YC00499-1A",
+"product_name": "镀锌鸡笼网",
+"received_num": 0,
+"shipments_num": 90,
+"sku": "YC00499"
+},
+{
+"damaged_qty": 0,
+"declare_num": 16,
+"gtin": "00462812077111",
+"msku": "YC00971-1A",
+"product_name": "磁吸仿真书（2pcs）",
+"received_num": 0,
+"shipments_num": 16,
+"sku": "YC00971"
+}
+],
+"in_bound_order_id": "PMC-HK2613-20261016-01",
+"item_ids": {
+"YC00199-1U": "20412760309",
+"YC00499-1A": "20748371655",
+"YC00971-1A": "21009750242"
+},
+"shipping_codes": [
+"SP202610160010009"
+],
+"status": "AWAITING_DELIVERY",
+"store_id": "S03",
+"store_name": "店铺S03",
+"to_closed_at": null
+},
+{
+"cargo_code": "3278783WFB",
+"created": "2026-10-16 09:37:57",
+"derived": {
+"arrival_date": "2026-11-20",
+"arrival_real": false,
+"arrival_source": "实际开船+航程+周期",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": true,
+"region": "美西",
+"sellable_date": "2026-11-30",
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 14,
+"sp_goods": [
+{
+"boxes": 4,
+"msku": "YC00046-1U",
+"per_box": 25,
+"shipped": 100,
+"shipping_code": "SP202610160010003",
+"sku": "YC00046"
+},
+{
+"boxes": 3,
+"msku": "YC00048-1U",
+"per_box": 8,
+"shipped": 24,
+"shipping_code": "SP202610160010003",
+"sku": "YC00048"
+},
+{
+"boxes": 1,
+"msku": "YC00784-1Z",
+"per_box": 20,
+"shipped": 20,
+"shipping_code": "SP202610160010003",
+"sku": "YC00784"
+},
+{
+"boxes": 2,
+"msku": "YC00836-1Z",
+"per_box": 15,
+"shipped": 30,
+"shipping_code": "SP202610160010003",
+"sku": "YC00836"
+},
+{
+"boxes": 2,
+"msku": "YC00867-1Z",
+"per_box": 10,
+"shipped": 20,
+"shipping_code": "SP202610160010003",
+"sku": "YC00867"
+},
+{
+"boxes": 2,
+"msku": "YC01167-1B",
+"per_box": 25,
+"shipped": 50,
+"shipping_code": "SP202610160010003",
+"sku": "YC01167"
+}
+],
+"sp_shipped_units": 244,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00451132073934": 0,
+"00460925538376": 0,
+"00461549540516": 0,
+"00462423916564": 0,
+"00464956870016": 0,
+"00465195807511": 0
+},
+"walmart_item_received": {
+"00451132073934": 0,
+"00460925538376": 0,
+"00461549540516": 0,
+"00462423916564": 0,
+"00464956870016": 0,
+"00465195807511": 0
+},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": 0,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 100,
+"gtin": "00464956870016",
+"msku": "YC00046-1U",
+"product_name": "8英寸绑带1500pc",
+"received_num": 0,
+"shipments_num": 100,
+"sku": "YC00046"
+},
+{
+"damaged_qty": 0,
+"declare_num": 24,
+"gtin": "00465195807511",
+"msku": "YC00048-1U",
+"product_name": "本色一次性纸盘9寸圆盘 150pc",
+"received_num": 0,
+"shipments_num": 24,
+"sku": "YC00048"
+},
+{
+"damaged_qty": 0,
+"declare_num": 20,
+"gtin": "00462423916564",
+"msku": "YC00784-1Z",
+"product_name": "床垫保护套",
+"received_num": 0,
+"shipments_num": 20,
+"sku": "YC00784"
+},
+{
+"damaged_qty": 0,
+"declare_num": 30,
+"gtin": "00451132073934",
+"msku": "YC00836-1Z",
+"product_name": "挂墙置物架（2pcs）",
+"received_num": 0,
+"shipments_num": 30,
+"sku": "YC00836"
+},
+{
+"damaged_qty": 0,
+"declare_num": 20,
+"gtin": "00460925538376",
+"msku": "YC00867-1Z",
+"product_name": "可拉伸钢丝架",
+"received_num": 0,
+"shipments_num": 20,
+"sku": "YC00867"
+},
+{
+"damaged_qty": 0,
+"declare_num": 50,
+"gtin": "00461549540516",
+"msku": "YC01167-1B",
+"product_name": "8英寸绑带1500pc 白色",
+"received_num": 0,
+"shipments_num": 50,
+"sku": "YC01167"
+}
+],
+"in_bound_order_id": "PMC-HK2614-20261015-03",
+"item_ids": {
+"YC00046-1U": "19982374121",
+"YC00048-1U": "19980672997",
+"YC00784-1Z": "21019301412",
+"YC00836-1Z": "20942617732",
+"YC00867-1Z": "20963309074",
+"YC01167-1B": "21046824269"
+},
+"shipping_codes": [
+"SP202610160010003"
+],
+"status": "AWAITING_DELIVERY",
+"store_id": "S06",
+"store_name": "店铺S06",
+"to_closed_at": null
+},
+{
+"cargo_code": "3133945WFB",
+"created": "2026-10-13 10:25:27",
+"derived": {
+"arrival_date": null,
+"arrival_real": false,
+"arrival_source": "无",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": false,
+"region": "美中",
+"sellable_date": null,
+"sellable_real": false,
+"shipped_out": false,
+"sp_boxes": 0,
+"sp_goods": [],
+"sp_shipped_units": 0,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00460183372460": 0
+},
+"walmart_item_received": {
+"00460183372460": 0
+},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": 0,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 10,
+"gtin": "00460183372460",
+"msku": "YC00408-1A",
+"product_name": "宠物草垫",
+"received_num": 0,
+"shipments_num": 0,
+"sku": "YC00408"
+}
+],
+"in_bound_order_id": "WMS-1791858298005",
+"item_ids": {
+"YC00408-1A": "20756202525"
+},
+"shipping_codes": [],
+"status": "PENDING_SHIPMENT_DETAILS",
+"store_id": "S03",
+"store_name": "店铺S03",
+"to_closed_at": null
+},
+{
+"cargo_code": "3116357WFB",
+"created": "2026-10-13 01:41:44",
+"derived": {
+"arrival_date": null,
+"arrival_real": false,
+"arrival_source": "无",
+"carrier_delivered_at": null,
+"is_test": true,
+"its_inferred": false,
+"region": "美东",
+"sellable_date": null,
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 0,
+"sp_goods": [],
+"sp_shipped_units": 0,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00460016364228": 0
+},
+"walmart_item_received": {
+"00460016364228": 0
+},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": 0,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 0,
+"gtin": "00460016364228",
+"msku": "YC00064-1U",
+"product_name": "3件套不锈钢沥水篮",
+"received_num": 0,
+"shipments_num": 0,
+"sku": "YC00064"
+}
+],
+"in_bound_order_id": "PMC-TEST-HK2614-20261013-ADDR",
+"item_ids": {
+"YC00064-1U": "20024473476"
+},
+"shipping_codes": [],
+"status": "CANCELLED",
+"store_id": "S06",
+"store_name": "店铺S06",
+"to_closed_at": null
+},
+{
+"cargo_code": "3109752WFB",
+"created": "2026-10-12 22:43:29",
+"derived": {
+"arrival_date": null,
+"arrival_real": false,
+"arrival_source": "无",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": false,
+"region": "美东",
+"sellable_date": null,
+"sellable_real": false,
+"shipped_out": false,
+"sp_boxes": 0,
+"sp_goods": [],
+"sp_shipped_units": 0,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00466718983811": 0
+},
+"walmart_item_received": {
+"00466718983811": 0
+},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": 0,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00466718983811",
+"msku": "JJ5102-1A",
+"product_name": "开罐器",
+"received_num": 0,
+"shipments_num": 0,
+"sku": "JJ5102"
+}
+],
+"in_bound_order_id": "WMS-1791816162519",
+"item_ids": {
+"JJ5102-1A": "20014566358"
+},
+"shipping_codes": [],
+"status": "PENDING_SHIPMENT_DETAILS",
+"store_id": "S02",
+"store_name": "店铺S02",
+"to_closed_at": null
+},
+{
+"cargo_code": "2329789WFB",
+"created": "2026-09-23 15:40:15",
+"derived": {
+"arrival_date": "2026-10-28",
+"arrival_real": false,
+"arrival_source": "实际到港+周期",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": true,
+"region": "美西",
+"sellable_date": "2026-11-07",
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 31,
+"sp_goods": [
+{
+"boxes": 13,
+"msku": "YC00568-1A",
+"per_box": 16,
+"shipped": 208,
+"shipping_code": "SP202609230010003",
+"sku": "YC00568"
+},
+{
+"boxes": 14,
+"msku": "YC00578-1A",
+"per_box": 15,
+"shipped": 210,
+"shipping_code": "SP202609230010003",
+"sku": "YC00578"
+},
+{
+"boxes": 4,
+"msku": "YC00631-1A",
+"per_box": 25,
+"shipped": 100,
+"shipping_code": "SP202609230010003",
+"sku": "YC00631"
+}
+],
+"sp_shipped_units": 518,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00451028014799": 0,
+"00451037889654": 0,
+"00460523158341": 0
+},
+"walmart_item_received": {
+"00451028014799": 0,
+"00451037889654": 0,
+"00460523158341": 0
+},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": 0,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 208,
+"gtin": "00460523158341",
+"msku": "YC00568-1A",
+"product_name": "威士忌酒杯（2pcs）",
+"received_num": 0,
+"shipments_num": 208,
+"sku": "YC00568"
+},
+{
+"damaged_qty": 0,
+"declare_num": 210,
+"gtin": "00451037889654",
+"msku": "YC00578-1A",
+"product_name": "熨衣板挂架",
+"received_num": 0,
+"shipments_num": 210,
+"sku": "YC00578"
+},
+{
+"damaged_qty": 0,
+"declare_num": 100,
+"gtin": "00451028014799",
+"msku": "YC00631-1A",
+"product_name": "楠竹款三层收纳架",
+"received_num": 0,
+"shipments_num": 100,
+"sku": "YC00631"
+}
+],
+"in_bound_order_id": "RIT-1790149070996",
+"item_ids": {
+"YC00568-1A": "20812004116",
+"YC00578-1A": "20862213377",
+"YC00631-1A": "20841721262"
+},
+"shipping_codes": [
+"SP202609230010003"
+],
+"status": "AWAITING_DELIVERY",
+"store_id": "S06",
+"store_name": "店铺S06",
+"to_closed_at": null
+},
+{
+"cargo_code": "2284857WFB",
+"created": "2026-09-22 12:34:53",
+"derived": {
+"arrival_date": "2026-10-27",
+"arrival_real": true,
+"arrival_source": "实际（众壹签收）",
+"carrier_delivered_at": "2026-10-27 22:00",
+"is_test": false,
+"its_inferred": true,
+"region": "美西",
+"sellable_date": "2026-11-01",
+"sellable_real": true,
+"shipped_out": true,
+"sp_boxes": 42,
+"sp_goods": [
+{
+"boxes": 5,
+"msku": "YC00345-1A",
+"per_box": 20,
+"shipped": 100,
+"shipping_code": "SP202609220010014",
+"sku": "YC00345"
+},
+{
+"boxes": 20,
+"msku": "YC00569-1Z",
+"per_box": 5,
+"shipped": 100,
+"shipping_code": "SP202609220010014",
+"sku": "YC00569"
+},
+{
+"boxes": 2,
+"msku": "YC00582-1A",
+"per_box": 50,
+"shipped": 100,
+"shipping_code": "SP202609220010014",
+"sku": "YC00582"
+},
+{
+"boxes": 1,
+"msku": "YC00627-1A",
+"per_box": 20,
+"shipped": 20,
+"shipping_code": "SP202609220010014",
+"sku": "YC00627"
+},
+{
+"boxes": 5,
+"msku": "YC00628-1A",
+"per_box": 20,
+"shipped": 100,
+"shipping_code": "SP202609220010014",
+"sku": "YC00628"
+},
+{
+"boxes": 5,
+"msku": "YC00629-1A",
+"per_box": 20,
+"shipped": 100,
+"shipping_code": "SP202609220010014",
+"sku": "YC00629"
+},
+{
+"boxes": 1,
+"msku": "YC00850-1C",
+"per_box": 20,
+"shipped": 20,
+"shipping_code": "SP202609220010014",
+"sku": "YC00850"
+},
+{
+"boxes": 1,
+"msku": "YC00851-1A",
+"per_box": 20,
+"shipped": 20,
+"shipping_code": "SP202609220010014",
+"sku": "YC00851"
+},
+{
+"boxes": 2,
+"msku": "YC00857-1A",
+"per_box": 75,
+"shipped": 150,
+"shipping_code": "SP202609220010014",
+"sku": "YC00857"
+}
+],
+"sp_shipped_units": 710,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": "2026-11-01",
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00451074065530": 0,
+"00451147784719": 0,
+"00451148637571": 0,
+"00460082776949": 0,
+"00460623580608": 0,
+"00460647595329": 0,
+"00460672377167": 0,
+"00460940247260": 0,
+"00469079839261": 0
+},
+"walmart_item_received": {
+"00451074065530": 100,
+"00451147784719": 140,
+"00451148637571": 100,
+"00460082776949": 102,
+"00460623580608": 20,
+"00460647595329": 150,
+"00460672377167": 20,
+"00460940247260": 20,
+"00469079839261": 100
+},
+"walmart_last_receipt": "2026-11-01",
+"walmart_receipt_by_gtin": {
+"00460082776949": "2026-11-01",
+"00460623580608": "2026-11-01"
+},
+"walmart_receipt_units": 8,
+"walmart_receipt_units_by_gtin": {
+"00460082776949": 5,
+"00460623580608": 3
+},
+"walmart_received_units": 752,
+"walmart_signed_date": "2026-11-03",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 100,
+"gtin": "00469079839261",
+"msku": "YC00345-1A",
+"product_name": "5cm木柄黑海绵(100pc)",
+"received_num": 100,
+"shipments_num": 100,
+"sku": "YC00345"
+},
+{
+"damaged_qty": 0,
+"declare_num": 100,
+"gtin": "00460082776949",
+"msku": "YC00569-1Z",
+"product_name": "运输纸箱50pcs",
+"received_num": 102,
+"shipments_num": 100,
+"sku": "YC00569"
+},
+{
+"damaged_qty": 0,
+"declare_num": 100,
+"gtin": "00451148637571",
+"msku": "YC00582-1A",
+"product_name": "烘干机维修套件",
+"received_num": 100,
+"shipments_num": 100,
+"sku": "YC00582"
+},
+{
+"damaged_qty": 0,
+"declare_num": 20,
+"gtin": "00460672377167",
+"msku": "YC00627-1A",
+"product_name": "剪裁式机绣稳定衬布",
+"received_num": 20,
+"shipments_num": 20,
+"sku": "YC00627"
+},
+{
+"damaged_qty": 0,
+"declare_num": 100,
+"gtin": "00451147784719",
+"msku": "YC00628-1A",
+"product_name": "W11130362洗衣机悬挂杆4只装",
+"received_num": 120,
+"shipments_num": 100,
+"sku": "YC00628"
+},
+{
+"damaged_qty": 0,
+"declare_num": 100,
+"gtin": "00451074065530",
+"msku": "YC00629-1A",
+"product_name": "W10780048洗衣机减震悬挂杆4只装",
+"received_num": 100,
+"shipments_num": 100,
+"sku": "YC00629"
+},
+{
+"damaged_qty": 0,
+"declare_num": 20,
+"gtin": "00460940247260",
+"msku": "YC00850-1C",
+"product_name": "发箍套装（20pcs）",
+"received_num": 20,
+"shipments_num": 20,
+"sku": "YC00850"
+},
+{
+"damaged_qty": 0,
+"declare_num": 20,
+"gtin": "00460623580608",
+"msku": "YC00851-1A",
+"product_name": "衣架连接挂钩（36pcs）",
+"received_num": 20,
+"shipments_num": 20,
+"sku": "YC00851"
+},
+{
+"damaged_qty": 0,
+"declare_num": 150,
+"gtin": "00460647595329",
+"msku": "YC00857-1A",
+"product_name": "可折叠三折写字板",
+"received_num": 150,
+"shipments_num": 150,
+"sku": "YC00857"
+}
+],
+"in_bound_order_id": "BUH-1790050875843",
+"item_ids": {
+"YC00345-1A": "20823002085",
+"YC00569-1Z": "20707351099",
+"YC00582-1A": "20846766684",
+"YC00627-1A": "20978203245",
+"YC00628-1A": "20883708397",
+"YC00629-1A": "20894415286",
+"YC00850-1C": "20987862181",
+"YC00851-1A": "20900062662",
+"YC00857-1A": "20945802835"
+},
+"shipping_codes": [
+"SP202609220010014"
+],
+"status": "CLOSED",
+"store_id": "S07",
+"store_name": "店铺S07",
+"to_closed_at": "2026-10-29T18:48:13.446000+00:00"
+},
+{
+"cargo_code": "2284199WFB",
+"created": "2026-09-22 12:13:06",
+"derived": {
+"arrival_date": "2026-10-28",
+"arrival_real": false,
+"arrival_source": "实际到港+周期",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": true,
+"region": "美西",
+"sellable_date": "2026-11-07",
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 49,
+"sp_goods": [
+{
+"boxes": 15,
+"msku": "YC00238-1A",
+"per_box": 10,
+"shipped": 150,
+"shipping_code": "SP202609220010012",
+"sku": "YC00238"
+},
+{
+"boxes": 9,
+"msku": "YC00261-1A",
+"per_box": 12,
+"shipped": 108,
+"shipping_code": "SP202609220010012",
+"sku": "YC00261"
+},
+{
+"boxes": 2,
+"msku": "YC00262-1A",
+"per_box": 50,
+"shipped": 100,
+"shipping_code": "SP202609220010012",
+"sku": "YC00262"
+},
+{
+"boxes": 5,
+"msku": "YC00275-1A",
+"per_box": 32,
+"shipped": 160,
+"shipping_code": "SP202609220010012",
+"sku": "YC00275"
+},
+{
+"boxes": 4,
+"msku": "YC00304-1A",
+"per_box": 25,
+"shipped": 100,
+"shipping_code": "SP202609220010012",
+"sku": "YC00304"
+},
+{
+"boxes": 4,
+"msku": "YC00343-1A",
+"per_box": 25,
+"shipped": 100,
+"shipping_code": "SP202609220010012",
+"sku": "YC00343"
+},
+{
+"boxes": 4,
+"msku": "YC00362-1A",
+"per_box": 60,
+"shipped": 240,
+"shipping_code": "SP202609220010012",
+"sku": "YC00362"
+},
+{
+"boxes": 4,
+"msku": "YC00372-1A",
+"per_box": 45,
+"shipped": 180,
+"shipping_code": "SP202609220010012",
+"sku": "YC00372"
+},
+{
+"boxes": 1,
+"msku": "YC00888-1A",
+"per_box": 20,
+"shipped": 20,
+"shipping_code": "SP202609220010012",
+"sku": "YC00888"
+},
+{
+"boxes": 1,
+"msku": "YC00929-1A",
+"per_box": 20,
+"shipped": 20,
+"shipping_code": "SP202609220010012",
+"sku": "YC00929"
+}
+],
+"sp_shipped_units": 1178,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00460884816829": 0,
+"00460889333079": 0,
+"00467963136588": 0,
+"00468333155673": 0,
+"00468461836369": 0,
+"00468482791692": 0,
+"00468700413825": 0,
+"00468797566930": 0,
+"00469461937445": 0,
+"00469858566937": 0
+},
+"walmart_item_received": {
+"00460884816829": 0,
+"00460889333079": 0,
+"00467963136588": 0,
+"00468333155673": 0,
+"00468461836369": 0,
+"00468482791692": 0,
+"00468700413825": 0,
+"00468797566930": 0,
+"00469461937445": 0,
+"00469858566937": 0
+},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": 0,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 150,
+"gtin": "00468482791692",
+"msku": "YC00238-1A",
+"product_name": "收纳盒（6pcs）",
+"received_num": 0,
+"shipments_num": 150,
+"sku": "YC00238"
+},
+{
+"damaged_qty": 0,
+"declare_num": 108,
+"gtin": "00468700413825",
+"msku": "YC00261-1A",
+"product_name": "平板电脑落地支架",
+"received_num": 0,
+"shipments_num": 108,
+"sku": "YC00261"
+},
+{
+"damaged_qty": 0,
+"declare_num": 100,
+"gtin": "00468461836369",
+"msku": "YC00262-1A",
+"product_name": "84x36黑色悬挂式双面珠宝收纳袋",
+"received_num": 0,
+"shipments_num": 100,
+"sku": "YC00262"
+},
+{
+"damaged_qty": 0,
+"declare_num": 160,
+"gtin": "00467963136588",
+"msku": "YC00275-1A",
+"product_name": "白盖3格饭盒2件套（白色）",
+"received_num": 0,
+"shipments_num": 160,
+"sku": "YC00275"
+},
+{
+"damaged_qty": 0,
+"declare_num": 100,
+"gtin": "00469461937445",
+"msku": "YC00304-1A",
+"product_name": "搅拌机碗硅胶衬垫(3pc)",
+"received_num": 0,
+"shipments_num": 100,
+"sku": "YC00304"
+},
+{
+"damaged_qty": 0,
+"declare_num": 100,
+"gtin": "00468797566930",
+"msku": "YC00343-1A",
+"product_name": "冰箱冷冻室温度计（12pcs）",
+"received_num": 0,
+"shipments_num": 100,
+"sku": "YC00343"
+},
+{
+"damaged_qty": 0,
+"declare_num": 240,
+"gtin": "00468333155673",
+"msku": "YC00362-1A",
+"product_name": "洗澡防水套",
+"received_num": 0,
+"shipments_num": 240,
+"sku": "YC00362"
+},
+{
+"damaged_qty": 0,
+"declare_num": 180,
+"gtin": "00469858566937",
+"msku": "YC00372-1A",
+"product_name": "透明车牌盖和框架（2pcs）",
+"received_num": 0,
+"shipments_num": 180,
+"sku": "YC00372"
+},
+{
+"damaged_qty": 0,
+"declare_num": 20,
+"gtin": "00460884816829",
+"msku": "YC00888-1A",
+"product_name": "毛毡条公告板(8pcs)",
+"received_num": 0,
+"shipments_num": 20,
+"sku": "YC00888"
+},
+{
+"damaged_qty": 0,
+"declare_num": 20,
+"gtin": "00460889333079",
+"msku": "YC00929-1A",
+"product_name": "多功能削皮刀（2PCS）",
+"received_num": 0,
+"shipments_num": 20,
+"sku": "YC00929"
+}
+],
+"in_bound_order_id": "BUH-1790050207038",
+"item_ids": {
+"YC00238-1A": "20456360816",
+"YC00261-1A": "20580069436",
+"YC00262-1A": "20423800781",
+"YC00275-1A": "20374569300",
+"YC00304-1A": "20575605508",
+"YC00343-1A": "20656774899",
+"YC00362-1A": "20491455143",
+"YC00372-1A": "20574267393",
+"YC00888-1A": "20900659861",
+"YC00929-1A": "20934319703"
+},
+"shipping_codes": [
+"SP202609220010012"
+],
+"status": "AWAITING_DELIVERY",
+"store_id": "S07",
+"store_name": "店铺S07",
+"to_closed_at": null
+},
+{
+"cargo_code": "2245432WFB",
+"created": "2026-09-21 17:54:24",
+"derived": {
+"arrival_date": "2026-10-27",
+"arrival_real": true,
+"arrival_source": "实际（众壹签收）",
+"carrier_delivered_at": "2026-10-27 22:00",
+"is_test": false,
+"its_inferred": true,
+"region": "美西",
+"sellable_date": "2026-11-01",
+"sellable_real": true,
+"shipped_out": true,
+"sp_boxes": 25,
+"sp_goods": [
+{
+"boxes": 2,
+"msku": "YC00356-1A",
+"per_box": 50,
+"shipped": 100,
+"shipping_code": "SP202609220010009",
+"sku": "YC00356"
+},
+{
+"boxes": 6,
+"msku": "YC00409-1A",
+"per_box": 18,
+"shipped": 108,
+"shipping_code": "SP202609220010009",
+"sku": "YC00409"
+},
+{
+"boxes": 17,
+"msku": "YC00453-1U",
+"per_box": 12,
+"shipped": 204,
+"shipping_code": "SP202609220010009",
+"sku": "YC00453"
+}
+],
+"sp_shipped_units": 412,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": "2026-11-01",
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00450101217607": 0,
+"00468353691052": 0,
+"00469467099246": 0
+},
+"walmart_item_received": {
+"00450101217607": 192,
+"00468353691052": 100,
+"00469467099246": 108
+},
+"walmart_last_receipt": "2026-11-01",
+"walmart_receipt_by_gtin": {
+"00450101217607": "2026-11-01"
+},
+"walmart_receipt_units": 12,
+"walmart_receipt_units_by_gtin": {
+"00450101217607": 12
+},
+"walmart_received_units": 400,
+"walmart_signed_date": "2026-10-30",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 100,
+"gtin": "00468353691052",
+"msku": "YC00356-1A",
+"product_name": "隐形花盆脚（24pcs）",
+"received_num": 100,
+"shipments_num": 100,
+"sku": "YC00356"
+},
+{
+"damaged_qty": 0,
+"declare_num": 108,
+"gtin": "00469467099246",
+"msku": "YC00409-1A",
+"product_name": "3L洒水壶",
+"received_num": 108,
+"shipments_num": 108,
+"sku": "YC00409"
+},
+{
+"damaged_qty": 0,
+"declare_num": 204,
+"gtin": "00450101217607",
+"msku": "YC00453-1U",
+"product_name": "Cuisinart适配咖啡壶",
+"received_num": 192,
+"shipments_num": 204,
+"sku": "YC00453"
+}
+],
+"in_bound_order_id": "AQD-1789984407932",
+"item_ids": {
+"YC00356-1A": "20436151462",
+"YC00409-1A": "20530262696",
+"YC00453-1U": "20655658090"
+},
+"shipping_codes": [
+"SP202609220010009"
+],
+"status": "RECEIVING_IN_PROGRESS",
+"store_id": "S03",
+"store_name": "店铺S03",
+"to_closed_at": null
+},
+{
+"cargo_code": "2244913WFB",
+"created": "2026-09-21 17:26:10",
+"derived": {
+"arrival_date": "2026-10-27",
+"arrival_real": true,
+"arrival_source": "实际（众壹签收）",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": true,
+"region": "美西",
+"sellable_date": "2026-10-31",
+"sellable_real": true,
+"shipped_out": true,
+"sp_boxes": 4,
+"sp_goods": [
+{
+"boxes": 1,
+"msku": "YC00303-1U",
+"per_box": 28,
+"shipped": 28,
+"shipping_code": "SP202609220010004",
+"sku": "YC00303"
+},
+{
+"boxes": 1,
+"msku": "YC00329-1A",
+"per_box": 10,
+"shipped": 10,
+"shipping_code": "SP202609220010004",
+"sku": "YC00329"
+},
+{
+"boxes": 1,
+"msku": "YC00504-1A",
+"per_box": 72,
+"shipped": 72,
+"shipping_code": "SP202609220010004",
+"sku": "YC00504"
+},
+{
+"boxes": 1,
+"msku": "YC00547-1A",
+"per_box": 16,
+"shipped": 16,
+"shipping_code": "SP202609220010004",
+"sku": "YC00547"
+}
+],
+"sp_shipped_units": 126,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": "2026-10-31",
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00451135536467": 0,
+"00468218821822": 0,
+"00468376115450": 0,
+"00468820940959": 0
+},
+"walmart_item_received": {
+"00451135536467": 16,
+"00468218821822": 28,
+"00468376115450": 10,
+"00468820940959": 70
+},
+"walmart_last_receipt": "2026-11-01",
+"walmart_receipt_by_gtin": {
+"00468218821822": "2026-10-31",
+"00468820940959": "2026-10-31"
+},
+"walmart_receipt_units": 27,
+"walmart_receipt_units_by_gtin": {
+"00468218821822": 5,
+"00468820940959": 22
+},
+"walmart_received_units": 124,
+"walmart_signed_date": "2026-10-31",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 28,
+"gtin": "00468218821822",
+"msku": "YC00303-1U",
+"product_name": "5层亚克力蛋糕架",
+"received_num": 28,
+"shipments_num": 28,
+"sku": "YC00303"
+},
+{
+"damaged_qty": 0,
+"declare_num": 10,
+"gtin": "00468376115450",
+"msku": "YC00329-1A",
+"product_name": "鸡玩具6个",
+"received_num": 10,
+"shipments_num": 10,
+"sku": "YC00329"
+},
+{
+"damaged_qty": 0,
+"declare_num": 72,
+"gtin": "00468820940959",
+"msku": "YC00504-1A",
+"product_name": "Q型挂钩带安全扣（36pcs）",
+"received_num": 70,
+"shipments_num": 72,
+"sku": "YC00504"
+},
+{
+"damaged_qty": 0,
+"declare_num": 16,
+"gtin": "00451135536467",
+"msku": "YC00547-1A",
+"product_name": "16pc水族箱过滤器滤芯",
+"received_num": 16,
+"shipments_num": 16,
+"sku": "YC00547"
+}
+],
+"in_bound_order_id": "AQD-1789982709713",
+"item_ids": {
+"YC00303-1U": "20435154504",
+"YC00329-1A": "20470269371",
+"YC00504-1A": "20691700128",
+"YC00547-1A": "20893215074"
+},
+"shipping_codes": [
+"SP202609220010004"
+],
+"status": "RECEIVING_IN_PROGRESS",
+"store_id": "S03",
+"store_name": "店铺S03",
+"to_closed_at": null
+},
+{
+"cargo_code": "2243495WFB",
+"created": "2026-09-21 16:32:54",
+"derived": {
+"arrival_date": "2026-10-27",
+"arrival_real": true,
+"arrival_source": "实际（众壹签收）",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": true,
+"region": "美西",
+"sellable_date": "2026-11-06",
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 2,
+"sp_goods": [
+{
+"boxes": 1,
+"msku": "YC00043-1A",
+"per_box": 8,
+"shipped": 8,
+"shipping_code": "SP202609210010011",
+"sku": "YC00043"
+},
+{
+"boxes": 1,
+"msku": "YC00322-1A",
+"per_box": 8,
+"shipped": 8,
+"shipping_code": "SP202609210010011",
+"sku": "YC00322"
+}
+],
+"sp_shipped_units": 16,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00465501484849": 0,
+"00468483429839": 0
+},
+"walmart_item_received": {
+"00465501484849": 8,
+"00468483429839": 8
+},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": 16,
+"walmart_signed_date": "2026-10-30",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 8,
+"gtin": "00465501484849",
+"msku": "YC00043-1A",
+"product_name": "16oz保鲜盒 10pc",
+"received_num": 8,
+"shipments_num": 8,
+"sku": "YC00043"
+},
+{
+"damaged_qty": 0,
+"declare_num": 8,
+"gtin": "00468483429839",
+"msku": "YC00322-1A",
+"product_name": "便折叠露营桌",
+"received_num": 8,
+"shipments_num": 8,
+"sku": "YC00322"
+}
+],
+"in_bound_order_id": "STL-1789979550802",
+"item_ids": {
+"YC00043-1A": "20079623149",
+"YC00322-1A": "20367516631"
+},
+"shipping_codes": [
+"SP202609210010011"
+],
+"status": "CLOSED",
+"store_id": "S02",
+"store_name": "店铺S02",
+"to_closed_at": "2026-10-29T18:44:55.837000+00:00"
+},
+{
+"cargo_code": "2071912WFB",
+"created": "2026-09-17 09:32:23",
+"derived": {
+"arrival_date": "2026-09-30",
+"arrival_real": true,
+"arrival_source": "实际（Walmart 签收）",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": false,
+"region": "美东",
+"sellable_date": "2026-10-11",
+"sellable_real": true,
+"shipped_out": true,
+"sp_boxes": 3,
+"sp_goods": [
+{
+"boxes": 3,
+"msku": "YC00049-1U",
+"per_box": 12,
+"shipped": 36,
+"shipping_code": "SP202609170010003",
+"sku": "YC00049"
+}
+],
+"sp_shipped_units": 36,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": "2026-10-11",
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00464910403212": 0
+},
+"walmart_item_received": {
+"00464910403212": 23
+},
+"walmart_last_receipt": "2026-10-23",
+"walmart_receipt_by_gtin": {
+"00464910403212": "2026-10-11"
+},
+"walmart_receipt_units": 23,
+"walmart_receipt_units_by_gtin": {
+"00464910403212": 23
+},
+"walmart_received_units": 23,
+"walmart_signed_date": "2026-09-30",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 36,
+"gtin": "00464910403212",
+"msku": "YC00049-1U",
+"product_name": "饮料收纳盒2pc",
+"received_num": 23,
+"shipments_num": 36,
+"sku": "YC00049"
+}
+],
+"in_bound_order_id": "RIT-1789608719488",
+"item_ids": {
+"YC00049-1U": "19979850642"
+},
+"shipping_codes": [
+"SP202609170010003"
+],
+"status": "RECEIVING_IN_PROGRESS",
+"store_id": "S06",
+"store_name": "店铺S06",
+"to_closed_at": null
+},
+{
+"cargo_code": "2071756WFB",
+"created": "2026-09-17 09:29:32",
+"derived": {
+"arrival_date": "2026-09-24",
+"arrival_real": true,
+"arrival_source": "实际（Walmart 签收）",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": false,
+"region": "美东",
+"sellable_date": "2026-10-02",
+"sellable_real": true,
+"shipped_out": true,
+"sp_boxes": 49,
+"sp_goods": [
+{
+"boxes": 49,
+"msku": "YC00047-1U",
+"per_box": 10,
+"shipped": 490,
+"shipping_code": "SP202609170010002",
+"sku": "YC00047"
+}
+],
+"sp_shipped_units": 490,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": "2026-10-02",
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00464385793726": 0
+},
+"walmart_item_received": {
+"00464385793726": 470
+},
+"walmart_last_receipt": "2026-10-31",
+"walmart_receipt_by_gtin": {
+"00464385793726": "2026-10-02"
+},
+"walmart_receipt_units": 470,
+"walmart_receipt_units_by_gtin": {
+"00464385793726": 470
+},
+"walmart_received_units": 470,
+"walmart_signed_date": "2026-09-24",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 490,
+"gtin": "00464385793726",
+"msku": "YC00047-1U",
+"product_name": "芝士切片器白色",
+"received_num": 470,
+"shipments_num": 490,
+"sku": "YC00047"
+}
+],
+"in_bound_order_id": "RIT-1789608543539",
+"item_ids": {
+"YC00047-1U": "19965020060"
+},
+"shipping_codes": [
+"SP202609170010002"
+],
+"status": "CLOSED",
+"store_id": "S06",
+"store_name": "店铺S06",
+"to_closed_at": "2026-11-02T01:45:00.688000+00:00"
+},
+{
+"cargo_code": "2071461WFB",
+"created": "2026-09-17 09:26:33",
+"derived": {
+"arrival_date": "2026-09-30",
+"arrival_real": true,
+"arrival_source": "实际（Walmart 签收）",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": false,
+"region": "美东",
+"sellable_date": "2026-10-11",
+"sellable_real": true,
+"shipped_out": true,
+"sp_boxes": 13,
+"sp_goods": [
+{
+"boxes": 13,
+"msku": "JJ8015-1U",
+"per_box": 24,
+"shipped": 312,
+"shipping_code": "SP202609170010001",
+"sku": "JJ8015"
+}
+],
+"sp_shipped_units": 312,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": "2026-10-11",
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00464913194179": 0
+},
+"walmart_item_received": {
+"00464913194179": 283
+},
+"walmart_last_receipt": "2026-10-26",
+"walmart_receipt_by_gtin": {
+"00464913194179": "2026-10-11"
+},
+"walmart_receipt_units": 271,
+"walmart_receipt_units_by_gtin": {
+"00464913194179": 271
+},
+"walmart_received_units": 283,
+"walmart_signed_date": "2026-09-30",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 312,
+"gtin": "00464913194179",
+"msku": "JJ8015-1U",
+"product_name": "4/7/9英寸蛋糕模具套装",
+"received_num": 295,
+"shipments_num": 312,
+"sku": "JJ8015"
+}
+],
+"in_bound_order_id": "RIT-1789608322669",
+"item_ids": {
+"JJ8015-1U": "19992467121"
+},
+"shipping_codes": [
+"SP202609170010001"
+],
+"status": "RECEIVING_IN_PROGRESS",
+"store_id": "S06",
+"store_name": "店铺S06",
+"to_closed_at": null
+},
+{
+"cargo_code": "1740201WFB",
+"created": "2026-09-09 09:12:18",
+"derived": {
+"arrival_date": "2026-09-11",
+"arrival_real": true,
+"arrival_source": "实际（Walmart 签收）",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": false,
+"region": "美东",
+"sellable_date": "2026-09-20",
+"sellable_real": true,
+"shipped_out": true,
+"sp_boxes": 20,
+"sp_goods": [
+{
+"boxes": 20,
+"msku": "JJ9002-1U",
+"per_box": 10,
+"shipped": 200,
+"shipping_code": "SP202609090010001",
+"sku": "JJ9002"
+}
+],
+"sp_shipped_units": 200,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": "2026-09-20",
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00465424737879": 0
+},
+"walmart_item_received": {
+"00465424737879": 187
+},
+"walmart_last_receipt": "2026-10-11",
+"walmart_receipt_by_gtin": {
+"00465424737879": "2026-09-20"
+},
+"walmart_receipt_units": 185,
+"walmart_receipt_units_by_gtin": {
+"00465424737879": 185
+},
+"walmart_received_units": 187,
+"walmart_signed_date": "2026-09-11",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 200,
+"gtin": "00465424737879",
+"msku": "JJ9002-1U",
+"product_name": "304不锈钢冰格(2pc)",
+"received_num": 187,
+"shipments_num": 200,
+"sku": "JJ9002"
+}
+],
+"in_bound_order_id": "RIT-1788916296708",
+"item_ids": {
+"JJ9002-1U": "20040271565"
+},
+"shipping_codes": [
+"SP202609090010001"
+],
+"status": "CLOSED",
+"store_id": "S06",
+"store_name": "店铺S06",
+"to_closed_at": "2026-10-12T08:19:25.028000+00:00"
+},
+{
+"cargo_code": "1698129WFB",
+"created": "2026-09-08 15:51:33",
+"derived": {
+"arrival_date": "2026-10-20",
+"arrival_real": true,
+"arrival_source": "实际（众壹签收）",
+"carrier_delivered_at": "2026-10-20 22:00",
+"is_test": false,
+"its_inferred": false,
+"region": "美东",
+"sellable_date": "2026-10-24",
+"sellable_real": true,
+"shipped_out": true,
+"sp_boxes": 42,
+"sp_goods": [
+{
+"boxes": 42,
+"msku": "YC00118-1U",
+"per_box": 5,
+"shipped": 210,
+"shipping_code": "SP202609080010008",
+"sku": "YC00118"
+}
+],
+"sp_shipped_units": 210,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": "2026-10-24",
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00460040529976": 0
+},
+"walmart_item_received": {
+"00460040529976": 186
+},
+"walmart_last_receipt": "2026-10-24",
+"walmart_receipt_by_gtin": {
+"00460040529976": "2026-10-24"
+},
+"walmart_receipt_units": 195,
+"walmart_receipt_units_by_gtin": {
+"00460040529976": 195
+},
+"walmart_received_units": 186,
+"walmart_signed_date": "2026-10-24",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 210,
+"gtin": "00460040529976",
+"msku": "YC00118-1U",
+"product_name": "六格拼装塑料置物架",
+"received_num": 186,
+"shipments_num": 210,
+"sku": "YC00118"
+}
+],
+"in_bound_order_id": "RIT-1788853871361",
+"item_ids": {
+"YC00118-1U": "20025056248"
+},
+"shipping_codes": [
+"SP202609080010008"
+],
+"status": "CLOSED",
+"store_id": "S06",
+"store_name": "店铺S06",
+"to_closed_at": "2026-10-26T12:28:35.138000+00:00"
+},
+{
+"cargo_code": "1697565WFB",
+"created": "2026-09-08 15:30:07",
+"derived": {
+"arrival_date": "2026-10-26",
+"arrival_real": true,
+"arrival_source": "实际（众壹签收）",
+"carrier_delivered_at": "2026-10-26 22:00",
+"is_test": false,
+"its_inferred": true,
+"region": "美东",
+"sellable_date": "2026-10-29",
+"sellable_real": true,
+"shipped_out": true,
+"sp_boxes": 23,
+"sp_goods": [
+{
+"boxes": 11,
+"msku": "YC00377-1B",
+"per_box": 18,
+"shipped": 198,
+"shipping_code": "SP202609100010003",
+"sku": "YC00377"
+},
+{
+"boxes": 10,
+"msku": "YC00378-1A",
+"per_box": 10,
+"shipped": 100,
+"shipping_code": "SP202609100010003",
+"sku": "YC00378"
+},
+{
+"boxes": 2,
+"msku": "YC00020-1A",
+"per_box": 45,
+"shipped": 90,
+"shipping_code": "SP202609100010003",
+"sku": "YC00020"
+}
+],
+"sp_shipped_units": 388,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": "2026-10-29",
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00451018372847": 0,
+"00451032385472": 0,
+"00464238039230": 0
+},
+"walmart_item_received": {
+"00451018372847": 214,
+"00451032385472": 101,
+"00464238039230": 89
+},
+"walmart_last_receipt": "2026-10-31",
+"walmart_receipt_by_gtin": {
+"00451018372847": "2026-10-29",
+"00451032385472": "2026-10-30",
+"00464238039230": "2026-10-29"
+},
+"walmart_receipt_units": 97,
+"walmart_receipt_units_by_gtin": {
+"00451018372847": 47,
+"00451032385472": 24,
+"00464238039230": 26
+},
+"walmart_received_units": 404,
+"walmart_signed_date": "2026-10-26",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 198,
+"gtin": "00451018372847",
+"msku": "YC00377-1B",
+"product_name": "2倍热压缩纳米海绵擦40pcs",
+"received_num": 214,
+"shipments_num": 198,
+"sku": "YC00377"
+},
+{
+"damaged_qty": 0,
+"declare_num": 100,
+"gtin": "00451032385472",
+"msku": "YC00378-1A",
+"product_name": "2倍热压缩纳米海绵擦80pcs",
+"received_num": 101,
+"shipments_num": 100,
+"sku": "YC00378"
+},
+{
+"damaged_qty": 0,
+"declare_num": 90,
+"gtin": "00464238039230",
+"msku": "YC00020-1A",
+"product_name": "纳米海绵擦20pcs",
+"received_num": 89,
+"shipments_num": 90,
+"sku": "YC00020"
+}
+],
+"in_bound_order_id": "RIN-1788852515239",
+"item_ids": {
+"YC00020-1A": "19906615272",
+"YC00377-1B": "20866305698",
+"YC00378-1A": "20800559236"
+},
+"shipping_codes": [
+"SP202609100010003"
+],
+"status": "RECEIVING_IN_PROGRESS",
+"store_id": "S04",
+"store_name": "店铺S04",
+"to_closed_at": null
+},
+{
+"cargo_code": "1696947WFB",
+"created": "2026-09-08 15:07:47",
+"derived": {
+"arrival_date": "2026-10-15",
+"arrival_real": true,
+"arrival_source": "实际（众壹签收）",
+"carrier_delivered_at": "2026-10-15 22:00",
+"is_test": false,
+"its_inferred": true,
+"region": "美西",
+"sellable_date": "2026-10-19",
+"sellable_real": true,
+"shipped_out": true,
+"sp_boxes": 35,
+"sp_goods": [
+{
+"boxes": 6,
+"msku": "YC00625-1A",
+"per_box": 15,
+"shipped": 90,
+"shipping_code": "SP202609100010007",
+"sku": "YC00625"
+},
+{
+"boxes": 17,
+"msku": "YC00168-1U",
+"per_box": 9,
+"shipped": 153,
+"shipping_code": "SP202609100010007",
+"sku": "YC00168"
+},
+{
+"boxes": 12,
+"msku": "YC00449-1U",
+"per_box": 4,
+"shipped": 48,
+"shipping_code": "SP202609100010007",
+"sku": "YC00449"
+}
+],
+"sp_shipped_units": 291,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": "2026-10-19",
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00451124822595": 0,
+"00465951533425": 0,
+"00730654547766": 0
+},
+"walmart_item_received": {
+"00451124822595": 60,
+"00465951533425": 48,
+"00730654547766": 76
+},
+"walmart_last_receipt": "2026-10-28",
+"walmart_receipt_by_gtin": {
+"00451124822595": "2026-10-19",
+"00465951533425": "2026-10-19",
+"00730654547766": "2026-10-20"
+},
+"walmart_receipt_units": 89,
+"walmart_receipt_units_by_gtin": {
+"00451124822595": 32,
+"00465951533425": 19,
+"00730654547766": 38
+},
+"walmart_received_units": 184,
+"walmart_signed_date": "2026-10-18",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 90,
+"gtin": "00451124822595",
+"msku": "YC00625-1A",
+"product_name": "100pcs固定器",
+"received_num": 60,
+"shipments_num": 90,
+"sku": "YC00625"
+},
+{
+"damaged_qty": 0,
+"declare_num": 153,
+"gtin": "00730654547766",
+"msku": "YC00168-1U",
+"product_name": "12英寸不锈钢锅盖(2pc)",
+"received_num": 76,
+"shipments_num": 153,
+"sku": "YC00168"
+},
+{
+"damaged_qty": 0,
+"declare_num": 48,
+"gtin": "00465951533425",
+"msku": "YC00449-1U",
+"product_name": "意大利面存储罐（3pcs）",
+"received_num": 48,
+"shipments_num": 48,
+"sku": "YC00449"
+}
+],
+"in_bound_order_id": "AQD-1788851125434",
+"item_ids": {
+"YC00168-1U": "20318152544",
+"YC00449-1U": "20571101278",
+"YC00625-1A": "20879720484"
+},
+"shipping_codes": [
+"SP202609100010007"
+],
+"status": "RECEIVING_IN_PROGRESS",
+"store_id": "S03",
+"store_name": "店铺S03",
+"to_closed_at": null
+},
+{
+"cargo_code": "1591534WFB",
+"created": "2026-09-05 10:30:18",
+"derived": {
+"arrival_date": "2026-10-15",
+"arrival_real": true,
+"arrival_source": "实际（众壹签收）",
+"carrier_delivered_at": "2026-10-15 22:00",
+"is_test": false,
+"its_inferred": false,
+"region": "美东",
+"sellable_date": "2026-10-19",
+"sellable_real": true,
+"shipped_out": true,
+"sp_boxes": 31,
+"sp_goods": [
+{
+"boxes": 13,
+"msku": "YC00036-1U",
+"per_box": 24,
+"shipped": 312,
+"shipping_code": "SP202609050010007",
+"sku": "YC00036"
+},
+{
+"boxes": 10,
+"msku": "YC00041-1U",
+"per_box": 30,
+"shipped": 300,
+"shipping_code": "SP202609050010007",
+"sku": "YC00041"
+},
+{
+"boxes": 8,
+"msku": "YC00605-1A",
+"per_box": 20,
+"shipped": 160,
+"shipping_code": "SP202609050010007",
+"sku": "YC00605"
+}
+],
+"sp_shipped_units": 772,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": "2026-10-19",
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00451113428210": 0,
+"00465358515796": 0,
+"00465791478924": 0
+},
+"walmart_item_received": {
+"00451113428210": 160,
+"00465358515796": 224,
+"00465791478924": 312
+},
+"walmart_last_receipt": "2026-10-31",
+"walmart_receipt_by_gtin": {
+"00451113428210": "2026-10-19",
+"00465358515796": "2026-10-19",
+"00465791478924": "2026-10-19"
+},
+"walmart_receipt_units": 711,
+"walmart_receipt_units_by_gtin": {
+"00451113428210": 160,
+"00465358515796": 239,
+"00465791478924": 312
+},
+"walmart_received_units": 696,
+"walmart_signed_date": "2026-10-19",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 312,
+"gtin": "00465791478924",
+"msku": "YC00036-1U",
+"product_name": "藤编田园风纸巾盒",
+"received_num": 312,
+"shipments_num": 312,
+"sku": "YC00036"
+},
+{
+"damaged_qty": 0,
+"declare_num": 300,
+"gtin": "00465358515796",
+"msku": "YC00041-1U",
+"product_name": "餐具沥水垫",
+"received_num": 255,
+"shipments_num": 300,
+"sku": "YC00041"
+},
+{
+"damaged_qty": 0,
+"declare_num": 160,
+"gtin": "00451113428210",
+"msku": "YC00605-1A",
+"product_name": "迷你冰箱硅胶垫",
+"received_num": 160,
+"shipments_num": 160,
+"sku": "YC00605"
+}
+],
+"in_bound_order_id": "RIT-1788575352463",
+"item_ids": {
+"YC00036-1U": "19986500361",
+"YC00041-1U": "19971758344",
+"YC00605-1A": "20939706595"
+},
+"shipping_codes": [
+"SP202609050010007"
+],
+"status": "CLOSED",
+"store_id": "S06",
+"store_name": "店铺S06",
+"to_closed_at": "2026-11-01T19:16:43.760000+00:00"
+},
+{
+"cargo_code": "1440892WFB",
+"created": "2026-09-02 17:57:26",
+"derived": {
+"arrival_date": "2026-09-08",
+"arrival_real": true,
+"arrival_source": "实际（Walmart 签收）",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": true,
+"region": "美中",
+"sellable_date": "2026-09-26",
+"sellable_real": true,
+"shipped_out": true,
+"sp_boxes": 13,
+"sp_goods": [
+{
+"boxes": 13,
+"msku": "YC00081-1U",
+"per_box": 16,
+"shipped": 208,
+"shipping_code": "SP202609020010012",
+"sku": "YC00081"
+}
+],
+"sp_shipped_units": 208,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": "2026-09-26",
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00469496523965": 0
+},
+"walmart_item_received": {
+"00469496523965": 208
+},
+"walmart_last_receipt": "2026-11-01",
+"walmart_receipt_by_gtin": {
+"00469496523965": "2026-09-26"
+},
+"walmart_receipt_units": 176,
+"walmart_receipt_units_by_gtin": {
+"00469496523965": 176
+},
+"walmart_received_units": 208,
+"walmart_signed_date": "2026-09-08",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 208,
+"gtin": "00469496523965",
+"msku": "YC00081-1U",
+"product_name": "4槽法棍模具",
+"received_num": 208,
+"shipments_num": 208,
+"sku": "YC00081"
+}
+],
+"in_bound_order_id": "AQD-1788342996347",
+"item_ids": {
+"YC00081-1U": "20598811962"
+},
+"shipping_codes": [
+"SP202609020010012"
+],
+"status": "CLOSED",
+"store_id": "S03",
+"store_name": "店铺S03",
+"to_closed_at": "2026-09-22T17:38:17.522000+00:00"
+},
+{
+"cargo_code": "1429383WFB",
+"created": "2026-09-02 09:49:35",
+"derived": {
+"arrival_date": "2026-10-07",
+"arrival_real": true,
+"arrival_source": "实际（众壹签收）",
+"carrier_delivered_at": "2026-10-07 15:30",
+"is_test": false,
+"its_inferred": true,
+"region": "美东",
+"sellable_date": "2026-10-11",
+"sellable_real": true,
+"shipped_out": true,
+"sp_boxes": 24,
+"sp_goods": [
+{
+"boxes": 24,
+"msku": "YC00019-1F",
+"per_box": 16,
+"shipped": 384,
+"shipping_code": "SP202609020010006",
+"sku": "YC00019"
+}
+],
+"sp_shipped_units": 384,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": "2026-10-11",
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00466906053272": 0
+},
+"walmart_item_received": {
+"00466906053272": 384
+},
+"walmart_last_receipt": "2026-11-01",
+"walmart_receipt_by_gtin": {
+"00466906053272": "2026-10-11"
+},
+"walmart_receipt_units": 220,
+"walmart_receipt_units_by_gtin": {
+"00466906053272": 220
+},
+"walmart_received_units": 384,
+"walmart_signed_date": "2026-10-07",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 384,
+"gtin": "00466906053272",
+"msku": "YC00019-1F",
+"product_name": "一次性马桶刷替换刷头50pcs",
+"received_num": 384,
+"shipments_num": 384,
+"sku": "YC00019"
+}
+],
+"in_bound_order_id": "IND-1788313749898",
+"item_ids": {
+"YC00019-1F": "20240651178"
+},
+"shipping_codes": [
+"SP202609020010006"
+],
+"status": "CLOSED",
+"store_id": "S05",
+"store_name": "店铺S05",
+"to_closed_at": "2026-10-08T02:10:17.758000+00:00"
+},
+{
+"cargo_code": "1371372WFB",
+"created": "2026-09-01 10:02:18",
+"derived": {
+"arrival_date": "2026-10-07",
+"arrival_real": true,
+"arrival_source": "实际（众壹签收）",
+"carrier_delivered_at": "2026-10-07 22:00",
+"is_test": false,
+"its_inferred": true,
+"region": "美西",
+"sellable_date": "2026-10-27",
+"sellable_real": true,
+"shipped_out": true,
+"sp_boxes": 24,
+"sp_goods": [
+{
+"boxes": 24,
+"msku": "YC00019-1F",
+"per_box": 16,
+"shipped": 384,
+"shipping_code": "SP202609010010005",
+"sku": "YC00019"
+}
+],
+"sp_shipped_units": 384,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": "2026-10-27",
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00466906053272": 0
+},
+"walmart_item_received": {
+"00466906053272": 256
+},
+"walmart_last_receipt": "2026-11-01",
+"walmart_receipt_by_gtin": {
+"00466906053272": "2026-10-27"
+},
+"walmart_receipt_units": 95,
+"walmart_receipt_units_by_gtin": {
+"00466906053272": 95
+},
+"walmart_received_units": 256,
+"walmart_signed_date": "2026-10-11",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 384,
+"gtin": "00466906053272",
+"msku": "YC00019-1F",
+"product_name": "一次性马桶刷替换刷头50pcs",
+"received_num": 256,
+"shipments_num": 384,
+"sku": "YC00019"
+}
+],
+"in_bound_order_id": "IND-1788228113060",
+"item_ids": {
+"YC00019-1F": "20240651178"
+},
+"shipping_codes": [
+"SP202609010010005"
+],
+"status": "RECEIVING_IN_PROGRESS",
+"store_id": "S05",
+"store_name": "店铺S05",
+"to_closed_at": null
+},
+{
+"cargo_code": "1176000WFB",
+"created": "2026-08-27 15:55:50",
+"derived": {
+"arrival_date": "2026-10-15",
+"arrival_real": true,
+"arrival_source": "实际（众壹签收）",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": false,
+"region": "美东",
+"sellable_date": "2026-10-25",
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 2,
+"sp_goods": [
+{
+"boxes": 2,
+"msku": "YC00417-1U",
+"per_box": 8,
+"shipped": 16,
+"shipping_code": "SP202608280010025",
+"sku": "YC00417"
+}
+],
+"sp_shipped_units": 16,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00450062584213": 0
+},
+"walmart_item_received": {
+"00450062584213": 0
+},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": 0,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 16,
+"gtin": "00450062584213",
+"msku": "YC00417-1U",
+"product_name": "新款一次性马桶刷替换刷头80pcs",
+"received_num": 0,
+"shipments_num": 16,
+"sku": "YC00417"
+}
+],
+"in_bound_order_id": "RIT-1787817323957",
+"item_ids": {
+"YC00417-1U": "20563858461"
+},
+"shipping_codes": [
+"SP202608280010025"
+],
+"status": "AWAITING_DELIVERY",
+"store_id": "S06",
+"store_name": "店铺S06",
+"to_closed_at": null
+},
+{
+"cargo_code": "0888154WFB",
+"created": "2026-08-20 16:31:43",
+"derived": {
+"arrival_date": "2026-08-26",
+"arrival_real": true,
+"arrival_source": "实际（Walmart 签收）",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": true,
+"region": "美中",
+"sellable_date": "2026-09-16",
+"sellable_real": true,
+"shipped_out": true,
+"sp_boxes": 0,
+"sp_goods": [
+{
+"boxes": 0,
+"msku": "WY00009-1A",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00009"
+},
+{
+"boxes": 0,
+"msku": "WY00009-1B",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00009"
+},
+{
+"boxes": 0,
+"msku": "WY00009-1C",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00009"
+},
+{
+"boxes": 0,
+"msku": "WY00009-1D",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00009"
+},
+{
+"boxes": 0,
+"msku": "WY00009-1E",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00009"
+},
+{
+"boxes": 0,
+"msku": "WY00023-1A",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00023"
+},
+{
+"boxes": 0,
+"msku": "WY00023-1B",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00023"
+},
+{
+"boxes": 0,
+"msku": "WY00023-1C",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00023"
+},
+{
+"boxes": 0,
+"msku": "WY00023-1D",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00023"
+},
+{
+"boxes": 0,
+"msku": "WY00023-1E",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00023"
+},
+{
+"boxes": 0,
+"msku": "WY00039-1A",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00039"
+},
+{
+"boxes": 0,
+"msku": "WY00039-1B",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00039"
+},
+{
+"boxes": 0,
+"msku": "WY00039-1C",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00039"
+},
+{
+"boxes": 0,
+"msku": "WY00039-1D",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00039"
+},
+{
+"boxes": 0,
+"msku": "WY00039-1E",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00039"
+},
+{
+"boxes": 0,
+"msku": "WY00056-1A",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00056"
+},
+{
+"boxes": 0,
+"msku": "WY00056-1B",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00056"
+},
+{
+"boxes": 0,
+"msku": "WY00056-1C",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00056"
+},
+{
+"boxes": 0,
+"msku": "WY00056-1D",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00056"
+},
+{
+"boxes": 0,
+"msku": "WY00056-1E",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00056"
+},
+{
+"boxes": 0,
+"msku": "WY00069-1A",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00069"
+},
+{
+"boxes": 0,
+"msku": "WY00069-1B",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00069"
+},
+{
+"boxes": 0,
+"msku": "WY00069-1C",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00069"
+},
+{
+"boxes": 0,
+"msku": "WY00069-1D",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00069"
+},
+{
+"boxes": 0,
+"msku": "WY00069-1E",
+"per_box": 0,
+"shipped": 1,
+"shipping_code": "SP202608220010003",
+"sku": "YC00069"
+}
+],
+"sp_shipped_units": 25,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": "2026-09-16",
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00460081424513": 0,
+"00460081551035": 0,
+"00460081570258": 0,
+"00460088089333": 0,
+"00460088278478": 0,
+"00460090611478": 0,
+"00460090611768": 0,
+"00460090622115": 0,
+"00460091208233": 0,
+"00460091370862": 0,
+"00460092562877": 0,
+"00460100988163": 0,
+"00460101201476": 0,
+"00460101804080": 0,
+"00460102746457": 0,
+"00460182633449": 0,
+"00460182689361": 0,
+"00460186158665": 0,
+"00460186174771": 0,
+"00460186629387": 0,
+"00460189542300": 0,
+"00460357186947": 0,
+"00460357243565": 0,
+"00460411956486": 0,
+"00469187243301": 0
+},
+"walmart_item_received": {
+"00460081424513": 1,
+"00460081551035": 1,
+"00460081570258": 1,
+"00460088089333": 1,
+"00460088278478": 1,
+"00460090611478": 1,
+"00460090611768": 1,
+"00460090622115": 1,
+"00460091208233": 1,
+"00460091370862": 1,
+"00460092562877": 1,
+"00460100988163": 1,
+"00460101201476": 1,
+"00460101804080": 1,
+"00460102746457": 1,
+"00460182633449": 1,
+"00460182689361": 1,
+"00460186158665": 1,
+"00460186174771": 1,
+"00460186629387": 1,
+"00460189542300": 1,
+"00460357186947": 1,
+"00460357243565": 1,
+"00460411956486": 1,
+"00469187243301": 1
+},
+"walmart_last_receipt": "2026-10-11",
+"walmart_receipt_by_gtin": {
+"00460081424513": "2026-09-16",
+"00460081551035": "2026-09-17",
+"00460081570258": "2026-09-16",
+"00460088089333": "2026-09-16",
+"00460088278478": "2026-09-16",
+"00460090611768": "2026-09-16",
+"00460090622115": "2026-09-16",
+"00460091208233": "2026-10-11",
+"00460091370862": "2026-10-11",
+"00460092562877": "2026-10-11",
+"00460100988163": "2026-09-29",
+"00460101201476": "2026-09-17",
+"00460101804080": "2026-09-17",
+"00460102746457": "2026-09-16",
+"00460182633449": "2026-09-16",
+"00460182689361": "2026-09-17",
+"00460186629387": "2026-10-11",
+"00460189542300": "2026-09-29",
+"00460357186947": "2026-09-16",
+"00460357243565": "2026-09-16",
+"00460411956486": "2026-09-16",
+"00469187243301": "2026-10-11"
+},
+"walmart_receipt_units": 22,
+"walmart_receipt_units_by_gtin": {
+"00460081424513": 1,
+"00460081551035": 1,
+"00460081570258": 1,
+"00460088089333": 1,
+"00460088278478": 1,
+"00460090611768": 1,
+"00460090622115": 1,
+"00460091208233": 1,
+"00460091370862": 1,
+"00460092562877": 1,
+"00460100988163": 1,
+"00460101201476": 1,
+"00460101804080": 1,
+"00460102746457": 1,
+"00460182633449": 1,
+"00460182689361": 1,
+"00460186629387": 1,
+"00460189542300": 1,
+"00460357186947": 1,
+"00460357243565": 1,
+"00460411956486": 1,
+"00469187243301": 1
+},
+"walmart_received_units": 25,
+"walmart_signed_date": "2026-08-26",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460090611478",
+"msku": "WY00009-1A",
+"product_name": "大号折叠沥水收纳碗架",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00009"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460186158665",
+"msku": "WY00009-1B",
+"product_name": "大号折叠沥水收纳碗架",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00009"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460090622115",
+"msku": "WY00009-1C",
+"product_name": "大号折叠沥水收纳碗架",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00009"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460090611768",
+"msku": "WY00009-1D",
+"product_name": "大号折叠沥水收纳碗架",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00009"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460186174771",
+"msku": "WY00009-1E",
+"product_name": "大号折叠沥水收纳碗架",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00009"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460081424513",
+"msku": "WY00023-1A",
+"product_name": "小号阅读支架",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00023"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460081551035",
+"msku": "WY00023-1B",
+"product_name": "小号阅读支架",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00023"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460182633449",
+"msku": "WY00023-1C",
+"product_name": "小号阅读支架",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00023"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460081570258",
+"msku": "WY00023-1D",
+"product_name": "小号阅读支架",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00023"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460182689361",
+"msku": "WY00023-1E",
+"product_name": "小号阅读支架",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00023"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460091208233",
+"msku": "WY00039-1A",
+"product_name": "大号竹盖收纳盒",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00039"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460091370862",
+"msku": "WY00039-1B",
+"product_name": "大号竹盖收纳盒",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00039"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460186629387",
+"msku": "WY00039-1C",
+"product_name": "大号竹盖收纳盒",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00039"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460092562877",
+"msku": "WY00039-1D",
+"product_name": "大号竹盖收纳盒",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00039"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00469187243301",
+"msku": "WY00039-1E",
+"product_name": "大号竹盖收纳盒",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00039"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460189542300",
+"msku": "WY00056-1A",
+"product_name": "海洋蓝香马桶刷头50pc",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00056"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460100988163",
+"msku": "WY00056-1B",
+"product_name": "海洋蓝香马桶刷头50pc",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00056"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460101201476",
+"msku": "WY00056-1C",
+"product_name": "海洋蓝香马桶刷头50pc",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00056"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460102746457",
+"msku": "WY00056-1D",
+"product_name": "海洋蓝香马桶刷头50pc",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00056"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460101804080",
+"msku": "WY00056-1E",
+"product_name": "海洋蓝香马桶刷头50pc",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00056"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460088089333",
+"msku": "WY00069-1A",
+"product_name": "二分格沥水零食盒配2金叉",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00069"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460088278478",
+"msku": "WY00069-1B",
+"product_name": "二分格沥水零食盒配2金叉",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00069"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460357186947",
+"msku": "WY00069-1C",
+"product_name": "二分格沥水零食盒配2金叉",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00069"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460411956486",
+"msku": "WY00069-1D",
+"product_name": "二分格沥水零食盒配2金叉",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00069"
+},
+{
+"damaged_qty": 0,
+"declare_num": 1,
+"gtin": "00460357243565",
+"msku": "WY00069-1E",
+"product_name": "二分格沥水零食盒配2金叉",
+"received_num": 1,
+"shipments_num": 1,
+"sku": "YC00069"
+}
+],
+"in_bound_order_id": "AQD-1787213947110",
+"item_ids": {
+"WY00009-1A": "20725222350",
+"WY00009-1B": "20739021460",
+"WY00009-1C": "20713651577",
+"WY00009-1D": "20770407140",
+"WY00009-1E": "20745658854",
+"WY00023-1A": "20747165251",
+"WY00023-1B": "20724012021",
+"WY00023-1C": "20761903770",
+"WY00023-1D": "20736869909",
+"WY00023-1E": "20755152327",
+"WY00039-1A": "20714351713",
+"WY00039-1B": "20746008100",
+"WY00039-1C": "20731412841",
+"WY00039-1D": "20730024055",
+"WY00039-1E": "20731762352",
+"WY00056-1A": "20794106322",
+"WY00056-1B": "20794306222",
+"WY00056-1C": "20781354428",
+"WY00056-1D": "20766352640",
+"WY00056-1E": "20780855234",
+"WY00069-1A": "20710301779",
+"WY00069-1B": "20750815164",
+"WY00069-1C": "20694216548",
+"WY00069-1D": "20722473133",
+"WY00069-1E": "20758602127"
+},
+"shipping_codes": [
+"SP202608220010003"
+],
+"status": "CLOSED",
+"store_id": "S03",
+"store_name": "店铺S03",
+"to_closed_at": "2026-10-10T00:10:42.527000+00:00"
+},
+{
+"cargo_code": "0581728WFB",
+"created": "2026-08-12 14:58:16",
+"derived": {
+"arrival_date": "2026-09-22",
+"arrival_real": true,
+"arrival_source": "实际（众壹签收）",
+"carrier_delivered_at": "2026-09-22 22:00",
+"is_test": false,
+"its_inferred": false,
+"region": "美中",
+"sellable_date": "2026-09-22",
+"sellable_real": true,
+"shipped_out": true,
+"sp_boxes": 97,
+"sp_goods": [
+{
+"boxes": 9,
+"msku": "JJ5033-1U",
+"per_box": 27,
+"shipped": 243,
+"shipping_code": "SP202608130010003",
+"sku": "JJ5033"
+},
+{
+"boxes": 12,
+"msku": "JJ8006-1U",
+"per_box": 16,
+"shipped": 192,
+"shipping_code": "SP202608130010003",
+"sku": "JJ8006"
+},
+{
+"boxes": 27,
+"msku": "JJ8014-1U",
+"per_box": 12,
+"shipped": 324,
+"shipping_code": "SP202608130010003",
+"sku": "JJ8014"
+},
+{
+"boxes": 3,
+"msku": "JJ8016-1U",
+"per_box": 30,
+"shipped": 90,
+"shipping_code": "SP202608130010003",
+"sku": "JJ8016"
+},
+{
+"boxes": 40,
+"msku": "YC00022-1U",
+"per_box": 10,
+"shipped": 400,
+"shipping_code": "SP202608130010003",
+"sku": "YC00022"
+},
+{
+"boxes": 6,
+"msku": "YC00068-1U",
+"per_box": 9,
+"shipped": 54,
+"shipping_code": "SP202608130010003",
+"sku": "YC00068"
+}
+],
+"sp_shipped_units": 1303,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": "2026-09-22",
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00462327007467": 0,
+"00464176629029": 0,
+"00464395358564": 0,
+"00464398777034": 0,
+"00464612030372": 0,
+"00465280529298": 0
+},
+"walmart_item_received": {
+"00462327007467": 408,
+"00464176629029": 176,
+"00464395358564": 54,
+"00464398777034": 108,
+"00464612030372": 243,
+"00465280529298": 324
+},
+"walmart_last_receipt": "2026-10-07",
+"walmart_receipt_by_gtin": {
+"00462327007467": "2026-09-22",
+"00464176629029": "2026-09-22",
+"00464395358564": "2026-09-22",
+"00464398777034": "2026-09-22",
+"00464612030372": "2026-09-22",
+"00465280529298": "2026-09-22"
+},
+"walmart_receipt_units": 1313,
+"walmart_receipt_units_by_gtin": {
+"00462327007467": 408,
+"00464176629029": 176,
+"00464395358564": 54,
+"00464398777034": 108,
+"00464612030372": 243,
+"00465280529298": 324
+},
+"walmart_received_units": 1313,
+"walmart_signed_date": "2026-09-22",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 243,
+"gtin": "00464612030372",
+"msku": "JJ5033-1U",
+"product_name": "保温饭盒",
+"received_num": 243,
+"shipments_num": 243,
+"sku": "JJ5033"
+},
+{
+"damaged_qty": 0,
+"declare_num": 192,
+"gtin": "00464176629029",
+"msku": "JJ8006-1U",
+"product_name": "木盖燕麦杯(4pc)",
+"received_num": 176,
+"shipments_num": 192,
+"sku": "JJ8006"
+},
+{
+"damaged_qty": 0,
+"declare_num": 324,
+"gtin": "00465280529298",
+"msku": "JJ8014-1U",
+"product_name": "18格布朗尼",
+"received_num": 324,
+"shipments_num": 324,
+"sku": "JJ8014"
+},
+{
+"damaged_qty": 0,
+"declare_num": 90,
+"gtin": "00464398777034",
+"msku": "JJ8016-1U",
+"product_name": "汉堡压肉器（10cm）",
+"received_num": 108,
+"shipments_num": 90,
+"sku": "JJ8016"
+},
+{
+"damaged_qty": 0,
+"declare_num": 400,
+"gtin": "00462327007467",
+"msku": "YC00022-1U",
+"product_name": "汽车收纳袋2pcs",
+"received_num": 408,
+"shipments_num": 400,
+"sku": "YC00022"
+},
+{
+"damaged_qty": 0,
+"declare_num": 54,
+"gtin": "00464395358564",
+"msku": "YC00068-1U",
+"product_name": "带盖波纹吐司盒 9件套",
+"received_num": 54,
+"shipments_num": 54,
+"sku": "YC00068"
+}
+],
+"in_bound_order_id": "RIT-1786517671775",
+"item_ids": {
+"JJ5033-1U": "19949824755",
+"JJ8006-1U": "19307124352",
+"JJ8014-1U": "20069867464",
+"JJ8016-1U": "19976312339",
+"YC00022-1U": "20010023112",
+"YC00068-1U": "19987713806"
+},
+"shipping_codes": [
+"SP202608130010003"
+],
+"status": "CLOSED",
+"store_id": "S06",
+"store_name": "店铺S06",
+"to_closed_at": "2026-10-23T00:50:59.619000+00:00"
+},
+{
+"cargo_code": "0264571WFB",
+"created": "2026-08-04 16:11:26",
+"derived": {
+"arrival_date": "2026-08-10",
+"arrival_real": true,
+"arrival_source": "实际（Walmart 签收）",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": false,
+"region": "美中",
+"sellable_date": "2026-08-20",
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 2,
+"sp_goods": [
+{
+"boxes": 2,
+"msku": "JJ5102-1A",
+"per_box": 24,
+"shipped": 42,
+"shipping_code": "SP202608040010014",
+"sku": "JJ5102"
+}
+],
+"sp_shipped_units": 42,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": true,
+"walmart_item_damaged": {
+"00466718983811": 0
+},
+"walmart_item_received": {
+"00466718983811": 0
+},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": 0,
+"walmart_signed_date": "2026-08-10",
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 42,
+"gtin": "00466718983811",
+"msku": "JJ5102-1A",
+"product_name": "开罐器",
+"received_num": 0,
+"shipments_num": 42,
+"sku": "JJ5102"
+}
+],
+"in_bound_order_id": "STL-1785831044217",
+"item_ids": {
+"JJ5102-1A": "20014566358"
+},
+"shipping_codes": [
+"SP202608040010014"
+],
+"status": "AWAITING_DELIVERY",
+"store_id": "S02",
+"store_name": "店铺S02",
+"to_closed_at": null
+},
+{
+"cargo_code": "9438537WFA",
+"created": "2026-07-10 12:30:21",
+"derived": {
+"arrival_date": "2026-08-11",
+"arrival_real": false,
+"arrival_source": "实际到港+周期",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": true,
+"region": "美西",
+"sellable_date": "2026-08-21",
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 6,
+"sp_goods": [
+{
+"boxes": 1,
+"msku": "YC00156-1C",
+"per_box": 12,
+"shipped": 12,
+"shipping_code": "SP202607150010001",
+"sku": "YC00156"
+},
+{
+"boxes": 1,
+"msku": "YC00152-1A",
+"per_box": 12,
+"shipped": 12,
+"shipping_code": "SP202607150010001",
+"sku": "YC00152"
+},
+{
+"boxes": 1,
+"msku": "YC00160-1C",
+"per_box": 20,
+"shipped": 20,
+"shipping_code": "SP202607150010001",
+"sku": "YC00160"
+},
+{
+"boxes": 2,
+"msku": "YC00159-1C",
+"per_box": 6,
+"shipped": 12,
+"shipping_code": "SP202607150010001",
+"sku": "YC00159"
+},
+{
+"boxes": 1,
+"msku": "YC00158-1C",
+"per_box": 20,
+"shipped": 20,
+"shipping_code": "SP202607150010001",
+"sku": "YC00158"
+}
+],
+"sp_shipped_units": 76,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": false,
+"walmart_item_damaged": {},
+"walmart_item_received": {},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": null,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 12,
+"gtin": "00468702868388",
+"msku": "YC00156-1C",
+"product_name": "雨后森林-马桶刷替换刷头(50pcs)",
+"received_num": 0,
+"shipments_num": 12,
+"sku": "YC00156"
+},
+{
+"damaged_qty": 0,
+"declare_num": 12,
+"gtin": "00450060102440",
+"msku": "YC00152-1A",
+"product_name": "柠檬-马桶刷替换刷头(50pcs)",
+"received_num": 0,
+"shipments_num": 12,
+"sku": "YC00152"
+},
+{
+"damaged_qty": 0,
+"declare_num": 20,
+"gtin": "00450060510078",
+"msku": "YC00160-1C",
+"product_name": "五种味道马桶刷替换刷头(50pcs)",
+"received_num": 0,
+"shipments_num": 20,
+"sku": "YC00160"
+},
+{
+"damaged_qty": 0,
+"declare_num": 12,
+"gtin": "00450060510962",
+"msku": "YC00159-1C",
+"product_name": "薰衣草-马桶刷替换刷头(100pcs)",
+"received_num": 0,
+"shipments_num": 12,
+"sku": "YC00159"
+},
+{
+"damaged_qty": 0,
+"declare_num": 20,
+"gtin": "00450060554577",
+"msku": "YC00158-1C",
+"product_name": "薰衣草-马桶刷替换刷头(50pcs)",
+"received_num": 0,
+"shipments_num": 20,
+"sku": "YC00158"
+}
+],
+"in_bound_order_id": "NYT-1783657704106",
+"item_ids": {
+"YC00152-1A": "20594355287",
+"YC00156-1C": "20576452732",
+"YC00158-1C": "20562108465",
+"YC00159-1C": "20514016296",
+"YC00160-1C": "20576452731"
+},
+"shipping_codes": [
+"SP202607150010001"
+],
+"status": "AWAITING_DELIVERY",
+"store_id": "S01",
+"store_name": "店铺S01",
+"to_closed_at": null
+},
+{
+"cargo_code": "9210904WFA",
+"created": "2026-07-02 15:36:36",
+"derived": {
+"arrival_date": "2026-08-30",
+"arrival_real": false,
+"arrival_source": "实际开船+航程+周期",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": false,
+"region": "美东",
+"sellable_date": "2026-09-09",
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 1,
+"sp_goods": [
+{
+"boxes": 1,
+"msku": "YC00265-1A",
+"per_box": 4,
+"shipped": 4,
+"shipping_code": "SP202607030010006",
+"sku": "YC00265"
+}
+],
+"sp_shipped_units": 4,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": false,
+"walmart_item_damaged": {},
+"walmart_item_received": {},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": null,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 4,
+"gtin": "00468354356325",
+"msku": "YC00265-1A",
+"product_name": "13英寸圆形编织餐垫（12PCS）",
+"received_num": 0,
+"shipments_num": 4,
+"sku": "YC00265"
+}
+],
+"in_bound_order_id": "BUH-1782977774214",
+"item_ids": {
+"YC00265-1A": "20495857072"
+},
+"shipping_codes": [
+"SP202607030010006"
+],
+"status": "AWAITING_DELIVERY",
+"store_id": "S07",
+"store_name": "店铺S07",
+"to_closed_at": null
+},
+{
+"cargo_code": "8753571WFA",
+"created": "2026-06-16 11:12:48",
+"derived": {
+"arrival_date": "2026-06-23",
+"arrival_real": false,
+"arrival_source": "领星预计到货",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": false,
+"region": "美中",
+"sellable_date": "2026-07-03",
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 99,
+"sp_goods": [
+{
+"boxes": 36,
+"msku": "JJ2027-1A",
+"per_box": 20,
+"shipped": 710,
+"shipping_code": "SP202606160010257",
+"sku": "JJ2027"
+},
+{
+"boxes": 24,
+"msku": "YC00017-1A",
+"per_box": 20,
+"shipped": 557,
+"shipping_code": "SP202606160010257",
+"sku": "YC00017"
+},
+{
+"boxes": 39,
+"msku": "YC00038-1A",
+"per_box": 17,
+"shipped": 619,
+"shipping_code": "SP202606160010257",
+"sku": "YC00038"
+}
+],
+"sp_shipped_units": 1886,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": false,
+"walmart_item_damaged": {},
+"walmart_item_received": {},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": null,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 720,
+"gtin": "00465830450812",
+"msku": "JJ2027-1A",
+"product_name": "四孔煎蛋锅(1pc)",
+"received_num": 710,
+"shipments_num": 710,
+"sku": "JJ2027"
+},
+{
+"damaged_qty": 0,
+"declare_num": 552,
+"gtin": "00465174330238",
+"msku": "YC00017-1A",
+"product_name": "不锈钢手动研磨器2PCS",
+"received_num": 557,
+"shipments_num": 557,
+"sku": "YC00017"
+},
+{
+"damaged_qty": 0,
+"declare_num": 624,
+"gtin": "00464995020281",
+"msku": "YC00038-1A",
+"product_name": "12连马芬杯烤盘2pc",
+"received_num": 624,
+"shipments_num": 619,
+"sku": "YC00038"
+}
+],
+"in_bound_order_id": "202606160087",
+"item_ids": {
+"JJ2027-1A": "20086168853",
+"YC00017-1A": "19924966245",
+"YC00038-1A": "19984251654"
+},
+"shipping_codes": [
+"SP202606160010257"
+],
+"status": "CLOSED",
+"store_id": "S08",
+"store_name": "店铺S08",
+"to_closed_at": "2026-10-22T19:18:13.943000+00:00"
+},
+{
+"cargo_code": "8731285WFA",
+"created": "2026-06-15 14:40:18",
+"derived": {
+"arrival_date": "2026-06-22",
+"arrival_real": false,
+"arrival_source": "领星预计到货",
+"carrier_delivered_at": null,
+"is_test": false,
+"its_inferred": false,
+"region": "美中",
+"sellable_date": "2026-07-02",
+"sellable_real": false,
+"shipped_out": true,
+"sp_boxes": 5,
+"sp_goods": [
+{
+"boxes": 5,
+"msku": "YC00120-1A",
+"per_box": 5,
+"shipped": 25,
+"shipping_code": "SP202606150010253",
+"sku": "YC00120"
+}
+],
+"sp_shipped_units": 25,
+"version": "wfs_board_derived.v1",
+"walmart_first_receipt": null,
+"walmart_has_shipment": false,
+"walmart_item_damaged": {},
+"walmart_item_received": {},
+"walmart_last_receipt": null,
+"walmart_receipt_by_gtin": {},
+"walmart_receipt_units": null,
+"walmart_receipt_units_by_gtin": {},
+"walmart_received_units": null,
+"walmart_signed_date": null,
+"walmart_store_connected": true
+},
+"goods": [
+{
+"damaged_qty": 0,
+"declare_num": 25,
+"gtin": "00465053717716",
+"msku": "YC00120-1A",
+"product_name": "卡其硅胶底不锈钢沙拉碗15件套",
+"received_num": 0,
+"shipments_num": 25,
+"sku": "YC00120"
+}
+],
+"in_bound_order_id": "LYL-1781505586445",
+"item_ids": {
+"YC00120-1A": "20002024925"
+},
+"shipping_codes": [
+"SP202606150010253"
+],
+"status": "AWAITING_DELIVERY",
+"store_id": "S08",
+"store_name": "店铺S08",
+"to_closed_at": null
+}
+],
+"source": "8088 demo daily 20261102 (drafts/src/app-a.jsx enrich/itemRows/buildExceptions, app-c.jsx product dimension); stores anonymised",
+"today": "2026-11-02"
+}

@@ -27,3 +27,15 @@
 - `503` `WFS_EXCEPTION_SCHEMA_NOT_READY`
 
 决策：`docs/data-sources/decisions/pmc-wfs-exception-center-decision.md`
+
+## 第一期：规则引擎（2026-11-03）
+
+规则引擎由 STUB 换成 8088 规则（`WFS-RULES-20261010`），由 `WfsExceptionDetector` 从当前发布的看板计算（只读看板，不调外部接口），本期只在本地回放脚本中调用，不开定时：
+
+- 规则命中：同一 货件 × 规则族 建一个案件（去重键同 `build_dedupe_key`），已有未关闭案件则刷新描述、级别、差异件数和证据；每次记录 `HIT` 检测。
+- 不再命中：本规则版本的未关闭案件记录 `MISS`，由系统解决（动作 `RESOLVE`，操作人 `system:wfs-rules`，`payload.auto=true`）。
+- 系统解决过的案件再次命中会重开（`REOPEN`）；人工解决 / 关闭的案件系统不重开。
+- 测试货件（`PMC-TEST-`）不建案；其他来源（人工、夹具）的案件不动。
+- 申诉类规则族 `appeal_deadline` 的 `due_at` = 沃尔玛签收日 + 50 天。
+
+新增规则族 `carrier_delivered_unreceived`（货代已签收 · WFS 未收货）。

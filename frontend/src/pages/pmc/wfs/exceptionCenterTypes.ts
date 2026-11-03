@@ -4,7 +4,8 @@ export type RuleFamily =
   | "arrival_no_receiving"
   | "receiving_incomplete"
   | "closed_shortage_damage"
-  | "appeal_deadline";
+  | "appeal_deadline"
+  | "carrier_delivered_unreceived";
 
 export type CaseStatus = "OPEN" | "IN_PROGRESS" | "WAITING_EXTERNAL" | "RESOLVED" | "CLOSED";
 export type Severity = "HIGH" | "MEDIUM" | "LOW";

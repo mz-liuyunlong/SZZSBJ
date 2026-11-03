@@ -3,7 +3,16 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { listCases } from "./exceptionCenterApi";
 import { boardError, getShipment } from "./shipmentBoardApi";
-import { STATUS_TONE, type ShipmentGoodsLine } from "./shipmentBoardTypes";
+import {
+  ARRIVAL_BUCKETS,
+  ETA_SOURCE_TEXT,
+  STATUS_TONE,
+  type ShipmentGoodsLine,
+  type ShipmentItemLine,
+} from "./shipmentBoardTypes";
+
+const SEV_TEXT: Record<string, [string, string]> = { high: ["error", "高"], mid: ["warning", "中"], low: ["default", "低"] };
+const SRC_TEXT: Record<string, string> = { real: "真实", calc: "推算", demo: "示例" };
 
 const labelTone: Record<string, string> = { READY: "success", PENDING: "processing", FAILED: "error" };
 const fmt = new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", dateStyle: "short", timeStyle: "short" });
@@ -62,6 +71,70 @@ export default function ShipmentBoardDrawer({ rowId, scope, onClose }: { rowId: 
           { key: "test", label: "测试标记", children: data.business_test ? "业务测试" : "正式" },
           { key: "addr", label: "配送地址", children: str(data.distribution_addresses), span: 2 },
         ]} />
+
+        <Typography.Title level={5} style={{ marginTop: 16 }}>到仓 · 可售（8088 口径）</Typography.Title>
+        <Descriptions size="small" bordered column={2} items={[
+          { key: "eta", label: "到仓日", children: data.eta ? `${data.eta}（${ETA_SOURCE_TEXT[data.eta_source ?? "plan"]}${data.eta_source_label ? ` · ${data.eta_source_label}` : ""}）` : "无 SP" },
+          { key: "sell", label: "可售日", children: data.sellable_date ? `${data.sellable_date}（${data.sellable_real ? "首批上架，真实" : "到仓日 + 10 天，预计"}）` : "—" },
+          { key: "bucket", label: "可售分段", children: ARRIVAL_BUCKETS.find((b) => b.value === data.arrival_bucket)?.label ?? "—" },
+          { key: "region", label: "FC 地区", children: `${str(data.logistics_code)} · ${str(data.region)}` },
+          { key: "carrier", label: "众壹签收", children: str(data.carrier_delivered_at) },
+          { key: "signed", label: "沃尔玛签收日（D0）", children: data.walmart_signed_date ?? (data.d0 ? `${data.d0}（按到仓日 +2 天推算）` : "—") },
+          { key: "receipt", label: "Walmart 首批 / 末批上架", children: `${str(data.walmart_first_receipt)} / ${str(data.walmart_last_receipt)}` },
+          { key: "owners", label: "产品负责人", children: data.owners?.length ? data.owners.join("、") : "—" },
+        ]} />
+
+        <Typography.Title level={5} style={{ marginTop: 16 }}>异常（规则 WFS-RULES-20261010）</Typography.Title>
+        {(data.exceptions?.length ?? 0) === 0 ? (
+          <Typography.Paragraph type="secondary">当前规则未命中。</Typography.Paragraph>
+        ) : (
+          <List
+            size="small"
+            dataSource={data.exceptions ?? []}
+            renderItem={(e) => (
+              <List.Item>
+                <span>
+                  <Tag color={SEV_TEXT[e.severity]?.[0]}>{SEV_TEXT[e.severity]?.[1] ?? e.severity}</Tag>
+                  <b>{e.type}</b>
+                  <Tag bordered={false} style={{ marginLeft: 4 }}>{SRC_TEXT[e.source] ?? e.source}</Tag>
+                  <br /><span className="wfs-pending__sub">{e.found ? `发现 ${e.found} · ` : ""}{e.description}</span>
+                </span>
+              </List.Item>
+            )}
+          />
+        )}
+
+        <Typography.Title level={5} style={{ marginTop: 16 }}>产品明细（正常 / 异常，单 SKU 差异 ≤ 10 件不算异常）</Typography.Title>
+        <Table<ShipmentItemLine>
+          size="small"
+          pagination={false}
+          rowKey={(i, n) => `${i.msku}-${n}`}
+          dataSource={data.items ?? []}
+          locale={{ emptyText: "无产品明细" }}
+          scroll={{ x: 900 }}
+          columns={[
+            { title: "MSKU / 品名", width: 180, render: (_, i) => <span>{i.msku || i.sku}<br /><span className="wfs-pending__sub">{i.product_name}</span></span> },
+            { title: "Item ID", width: 110, render: (_, i) => str(i.item_id) },
+            { title: "实际发货", width: 80, align: "right", render: (_, i) => num(i.shipped_units) },
+            { title: "已收（领星）", width: 90, align: "right", render: (_, i) => num(i.lingxing_received_units) },
+            { title: "签收（Walmart）", width: 100, align: "right", render: (_, i) => num(i.walmart_received_units) },
+            { title: "上架（Receipt）", width: 100, align: "right", render: (_, i) => num(i.put_away_units) },
+            { title: "破损", width: 60, align: "right", render: (_, i) => num(i.damaged_units) },
+            { title: "正常", width: 70, align: "right", render: (_, i) => <b>{i.normal_units}</b> },
+            {
+              title: "异常",
+              width: 110,
+              align: "right",
+              render: (_, i) => (i.abnormal_units === null || i.abnormal_units === undefined
+                ? "—"
+                : <span>
+                  <Typography.Text type={i.abnormal ? "danger" : "secondary"} strong>{i.abnormal_units}</Typography.Text>
+                  {i.abnormal_units > 0 && !i.abnormal ? <><br /><span className="wfs-pending__sub">≤10 不算异常</span></> : null}
+                  {i.over_units > 0 ? <><br /><span className="wfs-pending__sub">超收 +{i.over_units}</span></> : null}
+                </span>),
+            },
+          ]}
+        />
 
         <Typography.Title level={5} style={{ marginTop: 16 }}>节点</Typography.Title>
         <Timeline

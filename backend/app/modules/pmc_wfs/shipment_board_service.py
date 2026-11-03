@@ -9,8 +9,9 @@ creation and the next Lingxing pull. Walmart receipt detail is a later slice.
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select, text
 
@@ -18,6 +19,18 @@ from app.core.api import ApiError
 from app.modules.data_pages.models import LingxingStoreDimension as Store
 from app.modules.pmc_domestic.packing_models import PackingOrder
 from app.modules.pmc_domestic.packing_service import missing
+from app.modules.pmc_wfs.arrival_rules import BUCKET_LABELS, parse_date
+from app.modules.pmc_wfs.board_lookups import item_ids_by_store_msku, owners_by_sku
+from app.modules.pmc_wfs.board_view import (
+    RULE_VERSION,
+    ShipmentView,
+    WfsException,
+    WfsRules,
+    big_gaps,
+    build_exceptions,
+    build_view,
+    product_views,
+)
 from app.modules.pmc_wfs.creation_models import WfsCreation, WfsCreationTicket
 from app.modules.pmc_wfs.lingxing_models import WfsBoardPublication
 from app.modules.pmc_wfs.lingxing_models import WfsShipmentBoardRow as Mart
@@ -27,6 +40,7 @@ from app.modules.pmc_wfs.shipment_board_schemas import (
     BoardFreshness,
     ProductBoardList,
     ProductBoardRow,
+    ProductShipmentLine,
     ShipmentBoardDetail,
     ShipmentBoardFilter,
     ShipmentBoardList,
@@ -34,11 +48,15 @@ from app.modules.pmc_wfs.shipment_board_schemas import (
     ShipmentBoardQuery,
     ShipmentBoardRow,
     ShipmentBoardSummary,
+    ShipmentException,
     ShipmentGoodsLine,
+    ShipmentItemLine,
     StoreOption,
 )
 
 STALE_AFTER = timedelta(hours=24)
+BUSINESS_TZ = ZoneInfo("Asia/Shanghai")
+RULES = WfsRules()  # 8088 defaults; editable thresholds arrive with the WFS settings page.
 BOARD_TABLES = ("gov_wfs_board_publications", "mart_wfs_shipment_board")
 
 
@@ -51,6 +69,50 @@ def require_board_schema(session) -> None:
             status_code=503,
             message="WFS 货件看板数据库结构尚未更新，请先完成迁移后重试",
         )
+
+
+def business_today() -> date:
+    return datetime.now(BUSINESS_TZ).date()
+
+
+def _publication_data_day(pub: WfsBoardPublication) -> date | None:
+    raw = (pub.quality_report or {}).get("as_of")
+    try:
+        return date.fromisoformat(raw) if isinstance(raw, str) else None
+    except ValueError:
+        return None
+
+
+def _derived_fields(view: ShipmentView, owners: list[str], kinds: list[str]) -> dict[str, Any]:
+    return {
+        "owners": owners,
+        "region": view.region,
+        "its_inferred": view.its_inferred,
+        "baseline_units": view.baseline,
+        "baseline_from": view.baseline_from,
+        "diff_units": view.diff,
+        "boxes": view.boxes,
+        "eta": parse_date(view.eta),
+        "eta_source": view.eta_source or None,
+        "eta_source_label": view.eta_source_label or None,
+        "eta_passed_days": view.eta_passed,
+        "sellable_date": parse_date(view.sellable),
+        "sellable_real": view.sellable_real,
+        "arrival_bucket": view.arrival_bucket,
+        "shipped_out": view.shipped_out,
+        "carrier_delivered_at": view.carrier_delivered_at or None,
+        "walmart_signed_date": parse_date(view.d0_real),
+        "walmart_first_receipt": parse_date(view.wm_first),
+        "walmart_last_receipt": parse_date(view.wm_last),
+        "walmart_receiving": view.wm_receiving,
+        "walmart_done": view.wm_done,
+        "d0": parse_date(view.d0),
+        "d0_real": bool(view.d0_real),
+        "days_since_d0": view.d_n,
+        "external": view.external,
+        "age_days": view.age_days,
+        "exception_types": kinds,
+    }
 
 
 def _aware(value: datetime | None) -> datetime | None:
@@ -130,6 +192,23 @@ class ShipmentBoardService:
         self._rows: list[ShipmentBoardRow] | None = None
         self._mart_by_id: dict[str, Mart] = {}
         self._creation_by_id: dict[str, dict[str, Any]] = {}
+        self._view_by_id: dict[str, ShipmentView] = {}
+        self._exceptions_by_code: dict[str, list[WfsException]] = {}
+        self._owners_by_sku: dict[str, list[str]] = {}
+        self._today: date | None = None
+
+    @property
+    def today(self) -> date:
+        """Rule date, as in 8088 (``TODAY = 数据日``): the data day of the newest current
+        publication; the Shanghai calendar day when nothing is published yet."""
+        if self._today is None:
+            days = [d for p in self._current_publications() if (d := _publication_data_day(p))]
+            self._today = max(days) if days else business_today()
+        return self._today
+
+    @today.setter
+    def today(self, value: date) -> None:
+        self._today = value
 
     # ---- loading -------------------------------------------------------------------
 
@@ -173,7 +252,9 @@ class ShipmentBoardService:
             stmt = select(Mart).where(Mart.publication_id.in_([p.id for p in pubs]))
             if self.stores is not None:
                 stmt = stmt.where(Mart.store_id.in_(self.stores))
-            for mart in self.session.scalars(stmt):
+            marts = list(self.session.scalars(stmt))
+            self._load_views(marts)
+            for mart in marts:
                 shipment_id = mart.cargo_code or mart.cargo_id
                 link = creation.by_shipment.get(shipment_id)
                 row_id = f"lx:{mart.publication_id}:{mart.cargo_id}"
@@ -182,6 +263,12 @@ class ShipmentBoardService:
                     self._creation_by_id[row_id] = link
                 goods = (mart.payload_json or {}).get("goods") or []
                 first = goods[0] if goods else {}
+                view = self._view_by_id[row_id]
+                owners = sorted(
+                    {o for g in goods for o in self._owners_by_sku.get(g.get("sku") or "", [])}
+                )
+                kinds = [e.type for e in self._exceptions_by_code.get(view.code, [])]
+                first_item = view.items[0] if view.items else None
                 rows.append(
                     ShipmentBoardRow(
                         id=row_id,
@@ -197,12 +284,14 @@ class ShipmentBoardService:
                         ),
                         cargo_sync_status=mart.cargo_sync_status,
                         lingxing_sync_status="SYNCED",
-                        business_test=bool((link or {}).get("business_test", False)),
-                        its=(link or {}).get("its"),
+                        business_test=bool((link or {}).get("business_test", False))
+                        or view.is_test,
+                        its=(link or {}).get("its", view.its_inferred),
                         pk=(link or {}).get("pk"),
                         sku=first.get("sku") or (link or {}).get("sku"),
                         product_name=first.get("product_name") or (link or {}).get("product_name"),
-                        item_id=(link or {}).get("item_id"),
+                        item_id=(first_item.item_id if first_item else None)
+                        or (link or {}).get("item_id"),
                         gtin=first.get("gtin") or (link or {}).get("gtin"),
                         msku=first.get("msku") or (link or {}).get("msku"),
                         sku_count=mart.sku_count,
@@ -231,6 +320,7 @@ class ShipmentBoardService:
                         label_state=(link or {}).get("label_state"),
                         creation_state=(link or {}).get("creation_state"),
                         ticket_state=(link or {}).get("ticket_state"),
+                        **_derived_fields(view, owners, kinds),
                     )
                 )
                 seen_shipments.add(shipment_id)
@@ -272,6 +362,56 @@ class ShipmentBoardService:
         self._rows = rows
         return rows
 
+    def _load_views(self, marts: list[Mart]) -> None:
+        """8088 ``enrich`` / ``itemRows`` / ``buildExceptions`` for every published row."""
+
+        pairs: set[tuple[str, str]] = set()
+        skus: set[str] = set()
+        for mart in marts:
+            for good in (mart.payload_json or {}).get("goods") or []:
+                if mart.store_id and good.get("msku"):
+                    pairs.add((mart.store_id, good["msku"]))
+                if good.get("sku"):
+                    skus.add(good["sku"])
+        item_ids = item_ids_by_store_msku(self.session, self.accounts, pairs)
+        self._owners_by_sku = owners_by_sku(self.session, self.accounts, skus)
+        views: list[ShipmentView] = []
+        for mart in marts:
+            payload = mart.payload_json or {}
+            goods = payload.get("goods") or []
+            store_id = mart.store_id or ""
+            view = build_view(
+                cargo_code=mart.cargo_code or mart.cargo_id,
+                store_id=store_id,
+                store_name=mart.store_name or "",
+                status=mart.status_name or "",
+                created=str((payload.get("cargo") or {}).get("cargo_create_date") or ""),
+                to_closed_at=mart.to_closed_at,
+                in_bound_order_id=mart.in_bound_order_id or "",
+                shipping_codes=list(mart.shipping_codes or []),
+                goods=goods,
+                derived=payload.get("derived") or {},
+                today=self.today,
+                item_ids={
+                    g["msku"]: item_ids[(store_id, g["msku"])]
+                    for g in goods
+                    if g.get("msku") and (store_id, g["msku"]) in item_ids
+                },
+            )
+            self._view_by_id[f"lx:{mart.publication_id}:{mart.cargo_id}"] = view
+            views.append(view)
+        for exc in build_exceptions(views, RULES, self.today):
+            self._exceptions_by_code.setdefault(exc.code, []).append(exc)
+
+    def list_rows(self) -> list[ShipmentBoardRow]:
+        """Every row of the current version (creation-only rows included), unfiltered."""
+
+        return self._expand()
+
+    def exceptions_by_code(self) -> dict[str, list[WfsException]]:
+        self._expand()
+        return self._exceptions_by_code
+
     # ---- filtering / sorting -----------------------------------------------------------
 
     @staticmethod
@@ -301,6 +441,11 @@ class ShipmentBoardService:
             and (not query.only_test or row.business_test)
             and (query.status is None or row.status == query.status)
             and (query.sync is None or row.lingxing_sync_status == query.sync)
+            and (not query.owner or query.owner in row.owners)
+            and (not query.region or row.region == query.region)
+            and (query.arrival_bucket is None or row.arrival_bucket == query.arrival_bucket)
+            and (not query.only_exceptions or bool(row.exception_types))
+            and (not query.only_external or row.external)
             and (not word or self._match_keyword(row, query.keyword_field, word))
         ]
 
@@ -331,9 +476,18 @@ class ShipmentBoardService:
     def summary(self, query: ShipmentBoardFilter) -> ShipmentBoardSummary:
         rows = self._filter(self._expand(), query)
         by_status: dict[str, int] = defaultdict(int)
+        by_bucket: dict[str, int] = dict.fromkeys(BUCKET_LABELS, 0)
         for row in rows:
             if row.status is not None:
                 by_status[str(row.status)] += 1
+            if (
+                row.arrival_bucket
+                and row.shipped_out
+                and not row.business_test
+                and row.status_name not in ("CLOSED", "CANCELLED")
+                and not row.walmart_first_receipt
+            ):
+                by_bucket[row.arrival_bucket] += 1
         return ShipmentBoardSummary(
             total=len(rows),
             by_status=dict(by_status),
@@ -347,6 +501,11 @@ class ShipmentBoardService:
                 and r.received_units is not None
                 and r.received_units < r.declared_units
             ),
+            by_arrival_bucket=by_bucket,
+            with_exceptions=sum(bool(r.exception_types) for r in rows),
+            external=sum(r.external for r in rows),
+            rule_version=RULE_VERSION,
+            rule_date=self.today,
             freshness=self.freshness(),
         )
 
@@ -368,11 +527,15 @@ class ShipmentBoardService:
             store_id: (label if count == 1 and label else store_id)
             for store_id, count, label in self.session.execute(stmt).all()
         }
-        for row in self._expand():
+        rows = self._expand()
+        for row in rows:
             if row.store_id:
                 values.setdefault(row.store_id, row.store_name or row.store_id)
         return ShipmentBoardOptions(
-            stores=[StoreOption(value=k, label=v) for k, v in sorted(values.items())]
+            stores=[StoreOption(value=k, label=v) for k, v in sorted(values.items())],
+            owners=sorted({o for r in rows for o in r.owners}),
+            regions=sorted({r.region for r in rows if r.region}),
+            arrival_buckets=[StoreOption(value=k, label=v) for k, v in BUCKET_LABELS.items()],
         )
 
     def detail(self, ident: str) -> ShipmentBoardDetail:
@@ -384,9 +547,46 @@ class ShipmentBoardService:
         payload = (mart.payload_json or {}) if mart else {}
         cargo = payload.get("cargo") or {}
         goods = [ShipmentGoodsLine(**g) for g in payload.get("goods") or []]
+        view = self._view_by_id.get(ident)
+        gaps = {id(i) for i in big_gaps(view, RULES)} if view else set()
+        items = [
+            ShipmentItemLine(
+                msku=i.msku,
+                sku=i.sku,
+                product_name=i.name,
+                gtin=i.gtin,
+                item_id=i.item_id,
+                owners=self._owners_by_sku.get(i.sku, []),
+                declared_units=i.declare,
+                shipped_units=i.shipped,
+                lingxing_received_units=i.lx_received,
+                walmart_received_units=i.wm_received,
+                put_away_units=i.put_away,
+                damaged_units=i.damaged,
+                normal_units=i.normal,
+                over_units=i.over,
+                abnormal_units=i.abnormal,
+                abnormal=id(i) in gaps,
+            )
+            for i in (view.items if view else [])
+        ]
+        exceptions = [
+            ShipmentException(
+                type=e.type,
+                rule_family=e.rule_family,
+                severity=e.severity,  # type: ignore[arg-type]
+                found=parse_date(e.found),
+                description=e.desc,
+                source=e.source,  # type: ignore[arg-type]
+                qty=e.qty,
+            )
+            for e in (self._exceptions_by_code.get(view.code, []) if view else [])
+        ]
         return ShipmentBoardDetail(
             **row.model_dump(),
             goods=goods,
+            items=items,
+            exceptions=exceptions,
             shipping_lists=list(payload.get("shipping_lists") or []),
             distribution_addresses=cargo.get("distribution_addresses"),
             return_addresses=cargo.get("return_addresses"),
@@ -403,49 +603,49 @@ class ShipmentBoardService:
         )
 
     def products(self, query: ShipmentBoardQuery) -> ProductBoardList:
+        """8088 产品维度 over the filtered shipments (store × Item ID, sellable buckets)."""
+
         rows = self._filter(self._expand(), query)
-        agg: dict[tuple[str, str], dict[str, Any]] = {}
-        for row in rows:
-            mart = self._mart_by_id.get(row.id)
-            if mart is None or row.status == 4:
-                # Cancelled cargos never ship; they would only inflate declared units.
-                continue
-            for good in (mart.payload_json or {}).get("goods") or []:
-                key = (row.store_id, good.get("msku") or good.get("sku") or "")
-                entry = agg.setdefault(
-                    key,
-                    {
-                        "store_id": row.store_id,
-                        "store_name": row.store_name,
-                        "msku": good.get("msku"),
-                        "sku": good.get("sku"),
-                        "product_name": good.get("product_name"),
-                        "gtin": good.get("gtin"),
-                        "shipments": 0,
-                        "declared_units": None,
-                        "shipped_units": None,
-                        "received_units": None,
-                        "damaged_units": None,
-                        "in_transit_units": 0,
-                    },
-                )
-                entry["shipments"] += 1
-                for field, source in (
-                    ("declared_units", "declare_num"),
-                    ("shipped_units", "shipments_num"),
-                    ("received_units", "received_num"),
-                    ("damaged_units", "damaged_qty"),
-                ):
-                    value = good.get(source)
-                    if value is not None:
-                        entry[field] = (entry[field] or 0) + int(value)
-                if row.status in (1, 2):
-                    shipped = good.get("shipments_num") or good.get("declare_num") or 0
-                    received = good.get("received_num") or 0
-                    entry["in_transit_units"] += max(int(shipped) - int(received), 0)
+        views = [self._view_by_id[r.id] for r in rows if r.id in self._view_by_id]
         items = [
-            ProductBoardRow(id=f"{k[0]}:{k[1]}", **v)
-            for k, v in sorted(agg.items(), key=lambda kv: (kv[0][0], kv[0][1]))
+            ProductBoardRow(
+                id=f"{p.store_id}:{p.item_id}",
+                store_id=p.store_id,
+                store_name=p.store_name or None,
+                item_id=p.item_id,
+                mskus=p.mskus,
+                skus=p.skus,
+                product_name=p.name or None,
+                shipments=p.ships,
+                in_transit_units=p.in_transit,
+                buckets=p.buckets,
+                signed_not_put_units=p.signed_not_put,
+                arrived_shipped_units=p.arrived_shipped,
+                arrived_signed_units=p.arrived_signed,
+                arrived_shelved_units=p.arrived_shelved,
+                receiving_gap_units=p.receiving,
+                signed_zero_shelved=p.signed_zero_shelved,
+                next_eta=parse_date(p.next_eta),
+                next_sellable=parse_date(p.next_sellable),
+                lines=[
+                    ProductShipmentLine(
+                        shipment_id=line.code,
+                        status_name=line.status,
+                        msku=line.msku,
+                        shipped_units=line.shipped,
+                        signed_units=line.signed,
+                        shelved_units=line.shelved,
+                        eta=parse_date(line.eta),
+                        eta_source=line.eta_source or None,  # type: ignore[arg-type]
+                        sellable_date=parse_date(line.sellable),
+                        sellable_real=line.sellable_real,
+                        bucket=line.bucket,
+                        region=line.region or None,
+                    )
+                    for line in p.lines
+                ],
+            )
+            for p in product_views(views, self.today)
         ]
         start = (query.page - 1) * query.page_size
         freshness = self.freshness()

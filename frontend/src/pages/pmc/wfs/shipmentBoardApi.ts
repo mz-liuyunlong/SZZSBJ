@@ -18,6 +18,11 @@ const query = (f: ShipmentBoardFilters) =>
     ...(f.store_id ? { store_id: f.store_id } : {}),
     ...(f.status !== undefined && f.status !== null ? { status: String(f.status) } : {}),
     ...(f.sync ? { sync: f.sync } : {}),
+    ...(f.owner ? { owner: f.owner } : {}),
+    ...(f.region ? { region: f.region } : {}),
+    ...(f.arrival_bucket ? { arrival_bucket: f.arrival_bucket } : {}),
+    ...(f.only_exceptions ? { only_exceptions: "true" } : {}),
+    ...(f.only_external ? { only_external: "true" } : {}),
   });
 
 export const listShipments = (f: ShipmentBoardFilters, page: number, size: number, signal?: AbortSignal) =>
@@ -36,7 +41,12 @@ export const shipmentSummary = (f: ShipmentBoardFilters, signal?: AbortSignal) =
   backendRequest<ShipmentBoardSummary>(`${boardPrefix}/summary?${query(f)}`, { signal });
 
 export const boardOptions = (signal?: AbortSignal) =>
-  backendRequest<{ stores: { value: string; label: string }[] }>(`${boardPrefix}/filter-options`, { signal });
+  backendRequest<{
+    stores: { value: string; label: string }[];
+    owners?: string[];
+    regions?: string[];
+    arrival_buckets?: { value: string; label: string }[];
+  }>(`${boardPrefix}/filter-options`, { signal });
 
 export const getShipment = (id: string, signal?: AbortSignal) =>
   backendRequest<ShipmentBoardDetail>(`${boardPrefix}/shipments/${encodeURIComponent(id)}`, { signal });
