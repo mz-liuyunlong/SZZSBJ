@@ -1,0 +1,34 @@
+.logi-wrap {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.logi-detail h4 {
+  margin: 16px 0 8px;
+}
+
+.logi-timeline {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.logi-timeline li {
+  display: flex;
+  gap: 12px;
+  padding: 4px 0 4px 12px;
+  border-left: 2px solid #e5eaf3;
+}
+
+.logi-timeline li.is-done {
+  border-left-color: #2563eb;
+}
+
+.logi-timeline__t {
+  flex: 0 0 130px;
+  color: #475467;
+}
+
+.logi-exrow {
+  padding: 4px 0;
+}
