@@ -58,6 +58,10 @@ def list_owner_candidates(request: Request, _: admin_principal, session: db_sess
                 FROM dwd_lingxing_sku_product_info_current
                 WHERE owner_uid IS NOT NULL AND trim(owner_uid) <> ''
                 UNION
+                SELECT product_developer_uid AS owner_ref
+                FROM dwd_lingxing_sku_product_info_current
+                WHERE product_developer_uid IS NOT NULL AND trim(product_developer_uid) <> ''
+                UNION
                 SELECT owner_ref FROM mart_daily_sales_item_day
                 WHERE owner_ref IS NOT NULL AND trim(owner_ref) <> ''
                 UNION
