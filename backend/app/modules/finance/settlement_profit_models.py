@@ -380,8 +380,10 @@ class InventoryMovementLine(_FxColumns, _Timestamps, Base):
 
     Only rows with ``is_current = true`` are read.  Lingxing serial numbers repeat and can
     change, so they are informational only: a row is identified by the source flow row id
-    within one calc_version.  The store comes from the store_code mapping; a row whose
-    store_code is not mapped keeps store_id NULL (store_mapping_status = 'unmapped').
+    within one calc_version.  The store comes from the store_code mapping.  A movement whose
+    store_code is not mapped is not written here until finance assigns a store (PRP §8.4):
+    meanwhile it only exists as a 待指定 row with store_id '__unmapped__'; once assigned it
+    is written with that store and store_mapping_status = 'manual_assigned'.
     No foreign key to the flow table: it is owned and migrated by the inventory-claim PRP.
     """
 

@@ -6,7 +6,8 @@ Small, additive change to the PR-1 tables (all still empty: PR-1 has no writer):
 - 待指定 rows can carry a ¥ amount, a reason, a detail payload and an assigned store;
 - inventory movement rows keep the flow ``row_hash`` and their ``content_hash``;
 - the store-month reconcile row keeps the result hash and the 入库运费 difference.
-Downgrade restores the PR-1 shape.
+Downgrade restores the PR-1 shape only while these tables are empty; with any record it
+is refused (no DELETE / TRUNCATE of business data).
 """
 
 from collections.abc import Sequence
@@ -91,14 +92,20 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Non-destructive rollback (PRP §13): the schema is only reverted while none of the
+    # four tables holds a row.  Once any calculation, 待指定 or manual adjustment exists,
+    # rollback is refused instead of deleting or truncating records; recovery then goes
+    # forward with a new migration (or a restore approved by Rocky), never by DELETE.
+    conn = op.get_bind()
+    for table in (ADJUSTMENTS, UNASSIGNED, MOVEMENTS, RECONCILE):
+        if conn.execute(sa.text(f"SELECT EXISTS (SELECT 1 FROM {table})")).scalar_one():
+            raise RuntimeError("0074 rollback blocked: settlement profit records exist in " + table)
+
     op.drop_column(RECONCILE, "result_hash")
     op.drop_column(RECONCILE, "inbound_freight_lx_vs_settlement_diff_usd")
 
     op.drop_constraint("unassigned_amount_present", UNASSIGNED, type_="check")
     op.drop_constraint("unassigned_assigned_has_target", UNASSIGNED, type_="check")
-    op.execute(
-        f"DELETE FROM {UNASSIGNED} WHERE amount_usd IS NULL OR assigned_store_id IS NOT NULL"
-    )
     op.create_check_constraint(
         "unassigned_assigned_has_item",
         UNASSIGNED,
@@ -112,7 +119,6 @@ def downgrade() -> None:
 
     op.drop_column(MOVEMENTS, "content_hash")
     op.drop_column(MOVEMENTS, "source_row_hash")
-    op.execute(f"DELETE FROM {MOVEMENTS} WHERE store_mapping_status = 'manual_assigned'")
     op.drop_constraint("inv_move_store_id_matches_mapping", MOVEMENTS, type_="check")
     op.drop_constraint("inv_move_store_mapping", MOVEMENTS, type_="check")
     op.create_check_constraint(
@@ -124,7 +130,6 @@ def downgrade() -> None:
         "(store_mapping_status = 'mapped') = (store_id IS NOT NULL)",
     )
 
-    op.execute(f"DELETE FROM {ADJUSTMENTS} WHERE kind = 'assign_store'")
     op.drop_constraint("adjustment_kind", ADJUSTMENTS, type_="check")
     op.create_check_constraint(
         "adjustment_kind", ADJUSTMENTS, "kind IN ('cost', 'amount', 'assign_item', 'note')"

@@ -155,6 +155,8 @@ def test_unmapped_store_movement_todo_and_assignment(session: Session) -> None:
     loader = FakeLoader({STORE: base_input()}, unmapped=[loss])
     out = recalculate_month(session, loader, MONTH, now=NOW)
     assert out.unmapped_pending == 1
+    # not written to the movement fact until a store is assigned (PRP §8.4)
+    assert count(session, InventoryMovementLine) == 0
     todo = session.execute(
         sa.select(SettlementUnassignedAmount).where(
             SettlementUnassignedAmount.store_id == UNMAPPED_STORE_ID
@@ -190,3 +192,76 @@ def test_unmapped_store_movement_todo_and_assignment(session: Session) -> None:
     session.refresh(todo)
     assert todo.status == "void"
     assert count(session, SettlementUnassignedAmount, status="pending") == 1
+
+
+def test_assignment_survives_resync_and_revoke_returns_to_pending(session: Session) -> None:
+    loss = movement("LIQ", store_id=None, row_hash="u-9")
+    loader = FakeLoader({STORE: base_input()}, unmapped=[loss])
+    recalculate_month(session, loader, MONTH, now=NOW)
+    todo = session.execute(
+        sa.select(SettlementUnassignedAmount).where(
+            SettlementUnassignedAmount.store_id == UNMAPPED_STORE_ID
+        )
+    ).scalar_one()
+    loader.unmapped_adjustments = [
+        Adjustment(str(uuid4()), todo.line_key, "assign_store", {"store_id": STORE}, NOW)
+    ]
+    loader.inputs[STORE] = base_input()
+    assigned = recalculate_month(session, loader, MONTH, now=NOW).stores[0]
+    # re-sync: new flow id, same row_hash → identity kept, assignment kept, no new version
+    loader.unmapped = [
+        movement(
+            "LIQ", store_id=None, row_hash="u-9", flow_id="00000000-0000-0000-0000-0000000000bb"
+        )
+    ]
+    loader.inputs[STORE] = base_input()
+    resynced = recalculate_month(session, loader, MONTH, now=NOW).stores[0]
+    assert (resynced.action, resynced.calc_version) == ("unchanged", assigned.calc_version)
+    session.refresh(todo)
+    assert (todo.status, todo.assigned_store_id) == ("assigned", STORE)
+    # revoke the assign_store adjustment → back to the __unmapped__ to-do, store recalculated
+    loader.unmapped_adjustments = []
+    loader.inputs[STORE] = base_input()
+    revoked = recalculate_month(session, loader, MONTH, now=NOW)
+    session.refresh(todo)
+    assert (todo.status, todo.assigned_store_id) == ("pending", None)
+    assert revoked.unmapped_pending == 1
+    latest = revoked.stores[0].calc_version
+    assert count(session, InventoryMovementLine, calc_version=latest) == 0
+
+
+def test_rows_added_or_removed_after_close_are_diffs_only(session: Session) -> None:
+    loader = FakeLoader({STORE: base_input()})
+    recalculate_month(session, loader, MONTH, now=NOW)
+    session.add(
+        SettlementMonthClose(
+            store_scope=STORE,
+            bill_month=MONTH,
+            status="closed",
+            frozen_calc_version=1,
+            actor_id="fixture",
+            actor_role="finance_lead",
+            request_id="req-2",
+            idempotency_key=str(uuid4()),
+        )
+    )
+    session.flush()
+    changed = base_input()
+    # order SYN-O3 disappears, a new order SYN-O4 appears
+    changed.settlement_lines = [
+        ln for ln in changed.settlement_lines if ln.platform_order_no != "SYN-O3"
+    ]
+    changed.settlement_lines.append(
+        line(SettlementKind.SALE, "10.00", "SYN-O4", gtin="G2", quantity=1)
+    )
+    changed.fifo[("SYN-O4", "G2")] = changed.fifo[("SYN-O3", "G2")]
+    loader.inputs[STORE] = changed
+    out = recalculate_month(session, loader, MONTH, now=NOW).stores[0]
+    assert out.action == "frozen"
+    diffs = session.execute(sa.select(SettlementPostCloseDiff)).scalars().all()
+    by_key = {d.line_key.split("|")[2]: d for d in diffs}
+    assert {"SYN-O3", "SYN-O4"} <= set(by_key)
+    assert by_key["SYN-O3"].new_value["content_hash"] is None  # removed line
+    assert by_key["SYN-O4"].old_value["content_hash"] is None  # new line
+    assert count(session, SettlementOrderLine, calc_version=2) == 0
+    assert count(session, SettlementOrderLine, calc_version=1) == 3  # frozen rows unchanged

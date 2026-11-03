@@ -1,6 +1,6 @@
 # PRP：财务 · 结算利润 V2 —— 订单级分摊 / 订单审核 / 库存异动与弃置 / 纯利 / 评价加速器
 
-- Status: Rev 4.5（Rev 4.5 按已定规则写明 §8.6 查不到价格的处理：与快照缺失相同，整笔转待指定，不估价；Rev 4.4：Rev 4.4 按 Rocky 2026-11-03 拍板：对不上店铺的库存异动进订单审核「待指定」行，由财务手工指定店铺，见 §8.4、§15 第 13 条；Rev 4.3：Rev 4.3 按审核 M2 补 §8.1、§8.9：内容 hash 与结账后差异比对排除 source_flow_id、source_run_ids，改用领星成本计价 flow 行 row_hash 加业务字段；Rev 4.2：Rev 4 已由审核 AI 2026-11-03 审核通过；Rev 4.1 按审核 M1、M2 修订；Rev 4.2 按 Rocky 2026-11-03 补充：领星 WFS 成本计价表与同步归库存索赔 PRP，本 PRP 改为只读；待审核 AI 确认后提 PR-1）
+- Status: Rev 4.6（Rev 4.6 按审核 #309 意见：统一「对不上店铺」的 store_id 存储口径（§6.2、§8.4）；迁移冲突改接规则（§10）；回滚有数据即拒绝、不删记录（§13）；Rev 4.5：Rev 4.5 按已定规则写明 §8.6 查不到价格的处理：与快照缺失相同，整笔转待指定，不估价；Rev 4.4：Rev 4.4 按 Rocky 2026-11-03 拍板：对不上店铺的库存异动进订单审核「待指定」行，由财务手工指定店铺，见 §8.4、§15 第 13 条；Rev 4.3：Rev 4.3 按审核 M2 补 §8.1、§8.9：内容 hash 与结账后差异比对排除 source_flow_id、source_run_ids，改用领星成本计价 flow 行 row_hash 加业务字段；Rev 4.2：Rev 4 已由审核 AI 2026-11-03 审核通过；Rev 4.1 按审核 M1、M2 修订；Rev 4.2 按 Rocky 2026-11-03 补充：领星 WFS 成本计价表与同步归库存索赔 PRP，本 PRP 改为只读；待审核 AI 确认后提 PR-1）
 - Owner Approval Required: No（Rocky 已拍板，2026-11-03，经刘云龙授权）
 - Implementation authorization state: Authorized（审核 AI 2026-11-03 审核 Rev 4 通过，按 §10 顺序开发；生产开关仍另需授权）
 - Production execution authorized: No（生产同步开关、回填、定时开启各需 Rocky 书面授权一次，见 §6.4）
@@ -119,7 +119,7 @@ sensitive or critical domains: 财务 / 利润 / 成本 / 结算 / 库存 / 广�
 | ODS | `ods_walmart_storage_fee_lines` | Walmart 仓储费报表 handler（`walmart_remote_jobs`） | (source_account_ref, store_id, report_period_start, report_period_end, gtin) |
 | ODS | `ods_walmart_review_accelerator_snapshots` | 评价加速器 handler（每账期一次） | (source_account_ref, store_id, snapshot_report_key, item_id) |
 | FACT | `fact_settlement_order_lines` | 计算任务 | 唯一键只有 (store_id, bill_month, calc_version, line_key)，即 `line_key` 每个 calc_version 内唯一；(store_id, bill_month, platform_order_no, order_item_no) 只建普通索引（同一订单行第 1 期销售、第 2 期退款分属两期，不能按订单号做唯一键）。同一期结算单里同一订单行的各交易类型汇总成一行 |
-| FACT | `fact_inventory_movement_lines` | 计算任务 | (source_flow_id, calc_version)：`source_flow_id` = 库存索赔 PRP 表 `ods_lingxing_wfs_cost_valuation_flow` 中 `is_current = true` 行的 id（不建外键）。**不用流水号做键**（领星流水号会重复、会变），流水号只作展示列。店铺：store_id 取该行的 store_id（sid 优先，否则 store_code 对照）；对不上则 store_id 为空、`store_mapping_status = unmapped`，原样保留 store_code |
+| FACT | `fact_inventory_movement_lines` | 计算任务 | (source_flow_id, calc_version)：`source_flow_id` = 库存索赔 PRP 表 `ods_lingxing_wfs_cost_valuation_flow` 中 `is_current = true` 行的 id（不建外键）。**不用流水号做键**（领星流水号会重复、会变），流水号只作展示列。店铺：store_id 取该行的 store_id（sid 优先，否则 store_code 对照）。对不上店铺的异动在财务指定前不写本表，只写待指定（§8.4）；指定后写入，store_id = 指定店铺、`store_mapping_status = manual_assigned`。CHECK 仍允许 `unmapped` + store_id 为空，但计算任务不写这种行 |
 | FACT | `fact_settlement_unassigned_amounts` | 计算任务 | (store_id, bill_month, source_kind, source_ref) —— 「待指定」金额，§8.4。对不上店铺的库存异动也写这里：store_id 用固定占位值 `__unmapped__`（不用 NULL，保证唯一键生效），source_kind = `inventory_unmapped_store`，source_ref = flow 行 row_hash |
 | MART | `mart_settlement_profit_item_month` | 计算任务 | (store_id, item_id, bill_month) |
 | MART | `mart_settlement_order_review` | 计算任务 | (store_id, bill_month, line_key)；`row_kind` = order / unassigned / reconcile_diff；order 行另按 (store_id, bill_month, platform_order_no, order_item_no) 建索引；待指定和对平差额待办没有订单号，用 `line_key` 识别 |
@@ -215,6 +215,7 @@ helpUrl: docs/sop/finance-settlement-profit.md（PR-4 交付），PageShell help
 对不上商品的费用（2026-10 起）写入 `fact_settlement_unassigned_amounts`，状态 pending；每笔在订单审核里显示为一条待办（reason unassigned）。财务指定商品（adjustment kind assign_item）后进入该商品，再按 §0.3 规则分到订单。pending 期间：店铺月对平 status = UNASSIGNED_PENDING；可发布、可审核，不可结账。2026-10 以前的月份不计算，不产生待办。
 
 对不上店铺的库存异动（`store_mapping_status = unmapped`，例如弃置损耗；Rocky 2026-11-03 拍板）：
+- 对不上店铺时的存储口径：库存异动表只写有店铺的行（`mapped`，或财务指定后的 `manual_assigned`）；对不上店铺、还没指定的异动不写 `fact_inventory_movement_lines`，只在 `fact_settlement_unassigned_amounts` 和 `mart_settlement_order_review` 各写一条待指定，这两张表的 store_id 固定存占位值 `__unmapped__`（不存 NULL），领星 store_code 原样存在待指定的 detail 里。`__unmapped__` 不是店铺：不出现在店铺列表和店铺筛选里，没有对平行，页面显示为「未对上店铺」，只有数据范围为全部店铺的财务用户能查到。
 - 不进任何店铺的库存异动汇总和利润，写一条「待指定」：store_id = `__unmapped__`，bill_month = 异动月份，source_kind = `inventory_unmapped_store`，source_ref = 该 flow 行 `row_hash`，金额按 ¥ 原值记 `amount_cny`，并按 §8.2 汇率折 `amount_usd`（没有汇率则 `amount_usd` 为空、fx_status = missing），原样展示领星 store_code、流水号、SKU、类别。
 - 订单审核里显示为待办（row_kind unassigned，reason `unmapped_store`），只有数据范围为全部店铺的财务用户能看到和处理。
 - 财务用 adjustment kind = `assign_store`（payload：store_id）指定店铺，原因必填，走初审 / 终审，可撤销。指定后该异动按该店重算：`fact_inventory_movement_lines.store_id` = 指定店铺、`store_mapping_status = manual_assigned`，再按 SKU 落商品；该店对不上商品的，转成该店的普通「待指定」（assign_item）。撤销则回到 `__unmapped__` 待办。
@@ -269,9 +270,14 @@ helpUrl: docs/sop/finance-settlement-profit.md（PR-4 交付），PageShell help
 |---|---|---|---|---|---|
 | PR-1 建表 | 本 PRP §6.2 | 新建 `backend/app/modules/finance/`（models）与 `backend/tests/modules/finance/`；本 PRP 新表（16 张，不含领星 WFS 成本计价表）迁移 + model registry + scaffold 测试；表结构文档。领星 WFS 成本计价表、同步与契约登记不在本 PRP（归库存索赔 PR 1） | 接当时最新 head；#290 已合并 | migration up / down、`alembic check` 干净 | migration down（全部新表） |
 | PR-2 同步 | PR-1 的 ODS 表；Walmart 契约快照 | 多平台结算利润-订单走 Integration Sync（领星成本计价同步归库存索赔 PRP）；Walmart WFS 费用、仓储费报表、评价加速器快照走 `walmart_remote_jobs` | PR-1 | 合成 fixture 覆盖分页完整性、RAW 先落、行身份、未知枚举、单店失败隔离、开关 fail-closed；不调真实接口 | 关开关 + revert |
-| PR-3 计算 | PR-1 表；合成 fixture | §8 全部计算 + 重算任务；§8.4 所列小迁移（assign_store、manual_assigned、unassigned 表加列）；订单时间扩字段属于跨板块改动，测既有 WFS 同步不回归 | PR-1（不依赖 PR-2 真实数据） | 合成 fixture 覆盖 §14 每一项；重算幂等 | revert；MART 可全量重算 |
+| PR-3 计算 | PR-1 表；合成 fixture | §8 全部计算 + 重算任务入口（数据库读取实现与同步成功触发，待结算单行表、领星流水表上 main 后补）；§8.4 所列小迁移（assign_store、manual_assigned、unassigned 表加列）；订单时间扩字段属于跨板块改动，测既有 WFS 同步不回归 | PR-1（不依赖 PR-2 真实数据） | 合成 fixture 覆盖 §14 每一项；重算幂等 | 0074 回滚有记录即拒绝（§13）；revert；MART 可全量重算 |
 | PR-4 接口 | PR-3 计算 contract | §7 全部接口 + 权限 + 审计 | PR-1、PR-3 | API 测试：权限、数据范围、幂等、乐观锁、错误码 | revert |
 | PR-5 页面切换 | 5174 已验收前端；PR-4 接口 | 前端数据读取从本地文件切到接口（只切接口，不含后端逻辑） | PR-4 | Playwright E2E：4 个标签加载、筛选、调整、审核、撤销、结账拦截 | revert（回到本地数据） |
+
+迁移冲突规则（与库存索赔约定，2026-11-03）：结算利润 PR-3 的 `20261104_0074_fin_settle_calc` 和库存索赔 PR 1 的 `20261103_0073_wfs_cost_valuation_flow` 都接在 0072 后面。
+- 两个 PR 谁先合并进 main，谁的迁移不动；后合并的一方在合并前把 down_revision 改接到已合并的那个迁移上，不加 merge 迁移。
+- 后合并的一方同时改仓库里所有断言「当前 head」的测试：`tests/db/test_alembic_scaffold.py`、`tests/db/test_packing_pending_edit_postgresql.py`（REVISION）、`tests/modules/finance/test_settlement_profit_migration.py`、`tests/modules/ai_runtime/test_postgresql_acceptance.py`。#309 后合并：0074 改接 0073，上述断言改成 0074。#308 后合并：0073 改接 0074，`test_settlement_profit_migration` 里 0073 的 down_revision 断言也跟着改。
+- 验收：合并后 main 上 `alembic heads` 只有一个 head；scaffold 单 head 断言和 `test_alembic_graph_single_linear_head` 通过。
 
 ## 11. Validation Gates
 
@@ -300,6 +306,8 @@ Walmart：只走一店一服务器 walmart_remote_jobs；禁止在 Mac 本地直
 ## 13. Rollback Plan
 
 见 §10 每个 PR 的回滚列；manual_ 表回滚前先导出备份；已结账月份以冻结快照为准，不随回滚改变。
+
+迁移回滚不删业务数据：PR-3 迁移 0074 的 downgrade 只在待指定、库存异动、人工调整、对平四张表都没有记录时才回退结构；只要有一条记录就报错拒绝（`0074 rollback blocked`），不执行任何 DELETE / TRUNCATE。生产环境禁止对 0074 及之前的结算利润迁移做 downgrade；有记录后要修正结构，一律写新的前向迁移；如确需恢复数据，先导出备份，经 Rocky 书面同意后按备份恢复。
 
 ## 14. Acceptance Checklist（阈值 / 失败行为 / 测试数据）
 

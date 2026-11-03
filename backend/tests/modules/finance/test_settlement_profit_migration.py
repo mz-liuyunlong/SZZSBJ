@@ -148,10 +148,33 @@ def test_calc_migration_only_alters_settlement_profit_tables() -> None:
         elif node.func.attr == "create_check_constraint":
             touched.add(consts[node.args[1].id])
     assert touched <= set(SETTLEMENT_PROFIT_TABLES)
+    # rollback never deletes or truncates: no raw SQL is executed by the migration
+    raw_sql = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "op"
+        and node.func.attr == "execute"
+    ]
+    assert raw_sql == []
 
 
-def test_calc_migration_postgresql_round_trip() -> None:
+def test_calc_migration_postgresql_round_trip_and_blocked_rollback() -> None:
     url = admin_url()  # skips unless DOMESTIC_CHAIN_DB_TESTS=1
+    empty = create_database(url, "finsettlecalcempty")
+    try:
+        # empty tables: schema rollback and re-upgrade work
+        assert _alembic(url, empty, CALC_REVISION).returncode == 0
+        down = _alembic(url, empty, REVISION, command="downgrade")
+        assert down.returncode == 0, down.stderr
+        assert _version(url, empty) == [REVISION]
+        again = _alembic(url, empty, "head")
+        assert again.returncode == 0, again.stderr
+    finally:
+        drop_database(url, empty)
+
     database = create_database(url, "finsettlecalcmig")
     try:
         assert _alembic(url, database, CALC_REVISION).returncode == 0
@@ -182,12 +205,43 @@ def test_calc_migration_postgresql_round_trip() -> None:
                     raise AssertionError("a 待指定 row without any amount must be rejected")
                 except sa.exc.IntegrityError:
                     bad.rollback()
+            # with a record present the rollback is refused and nothing is deleted
+            blocked = _alembic(url, database, REVISION, command="downgrade")
+            assert blocked.returncode != 0
+            assert "0074 rollback blocked" in blocked.stderr
+            assert _version(url, database) == [CALC_REVISION]
+            with engine.connect() as conn:
+                kept = conn.execute(
+                    sa.text("SELECT count(*) FROM fact_settlement_unassigned_amounts")
+                ).scalar_one()
+            assert kept == 1
         finally:
             engine.dispose()
-        down = _alembic(url, database, REVISION, command="downgrade")
-        assert down.returncode == 0, down.stderr
-        assert _version(url, database) == [REVISION]
-        again = _alembic(url, database, "head")
-        assert again.returncode == 0, again.stderr
     finally:
         drop_database(url, database)
+
+
+INVENTORY_CLAIM_REVISION = "20261103_0073_wfs_cost_valuation_flow"
+
+
+def test_alembic_graph_single_linear_head() -> None:
+    """PRP §10: whichever of #308 (0073) / #309 (0074) merges later re-points onto the other.
+
+    After both are on main there must be one head, both revisions on its chain, and no fork
+    under 0072 (two migrations with the same parent).
+    """
+    script = _script()
+    heads = script.get_heads()
+    assert len(heads) == 1, f"multiple alembic heads: {heads}"
+    chain = {rev.revision for rev in script.walk_revisions("base", heads[0])}
+    present = {rev.revision for rev in script.walk_revisions()}
+    for revision in (INVENTORY_CLAIM_REVISION, CALC_REVISION):
+        if revision in present:
+            assert revision in chain
+    children = [
+        rev.revision
+        for rev in script.walk_revisions()
+        if rev.down_revision == REVISION
+        or (isinstance(rev.down_revision, tuple) and REVISION in rev.down_revision)
+    ]
+    assert len(children) == 1, f"fork under {REVISION}: {children}"

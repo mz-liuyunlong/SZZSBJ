@@ -1,6 +1,6 @@
 # 财务 · 结算利润 V2 计算口径（PR-3）
 
-依据：`PRPs/finance-settlement-profit-v2.md` Rev 4.5 §0、§8。代码：`backend/app/modules/finance/settlement_profit/`。
+依据：`PRPs/finance-settlement-profit-v2.md` Rev 4.6 §0、§8。代码：`backend/app/modules/finance/settlement_profit/`。
 
 ## 结构
 
@@ -47,6 +47,28 @@
 - 一店一月整体结果的 hash 不变时，不写新 calc_version（`mart_settlement_reconcile_store_month.result_hash`）。
 - 领星流水重同步后，flow 行 id 变了但 row_hash 不变，结果仍视为未变。row_hash 变了，原来的待指定和指定结果作废，同时生成新的待办。
 - 已结账的月份不改冻结数，只按行比对内容 hash，有差异就写 `fact_settlement_post_close_diffs`。同一行同一新 hash 只记一次。
+
+## 对不上店铺的存储口径
+
+- 还没指定店铺的异动不写 `fact_inventory_movement_lines`，只写待指定。待指定表和订单审核表的 store_id 存占位值 `__unmapped__`，不存 NULL；领星 store_code 放在 detail 里。
+- 指定店铺后，才写入库存异动表：store_id 为指定的店铺，`store_mapping_status = manual_assigned`。撤销指定后，回到 `__unmapped__` 待办，该店重算时不再包含这笔异动。
+- `__unmapped__` 不是店铺：不出现在店铺列表和店铺筛选里，没有对平行，只有数据范围为全部店铺的财务用户能看到（PR-4 接口负责过滤）。
+
+## 行身份与重同步
+
+- 库存异动的业务身份是 flow 行的 `row_hash`。`source_flow_id` 只用来追溯，不参与比对。
+- 重同步后 flow id 变了、row_hash 没变：结果 hash 不变，不写新版本，待指定和指定结果保留。
+- row_hash 变了：旧的待指定作废，生成新的待办；如果月份已结账，记一条结账后差异。
+
+## 本 PR 的边界
+
+- 本 PR 的落库代码只接受 `SettlementProfitLoader` 给的输入。测试里的 FakeLoader 和合成 fixture 只用于测试，不能接到生产环境。
+- 生产用的读取实现（读结算单行表、领星流水表、汇率、负责人、广告日报）和「同步成功后触发重算」不在本 PR，要等两张源表上 main 后另提 PR，并经审核通过。在那之前没有任何代码会调用 `recalculate_month`。
+
+## 迁移与回滚
+
+- 0074 只在本 PRP 的表上加列、改 CHECK。回滚时，只要待指定、库存异动、人工调整、对平四张表中有任何一条记录，就直接拒绝，不执行 DELETE 或 TRUNCATE。生产环境禁止回滚这个迁移（PRP §13）。
+- 与库存索赔 0073 的先后顺序：先合并的一方不动，后合并的一方把迁移改接到已合并的迁移上，最后 main 上只能有一个 head（PRP §10）。
 
 ## 依赖与本 PR 未覆盖的部分
 

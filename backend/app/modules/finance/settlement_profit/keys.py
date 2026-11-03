@@ -10,6 +10,9 @@ from decimal import Decimal
 
 from .money import q4
 
+# store_id of 待指定 / order-review rows for movements whose Lingxing store_code maps to no
+# store (PRP §8.4).  Never NULL (keeps the unique keys effective) and never a real store:
+# APIs must keep it out of store lists / filters and show it only to all-store finance users.
 UNMAPPED_STORE_ID = "__unmapped__"
 RECONCILE_DIFF = "reconcile_diff"
 
