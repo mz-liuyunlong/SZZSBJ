@@ -1,10 +1,11 @@
 /** WFS settings (PRP pmc-wfs-settings S2/S3): versioned rules, FC regions, creation defaults, channel dictionary. */
 import { QuestionCircleOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Drawer, Form, Input, InputNumber, Modal, Radio, Select, Space, Table, Tag, Typography, message } from "antd";
+import { Alert, Button, Card, Drawer, Form, Input, InputNumber, Modal, Radio, Select, Space, Table, Tabs, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import PageShell from "@/components/page/PageShell";
+import "./WfsSettingsPage.css";
 import type { NavigationPage } from "@/config/navigation";
 import {
   REGIONS,
@@ -53,6 +54,7 @@ export default function WfsSettingsPage({ page, scope = "anonymous", permissions
   const fcs = useQuery({ queryKey: [...base, "fc"], queryFn: ({ signal }) => listFcRegions(signal), retry: false });
   const defaults = useQuery({ queryKey: [...base, "defaults"], queryFn: ({ signal }) => getCreationDefaults(signal), retry: false });
   const channels = useQuery({ queryKey: [...base, "channels"], queryFn: ({ signal }) => listLogisticsChannels(signal), retry: false });
+  const [tab, setTab] = useState("rules");
   const [logOpen, setLogOpen] = useState(false);
   const changes = useQuery({ queryKey: [...base, "changes"], queryFn: ({ signal }) => listSettingsChanges(signal), retry: false, enabled: logOpen });
 
@@ -78,23 +80,23 @@ export default function WfsSettingsPage({ page, scope = "anonymous", permissions
 
   const editing = draft !== undefined;
   const ruleRows = draft ?? rules.data?.rows ?? [];
-  const setCell = (i: number, patch: Partial<RuleRow>) => setDraft((d) => d?.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const setCell = (row: RuleRow, patch: Partial<RuleRow>) => setDraft((d) => d?.map((r) => (r === row ? { ...r, ...patch } : r)));
   const text = (key: keyof RuleRow, title: string, width: number) => ({
     title, dataIndex: key, width,
-    render: (v: string, _r: RuleRow, i: number) =>
-      editing && key !== "rule_key" ? <Input size="small" aria-label={title} value={v} onChange={(e) => setCell(i, { [key]: e.target.value })} /> : v || "—",
+    render: (v: string, r: RuleRow) =>
+      editing && key !== "rule_key" ? <Input size="small" aria-label={title} value={v} onChange={(e) => setCell(r, { [key]: e.target.value })} /> : v || "—",
   });
   const num = (key: "days" | "remind_days", title: string) => ({
     title, dataIndex: key, width: 110,
-    render: (v: number, _r: RuleRow, i: number) =>
-      editing ? <InputNumber size="small" aria-label={title} min={0} max={365} value={v} onChange={(n) => setCell(i, { [key]: n ?? 0 })} /> : v,
+    render: (v: number, r: RuleRow) =>
+      editing ? <InputNumber size="small" aria-label={title} min={0} max={365} value={v} onChange={(n) => setCell(r, { [key]: n ?? 0 })} /> : v,
   });
   const ruleColumns: ColumnsType<RuleRow> = [
     {
       title: "节点", dataIndex: "node", width: 200,
-      render: (v: string, r, i) => (
+      render: (v: string, r) => (
         <Space size={4} wrap>
-          {editing ? <Input size="small" aria-label="节点" value={v} onChange={(e) => setCell(i, { node: e.target.value })} /> : v}
+          {editing ? <Input size="small" aria-label="节点" value={v} onChange={(e) => setCell(r, { node: e.target.value })} /> : v}
           {!r.decided && <Tag color="gold">{SAMPLE_TAG}</Tag>}
         </Space>
       ),
@@ -154,12 +156,135 @@ export default function WfsSettingsPage({ page, scope = "anonymous", permissions
   const loadAlert = (error: unknown) => (error ? <Alert type="error" showIcon message={settingsError(error)} /> : null);
   const rs = rules.data;
 
+  const pager = { pageSize: 20, showSizeChanger: false, showTotal: (t: number) => `共 ${t} 条` };
+
+  const rulesPanel = (
+    <Card
+      size="small"
+      title={rs ? `版本 v${rs.version.version_no} · 生效 ${rs.version.effective_date}` : "异常与提醒规则"}
+      extra={(
+        <Space wrap>
+          <Button onClick={() => setLogOpen(true)}>版本与修改记录</Button>
+          {editing ? (
+            <>
+              <Button onClick={() => setDraft((d) => [...(d ?? []), newRow()])}>+ 新增规则</Button>
+              <Button onClick={() => setDraft(undefined)}>取消</Button>
+              {writeButton("保存为新版本", () => openAsk({
+                title: "保存为新规则版本", withDate: true,
+                run: (reason, effective) => createRuleVersion({ effective_date: effective ?? today(), reason, rows: draft ?? [] }),
+              }), true)}
+            </>
+          ) : writeButton("编辑规则", () => setDraft(rs?.rows.map((r) => ({ ...r }))))}
+        </Space>
+      )}
+    >
+      <Space direction="vertical" size={12} className="wfs-settings__stack">
+        {loadAlert(rules.error)}
+        {rs && rs.sample_rows > 0 && (
+          <Alert
+            type="warning"
+            showIcon
+            message={`有 ${rs.sample_rows} 条规则按示例阈值执行（标「${SAMPLE_TAG}」），业务确认后改成正式值`}
+          />
+        )}
+        <Table<RuleRow>
+          size="small"
+          rowKey={(r) => `${r.rule_key ?? "new"}-${ruleRows.indexOf(r)}`}
+          loading={rules.isFetching}
+          columns={ruleColumns}
+          dataSource={ruleRows}
+          pagination={pager}
+          scroll={{ x: 1200 }}
+          rowClassName={(r) => (r.decided ? "" : "wfs-settings__sample-row")}
+        />
+      </Space>
+    </Card>
+  );
+
+  const fcPanel = (
+    <Card size="small">
+      <Space direction="vertical" size={12} className="wfs-settings__stack">
+        <Typography.Text type="secondary">仓库来自 WFS 货件看板的收货地址；没保存过的仓库按所在州给默认地区。</Typography.Text>
+        {loadAlert(fcs.error)}
+        <Table<FcRegion>
+          size="small" rowKey="fc" loading={fcs.isFetching} columns={fcColumns} dataSource={fcs.data ?? []}
+          pagination={pager} scroll={{ x: 900 }}
+          locale={{ emptyText: "看板上还没有仓库" }}
+        />
+      </Space>
+    </Card>
+  );
+
+  const defaultsPanel = (
+    <Card size="small">
+      {loadAlert(defaults.error)}
+      {defaults.data && (
+        <Form<CreationDefaults>
+          key={`${defaults.data.source_account_ref}-${defaults.data.updated_at ?? "seed"}`}
+          form={defaultsForm}
+          layout="inline"
+          disabled={!canManage}
+          initialValues={defaults.data}
+          onFinish={(values) => openAsk({ title: "修改创建默认值", run: (reason) => updateCreationDefaults({ ...values, reason }) })}
+        >
+          <Form.Item label="运输方式" name="transport">
+            <Select className="wfs-settings__select" options={Object.entries(transportLabel).map(([value, label]) => ({ value, label }))} />
+          </Form.Item>
+          <Form.Item label="发货日 = 今天 +" name="ship_date_offset"><InputNumber min={0} max={365} addonAfter="天" /></Form.Item>
+          <Form.Item label="每托箱数" name="pallet_boxes"><InputNumber min={1} max={999} /></Form.Item>
+          <Form.Item label="混装箱数" name="mixed_boxes"><InputNumber min={0} max={999} /></Form.Item>
+          <Form.Item label="承运商" name="carrier_opt">
+            <Radio.Group options={[{ value: "own", label: "自有承运商" }, { value: "wm", label: "Walmart 合作承运商" }]} />
+          </Form.Item>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" title={writeHint}>保存默认值</Button>
+          </Form.Item>
+          <Typography.Text type="secondary">
+            {defaults.data.saved ? `已保存 · ${defaults.data.updated_by ?? ""} ${time(defaults.data.updated_at)}` : "尚未保存，显示的是 8088 默认值"}
+          </Typography.Text>
+        </Form>
+      )}
+    </Card>
+  );
+
+  const channelsPanel = (
+    <Card size="small" title="物流渠道字典（只读）">
+      {loadAlert(channels.error)}
+      {channels.data && !channels.data.loaded ? (
+        <Alert showIcon type="info" message="WFS 组尚未导入物流渠道文件，导入后在这里显示。" />
+      ) : (
+        <Table<LogisticsChannel>
+          size="small" rowKey="channel_id" loading={channels.isFetching} columns={channelColumns}
+          dataSource={channels.data?.items ?? []} pagination={pager}
+        />
+      )}
+    </Card>
+  );
+
+  const storePanel = (
+    <Card size="small">
+      <Alert showIcon type="info" message="店铺设置等店铺来源 PR 合入主分支后接入（S1），本页暂不显示。" />
+    </Card>
+  );
+
+  const notesPanel = (
+    <Card size="small">
+      <Alert showIcon type="info" message="通知未接入：本期只保存「通知对象」文字，不发消息。" />
+      <Typography.Paragraph className="wfs-settings__note">
+        上架缓冲天数（10 天）引用「自动补货」的规则，这里只读显示，修改请到自动补货设置。
+      </Typography.Paragraph>
+      <Typography.Paragraph type="secondary">
+        规则改动保存为新版本，从生效日起使用；生效日之前的看板与异常仍按旧版本计算。地区与默认值的修改立即生效，并留修改记录。
+      </Typography.Paragraph>
+    </Card>
+  );
+
   return (
     <PageShell
       page={page}
       headerActions={<Button href="/help/pmc-wfs.html" target="_blank" rel="noreferrer" icon={<QuestionCircleOutlined />}>帮助</Button>}
     >
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      <div className="wfs-settings">
         <Alert
           showIcon
           type="info"
@@ -167,119 +292,20 @@ export default function WfsSettingsPage({ page, scope = "anonymous", permissions
           description="规则按版本保存，每次修改都要填原因并留痕。本页不调用领星，也不写入 Walmart。"
         />
         {!canManage && <Alert showIcon type="warning" message={`写入按钮已置灰：${writeHint}`} />}
-
-        <Card
-          title="① 异常与提醒规则"
-          extra={(
-            <Space wrap>
-              {rs && <Typography.Text type="secondary">版本 v{rs.version.version_no} · 生效 {rs.version.effective_date}</Typography.Text>}
-              <Button onClick={() => setLogOpen(true)}>版本与修改记录</Button>
-              {editing ? (
-                <>
-                  <Button onClick={() => setDraft((d) => [...(d ?? []), newRow()])}>+ 新增规则</Button>
-                  <Button onClick={() => setDraft(undefined)}>取消</Button>
-                  {writeButton("保存为新版本", () => openAsk({
-                    title: "保存为新规则版本", withDate: true,
-                    run: (reason, effective) => createRuleVersion({ effective_date: effective ?? today(), reason, rows: draft ?? [] }),
-                  }), true)}
-                </>
-              ) : writeButton("编辑规则", () => setDraft(rs?.rows.map((r) => ({ ...r }))))}
-            </Space>
-          )}
-        >
-          <Space direction="vertical" size={12} style={{ width: "100%" }}>
-            {loadAlert(rules.error)}
-            {rs && rs.sample_rows > 0 && (
-              <Alert
-                type="warning"
-                showIcon
-                message={`有 ${rs.sample_rows} 条规则按示例阈值执行（标「${SAMPLE_TAG}」），业务确认后改成正式值`}
-              />
-            )}
-            <Table<RuleRow>
-              size="small"
-              rowKey={(r, i) => `${r.rule_key ?? "new"}-${i}`}
-              loading={rules.isFetching}
-              columns={ruleColumns}
-              dataSource={ruleRows}
-              pagination={false}
-              scroll={{ x: 1200 }}
-              onRow={(r) => (r.decided ? {} : { style: { background: "#fffbe6" } })}
-            />
-          </Space>
-        </Card>
-
-        <Card title="② 店铺设置">
-          <Alert showIcon type="info" message="店铺设置等店铺来源 PR 合入主分支后接入（S1），本页暂不显示。" />
-        </Card>
-
-        <Card title="③ 仓库地区 (FC)">
-          <Space direction="vertical" size={12} style={{ width: "100%" }}>
-            <Typography.Text type="secondary">仓库来自 WFS 货件看板的收货地址；没保存过的仓库按所在州给默认地区。</Typography.Text>
-            {loadAlert(fcs.error)}
-            <Table<FcRegion>
-              size="small" rowKey="fc" loading={fcs.isFetching} columns={fcColumns} dataSource={fcs.data ?? []}
-              pagination={{ pageSize: 20, hideOnSinglePage: true }} scroll={{ x: 900 }}
-              locale={{ emptyText: "看板上还没有仓库" }}
-            />
-          </Space>
-        </Card>
-
-        <Card title="④ 创建货件默认值">
-          {loadAlert(defaults.error)}
-          {defaults.data && (
-            <Form<CreationDefaults>
-              key={`${defaults.data.source_account_ref}-${defaults.data.updated_at ?? "seed"}`}
-              form={defaultsForm}
-              layout="inline"
-              disabled={!canManage}
-              initialValues={defaults.data}
-              onFinish={(values) => openAsk({ title: "修改创建默认值", run: (reason) => updateCreationDefaults({ ...values, reason }) })}
-            >
-              <Form.Item label="运输方式" name="transport">
-                <Select style={{ width: 120 }} options={Object.entries(transportLabel).map(([value, label]) => ({ value, label }))} />
-              </Form.Item>
-              <Form.Item label="发货日 = 今天 +" name="ship_date_offset"><InputNumber min={0} max={365} addonAfter="天" /></Form.Item>
-              <Form.Item label="每托箱数" name="pallet_boxes"><InputNumber min={1} max={999} /></Form.Item>
-              <Form.Item label="混装箱数" name="mixed_boxes"><InputNumber min={0} max={999} /></Form.Item>
-              <Form.Item label="承运商" name="carrier_opt">
-                <Radio.Group options={[{ value: "own", label: "自有承运商" }, { value: "wm", label: "Walmart 合作承运商" }]} />
-              </Form.Item>
-              <Form.Item>
-                <Button type="primary" htmlType="submit" title={writeHint}>保存默认值</Button>
-              </Form.Item>
-              <Typography.Text type="secondary">
-                {defaults.data.saved ? `已保存 · ${defaults.data.updated_by ?? ""} ${time(defaults.data.updated_at)}` : "尚未保存，显示的是 8088 默认值"}
-              </Typography.Text>
-            </Form>
-          )}
-        </Card>
-
-        <Card title="⑤ 物流渠道字典（只读）">
-          {loadAlert(channels.error)}
-          {channels.data && !channels.data.loaded ? (
-            <Alert showIcon type="info" message="WFS 组尚未导入物流渠道文件，导入后在这里显示。" />
-          ) : (
-            <Table<LogisticsChannel>
-              size="small" rowKey="channel_id" loading={channels.isFetching} columns={channelColumns}
-              dataSource={channels.data?.items ?? []} pagination={{ pageSize: 20, hideOnSinglePage: true }}
-            />
-          )}
-        </Card>
-
-        <Card title="⑥ 通知">
-          <Alert showIcon type="info" message="通知未接入：本期只保存「通知对象」文字，不发消息。" />
-        </Card>
-
-        <Card title="⑦ 口径说明">
-          <Typography.Paragraph>
-            上架缓冲天数（10 天）引用「自动补货」的规则，这里只读显示，修改请到自动补货设置。
-          </Typography.Paragraph>
-          <Typography.Paragraph type="secondary">
-            规则改动保存为新版本，从生效日起使用；生效日之前的看板与异常仍按旧版本计算。地区与默认值的修改立即生效，并留修改记录。
-          </Typography.Paragraph>
-        </Card>
-      </Space>
+        <Tabs
+          className="wfs-settings__tabs"
+          activeKey={tab}
+          onChange={setTab}
+          items={[
+            { key: "rules", label: "异常与提醒规则", children: rulesPanel },
+            { key: "fc", label: "仓库地区", children: fcPanel },
+            { key: "defaults", label: "创建货件默认值", children: defaultsPanel },
+            { key: "channels", label: "物流渠道字典", children: channelsPanel },
+            { key: "store", label: "店铺设置", children: storePanel },
+            { key: "notes", label: "通知与口径说明", children: notesPanel },
+          ]}
+        />
+      </div>
 
       <Modal
         open={ask !== undefined}

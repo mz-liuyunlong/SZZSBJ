@@ -1,0 +1,29 @@
+/* WFS settings: PageShell clips overflow, so this wrapper is the page's own scroll container. */
+.wfs-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 16px;
+}
+
+.wfs-settings__tabs .ant-tabs-nav {
+  margin-bottom: 12px;
+}
+
+.wfs-settings__stack {
+  width: 100%;
+}
+
+.wfs-settings__select {
+  width: 120px;
+}
+
+.wfs-settings__note {
+  margin-top: 12px;
+}
+
+.wfs-settings__sample-row > td {
+  background: #fffbe6 !important;
+}

@@ -79,7 +79,7 @@ describe("WFS frontend pages", () => {
       pmc_wfs_pending_packing: { text: "当前条件下暂无已打包完成单据", header: "系统打包单", search: "搜索待发货打包单" },
       pmc_wfs_board: { text: /^当前条件下暂无货件/, header: "Shipment ID", search: "搜索WFS货件看板" },
       pmc_wfs_exceptions: { text: "当前条件下暂无异常货件", header: "货件号", search: "搜索异常中心" },
-      pmc_wfs_settings: { text: /上架缓冲天数（10 天）/ },
+      pmc_wfs_settings: { text: "数据来自新系统数据库" },
     };
     const sample = samples[page.key];
     renderWithQuery(<WfsFrontendPage page={page} />);
