@@ -59,9 +59,7 @@ def require_pmc_purchase_org_scope(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> None:
     """Check endpoint permission before evaluating organization data scope."""
-    required_permission = permission_for_request(
-        request.method, request.url.path, PERMISSION_READ
-    )
+    required_permission = permission_for_request(request.method, request.url.path, PERMISSION_READ)
     if not has_permission(principal, required_permission):
         raise ApiError(
             code=ErrorCode.FORBIDDEN,
