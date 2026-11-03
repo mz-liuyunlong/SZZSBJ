@@ -182,6 +182,7 @@ class ShipmentBoardSummary(Strict):
     with_exceptions: int = 0
     external: int = 0
     rule_version: str = ""
+    rule_date: date | None = None
     freshness: BoardFreshness
 
 

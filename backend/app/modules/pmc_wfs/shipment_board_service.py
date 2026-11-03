@@ -75,6 +75,14 @@ def business_today() -> date:
     return datetime.now(BUSINESS_TZ).date()
 
 
+def _publication_data_day(pub: WfsBoardPublication) -> date | None:
+    raw = (pub.quality_report or {}).get("as_of")
+    try:
+        return date.fromisoformat(raw) if isinstance(raw, str) else None
+    except ValueError:
+        return None
+
+
 def _derived_fields(view: ShipmentView, owners: list[str], kinds: list[str]) -> dict[str, Any]:
     return {
         "owners": owners,
@@ -187,7 +195,20 @@ class ShipmentBoardService:
         self._view_by_id: dict[str, ShipmentView] = {}
         self._exceptions_by_code: dict[str, list[WfsException]] = {}
         self._owners_by_sku: dict[str, list[str]] = {}
-        self.today = business_today()
+        self._today: date | None = None
+
+    @property
+    def today(self) -> date:
+        """Rule date, as in 8088 (``TODAY = 数据日``): the data day of the newest current
+        publication; the Shanghai calendar day when nothing is published yet."""
+        if self._today is None:
+            days = [d for p in self._current_publications() if (d := _publication_data_day(p))]
+            self._today = max(days) if days else business_today()
+        return self._today
+
+    @today.setter
+    def today(self, value: date) -> None:
+        self._today = value
 
     # ---- loading -------------------------------------------------------------------
 
@@ -484,6 +505,7 @@ class ShipmentBoardService:
             with_exceptions=sum(bool(r.exception_types) for r in rows),
             external=sum(r.external for r in rows),
             rule_version=RULE_VERSION,
+            rule_date=self.today,
             freshness=self.freshness(),
         )
 

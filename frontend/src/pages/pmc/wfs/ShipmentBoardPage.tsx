@@ -139,7 +139,7 @@ export default function ShipmentBoardPage({ page, scope = "anonymous" }: { page:
           { key: "s2", title: "收货中", value: stats?.by_status?.["2"] ?? 0, unit: "张", tone: "warning", icon: <span>收</span>, subtitle: "RECEIVING_IN_PROGRESS" },
           { key: "s3", title: "已关闭", value: stats?.by_status?.["3"] ?? 0, unit: "张", tone: "success", icon: <span>闭</span>, subtitle: `其中短收 ${stats?.received_short ?? 0} 张` },
           { key: "pending", title: "待领星同步", value: stats?.pending_lingxing_sync ?? "—", unit: "张", tone: "danger", icon: <span>同</span>, subtitle: "本系统已建、领星尚未出现" },
-          { key: "exceptions", title: "有异常", value: stats?.with_exceptions ?? "—", unit: "张", tone: "danger", icon: <span>异</span>, subtitle: "8088 异常规则（WFS-RULES-20261010）" },
+          { key: "exceptions", title: "有异常", value: stats?.with_exceptions ?? "—", unit: "张", tone: "danger", icon: <span>异</span>, subtitle: stats?.rule_date ? `8088 规则 · 按数据日 ${stats.rule_date} 计算` : "8088 异常规则（WFS-RULES-20261010）" },
           { key: "external", title: "外部创建·待关联", value: stats?.external ?? "—", unit: "张", tone: "warning", icon: <span>外</span>, subtitle: "8 月起、无 SP 发货单、未取消" },
           { key: "test", title: "测试货件", value: stats?.test ?? "—", unit: "张", tone: "normal", icon: <span>测</span>, subtitle: "PMC-TEST- 或业务测试" },
         ]}

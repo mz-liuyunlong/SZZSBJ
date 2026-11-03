@@ -228,7 +228,7 @@ def _seed_board(db, account, order, *, cargo_code, store_id, status=2, goods=Non
             coverage_end=date(2026, 10, 30),
             source_observed_at=datetime.now(UTC),
             builder_version="wfs_board.v1",
-            quality_report={"rows": 1},
+            quality_report={"rows": 1, "as_of": "2026-10-30"},
         )
     )
     goods = goods or [
@@ -333,6 +333,8 @@ def test_lingxing_row_links_creation_and_exposes_fulfillment(db):
     summary = svc.summary(ShipmentBoardQuery())
     assert summary.total == 1 and summary.pending_lingxing_sync == 0
     assert summary.by_status == {"2": 1}
+    # Rule date follows the publication's data day, as 8088 does (TODAY = 数据日).
+    assert summary.rule_date == date(2026, 10, 30) and svc.today == date(2026, 10, 30)
 
     # 8088 产品维度 counts only items with a Walmart Item ID that have shipped out; this seed has
     # neither (no listing row, no derived facts), so it stays out of the product view.

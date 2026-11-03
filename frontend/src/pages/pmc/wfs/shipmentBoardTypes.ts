@@ -167,6 +167,7 @@ export interface ShipmentBoardSummary {
   with_exceptions?: number;
   external?: number;
   rule_version?: string;
+  rule_date?: string | null;
   freshness: BoardFreshness;
 }
 
