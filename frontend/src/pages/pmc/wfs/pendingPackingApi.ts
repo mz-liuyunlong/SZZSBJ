@@ -10,6 +10,7 @@ const query = (f: PendingFilters) => new URLSearchParams({
   ...(f.store_id ? { store_id: f.store_id } : {}),
   ...(f.completed_from ? { completed_from: f.completed_from } : {}),
   ...(f.completed_to ? { completed_to: f.completed_to } : {}),
+  ...(f.only_overdue ? { only_overdue: "true" } : {}),
 });
 export const listPending = (f: PendingFilters, page: number, size: number, signal?: AbortSignal) => backendRequest<{ items: PendingRow[]; total: number }>(`${pendingPrefix}/orders?${query(f)}&page=${page}&page_size=${size}`, { signal });
 export const pendingSummary = (f: PendingFilters, signal?: AbortSignal) => backendRequest<PendingSummary>(`${pendingPrefix}/summary?${query(f)}`, { signal });

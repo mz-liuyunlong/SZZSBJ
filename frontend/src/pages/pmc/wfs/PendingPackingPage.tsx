@@ -81,7 +81,7 @@ export default function PendingPackingPage({ page, scope = "anonymous", permissi
   };
   const columns: ProColumns<PendingRow>[] = [
     { title: "选择", width: 56, fixed: "left", render: (_, r) => <Checkbox aria-label={`选择${r.order.pk}`} disabled={!r.available_boxes || busy || !can("action:pmc:wfs-pending-packing:create")} checked={selected.includes(r.order.id)} onChange={(e) => setSelected((old) => e.target.checked ? [...old, r.order.id] : old.filter((id) => id !== r.order.id))} /> },
-    { title: "系统打包单", width: 170, fixed: "left", render: (_, r) => <span>{r.order.pk}{r.business_test && <Tag color="orange">测试</Tag>}<span className="wfs-pending__sub">{r.order.box_set?.completed_by} {time(r.order.box_set?.completed_at)}</span></span> },
+    { title: "系统打包单", width: 170, fixed: "left", render: (_, r) => <span>{r.order.pk}{r.business_test && <Tag color="orange">测试</Tag>}{r.overdue && <Tag color="red">打包完成 {r.packed_days} 天未建货件</Tag>}<span className="wfs-pending__sub">{r.order.box_set?.completed_by} {time(r.order.box_set?.completed_at)}</span></span> },
     { title: "店铺", width: 230, render: (_, r) => <span>{r.order.store_name ?? r.order.store_id ?? "—"}{can("action:pmc:wfs-pending-packing:identity-switch") && <Button type="link" size="small" disabled={!r.can_edit || busy} onClick={() => open("identity", r)}>换店铺 / 换链接</Button>}</span> },
     { title: "SKU · 品名", width: 180, render: (_, r) => <span>{r.order.sku}<span className="wfs-pending__sub">{r.order.product_name ?? "—"}</span></span> },
     { title: "Item ID / GTIN", width: 170, render: (_, r) => <span><WalmartItemLink itemId={r.order.item_id} /><span className="wfs-pending__sub">{r.order.gtin ?? "缺GTIN"}</span></span> },
@@ -104,8 +104,9 @@ export default function PendingPackingPage({ page, scope = "anonymous", permissi
       {loadError && <Alert type="error" showIcon message={pendingError(loadError)} action={<Button onClick={() => void refresh()}>重试</Button>} />}
       <ManagementStatCards ariaLabel="待发货打包单统计" cards={[
         { key: "ready", title: "已打包完成 · 可建货件", value: summary?.ready ?? "—", unit: "张", tone: "normal", icon: <span>单</span>, subtitle: `已完成 ${summary?.completed ?? "—"} 张 · 测试 ${summary?.test ?? "—"} · 可用 ${summary?.available_boxes ?? "—"} 箱` },
+        { key: "overdue", title: `打包完成满 ${summary?.overdue_days ?? 3} 天未建货件`, value: summary?.overdue ?? "—", unit: "张", tone: "danger", icon: <span>超</span>, subtitle: "仍有箱子未安排到货件；点此只看这些单" },
         { key: "waiting", title: "已审批、还没打包完成", value: summary?.waiting ?? "—", unit: "张", tone: "warning", icon: <span>待</span>, subtitle: `没填装箱 ${summary?.no_box ?? "—"} · 已填未完成 ${summary?.filled_not_done ?? "—"}（不进下表）` },
-      ]} activeKey="" onCardClick={() => undefined} />
+      ]} activeKey={filters.only_overdue ? "overdue" : ""} onCardClick={(key) => commitFilters({ ...filters, only_overdue: key === "overdue" ? !filters.only_overdue : false })} />
       <div className="wfs-pending__toolbar" role="search" aria-label="待发货打包单筛选">
         <Select allowClear showSearch aria-label="店铺" placeholder="全部店铺" style={{ width: 280 }} value={filters.store_id} options={api.options.data?.data.stores} loading={api.options.isFetching} optionFilterProp="label" onChange={(v) => commitFilters({ ...filters, store_id: v })} />
         <Select aria-label="发货安排" className="report-filter-select" style={{ width: 160 }} value={filters.arrangement ?? "all"} options={[
