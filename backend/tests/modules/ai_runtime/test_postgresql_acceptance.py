@@ -320,6 +320,9 @@ def test_0071_real_historical_migration_preserves_jobs_and_blocks_populated_roll
                 {"connector": other},
             ).scalar_one()
             assert pinned == 0
+        with engine.begin() as cx:
+            version_before = cx.scalar(text("SELECT version_num FROM alembic_version"))
+        assert version_before is not None
         result = subprocess.run(
             [sys.executable, "-m", "alembic", "downgrade", "20261102_0070_ai_skill_soft_delete"],
             cwd=root,
@@ -330,11 +333,11 @@ def test_0071_real_historical_migration_preserves_jobs_and_blocks_populated_roll
         )
         assert result.returncode != 0
         with engine.begin() as cx:
-            assert (
-                cx.scalar(text("SELECT version_num FROM alembic_version"))
-                == "20261102_0071_skill_lib"
-            )
+            # The blocked rollback is atomic: whatever head was, nothing moved.
+            assert cx.scalar(text("SELECT version_num FROM alembic_version")) == version_before
             assert cx.scalar(text("SELECT count(*) FROM ai_skill_revisions")) == 3
+            # Later migrations (e.g. 0072 finance tables) were not partially rolled back.
+            assert cx.scalar(text("SELECT to_regclass('public.fact_settlement_order_lines')"))
         engine.dispose()
     finally:
         with psycopg.connect(**admin, autocommit=True) as cx:
