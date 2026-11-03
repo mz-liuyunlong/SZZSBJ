@@ -853,7 +853,13 @@ class OrderProfitRepository:
         if self.org_owner_refs is not None:
             # Profit MART rows can aggregate multiple owners. Do not expose them
             # until a reviewed owner-safe allocation exists.
-            raise PermissionError("Organization-scoped order profit is not yet audited")
+            from app.core.api import ApiError, ErrorCode
+
+            raise ApiError(
+                code=ErrorCode.DATA_SCOPE_DENIED,
+                status_code=403,
+                message="订单利润涉及多负责人聚合，尚未完成安全分摊审计",
+            )
         if start_date is not None:
             statement = statement.where(OrderProfitSkuDayMart.business_date_la >= start_date)
         if end_date is not None:

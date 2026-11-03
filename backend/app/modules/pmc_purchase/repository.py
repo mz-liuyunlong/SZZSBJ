@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from datetime import date, timedelta
 from typing import Any
 
-from sqlalchemy import Select, Text, and_, cast, func, or_, select
+from sqlalchemy import Select, Text, and_, cast, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.data_pages.models import LingxingStoreDimension
@@ -193,13 +193,15 @@ class PmcPurchaseReadRepository:
     def board_rows_for_order(
         self, order_sn: str, accounts: frozenset[str]
     ) -> list[DwsPurchaseBoard]:
+        statement = select(DwsPurchaseBoard).where(
+            DwsPurchaseBoard.source_account_ref.in_(sorted(accounts)),
+            DwsPurchaseBoard.order_sn == order_sn,
+        )
+        if self.org_owner_refs is not None:
+            statement = statement.where(DwsPurchaseBoard.owner_uid.in_(self.org_owner_refs))
         return list(
             self.session.scalars(
-                select(DwsPurchaseBoard)
-                .where(
-                    DwsPurchaseBoard.source_account_ref.in_(sorted(accounts)),
-                    DwsPurchaseBoard.order_sn == order_sn,
-                )
+                statement
                 .order_by(DwsPurchaseBoard.order_item_id, DwsPurchaseBoard.plan_key)
             )
         )
@@ -227,13 +229,23 @@ class PmcPurchaseReadRepository:
     ) -> list[DwsPurchaseSkuCycle]:
         if not skus:
             return []
+        statement = select(DwsPurchaseSkuCycle).where(
+            DwsPurchaseSkuCycle.source_account_ref.in_(sorted(accounts)),
+            DwsPurchaseSkuCycle.sku.in_(list(skus)),
+        )
+        if self.org_owner_refs is not None:
+            statement = statement.where(
+                DwsPurchaseSkuCycle.sku.in_(
+                    select(DwsPurchaseBoard.sku).where(
+                        DwsPurchaseBoard.source_account_ref == DwsPurchaseSkuCycle.source_account_ref,
+                        DwsPurchaseBoard.owner_uid.in_(self.org_owner_refs),
+                        DwsPurchaseBoard.sku.is_not(None),
+                    )
+                )
+            )
         return list(
             self.session.scalars(
-                select(DwsPurchaseSkuCycle)
-                .where(
-                    DwsPurchaseSkuCycle.source_account_ref.in_(sorted(accounts)),
-                    DwsPurchaseSkuCycle.sku.in_(list(skus)),
-                )
+                statement
                 .order_by(DwsPurchaseSkuCycle.sku)
             )
         )
@@ -257,6 +269,16 @@ class PmcPurchaseReadRepository:
             p.status == PLAN_STATUS_PENDING_PURCHASE,
             p.plan_sn.not_in(converted),
         ]
+        if self.org_owner_refs is not None:
+            clauses.append(
+                exists(
+                    select(1).where(
+                        DwsPurchaseBoard.source_account_ref == p.source_account_ref,
+                        DwsPurchaseBoard.sku == p.sku,
+                        DwsPurchaseBoard.owner_uid.in_(self.org_owner_refs),
+                    )
+                )
+            )
         if query.store_id:
             clauses.append(p.store_id.in_(query.store_id))
         values = [v for raw in query.search_values for v in raw.replace(",", " ").split() if v]
@@ -274,6 +296,26 @@ class PmcPurchaseReadRepository:
             self.session.scalars(
                 self._pending_plan_select(query, accounts).order_by(
                     DwdPurchasePlan.create_date.asc().nulls_last(), DwdPurchasePlan.plan_sn
+                )
+            )
+        )
+
+    def sku_is_owned_by(
+        self, *, sku: str, accounts: frozenset[str]
+    ) -> bool:
+        owner_clause = (
+            DwsPurchaseBoard.owner_uid.in_(self.org_owner_refs)
+            if self.org_owner_refs is not None
+            else True
+        )
+        return bool(
+            self.session.scalar(
+                select(
+                    exists().where(
+                        DwsPurchaseBoard.source_account_ref.in_(sorted(accounts)),
+                        DwsPurchaseBoard.sku == sku,
+                        owner_clause,
+                    )
                 )
             )
         )

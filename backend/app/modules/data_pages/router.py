@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode, ErrorEnvelope, SuccessEnvelope, success_response
 from app.core.auth import Principal, require_principal
+from app.core.permission_policy_v2 import permission_for_request
 from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.data_pages.daily_sales_export import (
@@ -82,12 +83,21 @@ def require_data_page_org_scope(
     principal: Annotated[Principal, Depends(require_principal)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> None:
-    """Restrict all DATA-PAGES routes once an org grant exists.
-
-    Unreviewed endpoints deny rather than bypass the owner filter.
-    """
-    # Avoid reusing a stale owner filter if a dependency override reuses a Session.
+    """Check endpoint permission before organization scope and SQL filtering."""
     session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
+    if request.url.path.startswith("/api/sales/order-profit"):
+        declared = _ORDER_PROFIT_REGISTRY.permission
+    elif request.url.path.startswith("/api/listings/"):
+        declared = _LISTING_REGISTRY.permission
+    else:
+        declared = _DAILY_SALES_REGISTRY.permission
+    required_permission = permission_for_request(request.method, request.url.path, declared)
+    if not has_permission(principal, required_permission):
+        raise ApiError(
+            code=ErrorCode.FORBIDDEN,
+            status_code=403,
+            details={"required_permission": required_permission},
+        )
     owner_refs = resolve_business_owner_refs(session, principal)
     if owner_refs is None:
         return

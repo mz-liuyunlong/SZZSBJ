@@ -85,6 +85,18 @@ def test_listing_archive_filter_options_uses_the_same_owner_scope() -> None:
     assert "source_account_ref IN ('A1')" in sql
 
 
+def test_org_scope_permission_is_checked_before_scope_resolution() -> None:
+    request = Request({"type": "http", "method": "GET", "path": "/api/sales/daily-sales", "headers": []})
+    principal = Principal(user_id="5", permissions=frozenset())
+    session = _session()
+    with patch("app.modules.data_pages.router.resolve_business_owner_refs") as resolver:
+        with pytest.raises(ApiError) as error:
+            require_data_page_org_scope(request, principal, session)
+    assert error.value.status_code == 403
+    assert error.value.code.value == "FORBIDDEN"
+    resolver.assert_not_called()
+
+
 def test_org_owner_scope_disallows_profit_aggregation() -> None:
     repository = OrderProfitRepository(_session({"uid-reviewed"}))
     with pytest.raises(PermissionError, match="not yet audited"):

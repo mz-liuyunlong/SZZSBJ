@@ -17,6 +17,7 @@ from app.core.api import (
 )
 from app.core.auth import Principal, require_principal
 from app.core.permissions import has_permission, require_permission
+from app.core.permission_policy_v2 import permission_for_request
 from app.db.session import get_db_session
 from app.modules.iam.organization_access import (
     ORG_OWNER_SCOPE_SESSION_KEY,
@@ -66,8 +67,17 @@ def require_product_management_org_scope(
     principal: Annotated[Principal, Depends(require_principal)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> None:
-    """Apply reviewed owner scopes and deny unreviewed product endpoints."""
+    """Check endpoint permission before applying reviewed organization scopes."""
     session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
+    required_permission = permission_for_request(
+        request.method, request.url.path, "page:products:product-management:view"
+    )
+    if not has_permission(principal, required_permission):
+        raise ApiError(
+            code=ErrorCode.FORBIDDEN,
+            status_code=403,
+            details={"required_permission": required_permission},
+        )
     owners = resolve_business_owner_refs(session, principal)
     if owners is None:
         return
