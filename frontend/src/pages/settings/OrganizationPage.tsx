@@ -90,7 +90,8 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
               void notice.success("飞书组织架构已同步到快照");
             } catch {
               void notice.error("同步失败或数据已变化，请重新预览。");
-              throw new Error("Organization snapshot apply failed");
+            } finally {
+              resolve();
             }
           },
           onCancel: () => resolve(),
