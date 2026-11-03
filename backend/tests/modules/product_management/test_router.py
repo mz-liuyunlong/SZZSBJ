@@ -13,9 +13,9 @@ from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.integration_sync.dependencies import require_source_account_scope
-from app.modules.product_management.router import require_product_management_org_scope
 from app.modules.product_management.models import ProductPricingRecalculationRun
 from app.modules.product_management.repository import ProductManagementRepository
+from app.modules.product_management.router import require_product_management_org_scope
 from app.modules.product_management.schemas import (
     CostComponentRead,
     ExportRequest,

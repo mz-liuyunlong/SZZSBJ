@@ -13,8 +13,8 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
-from app.modules.data_pages.router import require_data_page_org_scope
 from app.modules.data_pages.repository import ListingManagementRepository, ListingTagRepository
+from app.modules.data_pages.router import require_data_page_org_scope
 from app.modules.data_pages.schemas import (
     ListingManagementItemRead,
     ListingManagementListData,

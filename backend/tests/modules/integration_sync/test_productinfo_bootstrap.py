@@ -30,13 +30,13 @@ from app.modules.integration_sync.product_info_runner import (
     ProductInfoOneTimeRunner,
     ProductInfoSyncExecutionResult,
 )
-from app.modules.product_management.router import require_product_management_org_scope
 from app.modules.product_management.models import (
     ManualProductTag,
     ManualProductTagAssignment,
     ProductManagementPricingCurrent,
     ProductPricingRuleVersion,
 )
+from app.modules.product_management.router import require_product_management_org_scope
 from app.modules.product_management.schemas import ProductManagementListQuery
 from app.modules.product_management.service import ProductManagementService
 from app.modules.products.bootstrap import (
