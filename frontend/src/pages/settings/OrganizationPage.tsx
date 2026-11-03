@@ -24,7 +24,7 @@ interface OwnerCandidate {
   is_active: boolean;
 }
 interface OrganizationSyncRun {
-  id: string;
+  run_id: string;
   snapshot_hash: string;
   department_count: number;
   employee_count: number;
@@ -308,7 +308,7 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
       {canSync && (
         <Card title="组织同步历史" style={{ marginTop: 16 }}
           extra={<Button size="small" onClick={() => void reloadSyncRuns()}>刷新记录</Button>}>
-          <Table<OrganizationSyncRun> rowKey="id" size="small"
+          <Table<OrganizationSyncRun> rowKey="run_id" size="small"
             dataSource={syncRuns} pagination={{ pageSize: 8 }}
             columns={[
               { title: "同步时间", dataIndex: "applied_at" },
