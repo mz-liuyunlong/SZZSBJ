@@ -19,7 +19,7 @@ describe("PMC navigation contract", () => {
   it("opens each WFS leaf from the sidebar with one shared page permission", () => {
     const pages = pmc.children.filter((p) => p.sidebarSection === "pmc-wfs");
     expect(pages.map((p) => p.title)).toEqual([
-      "待发货打包单", "WFS 货件看板", "异常中心", "设置",
+      "待发货打包单", "WFS 货件看板", "异常中心",
     ]);
     expect(pmc.children.filter((p) => p.status === "disabled")).toHaveLength(0);
     for (const page of pages) {
@@ -28,6 +28,21 @@ describe("PMC navigation contract", () => {
       expect(isMockPageAccessibleForRole("user", page, ["page:pmc:wfs:view"])).toBe(true);
       expect(isMockPageAccessibleForRole("user", page, [])).toBe(false);
       expect(resolveRoute(page.path).kind).toBe("allowed");
+    }
+  });
+  it("opens each WFS settings section as its own sidebar leaf and tab", () => {
+    expect(pmc.sidebarSections?.map((s) => s.title)).toEqual(["国内仓", "WFS", "WFS 设置"]);
+    const pages = pmc.children.filter((p) => p.sidebarSection === "pmc-wfs-settings");
+    expect(pages.map((p) => p.title)).toEqual([
+      "异常与提醒规则", "仓库地区", "创建货件默认值", "物流渠道字典", "店铺设置", "通知与口径说明",
+    ]);
+    expect(new Set(pages.map((p) => p.path)).size).toBe(pages.length);
+    for (const page of pages) {
+      expect(page.readOnly).toBe(true);
+      expect(getPagePermissionKey(page)).toBe("page:pmc:wfs:view");
+      expect(isMockPageAccessibleForRole("user", page, ["page:pmc:wfs:view"])).toBe(true);
+      expect(isMockPageAccessibleForRole("user", page, [])).toBe(false);
+      expect(resolveRoute(page.path)).toMatchObject({ kind: "allowed", route: { page: { key: page.key } } });
     }
   });
   it("does not restore removed container tabs or register navigable groups", () => {

@@ -1,6 +1,6 @@
 /** WFS settings (PRP pmc-wfs-settings S2/S3): versioned rules, FC regions, creation defaults, channel dictionary. */
 import { QuestionCircleOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Drawer, Form, Input, InputNumber, Modal, Radio, Select, Space, Table, Tabs, Tag, Typography, message } from "antd";
+import { Alert, Button, Card, Drawer, Form, Input, InputNumber, Modal, Radio, Select, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -40,6 +40,16 @@ const newRow = (): RuleRow => ({
   row_effective_date: today(), notify: "", remark: "", decided: false,
 });
 
+type SettingsSection = "rules" | "fc" | "defaults" | "channels" | "stores" | "notes";
+const SETTINGS_SECTION_BY_PAGE: Record<string, SettingsSection> = {
+  pmc_wfs_settings: "rules",
+  pmc_wfs_settings_fc: "fc",
+  pmc_wfs_settings_defaults: "defaults",
+  pmc_wfs_settings_channels: "channels",
+  pmc_wfs_settings_stores: "stores",
+  pmc_wfs_settings_notes: "notes",
+};
+
 type Ask = { title: string; run: (reason: string, effective?: string) => Promise<unknown>; withDate?: boolean };
 
 export default function WfsSettingsPage({ page, scope = "anonymous", permissions = [] }: { page: NavigationPage; scope?: string; permissions?: string[] }) {
@@ -49,12 +59,13 @@ export default function WfsSettingsPage({ page, scope = "anonymous", permissions
   const canManage = !page.readOnly && (permissions.includes("*") || permissions.includes(SETTINGS_MANAGE_PERMISSION));
   const writeHint = canManage ? undefined : page.readOnly ? "本页当前只读，写入待正式放行" : "没有 WFS 设置维护权限";
 
-  const rules = useQuery({ queryKey: [...base, "rules"], queryFn: ({ signal }) => getRules(signal), retry: false });
-  const versions = useQuery({ queryKey: [...base, "versions"], queryFn: ({ signal }) => listRuleVersions(signal), retry: false });
-  const fcs = useQuery({ queryKey: [...base, "fc"], queryFn: ({ signal }) => listFcRegions(signal), retry: false });
-  const defaults = useQuery({ queryKey: [...base, "defaults"], queryFn: ({ signal }) => getCreationDefaults(signal), retry: false });
-  const channels = useQuery({ queryKey: [...base, "channels"], queryFn: ({ signal }) => listLogisticsChannels(signal), retry: false });
-  const [tab, setTab] = useState("rules");
+  // Each section is its own sidebar leaf / workspace tab; only that section's data is requested.
+  const section = SETTINGS_SECTION_BY_PAGE[page.key] ?? "rules";
+  const rules = useQuery({ queryKey: [...base, "rules"], queryFn: ({ signal }) => getRules(signal), retry: false, enabled: section === "rules" });
+  const versions = useQuery({ queryKey: [...base, "versions"], queryFn: ({ signal }) => listRuleVersions(signal), retry: false, enabled: section === "rules" });
+  const fcs = useQuery({ queryKey: [...base, "fc"], queryFn: ({ signal }) => listFcRegions(signal), retry: false, enabled: section === "fc" });
+  const defaults = useQuery({ queryKey: [...base, "defaults"], queryFn: ({ signal }) => getCreationDefaults(signal), retry: false, enabled: section === "defaults" });
+  const channels = useQuery({ queryKey: [...base, "channels"], queryFn: ({ signal }) => listLogisticsChannels(signal), retry: false, enabled: section === "channels" });
   const [logOpen, setLogOpen] = useState(false);
   const changes = useQuery({ queryKey: [...base, "changes"], queryFn: ({ signal }) => listSettingsChanges(signal), retry: false, enabled: logOpen });
 
@@ -113,8 +124,9 @@ export default function WfsSettingsPage({ page, scope = "anonymous", permissions
 
   const fcColumns: ColumnsType<FcRegion> = [
     { title: "仓库 (FC)", dataIndex: "fc", width: 110 },
-    { title: "名称", dataIndex: "name", width: 140, render: (v) => v ?? "—" },
-    { title: "地址", width: 200, render: (_, r) => [r.city, r.state, r.zip].filter(Boolean).join(", ") || "—" },
+    { title: "名称", dataIndex: "name", width: 120, render: (v) => v ?? "—" },
+    { title: "邮编", dataIndex: "zip", width: 90, render: (v) => v ?? "—" },
+    { title: "地址全称", dataIndex: "address", width: 340, render: (v, r) => v ?? ([r.city, r.state, r.zip].filter(Boolean).join(", ") || "—") },
     {
       title: "地区", dataIndex: "region", width: 200,
       render: (v: Region, r) => (
@@ -137,8 +149,10 @@ export default function WfsSettingsPage({ page, scope = "anonymous", permissions
   ];
 
   const channelColumns: ColumnsType<LogisticsChannel> = [
-    { title: "物流商", dataIndex: "provider_name", width: 160, render: (v, r) => v ?? r.provider_id ?? "—" },
-    { title: "渠道", dataIndex: "channel_name", width: 200, render: (v, r) => v ?? r.channel_id },
+    { title: "渠道编号（领星）", dataIndex: "channel_id", width: 140 },
+    { title: "渠道", dataIndex: "channel_name", width: 220, render: (v, r) => v ?? r.channel_id },
+    { title: "物流商编号（领星）", dataIndex: "provider_id", width: 150, render: (v) => v ?? "—" },
+    { title: "物流商", dataIndex: "provider_name", width: 220, render: (v) => v ?? "—" },
     { title: "运输方式", dataIndex: "method_name", width: 140, render: (v) => v ?? "—" },
     { title: "状态", dataIndex: "enabled", width: 80, render: (v: boolean) => (v ? <Tag color="green">启用</Tag> : <Tag>停用</Tag>) },
   ];
@@ -248,7 +262,7 @@ export default function WfsSettingsPage({ page, scope = "anonymous", permissions
   );
 
   const channelsPanel = (
-    <Card size="small" title="物流渠道字典（只读）">
+    <Card size="small" title="只读：来自领星物流渠道文件">
       {loadAlert(channels.error)}
       {channels.data && !channels.data.loaded ? (
         <Alert showIcon type="info" message="WFS 组尚未导入物流渠道文件，导入后在这里显示。" />
@@ -292,19 +306,7 @@ export default function WfsSettingsPage({ page, scope = "anonymous", permissions
           description="规则按版本保存，每次修改都要填原因并留痕。本页不调用领星，也不写入 Walmart。"
         />
         {!canManage && <Alert showIcon type="warning" message={`写入按钮已置灰：${writeHint}`} />}
-        <Tabs
-          className="wfs-settings__tabs"
-          activeKey={tab}
-          onChange={setTab}
-          items={[
-            { key: "rules", label: "异常与提醒规则", children: rulesPanel },
-            { key: "fc", label: "仓库地区", children: fcPanel },
-            { key: "defaults", label: "创建货件默认值", children: defaultsPanel },
-            { key: "channels", label: "物流渠道字典", children: channelsPanel },
-            { key: "store", label: "店铺设置", children: storePanel },
-            { key: "notes", label: "通知与口径说明", children: notesPanel },
-          ]}
-        />
+        {{ rules: rulesPanel, fc: fcPanel, defaults: defaultsPanel, channels: channelsPanel, stores: storePanel, notes: notesPanel }[section]}
       </div>
 
       <Modal

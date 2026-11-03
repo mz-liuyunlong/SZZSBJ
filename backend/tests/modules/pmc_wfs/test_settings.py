@@ -37,9 +37,21 @@ def _opt_in() -> None:
 
 
 def test_parse_fc_address() -> None:
-    assert parse_fc_address("1 Main St, Mira Loma, CA, 91752, US") == ("Mira Loma", "CA", "91752")
-    assert parse_fc_address("only line") == (None, None, None)
-    assert parse_fc_address(None) == (None, None, None)
+    assert parse_fc_address("1 Test Ave,Chino,CA,美国,US,91708") == (
+        "Chino",
+        "CA",
+        "91708",
+        "1 Test Ave, Chino, CA 91708",
+    )
+    assert parse_fc_address("1 Main St, Mira Loma, CA, 91752, US") == (
+        "Mira Loma",
+        "CA",
+        "91752",
+        "1 Main St, Mira Loma, CA 91752",
+    )
+    assert parse_fc_address("Atlanta, GA, 美国") == ("Atlanta", "GA", None, "Atlanta, GA")
+    assert parse_fc_address("only line") == (None, None, None, "only line")
+    assert parse_fc_address(None) == (None, None, None, None)
 
 
 def test_migration_0077_matches_orm_metadata():
@@ -232,13 +244,15 @@ def test_fc_regions_default_by_state_then_saved(db):
         db,
         {
             "LAX9T": "1 A St, Mira Loma, CA, 91752, US",
-            "ATL2": "2 B Rd, Atlanta, GA, 30336, US",
+            "ATL2": "2 B Rd,Atlanta,GA,美国,US,30336",
         },
     )
     client = _client(db, READ, MANAGE)
     items = {i["fc"]: i for i in _ok(client.get("/api/pmc/wfs/settings/fc-regions"))["items"]}
     assert items["LAX9T"]["region"] == "美西" and items["LAX9T"]["region_source"] == "state"
     assert items["LAX9T"]["zip"] == "91752" and items["ATL2"]["state"] == "GA"
+    assert items["ATL2"]["zip"] == "30336"
+    assert items["ATL2"]["address"] == "2 B Rd, Atlanta, GA 30336"
     saved = _ok(
         client.put(
             "/api/pmc/wfs/settings/fc-regions/ATL2",

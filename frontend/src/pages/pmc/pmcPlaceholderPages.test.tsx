@@ -18,6 +18,8 @@ describe("PMC placeholder pages", () => {
       "pmc_purchase_board",
       "pmc_logistics", "pmc_domestic_batches", "pmc_packing_approval", "pmc_packing_warehouse",
       "pmc_wfs_pending_packing", "pmc_wfs_board", "pmc_wfs_exceptions", "pmc_wfs_settings",
+      "pmc_wfs_settings_fc", "pmc_wfs_settings_defaults", "pmc_wfs_settings_channels", "pmc_wfs_settings_stores",
+      "pmc_wfs_settings_notes",
     ]);
     for (const item of placeholders) {
       expect(pmc?.children.find((page) => page.key === item.key)).toMatchObject({

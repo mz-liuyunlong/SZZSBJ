@@ -38,6 +38,7 @@ export interface RuleSet {
 export interface FcRegion {
   fc: string;
   name: string | null;
+  address: string | null;
   zip: string | null;
   city: string | null;
   state: string | null;

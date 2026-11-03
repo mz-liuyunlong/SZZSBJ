@@ -8,6 +8,7 @@ No external call; writes only the settings tables and the change log.
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -71,15 +72,28 @@ def _row_out(r: WfsRuleSetting) -> RuleRow:
     )
 
 
-def parse_fc_address(address: str | None) -> tuple[str | None, str | None, str | None]:
-    """Lingxing ``distribution_addresses`` ``line1, city, STATE, ZIP[, country]`` →
-    (city, state, zip); missing parts are ``None``."""
-    parts = [p.strip() for p in (address or "").split(",")]
+_ZIP = re.compile(r"^\d{5}(-\d{4})?$")
+_COUNTRY = {"US", "USA", "UNITED STATES", "美国"}
 
-    def at(i: int) -> str | None:
-        return parts[i] or None if len(parts) > i else None
 
-    return at(1), at(2), at(3)
+def parse_fc_address(
+    address: str | None,
+) -> tuple[str | None, str | None, str | None, str | None]:
+    """Lingxing ``distribution_addresses`` → (city, state, zip, full address).
+
+    Real rows look like ``1 Test Ave,Chino,CA,美国,US,91708``; older ones put the ZIP before
+    the country. The ZIP is whichever part looks like a US ZIP, country parts are dropped,
+    and the last two remaining parts are city and state. The full address reads
+    ``1 Test Ave, Chino, CA 91708``. Missing parts are ``None``."""
+    parts = [p.strip() for p in (address or "").split(",") if p.strip()]
+    zips = [p for p in parts if _ZIP.match(p)]
+    zip_code = zips[-1] if zips else None
+    rest = [p for p in parts if not _ZIP.match(p) and p.upper() not in _COUNTRY]
+    if len(rest) < 2:
+        return None, None, zip_code, ", ".join(parts) or None
+    city, state = rest[-2], rest[-1]
+    tail = f"{state} {zip_code}" if zip_code else state
+    return city, state, zip_code, ", ".join([*rest[:-2], city, tail])
 
 
 def _region(value: str) -> Any:
@@ -188,10 +202,17 @@ class WfsSettingsService:
         )
         for code, payload in rows:
             address = ((payload or {}).get("cargo") or {}).get("distribution_addresses")
-            city, state, zip_code = parse_fc_address(address)
-            fc = out.setdefault(code, {"city": city, "state": state, "zip": zip_code, "n": 0})
+            city, state, zip_code, full = parse_fc_address(address)
+            fc = out.setdefault(
+                code, {"city": city, "state": state, "zip": zip_code, "address": full, "n": 0}
+            )
             fc["n"] += 1
-            for key, value in (("city", city), ("state", state), ("zip", zip_code)):
+            for key, value in (
+                ("city", city),
+                ("state", state),
+                ("zip", zip_code),
+                ("address", full),
+            ):
                 if not fc[key] and value:
                     fc[key] = value
         return out
@@ -210,6 +231,7 @@ class WfsSettingsService:
                     zip=seen.get("zip"),
                     city=seen.get("city"),
                     state=seen.get("state"),
+                    address=seen.get("address"),
                     region=_region(row.region if row else region_of_state(seen.get("state"))),
                     region_source="saved" if row else "state",
                     shipments=seen.get("n", 0),
