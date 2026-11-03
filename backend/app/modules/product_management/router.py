@@ -57,6 +57,7 @@ _ORG_REVIEWED_PRODUCT_READS = frozenset(
     {
         "/api/product-management/skus",
         "/api/product-management/skus/summary",
+        "/api/product-management/options",
         "/api/product-management/skus/export",
     }
 )
@@ -69,15 +70,38 @@ def require_product_management_org_scope(
 ) -> None:
     """Check endpoint permission before applying reviewed organization scopes."""
     session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
+    if request.url.path == "/api/user-table-views/product-management":
+        legacy_permission = (
+            "products:table_views:update" if request.method == "PUT" else "products:read"
+        )
+    elif request.url.path == "/api/product-management/pricing-rules":
+        legacy_permission = (
+            "products:pricing_rules:update"
+            if request.method == "PUT"
+            else "products:pricing_rules:read"
+        )
+    elif request.url.path == "/api/product-management/skus/recalculate-pricing":
+        legacy_permission = "products:pricing:recalculate"
+    elif request.method == "POST" and request.url.path == "/api/product-management/skus/export":
+        legacy_permission = "products:export"
+    else:
+        legacy_permission = "products:read"
     required_permission = permission_for_request(
         request.method, request.url.path, "page:products:product-management:view"
     )
-    if not has_permission(principal, required_permission):
+    if not (
+        has_permission(principal, required_permission)
+        or has_permission(principal, legacy_permission)
+    ):
         raise ApiError(
             code=ErrorCode.FORBIDDEN,
             status_code=403,
             details={"required_permission": required_permission},
         )
+    # Personal table views contain no business rows; keep them usable without
+    # imposing a product-owner SQL filter, while retaining their own permission.
+    if request.url.path == "/api/user-table-views/product-management":
+        return
     owners = resolve_business_owner_refs(session, principal)
     if owners is None:
         return
@@ -85,7 +109,7 @@ def require_product_management_org_scope(
         r"/api/product-management/skus/[0-9A-Fa-f-]{36}(/pricing-breakdown)?",
         request.url.path,
     )
-    if request.method != "GET" or (
+    if request.method not in {"GET", "POST"} or (
         request.url.path not in _ORG_REVIEWED_PRODUCT_READS and detail_path is None
     ):
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
