@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { navigation } from "@/config/navigation";
 import WfsSettingsPage from "./WfsSettingsPage";
@@ -53,17 +53,25 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("WfsSettingsPage", () => {
-  it("shows the rule set with sample rows tagged and the seven blocks", async () => {
+  it("shows the rule set with sample rows tagged, paging, and every section as a tab", async () => {
     renderPage();
     expect(await screen.findByText("超过预计到仓")).toBeInTheDocument();
     expect(screen.getAllByText("示例 · 待定")).toHaveLength(1);
     expect(screen.getByText(/有 1 条规则按示例阈值执行/)).toBeInTheDocument();
     expect(screen.getByText("版本 v1 · 生效 2026-10-10")).toBeInTheDocument();
+    expect(screen.getByText("共 2 条")).toBeInTheDocument();
+    const open = (name: string) => fireEvent.click(screen.getByRole("tab", { name }));
+    open("仓库地区");
     expect(await screen.findByText("LAX1")).toBeInTheDocument();
     expect(screen.getByText("按州默认")).toBeInTheDocument();
-    expect(screen.getByText(/尚未导入物流渠道文件/)).toBeInTheDocument();
-    expect(screen.getByText(/通知未接入/)).toBeInTheDocument();
-    expect(screen.getByText(/店铺设置等店铺来源/)).toBeInTheDocument();
+    open("创建货件默认值");
+    expect(await screen.findByText("尚未保存，显示的是 8088 默认值")).toBeInTheDocument();
+    open("物流渠道字典");
+    expect(await screen.findByText(/尚未导入物流渠道文件/)).toBeInTheDocument();
+    open("店铺设置");
+    expect(await screen.findByText(/店铺设置等店铺来源/)).toBeInTheDocument();
+    open("通知与口径说明");
+    expect(await screen.findByText(/通知未接入/)).toBeInTheDocument();
     expect(screen.getByText(/上架缓冲天数（10 天）引用「自动补货」/)).toBeInTheDocument();
   });
 
@@ -72,6 +80,7 @@ describe("WfsSettingsPage", () => {
     await screen.findByText("超过预计到仓");
     expect(screen.getByRole("button", { name: "编辑规则" })).toBeDisabled();
     expect(screen.getByText(/写入按钮已置灰：本页当前只读/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "创建货件默认值" }));
     expect(await screen.findByRole("button", { name: "保存默认值" })).toBeDisabled();
   });
 
