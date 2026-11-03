@@ -281,7 +281,12 @@ export const navigation: NavigationGroup[] = [
         // Backend permission key (docs/api/pmc-purchase-api.md); the frontend does not enforce it.
         permissionKey: 'pmc:purchase:read',
       }),
-      page('pmc', 'logistics', '物流', '/pmc/logistics', { readOnly: true }),
+      page('pmc', 'logistics', '物流', '/pmc/logistics', {
+        status: 'testing', source: 'new_postgres', migrationMode: 'native', readOnly: true,
+        sourceTables: ['ods_lingxing_wfs_shipping_lists', 'ods_carrier_zhongyi_tracks', 'ods_walmart_wfs_receipts'],
+        // Reuses the WFS page permission until PRP #298 approves a logistics key.
+        viewPermissionKey: 'page:pmc:wfs:view',
+      }),
       page('pmc', 'domestic_batches', '批次看板', '/pmc/domestic/batches', {
         sidebarSection: 'pmc-domestic', status: 'testing', source: 'new_postgres', migrationMode: 'native',
         sourceTables: ['mart_domestic_inbound_batch_board', 'gov_domestic_board_publications'],

@@ -51,6 +51,16 @@ STORE_ID: Final = re.compile(r"^[0-9]{6,32}$")
 SCOPE_ALL: Final = "all"
 
 
+def _channel_payload(row: dict[str, str], raw: dict[str, Any]) -> dict[str, Any]:
+    """CSV columns plus the ``raw_json`` fields the 8088 物流看板 reads (method / remark)."""
+
+    payload: dict[str, Any] = {k: v for k, v in row.items() if k != "raw_json"}
+    payload.setdefault("method_name", raw.get("method_name") or "")
+    payload.setdefault("remark", raw.get("remark") or "")
+    payload.setdefault("enabled", str(raw.get("enabled", row.get("is_enable", ""))))
+    return payload
+
+
 class SourceLoadError(RuntimeError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
@@ -147,6 +157,8 @@ class WfsSourceLoader:
             )
         )
         if existing is not None:
+            if source == SOURCE_LINGXING and endpoint == "logistics_channels":
+                self._backfill_channel_remarks(existing, list(_rows(path)))
             return LoadedFile(
                 source, endpoint, scope, str(path), existing.row_count, existing.loaded_rows, True
             )
@@ -182,6 +194,30 @@ class WfsSourceLoader:
         record.is_current = True
         self.session.flush()
         return LoadedFile(source, endpoint, scope, str(path), len(rows), loaded, False)
+
+    def _backfill_channel_remarks(
+        self, record: PmcWfsSourceFile, rows: list[dict[str, str]]
+    ) -> None:
+        """Files loaded before 2026-11-03 dropped ``raw_json.remark`` (仓库代码 / 渠道代码 for the
+        物流看板); add it to the existing rows in place. Nothing is deleted."""
+
+        by_id = {_s(row.get("channel_id") or row.get("id"), 64): row for row in rows}
+        for ods in self.session.scalars(
+            select(LingxingLogisticsChannelOds).where(
+                LingxingLogisticsChannelOds.file_id == record.id
+            )
+        ):
+            if "remark" in (ods.payload_json or {}):
+                continue
+            row = by_id.get(ods.channel_id)
+            if row is None:
+                continue
+            try:
+                raw = json.loads(row.get("raw_json") or "{}")
+            except ValueError:
+                raw = {}
+            ods.payload_json = _channel_payload(row, raw if isinstance(raw, dict) else {})
+        self.session.flush()
 
     def _insert(
         self,
@@ -310,7 +346,7 @@ class WfsSourceLoader:
                             str(row.get("enabled") or raw.get("enabled", row.get("is_enable", ""))),
                             16,
                         ),
-                        payload_json={k: v for k, v in row.items() if k != "raw_json"},
+                        payload_json=_channel_payload(row, raw),
                     )
                 )
         else:  # pragma: no cover - guarded by the caller's fixed mapping

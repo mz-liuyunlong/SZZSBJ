@@ -37,6 +37,8 @@ export interface WfsQueryPageProps<Row extends { id: string } = { id: string }> 
   onPageChange?: (page: number, pageSize: number) => void;
   onRowClick?: (row: Row) => void;
   aboveToolbar?: ReactNode;
+  /** Help page for the header button; WFS pages share /help/pmc-wfs.html. */
+  helpHref?: string;
 }
 
 export default function WfsQueryPage<Row extends { id: string } = { id: string }>({
@@ -44,6 +46,7 @@ export default function WfsQueryPage<Row extends { id: string } = { id: string }
   typeAriaLabel, typeOptions, searchType, columns, scrollX, keyword, onSearch, onReset, filters, headExtra,
   loading = false, loadingLabel = "正在加载数据，请稍候",
   rows = [], total = 0, current = 1, pageSize = 20, onPageChange, onRowClick, aboveToolbar,
+  helpHref = "/help/pmc-wfs.html",
 }: WfsQueryPageProps<Row>) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const [scrollY, setScrollY] = useState(360);
@@ -57,7 +60,7 @@ export default function WfsQueryPage<Row extends { id: string } = { id: string }
     return () => observer.disconnect();
   }, []);
   return (
-    <PageShell page={page} headerActions={<Button href="/help/pmc-wfs.html" target="_blank" rel="noreferrer" icon={<QuestionCircleOutlined />}>帮助</Button>}>
+    <PageShell page={page} headerActions={<Button href={helpHref} target="_blank" rel="noreferrer" icon={<QuestionCircleOutlined />}>帮助</Button>}>
       <div className="wfs-pending">
         <RequestLoadingOverlay spinning={loading} label={loadingLabel} />
         {aboveToolbar}
