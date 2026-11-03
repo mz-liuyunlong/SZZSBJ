@@ -45,7 +45,10 @@ def test_restricted_org_cannot_use_unreviewed_purchase_routes(
     request = Request({"type": "http", "method": method, "path": path, "headers": []})
     session = MagicMock()
     session.info = {}
-    principal = Principal(user_id="8", permissions=frozenset({"pmc:purchase:read"}))
+    principal = Principal(
+        user_id="8",
+        permissions=frozenset({"pmc:purchase:read", "pmc:purchase:override"}),
+    )
     with patch(
         "app.modules.pmc_purchase.router.resolve_business_owner_refs",
         return_value=frozenset({"owner-approved"}),
