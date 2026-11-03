@@ -92,7 +92,10 @@ def require_data_page_org_scope(
     else:
         declared = _DAILY_SALES_REGISTRY.permission
     required_permission = permission_for_request(request.method, request.url.path, declared)
-    if not has_permission(principal, required_permission):
+    if not (
+        has_permission(principal, required_permission)
+        or has_permission(principal, declared)
+    ):
         raise ApiError(
             code=ErrorCode.FORBIDDEN,
             status_code=403,
