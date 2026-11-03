@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
+from app.modules.data_pages.router import require_data_page_org_scope
 from app.modules.data_pages.repository import ListingManagementRepository, ListingTagRepository
 from app.modules.data_pages.schemas import (
     ListingManagementItemRead,
@@ -29,6 +30,10 @@ NOW = datetime(2026, 9, 17, 8, 0, tzinfo=UTC)
 
 def _app(*permissions: str) -> FastAPI:
     application = create_app()
+    # Synthetic route tests do not provision Feishu organization snapshots.
+    # These tests exercise legacy permission/source-account contracts; separate
+    # org-scope tests exercise the actual dependency and fail-closed behavior.
+    application.dependency_overrides[require_data_page_org_scope] = lambda: None
     application.dependency_overrides[get_optional_principal] = lambda: Principal(
         user_id="synthetic-user",
         permissions=frozenset(permissions) if permissions else ALL_PERMISSIONS,
@@ -132,6 +137,10 @@ def test_listing_management_route_fails_closed_for_auth_permission_and_scope() -
     assert denied.json()["error"]["code"] == "FORBIDDEN"
 
     application = create_app()
+    # Synthetic route tests do not provision Feishu organization snapshots.
+    # These tests exercise legacy permission/source-account contracts; separate
+    # org-scope tests exercise the actual dependency and fail-closed behavior.
+    application.dependency_overrides[require_data_page_org_scope] = lambda: None
     application.dependency_overrides[get_optional_principal] = lambda: Principal(
         user_id="synthetic-user",
         permissions=ALL_PERMISSIONS,
