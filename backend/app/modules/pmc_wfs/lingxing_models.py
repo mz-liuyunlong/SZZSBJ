@@ -253,3 +253,7 @@ class WfsShipmentBoardRow(Base):
     expected_arrival_date: Mapped[date | None] = mapped_column(Date)
     logistics_numbers: Mapped[list[str]] = mapped_column(JSON_TYPE, nullable=False)
     payload_json: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
+
+
+# File-sourced WFS facts (Walmart inbound / carrier / channels) share this registry entry.
+from app.modules.pmc_wfs import source_models as _source_models  # noqa: E402,F401

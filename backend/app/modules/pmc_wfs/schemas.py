@@ -26,6 +26,7 @@ class PendingFilter(Strict):
     ] = "all"
     completed_from: date | None = None
     completed_to: date | None = None
+    only_overdue: bool = False
 
     @field_validator("completed_to")
     @classmethod
@@ -52,6 +53,9 @@ class PendingRow(Strict):
     occupied_boxes: int = 0
     available_boxes: int = 0
     available_units: int = 0
+    # Rocky 2026-11-02: packed ≥ N days (default 3) with boxes still not on a shipment → red.
+    packed_days: int | None = None
+    overdue: bool = False
 
 
 class PendingList(Strict):
@@ -77,6 +81,8 @@ class PendingSummary(Strict):
     filled_not_done: int
     available_boxes: int
     available_units: int
+    overdue: int = 0
+    overdue_days: int = 3
 
 
 class Selection(Strict):

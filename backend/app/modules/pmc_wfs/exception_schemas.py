@@ -15,6 +15,7 @@ RuleFamily = Literal[
     "receiving_incomplete",
     "closed_shortage_damage",
     "appeal_deadline",
+    "carrier_delivered_unreceived",
 ]
 Severity = Literal["HIGH", "MEDIUM", "LOW"]
 CaseStatus = Literal["OPEN", "IN_PROGRESS", "WAITING_EXTERNAL", "RESOLVED", "CLOSED"]

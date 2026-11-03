@@ -49,6 +49,10 @@ order复用仓库WarehouseOrderRead（含原Q、实装T、UUID行、尺寸cm/重
 
 缺GTIN/身份不完整阻断草稿，缺值不伪造为零。合法少装/多装沿用国内仓既有完成规则，不要求Q=T；仅当前真实已完成装箱可用。时间UTC返回，前端Asia/Taipei展示。
 
+## 第一期：满 3 天未建货件（2026-11-03）
+
+`GET /orders` 与 `/summary` 新增筛选 `only_overdue`。PendingRow 新增 `packed_days`（打包完成至今天数，按 Asia/Shanghai 日历日）和 `overdue`（`packed_days ≥ 3` 且仍有箱子未安排到货件）。`/summary` 新增 `overdue`（张数）和 `overdue_days`（当前阈值）。阈值第一期固定 3，后续由 WFS 设置 `wfs.pending_packing_overdue_days` 修改（D 组）。
+
 ## 改箱与报关
 
 复用 `/api/pmc/domestic/packing-warehouse/orders/{id}/rebox`、`/customs`，见 `docs/delivery/pmc-packing-warehouse-api.md`。前端同时要求国内仓查看及对应动作权限。两入口在共享账号/仓库/PK锁内执行WFS占用守卫，直接调用旧接口也不能绕过。改箱不足仍按原规则仅保存阻塞提议，不覆盖实装。
