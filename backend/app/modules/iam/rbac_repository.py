@@ -60,7 +60,7 @@ class RbacRepository:
         from app.modules.iam.permission_catalog_v2 import all_permission_definitions
 
         requested = set(permission_keys)
-        for item in PERMISSION_DEFINITIONS:
+        for item in all_permission_definitions():
             if item.permission_key not in requested:
                 continue
             self.session.execute(

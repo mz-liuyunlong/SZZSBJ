@@ -9,7 +9,6 @@ from app.core.api import ApiError, ErrorCode
 from app.core.auth import Principal
 from app.modules.iam.permission_catalog_v2 import (
     MODULE_NAMES,
-    PERMISSION_DEFINITIONS,
     all_permission_definitions,
 )
 from app.modules.iam.rbac_repository import RbacRepository
@@ -560,7 +559,7 @@ class RbacService:
         normalized = tuple(dict.fromkeys(item.strip() for item in permission_keys if item.strip()))
         existing = self.repository.existing_permission_keys(normalized)
         disabled = self.repository.disabled_declared_permission_keys()
-        declared = {item.permission_key for item in PERMISSION_DEFINITIONS}
+        declared = {item.permission_key for item in all_permission_definitions()}
         invalid = sorted(set(normalized) - (existing | (declared - disabled)))
         if invalid:
             raise ApiError(
@@ -625,7 +624,7 @@ class RbacService:
             self.repository.high_risk_permission_keys(permission_keys)
             | {
                 item.permission_key
-                for item in PERMISSION_DEFINITIONS
+                for item in all_permission_definitions()
                 if item.risk_level == "high" and item.permission_key in requested
             }
         )
