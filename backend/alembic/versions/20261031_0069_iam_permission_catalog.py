@@ -34,7 +34,7 @@ def upgrade() -> None:
             )
             ON CONFLICT (permission_key) DO UPDATE SET
                 name = EXCLUDED.name, description = EXCLUDED.description,
-                is_active = true, updated_at = now()
+                updated_at = now()
         """),
             {
                 "permission_key": item.permission_key,

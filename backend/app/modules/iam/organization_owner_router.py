@@ -24,6 +24,28 @@ class OwnerBindingWrite(BaseModel):
     feishu_open_id: str = Field(min_length=1, max_length=128)
 
 
+def _business_owner_exists(session: Session, owner_ref: str) -> bool:
+    return bool(
+        session.execute(
+            text(
+                """
+                SELECT EXISTS (
+                    SELECT 1 FROM dwd_lingxing_sku_product_info_current
+                    WHERE owner_uid = :owner_ref OR product_developer_uid = :owner_ref
+                    UNION ALL
+                    SELECT 1 FROM mart_daily_sales_item_day WHERE owner_ref = :owner_ref
+                    UNION ALL
+                    SELECT 1 FROM dws_purchase_board WHERE owner_uid = :owner_ref
+                    UNION ALL
+                    SELECT 1 FROM mart_listing_management_current WHERE owner_ref = :owner_ref
+                )
+                """
+            ),
+            {"owner_ref": owner_ref},
+        ).scalar()
+    )
+
+
 @router.get("/api/settings/organization/owner-bindings")
 def list_owner_bindings(request: Request, _: admin_principal, session: db_session):
     rows = session.execute(
@@ -49,6 +71,13 @@ def set_owner_binding(
     owner_ref = owner_ref.strip()
     if not owner_ref or len(owner_ref) > 128:
         raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422)
+    # A binding is accepted only when the Lingxing UID exists in real business data.
+    if not _business_owner_exists(session, owner_ref):
+        raise ApiError(
+            code=ErrorCode.VALIDATION_ERROR,
+            status_code=422,
+            message="负责人 UID 不存在于当前业务数据，不能建立绑定",
+        )
     # A mapping never trusts name-matching; both identities are explicitly reviewed.
     current = session.execute(
         text("""

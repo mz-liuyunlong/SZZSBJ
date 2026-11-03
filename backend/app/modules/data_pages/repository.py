@@ -1506,54 +1506,43 @@ class ListingManagementRepository:
         self,
         account_refs: frozenset[str],
     ) -> list[dict[str, object]]:
-        table_name = ListingManagementCurrentMart.__tablename__
-        refs = sorted(account_refs)
-        params: dict[str, object] = {}
-        account_filter_sql = ""
-
-        if refs:
-            placeholders: list[str] = []
-            for index, account_ref in enumerate(refs):
-                key = f"account_ref_{index}"
-                placeholders.append(f":{key}")
-                params[key] = account_ref
-            account_filter_sql = f"where m.source_account_ref in ({', '.join(placeholders)})"
-
-        row = (
-            self.session.execute(
-                text(
-                    f"""
-                select
-                    coalesce(
-                        sum(
-                            case
-                                when coalesce(s.is_archived, false) = false
-                                then 1
-                                else 0
-                            end
-                        ),
-                        0
-                    ) as active_count,
-                    coalesce(
-                        sum(
-                            case
-                                when coalesce(s.is_archived, false) = true
-                                then 1
-                                else 0
-                            end
-                        ),
-                        0
-                    ) as archived_count
-                from {table_name} m
-                left join listing_archive_states s on s.listing_id = m.id
-                {account_filter_sql}
-                """
-                ),
-                params,
+        owner_lookup = self._owner_lookup()
+        archive_flag = func.coalesce(ListingArchiveState.is_archived, False)
+        statement = (
+            select(
+                func.coalesce(
+                    func.sum(case((archive_flag.is_(False), 1), else_=0)), 0
+                ).label("active_count"),
+                func.coalesce(
+                    func.sum(case((archive_flag.is_(True), 1), else_=0)), 0
+                ).label("archived_count"),
             )
-            .mappings()
-            .one()
+            .select_from(ListingManagementCurrentMart)
+            .outerjoin(
+                ListingArchiveState,
+                ListingArchiveState.listing_id == ListingManagementCurrentMart.id,
+            )
+            .outerjoin(
+                owner_lookup,
+                and_(
+                    owner_lookup.c.source_account_ref
+                    == ListingManagementCurrentMart.source_account_ref,
+                    owner_lookup.c.lingxing_sku_code == ListingManagementCurrentMart.local_sku,
+                ),
+            )
+            .where(ListingManagementCurrentMart.source_account_ref.in_(sorted(account_refs)))
         )
+        if self.org_owner_refs is not None:
+            statement = statement.where(
+                or_(
+                    owner_lookup.c.owner_uid.in_(self.org_owner_refs),
+                    and_(
+                        owner_lookup.c.owner_uid.is_(None),
+                        ListingManagementCurrentMart.owner_ref.in_(self.org_owner_refs),
+                    ),
+                )
+            )
+        row = self.session.execute(statement).mappings().one()
 
         return [
             {

@@ -8,8 +8,18 @@ from app.core.auth import Principal, require_principal
 from app.core.permission_policy_v2 import permission_for_request
 
 
+# Explicit compatibility aliases for grants created before canonical RBAC v2 keys.
+# Aliases are one-way and operation-specific: read grants never imply write grants.
+_LEGACY_PERMISSION_ALIASES: dict[str, frozenset[str]] = {
+    "page:pmc:purchase-board:view": frozenset({"pmc:purchase:read"}),
+    "action:pmc:purchase-board:override": frozenset({"pmc:purchase:override"}),
+}
+
+
 def has_permission(principal: Principal, permission_key: str) -> bool:
-    return "*" in principal.permissions or permission_key in principal.permissions
+    if "*" in principal.permissions or permission_key in principal.permissions:
+        return True
+    return bool(_LEGACY_PERMISSION_ALIASES.get(permission_key, frozenset()) & principal.permissions)
 
 
 def has_any_permission(principal: Principal, permission_keys: tuple[str, ...]) -> bool:

@@ -15,6 +15,13 @@ from app.modules.pmc_purchase.router import require_pmc_purchase_org_scope
 from app.modules.pmc_purchase.schemas import BoardListQuery
 
 
+def test_legacy_pmc_read_grant_resolves_to_canonical_page_permission() -> None:
+    from app.core.permissions import has_permission
+
+    principal = Principal(user_id="8", permissions=frozenset({"pmc:purchase:read"}))
+    assert has_permission(principal, "page:pmc:purchase-board:view")
+
+
 def test_board_query_is_restricted_by_owner_and_account() -> None:
     session = MagicMock()
     session.info = {ORG_OWNER_SCOPE_SESSION_KEY: frozenset({"owner-approved"})}

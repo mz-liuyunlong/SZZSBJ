@@ -69,8 +69,9 @@ def resolve_business_owner_refs(
 ) -> frozenset[str] | None:
     """Map authorized Feishu departments to *reviewed* business-owner IDs.
 
-    None means no additional organization restriction; source-account RBAC still
-    applies. An explicit department scope with no valid owner mapping fails closed.
+    None means an explicit global organization grant. Users without a department
+    grant are restricted to their own reviewed Feishu/Lingxing owner binding; users
+    without either grant or binding fail closed.
     """
     if has_permission(principal, "*"):
         return None
@@ -88,10 +89,35 @@ def resolve_business_owner_refs(
     grants = RbacRepository(session).resolve_user_data_scope(
         user_id=user_id, scope_type="org_department"
     )
-    if not grants or "*" in grants:
-        # Existing source-account scopes remain the authority until an explicit
-        # organization grant is configured; this is backwards-compatible.
+    if "*" in grants:
         return None
+    if not grants:
+        own_owner_refs = frozenset(
+            str(value)
+            for value in session.execute(
+                text(
+                    """
+                    SELECT DISTINCT b.owner_ref
+                    FROM app_users u
+                    JOIN iam_feishu_employees e ON e.open_id = u.feishu_open_id
+                    JOIN iam_org_owner_bindings b ON b.feishu_open_id = e.open_id
+                    WHERE u.id = :user_id
+                      AND b.is_active IS TRUE
+                      AND e.is_active IS TRUE
+                      AND e.is_resigned IS NOT TRUE
+                      AND e.is_frozen IS NOT TRUE
+                      AND e.last_seen_run_id = (
+                          SELECT id FROM iam_feishu_org_sync_runs
+                          ORDER BY applied_at DESC, id DESC LIMIT 1
+                      )
+                    """
+                ),
+                {"user_id": user_id},
+            ).scalars()
+        )
+        if not own_owner_refs:
+            raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
+        return own_owner_refs
 
     departments = authorized_department_ids(session, principal)
     if not departments:

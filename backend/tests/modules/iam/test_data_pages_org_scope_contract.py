@@ -70,6 +70,21 @@ def test_listing_sql_requires_verified_owner_or_owner_uid_fallback() -> None:
     assert "owner_ref IN ('uid-reviewed')" in sql
 
 
+def test_listing_archive_filter_options_uses_the_same_owner_scope() -> None:
+    session = _session({"uid-reviewed"})
+    session.execute.return_value.mappings.return_value.one.return_value = {
+        "active_count": 1,
+        "archived_count": 2,
+    }
+    repository = ListingManagementRepository(session)
+    repository.archive_status_filter_options(frozenset({"A1"}))
+    statement = session.execute.call_args.args[0]
+    sql = _sql(statement)
+    assert "owner_uid IN ('uid-reviewed')" in sql
+    assert "owner_ref IN ('uid-reviewed')" in sql
+    assert "source_account_ref IN ('A1')" in sql
+
+
 def test_org_owner_scope_disallows_profit_aggregation() -> None:
     repository = OrderProfitRepository(_session({"uid-reviewed"}))
     with pytest.raises(PermissionError, match="not yet audited"):
