@@ -5,7 +5,6 @@ from fastapi import Depends, Request
 
 from app.core.api import ApiError, ErrorCode
 from app.core.auth import Principal, require_principal
-from app.core.permission_policy_v2 import permission_for_request
 from app.modules.iam.permission_catalog_v2 import register_runtime_permission_key
 
 
@@ -41,6 +40,8 @@ def require_permission(permission_key: str) -> Callable[..., Principal]:
         principal: Annotated[Principal, Depends(require_principal)],
         request: Request = None,
     ) -> Principal:
+        from app.core.permission_policy_v2 import permission_for_request
+
         required_key = (
             permission_for_request(request.method, request.url.path, permission_key)
             if request is not None
