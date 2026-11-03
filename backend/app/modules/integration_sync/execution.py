@@ -781,6 +781,13 @@ class SyncRunExecutionService:
             runner.summary.listing_rows = runner._write_listings(listings)
             self._heartbeat_data_pages_lock(run.id)
             runner.summary.mart_listing_rows = runner._refresh_listing_mart()
+            self._heartbeat_data_pages_lock(run.id)
+            completed = self.repository.get_run_for_update(run.id)
+            if completed is None:
+                raise DataPagesRealSyncError("SYNC_RUN_NOT_FOUND")
+            if completed.status != "running":
+                raise DataPagesRealSyncError("SYNC_RUN_NOT_RUNNING")
+            from_status = completed.status
             if runner.listing_complete_day is not None and runner.summary.listing_skipped_rows == 0:
                 self._event(
                     run.id,
@@ -793,22 +800,16 @@ class SyncRunExecutionService:
                         "row_count": runner.summary.listing_rows,
                     },
                 )
+            completed.status = "succeeded"
+            completed.finished_at = utc_now()
+            completed.work_items_succeeded = 1
+            completed.work_items_failed = 0
+            completed.records_seen = runner.summary.store_rows + runner.summary.listing_rows
+            completed.records_written = runner.summary.mart_listing_rows
+            completed.error_code = None
+            completed.error_message = None
+            self._event(completed.id, from_status, "succeeded", "SYNC_RUN_SUCCEEDED")
             runner.session.commit()
-
-        completed = self.repository.get_run_for_update(run.id)
-        if completed is None:
-            return
-        from_status = completed.status
-        completed.status = "succeeded"
-        completed.finished_at = utc_now()
-        completed.work_items_succeeded = 1
-        completed.work_items_failed = 0
-        completed.records_seen = runner.summary.store_rows + runner.summary.listing_rows
-        completed.records_written = runner.summary.mart_listing_rows
-        completed.error_code = None
-        completed.error_message = None
-        self._event(completed.id, from_status, "succeeded", "SYNC_RUN_SUCCEEDED")
-        self.session.commit()
 
     def _data_pages_business_dates_for_run(
         self,

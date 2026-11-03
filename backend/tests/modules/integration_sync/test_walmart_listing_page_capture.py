@@ -237,6 +237,8 @@ def test_governed_listing_run_emits_marker_only_with_complete_persisted_inventor
     )
     service.repository.get_run_for_update.return_value = run
     service._event = MagicMock()
+    event_run_statuses: list[str] = []
+    service._event.side_effect = lambda *_args, **_kwargs: event_run_statuses.append(run.status)
     service._heartbeat_data_pages_lock = MagicMock()
     runner = MagicMock()
     runner.session = session
@@ -263,6 +265,7 @@ def test_governed_listing_run_emits_marker_only_with_complete_persisted_inventor
         if call.args[3] == "SYNC_WFS_INVENTORY_DAY_VALIDATED"
     ]
     assert bool(marker_calls) is expected_marker
+    assert event_run_statuses == (["running", "succeeded"] if expected_marker else ["succeeded"])
     if expected_marker:
         assert marker_calls[0].kwargs["safe_details"] == {
             "business_date": "2026-01-15",
@@ -272,7 +275,6 @@ def test_governed_listing_run_emits_marker_only_with_complete_persisted_inventor
         assert [call[0] for call in calls.mock_calls] == [
             "commit",
             "event",
-            "commit",
             "event",
             "commit",
         ]
@@ -302,4 +304,39 @@ def test_governed_listing_run_does_not_commit_marker_when_mart_refresh_fails(
         service._execute_listing_management_run(run)
 
     assert session.commit.call_count == 1  # Only the initial run metadata was committed.
+    service._event.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("final_status", "error_code"),
+    [(None, "SYNC_RUN_NOT_FOUND"), ("failed", "SYNC_RUN_NOT_RUNNING")],
+)
+def test_governed_listing_run_does_not_commit_inventory_if_run_cannot_be_finalized(
+    monkeypatch,
+    final_status: str | None,
+    error_code: str,
+) -> None:
+    session = MagicMock()
+    service = execution.SyncRunExecutionService(session)
+    service.repository = MagicMock()
+    service.repository.get_run_for_update.return_value = (
+        None if final_status is None else SimpleNamespace(status=final_status)
+    )
+    service._event = MagicMock()
+    service._heartbeat_data_pages_lock = MagicMock()
+    runner = MagicMock()
+    runner.session = session
+    runner.summary = SimpleNamespace(
+        store_rows=1, listing_rows=1, mart_listing_rows=1, listing_skipped_rows=0
+    )
+    runner.listing_complete_day = date(2026, 1, 15)
+    runner._fetch_offset_all.return_value = []
+    monkeypatch.setattr(execution, "data_pages_client", lambda: nullcontext(MagicMock()))
+    monkeypatch.setattr(execution, "DataPagesRealSyncRunner", lambda **_kwargs: runner)
+    run = SimpleNamespace(id=uuid4(), config_id=None, source_account_ref="synthetic-account")
+
+    with pytest.raises(real_sync.DataPagesRealSyncError, match=error_code):
+        service._execute_listing_management_run(run)
+
+    assert session.commit.call_count == 1  # The inventory transaction was not committed.
     service._event.assert_not_called()
