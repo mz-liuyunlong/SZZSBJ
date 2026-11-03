@@ -136,13 +136,32 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
 
   useEffect(() => {
     let alive = true;
-    void backendRequest<DirectoryPreview>("/api/settings/organization/snapshot")
-      .then(response => { if (alive) setData(response.data); })
-      .catch(() => { if (alive) setError("组织架构读取失败：请确认已授权部门数据范围，并检查组织同步状态。"); })
-      .finally(() => { if (alive) setLoading(false); });
-    if (canSync) void reloadOwnerCandidates().catch(() => {
-      if (alive) void notice.error("负责人候选数据加载失败");
-    });
+    const load = async () => {
+      try {
+        const response = await backendRequest<DirectoryPreview>(
+          "/api/settings/organization/snapshot",
+        );
+        if (!alive) return;
+        setData(response.data);
+        if (canSync) {
+          try {
+            const owners = await backendRequest<OwnerCandidate[]>(
+              "/api/settings/organization/owner-candidates",
+            );
+            if (alive) setOwnerCandidates(owners.data);
+          } catch {
+            if (alive) setError("负责人候选数据加载失败，请检查业务数据表和管理员权限。");
+          }
+        }
+      } catch {
+        if (alive) {
+          setError("组织架构读取失败：请确认已授权部门数据范围，并检查组织同步状态。");
+        }
+      } finally {
+        if (alive) setLoading(false);
+      }
+    };
+    void load();
     return () => { alive = false; };
   }, [canSync]);
 
