@@ -59,6 +59,7 @@ class FcRegionOut(Strict):
     zip: str | None
     city: str | None
     state: str | None
+    address: str | None  # 地址全称（领星 distribution_addresses 整理）
     region: Region
     region_source: Literal["saved", "state"]  # saved = 本系统改过；state = 按州预填
     shipments: int

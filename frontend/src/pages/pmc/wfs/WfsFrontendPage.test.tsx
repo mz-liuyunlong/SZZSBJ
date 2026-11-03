@@ -8,7 +8,7 @@ import { navigation } from "@/config/navigation";
 import WfsFrontendPage from "./WfsFrontendPage";
 import WfsQueryPage from "./WfsQueryPage";
 
-const pages = navigation.find((group) => group.key === "pmc")!.children.filter((page) => page.sidebarSection === "pmc-wfs");
+const pages = navigation.find((group) => group.key === "pmc")!.children.filter((page) => page.sidebarSection === "pmc-wfs" || page.sidebarSection === "pmc-wfs-settings");
 vi.mock("./pendingPackingQueries", () => ({ usePendingPacking: () => ({
   list: { data: { data: { items: [], total: 0 } }, isFetching: false },
   summary: { data: { data: { completed: 0, ready: 0, test: 0, waiting: 0, no_box: 0, filled_not_done: 0, available_boxes: 0, available_units: 0 } } },
@@ -81,7 +81,7 @@ describe("WFS frontend pages", () => {
       pmc_wfs_exceptions: { text: "当前条件下暂无异常货件", header: "货件号", search: "搜索异常中心" },
       pmc_wfs_settings: { text: "数据来自新系统数据库" },
     };
-    const sample = samples[page.key];
+    const sample = samples[page.key] ?? (page.sidebarSection === "pmc-wfs-settings" ? samples.pmc_wfs_settings : undefined)!;
     renderWithQuery(<WfsFrontendPage page={page} />);
     expect(screen.getByRole("region", { name: page.title })).toBeInTheDocument();
     expect(await screen.findByText(sample.text)).toBeInTheDocument();
