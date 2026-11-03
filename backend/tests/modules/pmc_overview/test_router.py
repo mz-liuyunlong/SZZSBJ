@@ -148,6 +148,7 @@ def snap_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "snapshot.json"
     path.write_text(json.dumps(_snapshot(), ensure_ascii=False), encoding="utf-8")
     monkeypatch.setenv(snapshot.SNAPSHOT_ENV, str(path))
+    monkeypatch.setenv("APP_ENV", "local")
     monkeypatch.delenv(snapshot.DRAFT_MODE_ENV, raising=False)
     snapshot.clear_cache()
     return path
@@ -204,6 +205,7 @@ def test_broken_snapshot_is_not_ready(tmp_path: Path, monkeypatch: pytest.Monkey
     bad = tmp_path / "bad.json"
     bad.write_text("{not json", encoding="utf-8")
     monkeypatch.setenv(snapshot.SNAPSHOT_ENV, str(bad))
+    monkeypatch.setenv("APP_ENV", "local")
     snapshot.clear_cache()
     _envelope(TestClient(_app(READ)).get("/api/pmc/overview/items"), 503)
 
@@ -219,7 +221,7 @@ def test_summary_counts_all_items(snap_file: Path) -> None:
     meta = body["meta"]
     assert meta["data_date"] == TODAY
     assert meta["source"] == "pmc_overview_snapshot_8088"
-    assert meta["draft_mode"] == "demo_8088"
+    assert meta["draft_mode"] == "replenishment"
 
 
 def test_items_default_only_issues_sorted_by_priority(snap_file: Path) -> None:
@@ -280,3 +282,13 @@ def test_cache_reloads_when_file_changes(snap_file: Path) -> None:
     data["items"] = data["items"][:1]
     snap_file.write_text(json.dumps(data, ensure_ascii=False) + " ", encoding="utf-8")
     assert snapshot.load_board().kpi["items"] == 1
+
+
+@pytest.mark.parametrize("env", ["production", "staging", ""])
+def test_snapshot_is_refused_outside_local(
+    snap_file: Path, monkeypatch: pytest.MonkeyPatch, env: str
+) -> None:
+    monkeypatch.setenv("APP_ENV", env)
+    snapshot.clear_cache()
+    body = _envelope(TestClient(_app(READ)).get("/api/pmc/overview/summary"), 503)
+    assert body["error"]["code"] == "PMC_OVERVIEW_NOT_READY"

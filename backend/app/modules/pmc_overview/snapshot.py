@@ -33,6 +33,8 @@ from app.modules.pmc_overview.rules import RULE_VERSION_DEFAULT, OverviewParams,
 SNAPSHOT_ENV = "PMC_OVERVIEW_SNAPSHOT_FILE"
 DRAFT_MODE_ENV = "PMC_OVERVIEW_DRAFT_MODE"
 SUPPORTED_VERSION = 1
+# Rocky 2026-11-03 (#301): the snapshot is a 5173-only transition; 8443 must never read it.
+SNAPSHOT_ALLOWED_ENVS = frozenset({"local", "dev", "test"})
 
 
 class SnapshotNotReady(Exception):
@@ -128,7 +130,7 @@ def _row(display: dict[str, Any], inp: dict[str, Any], r: ItemResult, sort_cat: 
     }
 
 
-def build_board(snap: dict[str, Any], draft_mode: DraftMode = "demo_8088") -> OverviewBoard:
+def build_board(snap: dict[str, Any], draft_mode: DraftMode = "replenishment") -> OverviewBoard:
     if snap.get("version") != SUPPORTED_VERSION or not isinstance(snap.get("items"), list):
         raise SnapshotNotReady("unsupported snapshot format")
     params = params_from_demo(snap.get("params") or {})
@@ -180,13 +182,15 @@ _cache: dict[str, Any] = {"key": None, "board": None}
 
 
 def _draft_mode() -> DraftMode:
-    # Default follows the 8088 overview page (PRP D3 still open: overview 113 vs.
-    # replenishment page 87 drafts on 2026-11-02).
-    return "replenishment" if os.getenv(DRAFT_MODE_ENV) == "replenishment" else "demo_8088"
+    # PRP D3 = a (Rocky 2026-11-03): drafts follow the replenishment page (87 on 2026-11-02,
+    # not the 113 the 8088 overview page judged itself). demo_8088 is only for golden checks.
+    return "demo_8088" if os.getenv(DRAFT_MODE_ENV) == "demo_8088" else "replenishment"
 
 
 def load_board() -> OverviewBoard:
     """Return the board for the configured snapshot; cached until the file changes."""
+    if os.getenv("APP_ENV", "").strip().lower() not in SNAPSHOT_ALLOWED_ENVS:
+        raise SnapshotNotReady("snapshot source is local-only")
     raw = os.getenv(SNAPSHOT_ENV, "").strip()
     if not raw:
         raise SnapshotNotReady("snapshot path not configured")
