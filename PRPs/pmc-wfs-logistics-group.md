@@ -17,12 +17,12 @@
 | 项 | 内容 |
 |---|---|
 | **任务类型** | 本次：文档（PRP + 接口数据源决策）。确认后：前端页面 + 只读 API + 读模型计算 + 迁移（仅合并头 / 读模型字段）。 |
-| **允许路径** | `backend/app/modules/pmc_wfs/`（除 `creation_*`、`gateway.py` 只做“关闭开关”外不改逻辑）；`backend/app/modules/pmc_logistics/`（新增）；`backend/app/modules/integration_sync/handlers/lingxing_pmc_wfs_board_sync.py`、`parsers/lingxing_wfs_board.py`、`pmc_wfs_catalog.py`；`backend/scripts/*pmc_wfs*`、新增 `backend/scripts/replay_pmc_wfs_daily.py`；`backend/alembic/versions/` 本组新迁移；`backend/tests/modules/pmc_wfs/`、`pmc_logistics/`；`frontend/src/pages/pmc/wfs/`（除 `WfsSupportPages` 设置页）、`frontend/src/pages/pmc/logistics/`（新增）；`frontend/e2e/wfs-*`、`logistics-*`；`docs/api/pmc-wfs-*`、`pmc-logistics-*`；`docs/sop/pmc-wfs-*`、`pmc-logistics-*`；`docs/data-sources/decisions/pmc-wfs-*`、`pmc-logistics-*`；`frontend/public/help/pmc-wfs*.html`、`pmc-logistics.html`；`PRPs/pmc-wfs-*`、`pmc-logistics-*`。 |
+| **允许路径** | `backend/app/modules/pmc_wfs/`（`creation_*`、`gateway.py` 不改逻辑）；`backend/app/modules/pmc_logistics/`（新增）；`backend/app/modules/integration_sync/handlers/lingxing_pmc_wfs_board_sync.py`、`parsers/lingxing_wfs_board.py`、`pmc_wfs_catalog.py`；`backend/scripts/*pmc_wfs*`、新增 `backend/scripts/replay_pmc_wfs_daily.py`；`backend/alembic/versions/` 本组新迁移；`backend/tests/modules/pmc_wfs/`、`pmc_logistics/`；`frontend/src/pages/pmc/wfs/`（除 `WfsSupportPages` 设置页）、`frontend/src/pages/pmc/logistics/`（新增）；`frontend/e2e/wfs-*`、`logistics-*`；`docs/api/pmc-wfs-*`、`pmc-logistics-*`；`docs/sop/pmc-wfs-*`、`pmc-logistics-*`；`docs/data-sources/decisions/pmc-wfs-*`、`pmc-logistics-*`；`frontend/public/help/pmc-wfs*.html`、`pmc-logistics.html`；`PRPs/pmc-wfs-*`、`pmc-logistics-*`。 |
 | **禁止路径** | 共享文件（`PMC_OWNERS.md` §4：`navigation.ts`、`routes.tsx`、`main.py`、`model_registry.py`、`alembic/env.py`、`permission_catalog_v2.py`、`lingxing/client.py`、`integration_sync/catalog.py`、`execution.py`、`pmcWfsApiDocs.ts`）——只能报总负责 AI 排队改；`pmc_domestic/`（`warehouse_service.py` 分支里 +7 行须与 PMC-05 协调）；`warehouse_wfs/`（仓库 › WFS 费用异常，不属 PMC）；`integrations/walmart/`（统一网关，归 Walmart 写入单）；WFS 设置页（D 组）；`old-system/`；`.env`、调度配置、生产库。 |
 | **docs** | 8088 源码（见文首）；`features/pmc-wfs-shipment/context/decisions.md`（10-10 异常规则定稿第 1–8 条）；`features/pmc-logistics/context/decisions.md`、`carrier-api-zhongyi.md`；`features/pmc-handover/chapters/71_wfs_board_datasource_design.md`、`75_wfs_exception_rules_design.md`；本仓库 `docs/delivery/backend-data-source-decision-gate.md`、`docs/data-sources/database-layering-standard.md`、`field-standardization-standard.md`；分支 `pmc/wfs-v2-20261029` 上的 4 份 WFS 数据源决策与 3 份 API 文档。 |
 | **Skill** | 不使用外部 Skill。 |
-| **计划** | 见 §10：A 并分支 → B 货件看板补 8088 口径 → C 异常中心规则引擎 → D 待发货只读化 → E 物流总览（领星段）→ F 众壹 / Walmart 段（待决策后）。 |
-| **风险** | 见 §12：分支大（+14k 行）、迁移多头、共享文件冲突、Walmart / 众壹数据无入库通路、生产写入开关、本地不能调真实接口需回放数据。 |
+| **计划** | 见 §10：A 等 #282 合入 → B 货件看板补 8088 口径 → C 异常中心规则引擎 → D 待发货只读化 → E 物流总览（领星段）→ F 众壹 / Walmart 段（待决策后）。 |
+| **风险** | 见 §12：#282 体量大、共享文件冲突、Walmart / 众壹数据无入库通路、写入路由已注册（网关关闭）、本地不能调真实接口需回放数据。 |
 
 ---
 
@@ -147,7 +147,7 @@
 | 模块 | 方法 / 路径 | 状态 |
 |---|---|---|
 | 待发货 | GET `/api/pmc/wfs/pending-packing/orders`、`/summary`、`/orders/{ident}`、新增 `/by-store` | 分支已有前三个；补 8088 行状态枚举与按店铺汇总 |
-| 待发货 | POST `/drafts`；创建 `/capabilities`、`/optional-previews` 等 | **第一期不注册**（见 D-2） |
+| 待发货 | POST `/drafts`；创建 `/capabilities`、`/optional-previews`、审批等 | #282 已在 `main.py` 注册 `creation_router`（挂在 `/api/pmc/wfs/pending-packing`）。写不出去：网关是 `DisabledGateway`（调用即 503 `WFS_EXECUTION_DISABLED`），`guard_write` 只放行本地 / 测试库，创建须人工书面批准后才派发。一期是否摘掉该路由由刘云龙定（D-2） |
 | 货件看板 | GET `/api/pmc/wfs/shipment-board/shipments`、`/products`、`/shipments/{row_id}`、`/summary`、`/filter-options` | 分支已有；补 §6.3 派生字段（`eta`、`eta_source`、`sellable_date`、`sellable_real`、`arrival_bucket`、`its_inferred`、`owners`、`is_test`、产品行 `normal_units` / `abnormal_units`）；产品维度改为到货桶数量 |
 | 异常中心 | GET `/api/pmc/wfs/exception-center/cases`、`/summary`、新增 `/cases/{code}` | 分支已有；规则引擎从 STUB 改为 §6.3 实算，`rule_version=WFS-RULES-20261010` |
 | 物流 | GET `/api/pmc/logistics/shipping-lists`、`/shipping-lists/{code}`、`/alerts`、`/summary`、`/filter-options` | 新增 |
@@ -167,19 +167,19 @@
 
 ## 10. Implementation Plan
 
-**并分支方案（`pmc/wfs-v2-20261029` → main）**
-- 现状：相对 `origin/main` 领先 58 个提交 / 落后 9 个；实际差异 136 个文件、+14,038 行，几乎全是 WFS。PR #282 的审计修复已在分支上（`f76a47c9`）。
-- 冲突：用 `git merge-tree` 预演，只有 4 个文件冲突——`backend/tests/db/test_alembic_scaffold.py`、`test_packing_pending_edit_postgresql.py`（迁移头常量）、`backend/app/db/model_registry.py`、`docs/data-registry/DATA_INTERFACE_REGISTRY.md`。
-- 迁移：main 头是 `20261031_0069_walmart_gateway_ledger`，分支头是 `20261101_0073_wfs_creation_manual_approval`，合并后两头 → 新增空的合并迁移 `20261102_0074_merge_wfs_gateway`（只合头，不建表）。
-- 做法：从最新 main 建 `ai/20261102-pmc-wfs-phase1`，`git merge origin/pmc/wfs-v2-20261029`（保留历史），解冲突 + 0074，然后在同一分支做下面 B–E。**不 rebase、不改原分支**。
-- `pmc/wfs-creation-walmart`（3 个提交：Walmart 建货件适配器、店铺 WFS 设置、负责人默认值）**第一期不并**；其中“店铺设置”交 D 组评估。
+**#282 现状（2026-11-03 核对）**
+- PR #282（`pmc/wfs-v2-20261029`）head `ab61bd8`，已把 main `a156640` 合进分支，**尚未合入 main**。
+- 分支迁移 0068–0075：`0068_wfs_creation`、`0068_walmart_remote_jobs`、`0069_wfs_exception_center`、`0069_walmart_gateway_ledger`、`0070_merge_wfs_walmart_remote`、`0070_ai_skill_soft_delete`、`0071_wfs_lingxing_board`、`0071_independent_skill_library`、`0072_wfs_pending_drafts`、`0073_wfs_creation_manual_approval`、`0074_merge_wfs_walmart_gateway`、`0075_merge_wfs_skill_lib`；单一头 `20261102_0075_merge_wfs_skill_lib`。
+- 写入相关现状：`creation_router` 已在 `main.py` 注册；网关 `DisabledGateway`（`get_creation_gateway()` 只返回它，任何创建都 503 `WFS_EXECUTION_DISABLED`）；`guard_write` 只放行 `APP_ENV=local`（且必须是本机 `szzsbj_dev:55432`）或 `test`（库名 `wfs_v2_test_*`）；创建要有人工书面批准记录（`approval_ref` + `approved_by` + `approved_at`）才派发。
+- 本组第一期代码已开 Draft PR #302（head `8046849`，基于 #282 分支，新增迁移 `20261103_0076_wfs_source_files`）；#282 合入 main 后 #302 改 base 为 main。
+- `pmc/wfs-creation-walmart`（Walmart 建货件适配器、店铺 WFS 设置、负责人默认值）**第一期不并**；其中“店铺设置”交 D 组评估。
 - `pmc_domestic/warehouse_service.py`（+7 行）与 PMC-05 仓库打包 AI 对一下再合。
 
 **步骤**
-- A. 并分支 + 合并迁移 + CI 绿（lint / test / build / `scripts/check-rule-pack.sh` / `git diff --check`）。
+- A. 等 #282 合入 main（由刘云龙审核合并，本组不改 #282 分支）；合入后 #302 改 base 为 main，CI 绿（lint / test / build / `scripts/check-rule-pack.sh` / `git diff --check`）。
 - B. 货件看板：移植 `arrival_rules` 为 `pmc_wfs/arrival_rules.py`（纯函数 + 用 8088 同日数据做金样测试）；发布器写入派生字段；产品维度改到货桶；负责人、ITS、测试标记。
 - C. 异常中心：规则引擎实算（§6.3 可用的 4 条），去重键沿用分支 `source_account_ref + store_id + shipment_id + rule_family + item_key`；不可用规则在页面列“待接入 Walmart / 众壹数据”。
-- D. 待发货：按 `packRows` 补行状态 / 按店铺汇总；写入入口按 D-2 关闭。
+- D. 待发货：按 `packRows` 补行状态 / 按店铺汇总；写入入口按 D-2 处理。
 - E. 物流：新建 `pmc_logistics` 只读模块（读 S2 + S3），物流总览 + 异常与提醒（第一期 a 可用：合同超时 / 即将超时（以领星实际发货、到货时间）、实际费用未录入、预计到港缺失、运单号缺失、渠道与目的地区不符）。
 - F. Walmart CSV → RAW 入库（S9，D-1 方案 A，本地用 daily 回放）；补齐依赖 Walmart 的 3 类异常。
 - G. 众壹集成（S8，D-5 决定后）；补齐“货代已签收 · WFS 未收货”。
@@ -204,14 +204,14 @@ npx playwright test e2e/wfs-v2-live.spec.ts e2e/logistics-live.spec.ts
 ## 12. Forbidden Actions / 风险
 
 - 不调用领星 / Walmart / 众壹真实接口；不读凭证；不开定时同步；不执行生产迁移；不推 main、不自行合并。
-- **生产写入风险**：分支里的创建 worker / 网关在生产若被误开就会写 Walmart——第一期 `creation_router` 不注册、`PMC_WFS_CREATION_ENABLED` 默认关（D-2），8443 预检票（`features/pmc-launch-8443/precheck-ticket-20261102.md`）补一项检查该开关。
+- **生产写入风险**：#282 的 `creation_router` 已注册，但网关是 `DisabledGateway`（任何创建都 503），`guard_write` 在生产环境直接拒绝（`WFS_LOCAL_ONLY`），创建还须人工书面批准，三道关都在代码里，没有可误开的环境变量开关。要接真实 Walmart 写入，必须另行审核替换网关（第二期）。一期是否连路由一起摘掉由刘云龙定（D-2）；8443 预检票（`features/pmc-launch-8443/precheck-ticket-20261102.md`）补一项：确认 `get_creation_gateway()` 返回的仍是 `DisabledGateway`。
 - 分支体量大：审核按模块分段（看板 / 异常 / 待发货 / 物流）给审核 AI。
 - 共享文件（导航、路由、main.py、权限目录、model_registry、alembic env）只由总负责 AI 改。
 - 数据新鲜度：第一期 a 的领星数据靠手工一次性运行；上线后“多久刷新一次”需 Rocky 单独批准定时同步（D-4）。
 
 ## 13. Rollback Plan
 
-前端：导航状态改 `disabled` 即下线。后端：只读接口，回滚 = 回退合并提交；0074 为空合并迁移，可安全 downgrade；分支已有迁移有“表里有数据拒绝 downgrade”保护，生产以向前修复为主。异常案件数据保留不删。
+前端：导航状态改 `disabled` 即下线。后端：只读接口，回滚 = 回退合并提交；0074、0075 为空合并迁移，可安全 downgrade；0076 表空时可 downgrade；分支已有迁移有“表里有数据拒绝 downgrade”保护，生产以向前修复为主。异常案件数据保留不删。
 
 ## 14. Acceptance Checklist
 
@@ -219,7 +219,7 @@ npx playwright test e2e/wfs-v2-live.spec.ts e2e/logistics-live.spec.ts
 - [ ] 第一期页面上没有任何写 Walmart / 领星的按钮或接口
 - [ ] CI 全绿；审核 AI 通过；Rocky 在 5173 验收
 - [ ] API 文档 / SOP / 帮助页 / 数据中心接口文档更新
-- [ ] 发布单交刘云龙（提交、迁移 0068–0074、冒烟步骤、回滚）
+- [ ] 发布单交刘云龙（提交、迁移 0068–0075（#282）+ 0076（#302）、冒烟步骤、回滚）
 
 ---
 
@@ -228,7 +228,7 @@ npx playwright test e2e/wfs-v2-live.spec.ts e2e/logistics-live.spec.ts
 | # | 问题 | 建议 |
 |---|---|---|
 | D-1 | Walmart v3 数据怎么进库（§6.2；数据已在采集） | 按 A：读已校验 CSV 落 RAW，不新增任何 Walmart 调用；服务器入库未批准前以 B 状态上线 |
-| D-2 | 分支里的写入代码（草稿 / 创建 / 网关）第一期怎么处理 | 代码随分支合入，但第一期不注册路由、开关默认关，前端不显示按钮 |
+| D-2 | #282 里的写入代码（草稿 / 创建 / 网关）第一期怎么处理 | 现状：路由已注册，但网关 `DisabledGateway`、`guard_write` 只放本地 / 测试库、创建须人工书面批准，生产写不出去。建议保持现状随 #282 合入；是否再把 `creation_router` 从 `main.py` 摘掉由刘云龙定 |
 | D-3 | 异常中心第一期是否开放“处理状态 / 负责人 / 处理记录”（只写本系统，不碰外部） | 开放（8088 已在用，分支已实现）；若坚持纯只读则隐藏处理按钮 |
 | D-4 | 第一期领星数据刷新方式 | 上线时先手工一次性运行；定时同步另出票据由 Rocky 批准 |
 | D-5 | 众壹物流集成（S8）是否立项、凭证放哪台服务器 | 立项为第一期 b；凭证按部署规范放服务器环境变量，由刘云龙决定位置 |
