@@ -58,11 +58,11 @@ from app.modules.data_pages.service import (
     ListingManagementService,
     OrderProfitService,
 )
-from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.iam.organization_access import (
     ORG_OWNER_SCOPE_SESSION_KEY,
     resolve_business_owner_refs,
 )
+from app.modules.integration_sync.dependencies import require_source_account_scope
 
 _ORG_SCOPED_READS = frozenset(
     {
