@@ -6,6 +6,7 @@ from fastapi import Depends, Request
 from app.core.api import ApiError, ErrorCode
 from app.core.auth import Principal, require_principal
 from app.core.permission_policy_v2 import permission_for_request
+from app.modules.iam.permission_catalog_v2 import register_runtime_permission_key
 
 
 # Explicit compatibility aliases for grants created before canonical RBAC v2 keys.
@@ -17,6 +18,7 @@ _LEGACY_PERMISSION_ALIASES: dict[str, frozenset[str]] = {
 
 
 def has_permission(principal: Principal, permission_key: str) -> bool:
+    register_runtime_permission_key(permission_key)
     if "*" in principal.permissions or permission_key in principal.permissions:
         return True
     return bool(_LEGACY_PERMISSION_ALIASES.get(permission_key, frozenset()) & principal.permissions)
@@ -31,6 +33,7 @@ def has_any_permission(principal: Principal, permission_keys: tuple[str, ...]) -
 def require_permission(permission_key: str) -> Callable[..., Principal]:
     if not permission_key or permission_key != permission_key.strip():
         raise ValueError("permission_key must be a non-empty canonical value")
+    register_runtime_permission_key(permission_key)
 
     def dependency(
         principal: Annotated[Principal, Depends(require_principal)],

@@ -23,6 +23,21 @@ def test_organization_and_walmart_remote_are_registered() -> None:
     assert "action:data-center:walmart-remote:execute" in PERMISSION_KEYS
 
 
+def test_runtime_api_and_field_permissions_are_discovered_without_grants() -> None:
+    from app.modules.iam.permission_catalog_v2 import (
+        all_permission_definitions,
+        register_runtime_permission_key,
+    )
+
+    action = register_runtime_permission_key("action:ads:campaigns:pause")
+    field = register_runtime_permission_key("field:finance:profit-center:net-profit")
+    assert action is not None and action.risk_level == "high"
+    assert field is not None and field.risk_level == "high"
+    keys = {item.permission_key for item in all_permission_definitions()}
+    assert action.permission_key in keys
+    assert field.permission_key in keys
+
+
 def test_wfs_case_actions_are_assignable() -> None:
     for action in (
         "follow",

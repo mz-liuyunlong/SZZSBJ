@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from threading import RLock
 from typing import Literal
 
 PermissionType = Literal["page", "action", "field"]
@@ -447,7 +448,57 @@ def _build_permission_definitions() -> tuple[PermissionDefinition, ...]:
 
 
 PERMISSION_DEFINITIONS = _build_permission_definitions()
-PERMISSION_KEYS = frozenset(item.permission_key for item in PERMISSION_DEFINITIONS)
+_PERMISSION_LOCK = RLock()
+_RUNTIME_PERMISSION_DEFINITIONS: dict[str, PermissionDefinition] = {}
+PERMISSION_KEYS: set[str] = {item.permission_key for item in PERMISSION_DEFINITIONS}
+
+
+def register_runtime_permission_key(permission_key: str) -> PermissionDefinition | None:
+    """Discover API/field declarations without granting or writing to the database."""
+    parts = permission_key.split(":")
+    if len(parts) != 4 or parts[0] not in {"page", "action", "field"}:
+        return None
+    permission_type, module_slug, page_slug, leaf_slug = parts
+    module_key = module_slug.replace("-", "_")
+    page_key = f"{module_key}_{page_slug.replace('-', '_')}"
+    if page_key not in PAGE_DEFINITIONS:
+        return None
+    if permission_type == "page":
+        return next(
+            (item for item in PERMISSION_DEFINITIONS if item.permission_key == permission_key),
+            None,
+        )
+    with _PERMISSION_LOCK:
+        existing = _RUNTIME_PERMISSION_DEFINITIONS.get(permission_key)
+        if existing is not None:
+            return existing
+        if permission_key in PERMISSION_KEYS:
+            return next(
+                (item for item in PERMISSION_DEFINITIONS if item.permission_key == permission_key),
+                None,
+            )
+        page_name = PAGE_DEFINITIONS[page_key][2].name
+        leaf_name = leaf_slug.replace("-", " ").replace("_", " ").title()
+        definition = PermissionDefinition(
+            permission_key=permission_key,
+            name=f"{page_name} · {leaf_name}",
+            description=f"{page_name}：{leaf_name}（代码自动发现，未自动授权）",
+            permission_type=permission_type,
+            module_key=module_key,
+            page_key=page_key,
+            action_key=leaf_slug if permission_type == "action" else None,
+            field_key=leaf_slug if permission_type == "field" else None,
+            risk_level="high",
+            sort_order=9999,
+        )
+        _RUNTIME_PERMISSION_DEFINITIONS[permission_key] = definition
+        PERMISSION_KEYS.add(permission_key)
+        return definition
+
+
+def all_permission_definitions() -> tuple[PermissionDefinition, ...]:
+    with _PERMISSION_LOCK:
+        return (*PERMISSION_DEFINITIONS, *_RUNTIME_PERMISSION_DEFINITIONS.values())
 
 LEGACY_PERMISSION_MAPPINGS: dict[str, tuple[str, ...]] = {
     "products:read": (page_permission_key("products_product_management"),),

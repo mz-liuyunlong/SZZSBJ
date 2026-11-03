@@ -344,9 +344,9 @@ def read_permission_diagnostics(
     """Read-only catalog drift diagnostics. No registration, grants, or commits."""
     from sqlalchemy import text
 
-    from app.modules.iam.permission_catalog_v2 import PERMISSION_DEFINITIONS
+    from app.modules.iam.permission_catalog_v2 import all_permission_definitions
 
-    declared = {item.permission_key for item in PERMISSION_DEFINITIONS}
+    declared = {item.permission_key for item in all_permission_definitions()}
     rows = session.execute(text("SELECT permission_key, is_active FROM app_permissions")).all()
     stored = {str(key) for key, _active in rows}
     disabled = {str(key) for key, active in rows if not active}

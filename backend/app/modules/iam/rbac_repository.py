@@ -57,7 +57,7 @@ class RbacRepository:
 
     def register_declared_permissions(self, permission_keys: Iterable[str]) -> None:
         """Lazy, insert-only registration; never grants roles or reactivates disabled keys."""
-        from app.modules.iam.permission_catalog_v2 import PERMISSION_DEFINITIONS
+        from app.modules.iam.permission_catalog_v2 import all_permission_definitions
 
         requested = set(permission_keys)
         for item in PERMISSION_DEFINITIONS:

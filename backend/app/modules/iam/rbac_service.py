@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
 from app.core.auth import Principal
-from app.modules.iam.permission_catalog_v2 import MODULE_NAMES, PERMISSION_DEFINITIONS
+from app.modules.iam.permission_catalog_v2 import (
+    MODULE_NAMES,
+    PERMISSION_DEFINITIONS,
+    all_permission_definitions,
+)
 from app.modules.iam.rbac_repository import RbacRepository
 from app.modules.iam.rbac_schemas import (
     AuditEventRead,
@@ -80,7 +84,7 @@ class RbacService:
                     "risk_level": item.risk_level,
                     "sort_order": item.sort_order,
                 }
-                for item in PERMISSION_DEFINITIONS
+                for item in all_permission_definitions()
                 if item.permission_key not in declared and item.permission_key not in disabled
             ],
         ]

@@ -263,7 +263,7 @@ _RULES: tuple[RequestPermissionRule, ...] = (
 )
 
 
-def permission_for_request(method: str, path: str, declared_permission: str) -> str:
+def _permission_for_request(method: str, path: str, declared_permission: str) -> str:
     normalized_method = method.upper()
     if normalized_method == "GET" and path.startswith("/api/products/skus/"):
         suffix_permissions = {
@@ -331,3 +331,19 @@ def permission_for_request(method: str, path: str, declared_permission: str) -> 
                 return "action:products:listing-management:restore"
             return rule.permission_key
     return declared_permission
+
+
+def permission_for_request(method: str, path: str, declared_permission: str) -> str:
+    from app.modules.iam.permission_catalog_v2 import register_runtime_permission_key
+
+    permission_key = _permission_for_request(method, path, declared_permission)
+    register_runtime_permission_key(permission_key)
+    return permission_key
+
+
+# Import-time route policy declarations are discoverable before the role catalog
+# is first opened. They remain ungranted until an administrator explicitly assigns them.
+from app.modules.iam.permission_catalog_v2 import register_runtime_permission_key as _register
+
+for _rule in _RULES:
+    _register(_rule.permission_key)
