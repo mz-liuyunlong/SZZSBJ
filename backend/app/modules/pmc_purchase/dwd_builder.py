@@ -198,6 +198,9 @@ class DwdOrderLineRow:
     draft_no: str | None
     plan_found: bool
     source: SourceRef
+    # Where draft_no was read: (provider JSON path, document version). The plan remark is
+    # another ODS source than the order line, so lineage must point at the plan version.
+    draft_lineage: tuple[str, SourceRef] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -367,7 +370,7 @@ def _line(
     quantity: int,
     amount: Decimal | None,
     remark_item_id: str | None,
-    draft_no: str | None,
+    draft: tuple[str, str, SourceRef] | None,
     plan_found: bool,
 ) -> DwdOrderLineRow:
     return DwdOrderLineRow(
@@ -391,9 +394,10 @@ def _line(
         unit_price=item.price,
         expect_arrive_date=parse_provider_date(item.expect_arrive_time),
         remark_item_id=remark_item_id,
-        draft_no=draft_no,
+        draft_no=draft[0] if draft else None,
         plan_found=plan_found,
         source=_source(item),
+        draft_lineage=(draft[1], draft[2]) if draft else None,
     )
 
 
@@ -411,28 +415,43 @@ def _remark_item_id_for_line(
     return single_remark_item_id(plan_texts, line_texts)
 
 
+# Provider JSON paths in the same order as plan_texts_from_ods_plan / line_texts_from_ods_item.
+PLAN_DRAFT_PATHS: tuple[str, ...] = (
+    "$.data[].remark",
+    "$.data[].plan_remark",
+    "$.data[].item_purchase_remark",
+)
+LINE_DRAFT_PATHS: tuple[str, ...] = (
+    "$.data[].item_list[].remark",
+    "$.data[].item_list[].item_purchase_remark",
+)
+
+
 def _draft_no_for_line(
     item: OdsOrderItemLike,
     plan_sn: str | None,
     ods_plans_by_sn: Mapping[tuple[str, str], OdsPlanLike],
-) -> str | None:
+) -> tuple[str, str, SourceRef] | None:
     """Draft number: the linked plan's remark first (8088 rule), then the line remark.
 
     Drafts are written into the Lingxing *plan* remark (``ITEMID:<id> | 草稿:CG…``); a
     purchase order created from that plan usually does not copy it onto the line.
+    Returns ``(draft_no, source_path, source_version)`` for lineage, or ``None``.
     """
 
     if plan_sn:
         ods_plan = ods_plans_by_sn.get((item.source_account_ref, plan_sn))
         if ods_plan is not None:
-            for text in plan_texts_from_ods_plan(ods_plan):
+            for text, path in zip(
+                plan_texts_from_ods_plan(ods_plan), PLAN_DRAFT_PATHS, strict=True
+            ):
                 draft = parse_draft_remark(text)
                 if draft:
-                    return draft
-    for text in line_texts_from_ods_item(item):
+                    return draft, path, _source(ods_plan)
+    for text, path in zip(line_texts_from_ods_item(item), LINE_DRAFT_PATHS, strict=True):
         draft = parse_draft_remark(text)
         if draft:
-            return draft
+            return draft, path, _source(item)
     return None
 
 
@@ -486,7 +505,7 @@ def build_orders(
                     quantity=quantity,
                     amount=item.amount,
                     remark_item_id=_remark_item_id_for_line(item, None, ods_plans_by_sn),
-                    draft_no=_draft_no_for_line(item, None, ods_plans_by_sn),
+                    draft=_draft_no_for_line(item, None, ods_plans_by_sn),
                     plan_found=False,
                 )
             )
@@ -516,7 +535,7 @@ def build_orders(
                     remark_item_id=_remark_item_id_for_line(
                         item, allocation.plan_sn, ods_plans_by_sn
                     ),
-                    draft_no=_draft_no_for_line(item, allocation.plan_sn, ods_plans_by_sn),
+                    draft=_draft_no_for_line(item, allocation.plan_sn, ods_plans_by_sn),
                     plan_found=plan is not None,
                 )
             )

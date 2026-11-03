@@ -28,6 +28,9 @@ where `freshness_at` is the newest `calculated_at` among the returned DWS rows a
 (8088 parity: the Lingxing API operator account 「小罗」). Configured by the
 `PMC_PURCHASE_HIDDEN_OWNER_NAMES` environment variable (comma separated; unset = `小罗`, empty = none);
 rows whose owner name is on the list come back with `owner = { uid: null, name: null }`.
+Filtering by `owner_uid[]` still matches on the stored owner, so when a hidden owner's uid is
+used as a filter those rows are still returned, only with the owner shown empty
+（按负责人 uid 筛选时，被隐藏者的行仍会出现，只是负责人显示为空）.
 
 ## 2. Authentication, permissions, and scope
 
@@ -69,7 +72,7 @@ The list total counts detail rows; order cards on the summary count distinct ord
 未转单计划 are not board rows — `purchase_overdue` lists the overdue S2 orders only.
 Unknown parameters and inconsistent ranges are `422 VALIDATION_ERROR`.
 
-Row fields: `purchase_order_sn, draft_no (8088 rule: parsed from the linked plan's remark first, then the purchase order line 采购备注, e.g. ``草稿:CG261017-039``),
+Row fields: `purchase_order_sn, draft_no (8088 rule: parsed from the linked plan's remark first, then the purchase order line 采购备注, e.g. ``草稿:CG261017-039``; `gov_data_lineage` records the path and document version actually used — the plan's `$.data[].remark` / `plan_remark` / `item_purchase_remark` or the line's `$.data[].item_list[].remark` / `item_purchase_remark`),
 order_item_id, plan_sn, plan_sns[], order_status,
 stage{stage_code, stage_start, stage_start_estimated, threshold_days, due_date, overdue_days,
 overdue_kind(purchase|arrival|null), alert_due_since}, store{id,name,attributed}, sku,

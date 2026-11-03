@@ -281,6 +281,12 @@ def test_first_publish_inserts_dwd_rows_parse_jobs_and_lineage(session: Session)
         "dwd_purchase_order_line_item",
     }
     assert result.lineage_written == session.scalar(select(func.count(DataLineage.id)))
+    draft_lineage = session.scalars(
+        select(DataLineage).where(DataLineage.target_field == "draft_no")
+    ).all()
+    assert [(d.source_path, d.run_id) for d in draft_lineage] == [
+        ("$.data[].item_list[].remark", runs["purchaseOrderList"][0])
+    ]
 
 
 def test_republish_is_idempotent_and_newer_version_rewrites(session: Session) -> None:
@@ -497,3 +503,24 @@ def test_no_lines_in_build_removes_nothing(session: Session) -> None:
     result = PmcPurchaseDwdPublisher(session, now=T2).publish(source_account_ref=ACCOUNT)
     assert result.report.orders_seen == 0 and result.lines_removed == 0
     assert session.scalar(select(func.count(DwdPurchaseOrderLineItem.id))) == 2
+
+
+def test_draft_no_from_plan_remark_records_plan_lineage(session: Session) -> None:
+    # 8088 rule: the draft lives in the plan remark; lineage must point at the plan version.
+    runs = {k: _run(session, k) for k in ("purchasePlanList", "purchaseOrderList", "receipt")}
+    session.add(_plan(*runs["purchasePlanList"], remark="ITEMID:19051502014 | 草稿:CG261102-087"))
+    session.add(_order(*runs["purchaseOrderList"]))
+    session.add(_item(*runs["purchaseOrderList"], remark="10.28已分配采购"))
+    session.add_all(_receipt(*runs["receipt"]))
+    session.commit()
+
+    PmcPurchaseDwdPublisher(session, now=T1).publish(source_account_ref=ACCOUNT)
+
+    line = session.scalar(select(DwdPurchaseOrderLineItem))
+    assert line is not None and line.draft_no == "CG261102-087"
+    draft_lineage = session.scalars(
+        select(DataLineage).where(DataLineage.target_field == "draft_no")
+    ).all()
+    assert [(d.source_path, d.run_id, d.raw_request_ref_id) for d in draft_lineage] == [
+        ("$.data[].remark", runs["purchasePlanList"][0], runs["purchasePlanList"][1])
+    ]
