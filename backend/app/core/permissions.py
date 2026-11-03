@@ -5,7 +5,6 @@ from fastapi import Depends, Request
 
 from app.core.api import ApiError, ErrorCode
 from app.core.auth import Principal, require_principal
-from app.modules.iam.permission_catalog_v2 import register_runtime_permission_key
 
 
 # Explicit compatibility aliases for grants created before canonical RBAC v2 keys.
@@ -17,6 +16,8 @@ _LEGACY_PERMISSION_ALIASES: dict[str, frozenset[str]] = {
 
 
 def has_permission(principal: Principal, permission_key: str) -> bool:
+    from app.modules.iam.permission_catalog_v2 import register_runtime_permission_key
+
     register_runtime_permission_key(permission_key)
     if "*" in principal.permissions or permission_key in principal.permissions:
         return True
@@ -24,6 +25,8 @@ def has_permission(principal: Principal, permission_key: str) -> bool:
 
 
 def has_any_permission(principal: Principal, permission_keys: tuple[str, ...]) -> bool:
+    from app.modules.iam.permission_catalog_v2 import register_runtime_permission_key
+
     for permission_key in permission_keys:
         register_runtime_permission_key(permission_key)
     return "*" in principal.permissions or any(
@@ -32,6 +35,8 @@ def has_any_permission(principal: Principal, permission_keys: tuple[str, ...]) -
 
 
 def require_permission(permission_key: str) -> Callable[..., Principal]:
+    from app.modules.iam.permission_catalog_v2 import register_runtime_permission_key
+
     if not permission_key or permission_key != permission_key.strip():
         raise ValueError("permission_key must be a non-empty canonical value")
     register_runtime_permission_key(permission_key)
@@ -59,6 +64,8 @@ def require_permission(permission_key: str) -> Callable[..., Principal]:
 
 
 def require_any_permission(*permission_keys: str) -> Callable[..., Principal]:
+    from app.modules.iam.permission_catalog_v2 import register_runtime_permission_key
+
     normalized = tuple(dict.fromkeys(permission_keys))
     if not normalized or any(not item or item != item.strip() for item in normalized):
         raise ValueError("permission_keys must contain canonical non-empty values")
