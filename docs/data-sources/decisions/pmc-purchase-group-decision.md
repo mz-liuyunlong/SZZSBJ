@@ -38,7 +38,7 @@
 | A1 草稿号 `draft_no`（新增来源：采购计划备注） | 采购单行带出系统草稿号 | 领星采购计划 `remark` / `plan_remark` 中 `草稿:CGyymmdd-nnn`（经 `relation_purchase_plan` / `plan_sn` 关联到采购单行） | `REBUILD_SYNC`（复用已同步 `ods_lingxing_purchase_plan`，不新增同步） | 计划备注优先，采购单行备注（现有 `parse_draft_remark`）兜底 | 同短期 | — | 否（8088 已定，PRP 写明顺序） |
 | A2 搜索类型「草稿号 / 计划号」 | 按 CG… / PP… 查采购单 | 同 A1 + `plan_sn` | `REBUILD_SYNC`（同上） | DWS 增加可检索列 | 同短期 | — | 否 |
 | A3 ItemID 归属 | 采购行 ItemID / 店铺 | #288 共享规则 `item_id_resolution.py`（`purchase.remark.store.v2`）+ R-9 / R-9a（`store_from_remark` / `remark_store_conflict`） | `REBUILD_SYNC`（不变） | 维持 #288，不回退到 8088 写法 | 同短期 | — | 否（Rocky R-4 / R-9 / R-10 已定） |
-| A4 隐藏姓名名单（默认「小罗」） | 负责人 / 采购员 / 供应商不显示该名字 | Rocky 2026-11-02 决定（照 8088） | `NEW_SYSTEM_OWNED` | 配置 `pmc_purchase_hidden_names`，展示层过滤，不改 ODS | 同短期 | — | 否 |
+| A4 隐藏姓名名单（默认「小罗」） | 负责人 / 采购员 / 供应商不显示该名字 | Rocky 2026-11-02 决定（照 8088） | `NEW_SYSTEM_OWNED` | 环境变量 `PMC_PURCHASE_HIDDEN_OWNER_NAMES`（默认「小罗」），接口 `meta.hidden_owner_names` 下发，展示层过滤，不改 ODS | 同短期 | — | 否 |
 
 ### B 自动补货（采购计划草稿）
 
