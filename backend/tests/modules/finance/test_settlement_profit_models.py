@@ -153,7 +153,7 @@ def test_inventory_movement_is_not_keyed_by_serial_number() -> None:
     assert not table.c.store_code.nullable
     assert table.c.store_id.nullable
     assert not table.foreign_keys  # flow table is owned by the inventory-claim PRP
-    assert m.STORE_MAPPING_STATUSES == ("mapped", "unmapped")
+    assert m.STORE_MAPPING_STATUSES == ("mapped", "unmapped", "manual_assigned")
 
 
 def test_fx_status_has_no_fallback_state() -> None:

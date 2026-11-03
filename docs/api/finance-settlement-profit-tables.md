@@ -2,6 +2,8 @@
 
 来源：`PRPs/finance-settlement-profit-v2.md` §6.2；模型 `backend/app/modules/finance/settlement_profit_models.py`；迁移 `backend/alembic/versions/20261103_0072_fin_settle_profit_v2.py`（down_revision `20261102_0071_skill_lib`）。
 
+PR-3 迁移 `backend/alembic/versions/20261104_0074_fin_settle_calc.py` 只在本 PR 的表上加列、改 CHECK：调整类型加 `assign_store`；库存异动 `store_mapping_status` 加 `manual_assigned`，并加 `source_row_hash`、`content_hash`；待指定加 `amount_cny`、`reason`、`detail`、`assigned_store_id`，`amount_usd` 可为空（与 `amount_cny` 至少一个非空）；对平加 `inbound_freight_lx_vs_settlement_diff_usd`、`result_hash`。对不上店铺的库存异动，待指定行的 store_id 用占位值 `__unmapped__`（PRP §8.4）。
+
 ## 约定
 
 - 分层：RAW（既有 `ods_api_raw_blobs` / `ods_api_raw_request_refs`）→ ODS → FACT → MART；`manual_` 只覆盖计算结果，不写 RAW / ODS / FACT，也不建外键指向它们；`cfg_` 为财务设置。
@@ -213,6 +215,8 @@
 | `id` | `CHAR(32)` | 否 |
 | `source_flow_id` | `CHAR(32)` | 否 |
 | `source_sync_batch_id` | `CHAR(32)` | 是 |
+| `source_row_hash` | `VARCHAR(64)` | 否 |
+| `content_hash` | `VARCHAR(64)` | 否 |
 | `store_code` | `VARCHAR(128)` | 否 |
 | `store_id` | `VARCHAR(128)` | 是 |
 | `store_mapping_status` | `VARCHAR(16)` | 否 |
@@ -248,9 +252,13 @@
 | `bill_month` | `DATE` | 否 |
 | `source_kind` | `VARCHAR(64)` | 否 |
 | `source_ref` | `VARCHAR(255)` | 否 |
-| `amount_usd` | `NUMERIC(18, 4)` | 否 |
+| `amount_usd` | `NUMERIC(18, 4)` | 是 |
+| `amount_cny` | `NUMERIC(18, 4)` | 是 |
+| `reason` | `VARCHAR(32)` | 否 |
+| `detail` | `JSONB` | 否 |
 | `status` | `VARCHAR(16)` | 否 |
 | `assigned_item_id` | `VARCHAR(128)` | 是 |
+| `assigned_store_id` | `VARCHAR(128)` | 是 |
 | `adjustment_id` | `CHAR(32)` | 是 |
 | `note` | `TEXT` | 是 |
 | `calc_version` | `INTEGER` | 否 |
@@ -360,6 +368,8 @@
 | `diff_usd` | `NUMERIC(18, 4)` | 否 |
 | `ad_daily_vs_settlement_diff_usd` | `NUMERIC(18, 4)` | 是 |
 | `cross_month_disposal_fee_usd` | `NUMERIC(18, 4)` | 是 |
+| `inbound_freight_lx_vs_settlement_diff_usd` | `NUMERIC(18, 4)` | 是 |
+| `result_hash` | `VARCHAR(64)` | 是 |
 | `status` | `VARCHAR(24)` | 否 |
 | `fx_status` | `VARCHAR(16)` | 否 |
 | `calc_version` | `INTEGER` | 否 |

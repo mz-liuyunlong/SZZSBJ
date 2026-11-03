@@ -5,7 +5,7 @@
 - 目标：`PRPs/finance-settlement-profit-v2.md` 及 `/api/finance/settlement-profit/*`
 - 决策状态：**READY_FOR_PRP**
 - `NEED_OWNER_DECISION = 否`
-- 负责人决定：Rocky 2026-11-03，经刘云龙授权（含 2026-11-03 最新回答：汇率无兜底、入库运费只认领星、VDG 未归类）；审核 AI 复审 PRP Rev 4 通过后才可开发
+- 负责人决定：Rocky 2026-11-03，经刘云龙授权（含 2026-11-03 最新回答：汇率无兜底、入库运费只认领星、VDG 未归类、对不上店铺的库存异动进「待指定」）；审核 AI 复审 PRP Rev 4 通过后才可开发
 - 旧系统：不读取、不依赖；正式系统按 RAW → ODS → FACT → MART，前端只读 MART / 读模型
 
 ## 1. 数据源与通道
@@ -30,7 +30,7 @@
 - 本决策不再拥有该接口：ODS 表 `ods_lingxing_wfs_cost_valuation_flow`、同步、契约快照与 SOURCE_MAP / INVENTORY / DATA_INTERFACE_REGISTRY 登记，全部由「库存索赔」PRP 的 PR 1 负责（接口键沿用手工键 `LX-8437AD0BCB9E`）。
 - 该表按「同步批次 + 顺序号」入库、窗口内整段替换，唯一键 (raw_request_ref_id, source_item_ordinal)；流水号会重复、会变，不能作业务键。
 - 结算利润只读 `is_current = true` 的行：货本按 订单号 + GTIN 匹配；库存异动以该行 id 为来源（`fact_inventory_movement_lines` 唯一键 (source_flow_id, calc_version)），不对该表建外键。
-- 店铺：用该行的 store_id（sid 优先，否则 store_code 对照）；对不上则 store_id 为空、`store_mapping_status = unmapped`。
+- 店铺：用该行的 store_id（sid 优先，否则 store_code 对照）。对不上店铺的异动按 §2.11 处理：财务指定前不写库存异动表，只写待指定，待指定的 store_id 存占位值 `__unmapped__`（不存 NULL）；指定后写入库存异动表，store_id = 指定店铺、`store_mapping_status = manual_assigned`。
 
 ## 2. 负责人已决定的业务口径
 
@@ -78,6 +78,10 @@
 ### 2.10 审核、撤销与结账
 
 撤销已终审订单上的调整回到待初审；终审后再修改重走初审；同一人不能对同单既初审又终审；已结账月禁止 adjust / review / revoke，返回 `MONTH_CLOSED`；退回回到上一步并必填原因。订单行使用稳定 `line_key`，结账后源数据变化只写 `fact_settlement_post_close_diffs`，不改已结账数。
+
+### 2.11 对不上店铺的库存异动（Rocky 2026-11-03，按推荐）
+
+领星流水对不上任何店铺的库存异动（例如弃置损耗）不进任何店铺，放进订单审核「待指定」行（待指定表和订单审核表的 store_id 存占位值 `__unmapped__`，不是 NULL；source_kind `inventory_unmapped_store`；领星 store_code 存在 detail 里；`__unmapped__` 不出现在店铺列表和筛选里，页面显示「未对上店铺」，只有全部店铺数据范围的财务用户可见），由财务用 adjustment kind `assign_store` 手工指定归属店铺，走初审 / 终审、可撤销；未指定前该月所有店铺不可结账。细则见 PRP §8.4。
 
 ## 3. 权限与依赖提示
 
