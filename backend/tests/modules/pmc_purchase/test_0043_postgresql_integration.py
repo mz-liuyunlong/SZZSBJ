@@ -30,6 +30,7 @@ from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.pmc_purchase.gate3_models import DwsPurchaseBoard
+from app.modules.pmc_purchase.router import require_pmc_purchase_org_scope
 from app.modules.pmc_purchase.schemas import BoardListQuery
 
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
@@ -136,6 +137,9 @@ def _board_row(index: int, source: str) -> DwsPurchaseBoard:
 
 def _api(engine: Engine) -> TestClient:
     application = create_app()
+    # Isolated synthetic fixture tests the PMC 0043 migration and existing API
+    # contract. The reviewed organization-owner gate has separate regression tests.
+    application.dependency_overrides[require_pmc_purchase_org_scope] = lambda: None
 
     def database_session() -> Iterator[Session]:
         with Session(engine) as session:
