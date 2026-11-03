@@ -1,0 +1,3273 @@
+{
+ "source": "8088 pmc-logistics TabForecast on data day 2026-11-02 (daily/20261102); gold = what the 8088 page computed in the browser",
+ "today": "2026-11-02",
+ "buffer": 10,
+ "sps": [
+  {
+   "code": "SP202610310010005",
+   "status": "已发货",
+   "stage": "已发货",
+   "fc": "LAX2T",
+   "region": "美西",
+   "arrivalActual": "",
+   "arrivalActualSrc": "",
+   "arrivalPlan": "2026-12-20",
+   "arrivalPlanSrc": "region_total",
+   "arrivalDate": "2026-12-20",
+   "cargos": [
+    {
+     "code": "4040477WFB",
+     "status": "AWAITING_DELIVERY",
+     "items": [
+      {
+       "msku": "YC00222-1U",
+       "received": 0
+      }
+     ]
+    }
+   ],
+   "goods": [
+    {
+     "cargo": "4040477WFB",
+     "store_id": "110711149541688320",
+     "store": "HK2613-李思成(拓美恒）",
+     "msku": "YC00222-1U",
+     "sku": "YC00222",
+     "gtin": "00730654548459",
+     "name": "无纺布床单收纳盒(6pc)",
+     "qty": 150
+    }
+   ]
+  },
+  {
+   "code": "SP202610310010004",
+   "status": "已发货",
+   "stage": "已发货",
+   "fc": "LAX2T",
+   "region": "美西",
+   "arrivalActual": "",
+   "arrivalActualSrc": "",
+   "arrivalPlan": "2026-12-20",
+   "arrivalPlanSrc": "region_total",
+   "arrivalDate": "2026-12-20",
+   "cargos": [
+    {
+     "code": "4040417WFB",
+     "status": "AWAITING_DELIVERY",
+     "items": [
+      {
+       "msku": "YC00368-1A",
+       "received": 0
+      },
+      {
+       "msku": "YC01289-1A",
+       "received": 0
+      },
+      {
+       "msku": "YC01290-1A",
+       "received": 0
+      }
+     ]
+    }
+   ],
+   "goods": [
+    {
+     "cargo": "4040417WFB",
+     "store_id": "110711146247224320",
+     "store": "HK2615-邓业(浩鸿国际)",
+     "msku": "YC00368-1A",
+     "sku": "YC00368",
+     "gtin": "00468702905175",
+     "name": "扎带钳带100PCS扎带套装",
+     "qty": 105
+    },
+    {
+     "cargo": "4040417WFB",
+     "store_id": "110711146247224320",
+     "store": "HK2615-邓业(浩鸿国际)",
+     "msku": "YC01289-1A",
+     "sku": "YC01289",
+     "gtin": "00465112239845",
+     "name": "扎带钳带100PCS扎带套装蓝色",
+     "qty": 45
+    },
+    {
+     "cargo": "4040417WFB",
+     "store_id": "110711146247224320",
+     "store": "HK2615-邓业(浩鸿国际)",
+     "msku": "YC01290-1A",
+     "sku": "YC01290",
+     "gtin": "00464794768926",
+     "name": "扎带钳带100PCS扎带套装红色",
+     "qty": 45
+    }
+   ]
+  },
+  {
+   "code": "SP202610310010002",
+   "status": "已发货",
+   "stage": "已发货",
+   "fc": "IND2T",
+   "region": "美中",
+   "arrivalActual": "",
+   "arrivalActualSrc": "",
+   "arrivalPlan": "2026-11-06",
+   "arrivalPlanSrc": "lx_arrival",
+   "arrivalDate": "2026-11-06",
+   "cargos": [
+    {
+     "code": "4039758WFB",
+     "status": "AWAITING_DELIVERY",
+     "items": [
+      {
+       "msku": "WY2032-1A",
+       "received": 0
+      },
+      {
+       "msku": "WY2032-1B",
+       "received": 0
+      },
+      {
+       "msku": "WY2032-1C",
+       "received": 0
+      },
+      {
+       "msku": "WY2032-1D",
+       "received": 0
+      },
+      {
+       "msku": "WY2032-1E",
+       "received": 0
+      },
+      {
+       "msku": "WY2056-1A",
+       "received": 0
+      },
+      {
+       "msku": "WY2056-1B",
+       "received": 0
+      },
+      {
+       "msku": "WY2056-1C",
+       "received": 0
+      },
+      {
+       "msku": "WY2056-1D",
+       "received": 0
+      },
+      {
+       "msku": "WY2056-1E",
+       "received": 0
+      },
+      {
+       "msku": "WY8031-1A",
+       "received": 0
+      },
+      {
+       "msku": "WY8031-1B",
+       "received": 0
+      },
+      {
+       "msku": "WY8031-1C",
+       "received": 0
+      },
+      {
+       "msku": "WY8031-1D",
+       "received": 0
+      },
+      {
+       "msku": "WY8031-1E",
+       "received": 0
+      },
+      {
+       "msku": "WY8032-1B",
+       "received": 0
+      },
+      {
+       "msku": "WY8032-1C",
+       "received": 0
+      },
+      {
+       "msku": "WY8032-1D",
+       "received": 0
+      },
+      {
+       "msku": "WY8032-1E",
+       "received": 0
+      },
+      {
+       "msku": "WY8032-1F",
+       "received": 0
+      },
+      {
+       "msku": "WY8033-1A",
+       "received": 0
+      },
+      {
+       "msku": "WY8033-1B",
+       "received": 0
+      },
+      {
+       "msku": "WY8033-1C",
+       "received": 0
+      },
+      {
+       "msku": "WY8033-1D",
+       "received": 0
+      },
+      {
+       "msku": "WY8033-1E",
+       "received": 0
+      },
+      {
+       "msku": "WY8035-1A",
+       "received": 0
+      },
+      {
+       "msku": "WY8035-1B",
+       "received": 0
+      },
+      {
+       "msku": "WY8035-1C",
+       "received": 0
+      },
+      {
+       "msku": "WY8035-1D",
+       "received": 0
+      },
+      {
+       "msku": "WY8035-1E",
+       "received": 0
+      }
+     ]
+    }
+   ],
+   "goods": [
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY2032-1A",
+     "sku": "JJ2032",
+     "gtin": "00464096885932",
+     "name": "透明薄膜保鲜盒(4pc)",
+     "qty": 2
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY2032-1B",
+     "sku": "JJ2032",
+     "gtin": "00464101928142",
+     "name": "透明薄膜保鲜盒(4pc)",
+     "qty": 2
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY2032-1C",
+     "sku": "JJ2032",
+     "gtin": "00464101935676",
+     "name": "透明薄膜保鲜盒(4pc)",
+     "qty": 2
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY2032-1D",
+     "sku": "JJ2032",
+     "gtin": "00464101878850",
+     "name": "透明薄膜保鲜盒(4pc)",
+     "qty": 2
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY2032-1E",
+     "sku": "JJ2032",
+     "gtin": "00464101970691",
+     "name": "透明薄膜保鲜盒(4pc)",
+     "qty": 2
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY2056-1A",
+     "sku": "JJ2056",
+     "gtin": "00464098128204",
+     "name": "瓜子碗(1pc)",
+     "qty": 2
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY2056-1B",
+     "sku": "JJ2056",
+     "gtin": "00464816162756",
+     "name": "瓜子碗(1pc)",
+     "qty": 2
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY2056-1C",
+     "sku": "JJ2056",
+     "gtin": "00464101910123",
+     "name": "瓜子碗(1pc)",
+     "qty": 2
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY2056-1D",
+     "sku": "JJ2056",
+     "gtin": "00464101916576",
+     "name": "瓜子碗(1pc)",
+     "qty": 2
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY2056-1E",
+     "sku": "JJ2056",
+     "gtin": "00464101879512",
+     "name": "瓜子碗(1pc)",
+     "qty": 2
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8031-1A",
+     "sku": "JJ8031",
+     "gtin": "00464813020936",
+     "name": "花瓣-三色装",
+     "qty": 1
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8031-1B",
+     "sku": "JJ8031",
+     "gtin": "00464813091080",
+     "name": "花瓣-三色装",
+     "qty": 1
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8031-1C",
+     "sku": "JJ8031",
+     "gtin": "00466693513690",
+     "name": "花瓣-三色装",
+     "qty": 1
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8031-1D",
+     "sku": "JJ8031",
+     "gtin": "00466247057137",
+     "name": "花瓣-三色装",
+     "qty": 1
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8031-1E",
+     "sku": "JJ8031",
+     "gtin": "00466021356128",
+     "name": "花瓣-三色装",
+     "qty": 1
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8032-1B",
+     "sku": "JJ8032",
+     "gtin": "00468676790104",
+     "name": "小鳄鱼-三色装",
+     "qty": 1
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8032-1C",
+     "sku": "JJ8032",
+     "gtin": "00469429096320",
+     "name": "小鳄鱼-三色装",
+     "qty": 1
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8032-1D",
+     "sku": "JJ8032",
+     "gtin": "00469845213615",
+     "name": "小鳄鱼-三色装",
+     "qty": 1
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8032-1E",
+     "sku": "JJ8032",
+     "gtin": "00464118880822",
+     "name": "小鳄鱼-三色装",
+     "qty": 1
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8032-1F",
+     "sku": "JJ8032",
+     "gtin": "00455643242889",
+     "name": "小鳄鱼-三色装",
+     "qty": 1
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8033-1A",
+     "sku": "JJ8033",
+     "gtin": "00464139011984",
+     "name": "铝合金钥匙扣接杆 (6pc)",
+     "qty": 1
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8033-1B",
+     "sku": "JJ8033",
+     "gtin": "00469429255529",
+     "name": "铝合金钥匙扣接杆 (6pc)",
+     "qty": 1
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8033-1C",
+     "sku": "JJ8033",
+     "gtin": "00468677365097",
+     "name": "铝合金钥匙扣接杆 (6pc)",
+     "qty": 1
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8033-1D",
+     "sku": "JJ8033",
+     "gtin": "00469061042587",
+     "name": "铝合金钥匙扣接杆 (6pc)",
+     "qty": 1
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8033-1E",
+     "sku": "JJ8033",
+     "gtin": "00468677285999",
+     "name": "铝合金钥匙扣接杆 (6pc)",
+     "qty": 1
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8035-1A",
+     "sku": "JJ8035",
+     "gtin": "00464140171677",
+     "name": "四件套开罐器",
+     "qty": 2
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8035-1B",
+     "sku": "JJ8035",
+     "gtin": "00469429311065",
+     "name": "四件套开罐器",
+     "qty": 2
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8035-1C",
+     "sku": "JJ8035",
+     "gtin": "00469429382546",
+     "name": "四件套开罐器",
+     "qty": 2
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8035-1D",
+     "sku": "JJ8035",
+     "gtin": "00469061630234",
+     "name": "四件套开罐器",
+     "qty": 2
+    },
+    {
+     "cargo": "4039758WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "WY8035-1E",
+     "sku": "JJ8035",
+     "gtin": "00468677825805",
+     "name": "四件套开罐器",
+     "qty": 2
+    }
+   ]
+  },
+  {
+   "code": "SP202610290010005",
+   "status": "已发货",
+   "stage": "已发货",
+   "fc": "CVG1n",
+   "region": "美中",
+   "arrivalActual": "",
+   "arrivalActualSrc": "",
+   "arrivalPlan": "2026-12-30",
+   "arrivalPlanSrc": "region_total",
+   "arrivalDate": "2026-12-30",
+   "cargos": [
+    {
+     "code": "3872761WFB",
+     "status": "AWAITING_DELIVERY",
+     "items": [
+      {
+       "msku": "YC01282-1Z",
+       "received": 0
+      },
+      {
+       "msku": "YC01284-1Z",
+       "received": 0
+      }
+     ]
+    }
+   ],
+   "goods": [
+    {
+     "cargo": "3872761WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "YC01282-1Z",
+     "sku": "YC01282",
+     "gtin": "00464066618140",
+     "name": "不锈钢双面砧板60x40cm",
+     "qty": 30
+    },
+    {
+     "cargo": "3872761WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "YC01284-1Z",
+     "sku": "YC01284",
+     "gtin": "00465114989786",
+     "name": "不锈钢双面砧板70x50cm",
+     "qty": 30
+    }
+   ]
+  },
+  {
+   "code": "SP202610260010002",
+   "status": "已发货",
+   "stage": "Walmart 收货中",
+   "fc": "LAX2T",
+   "region": "美西",
+   "arrivalActual": "2026-10-30",
+   "arrivalActualSrc": "wm_sign",
+   "arrivalPlan": "2026-11-06",
+   "arrivalPlanSrc": "lx_arrival",
+   "arrivalDate": "2026-10-30",
+   "cargos": [
+    {
+     "code": "3750285WFB",
+     "status": "RECEIVING_IN_PROGRESS",
+     "items": [
+      {
+       "msku": "JJ9002-1U",
+       "received": 109
+      }
+     ]
+    }
+   ],
+   "goods": [
+    {
+     "cargo": "3750285WFB",
+     "store_id": "110711149920800256",
+     "store": "HK2614-李镜麟(凡米智航）",
+     "msku": "JJ9002-1U",
+     "sku": "JJ9002",
+     "gtin": "00465424737879",
+     "name": "304不锈钢冰格(2pc)",
+     "qty": 109
+    }
+   ]
+  },
+  {
+   "code": "SP202610230010008",
+   "status": "已发货",
+   "stage": "已开船",
+   "fc": "LAX2T",
+   "region": "美西",
+   "arrivalActual": "",
+   "arrivalActualSrc": "",
+   "arrivalPlan": "2026-11-21",
+   "arrivalPlanSrc": "atd+voyage+cycle",
+   "arrivalDate": "2026-11-21",
+   "cargos": [
+    {
+     "code": "3642336WFB",
+     "status": "AWAITING_DELIVERY",
+     "items": [
+      {
+       "msku": "YC00217-1U",
+       "received": 0
+      }
+     ]
+    }
+   ],
+   "goods": [
+    {
+     "cargo": "3642336WFB",
+     "store_id": "110711149541688320",
+     "store": "HK2613-李思成(拓美恒）",
+     "msku": "YC00217-1U",
+     "sku": "YC00217",
+     "gtin": "00730654548398",
+     "name": "抽屉整理器2个装黑色",
+     "qty": 224
+    }
+   ]
+  },
+  {
+   "code": "SP202610190010001",
+   "status": "已发货",
+   "stage": "已开船",
+   "fc": "LAX2T",
+   "region": "美西",
+   "arrivalActual": "",
+   "arrivalActualSrc": "",
+   "arrivalPlan": "2026-11-21",
+   "arrivalPlanSrc": "atd+voyage+cycle",
+   "arrivalDate": "2026-11-21",
+   "cargos": [
+    {
+     "code": "3349164WFB",
+     "status": "AWAITING_DELIVERY",
+     "items": [
+      {
+       "msku": "YC00368-1A",
+       "received": 0
+      }
+     ]
+    }
+   ],
+   "goods": [
+    {
+     "cargo": "3349164WFB",
+     "store_id": "110711146247224320",
+     "store": "HK2615-邓业(浩鸿国际)",
+     "msku": "YC00368-1A",
+     "sku": "YC00368",
+     "gtin": "00468702905175",
+     "name": "扎带钳带100PCS扎带套装",
+     "qty": 150
+    }
+   ]
+  },
+  {
+   "code": "SP202610100010010",
+   "status": "已发货",
+   "stage": "已开船",
+   "fc": "LAX2T",
+   "region": "美西",
+   "arrivalActual": "",
+   "arrivalActualSrc": "",
+   "arrivalPlan": "2026-11-12",
+   "arrivalPlanSrc": "atd+voyage+cycle",
+   "arrivalDate": "2026-11-12",
+   "cargos": [
+    {
+     "code": "2993889WFB",
+     "status": "AWAITING_DELIVERY",
+     "items": [
+      {
+       "msku": "YC00202-1A",
+       "received": 0
+      },
+      {
+       "msku": "YC00348-1A",
+       "received": 0
+      },
+      {
+       "msku": "YC00364-1A",
+       "received": 0
+      },
+      {
+       "msku": "YC00559-1E",
+       "received": 0
+      },
+      {
+       "msku": "YC01143-1A",
+       "received": 0
+      },
+      {
+       "msku": "YC01144-1A",
+       "received": 0
+      },
+      {
+       "msku": "YC01145-1A",
+       "received": 0
+      },
+      {
+       "msku": "YC01146-1A",
+       "received": 0
+      }
+     ]
+    },
+    {
+     "code": "2993959WFB",
+     "status": "AWAITING_DELIVERY",
+     "items": [
+      {
+       "msku": "YC00202-1A",
+       "received": 0
+      },
+      {
+       "msku": "YC00348-1A",
+       "received": 0
+      },
+      {
+       "msku": "YC00364-1A",
+       "received": 0
+      },
+      {
+       "msku": "YC00559-1E",
+       "received": 0
+      }
+     ]
+    },
+    {
+     "code": "2993995WFB",
+     "status": "AWAITING_DELIVERY",
+     "items": [
+      {
+       "msku": "YC00956-1A",
+       "received": 0
+      }
+     ]
+    }
+   ],
+   "goods": [
+    {
+     "cargo": "2993889WFB",
+     "store_id": "110687427724845056",
+     "store": "CN2501-掌上便捷(陈佳聪）",
+     "msku": "YC00202-1A",
+     "sku": "YC00202",
+     "gtin": "00466901946654",
+     "name": "防刮痕清洁海绵（24pcs）",
+     "qty": 224
+    },
+    {
+     "cargo": "2993889WFB",
+     "store_id": "110687427724845056",
+     "store": "CN2501-掌上便捷(陈佳聪）",
+     "msku": "YC00348-1A",
+     "sku": "YC00348",
+     "gtin": "00468619393775",
+     "name": "15g钢丝球(20pc)",
+     "qty": 60
+    },
+    {
+     "cargo": "2993889WFB",
+     "store_id": "110687427724845056",
+     "store": "CN2501-掌上便捷(陈佳聪）",
+     "msku": "YC00364-1A",
+     "sku": "YC00364",
+     "gtin": "00469025689100",
+     "name": "5色蜂窝洗车海绵(5pc)",
+     "qty": 105
+    },
+    {
+     "cargo": "2993889WFB",
+     "store_id": "110687427724845056",
+     "store": "CN2501-掌上便捷(陈佳聪）",
+     "msku": "YC00559-1E",
+     "sku": "YC00559",
+     "gtin": "00468281824713",
+     "name": "过滤网替换配件（6pcs）",
+     "qty": 120
+    },
+    {
+     "cargo": "2993889WFB",
+     "store_id": "110687427724845056",
+     "store": "CN2501-掌上便捷(陈佳聪）",
+     "msku": "YC01143-1A",
+     "sku": "YC01143",
+     "gtin": "00462414194759",
+     "name": "咖色蜂窝洗车海绵(5pc)",
+     "qty": 30
+    },
+    {
+     "cargo": "2993889WFB",
+     "store_id": "110687427724845056",
+     "store": "CN2501-掌上便捷(陈佳聪）",
+     "msku": "YC01144-1A",
+     "sku": "YC01144",
+     "gtin": "00462414337682",
+     "name": "粉色蜂窝洗车海绵(5pc)",
+     "qty": 30
+    },
+    {
+     "cargo": "2993889WFB",
+     "store_id": "110687427724845056",
+     "store": "CN2501-掌上便捷(陈佳聪）",
+     "msku": "YC01145-1A",
+     "sku": "YC01145",
+     "gtin": "00461375834322",
+     "name": "蓝色蜂窝洗车海绵(5pc)",
+     "qty": 30
+    },
+    {
+     "cargo": "2993889WFB",
+     "store_id": "110687427724845056",
+     "store": "CN2501-掌上便捷(陈佳聪）",
+     "msku": "YC01146-1A",
+     "sku": "YC01146",
+     "gtin": "00462842730352",
+     "name": "黄色蜂窝洗车海绵(5pc)",
+     "qty": 30
+    },
+    {
+     "cargo": "2993959WFB",
+     "store_id": "110687427724845056",
+     "store": "CN2501-掌上便捷(陈佳聪）",
+     "msku": "YC00202-1A",
+     "sku": "YC00202",
+     "gtin": "00466901946654",
+     "name": "防刮痕清洁海绵（24pcs）",
+     "qty": 16
+    },
+    {
+     "cargo": "2993959WFB",
+     "store_id": "110687427724845056",
+     "store": "CN2501-掌上便捷(陈佳聪）",
+     "msku": "YC00348-1A",
+     "sku": "YC00348",
+     "gtin": "00468619393775",
+     "name": "15g钢丝球(20pc)",
+     "qty": 54
+    },
+    {
+     "cargo": "2993959WFB",
+     "store_id": "110687427724845056",
+     "store": "CN2501-掌上便捷(陈佳聪）",
+     "msku": "YC00364-1A",
+     "sku": "YC00364",
+     "gtin": "00469025689100",
+     "name": "5色蜂窝洗车海绵(5pc)",
+     "qty": 105
+    },
+    {
+     "cargo": "2993959WFB",
+     "store_id": "110687427724845056",
+     "store": "CN2501-掌上便捷(陈佳聪）",
+     "msku": "YC00559-1E",
+     "sku": "YC00559",
+     "gtin": "00468281824713",
+     "name": "过滤网替换配件（6pcs）",
+     "qty": 30
+    },
+    {
+     "cargo": "2993995WFB",
+     "store_id": "110704872940532224",
+     "store": "HK2612-张李华(賽藝境）",
+     "msku": "YC00956-1A",
+     "sku": "YC00956",
+     "gtin": "00461269986519",
+     "name": "盘子展示架（6pcs）",
+     "qty": 20
+    }
+   ]
+  },
+  {
+   "code": "SP202609170010001",
+   "status": "已发货",
+   "stage": "Walmart 收货中",
+   "fc": "ATL1",
+   "region": "美东",
+   "arrivalActual": "2026-09-30",
+   "arrivalActualSrc": "wm_sign",
+   "arrivalPlan": "2026-09-24",
+   "arrivalPlanSrc": "lx_arrival",
+   "arrivalDate": "2026-09-30",
+   "cargos": [
+    {
+     "code": "2071461WFB",
+     "status": "RECEIVING_IN_PROGRESS",
+     "items": [
+      {
+       "msku": "JJ8015-1U",
+       "received": 295
+      }
+     ]
+    }
+   ],
+   "goods": [
+    {
+     "cargo": "2071461WFB",
+     "store_id": "110711149920800256",
+     "store": "HK2614-李镜麟(凡米智航）",
+     "msku": "JJ8015-1U",
+     "sku": "JJ8015",
+     "gtin": "00464913194179",
+     "name": "4/7/9英寸蛋糕模具套装",
+     "qty": 312
+    }
+   ]
+  },
+  {
+   "code": "SP202609110010005",
+   "status": "已发货",
+   "stage": "Walmart 收货中",
+   "fc": "LAX2T",
+   "region": "美西",
+   "arrivalActual": "2026-10-22",
+   "arrivalActualSrc": "carrier",
+   "arrivalPlan": "2026-10-22",
+   "arrivalPlanSrc": "carrier_est",
+   "arrivalDate": "2026-10-22",
+   "cargos": [
+    {
+     "code": "1859483WFB",
+     "status": "RECEIVING_IN_PROGRESS",
+     "items": [
+      {
+       "msku": "YC00214-1U",
+       "received": 92
+      },
+      {
+       "msku": "YC00767-1A",
+       "received": 9
+      },
+      {
+       "msku": "YC00830-1A",
+       "received": 20
+      }
+     ]
+    }
+   ],
+   "goods": [
+    {
+     "cargo": "1859483WFB",
+     "store_id": "110711149541688320",
+     "store": "HK2613-李思成(拓美恒）",
+     "msku": "YC00214-1U",
+     "sku": "YC00214",
+     "gtin": "00467943189719",
+     "name": "床底挡板(12pc)",
+     "qty": 150
+    },
+    {
+     "cargo": "1859483WFB",
+     "store_id": "110711149541688320",
+     "store": "HK2613-李思成(拓美恒）",
+     "msku": "YC00767-1A",
+     "sku": "YC00767",
+     "gtin": "00451062503631",
+     "name": "蜂蜜过滤器",
+     "qty": 20
+    },
+    {
+     "cargo": "1859483WFB",
+     "store_id": "110711149541688320",
+     "store": "HK2613-李思成(拓美恒）",
+     "msku": "YC00830-1A",
+     "sku": "YC00830",
+     "gtin": "00451060400833",
+     "name": "黄铜钥匙扣套组（10pcs）",
+     "qty": 20
+    }
+   ]
+  },
+  {
+   "code": "SP202609030010004",
+   "status": "已发货",
+   "stage": "Walmart 收货中",
+   "fc": "PHL4n",
+   "region": "美东",
+   "arrivalActual": "2026-10-09",
+   "arrivalActualSrc": "carrier",
+   "arrivalPlan": "2026-10-09",
+   "arrivalPlanSrc": "carrier_est",
+   "arrivalDate": "2026-10-09",
+   "cargos": [
+    {
+     "code": "1491516WFB",
+     "status": "RECEIVING_IN_PROGRESS",
+     "items": [
+      {
+       "msku": "YC00021-1U",
+       "received": 100
+      },
+      {
+       "msku": "YC00027-1U",
+       "received": 204
+      },
+      {
+       "msku": "YC00065-1U",
+       "received": 193
+      }
+     ]
+    },
+    {
+     "code": "1491726WFB",
+     "status": "AWAITING_DELIVERY",
+     "items": [
+      {
+       "msku": "YC00027-1U",
+       "received": 0
+      },
+      {
+       "msku": "YC00065-1U",
+       "received": 0
+      }
+     ]
+    }
+   ],
+   "goods": [
+    {
+     "cargo": "1491516WFB",
+     "store_id": "110711149920800256",
+     "store": "HK2614-李镜麟(凡米智航）",
+     "msku": "YC00021-1U",
+     "sku": "YC00021",
+     "gtin": "00464388596546",
+     "name": "相思木菜板",
+     "qty": 100
+    },
+    {
+     "cargo": "1491516WFB",
+     "store_id": "110711149920800256",
+     "store": "HK2614-李镜麟(凡米智航）",
+     "msku": "YC00027-1U",
+     "sku": "YC00027",
+     "gtin": "00464393994986",
+     "name": "黑色双耳烤盘",
+     "qty": 196
+    },
+    {
+     "cargo": "1491516WFB",
+     "store_id": "110711149920800256",
+     "store": "HK2614-李镜麟(凡米智航）",
+     "msku": "YC00065-1U",
+     "sku": "YC00065",
+     "gtin": "00465791580863",
+     "name": "大号阅读架15.4*11 in",
+     "qty": 200
+    },
+    {
+     "cargo": "1491726WFB",
+     "store_id": "110711149920800256",
+     "store": "HK2614-李镜麟(凡米智航）",
+     "msku": "YC00027-1U",
+     "sku": "YC00027",
+     "gtin": "00464393994986",
+     "name": "黑色双耳烤盘",
+     "qty": 8
+    },
+    {
+     "cargo": "1491726WFB",
+     "store_id": "110711149920800256",
+     "store": "HK2614-李镜麟(凡米智航）",
+     "msku": "YC00065-1U",
+     "sku": "YC00065",
+     "gtin": "00465791580863",
+     "name": "大号阅读架15.4*11 in",
+     "qty": 8
+    }
+   ]
+  },
+  {
+   "code": "SP202608250010004",
+   "status": "已发货",
+   "stage": "Walmart 收货中",
+   "fc": "LAX2T",
+   "region": "美西",
+   "arrivalActual": "2026-09-29",
+   "arrivalActualSrc": "carrier",
+   "arrivalPlan": "2026-09-29",
+   "arrivalPlanSrc": "carrier_est",
+   "arrivalDate": "2026-09-29",
+   "cargos": [
+    {
+     "code": "1020911WFB",
+     "status": "RECEIVING_IN_PROGRESS",
+     "items": [
+      {
+       "msku": "YC00559-1E",
+       "received": 300
+      },
+      {
+       "msku": "YC00639-1A",
+       "received": 148
+      },
+      {
+       "msku": "YC00017-1B",
+       "received": 156
+      },
+      {
+       "msku": "YC00522-1Z",
+       "received": 98
+      }
+     ]
+    },
+    {
+     "code": "1021013WFB",
+     "status": "CLOSED",
+     "items": [
+      {
+       "msku": "YC00017-1B",
+       "received": 32
+      }
+     ]
+    },
+    {
+     "code": "1024964WFB",
+     "status": "CLOSED",
+     "items": [
+      {
+       "msku": "YC00122-1A",
+       "received": 382
+      }
+     ]
+    },
+    {
+     "code": "1024996WFB",
+     "status": "CLOSED",
+     "items": [
+      {
+       "msku": "YC00122-1A",
+       "received": 30
+      }
+     ]
+    }
+   ],
+   "goods": [
+    {
+     "cargo": "1020911WFB",
+     "store_id": "110687427724845056",
+     "store": "CN2501-掌上便捷(陈佳聪）",
+     "msku": "YC00559-1E",
+     "sku": "YC00559",
+     "gtin": "00468281824713",
+     "name": "过滤网替换配件（6pcs）",
+     "qty": 300
+    },
+    {
+     "cargo": "1020911WFB",
+     "store_id": "110687427724845056",
+     "store": "CN2501-掌上便捷(陈佳聪）",
+     "msku": "YC00639-1A",
+     "sku": "YC00639",
+     "gtin": "00469072202956",
+     "name": "15g钢丝球(12pc)",
+     "qty": 150
+    },
+    {
+     "cargo": "1020911WFB",
+     "store_id": "110687427724845056",
+     "store": "CN2501-掌上便捷(陈佳聪）",
+     "msku": "YC00017-1B",
+     "sku": "YC00017",
+     "gtin": "00739630133863",
+     "name": "不锈钢手动研磨器2PCS",
+     "qty": 168
+    },
+    {
+     "cargo": "1020911WFB",
+     "store_id": "110687427724845056",
+     "store": "CN2501-掌上便捷(陈佳聪）",
+     "msku": "YC00522-1Z",
+     "sku": "YC00522",
+     "gtin": "00460215885494",
+     "name": "蒸汽拖把替换拖布4pcs",
+     "qty": 100
+    },
+    {
+     "cargo": "1021013WFB",
+     "store_id": "110687427724845056",
+     "store": "CN2501-掌上便捷(陈佳聪）",
+     "msku": "YC00017-1B",
+     "sku": "YC00017",
+     "gtin": "00739630133863",
+     "name": "不锈钢手动研磨器2PCS",
+     "qty": 32
+    },
+    {
+     "cargo": "1024964WFB",
+     "store_id": "110704863834580480",
+     "store": "CN2603-四颗洋葱(林翔）",
+     "msku": "YC00122-1A",
+     "sku": "YC00122",
+     "gtin": "00739630136161",
+     "name": "淡黄色除尘掸 (30pc)",
+     "qty": 350
+    },
+    {
+     "cargo": "1024996WFB",
+     "store_id": "110704863834580480",
+     "store": "CN2603-四颗洋葱(林翔）",
+     "msku": "YC00122-1A",
+     "sku": "YC00122",
+     "gtin": "00739630136161",
+     "name": "淡黄色除尘掸 (30pc)",
+     "qty": 30
+    }
+   ]
+  }
+ ],
+ "wm": {
+  "2993959WFB": {
+   "actualDelivery": "",
+   "firstReceipt": "",
+   "byGtin": {},
+   "itemsRecv": {
+    "00466901946654": 0,
+    "00468619393775": 0,
+    "00469025689100": 0,
+    "00468281824713": 0
+   }
+  },
+  "2993889WFB": {
+   "actualDelivery": "",
+   "firstReceipt": "",
+   "byGtin": {},
+   "itemsRecv": {
+    "00466901946654": 0,
+    "00468619393775": 0,
+    "00469025689100": 0,
+    "00468281824713": 0,
+    "00462414194759": 0,
+    "00462414337682": 0,
+    "00461375834322": 0,
+    "00462842730352": 0
+   }
+  },
+  "1021013WFB": {
+   "actualDelivery": "2026-10-01",
+   "firstReceipt": "2026-10-23",
+   "byGtin": {
+    "00739630133863": 4
+   },
+   "itemsRecv": {
+    "00739630133863": 32
+   }
+  },
+  "1020911WFB": {
+   "actualDelivery": "2026-10-07",
+   "firstReceipt": "2026-10-23",
+   "byGtin": {
+    "00468281824713": 55,
+    "00469072202956": 30,
+    "00739630133863": 36,
+    "00460215885494": 23
+   },
+   "itemsRecv": {
+    "00739630133863": 156,
+    "00460215885494": 98,
+    "00468281824713": 300,
+    "00469072202956": 148
+   }
+  },
+  "1024996WFB": {
+   "actualDelivery": "2026-10-05",
+   "firstReceipt": "",
+   "byGtin": {},
+   "itemsRecv": {
+    "00739630136161": 30
+   }
+  },
+  "1024964WFB": {
+   "actualDelivery": "2026-10-06",
+   "firstReceipt": "2026-10-24",
+   "byGtin": {
+    "00739630136161": 3
+   },
+   "itemsRecv": {
+    "00739630136161": 382
+   }
+  },
+  "4039758WFB": {
+   "actualDelivery": "",
+   "firstReceipt": "",
+   "byGtin": {},
+   "itemsRecv": {
+    "00464096885932": 0,
+    "00464101928142": 0,
+    "00464101935676": 0,
+    "00464101878850": 0,
+    "00464101970691": 0,
+    "00464098128204": 0,
+    "00464816162756": 0,
+    "00464101910123": 0,
+    "00464101916576": 0,
+    "00464101879512": 0,
+    "00464813020936": 0,
+    "00464813091080": 0,
+    "00466693513690": 0,
+    "00466247057137": 0,
+    "00466021356128": 0,
+    "00468676790104": 0,
+    "00469429096320": 0,
+    "00469845213615": 0,
+    "00464118880822": 0,
+    "00455643242889": 0,
+    "00464139011984": 0,
+    "00469429255529": 0,
+    "00468677365097": 0,
+    "00469061042587": 0,
+    "00468677285999": 0,
+    "00464140171677": 0,
+    "00469429311065": 0,
+    "00469429382546": 0,
+    "00469061630234": 0,
+    "00468677825805": 0
+   }
+  },
+  "3872761WFB": {
+   "actualDelivery": "",
+   "firstReceipt": "",
+   "byGtin": {},
+   "itemsRecv": {
+    "00464066618140": 0,
+    "00465114989786": 0
+   }
+  },
+  "2993995WFB": {
+   "actualDelivery": "",
+   "firstReceipt": "",
+   "byGtin": {},
+   "itemsRecv": {
+    "00461269986519": 0
+   }
+  },
+  "4040417WFB": {
+   "actualDelivery": "",
+   "firstReceipt": "",
+   "byGtin": {},
+   "itemsRecv": {
+    "00468702905175": 0,
+    "00465112239845": 0,
+    "00464794768926": 0
+   }
+  },
+  "3349164WFB": {
+   "actualDelivery": "",
+   "firstReceipt": "",
+   "byGtin": {},
+   "itemsRecv": {
+    "00468702905175": 0
+   }
+  },
+  "4040477WFB": {
+   "actualDelivery": "",
+   "firstReceipt": "",
+   "byGtin": {},
+   "itemsRecv": {
+    "00730654548459": 0
+   }
+  },
+  "3642336WFB": {
+   "actualDelivery": "",
+   "firstReceipt": "",
+   "byGtin": {},
+   "itemsRecv": {
+    "00730654548398": 0
+   }
+  },
+  "1859483WFB": {
+   "actualDelivery": "2026-10-31",
+   "firstReceipt": "2026-10-29",
+   "byGtin": {
+    "00467943189719": 11,
+    "00451060400833": 2
+   },
+   "itemsRecv": {
+    "00467943189719": 92,
+    "00451062503631": 9,
+    "00451060400833": 20
+   }
+  },
+  "3750285WFB": {
+   "actualDelivery": "2026-10-30",
+   "firstReceipt": "",
+   "byGtin": {},
+   "itemsRecv": {
+    "00465424737879": 109
+   }
+  },
+  "2071461WFB": {
+   "actualDelivery": "2026-09-30",
+   "firstReceipt": "2026-10-11",
+   "byGtin": {
+    "00464913194179": 271
+   },
+   "itemsRecv": {
+    "00464913194179": 283
+   }
+  },
+  "1491726WFB": {
+   "actualDelivery": "",
+   "firstReceipt": "",
+   "byGtin": {},
+   "itemsRecv": {
+    "00464393994986": 0,
+    "00465791580863": 0
+   }
+  },
+  "1491516WFB": {
+   "actualDelivery": "2026-10-10",
+   "firstReceipt": "2026-10-10",
+   "byGtin": {
+    "00464388596546": 100,
+    "00464393994986": 204,
+    "00465791580863": 198
+   },
+   "itemsRecv": {
+    "00464388596546": 100,
+    "00464393994986": 204,
+    "00465791580863": 193
+   }
+  }
+ },
+ "gold": [
+  {
+   "key": "110711149541688320|YC00222-1U",
+   "total": 150,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 0,
+   "b60": 150,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-12-20",
+   "nextSell": "2026-12-30",
+   "lines": [
+    {
+     "code": "SP202610310010005",
+     "cargo": "4040477WFB",
+     "bucket": "30–60 天可售",
+     "arr": "2026-12-20",
+     "arrSrc": "region_total",
+     "sell": "2026-12-30",
+     "days": 58,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110711146247224320|YC00368-1A",
+   "total": 255,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 150,
+   "b60": 105,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-21",
+   "nextSell": "2026-12-01",
+   "lines": [
+    {
+     "code": "SP202610310010004",
+     "cargo": "4040417WFB",
+     "bucket": "30–60 天可售",
+     "arr": "2026-12-20",
+     "arrSrc": "region_total",
+     "sell": "2026-12-30",
+     "days": 58,
+     "sign": 0,
+     "shelf": 0
+    },
+    {
+     "code": "SP202610190010001",
+     "cargo": "3349164WFB",
+     "bucket": "15–30 天可售",
+     "arr": "2026-11-21",
+     "arrSrc": "atd+voyage+cycle",
+     "sell": "2026-12-01",
+     "days": 29,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110711146247224320|YC01289-1A",
+   "total": 45,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 0,
+   "b60": 45,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-12-20",
+   "nextSell": "2026-12-30",
+   "lines": [
+    {
+     "code": "SP202610310010004",
+     "cargo": "4040417WFB",
+     "bucket": "30–60 天可售",
+     "arr": "2026-12-20",
+     "arrSrc": "region_total",
+     "sell": "2026-12-30",
+     "days": 58,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110711146247224320|YC01290-1A",
+   "total": 45,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 0,
+   "b60": 45,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-12-20",
+   "nextSell": "2026-12-30",
+   "lines": [
+    {
+     "code": "SP202610310010004",
+     "cargo": "4040417WFB",
+     "bucket": "30–60 天可售",
+     "arr": "2026-12-20",
+     "arrSrc": "region_total",
+     "sell": "2026-12-30",
+     "days": 58,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY2032-1A",
+   "total": 2,
+   "bOver": 0,
+   "b15": 2,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY2032-1B",
+   "total": 2,
+   "bOver": 0,
+   "b15": 2,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY2032-1C",
+   "total": 2,
+   "bOver": 0,
+   "b15": 2,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY2032-1D",
+   "total": 2,
+   "bOver": 0,
+   "b15": 2,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY2032-1E",
+   "total": 2,
+   "bOver": 0,
+   "b15": 2,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY2056-1A",
+   "total": 2,
+   "bOver": 0,
+   "b15": 2,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY2056-1B",
+   "total": 2,
+   "bOver": 0,
+   "b15": 2,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY2056-1C",
+   "total": 2,
+   "bOver": 0,
+   "b15": 2,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY2056-1D",
+   "total": 2,
+   "bOver": 0,
+   "b15": 2,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY2056-1E",
+   "total": 2,
+   "bOver": 0,
+   "b15": 2,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8031-1A",
+   "total": 1,
+   "bOver": 0,
+   "b15": 1,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8031-1B",
+   "total": 1,
+   "bOver": 0,
+   "b15": 1,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8031-1C",
+   "total": 1,
+   "bOver": 0,
+   "b15": 1,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8031-1D",
+   "total": 1,
+   "bOver": 0,
+   "b15": 1,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8031-1E",
+   "total": 1,
+   "bOver": 0,
+   "b15": 1,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8032-1B",
+   "total": 1,
+   "bOver": 0,
+   "b15": 1,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8032-1C",
+   "total": 1,
+   "bOver": 0,
+   "b15": 1,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8032-1D",
+   "total": 1,
+   "bOver": 0,
+   "b15": 1,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8032-1E",
+   "total": 1,
+   "bOver": 0,
+   "b15": 1,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8032-1F",
+   "total": 1,
+   "bOver": 0,
+   "b15": 1,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8033-1A",
+   "total": 1,
+   "bOver": 0,
+   "b15": 1,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8033-1B",
+   "total": 1,
+   "bOver": 0,
+   "b15": 1,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8033-1C",
+   "total": 1,
+   "bOver": 0,
+   "b15": 1,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8033-1D",
+   "total": 1,
+   "bOver": 0,
+   "b15": 1,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8033-1E",
+   "total": 1,
+   "bOver": 0,
+   "b15": 1,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8035-1A",
+   "total": 2,
+   "bOver": 0,
+   "b15": 2,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8035-1B",
+   "total": 2,
+   "bOver": 0,
+   "b15": 2,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8035-1C",
+   "total": 2,
+   "bOver": 0,
+   "b15": 2,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8035-1D",
+   "total": 2,
+   "bOver": 0,
+   "b15": 2,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|WY8035-1E",
+   "total": 2,
+   "bOver": 0,
+   "b15": 2,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-06",
+   "nextSell": "2026-11-16",
+   "lines": [
+    {
+     "code": "SP202610310010002",
+     "cargo": "4039758WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-11-06",
+     "arrSrc": "lx_arrival",
+     "sell": "2026-11-16",
+     "days": 14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|YC01282-1Z",
+   "total": 30,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 30,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-12-30",
+   "nextSell": "2027-01-09",
+   "lines": [
+    {
+     "code": "SP202610290010005",
+     "cargo": "3872761WFB",
+     "bucket": "超过 60 天可售",
+     "arr": "2026-12-30",
+     "arrSrc": "region_total",
+     "sell": "2027-01-09",
+     "days": 68,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|YC01284-1Z",
+   "total": 30,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 30,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-12-30",
+   "nextSell": "2027-01-09",
+   "lines": [
+    {
+     "code": "SP202610290010005",
+     "cargo": "3872761WFB",
+     "bucket": "超过 60 天可售",
+     "arr": "2026-12-30",
+     "arrSrc": "region_total",
+     "sell": "2027-01-09",
+     "days": 68,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110711149920800256|JJ9002-1U",
+   "total": 109,
+   "bOver": 0,
+   "b15": 109,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 109,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-10-30",
+   "nextSell": "2026-11-09",
+   "lines": [
+    {
+     "code": "SP202610260010002",
+     "cargo": "3750285WFB",
+     "bucket": "15 天内可售",
+     "arr": "2026-10-30",
+     "arrSrc": "wm_sign",
+     "sell": "2026-11-09",
+     "days": 7,
+     "sign": 109,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110711149541688320|YC00217-1U",
+   "total": 224,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 224,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-21",
+   "nextSell": "2026-12-01",
+   "lines": [
+    {
+     "code": "SP202610230010008",
+     "cargo": "3642336WFB",
+     "bucket": "15–30 天可售",
+     "arr": "2026-11-21",
+     "arrSrc": "atd+voyage+cycle",
+     "sell": "2026-12-01",
+     "days": 29,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110687427724845056|YC00202-1A",
+   "total": 240,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 240,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-12",
+   "nextSell": "2026-11-22",
+   "lines": [
+    {
+     "code": "SP202610100010010",
+     "cargo": "2993889WFB",
+     "bucket": "15–30 天可售",
+     "arr": "2026-11-12",
+     "arrSrc": "atd+voyage+cycle",
+     "sell": "2026-11-22",
+     "days": 20,
+     "sign": 0,
+     "shelf": 0
+    },
+    {
+     "code": "SP202610100010010",
+     "cargo": "2993959WFB",
+     "bucket": "15–30 天可售",
+     "arr": "2026-11-12",
+     "arrSrc": "atd+voyage+cycle",
+     "sell": "2026-11-22",
+     "days": 20,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110687427724845056|YC00348-1A",
+   "total": 114,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 114,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-12",
+   "nextSell": "2026-11-22",
+   "lines": [
+    {
+     "code": "SP202610100010010",
+     "cargo": "2993889WFB",
+     "bucket": "15–30 天可售",
+     "arr": "2026-11-12",
+     "arrSrc": "atd+voyage+cycle",
+     "sell": "2026-11-22",
+     "days": 20,
+     "sign": 0,
+     "shelf": 0
+    },
+    {
+     "code": "SP202610100010010",
+     "cargo": "2993959WFB",
+     "bucket": "15–30 天可售",
+     "arr": "2026-11-12",
+     "arrSrc": "atd+voyage+cycle",
+     "sell": "2026-11-22",
+     "days": 20,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110687427724845056|YC00364-1A",
+   "total": 210,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 210,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-12",
+   "nextSell": "2026-11-22",
+   "lines": [
+    {
+     "code": "SP202610100010010",
+     "cargo": "2993889WFB",
+     "bucket": "15–30 天可售",
+     "arr": "2026-11-12",
+     "arrSrc": "atd+voyage+cycle",
+     "sell": "2026-11-22",
+     "days": 20,
+     "sign": 0,
+     "shelf": 0
+    },
+    {
+     "code": "SP202610100010010",
+     "cargo": "2993959WFB",
+     "bucket": "15–30 天可售",
+     "arr": "2026-11-12",
+     "arrSrc": "atd+voyage+cycle",
+     "sell": "2026-11-22",
+     "days": 20,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110687427724845056|YC00559-1E",
+   "total": 150,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 150,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 300,
+   "aSign": 300,
+   "aShelf": 55,
+   "anom": 0,
+   "nextArr": "2026-11-12",
+   "nextSell": "2026-11-22",
+   "lines": [
+    {
+     "code": "SP202610100010010",
+     "cargo": "2993889WFB",
+     "bucket": "15–30 天可售",
+     "arr": "2026-11-12",
+     "arrSrc": "atd+voyage+cycle",
+     "sell": "2026-11-22",
+     "days": 20,
+     "sign": 0,
+     "shelf": 0
+    },
+    {
+     "code": "SP202610100010010",
+     "cargo": "2993959WFB",
+     "bucket": "15–30 天可售",
+     "arr": "2026-11-12",
+     "arrSrc": "atd+voyage+cycle",
+     "sell": "2026-11-22",
+     "days": 20,
+     "sign": 0,
+     "shelf": 0
+    },
+    {
+     "code": "SP202608250010004",
+     "cargo": "1020911WFB",
+     "bucket": "已到·收货中",
+     "arr": "",
+     "arrSrc": "",
+     "sell": "2026-10-23",
+     "days": null,
+     "sign": 300,
+     "shelf": 55
+    }
+   ]
+  },
+  {
+   "key": "110687427724845056|YC01143-1A",
+   "total": 30,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 30,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-12",
+   "nextSell": "2026-11-22",
+   "lines": [
+    {
+     "code": "SP202610100010010",
+     "cargo": "2993889WFB",
+     "bucket": "15–30 天可售",
+     "arr": "2026-11-12",
+     "arrSrc": "atd+voyage+cycle",
+     "sell": "2026-11-22",
+     "days": 20,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110687427724845056|YC01144-1A",
+   "total": 30,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 30,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-12",
+   "nextSell": "2026-11-22",
+   "lines": [
+    {
+     "code": "SP202610100010010",
+     "cargo": "2993889WFB",
+     "bucket": "15–30 天可售",
+     "arr": "2026-11-12",
+     "arrSrc": "atd+voyage+cycle",
+     "sell": "2026-11-22",
+     "days": 20,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110687427724845056|YC01145-1A",
+   "total": 30,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 30,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-12",
+   "nextSell": "2026-11-22",
+   "lines": [
+    {
+     "code": "SP202610100010010",
+     "cargo": "2993889WFB",
+     "bucket": "15–30 天可售",
+     "arr": "2026-11-12",
+     "arrSrc": "atd+voyage+cycle",
+     "sell": "2026-11-22",
+     "days": 20,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110687427724845056|YC01146-1A",
+   "total": 30,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 30,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-12",
+   "nextSell": "2026-11-22",
+   "lines": [
+    {
+     "code": "SP202610100010010",
+     "cargo": "2993889WFB",
+     "bucket": "15–30 天可售",
+     "arr": "2026-11-12",
+     "arrSrc": "atd+voyage+cycle",
+     "sell": "2026-11-22",
+     "days": 20,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110704872940532224|YC00956-1A",
+   "total": 20,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 20,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-11-12",
+   "nextSell": "2026-11-22",
+   "lines": [
+    {
+     "code": "SP202610100010010",
+     "cargo": "2993995WFB",
+     "bucket": "15–30 天可售",
+     "arr": "2026-11-12",
+     "arrSrc": "atd+voyage+cycle",
+     "sell": "2026-11-22",
+     "days": 20,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110711149920800256|JJ8015-1U",
+   "total": 0,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 312,
+   "aSign": 283,
+   "aShelf": 271,
+   "anom": 0,
+   "nextArr": "",
+   "nextSell": "",
+   "lines": [
+    {
+     "code": "SP202609170010001",
+     "cargo": "2071461WFB",
+     "bucket": "已到·收货中",
+     "arr": "",
+     "arrSrc": "",
+     "sell": "2026-10-11",
+     "days": null,
+     "sign": 283,
+     "shelf": 271
+    }
+   ]
+  },
+  {
+   "key": "110711149541688320|YC00214-1U",
+   "total": 0,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 150,
+   "aSign": 92,
+   "aShelf": 11,
+   "anom": 0,
+   "nextArr": "",
+   "nextSell": "",
+   "lines": [
+    {
+     "code": "SP202609110010005",
+     "cargo": "1859483WFB",
+     "bucket": "已到·收货中",
+     "arr": "",
+     "arrSrc": "",
+     "sell": "2026-10-29",
+     "days": null,
+     "sign": 92,
+     "shelf": 11
+    }
+   ]
+  },
+  {
+   "key": "110711149541688320|YC00767-1A",
+   "total": 20,
+   "bOver": 20,
+   "b15": 0,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 9,
+   "aShip": 0,
+   "aSign": 0,
+   "aShelf": 0,
+   "anom": 0,
+   "nextArr": "2026-10-22",
+   "nextSell": "2026-11-01",
+   "lines": [
+    {
+     "code": "SP202609110010005",
+     "cargo": "1859483WFB",
+     "bucket": "已过预计可售日未上架",
+     "arr": "2026-10-22",
+     "arrSrc": "carrier",
+     "sell": "2026-11-01",
+     "days": -1,
+     "sign": 9,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110711149541688320|YC00830-1A",
+   "total": 0,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 20,
+   "aSign": 20,
+   "aShelf": 2,
+   "anom": 0,
+   "nextArr": "",
+   "nextSell": "",
+   "lines": [
+    {
+     "code": "SP202609110010005",
+     "cargo": "1859483WFB",
+     "bucket": "已到·收货中",
+     "arr": "",
+     "arrSrc": "",
+     "sell": "2026-10-29",
+     "days": null,
+     "sign": 20,
+     "shelf": 2
+    }
+   ]
+  },
+  {
+   "key": "110711149920800256|YC00021-1U",
+   "total": 0,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 100,
+   "aSign": 100,
+   "aShelf": 100,
+   "anom": 0,
+   "nextArr": "",
+   "nextSell": "",
+   "lines": [
+    {
+     "code": "SP202609030010004",
+     "cargo": "1491516WFB",
+     "bucket": "已到·收货中",
+     "arr": "",
+     "arrSrc": "",
+     "sell": "2026-10-10",
+     "days": null,
+     "sign": 100,
+     "shelf": 100
+    }
+   ]
+  },
+  {
+   "key": "110711149920800256|YC00027-1U",
+   "total": 8,
+   "bOver": 8,
+   "b15": 0,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 196,
+   "aSign": 204,
+   "aShelf": 204,
+   "anom": 0,
+   "nextArr": "2026-10-09",
+   "nextSell": "2026-10-19",
+   "lines": [
+    {
+     "code": "SP202609030010004",
+     "cargo": "1491516WFB",
+     "bucket": "已到·收货中",
+     "arr": "",
+     "arrSrc": "",
+     "sell": "2026-10-10",
+     "days": null,
+     "sign": 204,
+     "shelf": 204
+    },
+    {
+     "code": "SP202609030010004",
+     "cargo": "1491726WFB",
+     "bucket": "已过预计可售日未上架",
+     "arr": "2026-10-09",
+     "arrSrc": "carrier",
+     "sell": "2026-10-19",
+     "days": -14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110711149920800256|YC00065-1U",
+   "total": 8,
+   "bOver": 8,
+   "b15": 0,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 200,
+   "aSign": 193,
+   "aShelf": 198,
+   "anom": 0,
+   "nextArr": "2026-10-09",
+   "nextSell": "2026-10-19",
+   "lines": [
+    {
+     "code": "SP202609030010004",
+     "cargo": "1491516WFB",
+     "bucket": "已到·收货中",
+     "arr": "",
+     "arrSrc": "",
+     "sell": "2026-10-10",
+     "days": null,
+     "sign": 193,
+     "shelf": 198
+    },
+    {
+     "code": "SP202609030010004",
+     "cargo": "1491726WFB",
+     "bucket": "已过预计可售日未上架",
+     "arr": "2026-10-09",
+     "arrSrc": "carrier",
+     "sell": "2026-10-19",
+     "days": -14,
+     "sign": 0,
+     "shelf": 0
+    }
+   ]
+  },
+  {
+   "key": "110687427724845056|YC00639-1A",
+   "total": 0,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 150,
+   "aSign": 148,
+   "aShelf": 30,
+   "anom": 0,
+   "nextArr": "",
+   "nextSell": "",
+   "lines": [
+    {
+     "code": "SP202608250010004",
+     "cargo": "1020911WFB",
+     "bucket": "已到·收货中",
+     "arr": "",
+     "arrSrc": "",
+     "sell": "2026-10-23",
+     "days": null,
+     "sign": 148,
+     "shelf": 30
+    }
+   ]
+  },
+  {
+   "key": "110687427724845056|YC00017-1B",
+   "total": 0,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 168,
+   "aSign": 156,
+   "aShelf": 36,
+   "anom": 0,
+   "nextArr": "",
+   "nextSell": "",
+   "lines": [
+    {
+     "code": "SP202608250010004",
+     "cargo": "1020911WFB",
+     "bucket": "已到·收货中",
+     "arr": "",
+     "arrSrc": "",
+     "sell": "2026-10-23",
+     "days": null,
+     "sign": 156,
+     "shelf": 36
+    }
+   ]
+  },
+  {
+   "key": "110687427724845056|YC00522-1Z",
+   "total": 0,
+   "bOver": 0,
+   "b15": 0,
+   "b30": 0,
+   "b60": 0,
+   "b60p": 0,
+   "bNone": 0,
+   "signedNP": 0,
+   "aShip": 100,
+   "aSign": 98,
+   "aShelf": 23,
+   "anom": 0,
+   "nextArr": "",
+   "nextSell": "",
+   "lines": [
+    {
+     "code": "SP202608250010004",
+     "cargo": "1020911WFB",
+     "bucket": "已到·收货中",
+     "arr": "",
+     "arrSrc": "",
+     "sell": "2026-10-23",
+     "days": null,
+     "sign": 98,
+     "shelf": 23
+    }
+   ]
+  }
+ ]
+}

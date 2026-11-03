@@ -31,7 +31,7 @@ describe("PMC navigation contract", () => {
     }
   });
   it("opens each WFS settings section as its own sidebar leaf and tab", () => {
-    expect(pmc.sidebarSections?.map((s) => s.title)).toEqual(["国内仓", "WFS", "WFS 设置"]);
+    expect(pmc.sidebarSections?.map((s) => s.title)).toEqual(["物流", "国内仓", "WFS", "WFS 设置"]);
     const pages = pmc.children.filter((p) => p.sidebarSection === "pmc-wfs-settings");
     expect(pages.map((p) => p.title)).toEqual([
       "异常与提醒规则", "仓库地区", "创建货件默认值", "物流渠道字典", "店铺设置", "通知与口径说明",

@@ -21,3 +21,20 @@ export const ARR_SRC: Record<string, string> = {
 };
 
 export const SEV_RANK: Record<Sev, number> = { high: 0, mid: 1, low: 2 };
+
+/** Filters shared by 物流总览 and 异常与提醒 (server query keys). */
+export interface SpFilters {
+  store?: string;
+  provider?: string;
+  channel?: string;
+  region?: string;
+  keyword: string;
+  field: "sp" | "cargo" | "track" | "sku";
+}
+
+export const SP_SEARCH_TYPES = [
+  { value: "sp", label: "发货单" },
+  { value: "cargo", label: "WFS 货件" },
+  { value: "track", label: "运单号" },
+  { value: "sku", label: "SKU/MSKU/GTIN" },
+];
