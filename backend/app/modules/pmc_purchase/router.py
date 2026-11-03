@@ -32,7 +32,6 @@ from app.modules.iam.organization_access import (
 )
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.pmc_purchase.overrides import PmcPurchaseOverrideService
-from app.modules.pmc_purchase.repository import PmcPurchaseReadRepository
 from app.modules.pmc_purchase.schemas import (
     BoardFilterQuery,
     BoardListData,
@@ -75,16 +74,9 @@ def require_pmc_purchase_org_scope(
         request.url.path == "/api/pmc/purchase/board"
         or request.url.path == "/api/pmc/purchase/board/summary"
         or request.url.path.startswith("/api/pmc/purchase/orders/")
-        or request.url.path == "/api/pmc/purchase/sku-cycles"
         or request.url.path == "/api/pmc/purchase/plans/pending"
-        or request.url.path.startswith("/api/pmc/purchase/sku-cycles/")
     )
-    allowed_override = (
-        request.method == "POST"
-        and request.url.path.startswith("/api/pmc/purchase/sku-cycles/")
-        and request.url.path.endswith("/overrides")
-    )
-    if not allowed_get and not allowed_override:
+    if not allowed_get:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
     session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owners
 
@@ -273,9 +265,6 @@ def list_sku_cycle_overrides(
     _: read_principal,
     accounts: source_scope,
 ) -> SuccessEnvelope[CycleOverrideListData, PurchaseReadMeta]:
-    if session.info.get(ORG_OWNER_SCOPE_SESSION_KEY) is not None:
-        if not PmcPurchaseReadRepository(session).sku_is_owned_by(sku=sku, accounts=accounts):
-            raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
     data = PmcPurchaseOverrideService(session).history(sku=sku, accounts=accounts)
     return success_response(
         request,
@@ -300,9 +289,6 @@ def create_sku_cycle_override(
     principal: override_principal,
     accounts: source_scope,
 ) -> SuccessEnvelope[CycleOverrideMutationData, PurchaseReadMeta]:
-    if session.info.get(ORG_OWNER_SCOPE_SESSION_KEY) is not None:
-        if not PmcPurchaseReadRepository(session).sku_is_owned_by(sku=sku, accounts=accounts):
-            raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
     data = PmcPurchaseOverrideService(session).apply(
         sku=sku,
         payload=payload,
