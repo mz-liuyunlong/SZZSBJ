@@ -477,6 +477,7 @@ jobs:
           required = {
               "test_worker_never_calls_walmart_without_human_approval",
               "test_migration_0072_matches_orm_metadata",
+              "test_migration_0076_matches_orm_metadata",
               "test_migration_0071_matches_orm_metadata",
               "test_migration_0069_downgrade_refuses_data_and_allows_empty",
           }

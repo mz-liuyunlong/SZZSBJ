@@ -20,6 +20,13 @@ from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
 from app.modules.integration_sync.models import ApiRawRequestRef, IntegrationSyncRun
+from app.modules.pmc_wfs.board_derivations import (
+    BoardFacts,
+    derive_cargo,
+    fc_regions,
+    sp_arrivals,
+)
+from app.modules.pmc_wfs.board_facts import load_board_facts
 from app.modules.pmc_wfs.lingxing_models import (
     WFS_CARGO_STATUS,
     LingxingWfsCargoGoodsOds,
@@ -29,7 +36,7 @@ from app.modules.pmc_wfs.lingxing_models import (
     WfsShipmentBoardRow,
 )
 
-BUILDER_VERSION: Final = "wfs_board.v1"
+BUILDER_VERSION: Final = "wfs_board.v2"
 PROVIDER_TZ: Final = ZoneInfo("Asia/Shanghai")
 
 
@@ -80,8 +87,19 @@ def build_board_rows(
     cargos: list[LingxingWfsCargoOds],
     goods: list[LingxingWfsCargoGoodsOds],
     shipping_lists: list[LingxingWfsShippingListOds],
+    *,
+    facts: BoardFacts | None = None,
+    as_of: date | None = None,
 ) -> list[dict[str, Any]]:
-    """Project ODS rows to board rows (one per cargo). Pure function for tests."""
+    """Project ODS rows to board rows (one per cargo). Pure function for tests.
+
+    ``payload_json["derived"]`` carries the 8088 arrival / sellable facts computed with
+    ``facts`` (Walmart / carrier / channels; empty when absent) as of ``as_of``.
+    """
+
+    facts = facts or BoardFacts()
+    as_of = as_of or datetime.now(PROVIDER_TZ).date()
+    sp_map = sp_arrivals(shipping_lists, fc_regions(cargos), facts, as_of)
 
     goods_by_cargo: dict[str, list[LingxingWfsCargoGoodsOds]] = defaultdict(list)
     for good in goods:
@@ -105,6 +123,13 @@ def build_board_rows(
                 linked.setdefault(shipping.shipping_code, shipping)
         shipping_rows = sorted(linked.values(), key=lambda s: (s.gmt_create or "", s.shipping_code))
         primary = shipping_rows[0] if shipping_rows else None
+        own_shipping = [
+            shipping_by_code[code]
+            for code in cargo.shipping_list_codes or []
+            if code in shipping_by_code
+        ]
+        derived = derive_cargo(cargo, own_shipping, sp_map, facts)
+        derived["walmart_store_connected"] = (cargo.store_id or "") in facts.walmart.stores
         status = cargo.status
         status_name = cargo.status_name or cargo.cargo_status
         if status_name is None and status is not None:
@@ -144,6 +169,7 @@ def build_board_rows(
                 {n for s in shipping_rows for n in (s.logistics_numbers or [])}
             ),
             "payload_json": {
+                "derived": derived,
                 "cargo": {
                     "id": cargo.cargo_id,
                     "cargo_code": cargo.cargo_code,
@@ -209,6 +235,10 @@ def build_board_rows(
     return rows
 
 
+def _aware_utc(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
 def _iso(value: datetime | None) -> str | None:
     if value is None:
         return None
@@ -227,7 +257,10 @@ class WfsBoardPublisher:
         account: str,
         cargo_run_id: UUID,
         shipping_run_id: UUID | None,
+        as_of: date | None = None,
     ) -> WfsBoardPublishResult:
+        """``as_of`` overrides the rule date (local file replay of a past data day only)."""
+
         try:
             if not account.strip():
                 raise WfsBoardPublishError("WFS_BOARD_PUBLICATION_SCOPE_INVALID")
@@ -291,8 +324,10 @@ class WfsBoardPublisher:
                         )
                     )
                 )
-            rows = build_board_rows(cargos, goods, shipping_lists)
             observed = min(r.received_at for r in refs)
+            facts = load_board_facts(self.session)
+            as_of = as_of or _aware_utc(observed).astimezone(PROVIDER_TZ).date()
+            rows = build_board_rows(cargos, goods, shipping_lists, facts=facts, as_of=as_of)
             start = cargo_run.window_start.date()
             end = cargo_run.window_end.date()
             without_shipping = sum(1 for r in rows if not r["shipping_codes"])
@@ -310,6 +345,8 @@ class WfsBoardPublisher:
                     "shipping_lists": len(shipping_lists),
                     "cargos_without_shipping": without_shipping,
                     "complete": True,
+                    "as_of": as_of.isoformat(),
+                    "fact_sources": facts.sources,
                 },
             )
             self.session.commit()

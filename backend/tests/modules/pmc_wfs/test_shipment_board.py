@@ -40,6 +40,9 @@ CLONED_TABLES = (
     "evt_wfs_creation_events",
     "gov_wfs_board_publications",
     "mart_wfs_shipment_board",
+    "ops_wfs_exception_cases",
+    "evt_wfs_exception_detections",
+    "evt_wfs_exception_actions",
 )
 
 
@@ -331,9 +334,10 @@ def test_lingxing_row_links_creation_and_exposes_fulfillment(db):
     assert summary.total == 1 and summary.pending_lingxing_sync == 0
     assert summary.by_status == {"2": 1}
 
-    products = svc.products(ShipmentBoardQuery())
-    assert products.total == 1
-    assert products.items[0].received_units == 38 and products.items[0].in_transit_units == 2
+    # 8088 产品维度 counts only items with a Walmart Item ID that have shipped out; this seed has
+    # neither (no listing row, no derived facts), so it stays out of the product view.
+    assert svc.products(ShipmentBoardQuery()).total == 0
+    assert row.arrival_bucket == "none" and row.exception_types == []
 
     assert svc.list(ShipmentBoardQuery(status=3)).total == 0
     assert svc.list(ShipmentBoardQuery(sync="PENDING")).total == 0
@@ -431,3 +435,49 @@ def test_migration_0071_matches_orm_metadata():
                 assert schema.startswith("wfs_") and token in schema
                 c.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
         admin.dispose()
+
+
+def test_exception_detector_opens_refreshes_and_auto_resolves(db):
+    """8088 rule 创建后长期未发货 (7 days) through the durable case lifecycle."""
+    from sqlalchemy import select
+
+    from app.modules.pmc_wfs.exception_detector import SYSTEM_ACTOR, WfsExceptionDetector
+    from app.modules.pmc_wfs.exception_models import WfsExceptionAction, WfsExceptionCase
+
+    account, order = _seed_order(db)
+    _seed_board(db, account, order, cargo_code="7000001WFB", store_id=order.store_id, status=0)
+    mart = db.scalar(
+        select(WfsShipmentBoardRow).where(WfsShipmentBoardRow.cargo_code == "7000001WFB")
+    )
+    mart.status_name = "PENDING_SHIPMENT_DETAILS"
+    mart.shipping_codes = []
+    mart.payload_json = {
+        **mart.payload_json,
+        "cargo": {"cargo_create_date": "2026-10-01 09:00:00"},
+        "derived": {"version": "wfs_board_derived.v1", "region": "美西"},
+    }
+    db.flush()
+
+    first = WfsExceptionDetector(db, account, today=date(2026, 10, 20)).run()
+    assert (first.hits, first.created) == (1, 1)
+    case = db.scalar(select(WfsExceptionCase).where(WfsExceptionCase.shipment_id == "7000001WFB"))
+    assert case.rule_family == "create_long_unshipped" and case.status == "OPEN"
+    assert case.rule_version == "WFS-RULES-20261010" and case.severity == "LOW"
+    assert case.summary == "创建 19 天仍未补发货信息 / 未关联发货单"
+
+    again = WfsExceptionDetector(db, account, today=date(2026, 10, 20)).run()
+    assert (again.created, again.refreshed, again.auto_resolved) == (0, 1, 0)
+
+    gone = WfsExceptionDetector(db, account, today=date(2026, 10, 5)).run()
+    assert gone.auto_resolved == 1
+    db.refresh(case)
+    assert case.status == "RESOLVED"
+    actions = db.scalars(
+        select(WfsExceptionAction).where(WfsExceptionAction.case_id == case.id)
+    ).all()
+    assert [(a.action_type, a.actor_uid) for a in actions] == [("RESOLVE", SYSTEM_ACTOR)]
+
+    back = WfsExceptionDetector(db, account, today=date(2026, 10, 21)).run()
+    assert back.reopened == 1
+    db.refresh(case)
+    assert case.status == "OPEN" and case.summary == "创建 20 天仍未补发货信息 / 未关联发货单"

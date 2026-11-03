@@ -35,6 +35,9 @@ const lingxingRow: ShipmentBoardRow = {
   to_await_at: "2026-10-16T08:00:00Z", to_receive_at: "2026-10-20T00:00:00Z", to_closed_at: null, to_cancelled_at: null,
   operation_id: "o", ticket_id: "t", ticket_number: 1, order_id: "ord", label_state: "READY",
   creation_state: "SUCCEEDED", ticket_state: "SUCCEEDED",
+  owners: ["林翔"], region: "美西", its_inferred: true, baseline_units: 40, baseline_from: "SP", diff_units: -2,
+  eta: "2026-10-25", eta_source: "real", eta_source_label: "众壹签收", sellable_date: "2026-10-27", sellable_real: true,
+  arrival_bucket: "overdue", shipped_out: true, walmart_first_receipt: "2026-10-27", exception_types: ["收货长期未完成"],
 };
 const pendingRow: ShipmentBoardRow = {
   ...lingxingRow, id: "cr:t2:WFS-NEW-1", source: "creation_only", shipment_id: "WFS-NEW-1", inbound_order_id: null,
@@ -66,8 +69,11 @@ describe("ShipmentBoardPage", () => {
     await waitFor(() => expect(screen.getByText("3292441WFB")).toBeInTheDocument());
     expect(screen.getByText(/WFS 货件（2 张）/)).toBeInTheDocument();
     expect(screen.getAllByText("收货中").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("40 / 40")).toBeInTheDocument();
-    expect(screen.getByText("38 / 2")).toBeInTheDocument();
+    expect(screen.getByText("38/40")).toBeInTheDocument();
+    expect(screen.getAllByText("林翔").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("众壹签收").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("2026-10-27").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("columnheader", { name: "到仓日（实际 / 预计）" })).toBeInTheDocument();
     expect(screen.getAllByText("待领星同步").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole("status", { name: "领星数据时间" })).toHaveTextContent(/领星数据时间/);
     expect(screen.getByText("PK-2")).toBeInTheDocument();

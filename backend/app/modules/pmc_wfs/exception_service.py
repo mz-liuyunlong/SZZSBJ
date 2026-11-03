@@ -33,6 +33,7 @@ RULE_LABELS = {
     "receiving_incomplete": "收货长期未完成",
     "closed_shortage_damage": "关闭后仍存在短少或破损",
     "appeal_deadline": "申诉临期提醒",
+    "carrier_delivered_unreceived": "货代已签收 · WFS未收货",
 }
 
 STATUS_LABELS = {
