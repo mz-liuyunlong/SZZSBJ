@@ -6,13 +6,14 @@ import type {
   RoleDataScopeType,
 } from "@/pages/settings/roleManagementTypes";
 
-const scopeTypeOptions: { value: RoleDataScopeType; label: string }[] = [
+const implementedScopeTypes = new Set<RoleDataScopeType>(["source_account", "org_department"]);
+const scopeTypeOptions: { value: RoleDataScopeType; label: string; disabled?: boolean }[] = [
   { value: "source_account", label: "数据源账号" },
-  { value: "store", label: "店铺" },
-  { value: "owner", label: "负责人" },
-  { value: "sku", label: "SKU" },
-  { value: "product", label: "产品" },
   { value: "org_department", label: "组织部门（含下级）" },
+  { value: "store", label: "店铺（服务端接入中）", disabled: true },
+  { value: "owner", label: "负责人（服务端接入中）", disabled: true },
+  { value: "sku", label: "SKU（服务端接入中）", disabled: true },
+  { value: "product", label: "产品（服务端接入中）", disabled: true },
 ];
 
 interface RoleDataScopeEditorProps {
@@ -50,7 +51,7 @@ function RoleDataScopeEditor({
         type="info"
         showIcon
         message="数据权限与页面、功能权限相互独立"
-        description="每行代表一个可访问范围；同类型多值按并集处理。值为 * 表示该类型全部范围。当前业务接口严格执行数据源账号范围；组织部门权限已在组织架构接口执行服务端过滤；其他非数据源账号维度仍在逐页接入，未接入前不得视为已生效隔离。"
+        description="当前仅数据源账号与组织部门范围接入服务端强制过滤。店铺、负责人、SKU、产品仍在逐模块接入，暂不允许新增或修改这些范围，避免产生未生效的授权假象。"
       />
       <Spin spinning={loading}>
         <div className="role-management__data-scope-toolbar">
@@ -85,13 +86,13 @@ function RoleDataScopeEditor({
                   aria-label={`第${index + 1}条数据范围类型`}
                   value={item.scopeType}
                   options={scopeTypeOptions}
-                  disabled={disabled}
+                  disabled={disabled || !implementedScopeTypes.has(item.scopeType)}
                   onChange={(scopeType) => updateItem(index, { scopeType })}
                 />
                 <Input
                   aria-label={`第${index + 1}条数据范围值`}
                   value={item.scopeValue}
-                  disabled={disabled}
+                  disabled={disabled || !implementedScopeTypes.has(item.scopeType)}
                   placeholder="输入真实范围值；* 表示全部"
                   onChange={(event) => updateItem(index, {
                     scopeValue: event.target.value,
