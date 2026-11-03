@@ -500,6 +500,7 @@ def all_permission_definitions() -> tuple[PermissionDefinition, ...]:
     with _PERMISSION_LOCK:
         return (*PERMISSION_DEFINITIONS, *_RUNTIME_PERMISSION_DEFINITIONS.values())
 
+
 LEGACY_PERMISSION_MAPPINGS: dict[str, tuple[str, ...]] = {
     "products:read": (page_permission_key("products_product_management"),),
     "sales:daily-sales:read": (page_permission_key("sales_daily_sales"),),
