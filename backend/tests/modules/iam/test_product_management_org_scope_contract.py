@@ -58,9 +58,7 @@ def test_product_list_and_summary_sql_uses_owner_uid() -> None:
         ("POST", "/api/product-management/skus/export", False),
     ],
 )
-def test_product_routes_fail_closed_when_scoped(
-    method: str, path: str, permitted: bool
-) -> None:
+def test_product_routes_fail_closed_when_scoped(method: str, path: str, permitted: bool) -> None:
     request = Request({"type": "http", "method": method, "path": path, "headers": []})
     principal = Principal(user_id="8", permissions=frozenset({"products:read"}))
     session = _session()
