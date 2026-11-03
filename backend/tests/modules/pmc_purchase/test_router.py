@@ -259,3 +259,26 @@ def test_order_detail_not_found_is_an_envelope(monkeypatch: Any) -> None:
     monkeypatch.setattr(PmcPurchaseReadService, "order_detail", missing)
     body = _envelope(TestClient(_app(READ)).get("/api/pmc/purchase/orders/NOPE"), 404)
     assert body["error"]["code"] == "NOT_FOUND"
+
+def test_org_scope_filters_order_details_and_sku_cycles() -> None:
+    from sqlalchemy.dialects import postgresql
+    from app.modules.pmc_purchase.gate3_models import DwsPurchaseSkuCycle
+    from app.modules.pmc_purchase.repository import PmcPurchaseReadRepository
+    from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
+    from unittest.mock import MagicMock
+
+    session = MagicMock()
+    session.info = {ORG_OWNER_SCOPE_SESSION_KEY: frozenset({"owner-approved"})}
+    repository = PmcPurchaseReadRepository(session)
+    repository.board_rows_for_order("PO-1", frozenset({"A1"}))
+    order_sql = str(session.scalars.call_args.args[0].compile(
+        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+    ))
+    assert "owner_uid IN ('owner-approved')" in order_sql
+
+    session.reset_mock()
+    repository.sku_cycles(["SKU-1"], frozenset({"A1"}))
+    cycle_sql = str(session.scalars.call_args.args[0].compile(
+        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+    ))
+    assert "dws_purchase_board.owner_uid IN ('owner-approved')" in cycle_sql

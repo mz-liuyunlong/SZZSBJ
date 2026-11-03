@@ -47,10 +47,12 @@ def test_board_query_is_restricted_by_owner_and_account() -> None:
     ("method", "path", "allowed"),
     [
         ("GET", "/api/pmc/purchase/board", True),
-        ("GET", "/api/pmc/purchase/board/summary", False),
-        ("GET", "/api/pmc/purchase/orders/PO123", False),
-        ("GET", "/api/pmc/purchase/plans/pending", False),
-        ("POST", "/api/pmc/purchase/sku-cycles/SKU1/overrides", False),
+        ("GET", "/api/pmc/purchase/board/summary", True),
+        ("GET", "/api/pmc/purchase/orders/PO123", True),
+        ("GET", "/api/pmc/purchase/plans/pending", True),
+        ("GET", "/api/pmc/purchase/sku-cycles", True),
+        ("GET", "/api/pmc/purchase/sku-cycles/SKU1/overrides", True),
+        ("POST", "/api/pmc/purchase/sku-cycles/SKU1/overrides", True),
     ],
 )
 def test_restricted_org_cannot_use_unreviewed_purchase_routes(
