@@ -18,6 +18,7 @@ from app.modules.pmc_wfs.board_facts import load_board_facts, source_tables_read
 from app.modules.pmc_wfs.source_loader import SourceLoadError, WfsSourceLoader
 from app.modules.pmc_wfs.source_models import (
     SOURCE_FILE_TABLES,
+    LingxingLogisticsChannelOds,
     PmcWfsSourceFile,
     WalmartWfsReceiptOds,
 )
@@ -254,3 +255,25 @@ def test_loader_refuses_symlinked_root(db, tmp_path):
     link.symlink_to(real, target_is_directory=True)
     with pytest.raises(SourceLoadError, match="WFS_SOURCE_ROOT_INVALID"):
         WfsSourceLoader(db, actor="test", batch_label="x").load_directory(link)
+
+
+def test_channel_payload_keeps_remark_and_backfills_older_loads(db, tmp_path):
+    """物流看板 reads 仓库代码 / 渠道代码 from ``raw_json.remark``; files loaded before it was kept
+    get it added in place when the same file is offered again (nothing is deleted)."""
+    raw = '{"method_name": "海卡", "remark": "仓库代码：ATL1 渠道代码：ZY-E1", "enabled": 1}'
+    daily = tmp_path / "20261102"
+    _csv(
+        daily / "lingxing" / "logistics_channels.csv",
+        [{"channel_id": "100", "channel_name": "美东直航", "raw_json": raw}],
+    )
+    WfsSourceLoader(db, actor="test", batch_label="20261102").load_directory(daily)
+    row = db.scalar(select(LingxingLogisticsChannelOds))
+    assert row.payload_json["remark"] == "仓库代码：ATL1 渠道代码：ZY-E1"
+    assert row.payload_json["method_name"] == "海卡" and row.payload_json["enabled"] == "1"
+
+    row.payload_json = {"channel_id": "100", "channel_name": "美东直航"}  # pre-2026-11-03 shape
+    db.flush()
+    again = WfsSourceLoader(db, actor="test", batch_label="20261102").load_directory(daily)
+    assert [f.skipped for f in again] == [True]
+    db.refresh(row)
+    assert row.payload_json["remark"] == "仓库代码：ATL1 渠道代码：ZY-E1"
