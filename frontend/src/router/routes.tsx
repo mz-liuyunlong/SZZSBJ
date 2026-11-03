@@ -33,6 +33,7 @@ import WalmartRemotePage from "@/pages/data-center/WalmartRemotePage";
 import ApprovalWorkspacePage from "@/pages/data-center/approval-workspace/ApprovalWorkspacePage";
 import ApiDocsPage from "@/pages/data-center/ApiDocsPage";
 import DataImportPage from "@/pages/data-center/DataImportPage";
+import FinancePageSwitch from "@/pages/finance/FinancePageSwitch";
 import WfsFeeAlertPage from "@/pages/warehouse/WfsFeeAlertPage";
 import PurchaseBoardPage from "@/pages/pmc/purchase-board/PurchaseBoardPage";
 import DomesticWarehousePage from "@/pages/pmc/domestic-warehouse/DomesticWarehousePage";
@@ -207,6 +208,8 @@ function BusinessRoute({
             view={page.key === "pmc_packing_approval" ? "approval" : page.key === "pmc_packing_warehouse" ? "packing" : "batches"} />
         ) : page.key === "data_center_approval_workspace" ? (
           <ApprovalWorkspacePage page={page} permissions={activeUser.permissions} />
+        ) : page.key.startsWith("finance_") ? (
+          <FinancePageSwitch page={page} />
         ) : page.key === "data_center_data_import" ? (
           <DataImportPage page={page} />
         ) : page.key === "data_center_api_docs" ? (

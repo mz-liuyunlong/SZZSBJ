@@ -1,0 +1,30 @@
+/* 财务板块页面框架：与 PMC 采购看板同一套（page card → 标题行 → 筛选卡 → 统计卡 → 表格壳）。 */
+.finance-board { display: flex; width: 100%; height: 100%; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; }
+.finance-board__page-card { width: 100%; height: 100%; min-width: 0; min-height: 0; flex: 1 1 0; overflow: hidden; border: 1px solid #dce3ed; border-radius: 14px; }
+.finance-board__page-card > .ant-card-body { display: flex; width: 100%; height: 100%; min-width: 0; min-height: 0; flex-direction: column; padding: 16px 18px; }
+.finance-board__title-row { display: flex; flex: 0 0 auto; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.finance-board__title-row h1 { margin: 0 0 6px; color: #101828; font-size: 22px; font-weight: 800; line-height: 1.25; }
+.finance-board__title-row p { margin: 0; color: #667085; line-height: 1.5; }
+.finance-board__toolbar-card { width: 100%; min-width: 0; flex: 0 0 auto; margin-bottom: 12px; border-color: #e5eaf3; border-radius: 12px; background: linear-gradient(180deg, #fff, #fbfdff); }
+.finance-board__toolbar-card .ant-card-body { padding: 12px; }
+.finance-board__toolbar { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 10px; }
+.finance-board__search { width: 420px; min-width: 320px; max-width: 420px; flex: 0 0 420px; }
+.finance-board__toolbar-actions { margin-left: auto; flex: 0 0 auto; }
+.finance-board__summary { margin-bottom: 12px; }
+.finance-board__summary--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.finance-board__summary--6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.finance-board__summary--7 { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+@media (max-width: 1500px) { .finance-board__summary--6, .finance-board__summary--7 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.finance-board__table-wrap { display: flex; min-width: 0; min-height: 0; flex: 1 1 0; flex-direction: column; }
+.finance-board__stack { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 2px; }
+.finance-board__sub { color: #98a2b3; font-size: 12px; line-height: 18px; }
+.finance-board__ref { cursor: pointer; }
+.finance-board__metric--neg { color: #cf1322; }
+.finance-board__summary--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.finance-board__inner-tabs { flex: 0 0 auto; }
+.finance-board__inner-tabs > .ant-tabs-nav { margin: 0; }
+.finance-board__fulltext { display: block; white-space: pre-wrap; word-break: break-all; }
+.finance-board__review { display: flex; flex-direction: column; gap: 2px; }
+.finance-board__review-row { display: inline-flex; align-items: center; gap: 2px; }
+.finance-board__review-label { width: 30px; color: #667085; font-size: 12px; }
+.finance-board__review-pass:not(:disabled) { color: #16a34a; }
