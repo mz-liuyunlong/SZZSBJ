@@ -106,6 +106,7 @@ The initial redacted snapshots are under `docs/integrations/lingxing/contracts/`
 | Key | Interface | Before | After | Owner decision | Boundary |
 |---|---|---|---|---|---|
 | `LX-4B9473A2D2E1` | 查询收货单列表 `/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/getOrderList` | `DO_NOT_USE` | `READY_FOR_PRP` (risk `AUTH_UNKNOWN`) | mz-liuyunlong, 2026-09-18, 方案 A, `docs/data-sources/decisions/pmc-purchase-board-decision.md` | Read-only per `official_verified_interfaces.csv`; PRP planning only; not provider verification; not real-call authorization; production use requires separate authorization |
+| `LX-8437AD0BCB9E` | 查询WFS成本计价明细 `/basicOpen/multiplatform/wfs/cost/valuation/detail` (POST) | 未收录（不在 normalized 索引） | `READY_FOR_PRP` (risk `AUTH_UNKNOWN`) | rocky, 2026-11-03, `docs/data-sources/decisions/warehouse-wfs-inventory-claim-decision.md`; snapshot `contracts/inventory-lx-8437ad0bcb9e.md` | 手工键 = SHA1(api_path) 前 12 位（无官方 document_path）；只读；PRP planning only；全仓库唯一 ODS `ods_lingxing_wfs_cost_valuation_flow`；同步默认关闭，真实调用须 rocky 书面授权；不计入上方 normalized 统计 |
 - Never infer authentication, account scope, rate limits, pagination, side effects, or field meaning from a similar endpoint.
 
 ## Source set

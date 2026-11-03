@@ -28,6 +28,15 @@ from app.integrations.lingxing.pmc_purchase_contracts import (
 )
 from app.integrations.lingxing.query_sign import LingxingQuerySignError, build_query_auth_params
 from app.integrations.lingxing.security import redact_json
+from app.integrations.lingxing.wfs_cost_valuation_contracts import (
+    WFS_COST_VALUATION_ALLOWED_BODY_FIELDS,
+    WFS_COST_VALUATION_ENDPOINT,
+    WFS_COST_VALUATION_MAX_PAGE_SIZE,
+    WFS_COST_VALUATION_OBJECT_TYPE,
+    WFS_COST_VALUATION_REQUIRED_BODY_FIELDS,
+    WfsCostValuationContractError,
+    build_wfs_cost_valuation_body,
+)
 
 type LingxingEndpoint = Literal[
     "/erp/sc/routing/inventoryLog/WareHouseInventory/wareHouseCenterStatement",
@@ -48,6 +57,7 @@ type LingxingEndpoint = Literal[
     "/erp/sc/routing/data/local_inventory/inventoryDetails",
     "/erp/sc/routing/data/local_inventory/getBatchDetailList",
     "/erp/sc/routing/data/local_inventory/getBatchStatementList",
+    "/basicOpen/multiplatform/wfs/cost/valuation/detail",
 ]
 type QueryValue = str | int | float | bool | None
 type SuccessEvaluator = Callable[[LingxingEndpoint, httpx.Response, JsonValue], bool]
@@ -323,6 +333,20 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
         )
         for spec in PMC_DOMESTIC_ENDPOINT_SPECS.values()
     },
+    # LX-8437AD0BCB9E WFS cost valuation flow (inventory claim PR 1). Read-only; the
+    # governed sync is disabled by default and never filters businessType.
+    WFS_COST_VALUATION_ENDPOINT: LingxingEndpointContract(
+        method="POST",
+        outbound_enabled=True,
+        allow_query_parameters=False,
+        require_json_body=True,
+        allowed_body_fields=WFS_COST_VALUATION_ALLOWED_BODY_FIELDS,
+        required_body_fields=WFS_COST_VALUATION_REQUIRED_BODY_FIELDS,
+        store_field=None,
+        page_size_field="length",
+        offset_field="offset",
+        auth_strategy="query_sign",
+    ),
 }
 
 
@@ -805,6 +829,54 @@ class LingxingReadonlyClient:
                 raise LingxingClientError("Inbound date window invalid") from None
         elif body.get("show_zero_stock") != 1:
             raise LingxingClientError("Inbound batch snapshot must include zero stock")
+        return self._fetch_page(capture, page, contract)
+
+    def fetch_wfs_cost_valuation_page(
+        self,
+        *,
+        start_date: date,
+        end_date: date,
+        offset: int,
+        length: int,
+        page_no: int,
+        source_account_ref: str,
+        run_id: str,
+        work_item_id: str,
+    ) -> LingxingRawEnvelope:
+        """Fetch one governed LX-8437AD0BCB9E page; pagination is owned by the handler."""
+        if not self._settings.lingxing_enable_real_calls:
+            raise LingxingClientError("Lingxing calls are disabled")
+        if not source_account_ref or source_account_ref != source_account_ref.strip():
+            raise LingxingClientError("Lingxing WFS cost valuation scope is invalid")
+        _required_integer(page_no, minimum=1)
+        try:
+            body = build_wfs_cost_valuation_body(
+                start=start_date, end=end_date, offset=offset, length=length
+            )
+        except WfsCostValuationContractError:
+            raise LingxingClientError("Lingxing WFS cost valuation request is invalid") from None
+        page = LingxingPageRequest.model_construct(
+            page_no=page_no, page_size=length, params=None, body=body
+        )
+        capture = LingxingCaptureRequest(
+            api_path=WFS_COST_VALUATION_ENDPOINT,
+            pages=(page,),
+            store_ids=(source_account_ref,),
+            object_type=WFS_COST_VALUATION_OBJECT_TYPE,
+            trace_id=run_id,
+            run_id=run_id,
+            batch_id=work_item_id,
+            data_date=end_date,
+            extra={"source_account_ref": source_account_ref},
+        )
+        contract = _ENDPOINT_CONTRACTS[capture.api_path]
+        self._validate_outbound_contract(
+            capture,
+            page,
+            contract,
+            page_size_limit=WFS_COST_VALUATION_MAX_PAGE_SIZE,
+            first_page_only=False,
+        )
         return self._fetch_page(capture, page, contract)
 
     def fetch_batch_product_info(
