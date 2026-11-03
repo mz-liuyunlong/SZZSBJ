@@ -35,6 +35,15 @@ vi.mock("./exceptionCenterApi", () => ({
   postCaseEvent: vi.fn(),
   exceptionError: () => "",
 }));
+vi.mock("./settingsApi", async (orig) => ({
+  ...(await orig<typeof import("./settingsApi")>()),
+  getRules: vi.fn(() => Promise.resolve({ version: { version_no: 1, effective_date: "2026-10-10", reason: "8088 初始", created_by: "system", created_at: "2026-10-10T00:00:00Z" }, rows: [], sample_rows: 0 })),
+  listRuleVersions: vi.fn(() => Promise.resolve([])),
+  listFcRegions: vi.fn(() => Promise.resolve([])),
+  getCreationDefaults: vi.fn(() => Promise.reject(new Error("offline"))),
+  listLogisticsChannels: vi.fn(() => Promise.resolve({ items: [], loaded: false })),
+  listSettingsChanges: vi.fn(() => Promise.resolve({ items: [], total: 0 })),
+}));
 
 const renderWithQuery = (ui: ReactElement) =>
   render(
@@ -70,7 +79,7 @@ describe("WFS frontend pages", () => {
       pmc_wfs_pending_packing: { text: "当前条件下暂无已打包完成单据", header: "系统打包单", search: "搜索待发货打包单" },
       pmc_wfs_board: { text: /^当前条件下暂无货件/, header: "Shipment ID", search: "搜索WFS货件看板" },
       pmc_wfs_exceptions: { text: "当前条件下暂无异常货件", header: "货件号", search: "搜索异常中心" },
-      pmc_wfs_settings: { text: "上架缓冲天数" },
+      pmc_wfs_settings: { text: /上架缓冲天数（10 天）/ },
     };
     const sample = samples[page.key];
     renderWithQuery(<WfsFrontendPage page={page} />);
@@ -80,7 +89,7 @@ describe("WFS frontend pages", () => {
       expect(screen.getByRole("columnheader", { name: sample.header })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: sample.search })).toBeInTheDocument();
     } else {
-      expect(screen.getByText(/不请求接口/)).toBeInTheDocument();
+      expect(screen.getByText(/不调用领星/)).toBeInTheDocument();
     }
   });
 

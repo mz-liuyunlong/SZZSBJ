@@ -278,6 +278,7 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ActionDefinition("pmc_wfs_pending_packing", "label-retry", "补取箱唛", 60),
     ActionDefinition("pmc_wfs_exceptions", "assign", "分配异常负责人", 10),
     ActionDefinition("pmc_wfs_exceptions", "handle", "处理异常案件", 20),
+    ActionDefinition("pmc_wfs_settings", "manage", "维护 WFS 设置（规则版本 / 地区 / 默认值）", 10),
     ActionDefinition("pmc_domestic_warehouse_board", "packing-approve", "通过打包审批", 10),
     ActionDefinition("pmc_domestic_warehouse_board", "packing-reject", "驳回打包审批", 20),
     ActionDefinition("products_product_management", "view-sync-history", "查看同步历史", 8),

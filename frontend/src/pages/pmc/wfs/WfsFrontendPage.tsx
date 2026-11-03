@@ -14,7 +14,7 @@ export default function WfsFrontendPage({ page, scope, permissions }: { page: Na
     case "pmc_wfs_exceptions":
       return <ExceptionCenterPage page={page} scope={scope} />;
     case "pmc_wfs_settings":
-      return <WfsSettingsPage page={page} />;
+      return <WfsSettingsPage page={page} scope={scope} permissions={permissions} />;
     default:
       return null;
   }
