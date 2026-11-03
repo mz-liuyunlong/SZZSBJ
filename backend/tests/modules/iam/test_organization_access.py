@@ -24,7 +24,6 @@ def test_organization_scope_allows_super_admin_without_query() -> None:
 def test_missing_department_grant_requires_own_verified_owner_binding() -> None:
     from unittest.mock import MagicMock, patch
     from app.core.auth import Principal
-    from app.core.api import ApiError
     from app.modules.iam.organization_access import resolve_business_owner_refs
 
     session = MagicMock()

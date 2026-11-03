@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.modules.iam.permission_catalog_v2 import register_runtime_permission_key as _register
+
 
 @dataclass(frozen=True, slots=True)
 class RequestPermissionRule:
@@ -334,16 +336,12 @@ def _permission_for_request(method: str, path: str, declared_permission: str) ->
 
 
 def permission_for_request(method: str, path: str, declared_permission: str) -> str:
-    from app.modules.iam.permission_catalog_v2 import register_runtime_permission_key
-
     permission_key = _permission_for_request(method, path, declared_permission)
-    register_runtime_permission_key(permission_key)
+    _register(permission_key)
     return permission_key
 
 
 # Import-time route policy declarations are discoverable before the role catalog
 # is first opened. They remain ungranted until an administrator explicitly assigns them.
-from app.modules.iam.permission_catalog_v2 import register_runtime_permission_key as _register
-
 for _rule in _RULES:
     _register(_rule.permission_key)

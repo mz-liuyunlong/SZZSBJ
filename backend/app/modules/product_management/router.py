@@ -16,8 +16,8 @@ from app.core.api import (
     success_response,
 )
 from app.core.auth import Principal, require_principal
-from app.core.permissions import has_permission, require_permission
 from app.core.permission_policy_v2 import permission_for_request
+from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.iam.organization_access import (
     ORG_OWNER_SCOPE_SESSION_KEY,

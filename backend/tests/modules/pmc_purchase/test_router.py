@@ -262,10 +262,12 @@ def test_order_detail_not_found_is_an_envelope(monkeypatch: Any) -> None:
 
 
 def test_org_scope_filters_purchase_order_detail() -> None:
-    from sqlalchemy.dialects import postgresql
-    from app.modules.pmc_purchase.repository import PmcPurchaseReadRepository
-    from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
     from unittest.mock import MagicMock
+
+    from sqlalchemy.dialects import postgresql
+
+    from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
+    from app.modules.pmc_purchase.repository import PmcPurchaseReadRepository
 
     session = MagicMock()
     session.info = {ORG_OWNER_SCOPE_SESSION_KEY: frozenset({"owner-approved"})}
