@@ -210,16 +210,21 @@ class PmcPurchaseReadRepository:
     ) -> list[DwdPurchasePlan]:
         if not plan_sns:
             return []
-        return list(
-            self.session.scalars(
-                select(DwdPurchasePlan)
-                .where(
-                    DwdPurchasePlan.source_account_ref.in_(sorted(accounts)),
-                    DwdPurchasePlan.plan_sn.in_(list(plan_sns)),
-                )
-                .order_by(DwdPurchasePlan.plan_sn)
-            )
+        statement = select(DwdPurchasePlan).where(
+            DwdPurchasePlan.source_account_ref.in_(sorted(accounts)),
+            DwdPurchasePlan.plan_sn.in_(list(plan_sns)),
         )
+        if self.org_owner_refs is not None:
+            statement = statement.where(
+                DwdPurchasePlan.sku.in_(
+                    select(DwsPurchaseBoard.sku).where(
+                        DwsPurchaseBoard.source_account_ref == DwdPurchasePlan.source_account_ref,
+                        DwsPurchaseBoard.plan_sn == DwdPurchasePlan.plan_sn,
+                        DwsPurchaseBoard.owner_uid.in_(self.org_owner_refs),
+                    )
+                )
+            )
+        return list(self.session.scalars(statement.order_by(DwdPurchasePlan.plan_sn)))
 
     # -- SKU cycles --
 
@@ -287,11 +292,17 @@ class PmcPurchaseReadRepository:
     # -- dimensions --
 
     def store_names(self, accounts: frozenset[str]) -> dict[str, str | None]:
-        return {
-            row.store_id: row.store_name
-            for row in self.session.scalars(
-                select(LingxingStoreDimension).where(
-                    LingxingStoreDimension.source_account_ref.in_(sorted(accounts))
+        statement = select(LingxingStoreDimension).where(
+            LingxingStoreDimension.source_account_ref.in_(sorted(accounts))
+        )
+        if self.org_owner_refs is not None:
+            statement = statement.where(
+                LingxingStoreDimension.store_id.in_(
+                    select(DwsPurchaseBoard.store_id).where(
+                        DwsPurchaseBoard.source_account_ref == LingxingStoreDimension.source_account_ref,
+                        DwsPurchaseBoard.owner_uid.in_(self.org_owner_refs),
+                        DwsPurchaseBoard.store_id.is_not(None),
+                    )
                 )
             )
-        }
+        return {row.store_id: row.store_name for row in self.session.scalars(statement)}

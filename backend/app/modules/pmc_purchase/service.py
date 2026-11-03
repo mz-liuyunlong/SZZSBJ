@@ -153,7 +153,15 @@ class PmcPurchaseReadService:
         plan_sns = sorted({r.plan_sn for r in rows if r.plan_sn})
         plans = self.repository.plans_by_sn(plan_sns, accounts)
         skus = sorted({r.sku for r in rows if r.sku})
-        cycles = self.repository.sku_cycles(skus, accounts)
+        # SKU cycle samples are aggregated across owners. Until a per-owner
+        # cycle mart exists, do not expose this aggregate to org-scoped users.
+        from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
+
+        cycles = (
+            []
+            if self.repository.session.info.get(ORG_OWNER_SCOPE_SESSION_KEY) is not None
+            else self.repository.sku_cycles(skus, accounts)
+        )
         data = OrderDetailData(
             purchase_order_sn=head.order_sn,
             order_status=head.order_status,
