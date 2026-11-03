@@ -267,7 +267,7 @@ export const navigation: NavigationGroup[] = [
   },
   {
     // PMC group approved by Rocky 2026-09-24 (PRP pmc-purchase-board §2, option A); owner review in PR.
-    sidebarSections: [{ key: 'pmc-domestic', title: '国内仓' }, { key: 'pmc-wfs', title: 'WFS' }, { key: 'pmc-wfs-settings', title: 'WFS 设置' }],
+    sidebarSections: [{ key: 'pmc-domestic', title: '国内仓' }, { key: 'pmc-wfs', title: 'WFS' }, { key: 'pmc-settings', title: 'PMC 设置' }],
     key: 'pmc',
     title: 'PMC',
     icon: createElement(DeploymentUnitOutlined, { 'aria-hidden': true }),
@@ -310,36 +310,37 @@ export const navigation: NavigationGroup[] = [
         viewPermissionKey: 'page:pmc:wfs:view',
         help: { enabled: true, title: 'WFS 异常中心使用说明', helpUrl: '/help/pmc-wfs.html', openInNewTab: true },
       }),
-      // WFS settings (PRP pmc-wfs-settings S3): one sidebar leaf per section, Rocky 2026-11-03.
-      page('pmc', 'wfs_settings', '异常与提醒规则', '/pmc/wfs/settings', {
-        sidebarSection: 'pmc-wfs-settings', status: 'building', readOnly: true,
+      // PMC settings group (Rocky 2026-11-03): settings for every PMC area live here; WFS pages carry a
+      // "WFS" prefix so domestic-warehouse / logistics settings can join the same group later.
+      page('pmc', 'wfs_settings', 'WFS 异常与提醒规则', '/pmc/settings/wfs/rules', {
+        sidebarSection: 'pmc-settings', status: 'building', readOnly: true,
         viewPermissionKey: 'page:pmc:wfs:view',
-        help: { enabled: true, title: 'WFS 设置使用说明', helpUrl: '/help/pmc-wfs.html', openInNewTab: true },
+        help: { enabled: true, title: 'PMC 设置使用说明', helpUrl: '/help/pmc-settings.html', openInNewTab: true },
       }),
-      page('pmc', 'wfs_settings_fc', '仓库地区', '/pmc/wfs/settings/fc-regions', {
-        sidebarSection: 'pmc-wfs-settings', status: 'building', readOnly: true,
+      page('pmc', 'wfs_settings_fc', 'WFS 仓库地区', '/pmc/settings/wfs/fc-regions', {
+        sidebarSection: 'pmc-settings', status: 'building', readOnly: true,
         viewPermissionKey: 'page:pmc:wfs:view',
-        help: { enabled: true, title: 'WFS 设置使用说明', helpUrl: '/help/pmc-wfs.html', openInNewTab: true },
+        help: { enabled: true, title: 'PMC 设置使用说明', helpUrl: '/help/pmc-settings.html', openInNewTab: true },
       }),
-      page('pmc', 'wfs_settings_defaults', '创建货件默认值', '/pmc/wfs/settings/creation-defaults', {
-        sidebarSection: 'pmc-wfs-settings', status: 'building', readOnly: true,
+      page('pmc', 'wfs_settings_defaults', 'WFS 创建货件默认值', '/pmc/settings/wfs/creation-defaults', {
+        sidebarSection: 'pmc-settings', status: 'building', readOnly: true,
         viewPermissionKey: 'page:pmc:wfs:view',
-        help: { enabled: true, title: 'WFS 设置使用说明', helpUrl: '/help/pmc-wfs.html', openInNewTab: true },
+        help: { enabled: true, title: 'PMC 设置使用说明', helpUrl: '/help/pmc-settings.html', openInNewTab: true },
       }),
-      page('pmc', 'wfs_settings_channels', '物流渠道字典', '/pmc/wfs/settings/logistics-channels', {
-        sidebarSection: 'pmc-wfs-settings', status: 'building', readOnly: true,
+      page('pmc', 'wfs_settings_channels', '物流渠道字典', '/pmc/settings/logistics-channels', {
+        sidebarSection: 'pmc-settings', status: 'building', readOnly: true,
         viewPermissionKey: 'page:pmc:wfs:view',
-        help: { enabled: true, title: 'WFS 设置使用说明', helpUrl: '/help/pmc-wfs.html', openInNewTab: true },
+        help: { enabled: true, title: 'PMC 设置使用说明', helpUrl: '/help/pmc-settings.html', openInNewTab: true },
       }),
-      page('pmc', 'wfs_settings_stores', '店铺设置', '/pmc/wfs/settings/stores', {
-        sidebarSection: 'pmc-wfs-settings', status: 'building', readOnly: true,
+      page('pmc', 'wfs_settings_stores', 'WFS 店铺设置', '/pmc/settings/wfs/stores', {
+        sidebarSection: 'pmc-settings', status: 'building', readOnly: true,
         viewPermissionKey: 'page:pmc:wfs:view',
-        help: { enabled: true, title: 'WFS 设置使用说明', helpUrl: '/help/pmc-wfs.html', openInNewTab: true },
+        help: { enabled: true, title: 'PMC 设置使用说明', helpUrl: '/help/pmc-settings.html', openInNewTab: true },
       }),
-      page('pmc', 'wfs_settings_notes', '通知与口径说明', '/pmc/wfs/settings/notes', {
-        sidebarSection: 'pmc-wfs-settings', status: 'building', readOnly: true,
+      page('pmc', 'wfs_settings_notes', 'WFS 通知与口径说明', '/pmc/settings/wfs/notes', {
+        sidebarSection: 'pmc-settings', status: 'building', readOnly: true,
         viewPermissionKey: 'page:pmc:wfs:view',
-        help: { enabled: true, title: 'WFS 设置使用说明', helpUrl: '/help/pmc-wfs.html', openInNewTab: true },
+        help: { enabled: true, title: 'PMC 设置使用说明', helpUrl: '/help/pmc-settings.html', openInNewTab: true },
       }),
     ],
   },
@@ -438,4 +439,11 @@ export const navigation: NavigationGroup[] = [
 export const navigationRedirects: Readonly<Record<string, string>> = {
   '/dashboard/today-sales': '/dashboard',
   '/pmc/domestic-warehouse-board': '/pmc/domestic/batches',
+  // WFS settings moved under the PMC settings group (Rocky 2026-11-03).
+  '/pmc/wfs/settings': '/pmc/settings/wfs/rules',
+  '/pmc/wfs/settings/fc-regions': '/pmc/settings/wfs/fc-regions',
+  '/pmc/wfs/settings/creation-defaults': '/pmc/settings/wfs/creation-defaults',
+  '/pmc/wfs/settings/logistics-channels': '/pmc/settings/logistics-channels',
+  '/pmc/wfs/settings/stores': '/pmc/settings/wfs/stores',
+  '/pmc/wfs/settings/notes': '/pmc/settings/wfs/notes',
 };

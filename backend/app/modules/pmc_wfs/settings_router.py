@@ -20,12 +20,16 @@ from app.modules.integration_sync.dependencies import require_source_account_sco
 from app.modules.pmc_wfs.settings_models import SETTINGS_TABLES
 from app.modules.pmc_wfs.settings_schemas import (
     ChangeQuery,
+    ChannelQuery,
     CreationDefaultsOut,
     CreationDefaultsUpdate,
     FcRegionList,
     FcRegionOut,
+    FcRegionQuery,
     FcRegionUpdate,
     LogisticsChannelList,
+    RuleRowPage,
+    RuleRowQuery,
     RuleSetOut,
     RuleVersionCreate,
     RuleVersionList,
@@ -71,6 +75,24 @@ def get_rules(
 
 
 @router.get(
+    "/rules/rows",
+    response_model=SuccessEnvelope[RuleRowPage, dict],
+    responses=ERRORS,
+    operation_id="listPmcWfsSettingsRuleRows",
+    summary="生效版本的规则行（服务端分页、筛选、排序；保存仍按整版）",
+)
+def rule_rows(
+    request: Request, query: Annotated[RuleRowQuery, Query()], svc: Svc, _: Read
+) -> SuccessEnvelope[RuleRowPage, dict]:
+    data = svc.page_rule_rows(query)
+    return success_response(
+        request,
+        data=data,
+        meta=_meta(page=query.page, page_size=query.page_size, total=data.total),
+    )
+
+
+@router.get(
     "/rules/versions",
     response_model=SuccessEnvelope[RuleVersionList, dict],
     responses=ERRORS,
@@ -100,10 +122,17 @@ def create_version(
     response_model=SuccessEnvelope[FcRegionList, dict],
     responses=ERRORS,
     operation_id="listPmcWfsSettingsFcRegions",
-    summary="Walmart 仓库（FC）与地区",
+    summary="Walmart 仓库（FC）与地区（服务端分页、筛选）",
 )
-def fc_regions(request: Request, svc: Svc, _: Read) -> SuccessEnvelope[FcRegionList, dict]:
-    return success_response(request, data=FcRegionList(items=svc.list_fc_regions()), meta=_meta())
+def fc_regions(
+    request: Request, query: Annotated[FcRegionQuery, Query()], svc: Svc, _: Read
+) -> SuccessEnvelope[FcRegionList, dict]:
+    items, total, states = svc.page_fc_regions(query)
+    return success_response(
+        request,
+        data=FcRegionList(items=items, total=total, states=states),
+        meta=_meta(page=query.page, page_size=query.page_size, total=total),
+    )
 
 
 @router.put(
@@ -163,14 +192,18 @@ def update_creation_defaults(
     response_model=SuccessEnvelope[LogisticsChannelList, dict],
     responses=ERRORS,
     operation_id="listPmcWfsSettingsLogisticsChannels",
-    summary="物流商 / 渠道字典（只读，领星渠道文件）",
+    summary="物流商 / 渠道字典（只读，领星渠道文件；服务端分页、筛选）",
 )
 def logistics_channels(
-    request: Request, svc: Svc, _: Read
+    request: Request, query: Annotated[ChannelQuery, Query()], svc: Svc, _: Read
 ) -> SuccessEnvelope[LogisticsChannelList, dict]:
-    items, loaded = svc.logistics_channels()
+    items, loaded, total, providers, methods = svc.logistics_channels(query)
     return success_response(
-        request, data=LogisticsChannelList(items=items, loaded=loaded), meta=_meta()
+        request,
+        data=LogisticsChannelList(
+            items=items, loaded=loaded, total=total, providers=providers, methods=methods
+        ),
+        meta=_meta(page=query.page, page_size=query.page_size, total=total),
     )
 
 

@@ -29,4 +29,5 @@ settings.md
 - `walmart-monitor-target-source.md`（Walmart 监控目标只读来源接口）
 - `wfs-fee-anomaly-auto-detection.md`（WFS 结算采集、只读检测预览与案件写入门禁）
 - `pmc-domestic-batch-board-api.md`（PMC 国内仓批次看板只读 API）
+- `pmc-wfs-settings-api.md`（PMC 设置 · WFS 设置：规则版本、仓库地区、创建默认值、物流渠道字典；服务端分页）
 - `keyword-planning-v11.md`（关键词 V1.1 本地开发契约；未部署、未开放正式投放）

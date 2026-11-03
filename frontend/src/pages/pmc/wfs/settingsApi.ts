@@ -1,4 +1,4 @@
-/** WFS settings API (`/api/pmc/wfs/settings/*`, PRP pmc-wfs-settings §5). Field names follow the contract. */
+/** PMC 设置 · WFS API (`/api/pmc/wfs/settings/*`, PRP pmc-wfs-settings §5). Field names follow the contract. */
 import { backendRequest, BackendRequestError } from "@/api/backendApi";
 
 export const settingsPrefix = "/api/pmc/wfs/settings";
@@ -94,8 +94,37 @@ export const listRuleVersions = (signal?: AbortSignal) =>
 export const createRuleVersion = (body: { effective_date: string; reason: string; rows: RuleRow[] }) =>
   backendRequest<RuleSet>(`${settingsPrefix}/rules/versions`, json("POST", body)).then((r) => r.data);
 
-export const listFcRegions = (signal?: AbortSignal) =>
-  backendRequest<{ items: FcRegion[] }>(`${settingsPrefix}/fc-regions`, { signal }).then((r) => r.data.items);
+/** Server-side page + filters (TABLE_COLUMN_AND_REPORT_RULES: no full-list loading in the browser). */
+export interface PageQuery {
+  page: number;
+  page_size: number;
+  keyword?: string;
+  search_field?: string;
+}
+export interface SortQuery<S extends string> { sort_by: S; sort_order: "asc" | "desc" }
+export const RULE_SORTS = ["row_no", "node", "days", "row_effective_date"] as const;
+export const FC_SORTS = ["fc", "zip", "state", "shipments"] as const;
+export const CHANNEL_SORTS = ["provider_name", "channel_id", "channel_name"] as const;
+export interface RuleRowQuery extends PageQuery, SortQuery<(typeof RULE_SORTS)[number]> { region?: string; decided?: boolean }
+export interface RuleRowPage { version: RuleVersion; items: RuleRow[]; total: number; sample_rows: number; regions: string[] }
+export interface FcRegionQuery extends PageQuery, SortQuery<(typeof FC_SORTS)[number]> { region?: Region; state?: string }
+export interface FcRegionPage { items: FcRegion[]; total: number; states: string[] }
+export interface ChannelQuery extends PageQuery, SortQuery<(typeof CHANNEL_SORTS)[number]> { provider?: string; method?: string; enabled?: boolean }
+export interface ChannelPage { items: LogisticsChannel[]; loaded: boolean; total: number; providers: string[]; methods: string[] }
+
+const qs = (query: object) => {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
+  }
+  return params.toString();
+};
+
+export const listRuleRows = (query: RuleRowQuery, signal?: AbortSignal) =>
+  backendRequest<RuleRowPage>(`${settingsPrefix}/rules/rows?${qs(query)}`, { signal }).then((r) => r.data);
+
+export const listFcRegions = (query: FcRegionQuery, signal?: AbortSignal) =>
+  backendRequest<FcRegionPage>(`${settingsPrefix}/fc-regions?${qs(query)}`, { signal }).then((r) => r.data);
 
 export const updateFcRegion = (fc: string, body: { region: Region; name?: string | null; reason: string }) =>
   backendRequest<FcRegion>(`${settingsPrefix}/fc-regions/${encodeURIComponent(fc)}`, json("PUT", body)).then((r) => r.data);
@@ -106,8 +135,8 @@ export const getCreationDefaults = (signal?: AbortSignal) =>
 export const updateCreationDefaults = (body: CreationDefaults & { reason: string }) =>
   backendRequest<CreationDefaultsOut>(`${settingsPrefix}/creation-defaults`, json("PUT", body)).then((r) => r.data);
 
-export const listLogisticsChannels = (signal?: AbortSignal) =>
-  backendRequest<{ items: LogisticsChannel[]; loaded: boolean }>(`${settingsPrefix}/logistics-channels`, { signal }).then((r) => r.data);
+export const listLogisticsChannels = (query: ChannelQuery, signal?: AbortSignal) =>
+  backendRequest<ChannelPage>(`${settingsPrefix}/logistics-channels?${qs(query)}`, { signal }).then((r) => r.data);
 
 export const listSettingsChanges = (signal?: AbortSignal) =>
   backendRequest<{ items: SettingsChange[]; total: number }>(`${settingsPrefix}/changes?page_size=100`, { signal }).then((r) => r.data);
