@@ -99,7 +99,7 @@ def test_listing_page_and_real_api_with_isolated_postgres(
                     local_sku=sku,
                     msku="SYNTHETIC-LISTING-A2-MSKU" if sku.endswith("A2") else None,
                     listing_status="离线" if sku.endswith("A2") else "在线",
-                    wfs_available_quantity=9 if sku.endswith("A2") else 0,
+                    wfs_available_quantity=None if sku.endswith("A2") else 0,
                     calculated_at=datetime.now(UTC),
                 )
             )
@@ -208,6 +208,12 @@ def test_listing_page_and_real_api_with_isolated_postgres(
             "SYNTHETIC-LISTING-A": None,
             "SYNTHETIC-LISTING-A2": "2026-10-14",
         }
+        stock_values = {
+            row["local_sku"]: row["wfs_available_quantity"]
+            for row in listing.json()["data"]["items"]
+        }
+        assert Decimal(stock_values["SYNTHETIC-LISTING-A"]) == 0
+        assert stock_values["SYNTHETIC-LISTING-A2"] is None
         assert client.get("/api/listings/walmart/summary").json()["data"]["online"] == 1
         assert (
             client.get("/api/listings/walmart", params={"archive_status": "active"}).json()["meta"][

@@ -36,6 +36,14 @@ test("Listing page persists GPT links, archive state, tags, and scoped CSV", asy
   await expect(page.getByText("SYNTHETIC-LISTING-A", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("row").filter({ has: page.getByText("SYNTHETIC-LISTING-A2", { exact: true }) })
     .getByText("2026-10-14", { exact: true })).toBeVisible();
+  const stockColumnIndex = await page.getByRole("columnheader", { name: "WFS可售库存" })
+    .evaluate((header) => (header as HTMLTableCellElement).cellIndex);
+  await expect(page.getByRole("row").filter({
+    has: page.getByText("SYNTHETIC-LISTING-A", { exact: true }),
+  }).locator("td").nth(stockColumnIndex)).toHaveText("0");
+  await expect(page.getByRole("row").filter({
+    has: page.getByText("SYNTHETIC-LISTING-A2", { exact: true }),
+  }).locator("td").nth(stockColumnIndex)).toHaveText("未同步");
   await expect(page.getByText("SYNTHETIC-LISTING-B", { exact: true })).toHaveCount(0);
   await page.getByRole("row").filter({
     has: page.getByText("SYNTHETIC-LISTING-A", { exact: true }),
