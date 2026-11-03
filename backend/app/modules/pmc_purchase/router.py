@@ -71,16 +71,13 @@ def require_pmc_purchase_org_scope(
     owners = resolve_business_owner_refs(session, principal)
     if owners is None:
         return
-    allowed_get = (
-        request.method == "GET"
-        and (
-            request.url.path == "/api/pmc/purchase/board"
-            or request.url.path == "/api/pmc/purchase/board/summary"
-            or request.url.path.startswith("/api/pmc/purchase/orders/")
-            or request.url.path == "/api/pmc/purchase/sku-cycles"
-            or request.url.path == "/api/pmc/purchase/plans/pending"
-            or request.url.path.startswith("/api/pmc/purchase/sku-cycles/")
-        )
+    allowed_get = request.method == "GET" and (
+        request.url.path == "/api/pmc/purchase/board"
+        or request.url.path == "/api/pmc/purchase/board/summary"
+        or request.url.path.startswith("/api/pmc/purchase/orders/")
+        or request.url.path == "/api/pmc/purchase/sku-cycles"
+        or request.url.path == "/api/pmc/purchase/plans/pending"
+        or request.url.path.startswith("/api/pmc/purchase/sku-cycles/")
     )
     allowed_override = (
         request.method == "POST"

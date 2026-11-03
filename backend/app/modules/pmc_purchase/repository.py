@@ -201,8 +201,7 @@ class PmcPurchaseReadRepository:
             statement = statement.where(DwsPurchaseBoard.owner_uid.in_(self.org_owner_refs))
         return list(
             self.session.scalars(
-                statement
-                .order_by(DwsPurchaseBoard.order_item_id, DwsPurchaseBoard.plan_key)
+                statement.order_by(DwsPurchaseBoard.order_item_id, DwsPurchaseBoard.plan_key)
             )
         )
 
@@ -237,18 +236,14 @@ class PmcPurchaseReadRepository:
             statement = statement.where(
                 DwsPurchaseSkuCycle.sku.in_(
                     select(DwsPurchaseBoard.sku).where(
-                        DwsPurchaseBoard.source_account_ref == DwsPurchaseSkuCycle.source_account_ref,
+                        DwsPurchaseBoard.source_account_ref
+                        == DwsPurchaseSkuCycle.source_account_ref,
                         DwsPurchaseBoard.owner_uid.in_(self.org_owner_refs),
                         DwsPurchaseBoard.sku.is_not(None),
                     )
                 )
             )
-        return list(
-            self.session.scalars(
-                statement
-                .order_by(DwsPurchaseSkuCycle.sku)
-            )
-        )
+        return list(self.session.scalars(statement.order_by(DwsPurchaseSkuCycle.sku)))
 
     # -- pending plans (status = 2, not yet on any purchase-order line) --
 
@@ -300,9 +295,7 @@ class PmcPurchaseReadRepository:
             )
         )
 
-    def sku_is_owned_by(
-        self, *, sku: str, accounts: frozenset[str]
-    ) -> bool:
+    def sku_is_owned_by(self, *, sku: str, accounts: frozenset[str]) -> bool:
         owner_clause = (
             DwsPurchaseBoard.owner_uid.in_(self.org_owner_refs)
             if self.org_owner_refs is not None

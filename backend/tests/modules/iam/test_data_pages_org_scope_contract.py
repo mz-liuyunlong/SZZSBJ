@@ -86,7 +86,9 @@ def test_listing_archive_filter_options_uses_the_same_owner_scope() -> None:
 
 
 def test_org_scope_permission_is_checked_before_scope_resolution() -> None:
-    request = Request({"type": "http", "method": "GET", "path": "/api/sales/daily-sales", "headers": []})
+    request = Request(
+        {"type": "http", "method": "GET", "path": "/api/sales/daily-sales", "headers": []}
+    )
     principal = Principal(user_id="5", permissions=frozenset())
     session = _session()
     with patch("app.modules.data_pages.router.resolve_business_owner_refs") as resolver:
