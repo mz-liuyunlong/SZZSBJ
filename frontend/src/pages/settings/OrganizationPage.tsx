@@ -23,6 +23,15 @@ interface OwnerCandidate {
   employee_name: string | null;
   is_active: boolean;
 }
+interface OwnerBindingEvent {
+  id: string;
+  owner_ref: string;
+  previous_open_id: string | null;
+  new_open_id: string | null;
+  actor_user_id: string;
+  event_type: string;
+  created_at: string;
+}
 interface DirectoryPreview {
   departments: Department[];
   users: Employee[];
@@ -55,6 +64,9 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
   const [syncing, setSyncing] = useState(false);
   const [ownerCandidates, setOwnerCandidates] = useState<OwnerCandidate[]>([]);
   const [ownerSaving, setOwnerSaving] = useState<string>();
+  const [historyOwner, setHistoryOwner] = useState<string>();
+  const [historyEvents, setHistoryEvents] = useState<OwnerBindingEvent[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [notice, noticeContext] = message.useMessage();
 
   const confirmSync = async () => {
@@ -116,6 +128,21 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
   const reloadOwnerCandidates = async () => {
     const response = await backendRequest<OwnerCandidate[]>("/api/settings/organization/owner-candidates");
     setOwnerCandidates(response.data);
+  };
+
+  const showBindingHistory = async (ownerRef: string) => {
+    setHistoryOwner(ownerRef);
+    setHistoryLoading(true);
+    try {
+      const response = await backendRequest<OwnerBindingEvent[]>(
+        `/api/settings/organization/owner-bindings/${encodeURIComponent(ownerRef)}/events`,
+      );
+      setHistoryEvents(response.data);
+    } catch {
+      void notice.error("负责人绑定历史读取失败");
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   const bindOwner = async (ownerRef: string, openId: string | undefined) => {
@@ -250,9 +277,33 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
               ) },
               { title: "状态", dataIndex: "is_active", width: 90,
                 render: value => value ? "已绑定" : "未绑定" },
+              { title: "历史", width: 90, render: (_, row) => (
+                <Button type="link" size="small" onClick={() => void showBindingHistory(row.owner_ref)}>
+                  变更记录
+                </Button>
+              ) },
             ]} />
         </Card>
       )}
+      <Modal
+        title={historyOwner ? `负责人绑定记录：${historyOwner}` : "负责人绑定记录"}
+        open={Boolean(historyOwner)}
+        onCancel={() => setHistoryOwner(undefined)}
+        footer={null}
+        width={760}
+      >
+        <Spin spinning={historyLoading}>
+          <Table<OwnerBindingEvent> rowKey="id" size="small"
+            dataSource={historyEvents} pagination={{ pageSize: 10 }}
+            columns={[
+              { title: "操作", dataIndex: "event_type", render: value => value === "bind" ? "绑定/变更" : "解除绑定" },
+              { title: "原飞书身份", dataIndex: "previous_open_id", render: value => value || "-" },
+              { title: "新飞书身份", dataIndex: "new_open_id", render: value => value || "-" },
+              { title: "操作人", dataIndex: "actor_user_id" },
+              { title: "时间", dataIndex: "created_at" },
+            ]} />
+        </Spin>
+      </Modal>
     </Spin>
   </div>;
 }

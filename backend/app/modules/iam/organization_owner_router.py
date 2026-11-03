@@ -94,6 +94,27 @@ def list_owner_bindings(request: Request, _: admin_principal, session: db_sessio
     return success_response(request, data=[dict(row) for row in rows], meta=None)
 
 
+@router.get("/api/settings/organization/owner-bindings/{owner_ref}/events")
+def list_owner_binding_events(
+    request: Request,
+    owner_ref: str,
+    _: admin_principal,
+    session: db_session,
+):
+    rows = session.execute(
+        text("""
+        SELECT id, owner_ref, previous_open_id, new_open_id,
+               actor_user_id, event_type, created_at
+        FROM iam_org_owner_binding_events
+        WHERE owner_ref = :owner_ref
+        ORDER BY created_at DESC, id DESC
+        LIMIT 100
+        """),
+        {"owner_ref": owner_ref},
+    ).mappings()
+    return success_response(request, data=[dict(row) for row in rows], meta=None)
+
+
 @router.put("/api/settings/organization/owner-bindings/{owner_ref}")
 def set_owner_binding(
     request: Request,
