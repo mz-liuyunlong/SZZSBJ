@@ -18,7 +18,7 @@
 | # | 数据集 | 当前权威来源 | 分类 | 策略 | 需负责人确认 |
 |---|---|---|---|---|---|
 | W1 | 时效 / 提醒规则（11 条默认） | 8088 页面常量 | NEW_SYSTEM_OWNED（`ref_wfs_rule_setting_versions` / `ref_wfs_rule_settings`） | 迁移种子 = 8088 默认；版本化 | 是（S2 / S3） |
-| W2 | 店铺 Walmart 代码、ITS、可创建开关 | #284 `ops_wfs_store_settings` | NEW_SYSTEM_OWNED | 从 #284 摘出 | 是（S1） |
+| W2 | 店铺 Walmart 代码、ITS、可创建开关 | #284 `ops_wfs_store_settings` | NEW_SYSTEM_OWNED | 从 #284 摘模型与接口；建表用本单新迁移（0076 起，排在 #282 的 0068–0075 之后），不沿用 #284 的 0072 | 是（S1） |
 | W3 | 店铺联系人、设施名、电话、邮箱 | 8088 页面（空白，本系统维护，不传 Walmart） | NEW_SYSTEM_OWNED | 加列 | 否 |
 | W4 | 发货地址簿（历史货件退货地址去重） | 领星 WFS 货件 | REBUILD_SYNC（复用 WFS 组 S1 ODS） | 只读 | 否 |
 | W5 | FC 代码 / 邮编 / 城市 / 州 | 领星货件 logistics_code 与收货地址 | REBUILD_SYNC（复用） | 种子 + 只读字段 | 否 |
@@ -32,8 +32,8 @@
 
 - [x] 不调任何外部接口；不写 RAW / ODS
 - [x] 每次修改记操作人、时间、原因，历史版本不删
-- [ ] #284 摘取时需确认不带出 Walmart 建货件代码（S1）
-- [ ] 8088 标「示例」的 5 条阈值未经 Rocky 定值（S3）
+- [ ] #284 先 rebase 到最新 main 并去掉 `0073_walmart_call_audit` / `walmart_audit.py`；摘取时不带出 Walmart 建货件代码（S1）
+- [ ] 8088 标「示例」的 5 条阈值未经 Rocky 定值；启用后异常中心按未定值报警，列为待 Rocky 定值（S3）
 
 ## 负责人决定
 
