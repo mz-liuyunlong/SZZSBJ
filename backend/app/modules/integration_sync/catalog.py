@@ -21,6 +21,9 @@ from app.modules.integration_sync.pmc_purchase_catalog import (
 )
 from app.modules.integration_sync.repository import IntegrationSyncRepository
 from app.modules.integration_sync.wfs_catalog import WFS_SETTLEMENT_SYNC_SPEC
+from app.modules.integration_sync.wfs_cost_valuation_catalog import (
+    WFS_COST_VALUATION_SYNC_SPEC,
+)
 
 BootstrapStatus = Literal["created", "updated", "unchanged"]
 
@@ -440,6 +443,36 @@ class IntegrationCatalogService:
 
         source_account_ref = validate_data_pages_source_account_ref(source_account_ref)
         spec = WFS_SETTLEMENT_SYNC_SPEC
+        try:
+            interface, interface_status = self._bootstrap_data_pages_interface(spec)
+            policy, policy_status = self._bootstrap_data_pages_retention_policy(spec)
+            config_status = self._bootstrap_data_pages_sync_config(
+                interface,
+                policy,
+                spec,
+                source_account_ref,
+            )
+            self.session.commit()
+            return WfsGovernanceBootstrapResult(
+                interface_statuses=(interface_status,),
+                retention_policy_statuses=(policy_status,),
+                sync_config_statuses=(config_status,),
+            )
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def bootstrap_wfs_cost_valuation_governance(
+        self,
+        source_account_ref: str,
+    ) -> WfsGovernanceBootstrapResult:
+        """Create the WFS cost valuation catalog/config with outbound and schedule disabled.
+
+        Re-running resets the config to disabled; enabling is a separate, owner-approved step.
+        """
+
+        source_account_ref = validate_data_pages_source_account_ref(source_account_ref)
+        spec = WFS_COST_VALUATION_SYNC_SPEC
         try:
             interface, interface_status = self._bootstrap_data_pages_interface(spec)
             policy, policy_status = self._bootstrap_data_pages_retention_policy(spec)

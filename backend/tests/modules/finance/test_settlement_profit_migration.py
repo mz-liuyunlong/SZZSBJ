@@ -21,8 +21,10 @@ MIGRATION = BACKEND_ROOT / "alembic" / "versions" / f"{REVISION}.py"
 
 def test_revision_is_single_head_after_skill_library() -> None:
     script = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
-    assert script.get_heads() == [REVISION]
+    # 0073 (inventory claim WFS cost valuation ODS) is stacked directly on 0072.
+    assert script.get_heads() == ["20261103_0073_wfs_cost_valuation_flow"]
     assert script.get_revision(REVISION).down_revision == PREVIOUS
+    assert script.get_revision("20261103_0073_wfs_cost_valuation_flow").down_revision == REVISION
 
 
 def test_migration_only_creates_and_drops_its_own_tables() -> None:
@@ -109,6 +111,6 @@ def test_postgresql_upgrade_downgrade_upgrade_on_disposable_database() -> None:
             engine.dispose()
         again = _alembic(url, database, "head")
         assert again.returncode == 0, again.stderr
-        assert _version(url, database) == [REVISION]
+        assert _version(url, database) == ["20261103_0073_wfs_cost_valuation_flow"]
     finally:
         drop_database(url, database)
