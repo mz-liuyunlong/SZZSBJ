@@ -30,3 +30,15 @@
 `freshness`：`source_observed_at`（领星拉取时间）、`published_at`、`coverage_start/end`、`stale`（>24h）。
 
 统一 envelope；`meta.lingxing_sync_enabled=true`、`meta.lingxing_sync_mode=manual_one_time_run`。看板表未迁移时返回 503 `WFS_BOARD_SCHEMA_NOT_READY`。
+
+## 第一期：8088 规则字段（2026-11-03）
+
+规则版本 `WFS-RULES-20261010`（与 8088 一致）。“今天”相关字段在读取时按 Asia/Shanghai 计算，发布版本不过期。Walmart 签收 / 上架流水和众壹轨迹来自已校验文件（见 `docs/data-sources/decisions/pmc-wfs-logistics-phase1-decision.md`），缺失时字段为 null，页面显示“—”，不补 0。
+
+新增查询参数（列表 / 产品 / 统计）：`owner`（产品负责人）、`region`（美东 / 美西…）、`arrival_bucket`（到仓分段 key）、`only_exceptions`、`only_external`。
+
+新增行字段：`owners`、`region`、`its_inferred`、`baseline_units` + `baseline_from`（差异基准：SP / 申报）、`diff_units`、`boxes`、`eta` + `eta_source` + `eta_source_label`（到仓日及来源：real 实际 / region 区域估算 / plan 计划）、`eta_passed_days`、`sellable_date` + `sellable_real`（首批上架，或到仓 + 10 天预估）、`arrival_bucket`、`shipped_out`、`carrier_delivered_at`、`walmart_signed_date`、`walmart_first_receipt`、`walmart_last_receipt`、`walmart_receiving`、`walmart_done`、`d0` + `d0_real` + `days_since_d0`（申诉起算日）、`external`（8 月起、无 SP、未取消）、`age_days`、`exception_types`（命中的 8088 异常描述）。
+
+`/summary` 新增 `by_arrival_bucket`、`with_exceptions`、`external`、`rule_version`；`/filter-options` 新增 `owners`、`regions`、`arrival_buckets`；详情新增 `items`（逐 Item：申报 / SP 发出 / Walmart 收货 / 破损 / 差异）和 `exceptions`（类型、级别、描述、数据来源）。
+
+`/products` 改为 8088 产品维度：一行一个 店铺 × Item ID，统计已发未可售件数（在途、按可售日分段、已签收未上架等），并列出关联货件（`ProductShipmentLine`）。Item ID 来自 `dim_walmart_listings`，产品负责人来自 `dwd_lingxing_sku_product_info_current`；维表无数据时为空。
