@@ -28,6 +28,11 @@ from app.modules.approvals.schemas import (
 from app.modules.approvals.service import ApprovalService
 from app.modules.approvals.workflow import ApprovalWorkflow
 from app.modules.clearance_center.service import ClearanceService
+from app.modules.clearance_center.field_access import mask_clearance_financials
+from app.modules.data_pages.field_access import (
+    ORDER_PROFIT_GROSS_PROFIT_PERMISSION,
+    ORDER_PROFIT_MARGIN_PERMISSION,
+)
 from app.modules.clearance_center.schemas import DecisionWrite
 from app.core.api import ApiError, ErrorCode
 from app.modules.integration_sync.dependencies import require_source_account_scope
@@ -170,6 +175,14 @@ def get_approval(
         is_admin=has_permission(principal, "*"),
         may_review_clearance=has_permission(principal, "action:products:clearance:review"),
     )
+
+    if data.approval_type == "clearance_request" and data.current_case is not None:
+        safe = mask_clearance_financials(
+            data.current_case,
+            can_view_profit=has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION),
+            can_view_margin=has_permission(principal, ORDER_PROFIT_MARGIN_PERMISSION),
+        )
+        data = data.model_copy(update={"current_case": safe})
     return success_response(request, data=data, meta=None)
 
 
