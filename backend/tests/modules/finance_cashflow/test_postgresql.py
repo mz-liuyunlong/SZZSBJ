@@ -354,7 +354,7 @@ def test_downgrade_allowed_with_only_migration_seeds(session: Session):
     assert not tables & {"dim_finance_cash_accounts", "cfg_finance_cash_classify_rules"}
 
 
-def _add_account(session: Session) -> None:
+def _add_account(session: Session, _tmp_path: Path) -> None:
     account = next(iter(S.seed().accounts.values()))
     session.add(
         FinanceCashAccount(
@@ -370,7 +370,7 @@ def _add_account(session: Session) -> None:
     )
 
 
-def _add_deploy_rule(session: Session) -> None:
+def _add_deploy_rule(session: Session, _tmp_path: Path) -> None:
     session.add(
         FinanceCashClassifyRule(
             rule_type="text", pattern="合成对方", category_code="G01", sort_order=1, source="deploy"
@@ -378,7 +378,7 @@ def _add_deploy_rule(session: Session) -> None:
     )
 
 
-def _add_exclusion(session: Session) -> None:
+def _add_exclusion(session: Session, _tmp_path: Path) -> None:
     session.add(
         FinanceCashExclusion(
             entry_key="E1", amount_cny=Decimal("5"), reason="合成", registered_by="admin"
@@ -386,8 +386,37 @@ def _add_exclusion(session: Session) -> None:
     )
 
 
-def _add_category(session: Session) -> None:
+def _add_category(session: Session, _tmp_path: Path) -> None:
     session.add(FinanceCashCategory(code="Z99", big="合成", name="合成类别", sort_order=99))
+
+
+def _add_rejected_upload(session: Session, tmp_path: Path) -> None:
+    """没登记账户时上传：文件被拒，只写导入批次、原件和质量结果，不产生流水。"""
+    settings = Settings()  # type: ignore[call-arg]
+    settings.media_storage_root = tmp_path
+    result = CashflowService(session, settings).upload(
+        import_id=None,
+        file_name="rejected.xlsx",
+        content=S.boc(S.BOC_A, boc_rows()),
+        actor="admin",
+        request_id=None,
+    )
+    assert result.file.status == "rejected"
+
+
+FINANCE_TABLES = {
+    "dim_finance_cash_accounts",
+    "landing_finance_cashflow_imports",
+    "raw_finance_cashflow_files",
+    "std_finance_cashflow_lines",
+    "std_finance_cashflow_line_occurrences",
+    "dq_run_finance_cashflow_import",
+    "dim_finance_cash_categories",
+    "cfg_finance_cash_classify_rules",
+    "evt_finance_cash_line_reviews",
+    "manual_finance_cash_line_state",
+    "manual_finance_cash_exclusions",
+}
 
 
 @pytest.mark.parametrize(
@@ -397,15 +426,27 @@ def _add_category(session: Session) -> None:
         (_add_deploy_rule, "cfg_finance_cash_classify_rules"),
         (_add_exclusion, "manual_finance_cash_exclusions"),
         (_add_category, "dim_finance_cash_categories"),
+        (_add_rejected_upload, "landing_finance_cashflow_imports"),
     ],
 )
-def test_downgrade_refuses_business_data_without_lines(session: Session, add, table):
-    add(session)
-    session.flush()
-    with pytest.raises(RuntimeError, match=f"{table}.*has data"):
-        _downgrade(session)
-    assert session.scalar(select(func.count()).select_from(FinanceCashLine)) == 0
-    assert session.scalar(select(func.count()).select_from(FinanceCashCategory)) >= 26
+def test_downgrade_refuses_business_data_without_lines(
+    session: Session, tmp_path: Path, add, table
+):
+    try:
+        add(session, tmp_path)
+        session.flush()
+        with pytest.raises(RuntimeError, match=f"{table}.*has data"):
+            _downgrade(session)
+        assert session.scalar(select(func.count()).select_from(FinanceCashLine)) == 0
+        assert session.scalar(select(func.count()).select_from(FinanceCashCategory)) >= 26
+        connection = session.connection()
+        assert set(inspect(connection).get_table_names()) & FINANCE_TABLES == FINANCE_TABLES
+        assert len(FINANCE_TABLES) == 11
+        version = connection.scalar(text("select version_num from alembic_version"))
+        assert version == FINANCE_REVISION
+    finally:
+        # 只清掉本条测试写的合成数据（夹具外层事务最后也会整体回滚）。
+        session.rollback()
 
 
 def test_downgrade_refuses_when_lines_exist(service, session):
