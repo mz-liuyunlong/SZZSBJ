@@ -20,6 +20,7 @@ from app.modules.new_product_workflow.router import (
     get_independent_purchase_plan,
     list_independent_purchase_plans,
     list_workflows,
+    list_listing_candidates,
     router,
 )
 
@@ -127,6 +128,75 @@ def test_list_rejects_account_outside_principal_scope() -> None:
     assert error.value.status_code == 403
 
 
+def test_listing_candidates_reject_out_of_scope_accounts_before_database() -> None:
+    session = MagicMock()
+    with pytest.raises(ApiError) as error:
+        list_listing_candidates(
+            request=Request(
+                {"type": "http", "method": "GET", "path": "/api/new-products/listing-candidates"}
+            ),
+            session=session,
+            _=Principal(user_id="reader", permissions=frozenset()),
+            accounts=frozenset({"account-a"}),
+            source_account_ref="account-b",
+            page=1,
+            page_size=50,
+        )
+    assert error.value.status_code == 403
+    session.execute.assert_not_called()
+
+
+def test_listing_candidates_use_scoped_server_pagination_without_tag_filter() -> None:
+    session = MagicMock()
+    session.execute.side_effect = [
+        MagicMock(scalar_one=lambda: 135),
+        MagicMock(mappings=lambda: MagicMock(all=lambda: [])),
+    ]
+    list_listing_candidates(
+        request=Request(
+            {"type": "http", "method": "GET", "path": "/api/new-products/listing-candidates"}
+        ),
+        session=session,
+        _=Principal(user_id="reader", permissions=frozenset()),
+        accounts=frozenset({"account-a"}),
+        source_account_ref="account-a",
+        page=2,
+        page_size=50,
+        sku_query="SKU-01",
+    )
+    assert session.execute.call_count == 2
+    for call in session.execute.call_args_list:
+        statement, params = call.args
+        assert "mart_listing_management_current" in str(statement)
+        assert "listing.source_account_ref = :account" in str(statement)
+        assert "listing.local_sku" in str(statement)
+        assert params["account"] == "account-a"
+        assert params["sku_query"] == "SKU-01"
+        assert params["skip"] == 50
+    assert "ORDER BY listing.store_id, listing.item_id" in str(
+        session.execute.call_args_list[1].args[0]
+    )
+
+
+def test_listing_candidates_reject_oversize_search_before_sql() -> None:
+    session = MagicMock()
+    with pytest.raises(ApiError) as error:
+        list_listing_candidates(
+            request=Request(
+                {"type": "http", "method": "GET", "path": "/api/new-products/listing-candidates"}
+            ),
+            session=session,
+            _=Principal(user_id="reader", permissions=frozenset()),
+            accounts=frozenset({"account-a"}),
+            source_account_ref="account-a",
+            page=1,
+            page_size=50,
+            sku_query="X" * 129,
+        )
+    assert error.value.status_code == 422
+    session.execute.assert_not_called()
+
+
 def test_tracking_filters_before_paging_and_scopes_all_sql() -> None:
     session = MagicMock()
     list_workflows(
@@ -224,6 +294,7 @@ def test_unknown_sku_identity_fails_closed() -> None:
 def test_workflow_router_registered_without_exposing_real_purchase_execution() -> None:
     paths = {route.path for route in router.routes}
     assert "/api/new-products/workflows" in paths
+    assert "/api/new-products/listing-candidates" in paths
     assert "/api/new-products/workflows/{sku_id}/purchase-decision" in paths
     assert "/api/new-products/workflows/{sku_id}/reconciliation" in paths
     assert "/api/new-products/dashboard" in paths

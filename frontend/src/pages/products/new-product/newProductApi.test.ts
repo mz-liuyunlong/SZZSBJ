@@ -3,6 +3,7 @@ import { backendRequest } from "@/api/backendApi";
 import {
   decideNewProductPurchase,
   getNewProductWorkflows,
+  getNewProductListingCandidates,
   getIndependentNewProductPlans,
   getIndependentNewProductPlan,
   getNewProductAccounts,
@@ -31,6 +32,16 @@ describe("new product server API identity and optimistic lock", () => {
       meta: {},
       request_id: "test-request",
     });
+  });
+
+  it("reads account-scoped Listing candidates with server pagination and encoded search", async () => {
+    await getNewProductListingCandidates("account & east", 3, { sku: "  SKU & 1  " });
+    expect(backendRequest).toHaveBeenCalledWith(
+      "/api/new-products/listing-candidates?source_account_ref=account+%26+east&page=3&sku_query=SKU+%26+1",
+    );
+    await expect(getNewProductListingCandidates("")).rejects.toThrow(
+      "需要先选择真实数据账户",
+    );
   });
 
   it("loads account choices only from the scoped server endpoint", async () => {
