@@ -59,6 +59,17 @@ interface SyncPreview {
   department_retention_ratio: number;
   employee_retention_ratio: number;
 }
+interface OrganizationInboxEvent {
+  event_id: string;
+  event_type: string;
+  status: "pending" | "processing" | "retry" | "needs_review" | "applied";
+  attempt_count: number;
+  received_at: string;
+  processed_at: string | null;
+  last_error_code: string | null;
+  last_run_id: string | null;
+}
+
 interface OrganizationPageProps {
   canSync: boolean;
 }
@@ -76,6 +87,9 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
   const [historyEvents, setHistoryEvents] = useState<OwnerBindingEvent[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [syncRuns, setSyncRuns] = useState<OrganizationSyncRun[]>([]);
+  const [eventInbox, setEventInbox] = useState<OrganizationInboxEvent[]>([]);
+  const [eventInboxError, setEventInboxError] = useState("");
+  const [retryingEvent, setRetryingEvent] = useState<string>();
   const [notice, noticeContext] = message.useMessage();
 
   const confirmSync = async () => {
@@ -151,6 +165,45 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
     }
   };
 
+  const reloadEventInbox = async () => {
+    try {
+      const response = await backendRequest<OrganizationInboxEvent[]>(
+        "/api/settings/organization/event-inbox",
+      );
+      setEventInbox(response.data);
+      setEventInboxError("");
+    } catch {
+      setEventInboxError("组织事件队列尚不可用，请检查迁移和服务配置。");
+    }
+  };
+
+  const retryEvent = (eventId: string) => {
+    Modal.confirm({
+      title: "重新执行飞书组织核对？",
+      content: "仅重新排队该事件，仍需通过完整组织快照校验；不会自动扩大角色或数据权限。",
+      okText: "确认重新核对",
+      cancelText: "取消",
+      onOk: async () => {
+        setRetryingEvent(eventId);
+        try {
+          await backendRequest("/api/settings/organization/event-inbox/retry", {
+            method: "POST",
+            body: JSON.stringify({
+              event_ids: [eventId],
+              confirmation: "确认重新执行飞书组织核对",
+            }),
+          });
+          await reloadEventInbox();
+          void notice.success("已重新排队；是否执行取决于组织同步开关。");
+        } catch {
+          void notice.error("重新排队失败，请确认事件仍处于待复核状态。");
+        } finally {
+          setRetryingEvent(undefined);
+        }
+      },
+    });
+  };
+
   const reloadSyncRuns = async () => {
     const response = await backendRequest<OrganizationSyncRun[]>(
       "/api/settings/organization/sync-runs",
@@ -212,6 +265,7 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
             if (alive) {
               setOwnerCandidates(owners.data);
               setSyncRuns(runs.data);
+              void reloadEventInbox();
             }
           } catch {
             if (alive) setError("负责人候选数据加载失败，请检查业务数据表和管理员权限。");
@@ -320,6 +374,42 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
                 </Button>
               ) },
             ]} />
+        </Card>
+      )}
+      {canSync && (
+        <Card title="飞书组织变更事件" style={{ marginTop: 16 }}
+          extra={<Button size="small" onClick={() => void reloadEventInbox()}>刷新事件</Button>}>
+          {eventInboxError && (
+            <Alert type="warning" showIcon message={eventInboxError} style={{ marginBottom: 12 }} />
+          )}
+          <Table<OrganizationInboxEvent>
+            rowKey="event_id"
+            size="small"
+            dataSource={eventInbox}
+            pagination={{ pageSize: 8 }}
+            columns={[
+              { title: "接收时间", dataIndex: "received_at", width: 180 },
+              { title: "变更事件", dataIndex: "event_type", ellipsis: true },
+              { title: "状态", dataIndex: "status", width: 116,
+                render: value => ({
+                  pending: "待处理",
+                  processing: "处理中",
+                  retry: "等待重试",
+                  needs_review: "待人工复核",
+                  applied: "已核对",
+                } as Record<string, string>)[String(value)] || String(value) },
+              { title: "尝试次数", dataIndex: "attempt_count", width: 90 },
+              { title: "失败代码", dataIndex: "last_error_code", width: 155,
+                render: value => value || "-" },
+              { title: "操作", width: 110, render: (_, item) =>
+                item.status === "needs_review" ? (
+                  <Button type="link" size="small" loading={retryingEvent === item.event_id}
+                    onClick={() => retryEvent(item.event_id)}>
+                    重新核对
+                  </Button>
+                ) : "-" },
+            ]}
+          />
         </Card>
       )}
       {canSync && (
