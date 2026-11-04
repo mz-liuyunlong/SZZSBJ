@@ -591,15 +591,14 @@ class ClearanceReadRepository:
             self.session.execute(
                 text("""
           select source_account_ref,store_id,item_id,
-            sum(coalesce(return_qty,0)) filter(where refund_effective=true)
-              refund_qty,
+            sum(coalesce(return_qty,0)) refund_qty,
             sum(coalesce(refund_loss_amount,0)) filter(where refund_loss_effective=true)
               refund_loss,
             count(distinct return_order_id) refund_orders
           from after_sales_refund_items
           where source_account_ref=any(:accounts) and item_id=any(:items)
-            and platform_code='walmart' and return_order_at is not null
-            and return_order_at::date between :day - 29 and :day
+            and platform_code='walmart' and refund_effective=true
+            and refund_effective_date between :day - 29 and :day
             and store_id is not null and item_id is not null
           group by source_account_ref,store_id,item_id
         """),
