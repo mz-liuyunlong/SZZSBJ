@@ -46,10 +46,13 @@ class ForecastQuery(_Query):
     region: str | None = Field(default=None, max_length=16)
     owner: str | None = Field(default=None, max_length=64)
     bucket: Literal["total", "bOver", "b15", "b30", "b60", "b60p", "bNone", "arrived"] | None = None
+    field: Literal["sku", "track", "cargo", "sp"] = "sku"
 
 
 class CarrierQuery(_Query):
     status: str | None = Field(default=None, max_length=32)
+    provider: str | None = Field(default=None, max_length=64)
+    field: Literal["all", "number", "customer", "sp"] = "all"
     store: str | None = Field(default=None, max_length=64)
     stale: bool = False
 

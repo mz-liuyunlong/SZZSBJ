@@ -49,3 +49,14 @@
 .logi-rules .ant-card + .ant-card {
   margin-top: 12px;
 }
+
+.logi-numbers {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.logi-nowrap {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

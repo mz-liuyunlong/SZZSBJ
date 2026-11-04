@@ -12,6 +12,7 @@ from pathlib import Path
 from app.modules.pmc_logistics.carriers import (
     carrier_orders,
     missing_orders,
+    provider_counts,
     sort_orders,
     zy_provider_ids,
 )
@@ -99,6 +100,38 @@ def test_forecast_lookups_and_closed_cargo():
     assert (no_shelf["b30"], no_shelf["nextSell"]) == (10, "2026-11-30")
 
 
+def test_forecast_rows_carry_logistics_numbers():
+    """Rocky 2026-11-04: each product row shows 运单号 / 货件单号 / 发货单号."""
+
+    def sp(code, tracking, cargo):
+        return {
+            "code": code,
+            "status": "已发货",
+            "provider": "众壹物流",
+            "tracking": tracking,
+            "arrivalDate": "2026-11-20",
+            "cargos": [{"code": cargo, "status": "WORKING", "items": []}],
+            "goods": [{"cargo": cargo, "store_id": "s1", "msku": "M1", "qty": 5}],
+        }
+
+    rows = forecast_rows(
+        [sp("SP1", ["ZY1"], "C1"), sp("SP2", ["ZY2", "ZY3"], "C2"), sp("SP3", [], "C1")],
+        {},
+        date(2026, 11, 2),
+        10,
+    )
+    r = rows[0]
+    assert r["codes"] == ["SP1", "SP2", "SP3"]
+    assert r["cargos"] == ["C1", "C2"]
+    assert r["trackings"] == ["ZY1", "ZY2", "ZY3"]
+    assert [(x["code"], x["cargo"], x["tracking"]) for x in r["lines"]] == [
+        ("SP1", "C1", ["ZY1"]),
+        ("SP2", "C2", ["ZY2", "ZY3"]),
+        ("SP3", "C1", []),
+    ]
+    assert {x["provider"] for x in r["lines"]} == {"众壹物流"}
+
+
 def _sp(code, tracking, cargo, provider="6995", status="已发货"):
     return {
         "code": code,
@@ -126,8 +159,15 @@ def test_carrier_orders_link_by_tracking_then_cargo_and_flag_stale():
         {"orderNumber": "ZY1", "trackTime": "2026-10-01 08:00:00", "name": "货物进入操作中心"},
         {"orderNumber": "ZY2", "trackTime": "2026-10-01 08:00:00", "name": "签收完成"},
     ]
-    out = carrier_orders(sps, orders, tracks, {"s1": "店一"}, date(2026, 11, 2))
+    orders.append({"number": "ZY7", "customerNumber": "none", "status": "已预报"})
+    providers = {"6995": "众壹物流", "7001": "另一家"}
+    out = carrier_orders(sps, orders, tracks, {"s1": "店一"}, date(2026, 11, 2), providers)
     by = {o["number"]: o for o in out}
+    # 物流商：linked → the SP's provider; unlinked → the source file's provider (众壹)
+    assert (by["ZY1"]["provider_id"], by["ZY1"]["provider"]) == ("6995", "众壹物流")
+    assert (by["ZY7"]["sp"], by["ZY7"]["provider"]) == ("", "众壹物流")
+    assert provider_counts(out) == [{"value": "6995", "label": "众壹物流", "count": 3}]
+    out = [o for o in out if o["number"] != "ZY7"]
     assert by["ZY1"]["sp"] == "SP1" and by["ZY1"]["status"] == "已开船"  # first row wins
     assert by["ZY1"]["trackCn"] == "已开船" and by["ZY1"]["staleDays"] == 13
     assert by["ZY1"]["stale"] is True and by["ZY1"]["store"] == "店一"

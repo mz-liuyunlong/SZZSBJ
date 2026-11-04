@@ -1,9 +1,10 @@
 /** 到货预测（8088 pmc-logistics TabForecast）：已发货、货件未关闭的 店铺 × MSKU，按预计可售日分段。
+ * 每行关联物流信息：发货单号 / 货件单号 / 运单号，可按这三种单号分别搜索（Rocky 2026-11-04）。
  * 计算在服务端（app/modules/pmc_logistics/forecast.py），筛选 / 分页在服务端。 */
 import { Drawer, Select, Table, Tag, Typography } from "antd";
 import type { ProColumns } from "@ant-design/pro-components";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import ManagementStatCards from "@/components/report-table/ManagementStatCards";
 import type { NavigationPage } from "@/config/navigation";
 import WfsQueryPage from "../wfs/WfsQueryPage";
@@ -26,6 +27,34 @@ const BUCKETS: { k: BucketKey; l: string }[] = [
 ];
 
 type Card = BucketKey | "total" | "arrived";
+type SearchField = "sku" | "sp" | "cargo" | "track";
+const SEARCH_TYPES: { value: SearchField; label: string }[] = [
+  { value: "sku", label: "SKU/MSKU/GTIN/ItemID" },
+  { value: "sp", label: "发货单号" },
+  { value: "cargo", label: "货件单号" },
+  { value: "track", label: "运单号" },
+];
+const PLACEHOLDER: Record<SearchField, string> = {
+  sku: "SKU / MSKU / GTIN / ItemID / 品名",
+  sp: "发货单号",
+  cargo: "WFS 货件单号",
+  track: "运单号",
+};
+
+/** 一组单号：最多显示 2 个，其余折成「+N」（悬停看全部）。 */
+function Numbers({ label, values, onClick }: { label: string; values: string[]; onClick?: (v: string) => void }) {
+  if (!values.length) return <div><Text type="secondary">{label} —</Text></div>;
+  const shown = values.slice(0, 2);
+  return (
+    <div className="logi-nowrap" title={values.join("\n")}>
+      <Text type="secondary">{label} </Text>
+      {shown.map((v, i) => (
+        <Fragment key={v}>{i > 0 && "、"}{onClick ? <a onClick={(e) => { e.stopPropagation(); onClick(v); }}>{v}</a> : <span>{v}</span>}</Fragment>
+      ))}
+      {values.length > 2 && <Text type="secondary"> +{values.length - 2}</Text>}
+    </div>
+  );
+}
 
 interface Filters {
   bucket?: Card;
@@ -33,9 +62,10 @@ interface Filters {
   region?: string;
   owner?: string;
   keyword: string;
+  field: SearchField;
 }
 
-const initial = (): Filters => ({ keyword: "" });
+const initial = (): Filters => ({ keyword: "", field: "sku" });
 const num = (v: number) => (v ? <span className="logi-num">{fmt(v)}</span> : <Text type="secondary">—</Text>);
 
 export default function LogisticsForecastPage({ page, scope }: { page: NavigationPage; scope: string }) {
@@ -71,6 +101,16 @@ export default function LogisticsForecastPage({ page, scope }: { page: Navigatio
     { title: "负责人", width: 100, render: (_, r) => r.owner || <Text type="secondary">—</Text> },
     { title: "GTIN", dataIndex: "gtin", width: 140, render: (_, r) => r.gtin || "—" },
     { title: "品名", dataIndex: "name", width: 200, ellipsis: true },
+    {
+      title: "关联物流（发货单 / 货件 / 运单）", width: 300,
+      render: (_, r) => (
+        <div className="logi-numbers">
+          <Numbers label="发货单" values={r.codes} onClick={setOpen} />
+          <Numbers label="货件" values={r.cargos} />
+          <Numbers label="运单" values={r.trackings} />
+        </div>
+      ),
+    },
     { title: "未可售合计", width: 100, align: "right", render: (_, r) => (r.total ? <b>{fmt(r.total)}</b> : <Text type="secondary">—</Text>) },
     ...BUCKETS.filter((b) => b.k !== "bNone" || (sum?.bNone ?? 0) > 0).map((b): ProColumns<ForecastRow & { id: string }> => ({
       title: b.l, width: b.k === "bOver" ? 160 : 118, align: "right",
@@ -94,10 +134,12 @@ export default function LogisticsForecastPage({ page, scope }: { page: Navigatio
 
   const t = (k: keyof NonNullable<typeof sum>) => fmt((sum?.[k] as number | undefined) ?? 0);
   const lineColumns = [
+    { title: "发货单号", render: (_: unknown, x: ForecastLine) => <a onClick={() => setOpen(x.code)}>{x.code}</a> },
+    { title: "货件单号", render: (_: unknown, x: ForecastLine) => x.cargo || "—" },
     {
-      title: "发货单 / 货件", render: (_: unknown, x: ForecastLine) => (
-        <span><a onClick={() => setOpen(x.code)}>{x.code}</a><br /><Text type="secondary">{x.cargo}</Text></span>
-      ),
+      title: "运单号", render: (_: unknown, x: ForecastLine) => (x.tracking.length
+        ? <span>{x.tracking.map((t) => <div key={t}>{t}</div>)}<Text type="secondary">{x.provider}</Text></span>
+        : <span><Text type="secondary">无运单号</Text>{x.provider && <><br /><Text type="secondary">{x.provider}</Text></>}</span>),
     },
     { title: "阶段", render: (_: unknown, x: ForecastLine) => <StageTag stage={x.stage} /> },
     { title: "目的仓", render: (_: unknown, x: ForecastLine) => `${x.fc} ${x.region}` },
@@ -126,12 +168,12 @@ export default function LogisticsForecastPage({ page, scope }: { page: Navigatio
         emptyText={q.isFetching ? "正在加载" : "当前条件下暂无在途产品"}
         searchAriaLabel="搜索到货预测"
         inputAriaLabel="搜索到货预测关键字"
-        inputPlaceholder="SKU / MSKU / GTIN / ItemID / 品名"
+        inputPlaceholder={PLACEHOLDER[filters.field]}
         typeAriaLabel="到货预测搜索类型"
-        typeOptions={[{ value: "sku", label: "SKU/MSKU/GTIN/ItemID" }]}
-        searchType="sku"
+        typeOptions={SEARCH_TYPES}
+        searchType={filters.field}
         keyword={filters.keyword}
-        onSearch={(keyword) => commit({ keyword })}
+        onSearch={(keyword, field) => commit({ keyword, field: field as SearchField })}
         onReset={() => { setFilters(initial()); setPg({ page: 1, size: PAGE_SIZE }); }}
         filters={(
           <>
@@ -170,7 +212,7 @@ export default function LogisticsForecastPage({ page, scope }: { page: Navigatio
         loading={q.isFetching}
         loadingLabel="正在加载到货预测，请稍候"
         columns={columns}
-        scrollX={2300}
+        scrollX={2600}
         rows={(data?.items ?? []).map((r) => ({ ...r, id: r.key }))}
         total={data?.total ?? 0}
         current={pg.page}
@@ -180,7 +222,7 @@ export default function LogisticsForecastPage({ page, scope }: { page: Navigatio
       />
       <Drawer
         open={!!detail}
-        width={1000}
+        width={1200}
         onClose={() => setDetail(undefined)}
         title={detail && <span>{detail.store} · <b>{detail.sku}</b> <Text type="secondary">{detail.msku}</Text></span>}
       >

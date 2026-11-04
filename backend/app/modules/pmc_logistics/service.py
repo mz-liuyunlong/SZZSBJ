@@ -28,6 +28,7 @@ from app.modules.pmc_logistics.carriers import (
     STALE_DAYS,
     carrier_orders,
     missing_orders,
+    provider_counts,
     sort_orders,
     status_counts,
     zy_provider_ids,
@@ -337,7 +338,9 @@ class LogisticsService:
             wm_day=wm_day,
             wm=wm,
             rows=rows,
-            carrier_orders=carrier_orders(inputs.sps, zy_orders, zy_tracks, inputs.stores, today),
+            carrier_orders=carrier_orders(
+                inputs.sps, zy_orders, zy_tracks, inputs.stores, today, inputs.providers
+            ),
             sources={
                 "publications": len(pubs),
                 "shipping_lists": len(lists),
@@ -567,10 +570,7 @@ class LogisticsService:
             and (not q.region or any(x["region"] == q.region for x in r["lines"]))
             and (not q.owner or q.owner in r["owner"].split("、"))
             and (not q.bucket or (r["aShip"] if q.bucket == "arrived" else r[q.bucket]) > 0)
-            and (
-                not kw
-                or kw in f"{r['sku']} {r['msku']} {r['gtin']} {r['name']} {r['item_id']}".lower()
-            )
+            and (not kw or kw in self._forecast_text(r, q.field).lower())
         ]
         hits.sort(key=lambda r: (-r["total"], r["key"]))
         summary = {
@@ -580,7 +580,27 @@ class LogisticsService:
         }
         return self._page(hits, q, summary)
 
+    @staticmethod
+    def _forecast_text(r: dict[str, Any], field: str) -> str:
+        if field == "track":
+            return " ".join(r["trackings"])
+        if field == "cargo":
+            return " ".join(r["cargos"])
+        if field == "sp":
+            return " ".join(r["codes"])
+        return f"{r['sku']} {r['msku']} {r['gtin']} {r['name']} {r['item_id']}"
+
     # 货代看板 ------------------------------------------------------------------------
+
+    @staticmethod
+    def _carrier_text(o: dict[str, Any], field: str) -> str:
+        if field == "number":
+            return o["number"]
+        if field == "customer":
+            return o["customerNumber"]
+        if field == "sp":
+            return o["sp"]
+        return f"{o['number']} {o['customerNumber']} {o['sp']} {o['trackCn']}"
 
     def _carrier_orders(self) -> list[dict[str, Any]]:
         orders = self.snapshot().carrier_orders
@@ -600,10 +620,8 @@ class LogisticsService:
                 if (not q.status or o["status"] == q.status)
                 and (not q.stale or o["stale"])
                 and (not q.store or o["store_id"] == q.store)
-                and (
-                    not kw
-                    or kw in f"{o['number']} {o['customerNumber']} {o['sp']} {o['trackCn']}".lower()
-                )
+                and (not q.provider or o["provider_id"] == q.provider)
+                and (not kw or kw in self._carrier_text(o, q.field).lower())
             ]
         )
         sps = [item["sp"] for item in self.visible_rows()]
@@ -622,6 +640,7 @@ class LogisticsService:
             "queried": queried,
             "zy_sps": zy_sps,
             "status_counts": status_counts(orders),
+            "providers": provider_counts(orders),
             "missing": [*not_found, *no_tracking],
             "not_found": len(not_found),
             "no_tracking": len(no_tracking),

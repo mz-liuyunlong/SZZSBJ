@@ -34,8 +34,18 @@ def carrier_orders(
     tracks: Iterable[Mapping[str, Any]],
     stores: Mapping[str, str],
     today: date,
+    providers: Mapping[str, str] | None = None,
 ) -> list[dict[str, Any]]:
-    """8088 ``zy_panel.orders``: first summary row per order number, latest track first."""
+    """8088 ``zy_panel.orders``: first summary row per order number, latest track first.
+
+    物流商 (Rocky 2026-11-04): the linked SP's provider; an order not linked to an SP keeps
+    the provider of its source file (众壹 is the only carrier with validated files today).
+    """
+
+    providers = providers or {}
+    src_ids = sorted(zy_provider_ids(providers))
+    src_id = src_ids[0] if src_ids else ""
+    src_name = providers.get(src_id, "众壹物流") if src_id else "众壹物流"
 
     by_tn: dict[str, Mapping[str, Any]] = {}
     for s in sps:
@@ -66,6 +76,12 @@ def carrier_orders(
                 "number": number,
                 "customerNumber": r.get("customerNumber") or "",
                 "status": status,
+                "provider_id": (s.get("provider_id") or "") if s else src_id,
+                "provider": (
+                    providers.get(s.get("provider_id") or "", s.get("provider_id") or "")
+                    if s
+                    else src_name
+                ),
                 "serviceNumber": r.get("serviceNumber") or "",
                 "kg": _f(r.get("totalWeightKg")),
                 "weight": _f(r.get("weight")),
@@ -155,3 +171,15 @@ def _neg(text: str) -> tuple[int, ...]:
 
 def status_counts(orders: Iterable[Mapping[str, Any]]) -> dict[str, int]:
     return dict(Counter(o["status"] for o in orders).most_common())
+
+
+def provider_counts(orders: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """物流商 filter options: provider id, name and order count, most orders first."""
+
+    counts: Counter[tuple[str, str]] = Counter(
+        (o.get("provider_id") or "", o.get("provider") or "") for o in orders
+    )
+    return [
+        {"value": pid, "label": name or pid or "未知物流商", "count": n}
+        for (pid, name), n in sorted(counts.items(), key=lambda x: (-x[1], x[0][1], x[0][0]))
+    ]

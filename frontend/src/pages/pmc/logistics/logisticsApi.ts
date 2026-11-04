@@ -179,6 +179,9 @@ export interface AlertSummary {
 export interface ForecastLine {
   code: string;
   cargo: string;
+  /** 运单号（发货单上的物流商单号，可多张） */
+  tracking: string[];
+  provider: string;
   stage: string;
   fc: string;
   region: string;
@@ -212,6 +215,10 @@ export interface ForecastRow extends Record<BucketKey, number> {
   anom: number;
   nextArr: string;
   nextSell: string;
+  /** 关联物流：发货单号 / 货件单号 / 运单号（去重，按出现顺序） */
+  codes: string[];
+  cargos: string[];
+  trackings: string[];
   lines: ForecastLine[];
 }
 export interface ForecastSummary extends Record<BucketKey, number> {
@@ -239,6 +246,8 @@ export interface CarrierOrder {
   number: string;
   customerNumber: string;
   status: string;
+  provider_id: string;
+  provider: string;
   serviceNumber: string;
   kg: number;
   weight: number;
@@ -275,6 +284,7 @@ export interface CarrierSummary {
   queried: number;
   zy_sps: number;
   status_counts: Record<string, number>;
+  providers: { value: string; label: string; count: number }[];
   missing: CarrierMissing[];
   not_found: number;
   no_tracking: number;

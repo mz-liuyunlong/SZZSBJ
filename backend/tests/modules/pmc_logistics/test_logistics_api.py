@@ -134,6 +134,59 @@ def test_rule_tables_are_server_paginated_with_a_sort_whitelist():
     assert client.get(f"{API}/rules/nope").status_code == 422
 
 
+def test_carriers_filter_by_provider_and_search_field():
+    svc = _service()
+    sp = FIXTURE["cases"][0]["sp"]
+    base = {"status": "已开船", "store_id": "", "stale": False, "trackCn": "", "lastTrack": ""}
+    svc.snapshot().carrier_orders = [
+        {
+            **base,
+            "number": "ZY1",
+            "customerNumber": "C1",
+            "sp": sp["code"],
+            "provider_id": "6995",
+            "provider": "众壹物流",
+        },
+        {
+            **base,
+            "number": "ZY2",
+            "customerNumber": "ZY1-C",
+            "sp": "",
+            "provider_id": "6995",
+            "provider": "众壹物流",
+        },
+    ]
+    client = _client(svc)
+
+    def total(**params):
+        return client.get(f"{API}/carriers", params=params).json()["data"]["total"]
+
+    assert total(provider="6995") == 2 and total(provider="7001") == 0
+    assert total(keyword="zy1") == 2  # 全部字段
+    assert total(keyword="zy1", field="number") == 1
+    assert total(keyword="zy1-c", field="customer") == 1
+    assert total(keyword=sp["code"], field="sp") == 1 and total(keyword="zy1", field="sp") == 0
+    data = client.get(f"{API}/carriers").json()["data"]
+    assert data["summary"]["providers"] == [{"value": "6995", "label": "众壹物流", "count": 2}]
+    assert client.get(f"{API}/carriers", params={"field": "track"}).status_code == 422
+
+
+def test_forecast_search_by_logistics_numbers():
+    client = _client(_service())
+    rows = client.get(f"{API}/forecast", params={"page_size": 1000}).json()["data"]["items"]
+    row = next(r for r in rows if r["trackings"])
+    for field, value in (
+        ("sp", row["codes"][0]),
+        ("cargo", row["cargos"][0]),
+        ("track", row["trackings"][0]),
+    ):
+        hits = client.get(f"{API}/forecast", params={"field": field, "keyword": value}).json()
+        assert row["key"] in {r["key"] for r in hits["data"]["items"]}, field
+    none = client.get(f"{API}/forecast", params={"field": "sku", "keyword": row["codes"][0]})
+    assert none.json()["data"]["total"] == 0
+    assert client.get(f"{API}/forecast", params={"field": "nope"}).status_code == 422
+
+
 def test_carriers_empty_without_files_and_404_detail():
     client = _client(_service())
     data = client.get(f"{API}/carriers").json()["data"]

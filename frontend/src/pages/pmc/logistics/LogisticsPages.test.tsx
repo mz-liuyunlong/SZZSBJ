@@ -101,8 +101,8 @@ describe("物流 pages", () => {
     const fr: api.ForecastRow = {
       key: "s1|M1", store: "店铺一", store_id: "s1", sku: "SKU-1", msku: "M1", gtin: "G1", name: "碗", item_id: "123", owner: "甲",
       total: 10, bOver: 0, b15: 10, b30: 0, b60: 0, b60p: 0, bNone: 0, signedNP: 0, aShip: 0, aSign: 0, aShelf: 0, anom: 0,
-      nextArr: "2026-11-05", nextSell: "2026-11-15",
-      lines: [{ code: "SP-1", cargo: "C1", stage: "已到港", fc: "ATL1", region: "美东", ship: 10, sign: 0, shelf: 0, bucket: "15 天内可售", arr: "2026-11-05", arrSrc: "eta+cycle", arrReal: false, sell: "2026-11-15", sellReal: false, days: 13 }],
+      nextArr: "2026-11-05", nextSell: "2026-11-15", codes: ["SP-1"], cargos: ["C1"], trackings: ["ZY1", "ZY2", "ZY3"],
+      lines: [{ code: "SP-1", cargo: "C1", tracking: ["ZY1"], provider: "众壹物流", stage: "已到港", fc: "ATL1", region: "美东", ship: 10, sign: 0, shelf: 0, bucket: "15 天内可售", arr: "2026-11-05", arrSrc: "eta+cycle", arrReal: false, sell: "2026-11-15", sellReal: false, days: 13 }],
     };
     vi.mocked(api.getForecast).mockResolvedValue(list([fr], {
       total: 10, bOver: 0, b15: 10, b30: 0, b60: 0, b60p: 0, bNone: 0, signedNP: 0, aShip: 0, aSign: 0, aShelf: 0, anom: 0,
@@ -111,18 +111,30 @@ describe("物流 pages", () => {
     renderPage("pmc_logistics_forecast");
     await waitFor(() => expect(screen.getByText("SKU-1")).toBeInTheDocument());
     expect(screen.getByRole("link", { name: "123" })).toHaveAttribute("href", "https://www.walmart.com/ip/123");
+    // 关联物流：发货单 / 货件 / 运单（多于 2 个折成 +N）
+    expect(screen.getByText("SP-1")).toBeInTheDocument();
+    expect(screen.getByText("ZY2")).toBeInTheDocument();
+    expect(screen.getByText("+1")).toBeInTheDocument();
+    expect(vi.mocked(api.getForecast).mock.calls[0][0]).toMatchObject({ field: "sku" });
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "到货预测搜索类型" }));
+    fireEvent.click(await screen.findByTitle("运单号"));
+    fireEvent.change(screen.getByRole("textbox", { name: "搜索到货预测关键字" }), { target: { value: "ZY1" } });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "搜索到货预测关键字" }), { key: "Enter", code: "Enter" });
+    await waitFor(() => expect(vi.mocked(api.getForecast).mock.lastCall?.[0]).toMatchObject({ field: "track", keyword: "ZY1", page: 1 }));
     fireEvent.click(screen.getByText("SKU-1"));
-    await waitFor(() => expect(screen.getByText("C1")).toBeInTheDocument());
-    expect(screen.getByText("13 天")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("13 天")).toBeInTheDocument());
+    expect(screen.getAllByText("C1").length).toBeGreaterThan(1);
+    expect(screen.getByText("众壹物流")).toBeInTheDocument();
   });
 
   it("货代看板 lists carrier orders and the orders that could not be found", async () => {
     vi.mocked(api.getCarriers).mockResolvedValue(list([{
-      number: "ZY1", customerNumber: "C1", status: "已开船", serviceNumber: "", kg: 30, weight: 20, cbm: 1.2,
+      number: "ZY1", customerNumber: "C1", status: "已开船", provider_id: "6995", provider: "众壹物流", serviceNumber: "", kg: 30, weight: 20, cbm: 1.2,
       sp: "SP-1", sp_status: "已发货", sp_boxes: 2, fc: "ATL1", region: "美东", store_id: "s1", store: "店铺一",
       trackCn: "已开船", trackEn: "", lastTrack: "2026-10-20 08:00", nTracks: 2, staleDays: 13, stale: true,
     }], {
       orders: 1, linked: 1, unlinked: 0, stale: 1, stale_days: 7, queried: 2, zy_sps: 2, status_counts: { 已开船: 1 },
+      providers: [{ value: "6995", label: "众壹物流", count: 1 }],
       missing: [{ kind: "查不到", tracking: "ZY9", sp: "SP-9", sp_status: "已发货", store: "店铺一", why: "已校验的众壹文件里没有这张运单" }],
       not_found: 1, no_tracking: 0,
     }) as never);
@@ -131,6 +143,21 @@ describe("物流 pages", () => {
     expect(screen.getByText("13 天")).toBeInTheDocument();
     expect(screen.getByText(/没拿到数据的运单 1 张/)).toBeInTheDocument();
     expect(screen.queryByText(/接口调用/)).not.toBeInTheDocument();
+    // 物流商列 + 通用标题
+    expect(screen.getByRole("columnheader", { name: "物流商" })).toBeInTheDocument();
+    expect(screen.getAllByText("众壹物流").length).toBeGreaterThan(0);
+    expect(screen.getByText("货代运单（1 / 1 张）")).toBeInTheDocument();
+    expect(screen.queryByText(/众壹运单/)).not.toBeInTheDocument();
+    // 按发货单号搜索
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "货代运单搜索类型" }));
+    fireEvent.click(await screen.findByTitle("发货单号"));
+    fireEvent.change(screen.getByRole("textbox", { name: "搜索货代运单关键字" }), { target: { value: "SP-1" } });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "搜索货代运单关键字" }), { key: "Enter", code: "Enter" });
+    await waitFor(() => expect(vi.mocked(api.getCarriers).mock.lastCall?.[0]).toMatchObject({ field: "sp", keyword: "SP-1", page: 1 }));
+    // 按物流商筛选
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "物流商" }));
+    fireEvent.click(await screen.findByTitle("众壹物流（1）"));
+    await waitFor(() => expect(vi.mocked(api.getCarriers).mock.lastCall?.[0]).toMatchObject({ provider: "6995", page: 1 }));
   });
 
   it("时效与阈值设置 is read-only and pages its tables on the server", async () => {

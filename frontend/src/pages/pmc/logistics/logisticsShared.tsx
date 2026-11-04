@@ -56,7 +56,7 @@ export function DataDayNotice({ options, error }: { options?: LogisticsOptions; 
         type="info"
         showIcon
         style={{ marginBottom: 12 }}
-        message={`数据日 ${options.today}（8088 规则按数据日计算）· 领星发货单 07-01 起 ${options.total} 张 · 众壹运单 ${String(s.carrier_orders ?? 0)} 张 · Walmart ${stores} 店（批次 ${String(s.walmart_batch || "—")}）· 只读，不调用领星 / 物流商 / Walmart 接口`}
+        message={`数据日 ${options.today}（8088 规则按数据日计算）· 领星发货单 07-01 起 ${options.total} 张 · 货代运单 ${String(s.carrier_orders ?? 0)} 张（众壹） · Walmart ${stores} 店（批次 ${String(s.walmart_batch || "—")}）· 只读，不调用领星 / 物流商 / Walmart 接口`}
       />
     </div>
   );

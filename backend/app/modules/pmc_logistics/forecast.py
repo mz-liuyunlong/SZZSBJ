@@ -127,6 +127,9 @@ def forecast_rows(
                     "owner": "、".join(owners.get(g.get("sku", ""), ())),
                     **{k: 0 for k in SUM_KEYS},
                     "lines": [],
+                    "codes": [],
+                    "cargos": [],
+                    "trackings": [],
                     "nextArr": "",
                     "nextSell": "",
                 }
@@ -140,9 +143,20 @@ def forecast_rows(
             recv = (wmf or {}).get("itemsRecv") or {}
             signed = recv[gtin] if gtin in recv else ((ci or {}).get("received") or 0)
             shelved = ((wmf or {}).get("byGtin") or {}).get(gtin, 0) or 0
+            tracking = [str(t) for t in s.get("tracking") or [] if t]
+            for k, vals in (
+                ("codes", [s["code"]]),
+                ("cargos", [g.get("cargo") or ""]),
+                ("trackings", tracking),
+            ):
+                for v in vals:
+                    if v and v not in r[k]:
+                        r[k].append(v)
             base = {
                 "code": s["code"],
                 "cargo": g.get("cargo", ""),
+                "tracking": tracking,
+                "provider": s.get("provider", ""),
                 "stage": s.get("stage", ""),
                 "fc": s.get("fc", ""),
                 "region": s.get("region", ""),

@@ -1,5 +1,6 @@
-/** 货代看板（原 8088「众壹接口面板」，Rocky 2026-11-03 改名）：一行一张货代运单，来自已校验的众壹文件。
- * 新系统不调众壹接口，8088 的拉数 / 调用统计和接口清单不再展示。筛选 / 分页在服务端。 */
+/** 货代看板（原 8088「众壹接口面板」，Rocky 2026-11-03 改名）：一行一张货代运单，带物流商（众壹是其中一家，
+ * 目前只有众壹有已校验的运单文件）。新系统不调物流商接口，8088 的拉数 / 调用统计和接口清单不再展示。
+ * 筛选（物流商 / 状态 / 店铺 / 停更）、按运单号 / 客户单号 / 发货单号分别搜索、分页都在服务端（Rocky 2026-11-04）。 */
 import { Alert, Descriptions, Drawer, Select, Spin, Switch, Table, Tag, Typography } from "antd";
 import type { ProColumns } from "@ant-design/pro-components";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -21,14 +22,30 @@ const STATUS_COLOR: Record<string, string> = {
 };
 const KEY_TRACKS = new Set(["签收完成", "已靠港，正在卸柜中", "已开船", "货物进入操作中心", "已装柜，货物离开操作中心"]);
 
+type SearchField = "all" | "number" | "customer" | "sp";
+const SEARCH_TYPES: { value: SearchField; label: string }[] = [
+  { value: "all", label: "全部" },
+  { value: "number", label: "运单号" },
+  { value: "customer", label: "客户单号（货件单号）" },
+  { value: "sp", label: "发货单号" },
+];
+const PLACEHOLDER: Record<SearchField, string> = {
+  all: "运单号 / 货件单号 / 发货单号 / 轨迹",
+  number: "运单号",
+  customer: "客户单号（WFS 货件单号）",
+  sp: "发货单号",
+};
+
 interface Filters {
+  provider?: string;
   status?: string;
   store?: string;
   stale: boolean;
   keyword: string;
+  field: SearchField;
 }
 
-const initial = (): Filters => ({ stale: false, keyword: "" });
+const initial = (): Filters => ({ stale: false, keyword: "", field: "all" });
 
 function OrderDrawer({ number, scope, onClose, openSp }: { number: string; scope: string; onClose: () => void; openSp: (code: string) => void }) {
   const q = useQuery({
@@ -45,6 +62,7 @@ function OrderDrawer({ number, scope, onClose, openSp }: { number: string; scope
         <div className="logi-detail">
           <Descriptions size="small" bordered column={3} items={[
             { key: "n", label: "运单号 number", children: o.number },
+            { key: "p", label: "物流商", children: o.provider || "—" },
             { key: "c", label: "客户单号（WFS 货件）", children: o.customerNumber || "—" },
             { key: "s", label: "服务商单号", children: o.serviceNumber || "—" },
             { key: "w", label: "重量 / 计费重 kg", children: `${fmt(o.weight)} / ${fmt(o.kg)}` },
@@ -87,9 +105,17 @@ export default function LogisticsCarriersPage({ page, scope }: { page: Navigatio
     setFilters((f) => ({ ...f, ...next }));
     setPg((p) => ({ ...p, page: 1 }));
   };
+  // 物流商下拉：全部物流商（来自物流选项），后面带有运单的张数；没有运单文件的物流商为 0
+  const providerCount = new Map((sum?.providers ?? []).map((p) => [p.value, p.count]));
+  const providerOptions = [
+    ...(sum?.providers ?? []).map((p) => ({ value: p.value, label: `${p.label}（${p.count}）` })),
+    ...(options?.providers ?? []).filter((p) => !providerCount.has(p.value)).map((p) => ({ value: p.value, label: `${p.label}（0）` })),
+  ];
+  const providerNames = (sum?.providers ?? []).map((p) => p.label).join("、");
 
   const columns: ProColumns<CarrierOrder & { id: string }>[] = [
     { title: "运单号", width: 210, fixed: "left", render: (_, o) => <a>{o.number}</a> },
+    { title: "物流商", width: 130, render: (_, o) => o.provider || <Text type="secondary">—</Text> },
     { title: "客户单号（货件）", width: 130, render: (_, o) => o.customerNumber || "—" },
     { title: "状态", width: 90, render: (_, o) => <Tag color={STATUS_COLOR[o.status] ?? "default"} bordered={false}>{o.status}</Tag> },
     {
@@ -115,20 +141,22 @@ export default function LogisticsCarriersPage({ page, scope }: { page: Navigatio
       <WfsQueryPage<CarrierOrder & { id: string }>
         page={page}
         helpHref="/help/pmc-logistics.html"
-        title={`众壹运单（${data?.total ?? 0} / ${sum?.orders ?? 0} 张）`}
+        title={`货代运单（${data?.total ?? 0} / ${sum?.orders ?? 0} 张）`}
         tableLabel="货代运单表格"
         emptyText={q.isFetching ? "正在加载" : "当前条件下暂无运单"}
         searchAriaLabel="搜索货代运单"
         inputAriaLabel="搜索货代运单关键字"
-        inputPlaceholder="运单号 / 货件号 / 发货单号 / 轨迹"
+        inputPlaceholder={PLACEHOLDER[filters.field]}
         typeAriaLabel="货代运单搜索类型"
-        typeOptions={[{ value: "all", label: "运单 / 货件 / 发货单" }]}
-        searchType="all"
+        typeOptions={SEARCH_TYPES}
+        searchType={filters.field}
         keyword={filters.keyword}
-        onSearch={(keyword) => commit({ keyword })}
+        onSearch={(keyword, field) => commit({ keyword, field: field as SearchField })}
         onReset={() => { setFilters(initial()); setPg({ page: 1, size: PAGE_SIZE }); }}
         filters={(
           <>
+            <Select allowClear showSearch aria-label="物流商" className="report-filter-select" placeholder="全部物流商" style={{ width: 170 }}
+              value={filters.provider} options={providerOptions} optionFilterProp="label" onChange={(provider) => commit({ provider })} />
             <Select allowClear aria-label="运单状态" className="report-filter-select" placeholder="运单状态" style={{ width: 150 }}
               value={filters.status} options={options?.carrier_statuses} onChange={(status) => commit({ status })} />
             <Select allowClear showSearch aria-label="店铺" className="report-filter-select" placeholder="全部店铺" style={{ width: 220 }}
@@ -144,10 +172,10 @@ export default function LogisticsCarriersPage({ page, scope }: { page: Navigatio
               activeKey={filters.stale ? "stale" : "all"}
               onCardClick={(k) => commit({ stale: k === "stale" ? !filters.stale : false })}
               cards={[
-                { key: "all", title: "众壹运单", value: sum?.orders ?? 0, unit: "张", tone: "normal", icon: <span>单</span>, subtitle: `关联发货单 ${sum?.linked ?? 0} · 未关联 ${sum?.unlinked ?? 0}` },
-                { key: "missing", title: "应查运单 / 查不到", value: `${sum?.queried ?? 0} / ${sum?.not_found ?? 0}`, tone: sum?.not_found ? "danger" : "normal", icon: <span>!</span>, subtitle: `众壹发货单 ${sum?.zy_sps ?? 0} 张` },
+                { key: "all", title: "货代运单", value: sum?.orders ?? 0, unit: "张", tone: "normal", icon: <span>单</span>, subtitle: `${providerNames || "—"} · 关联发货单 ${sum?.linked ?? 0} · 未关联 ${sum?.unlinked ?? 0}` },
+                { key: "missing", title: "应查运单 / 查不到", value: `${sum?.queried ?? 0} / ${sum?.not_found ?? 0}`, tone: sum?.not_found ? "danger" : "normal", icon: <span>!</span>, subtitle: `有运单文件的物流商发货单 ${sum?.zy_sps ?? 0} 张` },
                 { key: "stale", title: `轨迹停更 ≥ ${sum?.stale_days ?? 7} 天`, value: sum?.stale ?? 0, unit: "张", tone: sum?.stale ? "warning" : "normal", icon: <span>停</span>, subtitle: "未签收且最后一条轨迹超过 7 天" },
-                { key: "notrack", title: "无运单号", value: sum?.no_tracking ?? 0, unit: "张", tone: sum?.no_tracking ? "warning" : "normal", icon: <span>缺</span>, subtitle: "众壹发货单领星没填运单号" },
+                { key: "notrack", title: "无运单号", value: sum?.no_tracking ?? 0, unit: "张", tone: sum?.no_tracking ? "warning" : "normal", icon: <span>缺</span>, subtitle: "有运单文件的物流商发货单，领星没填运单号" },
               ]}
             />
             {missing.length > 0 && (
@@ -155,7 +183,7 @@ export default function LogisticsCarriersPage({ page, scope }: { page: Navigatio
                 type="warning"
                 showIcon
                 style={{ marginBottom: 12 }}
-                message={`没拿到数据的运单 ${missing.length} 张（查不到 = 已校验的众壹文件里没有这张运单，要核对领星运单号；无运单号 = 领星发货单缺运单号）`}
+                message={`没拿到数据的运单 ${missing.length} 张（查不到 = 已校验的货代运单文件里没有这张运单，要核对领星运单号；无运单号 = 领星发货单缺运单号；目前只有众壹有运单文件）`}
                 description={(
                   <ul className="logi-missing">
                     {missing.slice(0, 10).map((x) => (
@@ -172,11 +200,11 @@ export default function LogisticsCarriersPage({ page, scope }: { page: Navigatio
             )}
           </>
         )}
-        headExtra={<Text type="secondary">运单状态 / 计费重 / 体积 = 众壹原值；最新轨迹 = 最新一条；停更天数 = 数据日 − 最后轨迹日</Text>}
+        headExtra={<Text type="secondary">运单状态 / 计费重 / 体积 = 货代原值；物流商 = 关联发货单的物流商；最新轨迹 = 最新一条；停更天数 = 数据日 − 最后轨迹日</Text>}
         loading={q.isFetching}
         loadingLabel="正在加载货代运单，请稍候"
         columns={columns}
-        scrollX={1600}
+        scrollX={1730}
         rows={(data?.items ?? []).map((o) => ({ ...o, id: o.number }))}
         total={data?.total ?? 0}
         current={pg.page}
