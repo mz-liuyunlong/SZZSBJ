@@ -40,6 +40,7 @@ from app.modules.data_pages.models import (
     WalmartListingInventoryDailyFact,
 )
 from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
+from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
 from app.modules.walmart_monitor.models import WalmartMonitorListingCurrent
 
 DAILY_SALES_SEARCH_COLUMNS: dict[str, ColumnElement[str | None]] = {
@@ -175,6 +176,9 @@ class DailySalesRepository:
         info = getattr(session, "info", None)
         self.org_owner_refs: frozenset[str] | None = (
             info.get(ORG_OWNER_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.account_stores: frozenset[tuple[str, str]] | None = (
+            info.get(STORE_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
         )
 
     def _inventory_snapshot_table_ready(self) -> bool:
@@ -668,6 +672,13 @@ class DailySalesRepository:
         statement = select(DailySalesItemDayMart).where(
             DailySalesItemDayMart.source_account_ref.in_(account_refs)
         )
+        if self.account_stores is not None:
+            statement = statement.where(
+                tuple_(
+                    DailySalesItemDayMart.source_account_ref,
+                    DailySalesItemDayMart.store_id,
+                ).in_(sorted(self.account_stores))
+            )
         if self.org_owner_refs is not None:
             statement = statement.where(DailySalesItemDayMart.owner_ref.in_(self.org_owner_refs))
         if start_date is not None:
@@ -727,6 +738,9 @@ class OrderProfitRepository:
         info = getattr(session, "info", None)
         self.org_owner_refs: frozenset[str] | None = (
             info.get(ORG_OWNER_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.account_stores: frozenset[tuple[str, str]] | None = (
+            info.get(STORE_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
         )
 
     def list_order_profit(
@@ -881,6 +895,9 @@ class ListingManagementRepository:
         info = getattr(session, "info", None)
         self.org_owner_refs: frozenset[str] | None = (
             info.get(ORG_OWNER_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.account_stores: frozenset[tuple[str, str]] | None = (
+            info.get(STORE_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
         )
 
     def list_listings(
@@ -1276,6 +1293,13 @@ class ListingManagementRepository:
             )
             .where(ListingManagementCurrentMart.source_account_ref.in_(account_refs))
         )
+        if self.account_stores is not None:
+            statement = statement.where(
+                tuple_(
+                    ListingManagementCurrentMart.source_account_ref,
+                    ListingManagementCurrentMart.store_id,
+                ).in_(sorted(self.account_stores))
+            )
         if self.org_owner_refs is not None:
             statement = statement.where(
                 or_(
