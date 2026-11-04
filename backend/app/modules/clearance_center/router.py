@@ -157,7 +157,11 @@ def request_detail(
     request: Request, request_id: UUID, session: db_session, principal: reader, accounts: scope
 ):
     return success_response(
-        request, data=_safe_listing(ClearanceService(session).request_detail(request_id, accounts), principal), meta=None
+        request,
+        data=_safe_listing(
+            ClearanceService(session).request_detail(request_id, accounts), principal
+        ),
+        meta=None,
     )
 
 
@@ -217,7 +221,11 @@ def listing_detail(
     request: Request, listing_id: UUID, session: db_session, principal: reader, accounts: scope
 ):
     return success_response(
-        request, data=_safe_listing(ClearanceService(session).listing_detail(str(listing_id), accounts), principal), meta=None
+        request,
+        data=_safe_listing(
+            ClearanceService(session).listing_detail(str(listing_id), accounts), principal
+        ),
+        meta=None,
     )
 
 
