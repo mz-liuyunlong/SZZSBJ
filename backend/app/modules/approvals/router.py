@@ -27,10 +27,29 @@ from app.modules.approvals.schemas import (
 )
 from app.modules.approvals.service import ApprovalService
 from app.modules.approvals.workflow import ApprovalWorkflow
+from app.modules.iam.organization_access import (
+    ORG_OWNER_SCOPE_SESSION_KEY,
+    resolve_business_owner_refs,
+)
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.warehouse_wfs.schemas import WfsFeeArchiveRequestWrite
 
-router = APIRouter(prefix="/api/approvals", tags=["Approval Workbench"])
+def require_approval_org_scope(
+    principal: Annotated[Principal, Depends(require_principal)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    """Apply reviewed organization owners to every WFS approval read and action."""
+    session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
+    owners = resolve_business_owner_refs(session, principal)
+    if owners is not None:
+        session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owners
+
+
+router = APIRouter(
+    prefix="/api/approvals",
+    tags=["Approval Workbench"],
+    dependencies=[Depends(require_approval_org_scope)],
+)
 db_session = Annotated[Session, Depends(get_db_session)]
 account_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
 view_principal = Annotated[
