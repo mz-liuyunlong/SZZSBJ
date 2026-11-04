@@ -1,13 +1,13 @@
-import { Button, Progress, Space, Tag, Typography } from "antd";
+import {
+  Button, Progress, Space, Tag, Typography } from "antd";
+import { FundOutlined, NotificationOutlined, DollarCircleOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import { useState, type ReactNode } from "react";
 import ReportTableShell from "@/components/report-table/ReportTableShell";
 import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
 import { REPORT_TABLE_PAGE_SIZE_OPTIONS } from "@/components/report-table/pagination";
 import {
-  activeTaskFor, coverage, evaluateProduct, findProduct, latestTaskFor,
-  RISK_NAMES, STATUS_NAMES, taskCost, taskProgress, taskQty, taskRemoved, taskSold, taskStore,
-  type ClearanceProduct, type ClearanceRules, type ClearanceTask, type RiskLevel, type PeriodDays,
+  activeTaskFor, coverage, evaluateProduct, findProduct, latestTaskFor, RISK_NAMES, STATUS_NAMES, type ClearanceProduct, type ClearanceRules, type ClearanceTask, type RiskLevel, type PeriodDays
 } from "./clearanceModel";
 
 import { ANALYSIS_FIELDS, MANAGEMENT_FIELDS, getClearancePeriodMetrics, money, integer, percent } from "./clearanceUiConfig";
@@ -26,15 +26,27 @@ function makeColumn<T>(
   onWidth:(key:string,value:number)=>void,render:(row:T)=>ReactNode,tab:string,
 ):ProColumns<T>{
   const width=widths[tab+":"+key]??initialWidth;
+  const tone=tab==="analysis"?metricTone(key):null;
   return {
     key,dataIndex:key,
     title:<ResizableColumnTitle label={label} width={width} minWidth={Math.min(width,110)} onWidthChange={n=>onWidth(tab+":"+key,n)}/>,
     width,ellipsis:false,
+    className:tone?`clearance-metric-cell clearance-metric-cell--${tone}`:undefined,
     fixed:key==="action"?"right":(tab==="analysis"&&(key==="identity"||key==="sku"))||(tab==="management"&&(key==="id"||key==="item"))?"left":undefined,
-    onHeaderCell:()=>({className:"report-table-resizable-header-cell"}),
+    onHeaderCell:()=>({className:"report-table-resizable-header-cell"+(tone?` clearance-metric-child-header clearance-metric-child-header--${tone}`:"")}),
     render:(_,row)=>render(row),
   };
 }
+
+// PR285_SIX_METRIC_GROUPS
+function metricTone(key:string):"sales"|"ads"|"profit"|null {
+  if(key==="revenue"||key==="daily")return "sales";
+  if(key==="ads"||key==="adRate")return "ads";
+  if(key==="profit"||key==="profitRate")return "profit";
+  return null;
+}
+
+
 export function ClearanceAnalysisTable({rows,rules,tasks,manual,period,state,onPage,onInspect,onApply,onTask}:TableCommon&{
   rows:ClearanceProduct[];rules:ClearanceRules;tasks:ClearanceTask[];manual:string[];period:PeriodDays;
   onInspect:(id:string)=>void;onApply:(id:string)=>void;onTask:(id:string)=>void;
@@ -63,7 +75,13 @@ export function ClearanceAnalysisTable({rows,rules,tasks,manual,period,state,onP
         :key==="profit"?money(m.profit)
         :key==="profitRate"?percent(m.profitRate):integer(m.units);
       const negative=(key==="profit"&&m.profit<0)||(key==="profitRate"&&m.profitRate!==null&&m.profitRate<0);
-      return <strong className={negative?"clearance-period-value is-negative":"clearance-period-value"}>{value}</strong>;
+
+      return <div className="clearance-metric-content">
+        <strong className={negative
+          ?"clearance-period-value is-negative"
+          :"clearance-period-value"}>{value}</strong>
+      </div>;
+
     }
     case "returns":return <><strong>{percent(x.per[30].units>0?x.returns/x.per[30].units*100:null)}</strong><Typography.Text type="secondary" className="clearance-subline">{x.returns} 次 / {x.per[30].units} 单</Typography.Text></>;
     case "rating":return <><span className="clearance-star">★</span> <strong>{x.rating.toFixed(1)}</strong><Typography.Text type="secondary" className="clearance-subline">{x.reviewCount} 条评价</Typography.Text></>;
@@ -73,46 +91,207 @@ export function ClearanceAnalysisTable({rows,rules,tasks,manual,period,state,onP
     }
   };
   const fields=state.columns.flatMap(key=>ANALYSIS_FIELDS.filter(([name])=>name===key));
-  const columns=fields.map(([key,label,width])=>makeColumn<ClearanceProduct>(key,label,width,widths,onWidth,row=>cell(row,key),"analysis"));
+  const leafColumns=fields.map(([key,label,width])=>makeColumn<ClearanceProduct>(key,label,width,widths,onWidth,row=>cell(row,key),"analysis"));
+
+  const groups=[
+    {id:"sales",name:"销售表现",keys:["revenue","daily"]},
+    {id:"ads",name:"广告表现",keys:["ads","adRate"]},
+    {id:"profit",name:"利润表现",keys:["profit","profitRate"]},
+  ] as const;
+
+  const columns:ProColumns<ClearanceProduct>[]=[];
+  const added=new Set<string>();
+
+  fields.forEach(([key],index)=>{
+    const group=groups.find(g=>g.keys.some(k=>k===key));
+    if(!group){
+      columns.push(leafColumns[index]);
+      return;
+    }
+    if(added.has(group.id))return;
+    added.add(group.id);
+
+    const children=group.keys.map(k=>{
+      const i=fields.findIndex(([name])=>name===k);
+      return i>=0?leafColumns[i]:undefined;
+    }).filter((c):c is ProColumns<ClearanceProduct>=>c!==undefined);
+
+    const icon=group.id==="sales"?<FundOutlined/>
+      :group.id==="ads"?<NotificationOutlined/>
+      :<DollarCircleOutlined/>;
+
+    columns.push({
+      key:"metric-"+group.id,
+      title:<span className={`clearance-metric-group-title clearance-metric-group-title--${group.id}`}>
+        <span className="clearance-metric-group-icon">{icon}</span>
+        {group.name}
+      </span>,
+      children,
+      onHeaderCell:()=>({
+        className:`clearance-metric-group-header clearance-metric-group-header--${group.id}`
+      }),
+    });
+  });
   return <ReportTableShell label="清货分析表格"><ProTable<ClearanceProduct>
     rowKey="id" search={false} options={false} toolBarRender={false} columns={columns} dataSource={rows}
-    scroll={{x:fields.reduce((n,[key,,w])=>n+(widths["analysis:"+key]??w),0)}}
+    scroll={{x:fields.reduce((n,[key,,w])=>n+(widths["analysis:"+key]??w),0),y:"100%"}}
     pagination={{current:state.page,pageSize:state.pageSize,total:rows.length,size:"small",showSizeChanger:true,showQuickJumper:true,pageSizeOptions:REPORT_TABLE_PAGE_SIZE_OPTIONS,onChange:onPage}}
     locale={{emptyText:"暂无符合条件的清货商品，正常 SKU 可以通过申请 SKU 搜索"}}/>
   </ReportTableShell>;
 }
-export function ClearanceManagementTable({rows,state,onPage,onTask}:TableCommon&{
-  rows:ClearanceTask[];onTask:(id:string)=>void;
-}){
-  const [widths,setWidths]=useState<Record<string,number>>({});
-  const onWidth=(key:string,value:number)=>setWidths(old=>({...old,[key]:value}));
-  const cell=(t:ClearanceTask,key:string):ReactNode=>{
-    const first=findProduct(t.lines[0]?.id);
-    switch(key){
-    case "id":return <><Button type="link" className="clearance-table-link" onClick={()=>onTask(t.id)}>{t.id}</Button><Typography.Text className="clearance-subline" type="secondary">{t.lines.length} 个 SKU</Typography.Text></>;
-    case "item":return <><strong>{first?.name??"—"}</strong><Typography.Text className="clearance-subline" type="secondary">{first?.sku}{t.lines.length>1?" 等":""}</Typography.Text></>;
-    case "store":return <>{taskStore(t)}<Typography.Text className="clearance-subline" type="secondary">{t.owner}</Typography.Text></>;
-    case "source":return <Tag color={t.source==="manual"?"purple":"blue"}>{t.source==="manual"?"运营主动":"系统识别"}</Tag>;
-    case "reason":return t.reason;
-    case "method":return t.methods.join(" / ");
-    case "goal":return <strong>{integer(taskQty(t))} 件</strong>;
-    case "sold":return integer(taskSold(t))+" 件";
-    case "removed":return integer(taskRemoved(t))+" 件";
-    case "progress":return <div className="clearance-progress"><strong>{taskProgress(t)}%</strong><Progress percent={taskProgress(t)} showInfo={false} size="small"/></div>;
-    case "cost":return <strong>{money(taskCost(t))}</strong>;
-    case "due":return t.due;
-    case "status":return <StatusTag status={t.status}/>;
-    case "submitted":return t.submitted;
-    case "action":return <Button type="link" onClick={()=>onTask(t.id)}>任务详情</Button>;
-    default:return "—";
+
+
+
+// PR285_MANAGEMENT_16_COLUMNS_SALES_ONLY_V1
+/**
+ * 每个 SKU 单独展示一行；同一申请单的公共状态、原因和日期保持关联。
+ * 清货进度仅统计实际已销售件数，不把移除或弃置计入百分比。
+ */
+type Pr285ClearanceManagementSkuRow = {
+  task: ClearanceTask;
+  line: ClearanceTask["lines"][number];
+};
+
+export function ClearanceManagementTable({ rows, state, onPage, onTask }: TableCommon & {
+  rows: Array<ClearanceTask | Pr285ClearanceManagementSkuRow>;
+  onTask: (id: string) => void;
+}) {
+  const [widths, setWidths] = useState<Record<string, number>>({});
+  const onWidth = (key: string, value: number) =>
+    setWidths(old => ({ ...old, [key]: value }));
+
+  // Compatible with both original task rows and previously flattened SKU rows.
+  const skuRows: Pr285ClearanceManagementSkuRow[] = rows.flatMap(entry => {
+    if ("task" in entry && "line" in entry) {
+      return [{ task: entry.task, line: entry.line }];
+    }
+    return entry.lines.map(line => ({ task: entry, line }));
+  });
+
+  const cell = (row: Pr285ClearanceManagementSkuRow, key: string): ReactNode => {
+    const { task, line } = row;
+    const product = findProduct(line.id);
+    switch (key) {
+      case "identity":
+        return <>
+          <strong>{product?.name ?? "—"}</strong>
+          <Typography.Text className="clearance-subline" type="secondary">
+            {product?.item ?? line.id}
+          </Typography.Text>
+        </>;
+      case "sku":
+        return <>
+          <strong>{product?.sku ?? "—"}</strong>
+          <Typography.Text className="clearance-subline" type="secondary">
+            {product?.msku ?? "—"}
+          </Typography.Text>
+        </>;
+      case "store":
+        return <>
+          {product?.store ?? "—"}
+          <Typography.Text className="clearance-subline" type="secondary">
+            {product?.owner ?? task.owner}
+          </Typography.Text>
+        </>;
+      case "source":
+        return <Tag color={task.source === "manual" ? "purple" : "blue"}>
+          {task.source === "manual" ? "运营主动" : "系统识别"}
+        </Tag>;
+      case "reason":
+        return task.reason;
+      case "method":
+        return task.methods.join(" / ");
+      case "goal":
+        return <strong>{integer(line.qty)} 件</strong>;
+      case "sold":
+        return integer(line.sold) + " 件";
+      case "revenue": {
+        // Only genuine recorded transaction revenue may appear here.
+        // The current Mock task model does not contain a revenue field.
+        // Never calculate sold * current listing price (prices may change).
+        const recorded = line as typeof line & {
+          actualSalesAmount?: number | null;
+        };
+        return typeof recorded.actualSalesAmount === "number" &&
+          Number.isFinite(recorded.actualSalesAmount)
+          ? <strong>{money(recorded.actualSalesAmount)}</strong>
+          : <span title="当前任务尚无实际成交金额记录；不会使用当前售价估算">—</span>;
+      }
+      case "progress": {
+        const soldPct = line.qty > 0
+          ? Math.max(0, Math.min(100, Math.floor(line.sold * 100 / line.qty)))
+          : 0;
+        return <div
+          className="clearance-progress"
+          title={`仅统计销售进度：已销售 ${line.sold} 件 / 目标 ${line.qty} 件；移除和弃置不计入`}
+        >
+          <strong>{soldPct}%</strong>
+          <Progress percent={soldPct} showInfo={false} size="small" />
+        </div>;
+      }
+      case "cost": {
+        // Original Mock only provides product unit cost, not an application-time snapshot.
+        // Keep the existing estimated-cost behavior until snapshot data is available.
+        const stored = line as typeof line & { unitCostAtApplication?: number | null };
+        const unitCost = typeof stored.unitCostAtApplication === "number" &&
+          Number.isFinite(stored.unitCostAtApplication)
+          ? stored.unitCostAtApplication
+          : product?.cost;
+        return unitCost == null
+          ? "—"
+          : <strong>{money(line.qty * unitCost)}</strong>;
+      }
+      case "plannedStart": {
+        const dated = task as ClearanceTask & { plannedStart?: string | null };
+        return dated.plannedStart
+          ? dated.plannedStart
+          : <span title="当前任务没有保存计划开始日期，不能拿提交时间代替">—</span>;
+      }
+      case "due":
+        return task.due || "—";
+      case "status":
+        return <StatusTag status={task.status} />;
+      case "submitted":
+        return task.submitted || "—";
+      case "action":
+        return <Button type="link" onClick={() => onTask(task.id)}>任务详情</Button>;
+      default:
+        return "—";
     }
   };
-  const fields=state.columns.flatMap(key=>MANAGEMENT_FIELDS.filter(([name])=>name===key));
-  const columns=fields.map(([key,label,width])=>makeColumn<ClearanceTask>(key,label,width,widths,onWidth,row=>cell(row,key),"management"));
-  return <ReportTableShell label="清货管理表格"><ProTable<ClearanceTask>
-    rowKey="id" search={false} options={false} toolBarRender={false} dataSource={rows} columns={columns}
-    scroll={{x:fields.reduce((n,[key,,w])=>n+(widths["management:"+key]??w),0)}}
-    pagination={{current:state.page,pageSize:state.pageSize,total:rows.length,size:"small",showSizeChanger:true,showQuickJumper:true,pageSizeOptions:REPORT_TABLE_PAGE_SIZE_OPTIONS,onChange:onPage}}
-    locale={{emptyText:"暂无符合条件的清货申请"}}/>
+
+  // Always show the exact 16 agreed columns, including in worktrees with old
+  // persisted column-key preferences (id/item/removed) from previous versions.
+  const fields = MANAGEMENT_FIELDS;
+  const columns = fields.map(([key, label, width]) => ({
+    ...makeColumn<Pr285ClearanceManagementSkuRow>(
+      key, label, width, widths, onWidth,
+      row => cell(row, key), "management",
+    ),
+    fixed: key === "action" ? "right" as const
+      : (key === "identity" || key === "sku") ? "left" as const
+      : undefined,
+  }));
+  const totalWidth = fields.reduce(
+    (n, [key, , width]) => n + (widths["management:" + key] ?? width), 0,
+  );
+
+  return <ReportTableShell label="清货管理表格">
+    <ProTable<Pr285ClearanceManagementSkuRow>
+      rowKey={row => row.task.id + ":" + row.line.id}
+      search={false}
+      options={false}
+      toolBarRender={false}
+      dataSource={skuRows}
+      columns={columns}
+      scroll={{ x: totalWidth, y: "100%" }}
+      pagination={{
+        current: state.page, pageSize: state.pageSize, total: skuRows.length,
+        size: "small", showSizeChanger: true, showQuickJumper: true,
+        pageSizeOptions: REPORT_TABLE_PAGE_SIZE_OPTIONS,
+        onChange: onPage,
+      }}
+      locale={{ emptyText: "暂无符合条件的清货申请" }}
+    />
   </ReportTableShell>;
 }

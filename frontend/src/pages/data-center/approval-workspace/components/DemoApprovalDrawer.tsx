@@ -1,12 +1,12 @@
 /** V3 demo-only drawers: four independent business layouts, no approval endpoints. */
-import { Alert, Button, Descriptions, Drawer, Table, Tag, Typography } from "antd";
+import { Alert, Button, Descriptions, Drawer, Input, Modal, Table, Tag, Typography, message } from "antd";
 import { useState, type ReactNode } from "react";
 import type { ApprovalItem } from "../approvalTypes";
 import { getDemoSeed, type DemoSeed } from "../approvalDemoData";
 import { demoProfiles, type ClearanceSku, type DemoBusinessProfile } from "../approvalDemoPresentation";
 import "./DemoApprovalDrawer.css";
 
-interface Props { selected?: ApprovalItem; onClose(): void; }
+interface Props { selected?: ApprovalItem; onClose(): void; initialAction?: "approve" | "reject"; }
 const usd = (n: number | string | null | undefined) => n == null ? "—" : `$${Number(n).toFixed(2)}`;
 const num = (n: number | undefined) => n == null ? "—" : n.toLocaleString("zh-CN");
 const pct = (n: number | null | undefined) => n == null || !Number.isFinite(n) ? "—" : `${n.toFixed(1)}%`;
@@ -51,45 +51,164 @@ function BusinessMatrix({sku}:{sku:ClearanceSku}) {
     ["利润",sku.profit.map(usd)],
     ["利润率",sku.profit.map((n,i)=>pct(sku.revenue[i]?100*n/sku.revenue[i]:null))],
   ].map(([label,values])=>({key:label as string,label:label as string,values:values as string[]}));
-  return <Table size="small" pagination={false} scroll={{x:600}}
+  return <Table className="approval-demo__business-matrix-table" size="small" pagination={false} scroll={{x:560}}
     rowKey="key" dataSource={rows} columns={[
       {key:"label",title:"经营指标",dataIndex:"label",width:180},
       ...windows.map((n,i)=>({key:String(n),title:`近${n}天`,render:(_v:unknown,row:typeof rows[number])=>row.values[i]})),
     ]}/>;
 }
-function ClearanceDetail({seed,p}:{seed:DemoSeed;p:DemoBusinessProfile}) {
-  const products=p.clearanceSkus ?? [];
-  const [index,setIndex]=useState(0);
-  const current=products[index] ?? products[0];
-  const stockCost=products.reduce((s,x)=>s+x.target*x.cost,0);
-  return <>
-    <StatTiles items={[["计划清货量",`${num(p.targetQty)} 件`,"整单申请目标"],["相关库存成本",usd(stockCost),"不等于清货亏损"],["SKU 数量",String(products.length),"单店铺申请"]]}/>
-    <Section heading="01 / 清货申请决策依据"><Descriptions size="small" bordered column={2} items={[
-      info("Walmart 店铺",seed.store),info("清货原因",seed.reason),info("计划完成日期",p.deadline),
-      info("清货方式",p.methods?.join("、")),info("申请来源",p.source),info("预计库存成本",usd(stockCost)),
-    ]}/></Section>
-    <Section heading="02 / 清货 SKU 明细" note="逐 SKU 核对">
-      <Table size="small" pagination={false} scroll={{x:740}} rowKey="sku" dataSource={products} columns={[
-        {title:"SKU / MSKU",key:"sku",width:170,render:(_v,x:ClearanceSku)=><><strong>{x.sku}</strong><small className="approval-demo__subline">{x.msku}</small></>},
-        {title:"商品 ID",dataIndex:"item",width:120},
-        {title:"WFS 可售",key:"available",render:(_v,x:ClearanceSku)=>`${num(x.available)} 件`},
-        {title:"库龄",key:"age",render:(_v,x:ClearanceSku)=>`${x.age} 天`},
-        {title:"目标清货量",key:"target",render:(_v,x:ClearanceSku)=>`${num(x.target)} 件`},
-        {title:"单件成本",key:"cost",render:(_v,x:ClearanceSku)=>usd(x.cost)},
-      ]}/>
+function ClearanceDetail({
+  seed,
+  p,
+  currentStatus,
+  reviewedAt,
+  reviewNote,
+}: {
+  seed: DemoSeed;
+  p: DemoBusinessProfile;
+  currentStatus: DemoSeed["status"];
+  reviewedAt: string | null;
+  reviewNote: string;
+}) {
+  const products = p.clearanceSkus ?? [];
+  // 详情只展示当前申请记录指定的主 SKU
+  const current = products.find((item) => item.sku === seed.sku);
+  const totalAvailable = current?.available ?? 0;
+  const appliedQty = current?.target ?? 0;
+  const remaining = Math.max(0, totalAvailable - appliedQty);
+  const currentRisk = risk[seed.risk];
+  const submittedAt = formatDemoTime(seed.submitted_at);
+  const methods = p.methods?.join("、") ?? "—";
+
+  return <div className="approval-demo__clearance-main">
+    <Section heading="01 申请基本信息" note="运营提交内容">
+      <div className="approval-demo__clearance-product">
+        <div className="approval-demo__clearance-thumb">SKU</div>
+        <div className="approval-demo__clearance-product-info">
+          <strong>{current?.name ?? seed.title}</strong>
+          <small>{current ? `${current.item} · ${current.sku} · ${current.msku}` : seed.sku}</small>
+        </div>
+        <Tag color={seed.risk === "high" ? "error" : seed.risk === "medium" ? "warning" : "success"}>{currentRisk}</Tag>
+      </div>
+      <div className="approval-demo__clearance-base-grid">
+        <div><span>店铺</span><strong>{seed.store}</strong></div>
+        <div><span>负责人</span><strong>{p.owner ?? seed.applicant}</strong></div>
+        <div><span>当前售价</span><strong>{current ? usd(current.price) : "—"}</strong></div>
+        <div><span>划线价</span><strong>—</strong></div>
+        <div><span>购物车</span><strong>—</strong></div>
+        <div><span>单件库存成本</span><strong>{current ? usd(current.cost) : "—"}</strong></div>
+        <div><span>单件毛利空间</span><strong>—</strong></div>
+        <div><span>清货原因</span><strong>{seed.reason}</strong></div>
+        <div><span>清货方式</span><strong>{methods}</strong></div>
+        <div><span>申请清货数量</span><strong>{num(appliedQty)} 件</strong></div>
+        <div><span>计划完成日期</span><strong>{p.deadline ?? "—"}</strong></div>
+        <div><span>申请状态</span><strong><Tag color={currentStatus === "approved" ? "success" : currentStatus === "rejected" ? "error" : "warning"}>{status[currentStatus]}</Tag></strong></div>
+      </div>
+      <div className="approval-demo__snapshot-note">当前为清货审批 Mock 申请资料；划线价、购物车及完整毛利数据未提供时以 — 展示。</div>
     </Section>
-    {current?<Section heading="03 / 经营表现 · 7 / 14 / 30 天" note="与清货分析口径一致">
-      <div className="approval-demo__sku-pills">{products.map((item,i)=><Button key={item.sku} size="small" type={i===index?"primary":"default"} onClick={()=>setIndex(i)}>{item.sku}</Button>)}</div>
-      <div className="approval-demo__sku-summary">{current.name} ｜ {current.item} ｜ {current.sku} / {current.msku}<p>WFS 可售 {num(current.available)} 件 · 平均库龄 {current.age} 天 · 预计售罄 {current.sales[2]?Math.ceil(current.available/current.sales[2]*30):"无法估算"} 天</p></div>
-      <BusinessMatrix sku={current}/>
-      <Descriptions bordered size="small" column={2} className="approval-demo__bottom-facts" items={[
-        info("30天退货率",pct(current.returnRate)),info("商品评分",`${current.rating.toFixed(1)} / 5.0`),
-        info("当前售价",usd(current.price)),info("WFS 可售库存成本",usd(current.available*current.cost)),
-      ]}/>
-    </Section>:null}
-    <Section heading="04 / 库存与经营风险说明"><Safety>申请人不得自批；清货数量不能超过可售库存。审批通过不会自动降价、创建广告或执行 WFS 移除/弃置。</Safety></Section>
-  </>;
+
+    <Section heading="02 清货方案对比" note="系统建议 vs 运营申请">
+      <div className="approval-demo__compare-grid">
+        <div className="approval-demo__compare-card">
+          <div className="approval-demo__compare-head"><b>系统建议</b><span>申请时建议快照</span></div>
+          <div className="approval-demo__compare-body">
+            <div className="approval-demo__compare-primary"><strong>—</strong><span>件 · 系统建议量未提供</span></div>
+            <div className="approval-demo__compare-kpis">
+              <div><span>建议清货售价</span><b>—</b></div>
+              <div><span>最低保本售价</span><b>—</b></div>
+              <div><span>预计净回款</span><b>—</b></div>
+              <div><span>预计清货盈亏</span><b>—</b></div>
+              <div><span>清货后剩余库存</span><b>—</b></div>
+              <div><span>单件毛利空间</span><b>—</b></div>
+            </div>
+          </div>
+        </div>
+        <div className="approval-demo__compare-card approval-demo__compare-card--applied">
+          <div className="approval-demo__compare-head"><b>运营申请</b><Tag color="blue">实际提交方案</Tag></div>
+          <div className="approval-demo__compare-body">
+            <div className="approval-demo__compare-primary"><strong>{num(appliedQty)}</strong><span>件 · 申请清货量</span></div>
+            <div className="approval-demo__compare-kpis">
+              <div><span>申请清货售价</span><b>—</b></div>
+              <div><span>最低保本售价</span><b>—</b></div>
+              <div><span>预计净回款</span><b>—</b></div>
+              <div><span>预计清货盈亏</span><b>—</b></div>
+              <div><span>清货后剩余库存</span><b>{num(remaining)} 件</b></div>
+              <div><span>单件毛利空间</span><b>—</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="approval-demo__delta-row">系统建议快照未提供，暂无法计算申请数量、售价及盈亏差异。</div>
+      <div className="approval-demo__compare-alert">当前 Mock 资料未提供系统建议历史快照及完整清货费用口径，净回款、盈亏和保本价暂不展示，避免使用当前售价或库存成本代替清货测算。</div>
+    </Section>
+
+    <Section heading="03 SKU 经营与库存风险" note="当前最新数据">
+      <div className="approval-demo__timestamp">当前展示清货审批 Mock 经营数据</div>
+      {current ? <>
+        <div className="approval-demo__sku-metrics">
+          <div><span>WFS 可售库存</span><strong>{num(current.available)} 件</strong><small>当前可售</small></div>
+          <div><span>预计售罄天数</span><strong className="approval-demo__red">{current.sales[2] > 0 ? `${num(Math.ceil(current.available / current.sales[2] * 30))} 天` : "—"}</strong><small>按近30天销量估算</small></div>
+          <div><span>可售库存成本</span><strong>{usd(current.available * current.cost)}</strong><small>可售库存 × 单件成本</small></div>
+          <div><span>上架天数</span><strong>—</strong><small>Mock 数据未提供</small></div>
+          <div><span>Listing 评分</span><strong className={current.rating < 4 ? "approval-demo__red" : ""}>{current.rating.toFixed(1)} / 5</strong><small>Mock 评价数据</small></div>
+          <div><span>退货率 · 30天</span><strong>{pct(current.returnRate)}</strong><small>30天退货率</small></div>
+        </div>
+        <div className="approval-demo__sku-analysis-grid">
+          <div className="approval-demo__mini-panel">
+            <div className="approval-demo__mini-head"><b>经营数据对比</b><span>7 / 14 / 30 天</span></div>
+            <div className="approval-demo__business-matrix"><BusinessMatrix sku={current}/></div>
+          </div>
+          <div className="approval-demo__mini-panel">
+            <div className="approval-demo__mini-head"><b>库存与风险依据</b><Tag color={seed.risk === "high" ? "error" : seed.risk === "medium" ? "warning" : "success"}>{currentRisk}</Tag></div>
+            <div className="approval-demo__risk-reasons">
+              <div><b>申请风险等级 · {currentRisk}</b><p>{seed.reason}</p></div>
+              <div><b>申请佐证资料</b><p>{seed.evidence || "未提供补充佐证资料"}</p></div>
+              <div><b>清货计划</b><p>{seed.plan || "未提供清货计划说明"}</p></div>
+            </div>
+          </div>
+        </div>
+      </> : <div className="approval-demo__empty">当前申请未关联 SKU 明细。</div>}
+    </Section>
+
+    <Section heading="04 申请说明" note="申请人补充信息">
+      <p className="approval-demo__request-description">{seed.reason || "申请人未填写补充说明。"}</p>
+    </Section>
+
+    <Section heading="05 审批记录" note="完整保留申请与流转记录">
+      <div className="approval-demo__timeline">
+        <div className="approval-demo__timeline-item">
+          <i className="approval-demo__timeline-dot approval-demo__timeline-dot--done"/>
+          <div><b>{seed.applicant}提交清货申请</b><p>提交清货数量 {num(appliedQty)} 件，方式：{methods}。</p></div>
+          <time>{submittedAt}</time>
+        </div>
+        {reviewedAt ? <div className="approval-demo__timeline-item">
+          <i className={`approval-demo__timeline-dot ${currentStatus === "approved" ? "approval-demo__timeline-dot--done" : "approval-demo__timeline-dot--rejected"}`}/>
+          <div><b>演示审批人{currentStatus === "approved" ? "审批通过" : "驳回申请"}</b><p>{reviewNote || "本地演示操作，未调用正式审批接口。"}</p></div>
+          <time>{formatDemoTime(reviewedAt)}</time>
+        </div> : currentStatus === "submitted" ? <div className="approval-demo__timeline-item">
+          <i className="approval-demo__timeline-dot approval-demo__timeline-dot--pending"/>
+          <div><b>流转至部门负责人</b><p>等待审批处理</p></div>
+          <time>待处理</time>
+        </div> : <div className="approval-demo__timeline-item">
+          <i className={`approval-demo__timeline-dot ${currentStatus === "approved" ? "approval-demo__timeline-dot--done" : "approval-demo__timeline-dot--rejected"}`}/>
+          <div><b>Mock 记录：{status[currentStatus]}</b><p>原始演示数据未提供审批意见和审批时间。</p></div>
+          <time>—</time>
+        </div>}
+      </div>
+    </Section>
+  </div>;
 }
+
+function formatDemoTime(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("zh-CN", {
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+}
+
 function ListingDetail({seed,p}:{seed:DemoSeed;p:DemoBusinessProfile}) {
   return <>
     <StatTiles items={[["归档业务对象",p.item??"—","商品 ID / Listing"],["当前 Listing 状态",p.listingStatus??"—","申请时快照"],["WFS 可售库存",`${num(p.stockAvailable)} 件`,"归档前核对"]]}/>
@@ -135,25 +254,131 @@ function Side({seed}:{seed:DemoSeed}) {
     <Section heading="安全边界"><p className="approval-demo__copy">演示记录不调用审批 API。申请人不能审批自己的正式申请，真实业务须由后端校验授权和业务快照。</p></Section>
   </aside>;
 }
-export default function DemoApprovalDrawer({selected,onClose}:Props) {
-  const seed=selected ? getDemoSeed(selected.id) : undefined;
-  const p=seed?demoProfiles[seed.id]:undefined;
-  return <Drawer title={null} closable={false} open={Boolean(seed)} width={1040} destroyOnHidden onClose={onClose} styles={{body:{padding:0}}}>
-    {seed&&p?<div className="approval-demo">
-      <header className="approval-demo__header"><div>
-        <small>数据中心 / 审批工作台 / {approvalType[p.kind]}</small>
-        <h2>{seed.title}</h2>
-        <Tag color="blue">演示数据</Tag><Tag color={seed.status==="approved"?"green":seed.status==="rejected"?"red":"orange"}>{status[seed.status]}</Tag><Tag>{risk[seed.risk]}</Tag>
-        <span className="approval-demo__header-id">审批单 {seed.id}</span>
-      </div><Button onClick={onClose}>关闭</Button></header>
-      <div className="approval-demo__layout"><main className="approval-demo__main">
-        {p.kind==="purchase"?<PurchaseDetail seed={seed} p={p}/>:null}
-        {p.kind==="clearance"?<ClearanceDetail key={seed.id} seed={seed} p={p}/>:null}
-        {p.kind==="listing"?<ListingDetail seed={seed} p={p}/>:null}
-        {p.kind==="price"?<PriceDetail seed={seed} p={p}/>:null}
-      </main><Side seed={seed}/></div>
-      <footer className="approval-demo__footer"><Typography.Text type="secondary">只读演示 · 不连接真实审批、采购、清货、Listing 或价格 API</Typography.Text><Button onClick={onClose}>关闭详情</Button></footer>
-    </div>:null}
+function DemoApprovalDrawerContent({selected,onClose,initialAction}:Props) {
+  const seed = selected ? getDemoSeed(selected.id) : undefined;
+  const p = seed ? demoProfiles[seed.id] : undefined;
+  const isClearance = p?.kind === "clearance";
+  const [clearanceStatus, setClearanceStatus] = useState<DemoSeed["status"]>(seed?.status ?? "submitted");
+  const [actionType, setActionType] = useState<"approve" | "reject" | null>(initialAction ?? null);
+  const [actionNote, setActionNote] = useState("");
+  const [actionError, setActionError] = useState(false);
+  const [reviewedAt, setReviewedAt] = useState<string | null>(null);
+  const [reviewNote, setReviewNote] = useState("");
+
+  const openAction = (type: "approve" | "reject") => {
+    setActionType(type);
+    setActionNote("");
+    setActionError(false);
+  };
+  const closeAction = () => {
+    setActionType(null);
+    setActionError(false);
+  };
+  const confirmAction = () => {
+    if (!actionType) return;
+    const note = actionNote.trim();
+    if (actionType === "reject" && !note) {
+      setActionError(true);
+      return;
+    }
+    setClearanceStatus(actionType === "approve" ? "approved" : "rejected");
+    setReviewedAt(new Date().toISOString());
+    setReviewNote(note);
+    closeAction();
+    message.success(`本地演示状态已更新为${actionType === "approve" ? "已审批" : "已驳回"}，未调用正式审批接口`);
+  };
+
+  return <Drawer
+    title={null}
+    closable={false}
+    open={Boolean(seed)}
+    width={isClearance ? 1000 : 1040}
+    destroyOnHidden
+    onClose={onClose}
+    styles={{body:{padding:0}}}
+  >
+    {seed && p ? <div className={`approval-demo ${isClearance ? "approval-demo--clearance" : ""}`}>
+      {isClearance ? <>
+        <header className="approval-demo__clearance-header">
+          <div className="approval-demo__clearance-header-top">
+            <div className="approval-demo__clearance-title-wrap">
+              <div className="approval-demo__clearance-eyebrow">CLEARANCE APPROVAL · DETAIL</div>
+              <div className="approval-demo__clearance-title-line">
+                <h2>{seed.title}</h2>
+                <Tag color="blue">演示数据</Tag>
+                <Tag color={clearanceStatus === "approved" ? "success" : clearanceStatus === "rejected" ? "error" : "warning"}>{status[clearanceStatus]}</Tag>
+                <Tag color={seed.risk === "high" ? "error" : seed.risk === "medium" ? "warning" : "success"}>{risk[seed.risk]}</Tag>
+              </div>
+              <div className="approval-demo__clearance-request-id">申请编号：{seed.id}</div>
+            </div>
+            <Button className="approval-demo__clearance-close" aria-label="关闭详情" onClick={onClose}>×</Button>
+          </div>
+          <div className="approval-demo__clearance-meta">
+            <span>申请人<b>{seed.applicant}</b></span>
+            <span>提交时间<b>{formatDemoTime(seed.submitted_at)}</b></span>
+            <span>当前审批人<b>{clearanceStatus === "submitted" ? "部门负责人" : "—"}</b></span>
+            <span>等待时长<b>—</b></span>
+          </div>
+        </header>
+        <main className="approval-demo__clearance-body">
+          <ClearanceDetail seed={seed} p={p} currentStatus={clearanceStatus} reviewedAt={reviewedAt} reviewNote={reviewNote}/>
+        </main>
+        <footer className="approval-demo__clearance-footer">
+          <span>演示交互仅更新当前详情状态，不调用正式审批接口或执行平台操作。</span>
+          <div>
+            <Button danger disabled={clearanceStatus !== "submitted"} onClick={() => openAction("reject")}>驳回</Button>
+            <Button type="primary" disabled={clearanceStatus !== "submitted"} onClick={() => openAction("approve")}>审批通过</Button>
+          </div>
+        </footer>
+        <Modal
+          className="approval-demo__clearance-action-modal"
+          open={actionType !== null}
+          centered
+          width={410}
+          title={actionType === "approve" ? "审批通过" : "驳回申请"}
+          footer={null}
+          onCancel={closeAction}
+          destroyOnHidden
+        >
+          <div className="approval-demo__clearance-action-body">
+            <label htmlFor="approval-clearance-action-note">{actionType === "approve" ? "审批意见（选填）" : "驳回原因 *"}</label>
+            <Input.TextArea
+              id="approval-clearance-action-note"
+              rows={4}
+              value={actionNote}
+              onChange={event => { setActionNote(event.target.value); setActionError(false); }}
+              placeholder={actionType === "approve" ? "填写审批意见（选填）" : "请填写驳回原因"}
+              className="approval-demo__clearance-action-input"
+            />
+            {actionError ? <div className="approval-demo__clearance-action-error" role="alert">请填写驳回原因</div> : null}
+          </div>
+          <div className="approval-demo__clearance-action-footer">
+            <Button onClick={closeAction}>取消</Button>
+            {actionType === "approve"
+              ? <Button type="primary" onClick={confirmAction}>确认通过</Button>
+              : <Button danger onClick={confirmAction}>确认驳回</Button>}
+          </div>
+        </Modal>
+      </> : <>
+        <header className="approval-demo__header"><div>
+          <small>数据中心 / 审批工作台 / {approvalType[p.kind]}</small>
+          <h2>{seed.title}</h2>
+          <Tag color="blue">演示数据</Tag><Tag color={seed.status==="approved"?"green":seed.status==="rejected"?"red":"orange"}>{status[seed.status]}</Tag><Tag>{risk[seed.risk]}</Tag>
+          <span className="approval-demo__header-id">审批单 {seed.id}</span>
+        </div><Button onClick={onClose}>关闭</Button></header>
+        <div className="approval-demo__layout"><main className="approval-demo__main">
+          {p.kind==="purchase"?<PurchaseDetail seed={seed} p={p}/>:null}
+          {p.kind==="listing"?<ListingDetail seed={seed} p={p}/>:null}
+          {p.kind==="price"?<PriceDetail seed={seed} p={p}/>:null}
+        </main><Side seed={seed}/></div>
+        <footer className="approval-demo__footer"><Typography.Text type="secondary">只读演示 · 不连接真实审批、采购、清货、Listing 或价格 API</Typography.Text><Button onClick={onClose}>关闭详情</Button></footer>
+      </>}
+    </div> : null}
   </Drawer>;
 }
 
+// Remount the demo detail when the selected approval changes. This resets local
+// demo state without synchronously calling setState inside an effect.
+export default function DemoApprovalDrawer(props: Props) {
+  return <DemoApprovalDrawerContent key={props.selected?.id ?? "closed"} {...props} />;
+}

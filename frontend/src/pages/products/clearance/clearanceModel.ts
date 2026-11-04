@@ -33,6 +33,18 @@ export interface ClearanceProduct {
   price: number;
   cost: number;
   per: Record<PeriodDays, SalesPeriod>;
+  /** Optional sources: never substitute missing data with invented zeroes. */
+  lastSaleDays?: number;
+  activeSalesDays30?: number;
+  adClicks30?: number;
+  adOrders30?: number;
+  netUnits30?: number;
+  hasBuyBox?: boolean;
+  openPurchaseQty?: number;
+  riskConsecutiveDays?: number;
+  estimatedHoldingCost30?: number;
+  referralRate?: number;
+  fulfillmentFeePerUnit?: number;
 }
 export interface ClearanceRules {
   highCoverage: number;
@@ -58,6 +70,44 @@ export interface ClearanceRules {
   enableAd: boolean;
   enableReturns: boolean;
   enableRating: boolean;
+  feeAgeDays: number;
+  feeWarningDays: number;
+  agedRatioPercent: number;
+  lastSaleDaysLimit: number;
+  maxActiveSalesDays30: number;
+  margin30Threshold: number;
+  minAdClicks30: number;
+  maxAdConversionPercent: number;
+  maxNetUnits30: number;
+  salesRecoveryPercent: number;
+  minSalesForRecovery: number;
+  inboundConflictMin: number;
+  purchaseConflictMin: number;
+  minStockCapital: number;
+  riskDaysThreshold: number;
+  holdingCost30Threshold: number;
+  targetHoldingDays: number;
+  safetyStockUnits: number;
+  allowedClearanceLoss: number;
+  enableNearFee: boolean;
+  enableAgedRatio: boolean;
+  enableLastSale: boolean;
+  enableActiveDays: boolean;
+  enableMargin30: boolean;
+  enableAdConversion: boolean;
+  enableNetSales: boolean;
+  enableNewProductProtection: boolean;
+  enableRecoveryProtection: boolean;
+  enableBuyBoxProtection: boolean;
+  enableInboundConflict: boolean;
+  enablePurchaseConflict: boolean;
+  enableCapitalPriority: boolean;
+  enableRiskDuration: boolean;
+  enableHoldingCost: boolean;
+  enableRepeatBacklog: boolean;
+  enableQtySuggestion: boolean;
+  enableFloorPrice: boolean;
+  enableClearanceReview: boolean;
 }
 export const DEFAULT_RULES: ClearanceRules = {
   highCoverage:180,mediumCoverage:90,assistCoverage:60,mediumAge:180,
@@ -66,6 +116,22 @@ export const DEFAULT_RULES: ClearanceRules = {
   enableCoverage:true,enableZero:true,enableAged:true,enableAverageAge:true,
   enableAssisted:true,enableProfit:true,enableDecline:true,enableAd:true,
   enableReturns:true,enableRating:true,
+  feeAgeDays:365,feeWarningDays:45,agedRatioPercent:30,
+  lastSaleDaysLimit:14,maxActiveSalesDays30:5,margin30Threshold:8,
+  minAdClicks30:80,maxAdConversionPercent:1,maxNetUnits30:5,
+  salesRecoveryPercent:50,minSalesForRecovery:5,
+  inboundConflictMin:1,purchaseConflictMin:1,
+  minStockCapital:3000,riskDaysThreshold:7,holdingCost30Threshold:60,
+  targetHoldingDays:60,safetyStockUnits:50,allowedClearanceLoss:0,
+  enableNearFee:false,enableAgedRatio:false,enableLastSale:false,
+  enableActiveDays:false,enableMargin30:false,enableAdConversion:false,
+  enableNetSales:false,enableNewProductProtection:false,
+  enableRecoveryProtection:false,enableBuyBoxProtection:false,
+  enableInboundConflict:true,enablePurchaseConflict:false,
+  enableCapitalPriority:true,enableRiskDuration:false,
+  enableHoldingCost:false,enableRepeatBacklog:false,
+  enableQtySuggestion:true,enableFloorPrice:false,
+  enableClearanceReview:false,
 };
 type SourceRow = Pick<ClearanceProduct,"id"|"sku"|"msku"|"item"|"name"|"store"|"owner"|"avail"|"res"|"bad"|"inbound"|"age"|"price"|"cost"> & {s7:number;s30:number};
 const source: SourceRow[] = [
@@ -107,8 +173,8 @@ export const CLEARANCE_PRODUCTS: ClearanceProduct[] = source.map((row,i)=>{
     per:{7:period(7,row.s7),14:period(14,s14),30:period(30,row.s30)},
   };
 });
-export const REASONS = ["库存滞销","WFS库龄过高","季节性清仓","产品升级换代","准备停售","质量问题","经营策略调整","其他原因"];
-export const METHODS = ["降价","促销","广告调整","WFS移除","弃置"];
+export const REASONS = ["长期滞销","库存积压","持续亏损","利润过低","仓储成本压力","季节性商品过季","市场需求下降","竞争加剧","质量或售后问题","商品计划停售","其他原因"];
+export const METHODS = ["降价","促销","广告清货","WFS 移除","弃置"];
 export const STATUS_NAMES: Record<TaskStatus,string> = {
   pending:"待审批",supplement:"待补资料",ready:"待执行",running:"执行中",
   paused:"已暂停",done:"已完成",rejected:"已驳回",cancelled:"已撤回",
@@ -119,6 +185,28 @@ export function coverage(x:ClearanceProduct):number|null{
   const units=x.per[30].units;
   return units>0?Math.ceil(x.avail/(units/30)):null;
 }
+/** Optional newer business signals. Missing external data never means zero. */
+function newerBusinessSignals(x: ClearanceProduct, r: ClearanceRules): string[] {
+  const found: string[] = [];
+  if(r.enableMargin30 && x.per[30].margin !== null && x.per[30].margin < r.margin30Threshold)
+    found.push("30天利润率低于"+r.margin30Threshold+"%");
+  if(r.enableAdConversion && x.adClicks30 !== undefined && x.adOrders30 !== undefined && x.adClicks30 >= r.minAdClicks30 && x.adClicks30 > 0 && x.adOrders30 / x.adClicks30 * 100 < r.maxAdConversionPercent)
+    found.push("广告点击足够但订单转化率低");
+  if(r.enableNetSales && x.netUnits30 !== undefined && x.netUnits30 <= r.maxNetUnits30)
+    found.push("30天净销量偏低");
+  return found;
+}
+/** Advisory estimates are explicitly non-executing. */
+export function suggestedClearanceQty(x: ClearanceProduct, r: ClearanceRules): number | null {
+  if(!r.enableQtySuggestion || x.per[30].units < 0) return null;
+  const demand = Math.ceil(x.per[30].units / 30 * r.targetHoldingDays);
+  return Math.max(0, Math.min(x.avail, x.avail - demand - r.safetyStockUnits));
+}
+export function suggestedClearanceFloorPrice(x: ClearanceProduct, r: ClearanceRules): number | null {
+  if(!r.enableFloorPrice || x.referralRate === undefined || x.fulfillmentFeePerUnit === undefined || x.referralRate < 0 || x.referralRate >= 1) return null;
+  return Math.max(0, Math.ceil(((x.cost + x.fulfillmentFeePerUnit - r.allowedClearanceLoss) / (1 - x.referralRate)) * 100) / 100);
+}
+
 export function businessSignals(x:ClearanceProduct,r:ClearanceRules):string[]{
   const p7=x.per[7],p14=x.per[14],p30=x.per[30],prev7=p14.units-p7.units,signals:string[]=[];
   if(r.enableProfit&&p7.profit<0&&p14.profit<0&&p14.units>=3)signals.push("近7天与14天持续亏损");
@@ -126,7 +214,7 @@ export function businessSignals(x:ClearanceProduct,r:ClearanceRules):string[]{
   if(r.enableAd&&p7.adRate!==null&&p30.adRate!==null&&p7.adRate-p30.adRate>=r.adRateIncrease&&p7.profit<0)signals.push("近期广告占比上升≥"+r.adRateIncrease+"个百分点且亏损");
   if(r.enableReturns&&x.returns>=5&&p30.units>=30&&x.returns/p30.units*100>=r.returnRate)signals.push("30天退货率≥"+r.returnRate+"%");
   if(r.enableRating&&x.rating<r.ratingThreshold&&x.reviewCount>=10)signals.push("商品评分低于"+r.ratingThreshold);
-  return signals;
+  return [...signals,...newerBusinessSignals(x,r)];
 }
 export function evaluateProduct(x:ClearanceProduct,r:ClearanceRules):RiskEvaluation{
   const cov=coverage(x),business=businessSignals(x,r),reasons:string[]=[];
@@ -145,7 +233,45 @@ export function evaluateProduct(x:ClearanceProduct,r:ClearanceRules):RiskEvaluat
   if(level==="low"&&r.enableAssisted&&cov!==null&&cov>=r.assistCoverage&&business.length>=r.minBusinessSignals){
     level="medium";reasons.push("预计售罄≥"+r.assistCoverage+"天且存在≥"+r.minBusinessSignals+"项经营异常");
   }
-  if(level==="low")reasons.push("暂未达到自动清货准入条件");
+  /* Extended rules are opt-in; source gaps never turn into zero values. */
+  const inheritedHigh = level === "high";
+  const feeLots = x.ageLots.filter(l=>l.qty > 0 && l.ageDays >= r.feeAgeDays - r.feeWarningDays);
+  if(r.enableNearFee && feeLots.length && level === "low") {
+    level="medium";
+    reasons.push("有"+feeLots.reduce((sum,l)=>sum+l.qty,0)+"件库存批次接近长期仓储费参考库龄");
+  }
+  const agedQty = x.ageLots.filter(l=>l.ageDays > r.agedLotDays).reduce((sum,l)=>sum+l.qty,0);
+  if(r.enableAgedRatio && x.avail > 0 && agedQty / x.avail * 100 >= r.agedRatioPercent && level === "low") {
+    level="medium";reasons.push("超龄库存占比达到"+r.agedRatioPercent+"%");
+  }
+  if(r.enableLastSale && x.lastSaleDays !== undefined && x.lastSaleDays >= r.lastSaleDaysLimit && cov !== null && cov >= r.assistCoverage && level === "low") {
+    level="medium";reasons.push("最后出单间隔"+x.lastSaleDays+"天，且库存积压");
+  }
+  if(r.enableActiveDays && x.activeSalesDays30 !== undefined && x.activeSalesDays30 <= r.maxActiveSalesDays30 && cov !== null && cov >= r.assistCoverage && level === "low") {
+    level="medium";reasons.push("30天有效出单日少，且库存积压");
+  }
+  const storageRisk = inheritedHigh || (r.enableNearFee && feeLots.length > 0) || (r.enableAgedRatio && x.avail > 0 && agedQty / x.avail * 100 >= r.agedRatioPercent);
+  if(r.enableNewProductProtection && x.listingDays < r.minListingDays && !storageRisk && level === "medium") {
+    level="low";reasons.push("新品保护：暂缓普通中风险自动入池");
+  }
+  const before7 = x.per[14].units - x.per[7].units;
+  if(r.enableRecoveryProtection && before7 >= r.minSalesForRecovery && x.per[7].units >= r.minSalesForRecovery && x.per[7].units >= before7 * (1 + r.salesRecoveryPercent / 100) && !storageRisk && level === "medium") {
+    level="low";reasons.push("近7天销量明显恢复，暂缓中风险入池");
+  }
+  if(r.enableBuyBoxProtection && x.hasBuyBox === false && !storageRisk && level === "medium") {
+    level="low";reasons.push("购物车异常：先核查转化问题");
+  }
+  if(r.enableCapitalPriority && x.avail * x.cost >= r.minStockCapital)
+    reasons.push("库存资金占用较高，建议优先处理（不单独入池）");
+  if(r.enableInboundConflict && x.inbound >= r.inboundConflictMin && (cov === null || cov >= r.assistCoverage))
+    reasons.push("在途补货与积压风险冲突，请协调补货（不单独入池）");
+  if(r.enablePurchaseConflict && x.openPurchaseQty !== undefined && x.openPurchaseQty >= r.purchaseConflictMin)
+    reasons.push("尚有未完成采购数量，请协调采购（不单独入池）");
+  if(r.enableRiskDuration && x.riskConsecutiveDays !== undefined && x.riskConsecutiveDays >= r.riskDaysThreshold)
+    reasons.push("风险持续"+x.riskConsecutiveDays+"天，建议提高处理优先级");
+  if(r.enableHoldingCost && x.estimatedHoldingCost30 !== undefined && x.estimatedHoldingCost30 >= r.holdingCost30Threshold)
+    reasons.push("预计30天持有成本超过阈值，建议优先处理");
+  if(level==="low"&&!reasons.includes("暂未达到自动清货准入条件"))reasons.push("暂未达到自动清货准入条件");
   return {level,auto:level!=="low",reasons,business};
 }
 export function validateRules(r:ClearanceRules):string{
@@ -156,6 +282,17 @@ export function validateRules(r:ClearanceRules):string{
   if(r.salesDropPercent>100||r.returnRate>100||r.adRateIncrease>100||r.ratingThreshold>5||r.ratingThreshold<1)return "百分比范围为0～100，评分阈值为1～5";
   if(r.agedLotMin<1||r.minBusinessSignals<1||r.minBusinessSignals>5||!Number.isInteger(r.agedLotMin)||!Number.isInteger(r.minBusinessSignals))return "超龄库存件数与辅助信号数量必须为正整数";
   if(r.highCoverage>3650||r.mediumAge>3650||r.agedLotDays>3650||r.minListingDays>3650)return "天数阈值不能超过3650天";
+  const extraNumeric: (keyof ClearanceRules)[] = [
+    "feeAgeDays","feeWarningDays","agedRatioPercent","lastSaleDaysLimit","maxActiveSalesDays30",
+    "margin30Threshold","minAdClicks30","maxAdConversionPercent","maxNetUnits30",
+    "salesRecoveryPercent","minSalesForRecovery","inboundConflictMin","purchaseConflictMin",
+    "minStockCapital","riskDaysThreshold","holdingCost30Threshold","targetHoldingDays",
+    "safetyStockUnits","allowedClearanceLoss",
+  ];
+  for(const key of extraNumeric){const value=r[key];if(typeof value!=="number" || !Number.isFinite(value) || value<0)return "无效的扩展规则参数："+key;}
+  if(r.feeWarningDays>r.feeAgeDays || r.feeAgeDays>3650 || r.lastSaleDaysLimit>3650 || r.targetHoldingDays>3650 || r.riskDaysThreshold>3650)return "请检查扩展规则的天数范围";
+  if(r.agedRatioPercent>100 || r.maxAdConversionPercent>100 || r.salesRecoveryPercent>1000 || r.margin30Threshold>100)return "百分比参数超出允许范围";
+  if(["feeAgeDays","feeWarningDays","lastSaleDaysLimit","maxActiveSalesDays30","minAdClicks30","maxNetUnits30","minSalesForRecovery","inboundConflictMin","purchaseConflictMin","riskDaysThreshold","targetHoldingDays","safetyStockUnits"].some(k=>!Number.isInteger(r[k as keyof ClearanceRules] as number)))return "件数、天数和点击数必须为整数";
   return "";
 }
 export interface ClearanceTaskLine {id:string;qty:number;sold:number;removed:number;disposed:number}

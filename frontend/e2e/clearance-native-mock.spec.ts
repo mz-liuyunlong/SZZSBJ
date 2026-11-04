@@ -38,15 +38,18 @@ test("clearance uses one native page, shared table and mock only",async({page})=
  await expect(item).toContainText("$31.98");
  await page.getByText("30天",{exact:true}).click();
  await expect(item).toContainText("$223.86");
- await expect(page.getByText("仅 Mock 数据")).toBeVisible();
+ await expect(page.getByText("仅 Mock 数据")).toHaveCount(0);
  await page.getByRole("button",{name:"规则配置"}).click();
- await expect(page.getByRole("heading",{name:"清货规则配置"})).toBeVisible();
- await expect(page.getByText("影响预览确认后才保存",{exact:false})).toBeVisible();
+ await expect(page.locator(".clearance-rules-drawer")).toBeVisible();
+ await expect(page.getByText("自动识别条件",{exact:true})).toBeVisible();
+ await expect(page.getByRole("button",{name:"保存并应用"})).toBeVisible();
+ await page.keyboard.press("Escape");
+ await expect(page.locator(".clearance-rules-drawer")).toHaveCount(0);
  await page.getByRole("tab",{name:/清货管理/}).click();
  await expect(page.locator(".clearance-main-card .ant-table-thead th.ant-table-cell-fix-left")).toHaveCount(2);
  await expect(page.getByRole("button",{name:"任务详情"}).first()).toBeVisible();
  await page.getByRole("button",{name:"申请 SKU"}).click();
- await expect(page.getByRole("dialog",{name:"运营主动申请清货"})).toBeVisible();
+ await expect(page.getByRole("dialog",{name:/主动申请\s*SKU/})).toBeVisible();
 });
 
 test("manual SKU application creates an auditable mock task without backend writes",async({page})=>{
@@ -58,20 +61,43 @@ test("manual SKU application creates an auditable mock task without backend writ
  const applySkuButton=page.locator(".clearance-toolbar").getByRole("button",{name:/申请\s*SKU/});
  await expect(applySkuButton).toHaveCount(1);
  await applySkuButton.click();
- const chooser=page.getByRole("dialog",{name:"运营主动申请清货"});
+ const chooser=page.getByRole("dialog",{name:/主动申请\s*SKU/});
  await expect(chooser).toBeVisible();
+ await chooser.evaluate(node=>
+  node.setAttribute("data-pr285-modal-instance","stable")
+ );
  const sku=chooser.locator(".ant-table-row").filter({hasText:"DEMO-SKU-101"});
- await sku.getByRole("checkbox").check();
- await chooser.getByRole("button",{name:"下一步 · 填写申请"}).click();
- const application=page.getByRole("dialog",{name:"提交 WFS 清货申请"});
+ await sku.getByRole("button",{name:"选择商品"}).click();
+ await chooser.getByRole("button",{name:"下一步",exact:true}).click();
+ const application=page.getByRole("dialog",{name:/主动申请\s*SKU/});
  await expect(application).toBeVisible();
+ await expect(application).toHaveAttribute(
+  "data-pr285-modal-instance","stable"
+ );
  const reasonSelect=application.locator(".ant-form-item").filter({hasText:"清货原因"}).locator(".ant-select");
  await reasonSelect.click();
- // Drive rc-select with a real keyboard event: popup options may animate away during pointer hit testing.
- await reasonSelect.locator('input[role="combobox"]').press("Enter");
- await expect(reasonSelect).toContainText("库存滞销");
+ const firstReason=page.locator(
+  ".ant-select-dropdown:visible .ant-select-item-option:not(.ant-select-item-option-disabled)"
+ ).first();
+ await expect(firstReason).toBeVisible();
+ const chosenReason=(await firstReason.innerText()).trim();
+ await firstReason.click();
+ await expect(reasonSelect).toContainText(chosenReason);
  await application.getByRole("checkbox",{name:"促销"}).check();
- await application.getByRole("textbox",{name:"申请说明"}).fill("清货 Mock 申请闭环测试：确认无真实审批写入");
+ const remark="清货 Mock 申请闭环测试：确认无真实审批写入";
+ await application.getByRole("textbox",{name:"申请说明"}).fill(remark);
+
+ await application.getByRole("button",{name:"上一步"}).click();
+ await expect(sku.getByRole("button",{name:"已选择"})).toBeVisible();
+
+ await application.getByRole("button",{name:"下一步",exact:true}).click();
+ await expect(application).toHaveAttribute(
+  "data-pr285-modal-instance","stable"
+ );
+ await expect(
+  application.getByRole("textbox",{name:"申请说明"})
+ ).toHaveValue(remark);
+
  await application.getByRole("button",{name:"提交申请"}).click();
  await expect(application).toHaveCount(0);
  await page.getByRole("tab",{name:/清货管理/}).click();
@@ -88,13 +114,14 @@ test("rule draft preview is saved and versioned only in local mock state",async(
  await page.goto("/#/products/clearance-center");
  await expect(page.getByRole("heading",{name:"WFS 清货中心"})).toBeVisible();
  await page.getByRole("button",{name:"规则配置"}).click();
- await expect(page.getByRole("heading",{name:"清货规则配置"})).toBeVisible();
- const coverage=page.locator(".clearance-rule-fields .clearance-rule-field").first().locator("input");
+ await expect(page.locator(".clearance-rules-drawer")).toBeVisible();
+ await expect(page.getByText("自动识别条件",{exact:true})).toBeVisible();
+ const coverage=page.locator(".clearance-explain-fields .clearance-explain-field").first().locator("input");
  await expect(coverage).toHaveValue("180");
  await coverage.fill("200");
  await coverage.press("Tab");
  await page.getByRole("button",{name:"保存并应用"}).click();
- await expect(page.getByText("当前规则版本").locator("..")).toContainText("V2");
+ await expect(page.getByText("自动识别条件",{exact:true})).toBeVisible();
  await expect.poll(()=>page.evaluate(()=>Object.values(localStorage).some(v=>v.includes('"ruleVersion":2')))).toBe(true);
  expect(writes).toEqual([]);
 });
