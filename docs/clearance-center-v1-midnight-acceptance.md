@@ -65,3 +65,14 @@ uv run python -m app.modules.clearance_center.audit --source-account YOUR_ACCOUN
 - 退款期间口径需验证三个样本：退款申请早于窗口但有效退款日落在窗口内、申请日在窗口内但完成日在窗口外、窗口内尚未完成退款。只有第一类计入期间已完成退款；退款源同步完整性仍需要独立水位证据，缺少水位时保留 `REFUND_SYNC_UNVERIFIED`。
 - 真实数据审计必须在**已授权的验收数据库**运行并保存脱敏汇总证据。本开发环境只有 GitHub 文件/CI 访问，不能把隔离合成测试结果当作真实店铺的 30 天销售、退款、利润和 WFS 库存审计结果。
 - 本轮遵循业务安排：六项工作集中开发与准备验收，暂不运行最终 CI。先完成每日评估、真实数据审计准备、销量窗口、RBAC、页面闭环和规模性能回归，再统一进行一次最终 CI。
+
+## 每日任务运行观测字段
+
+验收前通过 `GET /api/products/clearance-center/daily-evaluation?source_account_ref=...` 核对：
+
+- `evaluation_status`：`ready` 代表当天 LA 已有成功批次；`stale` 代表只有过往日期成功批次；`not_ready` 代表未产生过成功批次。
+- `scheduled_run_status`：当天 LA 执行记录的状态（`missing/running/succeeded/failed`）。
+- `scheduled_attempt_count`、`scheduled_started_at`、`scheduled_finished_at`、`scheduled_next_retry_at`、`scheduled_error_code`：为漏跑、失败重试与幂等验收提供证据。
+- 运行时间的业务时区是 `America/Los_Angeles`，而接口中的时间戳均为带时区 ISO-8601 格式，不能混用北京或 UTC 日期判断是否漏跑。
+- 任务在 LA 当地 00:00 由 Celery Beat 触发，若此刻队列/Beat 不可用，恢复后可在**同一个 LA 自然日**进行补跑；已成功的日期不会重复生成审批单或重复更新风险。
+- 对真实店铺的财务、退款和销售历史正确性，仍须执行 `audit.py` 并保留完整的只读审计输出；若 `REFUND_SYNC_COMPLETENESS_UNVERIFIED` 未解决，不得将整体验收标记为最终通过。
