@@ -182,3 +182,36 @@ test("analysis Listing scroll fetches 50 at a time without page buttons",async({
   await expect(page.getByText("已加载全部 110 条 Listing")).toBeVisible();
   expect(requestedPages).toEqual([1,2,3]);
 });
+
+
+test("manual WFS Listing picker appends on scroll without pagination",async({page})=>{
+  const pages:number[]=[];
+  await prepare(page,[]);
+  await page.route("**/api/products/clearance-center/eligible-listings?**",async route=>{
+    const current=Number(new URL(route.request().url()).searchParams.get("page")||1);
+    pages.push(current);
+    const offset=(current-1)*50;
+    const items=Array.from({length:Math.max(0,Math.min(50,55-offset))},(_,i)=>({
+      ...fixture,
+      listing:{
+        ...fixture.listing,
+        id:`11111111-1111-4111-8111-${String(i+offset).padStart(12,"0")}`,
+        item_id:`ELIGIBLE-WFS-${String(offset+i).padStart(4,"0")}`,
+        title:`可选 WFS 商品 ${offset+i+1}`,
+      },
+    }));
+    await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+      success:true,data:{items,total:55,page:current,page_size:50},
+      error:null,meta:{},request_id:"eligible-scroll",
+    })});
+  });
+  await page.goto("/#/products/clearance-center");
+  await page.getByRole("button",{name:"申请 SKU"}).click();
+  const modal=page.getByRole("dialog",{name:"主动申请 SKU"});
+  await expect(modal.getByText("已加载 50 / 55 条")).toBeVisible();
+  await expect(modal.getByRole("button",{name:"下一页"})).toHaveCount(0);
+  const body=modal.locator(".ant-table-body");
+  await body.evaluate(node=>{node.scrollTop=node.scrollHeight;node.dispatchEvent(new Event("scroll"));});
+  await expect(modal.getByText("已加载全部 55 条符合条件的商品")).toBeVisible();
+  expect(pages).toEqual([1,2]);
+});
