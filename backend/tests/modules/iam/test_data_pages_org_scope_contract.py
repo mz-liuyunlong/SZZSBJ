@@ -188,3 +188,113 @@ def test_unscoped_request_clears_stale_scope() -> None:
     with patch("app.modules.data_pages.router.resolve_business_owner_refs", return_value=None):
         require_data_page_org_scope(request, principal, session)
     assert ORG_OWNER_SCOPE_SESSION_KEY not in session.info
+
+
+def test_daily_sales_store_grant_is_account_qualified_across_all_aggregations() -> None:
+    """Daily Sales detail, summary, refunds, facets and export share one filter."""
+    from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+
+    session = _session({"owner-approved"})
+    session.info[STORE_SCOPE_SESSION_KEY] = frozenset({("A1", "store-01")})
+    repository = DailySalesRepository(session)
+    statement = repository._filtered_statement(
+        account_refs=frozenset({"A1", "A2"}),
+        start_date=None,
+        end_date=None,
+        platform=None,
+        store_id=None,
+        owner_ref=None,
+        search_field="sku",
+        keyword="",
+    )
+    sql = _sql(statement)
+    assert "source_account_ref IN ('A1', 'A2')" in sql
+    assert "store_id" in sql
+    assert "('A1', 'store-01')" in sql
+    assert "owner_ref IN ('owner-approved')" in sql
+
+
+def test_listing_store_grant_applies_before_summary_facets_and_export() -> None:
+    """Listing data, summary, filter options and CSV reuse the same SQL."""
+    from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+
+    session = _session({"owner-approved"})
+    session.info[STORE_SCOPE_SESSION_KEY] = frozenset({("A1", "store-01")})
+    repository = ListingManagementRepository(session)
+    statement = repository._filtered_listing_statement(
+        account_refs=frozenset({"A1", "A2"}),
+        store_id=None,
+        owner_ref=None,
+        product_type=None,
+        status=None,
+        tag=None,
+        archive_status=None,
+        summary_filter="total",
+        search_field="sku",
+        keyword="",
+        batch_values="",
+    )
+    sql = _sql(statement)
+    assert "('A1', 'store-01')" in sql
+    assert "source_account_ref IN ('A1', 'A2')" in sql
+    assert "owner_uid IN ('owner-approved')" in sql
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["store-01", "A1|", "|store-01", " A1|store-01", "A1| store-01", "A1|store|01"],
+)
+def test_unqualified_or_malformed_store_grants_fail_closed(value: str) -> None:
+    from app.modules.iam.store_scope import parse_account_store
+
+    with pytest.raises(ApiError) as error:
+        parse_account_store(value)
+    assert error.value.status_code == 403
+
+
+def test_store_scope_uses_user_override_and_never_trusts_client_filter() -> None:
+    from app.modules.iam.store_scope import resolve_account_store_scope
+
+    session = _session()
+    with patch(
+        "app.modules.iam.store_scope.RbacRepository.resolve_user_data_scope",
+        return_value={"A1|store-01", "A2|store-01"},
+    ) as resolver:
+        stores = resolve_account_store_scope(
+            session,
+            Principal(user_id="5", permissions=frozenset({"products:read"})),
+        )
+    assert stores == frozenset({("A1", "store-01"), ("A2", "store-01")})
+    resolver.assert_called_once_with(user_id=5, scope_type="store")
+
+
+def test_store_scope_blocks_unreviewed_listing_mutations_even_with_global_org() -> None:
+    from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+
+    request = Request({
+        "type": "http",
+        "method": "POST",
+        "path": "/api/listings/walmart/synthetic-id/archive",
+        "headers": [],
+    })
+    session = _session()
+    with (
+        patch("app.modules.data_pages.router.resolve_business_owner_refs", return_value=None),
+        patch(
+            "app.modules.data_pages.router.resolve_account_store_scope",
+            return_value=frozenset({("A1", "store-01")}),
+        ),
+    ):
+        with pytest.raises(ApiError) as error:
+            require_data_page_org_scope(
+                request,
+                Principal(
+                    user_id="5",
+                    permissions=frozenset({
+                        "products:read", "action:products:listing-management:archive"
+                    }),
+                ),
+                session,
+            )
+    assert error.value.status_code == 403
+    assert STORE_SCOPE_SESSION_KEY not in session.info
