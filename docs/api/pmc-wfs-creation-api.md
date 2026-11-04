@@ -54,7 +54,7 @@ SP 发货单号：每个账号当前发布（`gov_wfs_board_publications.is_curr
 
 ## 本机模拟（只在 APP_ENV=local）
 
-- `PMC_WFS_LOCAL_SIMULATOR=1` 打开本机模拟通道（`local_simulator.py`），只有 APP_ENV=local、库是 127.0.0.1:55432/szzsbj_dev、并且没设 `WFS_CREATION_MODE` 时才生效。别处设了这个变量：路由模块导入时报错（服务起不来），取网关时报错，绝不退回真实通道；有测试。
+- `PMC_WFS_LOCAL_SIMULATOR=1` 打开本机模拟通道（`local_simulator.py`），只有 APP_ENV=local、库是本机开发库（127.0.0.1:55432）、并且没设 `WFS_CREATION_MODE` 时才生效。别处设了这个变量：路由模块导入时报错（服务起不来），取网关时报错，绝不退回真实通道；有测试。
 - 模拟通道不建网关、不读凭证、没有网络调用，行为和 8088 一样：先查单号（查无此单）→ 创建只返回货件号 → 回读给 FC `LAX2T` → 箱唛是本地生成的一页 PDF，印着 SIMULATED。退货地址邮编 `00000` = 拒绝，`99999` = 结果不明（进提交中，下一次拉取查到），其他 = 成功。
 - 本机没有任务进程：模拟模式下请求建的任务中心运行直接在 API 进程里跑完，运行记录照常留在任务中心。
 - 模拟数据：`scripts/seed_pmc_wfs_local_demo.py seed | clear`，只在本机运行。打包单号 `DEMO-01`～`DEMO-07`、`is_test` / `business_test`、操作人 `demo-seed:wfs-sim-20261104`；创建操作快照写 `demo_seed`；`clear` 只删这些（`clear` 会在本机库、本次事务里临时停掉两张审计事件表的只追加触发器，只删 DEMO 的事件，提交前恢复）。
