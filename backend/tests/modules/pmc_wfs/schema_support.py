@@ -94,6 +94,9 @@ def ensure_manual_approval_columns(conn) -> None:
     """Migration 0073 when the cloned creation table predates it."""
     if not _has_column(conn, "ops_wfs_creation_operations", "approval_ref"):
         run_migration(conn, "20261101_0073_wfs_creation_manual_approval.py")
+    # Migration 0080 (our order id) when the cloned ticket table predates it.
+    if not _has_column(conn, "ops_wfs_creation_tickets", "inbound_order_id"):
+        run_migration(conn, "20261104_0080_wfs_inbound_order_id.py")
 
 
 def bring_wfs_schema_to_head(conn) -> None:

@@ -149,6 +149,10 @@ class WfsSettingsChange(Base):
     )
 
 
+# 「全部店铺通用」那一行在 ref_wfs_store_creation_defaults 里的 store_id（领星店铺 ID 不会是它）。
+COMMON_STORE = "*"
+
+
 class WfsStoreCreationDefaults(Base):
     """创建默认值按店铺（Rocky 2026-11-04）：店铺行优先，其次账号行，最后 8088 默认值。
 

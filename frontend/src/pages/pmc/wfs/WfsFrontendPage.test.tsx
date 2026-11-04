@@ -77,7 +77,7 @@ afterEach(cleanup);
 describe("WFS frontend pages", () => {
   it.each(pages)("renders $title", async (page) => {
     const samples: Record<string, { text: string | RegExp; header?: string; search?: string }> = {
-      pmc_wfs_pending_packing: { text: "当前条件下暂无已打包完成单据", header: "系统打包单", search: "搜索待创建货件" },
+      pmc_wfs_pending_packing: { text: "当前条件下没有货件", header: "系统打包单", search: "搜索待创建货件" },
       pmc_wfs_board: { text: /^当前条件下暂无货件/, header: "Shipment ID", search: "搜索WFS货件看板" },
       pmc_wfs_exceptions: { text: "当前条件下暂无异常货件", header: "货件号", search: "搜索异常中心" },
     };

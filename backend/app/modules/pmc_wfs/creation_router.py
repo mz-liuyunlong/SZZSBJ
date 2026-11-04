@@ -1,15 +1,21 @@
 """V2 endpoints; Walmart is reached only through the reviewed adapter and WFS_CREATION_MODE."""
 
+from datetime import date
 from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 
-from app.core.api import SuccessEnvelope
+from app.core.api import ApiError, ErrorCode, SuccessEnvelope
 from app.core.auth import Principal
 from app.core.permissions import require_permission
+from app.modules.pmc_wfs import local_simulator
 from app.modules.pmc_wfs.creation_board import (
+    BoardRowList,
     CreationBoard,
+    CreationRows,
+    RowQuery,
+    RowStatus,
     StoreDefaults,
     StoreDefaultsList,
     StoreDefaultsRow,
@@ -29,14 +35,16 @@ from app.modules.pmc_wfs.creation_schemas import (
     OperationList,
     OperationRead,
     ProbeResult,
+    SimulatorPull,
 )
 from app.modules.pmc_wfs.creation_service import CreationService
-from app.modules.pmc_wfs.creation_task import get_creation_dispatcher
+from app.modules.pmc_wfs.creation_task import get_creation_dispatcher, simulator_pull
 from app.modules.pmc_wfs.gateway import get_creation_gateway
-from app.modules.pmc_wfs.router import ERRORS, Service
+from app.modules.pmc_wfs.router import ERRORS, Read, Service
 from app.modules.pmc_wfs.router import response as preparation_response
 
 router = APIRouter(tags=["PMC WFS Pending Packing V2"])
+local_simulator.startup_check()  # a simulator switch outside local stops the service
 Create = Annotated[Principal, Depends(require_permission("action:pmc:wfs-pending-packing:create"))]
 Preview = Annotated[
     Principal, Depends(require_permission("action:pmc:wfs-pending-packing:preview"))
@@ -44,9 +52,9 @@ Preview = Annotated[
 Reconcile = Annotated[
     Principal, Depends(require_permission("action:pmc:wfs-pending-packing:reconcile"))
 ]
-Approve = Annotated[
-    Principal, Depends(require_permission("action:pmc:wfs-pending-packing:approve"))
-]
+# Rocky 2026-11-04 取消「待批准」：「确认创建」就发出，重试和旧记录的批准都用创建权限；
+# 「人工书面批准」权限不再使用（权限定义暂留，另行去掉）。
+Approve = Create
 Manage = Annotated[Principal, Depends(require_permission("action:pmc:wfs-settings:manage"))]
 Label = Annotated[
     Principal, Depends(require_permission("action:pmc:wfs-pending-packing:label-retry"))
@@ -79,11 +87,23 @@ def capabilities(request: Request, svc: Creation):
             creation_enabled=svc.gateway.enabled,
             preview_enabled=getattr(svc.gateway, "preview_enabled", svc.gateway.enabled),
             reason=getattr(svc.gateway, "reason", None) or None,
-            mode=creation_mode()
+            mode=getattr(svc.gateway, "mode", None) or creation_mode()
             if svc.gateway.enabled or getattr(svc.gateway, "preview_enabled", False)
             else "off",
+            simulator=bool(getattr(svc.gateway, "simulator", False)),
         ),
     )
+
+
+@router.post(
+    "/simulator/pull", response_model=SuccessEnvelope[SimulatorPull, dict], responses=V2_ERRORS
+)
+def simulator_pull_now(request: Request, base: Service, actor: Reconcile):
+    """「立即拉取结果（本机模拟）」，代替本机没有的 3 分钟定时。不在本机模拟模式就是 404。"""
+    if not local_simulator.simulator_active():
+        raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
+    runs = simulator_pull(base.session, base.accounts, actor.user_id)
+    return response(request, SimulatorPull(run_ids=runs))
 
 
 @router.get("/creation-defaults", response_model=SuccessEnvelope[CreationDefaultsRead, dict])
@@ -110,6 +130,36 @@ def tickets(
     """待创建货件的 提交中 / 创建失败 / 已创建未发货 页签（一行一票）。"""
     board = CreationBoard(base.session, base.accounts, base.stores)
     return response(request, board.list(tab, store_id, keyword, page, page_size))
+
+
+@router.get("/rows", response_model=SuccessEnvelope[BoardRowList, dict], responses=V2_ERRORS)
+def rows(
+    request: Request,
+    base: Service,
+    store_id: Annotated[str | None, Query(max_length=64)] = None,
+    keyword: Annotated[str, Query(max_length=200)] = "",
+    only_test: bool = False,
+    completed_from: date | None = None,
+    completed_to: date | None = None,
+    status: Annotated[list[RowStatus] | None, Query()] = None,
+    show_shipped: bool = False,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=200)] = 50,
+):
+    """待创建货件单列表：待创建（每个打包单一行）+ 已提交（每票每个货件一行），状态在行上。
+    ``status`` 可多选，默认前 5 种；已发货只在 ``show_shipped=true`` 时出现。"""
+    query = RowQuery(
+        store_id=store_id,
+        keyword=keyword,
+        only_test=only_test,
+        completed_from=completed_from,
+        completed_to=completed_to,
+        statuses=status or [],
+        show_shipped=show_shipped,
+        page=page,
+        page_size=page_size,
+    )
+    return response(request, CreationRows(base).list(query))
 
 
 @router.get("/creation-ticket-counts", response_model=SuccessEnvelope[TicketCounts, dict])
@@ -159,7 +209,9 @@ def allocation(request: Request, body: AllocationCommand, svc: Creation, actor: 
     "/creation-operations", response_model=SuccessEnvelope[OperationRead, dict], responses=V2_ERRORS
 )
 def create(request: Request, body: CreationCommand, svc: Creation, actor: Create):
-    return response(request, svc.submit(body, actor.user_id))
+    """「确认创建」：占箱、自动检查、生成单号后直接发出（Rocky 2026-11-04 取消「待批准」）。
+    线上是否真的调用 Walmart 仍由 ``WFS_CREATION_MODE`` 决定；本机模拟模式走模拟通道。"""
+    return response(request, svc.submit_and_send(body, actor.user_id))
 
 
 @router.post(
@@ -230,6 +282,23 @@ def label(ident: UUID, shipment_id: str, svc: Creation):
     return Response(
         content=svc.label(ident, shipment_id),
         media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": 'attachment; filename="wfs-label.pdf"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.post(
+    "/creation-operations/{ident}/labels/{shipment_id}/print",
+    responses=V2_ERRORS,
+    response_class=Response,
+)
+def print_label(ident: UUID, shipment_id: str, svc: Creation, actor: Read):
+    """「打印箱唛」：返回 PDF，并给这个货件记一次打印（已打印 x 次）。"""
+    return Response(
+        content=svc.print_label(ident, shipment_id, actor.user_id),
+        media_type="application/octet-stream",  # the page's download helper expects this
         headers={
             "Content-Disposition": 'attachment; filename="wfs-label.pdf"',
             "Cache-Control": "no-store",

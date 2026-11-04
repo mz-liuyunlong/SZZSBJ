@@ -357,11 +357,6 @@ export const navigation: NavigationGroup[] = [
         viewPermissionKey: 'page:pmc:wfs:view',
         help: { enabled: true, title: 'PMC 设置使用说明', helpUrl: '/help/pmc-settings.html', openInNewTab: true },
       }),
-      page('pmc', 'wfs_settings_defaults', 'WFS 创建货件默认值', '/pmc/settings/wfs/creation-defaults', {
-        sidebarSection: 'pmc-settings', status: 'building', readOnly: true,
-        viewPermissionKey: 'page:pmc:wfs:view',
-        help: { enabled: true, title: 'PMC 设置使用说明', helpUrl: '/help/pmc-settings.html', openInNewTab: true },
-      }),
       page('pmc', 'wfs_settings_channels', '物流渠道字典', '/pmc/settings/logistics-channels', {
         sidebarSection: 'pmc-settings', status: 'building', readOnly: true,
         viewPermissionKey: 'page:pmc:wfs:view',
@@ -488,7 +483,9 @@ export const navigationRedirects: Readonly<Record<string, string>> = {
   // WFS settings moved under the PMC settings group (Rocky 2026-11-03).
   '/pmc/wfs/settings': '/pmc/settings/wfs/rules',
   '/pmc/wfs/settings/fc-regions': '/pmc/settings/wfs/fc-regions',
-  '/pmc/wfs/settings/creation-defaults': '/pmc/settings/wfs/creation-defaults',
+  // 创建默认值合成一处（Rocky 2026-11-04）：只在 待创建货件 右上角「创建默认值」抽屉里设置。
+  '/pmc/wfs/settings/creation-defaults': '/pmc/wfs/pending-packing',
+  '/pmc/settings/wfs/creation-defaults': '/pmc/wfs/pending-packing',
   '/pmc/wfs/settings/logistics-channels': '/pmc/settings/logistics-channels',
   '/pmc/wfs/settings/stores': '/pmc/settings/wfs/stores',
   '/pmc/wfs/settings/notes': '/pmc/settings/wfs/notes',

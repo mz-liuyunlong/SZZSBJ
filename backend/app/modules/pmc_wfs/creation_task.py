@@ -54,7 +54,7 @@ def _utc_now() -> datetime:
 
 def due_actions(tickets, now: datetime) -> list[str]:
     """What one task run does for one approved operation, in order."""
-    from app.modules.pmc_wfs.creation_worker import poll_due
+    from app.modules.pmc_wfs.creation_worker import fc_check_due, poll_due
 
     actions: list[str] = []
     states = {t.state for t in tickets}
@@ -75,8 +75,9 @@ def due_actions(tickets, now: datetime) -> list[str]:
         for t in tickets
     ):
         actions.append("poll")
-    if "labels" in requested:
-        actions.append("labels")
+    fc_due = any(t.state == "SUCCEEDED" and fc_check_due(t.result, now) for t in tickets)
+    if "labels" in requested or fc_due:
+        actions.append("labels")  # labels mode also reads the missing FC back
     return actions
 
 
@@ -92,6 +93,7 @@ def pending_operations(session, account: str, now: datetime) -> list[tuple[UUID,
             or_(
                 WfsCreationTicket.state.in_(OPEN_STATES),
                 WfsCreationTicket.result[REQUESTED].as_string().is_not(None),
+                WfsCreationTicket.result["fc_check"].is_not(None),
             ),
         )
         .order_by(WfsCreation.created_at, WfsCreationTicket.number)
@@ -333,11 +335,55 @@ def request_run(session, account: str, actor: str, reason: str) -> UUID | None:
     except ApiError:
         session.rollback()
         return None
+    from app.modules.pmc_wfs import local_simulator
+
+    if local_simulator.simulator_active():
+        _run_inline(created.run_id)  # no worker locally: run it here, still logged as a run
+        return created.run_id
     try:
         dispatch_sync_run(created.run_id)
     except TaskDispatchError:
         logger.warning("wfs_creation_run_dispatch_deferred run_id=%s", created.run_id)
     return created.run_id
+
+
+def _run_inline(run_id: UUID) -> None:
+    """Local simulator only: execute the queued run in this process (``backend_ctl`` starts no
+    worker). Never reached unless ``simulator_active()`` returned True."""
+    from app.db.session import get_session_factory
+    from app.modules.integration_sync.execution import SyncRunExecutionService
+
+    with get_session_factory()() as session:
+        SyncRunExecutionService(session).execute(run_id)
+
+
+def simulator_pull(session, accounts, actor: str) -> list[UUID]:
+    """「立即拉取结果（本机模拟）」: mark every open ticket in scope and run the task once per
+    account. Raises ``SimulatorRefused`` outside local; the router turns "off" into 404."""
+    from app.modules.pmc_wfs import local_simulator
+
+    if not local_simulator.simulator_active():
+        return []
+    query = (
+        select(WfsCreationTicket)
+        .join(WfsCreation, WfsCreation.id == WfsCreationTicket.operation_id)
+        .where(WfsCreationTicket.state.in_(OPEN_STATES))
+        .with_for_update(of=WfsCreationTicket)
+    )
+    if accounts is not None and "*" not in accounts:
+        query = query.where(WfsCreation.source_account_ref.in_(tuple(accounts)))
+    wanted = set()
+    for ticket in session.scalars(query):
+        ticket.result = {**ticket.result, REQUESTED: "reconcile"}
+        op = session.get(WfsCreation, ticket.operation_id)
+        wanted.add(op.source_account_ref)
+    session.commit()
+    runs = []
+    for account in sorted(wanted):
+        run_id = request_run(session, account, actor, "WFS 创建 立即拉取（本机模拟）")
+        if run_id is not None:
+            runs.append(run_id)
+    return runs
 
 
 def dispatch_creation(operation_id, action="execute", factory=None):

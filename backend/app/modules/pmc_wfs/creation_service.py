@@ -19,6 +19,7 @@ from app.modules.pmc_wfs.creation_models import (
     WfsCreationTicket,
 )
 from app.modules.pmc_wfs.creation_schemas import (
+    ApprovalCommand,
     CreationDefaultsRead,
     OperationList,
     OperationRead,
@@ -47,20 +48,28 @@ def guard_write(session):
 
 
 def creation_defaults(session, account, store_id=None):
-    """WFS 创建默认值：店铺行 → 账号行（WFS 设置）→ 8088 默认值。"""
-    from app.modules.pmc_wfs.settings_models import WfsCreationDefaults, WfsStoreCreationDefaults
+    """WFS 创建默认值（Rocky 2026-11-04 合成一处：待创建货件 ·「创建默认值」抽屉）：
+    店铺行 → 「全部店铺通用」行（store_id = ``COMMON_STORE``）→ 旧的账号行（原 WFS 设置页，
+    只读兜底，页面已去掉）→ 8088 默认值。"""
+    from app.modules.pmc_wfs.settings_models import (
+        COMMON_STORE,
+        WfsCreationDefaults,
+        WfsStoreCreationDefaults,
+    )
     from app.modules.pmc_wfs.settings_seed import CREATION_DEFAULTS
 
     keys = ("transport", "ship_date_offset", "pallet_boxes", "mixed_boxes", "carrier_opt")
-    if store_id:
-        row = session.get(WfsStoreCreationDefaults, (account, store_id))
+    for key, level in ((store_id, "store"), (COMMON_STORE, "common")):
+        if not key:
+            continue
+        row = session.get(WfsStoreCreationDefaults, (account, key))
         if row is not None:
             return {
                 **{k: getattr(row, k) for k in keys},
                 "its": row.its,
                 "return_address": row.return_address,
                 "saved": True,
-                "level": "store",
+                "level": level,
             }
     row = session.get(WfsCreationDefaults, account)
     values = {k: getattr(row, k) for k in keys} if row is not None else dict(CREATION_DEFAULTS)
@@ -164,6 +173,7 @@ class CreationService:
                 TicketRead(
                     id=t.id,
                     number=t.number,
+                    inbound_order_id=t.inbound_order_id,
                     state=t.state,
                     allocation=t.allocation,
                     shipments=[
@@ -338,7 +348,19 @@ class CreationService:
         self.s.expire_all()
         return self.read(ident)
 
-    def approve(self, ident, cmd, actor):
+    def submit_and_send(self, cmd, actor):
+        """「确认创建」（Rocky 2026-11-04：取消单独的「待批准」）：提交后直接批准并发出。
+        点「确认创建」的人就是批准人，批准记录写 ``confirm:<幂等键>``，worker 的批准检查不变。
+        重放同一个幂等键时返回已有的操作，不会再批准一次。"""
+        op = self.submit(cmd, actor)
+        if op.state != "AWAITING_APPROVAL":
+            return op
+        ref = f"confirm:{cmd.idempotency_key}"
+        return self.approve(
+            op.id, ApprovalCommand(approval_ref=ref), actor, kind="confirmed_and_sent"
+        )
+
+    def approve(self, ident, cmd, actor, kind="manually_approved"):
         """Record the written human approval for one operation, then dispatch it."""
         guard_write(self.s)
         try:
@@ -355,7 +377,7 @@ class CreationService:
                 WfsCreationEvent(
                     operation_id=op.id,
                     actor_uid=actor,
-                    kind="manually_approved",
+                    kind=kind,
                     evidence={
                         "approval_ref": cmd.approval_ref,
                         "approved_by": actor,
@@ -552,6 +574,44 @@ class CreationService:
             raise ApiError(
                 code="WFS_PROBE_FAILED", status_code=502, message=f"探测失败：{code}"
             ) from None
+
+    def print_label(self, ident, shipment_id, actor):
+        """「打印箱唛」: the same PDF as ``label``, and one more print recorded on that ticket
+        (count + who / when, plus a ``label_printed`` event). Not a Walmart call."""
+        import base64
+
+        op = self.operation(ident)
+        for ticket in self.s.scalars(
+            select(WfsCreationTicket)
+            .where(WfsCreationTicket.operation_id == op.id)
+            .order_by(WfsCreationTicket.number)
+            .with_for_update()
+        ):
+            labels = dict(ticket.result.get("labels", {}))
+            entry = labels.get(shipment_id)
+            if not entry or entry.get("state") != "READY":
+                continue
+            pdf = base64.b64decode(entry["pdf"], validate=True)
+            now = datetime.now(UTC)
+            labels[shipment_id] = {
+                **entry,
+                "prints": int(entry.get("prints", 0)) + 1,
+                "printed_at": now.isoformat(),
+                "printed_by": actor,
+            }
+            ticket.result = {**ticket.result, "labels": labels}
+            self.s.add(
+                WfsCreationEvent(
+                    operation_id=op.id,
+                    actor_uid=actor,
+                    kind="label_printed",
+                    evidence={"shipment_id": shipment_id, "prints": labels[shipment_id]["prints"]},
+                )
+            )
+            self.s.commit()
+            return pdf
+        self.s.rollback()
+        missing()
 
     def label(self, ident, shipment_id):
         import base64

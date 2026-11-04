@@ -37,7 +37,7 @@ export default function CreationTicketTable({ tab, rows, total, loading, page, s
     onOk: () => perform(row.ticket_id, () => retryCreation(row.operation_id)),
   });
   const base: ProColumns<TicketRow>[] = [
-    { title: "打包单 PK", width: 170, fixed: "left", render: (_, r) => <span className="wfs-create__strong">{r.pks.join("、") || "—"}<span className="wfs-create__sub">计划货件 {r.number}</span></span> },
+    { title: "打包单 PK · 单号", width: 230, fixed: "left", render: (_, r) => <span className="wfs-create__strong">{r.pks.join("、") || "—"}<span className="wfs-create__sub">计划货件 {r.number}{r.inbound_order_id ? ` · 单号 ${r.inbound_order_id}` : ""}</span></span> },
     { title: "店铺", width: 160, render: (_, r) => r.store_name ?? r.store_id ?? "—" },
     { title: "SKU", width: 150, render: (_, r) => r.skus.join("、") || "—" },
     { title: "箱 / 件", width: 90, align: "right", render: (_, r) => `${r.boxes} / ${r.units}` },

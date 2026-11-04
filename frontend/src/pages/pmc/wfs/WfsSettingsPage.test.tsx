@@ -136,11 +136,7 @@ describe("PMC 设置 · WFS pages", () => {
     expect(screen.getByText("启用")).toBeInTheDocument();
   });
 
-  it("form and notice pages render inside the shared page card", async () => {
-    renderPage(pageOf("pmc_wfs_settings_defaults"));
-    expect(await screen.findByText("尚未保存，显示的是 8088 默认值")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /保存默认值/ })).toBeDisabled();
-    cleanup();
+  it("notice pages render inside the shared page card", async () => {
     renderPage(pageOf("pmc_wfs_settings_stores"));
     expect(screen.getByText(/店铺设置等店铺来源/)).toBeInTheDocument();
   });

@@ -26,10 +26,10 @@ export default function CreationRecords({ orderId, scope, permissions, onClose, 
     <Button onClick={() => void query.refetch()}>刷新记录</Button>
     <Table size="small" rowKey="id" loading={query.isFetching} dataSource={query.data?.data.items} pagination={{ current: page, pageSize: 10, total: query.data?.data.total, onChange: setPage }} columns={[
       { title: "创建记录", dataIndex: "id" },
-      { title: "批准", render: (_, r) => r.approved_at ? `已批准 · ${r.approved_by ?? ""} · ${r.approval_ref ?? ""}` : r.automatic_checks_at ? "程序检查已通过，待人工批准" : "待人工批准" },
+      { title: "确认 / 发出", render: (_, r) => r.approved_at ? `${r.approved_by ?? ""} · ${r.approval_ref?.startsWith("confirm:") ? "确认创建即发出" : r.approval_ref ?? ""}` : "旧记录：待发出" },
       { title: "状态", render: (_, r) => <Tag>{creationLabels[r.state]}</Tag> },
       { title: "计划票数 / 实际货件数", render: (_, r) => `${r.tickets.length} / ${r.tickets.reduce((n, t) => n + t.shipments.length, 0)}` },
-      { title: "操作", render: (_, r) => <Space>{r.state === "AWAITING_APPROVAL" && can("approve") && <Button size="small" type="primary" disabled={busy} onClick={() => { setApprovalRef(""); setApproving(r.id); }}>批准执行</Button>}{r.approved_at && can("reconcile") && <Button size="small" disabled={busy} onClick={() => void perform(() => recoverCreation(r.id, "reconcile"))}>核实结果</Button>}{r.approved_at && can("label-retry") && <Button size="small" disabled={busy} onClick={() => void perform(() => recoverCreation(r.id, "labels/retry"))}>补取箱唛</Button>}</Space> },
+      { title: "操作", render: (_, r) => <Space>{r.state === "AWAITING_APPROVAL" && can("create") && <Button size="small" type="primary" disabled={busy} onClick={() => { setApprovalRef(""); setApproving(r.id); }}>发出（旧记录）</Button>}{r.approved_at && can("reconcile") && <Button size="small" disabled={busy} onClick={() => void perform(() => recoverCreation(r.id, "reconcile"))}>核实结果</Button>}{r.approved_at && can("label-retry") && <Button size="small" disabled={busy} onClick={() => void perform(() => recoverCreation(r.id, "labels/retry"))}>补取箱唛</Button>}</Space> },
     ]} expandable={{ defaultExpandAllRows: true, expandedRowRender: (op) => <Table size="small" rowKey="id" pagination={false} dataSource={op.tickets} columns={[
       { title: "计划票", dataIndex: "number" }, { title: "箱 / 件", render: (_, t) => `${t.allocation.boxes} / ${t.allocation.units}` },
       { title: "状态", render: (_, t) => creationLabels[t.state] },

@@ -3,7 +3,6 @@
  * sections live in ./settings and compose the shared report / form components.
  */
 import type { NavigationPage } from "@/config/navigation";
-import CreationDefaultsSection from "./settings/CreationDefaultsSection";
 import FcRegionsSection from "./settings/FcRegionsSection";
 import LogisticsChannelsSection from "./settings/LogisticsChannelsSection";
 import { StoreSettingsSection } from "./settings/SettingsNoticeSection";
@@ -14,7 +13,6 @@ import { SETTINGS_SECTION_BY_PAGE } from "./settings/settingsShared";
 const SECTIONS = {
   rules: (props: SectionProps) => <WfsAlertCenter {...props} initialTab="rules" />,
   fc: FcRegionsSection,
-  defaults: CreationDefaultsSection,
   channels: LogisticsChannelsSection,
   stores: StoreSettingsSection,
   notes: (props: SectionProps) => <WfsAlertCenter {...props} initialTab="notes" />,

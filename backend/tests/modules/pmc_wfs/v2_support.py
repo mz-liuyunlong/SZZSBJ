@@ -17,7 +17,12 @@ from app.modules.pmc_wfs.creation_worker import DefinitiveRejection, run_operati
 
 
 class SyntheticGateway:
-    """Stands in for Walmart. ``applied`` = whether an ambiguous create really happened."""
+    """Stands in for Walmart. ``applied`` = whether an ambiguous create really happened.
+
+    Like the real API on 8088: the create answer carries the shipment id but no FC; the
+    read-back by order id carries the FC. ``prechecks`` = look-ups of an order id never sent
+    yet (the check before the first POST); ``reads`` = every other read-back. ``taken`` =
+    order ids Walmart already has from elsewhere (e.g. made on 8088)."""
 
     enabled = True
     preview_enabled = True
@@ -25,7 +30,10 @@ class SyntheticGateway:
 
     def __init__(self):
         self.creates = []
+        self.prechecks = []
         self.reads = []
+        self.taken = set()
+        self.fc_on_read = True
         self.labels = []
         self.created = set()
         self.fail_label = False
@@ -38,9 +46,13 @@ class SyntheticGateway:
     def validate(self, snapshot):
         assert snapshot["source_account_ref"].startswith("wfs-fixture-")
 
-    def _shipment(self, ticket_id):
-        sid = "TEST" + ticket_id.replace("-", "")[:20]
-        return {"shipment_id": sid, "fc": self.fc} if self.fc else sid
+    def store_code(self, snapshot):
+        return "TEST01"
+
+    def _shipment(self, ticket_id, read=False):
+        sid = "TEST" + ticket_id.replace("-", "")[-20:]
+        fc = (self.fc or "LAX2T-TEST") if read and self.fc_on_read else None
+        return {"shipment_id": sid, "fc": fc} if fc else sid
 
     def create(self, ticket_id, snapshot, allocation):
         self.creates.append(ticket_id)
@@ -56,8 +68,10 @@ class SyntheticGateway:
         return [self._shipment(ticket_id)]
 
     def reconcile(self, ticket_id, snapshot):
-        self.reads.append(ticket_id)
-        return [self._shipment(ticket_id)] if ticket_id in self.created else None
+        (self.reads if ticket_id in self.creates else self.prechecks).append(ticket_id)
+        if ticket_id in self.taken:
+            return [{"shipment_id": "OTHER" + ticket_id.replace("-", "")[-12:], "fc": "X"}]
+        return [self._shipment(ticket_id, read=True)] if ticket_id in self.created else None
 
     def label(self, shipment_id, snapshot, cartons=None):
         self.labels.append((shipment_id, cartons))
@@ -79,6 +93,7 @@ def module_from(path, name):
 V2_MIGRATIONS = (
     "20261029_0068_wfs_creation.py",
     "20261101_0073_wfs_creation_manual_approval.py",
+    "20261104_0080_wfs_inbound_order_id.py",
 )
 
 
@@ -117,6 +132,9 @@ def install_v2_schema(conn):
                 "ref_wfs_",
                 "dim_lingxing_stores",
                 "evt_wfs_settings_changes",
+                # 单列表的 SP 发货单号：当前发布 → 发货单批次 → cargo_codes
+                "gov_wfs_board_publications",
+                "ods_lingxing_wfs_shipping_lists",
             )
         ):
             continue

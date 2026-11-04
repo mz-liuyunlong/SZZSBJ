@@ -5,13 +5,12 @@ import { SETTINGS_MANAGE_PERMISSION } from "../settingsApi";
 export const SAMPLE_TAG = "示例 · 待定";
 export const SETTINGS_HELP_URL = "/help/pmc-settings.html";
 
-export type SettingsSection = "rules" | "fc" | "defaults" | "channels" | "stores" | "notes";
+export type SettingsSection = "rules" | "fc" | "channels" | "stores" | "notes";
 
 /** Navigation page key → section rendered by that sidebar leaf / workspace tab. */
 export const SETTINGS_SECTION_BY_PAGE: Record<string, SettingsSection> = {
   pmc_wfs_settings: "rules",
   pmc_wfs_settings_fc: "fc",
-  pmc_wfs_settings_defaults: "defaults",
   pmc_wfs_settings_channels: "channels",
   pmc_wfs_settings_stores: "stores",
   pmc_wfs_settings_notes: "notes",

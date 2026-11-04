@@ -4,9 +4,10 @@ Nothing here holds or reads a Walmart credential: every call goes through
 ``app.modules.walmart_scf.persistence.build_production_gateway`` (per-store cloud function,
 persistent write ledger, audit rows). The adapter only
 
-* builds the inbound-order body from the operation snapshot (our order id = ticket id),
+* builds the inbound-order body from the operation snapshot (our order id =
+  ``PMC-<店铺码>-<YYYYMMDD>-<序号>``, assigned by the worker, same format as 8088),
 * sends the reviewed write ``wfs_inbound_shipment_create`` with the business key
-  ``create:<ticket id>`` so the ledger refuses a second POST while the first is open,
+  ``create:<order id>`` so the ledger refuses a second POST while the first is open,
 * reads back by ``inboundOrderId`` (``inbound_shipments``) to confirm or deny a shipment,
 * fetches labels (``wfs_shipment_label``) and runs the optional preview.
 
@@ -74,7 +75,7 @@ def walmart_date(value: str) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%S.") + f"{moment.microsecond // 1000:03d}Z"
 
 
-def inbound_order(ticket_id: str, snapshot: Mapping[str, Any], allocation: Mapping[str, Any]):
+def inbound_order(order_id: str, snapshot: Mapping[str, Any], allocation: Mapping[str, Any]):
     """One planned shipment (ticket) -> one Walmart inbound order; SKU lines aggregated."""
     orders = {str(o["id"]): o for o in snapshot.get("orders") or [snapshot["order"]]}
     items: dict[str, dict[str, Any]] = {}
@@ -102,7 +103,7 @@ def inbound_order(ticket_id: str, snapshot: Mapping[str, Any], allocation: Mappi
             item["itemQty"] += int(box_range["units"])
     address = snapshot["return_address"]
     body: dict[str, Any] = {
-        "inboundOrderId": str(ticket_id),
+        "inboundOrderId": str(order_id),
         "returnAddress": {
             "addressLine1": address["address_line1"],
             "city": address["city"],
@@ -263,6 +264,10 @@ class WalmartCreationGateway:
                 raise NotSent(error.code, f"未发出：{error.code}") from None
             raise ResultUnknown(error.code) from None
 
+    def store_code(self, snapshot: Mapping[str, Any]) -> str:
+        """Walmart store code (e.g. HK2614) used in our order id."""
+        return self._store(snapshot)
+
     # -- CreationGateway
     def validate(self, snapshot: dict) -> None:
         if not self.enabled:
@@ -282,44 +287,48 @@ class WalmartCreationGateway:
         except NotSent as error:
             raise ApiError(code=error.code, status_code=409, message=error.reason) from None
 
-    def create(self, ticket_id: str, snapshot: dict, allocation: dict) -> list[dict]:
+    def create(self, order_id: str, snapshot: dict, allocation: dict) -> list[dict]:
         store = self._store(snapshot)
-        body = inbound_order(ticket_id, snapshot, allocation)
+        body = inbound_order(order_id, snapshot, allocation)
         result = self._call(
             store,
             CREATE,
             body=body,
             approval_ref=self._approval(snapshot),
-            idempotency_key=f"create:{ticket_id}",
+            idempotency_key=f"create:{order_id}",
         )
         if result.ok:
-            return shipments_from(result.data, str(ticket_id))
+            return shipments_from(result.data, str(order_id))
         status = result.status_code
         if status >= 500 or status in (408, 429):
             raise ResultUnknown(f"WALMART_HTTP_{status}")
         raise DefinitiveRejection(provider_reason(result.provider_error or result.data))
 
-    def reconcile(self, ticket_id: str, snapshot: dict) -> list[dict] | None:
+    def reconcile(self, order_id: str, snapshot: dict) -> list[dict] | None:
+        """Read back by our order id. ``None`` = Walmart has nothing under it: on 8088 that
+        answer was HTTP 204 (no body); 404 is read the same way."""
         store = self._store(snapshot)
         now = self._clock()
         params = {
-            "inboundOrderId": str(ticket_id),
+            "inboundOrderId": str(order_id),
             "fromCreatedDate": int((now - timedelta(days=30)).timestamp() * 1000),
             "toCreatedDate": int((now + timedelta(days=1)).timestamp() * 1000),
             "limit": 50,
             "offset": 0,
         }
         result = self._call(store, READ_BACK, params=params)
+        if result.status_code in (204, 404):
+            return None
         if not result.ok:
             raise ResultUnknown(f"WALMART_HTTP_{result.status_code}")
-        found = shipments_from(result.data, str(ticket_id))
+        found = shipments_from(result.data, str(order_id))
         return found or None
 
-    def resolve(self, ticket_id: str, outcome: str, note: str) -> None:
+    def resolve(self, order_id: str, outcome: str, note: str) -> None:
         """Close the ledger key after a read-back (ok / failed); best effort."""
         try:
-            if self._walmart.ledger.status(f"create:{ticket_id}") in ("attempting", "unknown"):
-                self._walmart.ledger.resolve(f"create:{ticket_id}", outcome=outcome, note=note)
+            if self._walmart.ledger.status(f"create:{order_id}") in ("attempting", "unknown"):
+                self._walmart.ledger.resolve(f"create:{order_id}", outcome=outcome, note=note)
         except Exception:
             pass
 
@@ -377,9 +386,21 @@ class WalmartCreationGateway:
             "offset": 0,
         }
         result = self._call(store, READ_BACK, params=params)
+        # Second read-only check: an order id that cannot exist must come back as "not found"
+        # (8088: HTTP 204), which is what the pre-check before every first POST relies on.
+        lookup = self._call(
+            store,
+            READ_BACK,
+            params={**params, "inboundOrderId": f"PMC-PROBE-{store}-{now:%Y%m%d%H%M%S}"},
+        )
+        lookup_ok = lookup.status_code in (204, 404) or (
+            lookup.ok and not shipments_from(lookup.data)
+        )
         return {
-            "ok": result.ok,
+            "ok": result.ok and lookup_ok,
             "status_code": result.status_code,
             "store_code": store,
             "recent_shipments": len(shipments_from(result.data)) if result.ok else 0,
+            "lookup_status_code": lookup.status_code,
+            "lookup_not_found_ok": lookup_ok,
         }

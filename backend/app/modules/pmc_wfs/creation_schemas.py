@@ -100,6 +100,7 @@ class ShipmentRead(Strict):
 class TicketRead(Strict):
     id: UUID
     number: int
+    inbound_order_id: str | None = None  # 我方单号 = Walmart inboundOrderId（提交后才有）
     state: State
     allocation: AllocationTicket
     shipments: list[ShipmentRead]
@@ -133,7 +134,9 @@ class Capabilities(Strict):
     creation_enabled: bool
     preview_enabled: bool
     reason: str | None = None
-    mode: Literal["off", "probe", "single", "batch"] = "off"
+    mode: Literal["off", "probe", "single", "batch", "simulator"] = "off"
+    # 本机模拟通道（只在 APP_ENV=local），页面据此显示横幅和「立即拉取结果」
+    simulator: bool = False
 
 
 class CreationDefaultsRead(Strict):
@@ -149,7 +152,7 @@ class CreationDefaultsRead(Strict):
     its: bool = False
     return_address: ReturnAddress | None = None
     saved: bool
-    level: Literal["store", "account", "default"] = "default"
+    level: Literal["store", "common", "account", "default"] = "default"
     expected_delivery_date: str  # today + ship_date_offset (Asia/Shanghai)
 
 
@@ -158,3 +161,12 @@ class ProbeResult(Strict):
     status_code: int
     store_code: str
     recent_shipments: int
+    # 用一个不可能存在的单号查一次：要返回"查无此单"（8088 是 204），首次提交前的查单才可靠。
+    lookup_status_code: int | None = None
+    lookup_not_found_ok: bool | None = None
+
+
+class SimulatorPull(Strict):
+    """「立即拉取结果（本机模拟）」：这次触发的任务中心运行。"""
+
+    run_ids: list[UUID]

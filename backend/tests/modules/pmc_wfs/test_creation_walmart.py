@@ -5,7 +5,6 @@ Only the per-store cloud transport is replaced by a scripted fake: no network, n
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from uuid import uuid4
 
 import pytest
 
@@ -32,7 +31,7 @@ from app.modules.pmc_wfs.walmart_gateway import (
 )
 
 STORE_ID, STORE = "lx-store-1", "HK2614"
-TICKET = str(uuid4())
+TICKET = "PMC-HK2614-20261104-01"  # our order id: same format as the 8088 creations
 NOW = datetime(2026, 11, 4, 12, 0, tzinfo=UTC)
 
 
@@ -275,12 +274,43 @@ def test_rollout_modes_and_store_mapping(monkeypatch):
 
 
 def test_probe_is_read_only():
-    transport = ScriptedTransport(WalmartResult(200, {"payload": [{"shipmentId": "A1"}]}))
+    transport = ScriptedTransport(
+        WalmartResult(200, {"payload": [{"shipmentId": "A1"}]}),
+        WalmartResult(204, None),  # 8088: an order id Walmart does not have -> 204
+    )
     gateway, walmart, _ = adapter(transport, mode="probe")
     result = gateway.probe(STORE_ID)
-    assert result == {"ok": True, "status_code": 200, "store_code": STORE, "recent_shipments": 1}
-    assert transport.requests[0].request.is_write is False
+    assert result == {
+        "ok": True,
+        "status_code": 200,
+        "store_code": STORE,
+        "recent_shipments": 1,
+        "lookup_status_code": 204,
+        "lookup_not_found_ok": True,
+    }
+    assert all(r.request.is_write is False for r in transport.requests)
+    lookup = transport.requests[1].request.query
+    assert lookup["inboundOrderId"] == "PMC-PROBE-HK2614-20261104120000"
     assert walmart.ledger.status(f"create:{TICKET}") is None
+
+
+def test_probe_fails_when_unknown_order_id_is_an_error():
+    transport = ScriptedTransport(
+        WalmartResult(200, {"payload": []}), WalmartResult(400, {"errors": [{"code": "x"}]})
+    )
+    gateway, *_ = adapter(transport, mode="probe")
+    result = gateway.probe(STORE_ID)
+    assert result["ok"] is False and result["lookup_not_found_ok"] is False
+
+
+def test_read_back_204_or_404_means_not_found():
+    for status in (204, 404):
+        gateway, *_ = adapter(ScriptedTransport(WalmartResult(status, None)))
+        assert gateway.reconcile(TICKET, snapshot()) is None
+    gateway, *_ = adapter(ScriptedTransport(WalmartResult(503, None)))
+    with pytest.raises(ResultUnknown):
+        gateway.reconcile(TICKET, snapshot())
+    assert gateway.store_code(snapshot()) == STORE
 
 
 def test_label_uses_carton_count_and_mixed_boxes():

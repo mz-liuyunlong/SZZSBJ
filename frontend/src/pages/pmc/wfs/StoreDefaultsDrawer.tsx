@@ -1,9 +1,12 @@
-/** 创建默认值（按店铺）：右上角按钮打开的侧边抽屉。创建货件弹窗自动带出这里的值。 */
+/**
+ * 创建默认值：待创建货件右上角按钮打开的侧边抽屉，全系统只在这里设置（Rocky 2026-11-04 合成一处）。
+ * 第一行「全部店铺通用」，下面各店铺；店铺没单独设置就沿用通用。创建货件弹窗自动带出这里的值。
+ */
 import { Alert, Button, Checkbox, Drawer, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, Typography, message } from "antd";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import EmptyState from "@/shared/states/EmptyState";
-import { listStoreDefaults, saveStoreDefaults, type DefaultValues, type StoreDefaultsRow } from "./creationApi";
+import { COMMON_STORE, listStoreDefaults, saveStoreDefaults, type DefaultValues, type StoreDefaultsRow } from "./creationApi";
 import { pendingError } from "./pendingPackingApi";
 
 const transports = [
@@ -15,10 +18,12 @@ const carriers = [
   { value: "own", label: "自有承运人" },
   { value: "wm", label: "Walmart 合作承运人" },
 ];
-const levels: Record<StoreDefaultsRow["level"], { text: string; color?: string }> = {
-  store: { text: "本店铺", color: "blue" },
-  account: { text: "沿用账号设置" },
-  default: { text: "系统默认" },
+const isCommon = (r: StoreDefaultsRow) => r.store_id === COMMON_STORE;
+/** 来源列：通用行看自己有没有保存；店铺行看是本店铺单独设置还是沿用通用。 */
+const source = (r: StoreDefaultsRow): { text: string; color?: string } => {
+  if (isCommon(r)) return r.level === "default" ? { text: "系统默认" } : { text: "已设置", color: "blue" };
+  if (r.level === "store") return { text: "本店铺", color: "blue" };
+  return r.level === "default" ? { text: "沿用通用（系统默认）" } : { text: "沿用通用" };
 };
 const label = (options: { value: string; label: string }[], value: string) => options.find((o) => o.value === value)?.label ?? value;
 const time = (v?: string | null) => v ? new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", dateStyle: "short", timeStyle: "short" }).format(new Date(v)) : "—";
@@ -49,31 +54,37 @@ export default function StoreDefaultsDrawer({ open, scope, canManage, onClose }:
       : null;
     setBusy(true); setError(undefined);
     try {
-      await saveStoreDefaults(editing!.store_id, { ...values, return_address: address, reason });
+      const target = editing!;
+      await saveStoreDefaults(target.store_id, { ...values, return_address: address, reason, ...(isCommon(target) ? { source_account_ref: target.source_account_ref } : {}) });
       await Promise.all([
         client.invalidateQueries({ queryKey: ["wfs-store-creation-defaults"] }),
         client.invalidateQueries({ queryKey: ["wfs-creation-defaults"] }),
       ]);
       setEditing(undefined);
-      void messages.success("已保存，之后创建货件会自动带出");
+      void messages.success(isCommon(target) ? "已保存，没有单独设置的店铺都会沿用" : "已保存，之后创建货件会自动带出");
     } catch (e) {
       setError(pendingError(e));
     } finally {
       setBusy(false);
     }
   };
-  const rows = query.data?.data.items ?? [];
-  return <Drawer open={open} width={1080} title="创建默认值（按店铺）" onClose={onClose} destroyOnClose>
+  const common = query.data?.data.common ?? [];
+  const rows = [...common, ...(query.data?.data.items ?? [])];
+  const many = common.length > 1;
+  return <Drawer open={open} width={1080} title="创建默认值" onClose={onClose} destroyOnClose>
     {holder}
     <Typography.Paragraph type="secondary">
-      每个店铺一套默认值；创建货件时自动带出，弹窗里改了只影响那一次。店铺没设置时沿用账号设置，再没有就用系统默认（运输方式 LTL、发货日偏移 15 天）。
+      第一行「全部店铺通用」对所有店铺生效；某个店铺不一样（比如退货地址不同、不能选 ITS）才单独编辑那一行。创建货件时自动带出，弹窗里改了只影响那一次。通用也没设置时用系统默认（运输方式 LTL、发货日偏移 15 天）。
     </Typography.Paragraph>
     {query.error && <Alert type="error" showIcon message={pendingError(query.error)} action={<Button size="small" onClick={() => void query.refetch()}>重试</Button>} />}
     <Table<StoreDefaultsRow> size="small" bordered rowKey={(r) => `${r.source_account_ref}:${r.store_id}`} loading={query.isFetching} dataSource={rows} pagination={false} scroll={{ x: 1000 }}
+      rowClassName={(r) => isCommon(r) ? "wfs-create__common-row" : ""}
       locale={{ emptyText: <EmptyState title="暂无店铺" description={query.error ? "加载失败，请重试" : "当前账号下没有可设置的店铺"} compact /> }}
       columns={[
-        { title: "店铺", width: 180, fixed: "left", render: (_, r) => <span>{r.store_name ?? r.store_id}<span className="wfs-create__sub">{r.store_id}</span></span> },
-        { title: "来源", width: 110, render: (_, r) => <Tag color={levels[r.level].color} bordered={false}>{levels[r.level].text}</Tag> },
+        { title: "店铺", width: 180, fixed: "left", render: (_, r) => isCommon(r)
+          ? <span className="wfs-create__strong">全部店铺通用{many && <span className="wfs-create__sub">{r.source_account_ref}</span>}</span>
+          : <span>{r.store_name ?? r.store_id}<span className="wfs-create__sub">{r.store_id}</span></span> },
+        { title: "来源", width: 130, render: (_, r) => <Tag color={source(r).color} bordered={false}>{source(r).text}</Tag> },
         { title: "运输方式", width: 100, render: (_, r) => label(transports, r.transport) },
         { title: "发货日偏移", width: 96, align: "right", render: (_, r) => `${r.ship_date_offset} 天` },
         { title: "托盘箱数 / 混装箱数", width: 130, align: "right", render: (_, r) => `${r.pallet_boxes} / ${r.mixed_boxes}` },
@@ -83,7 +94,7 @@ export default function StoreDefaultsDrawer({ open, scope, canManage, onClose }:
         { title: "最后修改", width: 150, render: (_, r) => r.updated_by ? <span>{r.updated_by}<span className="wfs-create__sub">{time(r.updated_at)}</span></span> : "—" },
         { title: "操作", width: 80, fixed: "right", render: (_, r) => canManage ? <Button type="link" size="small" onClick={() => edit(r)}>编辑</Button> : <Typography.Text type="secondary">只读</Typography.Text> },
       ]} />
-    <Modal open={!!editing} width={640} title={`编辑创建默认值 · ${editing?.store_name ?? editing?.store_id ?? ""}`} okText="保存" confirmLoading={busy} onOk={() => void save().catch(() => undefined)} onCancel={() => setEditing(undefined)} destroyOnClose>
+    <Modal open={!!editing} width={640} title={`编辑创建默认值 · ${editing && isCommon(editing) ? "全部店铺通用" : editing?.store_name ?? editing?.store_id ?? ""}`} okText="保存" confirmLoading={busy} onOk={() => void save().catch(() => undefined)} onCancel={() => setEditing(undefined)} destroyOnClose>
       {error && <Alert type="error" showIcon message={error} />}
       <Form form={form} layout="vertical" disabled={busy}>
         <Space wrap align="start">

@@ -36,7 +36,7 @@ export default function CreationDialog({ rows, scope, canProbe, onCancel, onCrea
     if (d.return_address) for (const [k, v] of Object.entries(d.return_address)) if (untouched(k as keyof Values)) Object.assign(next, { [k]: v });
     form.setFieldsValue(next);
   }, [defaults.data, form]);
-  const levelText = { store: "本店铺的创建默认值", account: "账号的创建默认值", default: "系统默认值" } as const;
+  const levelText = { store: "本店铺的创建默认值", common: "全部店铺通用的创建默认值", account: "全部店铺通用的创建默认值", default: "系统默认值" } as const;
   const valid = Number.isInteger(boxes) && boxes > 0 && boxes <= Math.min(availableBoxes, 9999) && counts.every((n) => Number.isInteger(n) && n > 0) && counts.reduce((a, b) => a + b, 0) === boxes;
   const invalidate = () => { setPreview(undefined); setProbe(undefined); };
   const input = (): AllocationInput => ({ order_id: row.order.id, expected_version: row.order.version, expected_box_version: row.order.box_set!.version, additional_selections: rows.slice(1).map((r) => ({ order_id: r.order.id, expected_version: r.order.version, expected_box_version: r.order.box_set!.version })), shipping_boxes: boxes, shipment_count: counts.length, shipment_boxes: counts });
@@ -57,7 +57,7 @@ export default function CreationDialog({ rows, scope, canProbe, onCancel, onCrea
     {canProbe && <Button disabled={!preview || !capabilities.data?.data.preview_enabled} loading={busy} onClick={() => void perform(async () => { const result = await optionalPreview(await body()); setProbe(`探测时间 ${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Taipei" })}：${JSON.stringify(result.data.result)}`); })}>按需探测</Button>}
     <Button aria-label="确认创建" type="primary" disabled={busy || !valid || !preview || !capabilities.data?.data.creation_enabled} loading={busy} onClick={() => void perform(async () => { const result = await createShipments(await body()); onCreated(result.data); })}>确认创建</Button>
   </Space>}>
-    <Typography.Paragraph>选择本次发货箱数和分票方式，核对每票实际箱子后确认创建。无需 OWS。确认创建后程序先做自动检查并占用箱子，状态为“待人工批准”；有书面批准的人在创建记录里点“批准执行”后才会调用 Walmart。探测可选。</Typography.Paragraph>
+    <Typography.Paragraph>选择本次发货箱数和分票方式，核对每票实际箱子后确认创建。无需 OWS。确认创建后程序先做自动检查并占用箱子，然后直接提交 Walmart（先按单号查一次，再创建），这一行变成“提交中”，查到货件号后变成“已创建未发货”。探测可选。</Typography.Paragraph>
     {capabilities.data?.data.reason && <Alert type="info" showIcon message={capabilities.data.data.reason} />}
     {defaults.data?.data && <Alert className="wfs-create__defaults-note" type="success" showIcon message={`已按${levelText[defaults.data.data.level]}带出退货地址、预计到仓日期（今天 + ${defaults.data.data.ship_date_offset} 天）和 ITS；这里改只影响这一次，不改默认值。`} />}
     {(error || capabilities.error) && <Alert type="error" showIcon message={error ?? pendingError(capabilities.error)} />}

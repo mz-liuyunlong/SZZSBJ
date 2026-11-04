@@ -62,6 +62,8 @@ class WfsCreationTicket(Base):
     allocation: Mapped[dict] = mapped_column(J)
     result: Mapped[dict] = mapped_column(J, default=dict)
     error_code: Mapped[str | None] = mapped_column(String(64))
+    # 我方单号 = Walmart inboundOrderId（PMC-店铺码-日期-序号，同 8088）；首次提交前分配。
+    inbound_order_id: Mapped[str | None] = mapped_column(String(40), unique=True)
 
 
 class WfsBoxHold(Base):

@@ -34,13 +34,16 @@ describe("PMC navigation contract", () => {
     expect(pmc.sidebarSections?.map((s) => s.title)).toEqual(["物流", "国内仓", "WFS", "PMC 设置"]);
     const pages = pmc.children.filter((p) => p.sidebarSection === "pmc-settings");
     expect(pages.map((p) => p.title)).toEqual([
-      "WFS 异常与提醒规则", "WFS 仓库地区", "WFS 创建货件默认值", "物流渠道字典", "物流 异常与提醒", "物流 时效与阈值设置", "WFS 店铺设置", "WFS 通知与口径说明",
+      "WFS 异常与提醒规则", "WFS 仓库地区", "物流渠道字典", "物流 异常与提醒", "物流 时效与阈值设置", "WFS 店铺设置", "WFS 通知与口径说明",
     ]);
     expect(new Set(pages.map((p) => p.path)).size).toBe(pages.length);
     for (const page of pages) expect(page.path.startsWith("/pmc/settings/")).toBe(true);
     expect(navigationRedirects["/pmc/wfs/settings"]).toBe("/pmc/settings/wfs/rules");
     expect(navigationRedirects["/pmc/wfs/settings/fc-regions"]).toBe("/pmc/settings/wfs/fc-regions");
     expect(navigationRedirects["/pmc/logistics/alerts"]).toBe("/pmc/settings/logistics/alerts");
+    // 创建默认值只在 待创建货件 的抽屉里（Rocky 2026-11-04），旧地址跳过去
+    expect(navigationRedirects["/pmc/settings/wfs/creation-defaults"]).toBe("/pmc/wfs/pending-packing");
+    expect(navigationRedirects["/pmc/wfs/settings/creation-defaults"]).toBe("/pmc/wfs/pending-packing");
     for (const page of pages) {
       expect(page.readOnly).toBe(true);
       expect(getPagePermissionKey(page)).toBe("page:pmc:wfs:view");

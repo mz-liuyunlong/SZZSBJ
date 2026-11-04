@@ -4,6 +4,10 @@
 (``walmart_gateway.WalmartCreationGateway``) only when the owner set ``WFS_CREATION_MODE``
 to probe / single / batch *and* the unified Walmart gateway can be built from the server
 configuration; otherwise it returns ``DisabledGateway`` carrying the reason.
+
+The one exception is the local simulator (``local_simulator``): only on APP_ENV=local with the
+local database and ``WFS_CREATION_MODE`` unset. A simulator switch set anywhere else raises
+here instead of falling back to Walmart.
 """
 
 import logging
@@ -63,6 +67,10 @@ def _production_gateway(mode: str):
 
 
 def get_creation_gateway() -> CreationGateway:
+    from app.modules.pmc_wfs import local_simulator
+
+    if local_simulator.simulator_active():  # raises SimulatorRefused outside local
+        return local_simulator.LocalSimulatorGateway()
     mode = creation_mode()
     if mode == "off":
         return DisabledGateway()

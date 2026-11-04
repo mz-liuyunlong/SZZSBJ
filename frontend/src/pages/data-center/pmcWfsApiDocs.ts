@@ -17,9 +17,9 @@ const endpoints: [ApiMethod, string, string][] = [
   ["POST", "/creation-operations/{ident}/retry", "创建失败重试：先查同一单号，查不到才重新提交"],
   ["GET", "/creation-tickets", "提交中 / 创建失败 / 已创建未发货（一行一票）"],
   ["GET", "/creation-ticket-counts", "三个页签的票数"],
-  ["GET", "/creation-defaults", "创建默认值（按店铺 → 账号 → 系统默认）"],
-  ["GET", "/store-creation-defaults", "按店铺的创建默认值列表"],
-  ["PUT", "/store-creation-defaults/{store_id}", "保存某店铺的创建默认值"],
+  ["GET", "/creation-defaults", "创建默认值（本店铺 → 全部店铺通用 → 系统默认）"],
+  ["GET", "/store-creation-defaults", "创建默认值列表：全部店铺通用 + 各店铺"],
+  ["PUT", "/store-creation-defaults/{store_id}", "保存某店铺的创建默认值；store_id 为 * 时保存全部店铺通用"],
   ["POST", "/optional-previews", "按需探测"],
   ["POST", "/drafts", "生成待审批货件草稿"], ["GET", "/drafts/{id}", "读取草稿回执"],
 ];
