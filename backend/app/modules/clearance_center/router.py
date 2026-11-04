@@ -63,6 +63,11 @@ def listings(
     principal: reader,
     accounts: scope,
 ):
+    if not has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION):
+        # Filtering by a private profit-derived risk before redaction would
+        # reveal the hidden classification through membership and totals.
+        if query.risk_level is not None or query.candidate_status is not None:
+            raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     data = ClearanceService(session).list_listings(
         _requested_accounts(accounts, query.source_account_ref),
         store_id=query.store_id,
