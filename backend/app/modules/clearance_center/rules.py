@@ -40,16 +40,39 @@ DEFAULT_RULES: dict[str, Any] = {
 }
 
 
+NUMERIC_THRESHOLD_KEYS = frozenset(
+    {
+        "sales_drop_percent",
+        "ad_ratio_growth_points",
+        "refund_rate_percent",
+        "margin_below_percent",
+        "rating_below",
+        "sales_recovery_percent",
+        "high_stock_capital_usd",
+    }
+)
+
+
 def validate_rules(changes: dict[str, Any]) -> dict[str, Any]:
-    if any(k not in DEFAULT_RULES for k in changes):
+    if any(key not in DEFAULT_RULES for key in changes):
         raise ValueError("Unknown clearance rule")
     merged = {**DEFAULT_RULES, **changes}
     for key, original in DEFAULT_RULES.items():
         value = merged[key]
-        if type(value) is not type(original) or (
-            isinstance(value, (int, float)) and (value < 0 or value > 3650)
-        ):
+        if isinstance(original, bool):
+            valid = type(value) is bool
+        elif key in NUMERIC_THRESHOLD_KEYS:
+            valid = type(value) in (int, float) and number(value) is not None
+        else:
+            valid = type(value) is int
+        if not valid:
             raise ValueError(f"Invalid clearance rule: {key}")
+        if type(value) in (int, float) and (value < 0 or value > 3650):
+            raise ValueError(f"Clearance rule out of bounds: {key}")
+    # Evidence queries are 30-day lookbacks and 72-hour freshness checks.
+    # Do not accept silently ignored settings until the matching queries are dynamic.
+    if merged["zero_sales_days"] != 30 or merged["inventory_max_age_hours"] != 72:
+        raise ValueError("Fixed evidence windows cannot be overridden in V1")
     if not (
         0
         < merged["assisted_coverage_days"]
