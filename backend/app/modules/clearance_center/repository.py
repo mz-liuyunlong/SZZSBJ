@@ -18,6 +18,38 @@ from app.modules.product_management.daily_sales_costs import (
 LOS_ANGELES = ZoneInfo("America/Los_Angeles")
 
 
+def overlay_latest_wfs(evaluation: dict, listing: dict) -> dict:
+    """Keep daily risk unchanged, but always show current conservative WFS."""
+    result = dict(evaluation)
+    result["warnings"] = list(evaluation.get("warnings", []))
+    result["evaluated_wfs_available"] = evaluation.get("current_wfs_available")
+    current_mart = number(listing.get("wfs_available_quantity"))
+    current_snapshot = number(listing.get("snapshot_wfs_available"))
+    minimum = (
+        min(current_mart, current_snapshot)
+        if current_mart is not None and current_snapshot is not None else None
+    )
+    result["current_wfs_available"] = str(minimum) if minimum is not None else None
+    captured = listing.get("inventory_captured_at")
+    result["inventory_captured_at"] = captured.isoformat() if captured is not None else None
+    now = datetime.now(LOS_ANGELES)
+    fresh = bool(
+        captured is not None and captured.tzinfo is not None and
+        timedelta(0) <= now - captured <= timedelta(hours=72)
+    )
+    if minimum is None or minimum <= 0 or not fresh:
+        result["current_inventory_not_eligible"] = True
+        if "WFS_STOCK_UNAVAILABLE_OR_STALE" not in result["warnings"]:
+            result["warnings"].append("WFS_STOCK_UNAVAILABLE_OR_STALE")
+    else:
+        result["current_inventory_not_eligible"] = False
+        result["warnings"] = [
+            x for x in result["warnings"]
+            if x != "WFS_STOCK_UNAVAILABLE_OR_STALE"
+        ]
+    return result
+
+
 class ClearanceReadRepository:
     def __init__(self, session: Session):
         self.session = session
@@ -167,28 +199,10 @@ class ClearanceReadRepository:
         ).mappings().first()
         if row is None:
             return None
-        evaluation = dict(row["evaluation_json"])
+        evaluation = overlay_latest_wfs(dict(row["evaluation_json"]), listing)
         evaluation["quality_status"] = row["quality_status"]
         evaluation["evaluation_run_date_la"] = run["run_date_la"].isoformat()
         evaluation["as_of_date"] = run["as_of_date_la"].isoformat()
-        # The daily decision remains the overnight decision; the UI/current
-        # application selection always uses the independently fetched latest
-        # stock snapshot so a sold-out Listing cannot be submitted later.
-        latest = number(listing.get("snapshot_wfs_available"))
-        evaluation["current_wfs_available"] = str(latest) if latest is not None else None
-        captured = listing.get("inventory_captured_at")
-        evaluation["inventory_captured_at"] = captured.isoformat() if captured else None
-        if (
-            latest is None or latest <= 0 or captured is None or
-            captured.tzinfo is None or
-            datetime.now(LOS_ANGELES) - captured > timedelta(hours=72)
-        ):
-            evaluation["current_inventory_not_eligible"] = True
-            if "WFS_STOCK_UNAVAILABLE_OR_STALE" not in evaluation.get("warnings", []):
-                evaluation["warnings"] = [
-                    *evaluation.get("warnings", []),
-                    "WFS_STOCK_UNAVAILABLE_OR_STALE",
-                ]
         return {
             "listing": listing, "evaluation": evaluation,
             "rule_config_version": int(row["rule_config_version"]),
@@ -268,7 +282,7 @@ class ClearanceReadRepository:
         items = []
         for row in records:
             item = dict(row)
-            evaluation = item.pop("evaluation_json")
+            evaluation = overlay_latest_wfs(item.pop("evaluation_json"), item)
             version = item.pop("rule_config_version")
             quality = item.pop("quality_status")
             evaluation["quality_status"] = quality
