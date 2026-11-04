@@ -53,6 +53,6 @@ describe("UserDataScopeModal", () => {
 
     expect(screen.getByText("角色：source_account=account-a")).toBeInTheDocument();
     expect(screen.getByText("用户：store=store-a")).toBeInTheDocument();
-    expect(screen.getByText(/当前业务接口严格执行数据源账号范围/)).toBeInTheDocument();
+    expect(screen.getByText(/当前仅数据源账号与组织部门范围接入服务端强制过滤/)).toBeInTheDocument();
   });
 });
