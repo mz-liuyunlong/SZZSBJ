@@ -62,6 +62,85 @@ def authorized_department_ids(
 # Never store this in a global cache: permissions are evaluated per request.
 ORG_OWNER_SCOPE_SESSION_KEY = "szzsbj_org_scoped_owner_refs"
 
+# Account-qualified bindings are a separate, stronger scope from historical UID-only
+# bindings. Business SQL must match BOTH columns, never just owner UID.
+ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY = "szzsbj_org_scoped_account_owners"
+
+
+def resolve_business_account_owner_pairs(
+    session: Session,
+    principal: Principal,
+) -> frozenset[tuple[str, str]] | None:
+    """Resolve administrator-reviewed (source_account_ref, owner_ref) pairs.
+
+    An empty result means no new account-qualified bindings (legacy resolution
+    remains a separate path); None means explicit global org grant. Do not
+    automatically grant an owner in a second source account that happens to
+    reuse the same UID.
+    """
+    if has_permission(principal, "*"):
+        return None
+    from app.core.auth import PREVIEW_PRINCIPAL_ID
+
+    if principal.user_id == PREVIEW_PRINCIPAL_ID:
+        return None
+    try:
+        user_id = int(principal.user_id)
+    except (TypeError, ValueError) as exc:
+        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403) from exc
+
+    granted = RbacRepository(session).resolve_user_data_scope(
+        user_id=user_id, scope_type="org_department"
+    )
+    if "*" in granted:
+        return None
+
+    params: dict[str, object] = {"user_id": user_id}
+    department_predicate = ""
+    if granted:
+        departments = authorized_department_ids(session, principal)
+        if not departments:
+            raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
+        department_predicate = """
+          AND EXISTS (
+              SELECT 1 FROM jsonb_array_elements_text(e.department_ids) AS d(id)
+              WHERE d.id IN :department_ids
+          )
+        """
+        params["department_ids"] = sorted(departments)
+    else:
+        department_predicate = """
+          AND EXISTS (
+              SELECT 1 FROM app_users u
+              WHERE u.id = :user_id AND u.feishu_open_id = e.open_id
+          )
+        """
+
+    statement = text(
+        """
+        SELECT DISTINCT b.source_account_ref, b.owner_ref
+        FROM iam_org_owner_account_bindings b
+        JOIN iam_feishu_employees e ON e.open_id = b.feishu_open_id
+        WHERE b.is_active IS TRUE
+          AND e.is_active IS TRUE
+          AND e.is_resigned IS NOT TRUE
+          AND e.is_frozen IS NOT TRUE
+          AND e.last_seen_run_id = (
+              SELECT id FROM iam_feishu_org_sync_runs
+              ORDER BY applied_at DESC, id DESC LIMIT 1
+          )
+        """ + department_predicate
+    )
+    if granted:
+        statement = statement.bindparams(bindparam("department_ids", expanding=True))
+    rows = session.execute(statement, params)
+    return frozenset(
+        (str(account), str(owner))
+        for account, owner in rows
+        if account and owner
+    )
+
+
 
 def verified_single_account_owner_refs(
     session: Session, owner_refs: frozenset[str]
