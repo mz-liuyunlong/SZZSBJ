@@ -258,7 +258,7 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  ...(canViewCost?[{key:"amount",title:"采购金额",render:(_:unknown,p:ProductSample)=>"¥"+((p.requestQty??0)*p.unitCost).toFixed(2)}]:[]),
  {key:"status",title:"审批状态",dataIndex:"approval"},
  {key:"action",title:"操作",render:(_,p)=>p.approval==="pending"&&canManage?<Button type="link" onClick={()=>{setApproval(p);setReason("");}}>审核</Button>:"—"}]}/>
- <DataTable title="正式采购计划" data={state.plans} columns={[
+ <DataTable title="模拟采购计划（不生成真实采购单）" data={state.plans} columns={[
  {key:"id",title:"计划编号",dataIndex:"id"},{key:"productId",title:"SKU",dataIndex:"productId"},
  {key:"grade",title:"评级",dataIndex:"grade"},{key:"suggestedQty",title:"建议量",dataIndex:"suggestedQty"},
  {key:"approvedQty",title:"批准量",dataIndex:"approvedQty"}]}/></>}</>}

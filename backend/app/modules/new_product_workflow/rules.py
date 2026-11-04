@@ -15,8 +15,11 @@ DEFAULT_RULES: dict[str, Any] = {
 
 
 def compute_new_product_score(
-    *, market_score: int | None, metrics: dict[str, Any],
-    rules: dict[str, Any], rule_version: int,
+    *,
+    market_score: int | None,
+    metrics: dict[str, Any],
+    rules: dict[str, Any],
+    rule_version: int,
 ) -> dict[str, Any]:
     if market_score is None or not metrics.get("complete"):
         return {"status": "insufficient_data", "grade": None, "rule_version": rule_version}
@@ -36,19 +39,32 @@ def compute_new_product_score(
     weights = rules.get("weights", DEFAULT_RULES["weights"])
     score = round(sum(values[key] * weights[key] for key in values) / 100, 2)
     grade = (
-        "S" if score >= 9 else "A" if score >= 8 else "B" if score >= 7
-        else "C" if score >= 6 else "D"
+        "S"
+        if score >= 9
+        else "A"
+        if score >= 8
+        else "B"
+        if score >= 7
+        else "C"
+        if score >= 6
+        else "D"
     )
     return {
-        "status": "evaluated", "grade": grade, "score": score,
-        "components": values, "rule_version": rule_version,
+        "status": "evaluated",
+        "grade": grade,
+        "score": score,
+        "components": values,
+        "rule_version": rule_version,
         "note": "Derived from completed 30-day business-mart window; not the demo score.",
     }
 
 
 def compute_launch_result(
-    *, metrics: dict[str, Any], rules: dict[str, Any],
-    start_date: date | None, as_of: date,
+    *,
+    metrics: dict[str, Any],
+    rules: dict[str, Any],
+    start_date: date | None,
+    as_of: date,
 ) -> dict[str, Any]:
     if start_date is None:
         return {"status": "awaiting_verified_sellable_date", "result": None}

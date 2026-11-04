@@ -361,9 +361,15 @@ def get_workflow_metrics(
     if not sku:
         _block(422)
     state = _state(session, sku_id, lock=False)
-    rule = session.execute(
-        text("SELECT version, rule_json FROM product_new_rule_versions ORDER BY version DESC LIMIT 1")
-    ).mappings().first()
+    rule = (
+        session.execute(
+            text(
+                "SELECT version, rule_json FROM product_new_rule_versions ORDER BY version DESC LIMIT 1"
+            )
+        )
+        .mappings()
+        .first()
+    )
     return success_response(
         request,
         data=read_sku_metrics(

@@ -182,7 +182,7 @@ function BusinessRoute({
         ) : page.key === "products_new_product_analysis" ? (
           <NewProductPages page={page} mode="performance" username={activeUser.username} canManage={hasPermission(activeUser.permissions,"action:products:new-product-analysis:approve")} canConfigure={hasPermission(activeUser.permissions,"action:products:new-product-analysis:configure")} canScore={hasPermission(activeUser.permissions,"action:products:new-product-analysis:score")} canRequest={hasPermission(activeUser.permissions,"action:products:new-product-analysis:request-purchase")} canReview={hasPermission(activeUser.permissions,"action:products:launch-tracking:review")} canViewCost={hasPermission(activeUser.permissions,"field:products:new-product-analysis:unit-cost")} />
         ) : page.key === "products_launch_tracking" ? (
-          <NewProductPages page={page} mode="tracking" username={activeUser.username} canManage={hasPermission(activeUser.permissions,"action:products:new-product:approve")} canConfigure={hasPermission(activeUser.permissions,"action:products:new-product:configure")} />
+          <NewProductPages page={page} mode="tracking" username={activeUser.username} canManage={hasPermission(activeUser.permissions,"action:products:new-product-analysis:approve")} canConfigure={hasPermission(activeUser.permissions,"action:products:new-product-analysis:configure")} canReview={hasPermission(activeUser.permissions,"action:products:launch-tracking:review")} />
         ) : page.key === "products_clearance_center" ? (
           <ClearanceCenterPage page={page} />
         ) : page.key === "sales_daily_sales" ? (

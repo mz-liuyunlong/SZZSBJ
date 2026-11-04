@@ -45,9 +45,10 @@ def read_sku_metrics(
     for days in PERIODS:
         start = end - timedelta(days=days)
         params = {"account": account, "sku": sku, "start": start, "end": end}
-        sales = session.execute(
-            text(
-                """
+        sales = (
+            session.execute(
+                text(
+                    """
                 SELECT count(*) AS observed_days,
                        sum(sales_qty) AS sales_qty,
                        sum(order_count) AS orders,
@@ -62,12 +63,16 @@ def read_sku_metrics(
                 WHERE source_account_ref = :account AND local_sku = :sku
                   AND business_date_la >= :start AND business_date_la < :end
                 """
-            ),
-            params,
-        ).mappings().one()
-        clicks = session.execute(
-            text(
-                """
+                ),
+                params,
+            )
+            .mappings()
+            .one()
+        )
+        clicks = (
+            session.execute(
+                text(
+                    """
                 SELECT sum(ad.num_ads_clicks) AS clicks,
                        count(DISTINCT ad.business_date_la) AS ad_days
                 FROM fact_walmart_ad_item_sp_daily AS ad
@@ -81,22 +86,34 @@ def read_sku_metrics(
                       AND listing.local_sku = :sku
                   )
                 """
-            ),
-            params,
-        ).mappings().one()
+                ),
+                params,
+            )
+            .mappings()
+            .one()
+        )
         profit = _number(sales["profit"])
         sales_amount = _number(sales["sales_amount"])
         ad_spend = _number(sales["ad_spend"])
         cost_days = int(sales["complete_cost_days"] or 0)
         observed = int(sales["observed_days"] or 0)
-        margin = (profit / sales_amount * 100) if (
-            cost_days == observed and observed > 0 and sales_amount is not None
-            and sales_amount > 0 and profit is not None
-            and int(sales["currencies"] or 0) == 1
-        ) else None
-        acos = (ad_spend / sales_amount * 100) if (
-            ad_spend is not None and sales_amount is not None and sales_amount > 0
-        ) else None
+        margin = (
+            (profit / sales_amount * 100)
+            if (
+                cost_days == observed
+                and observed > 0
+                and sales_amount is not None
+                and sales_amount > 0
+                and profit is not None
+                and int(sales["currencies"] or 0) == 1
+            )
+            else None
+        )
+        acos = (
+            (ad_spend / sales_amount * 100)
+            if (ad_spend is not None and sales_amount is not None and sales_amount > 0)
+            else None
+        )
         # Missing days or incomplete cost valuation are never silently filled with zero.
         periods[str(days)] = {
             "days": days,
@@ -113,22 +130,29 @@ def read_sku_metrics(
             "acos": acos,
             "observed_days": observed,
             "complete_cost_days": cost_days,
-            "complete": observed == days and cost_days == days and margin is not None
-            and ad_spend is not None and clicks["clicks"] is not None,
+            "complete": observed == days
+            and cost_days == days
+            and margin is not None
+            and ad_spend is not None
+            and clicks["clicks"] is not None,
         }
 
-    inv = session.execute(
-        text(
-            """
+    inv = (
+        session.execute(
+            text(
+                """
             SELECT sum(available_quantity) AS available,
                    sum(wfs_available_quantity) AS wfs_available,
                    count(*) AS listing_count, max(calculated_at) AS refreshed_at
             FROM mart_listing_management_current
             WHERE source_account_ref = :account AND local_sku = :sku
             """
-        ),
-        {"account": account, "sku": sku},
-    ).mappings().one()
+            ),
+            {"account": account, "sku": sku},
+        )
+        .mappings()
+        .one()
+    )
     inventory = {
         "available": _number(inv["available"]),
         "wfs_available": _number(inv["wfs_available"]),
@@ -154,11 +178,15 @@ def read_sku_metrics(
         "rule_version": rule_version,
     }
     result["score"] = compute_new_product_score(
-        market_score=market_score, metrics=periods["30"], rules=rules,
+        market_score=market_score,
+        metrics=periods["30"],
+        rules=rules,
         rule_version=rule_version,
     )
     result["launch"] = compute_launch_result(
-        metrics=periods[str(rules.get("success_days", 60))], rules=rules,
-        start_date=None, as_of=end,
+        metrics=periods[str(rules.get("success_days", 60))],
+        rules=rules,
+        start_date=None,
+        as_of=end,
     )
     return result
