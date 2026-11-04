@@ -40,9 +40,9 @@ class _Session:
                     "profit": 200,
                     "complete_cost_days": days,
                     "currencies": 1,
-                "sales_currencies": 1,
-                "sales_currency": "USD",
-                "profit_currency": "USD",
+                    "sales_currencies": 1,
+                    "sales_currency": "USD",
+                    "profit_currency": "USD",
                 }
             )
         if "FROM fact_walmart_ad_item_sp_daily" in sql:
