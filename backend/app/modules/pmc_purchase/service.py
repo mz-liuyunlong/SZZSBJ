@@ -156,10 +156,12 @@ class PmcPurchaseReadService:
         # SKU cycle samples are aggregated across owners. Until a per-owner
         # cycle mart exists, do not expose this aggregate to org-scoped users.
         from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
+        from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
 
         cycles = (
             []
             if self.repository.session.info.get(ORG_OWNER_SCOPE_SESSION_KEY) is not None
+            or self.repository.session.info.get(STORE_SCOPE_SESSION_KEY) is not None
             else self.repository.sku_cycles(skus, accounts)
         )
         data = OrderDetailData(
@@ -343,7 +345,10 @@ def _plan_ref(plan: DwdPurchasePlan) -> OrderPlanRef:
 
 
 def _pending_plan(
-    plan: DwdPurchasePlan, stores: dict[str, str | None], threshold: int, today: date
+    plan: DwdPurchasePlan,
+    stores: dict[tuple[str, str], str | None],
+    threshold: int,
+    today: date
 ) -> PendingPlanRead:
     since = plan.first_seen_pending_date or plan.create_date
     pending_days = (today - since).days if since else None
@@ -360,7 +365,10 @@ def _pending_plan(
         overdue_days=overdue,
         store=StoreRef(
             id=plan.store_id,
-            name=stores.get(plan.store_id) if plan.store_id else None,
+            name=(
+                stores.get((plan.source_account_ref, plan.store_id))
+                if plan.store_id else None
+            ),
             attributed=plan.store_attributed,
         ),
         sku=plan.sku,
