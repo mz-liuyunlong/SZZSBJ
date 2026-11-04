@@ -260,8 +260,7 @@ class ClearanceReadRepository:
         r_map = {key(r): dict(r) for r in refunds}
         source_map = {key(r): dict(r) for r in source_item_sales}
         store_history_map = {
-            (str(r["source_account_ref"]), str(r["store_id"])): dict(r)
-            for r in store_history
+            (str(r["source_account_ref"]), str(r["store_id"])): dict(r) for r in store_history
         }
         now = datetime.now(LOS_ANGELES)
         out: dict[tuple[str, str, str], dict] = {}
