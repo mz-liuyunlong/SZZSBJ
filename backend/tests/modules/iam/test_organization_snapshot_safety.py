@@ -86,3 +86,42 @@ def test_large_visibility_drop_requires_explicit_confirmation() -> None:
             requested_by="admin",
         )
     assert session.execute.call_count == 2
+
+
+@pytest.mark.parametrize(
+    "change_flag",
+    ["allow_large_reduction", "allow_identity_replacement"],
+)
+def test_high_risk_sync_requires_independent_confirmation(change_flag: str) -> None:
+    from unittest.mock import MagicMock, patch
+
+    from starlette.requests import Request
+
+    from app.core.api import ApiError
+    from app.core.auth import Principal
+    from app.modules.iam.organization_sync_router import (
+        ApplySnapshotRequest,
+        apply_organization_sync,
+    )
+
+    payload = ApplySnapshotRequest(
+        expected_hash="0" * 64,
+        **{change_flag: True},
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/settings/organization/sync-apply",
+            "headers": [],
+        }
+    )
+    session = MagicMock()
+    principal = Principal(user_id="1", permissions=frozenset({"*"}))
+    with patch("app.modules.iam.organization_sync_router._read_feishu") as external:
+        with pytest.raises(ApiError) as error:
+            apply_organization_sync(request, payload, principal, session)
+    assert error.value.status_code == 422
+    external.assert_not_called()
+    session.execute.assert_not_called()
+    session.commit.assert_not_called()

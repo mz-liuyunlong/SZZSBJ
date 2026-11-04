@@ -95,9 +95,8 @@ def apply_organization_sync(
     session: db_session,
 ):
     """Fail closed if Feishu changed between preview and apply."""
-    if (
-        payload.allow_large_reduction or payload.allow_identity_replacement
-    ) and payload.critical_change_confirmation != "我已核对飞书通讯录授权范围":
+    critical_change = payload.allow_large_reduction or payload.allow_identity_replacement
+    if critical_change and payload.critical_change_confirmation != "我已核对飞书通讯录授权范围":
         raise ApiError(
             code=ErrorCode.INVALID_REQUEST,
             status_code=422,
