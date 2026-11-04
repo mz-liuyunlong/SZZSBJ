@@ -24,7 +24,7 @@ from sqlalchemy import (
     tuple_,
 )
 from sqlalchemy.exc import ProgrammingError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.modules.data_pages.models import (
@@ -880,15 +880,46 @@ class OrderProfitRepository:
         statement = select(OrderProfitSkuDayMart).where(
             OrderProfitSkuDayMart.source_account_ref.in_(account_refs)
         )
-        if self.account_owner_pairs is not None or self.org_owner_refs is not None:
-            # Profit MART rows can aggregate multiple owners. Do not expose them
-            # until a reviewed owner-safe allocation exists.
-            from app.core.api import ApiError, ErrorCode
-
-            raise ApiError(
-                code=ErrorCode.DATA_SCOPE_DENIED,
-                status_code=403,
-                message="订单利润涉及多负责人聚合，尚未完成安全分摊审计",
+        # Profit MART rows are aggregated by (day, account, SKU), not by owner.
+        # Only expose a *complete* SKU aggregate when every component in the
+        # corresponding daily-sales MART is inside the caller's grants. A
+        # mixed-owner or mixed-store SKU is omitted; no guessed allocation.
+        if (
+            self.account_owner_pairs is not None
+            or self.org_owner_refs is not None
+            or self.account_stores is not None
+        ):
+            source = aliased(DailySalesItemDayMart)
+            same_group = and_(
+                source.business_date_la == OrderProfitSkuDayMart.business_date_la,
+                source.source_account_ref == OrderProfitSkuDayMart.source_account_ref,
+                source.local_sku == OrderProfitSkuDayMart.local_sku,
+            )
+            permitted_parts: list[ColumnElement[bool]] = []
+            if self.account_owner_pairs is not None:
+                permitted_parts.append(
+                    tuple_(source.source_account_ref, source.owner_ref).in_(
+                        sorted(self.account_owner_pairs)
+                    )
+                )
+            if self.org_owner_refs is not None:
+                permitted_parts.append(source.owner_ref.in_(self.org_owner_refs))
+            if self.account_stores is not None:
+                permitted_parts.append(
+                    tuple_(source.source_account_ref, source.store_id).in_(
+                        sorted(self.account_stores)
+                    )
+                )
+            if store_id is not None:
+                permitted_parts.append(source.store_id == store_id)
+            authorized = and_(*permitted_parts)
+            statement = statement.where(
+                exists(
+                    select(1).select_from(source).where(same_group, authorized)
+                ).correlate(OrderProfitSkuDayMart),
+                ~exists(
+                    select(1).select_from(source).where(same_group, ~authorized)
+                ).correlate(OrderProfitSkuDayMart),
             )
         if start_date is not None:
             statement = statement.where(OrderProfitSkuDayMart.business_date_la >= start_date)
