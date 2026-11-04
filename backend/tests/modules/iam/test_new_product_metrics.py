@@ -30,34 +30,40 @@ class _Session:
         self.queries.append(sql)
         if "FROM mart_order_profit_sku_day" in sql:
             days = (params["end"] - params["start"]).days
-            return _Result({
-                "observed_days": days,
-                "sales_qty": 200,
-                "orders": 180,
-                "sales_amount": 1000,
-                "ad_spend": 100,
-                "profit": 200,
-                "complete_cost_days": days,
-                "currencies": 1,
-            })
+            return _Result(
+                {
+                    "observed_days": days,
+                    "sales_qty": 200,
+                    "orders": 180,
+                    "sales_amount": 1000,
+                    "ad_spend": 100,
+                    "profit": 200,
+                    "complete_cost_days": days,
+                    "currencies": 1,
+                }
+            )
         if "FROM fact_walmart_ad_item_sp_daily" in sql:
-            return _Result({
-                "clicks": 80,
-                "attributed_spend": 100,
-                "attributed_sales": 400,
-                "spend_currencies": 1,
-                "attributed_currencies": 1 if self.attributed_currency else 0,
-                "spend_currency": "USD",
-                "attributed_currency": self.attributed_currency,
-                "ad_days": 30,
-            })
+            return _Result(
+                {
+                    "clicks": 80,
+                    "attributed_spend": 100,
+                    "attributed_sales": 400,
+                    "spend_currencies": 1,
+                    "attributed_currencies": 1 if self.attributed_currency else 0,
+                    "spend_currency": "USD",
+                    "attributed_currency": self.attributed_currency,
+                    "ad_days": 30,
+                }
+            )
         if "FROM mart_listing_management_current" in sql:
-            return _Result({
-                "available": 90,
-                "wfs_available": 50,
-                "listing_count": 1,
-                "refreshed_at": None,
-            })
+            return _Result(
+                {
+                    "available": 90,
+                    "wfs_available": 50,
+                    "listing_count": 1,
+                    "refreshed_at": None,
+                }
+            )
         raise AssertionError(f"Unexpected query: {sql}")
 
 
