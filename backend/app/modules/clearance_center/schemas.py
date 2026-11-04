@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from typing import Annotated
@@ -30,7 +31,7 @@ class ApplicationWrite(Strict):
     reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
     remark: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
     due_date: date | None = None
-    proposed_price: str | None = None
+    proposed_price: Decimal | None = Field(default=None, gt=0, max_digits=18, decimal_places=4)
     source: Literal["manual", "auto"] = "manual"
 
 
