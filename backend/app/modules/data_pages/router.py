@@ -65,6 +65,11 @@ from app.modules.iam.organization_access import (
     resolve_business_owner_refs,
     resolve_business_account_owner_pairs,
 )
+from app.modules.iam.explicit_item_scope import (
+    SKU_SCOPE_SESSION_KEY,
+    PRODUCT_SCOPE_SESSION_KEY,
+    resolve_explicit_identity_scope,
+)
 from app.modules.iam.explicit_owner_scope import OWNER_SCOPE_SESSION_KEY, resolve_explicit_owner_scope
 from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY, resolve_account_store_scope
 from app.modules.integration_sync.dependencies import require_source_account_scope
@@ -96,6 +101,8 @@ def require_data_page_org_scope(
     session.info.pop(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY, None)
     session.info.pop(STORE_SCOPE_SESSION_KEY, None)
     session.info.pop(OWNER_SCOPE_SESSION_KEY, None)
+    session.info.pop(SKU_SCOPE_SESSION_KEY, None)
+    session.info.pop(PRODUCT_SCOPE_SESSION_KEY, None)
     if request.url.path.startswith("/api/sales/order-profit"):
         declared = _ORDER_PROFIT_REGISTRY.permission
     elif request.url.path.startswith("/api/listings/"):
@@ -119,7 +126,12 @@ def require_data_page_org_scope(
     )
     account_stores = resolve_account_store_scope(session, principal)
     explicit_owners = resolve_explicit_owner_scope(session, principal)
-    if owner_refs is None and not owner_pairs and account_stores is None and explicit_owners is None:
+    scoped_skus = resolve_explicit_identity_scope(session, principal, scope_type="sku")
+    scoped_items = resolve_explicit_identity_scope(session, principal, scope_type="product")
+    if all(value is None for value in (
+        owner_refs, owner_pairs or None, account_stores,
+        explicit_owners, scoped_skus, scoped_items,
+    )):
         return
     if request.method != "GET" or request.url.path not in _ORG_SCOPED_READS:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
@@ -131,6 +143,10 @@ def require_data_page_org_scope(
         session.info[STORE_SCOPE_SESSION_KEY] = account_stores
     if explicit_owners is not None:
         session.info[OWNER_SCOPE_SESSION_KEY] = explicit_owners
+    if scoped_skus is not None:
+        session.info[SKU_SCOPE_SESSION_KEY] = scoped_skus
+    if scoped_items is not None:
+        session.info[PRODUCT_SCOPE_SESSION_KEY] = scoped_items
 
 
 router = APIRouter(tags=["DATA-PAGES"], dependencies=[Depends(require_data_page_org_scope)])
