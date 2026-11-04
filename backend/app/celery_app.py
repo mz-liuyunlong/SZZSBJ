@@ -26,6 +26,7 @@ TASK_IMPORTS = (
     "app.modules.business_connectors.tasks",
     "app.modules.listing_rule_config.tasks",
     "app.modules.ai_runtime.tasks",
+    "app.modules.clearance_center.tasks",
 )
 
 TASK_ROUTES = {
@@ -36,6 +37,7 @@ TASK_ROUTES = {
     "ai_runtime.*": {"queue": AI_QUEUE, "routing_key": AI_QUEUE},
     "walmart_scf.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "walmart_remote.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
+    "clearance_center.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "integration_sync.*": {
         "queue": INTEGRATION_QUEUE,
         "routing_key": INTEGRATION_QUEUE,
@@ -127,6 +129,12 @@ def create_celery_app(
             "walmart-remote-scheduler": {
                 "task": "walmart_remote.scheduler_tick",
                 "schedule": 600.0,
+            },
+            # The tick checks America/Los_Angeles midnight, including PST/PDT.
+            # A UTC-only cron hour would drift by one hour at DST transitions.
+            "clearance-daily-los-angeles": {
+                "task": "clearance_center.scheduler_tick",
+                "schedule": crontab(minute="*"),
             },
             "integration-sync-scheduler": {
                 "task": "integration_sync.scheduler_tick",
