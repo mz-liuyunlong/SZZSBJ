@@ -25,6 +25,7 @@ export interface NewProductMetrics {
   sku: string;
   business_timezone: string;
   as_of_exclusive: string;
+  verified_start_date?: string | null;
   source_tables: string[];
   periods: Record<"30" | "60" | "90", NewProductPeriodMetrics>;
   inventory: {
@@ -52,6 +53,9 @@ export interface NewProductWorkflowRecord {
   market_score: number | null;
   purchase_request_qty: number | null;
   review_result: "observe" | "optimize" | "success" | "failure" | null;
+  arrival_date?: string | null;
+  sellable_date?: string | null;
+  dates_verified_by?: string | null;
 }
 
 export interface NewProductWorkflowList {
@@ -95,6 +99,15 @@ export const decideNewProductPurchase = (id: string, expectedVersion: number, de
   mutate(id, "/purchase-decision", { expected_version: expectedVersion, decision, note });
 export const reviewNewProductLaunch = (id: string, expectedVersion: number, result: "observe" | "optimize", reason: string, nextReview?: string) =>
   mutate(id, "/review", { expected_version: expectedVersion, result, reason, next_review: nextReview ?? null });
+
+export const verifyNewProductDates = (
+  id: string, expectedVersion: number, arrivalDate: string, sellableDate: string, evidence: string,
+) => mutate(id, "/verified-dates", {
+  expected_version: expectedVersion,
+  arrival_date: arrivalDate,
+  sellable_date: sellableDate,
+  evidence,
+});
 
 export async function getNewProductRules() {
   return (await backendRequest<Record<string, unknown>>("/api/new-products/rules")).data;

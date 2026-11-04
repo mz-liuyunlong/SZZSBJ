@@ -42,6 +42,11 @@ def upgrade() -> None:
         sa.Column("reviewed_by", sa.String(128)),
         sa.Column("reviewed_at", sa.DateTime(timezone=True)),
         sa.Column("score_snapshot_json", JSONB()),
+        sa.Column("arrival_date", sa.Date()),
+        sa.Column("sellable_date", sa.Date()),
+        sa.Column("date_evidence", sa.Text()),
+        sa.Column("dates_verified_by", sa.String(128)),
+        sa.Column("dates_verified_at", sa.DateTime(timezone=True)),
         sa.Column("row_version", sa.Integer(), nullable=False, server_default="1"),
         sa.Column(
             "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()

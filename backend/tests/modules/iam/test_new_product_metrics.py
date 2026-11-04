@@ -87,6 +87,23 @@ def test_acos_uses_attributed_sales_not_total_sales() -> None:
     assert any("ad.attributed_sales_amount" in sql for sql in session.queries)
 
 
+def test_launch_uses_verified_first_window_not_latest_rolling_period() -> None:
+    session = _Session()
+    data = read_sku_metrics(
+        session,
+        account="test-account",
+        sku="TEST-SKU",
+        market_score=8,
+        rule_version=1,
+        rules=DEFAULT_RULES,
+        as_of=date(2026, 11, 1),
+        start_date=date(2026, 8, 1),
+    )
+    assert data["verified_start_date"] == "2026-08-01"
+    assert data["launch"] == {"status": "evaluated", "result": "success"}
+    assert len(session.queries) == 9  # 3 rolling windows, 1 launch window and inventory
+
+
 def test_unknown_attribution_currency_never_produces_an_acos_score() -> None:
     session = _Session(attributed_currency=None)
     data = read_sku_metrics(

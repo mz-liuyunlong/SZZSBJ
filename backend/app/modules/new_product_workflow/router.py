@@ -73,6 +73,12 @@ class ReviewWrite(VersionedPayload):
         return self
 
 
+class LaunchDateWrite(VersionedPayload):
+    arrival_date: date
+    sellable_date: date
+    evidence: str = Field(min_length=5, max_length=1000)
+
+
 class RuleWrite(StrictPayload):
     expected_version: int = Field(ge=0)
     reason: str = Field(min_length=5, max_length=1000)
@@ -143,6 +149,11 @@ def _state(session: Session, sku_id: UUID, *, lock: bool) -> dict[str, Any]:
             "reviewed_by": None,
             "reviewed_at": None,
             "score_snapshot_json": None,
+            "arrival_date": None,
+            "sellable_date": None,
+            "date_evidence": None,
+            "dates_verified_by": None,
+            "dates_verified_at": None,
         }
     return dict(row)
 
@@ -203,6 +214,16 @@ def _edit(
                 "creates_pmc_order": False,
             }
             changes["score_snapshot_json"] = json.dumps(evidence)
+    elif isinstance(payload, LaunchDateWrite):
+        if status != "approved_draft":
+            _block(409)
+        reason = payload.evidence.strip()
+        changes = {
+            "arrival_date": payload.arrival_date,
+            "sellable_date": payload.sellable_date,
+            "date_evidence": reason,
+            "dates_verified_by": principal.user_id,
+        }
     elif isinstance(payload, ReviewWrite):
         if status != "approved_draft":
             _block(409)
@@ -249,6 +270,8 @@ def _edit(
             now_fields.append("purchase_review_at = now()")
         if isinstance(payload, ReviewWrite):
             now_fields.append("reviewed_at = now()")
+        if isinstance(payload, LaunchDateWrite):
+            now_fields.append("dates_verified_at = now()")
         clause = ", ".join(
             [assignments, *now_fields, "row_version = row_version + 1", "updated_at = now()"]
         )
@@ -324,7 +347,9 @@ def list_workflows(
                workflow.purchase_request_qty, workflow.purchase_reason,
                workflow.purchase_review_by, workflow.purchase_review_at,
                workflow.review_result, workflow.review_reason,
-               workflow.review_due_at, workflow.reviewed_by, workflow.reviewed_at
+               workflow.review_due_at, workflow.reviewed_by, workflow.reviewed_at,
+               workflow.arrival_date, workflow.sellable_date,
+               workflow.date_evidence, workflow.dates_verified_by, workflow.dates_verified_at
         FROM dwd_lingxing_sku_identity_index AS identity
         LEFT JOIN products AS p ON p.id = identity.product_id AND p.deleted_at IS NULL
         LEFT JOIN dwd_lingxing_sku_product_info_current AS detail
@@ -381,6 +406,11 @@ def get_workflow_metrics(
         .mappings()
         .first()
     )
+    verified_start = (
+        max(state["arrival_date"], state["sellable_date"])
+        if state["arrival_date"] and state["sellable_date"] and state["dates_verified_by"]
+        else None
+    )
     return success_response(
         request,
         data=read_sku_metrics(
@@ -390,6 +420,7 @@ def get_workflow_metrics(
             market_score=state["market_score"],
             rule_version=int(rule["version"]) if rule else 0,
             rules=dict(rule["rule_json"]) if rule else DEFAULT_RULES,
+            start_date=verified_start,
         ),
     )
 
@@ -442,6 +473,23 @@ def decide_purchase(
 ) -> SuccessEnvelope[dict[str, Any], None]:
     return success_response(
         request, data=_edit(session, sku_id, accounts, principal, request, payload, "decision")
+    )
+
+
+@router.post(
+    "/workflows/{sku_id}/verified-dates",
+    response_model=SuccessEnvelope[dict[str, Any], None],
+)
+def verify_launch_dates(
+    request: Request,
+    sku_id: UUID,
+    payload: LaunchDateWrite,
+    session: db_session,
+    principal: Annotated[Principal, Depends(require_permission(REVIEW))],
+    accounts: account_scope,
+) -> SuccessEnvelope[dict[str, Any], None]:
+    return success_response(
+        request, data=_edit(session, sku_id, accounts, principal, request, payload, "verify_dates")
     )
 
 

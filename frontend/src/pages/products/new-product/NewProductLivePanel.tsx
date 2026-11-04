@@ -13,13 +13,14 @@ import {
   requestNewProductPurchase,
   reviewNewProductLaunch,
   saveMarketScore,
+  verifyNewProductDates,
   type NewProductWorkflowList,
   type NewProductWorkflowRecord,
   type NewProductMetrics,
 } from "./newProductApi";
 
-type Action = "market" | "request" | "decision" | "review";
-type Draft = { score?: number; quantity?: number; reason: string; decision?: "approved_draft" | "rejected"; result?: "observe" | "optimize"; nextReview?: string };
+type Action = "market" | "request" | "decision" | "review" | "dates";
+type Draft = { score?: number; quantity?: number; reason: string; decision?: "approved_draft" | "rejected"; result?: "observe" | "optimize"; nextReview?: string; arrivalDate?: string; sellableDate?: string };
 
 export default function NewProductLivePanel({ canScore, canRequest, canApprove, canReview }: {
   canScore: boolean; canRequest: boolean; canApprove: boolean; canReview: boolean;
@@ -99,6 +100,11 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
       } else if (action === "decision") {
         if (!canApprove || !draft.decision) throw new Error("没有审批权限或决定为空");
         await decideNewProductPurchase(id, version, draft.decision, draft.reason);
+      } else if (action === "dates") {
+        if (!canReview || !draft.arrivalDate || !draft.sellableDate) {
+          throw new Error("没有日期确认权限或到货、可售日期不完整");
+        }
+        await verifyNewProductDates(id, version, draft.arrivalDate, draft.sellableDate, draft.reason);
       } else {
         if (!canReview || !draft.result) throw new Error("没有复盘权限或结果为空");
         await reviewNewProductLaunch(id, version, draft.result, draft.reason, draft.nextReview);
@@ -133,6 +139,7 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
         {canScore && state === "pending_market" && <Button type="link" onClick={() => open(row, "market")}>市场评分</Button>}
         {canRequest && (state === "scored" || state === "rejected") && <Button type="link" onClick={() => open(row, "request")}>采购申请</Button>}
         {canApprove && state === "pending_purchase" && <Button type="link" onClick={() => open(row, "decision")}>草稿审批</Button>}
+        {canReview && state === "approved_draft" && <Button type="link" onClick={() => open(row, "dates")}>确认到货/可售日</Button>}
         {canReview && state === "approved_draft" && <Button type="link" onClick={() => open(row, "review")}>复盘</Button>}
       </Space>;
     } },
@@ -158,7 +165,7 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
       {metricData && <NewProductMetricsPanel metrics={metricData} />}
     </Modal>
     <Modal title={action === "market" ? "市场评分" : action === "request" ? "申请采购" :
-      action === "decision" ? "审批采购草稿" : "打品复盘"} open={!!record} confirmLoading={busy}
+      action === "decision" ? "审批采购草稿" : action === "dates" ? "确认打品观察起点" : "打品复盘"} open={!!record} confirmLoading={busy}
       onCancel={() => setRecord(null)} onOk={() => void submit()} okText="保存">
       <Form layout="vertical">
         <Typography.Paragraph>{record?.sku} · {record?.product_name}</Typography.Paragraph>
@@ -175,6 +182,17 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
             options={[{ label: "批准草稿（不生成采购单）", value: "approved_draft" },
               { label: "驳回", value: "rejected" }]} />
         </Form.Item>}
+        {action === "dates" && <>
+          <Form.Item label="实际到货日" required>
+            <DatePicker style={{ width: "100%" }} value={draft.arrivalDate ? dayjs(draft.arrivalDate) : null}
+              onChange={value => setDraft(s => ({ ...s, arrivalDate: value?.format("YYYY-MM-DD") }))} />
+          </Form.Item>
+          <Form.Item label="实际可售日" required>
+            <DatePicker style={{ width: "100%" }} value={draft.sellableDate ? dayjs(draft.sellableDate) : null}
+              onChange={value => setDraft(s => ({ ...s, sellableDate: value?.format("YYYY-MM-DD") }))} />
+          </Form.Item>
+          <Alert type="info" showIcon message="必须在理由中填写可核对的到货和可售来源；以两日期中较晚者作为观察期起点。" />
+        </>}
         {action === "review" && <>
           <Form.Item label="复盘状态" required>
             <Select value={draft.result} onChange={value => setDraft(s => ({ ...s, result: value }))}

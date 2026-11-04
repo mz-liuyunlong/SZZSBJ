@@ -33,17 +33,17 @@ def read_sku_metrics(
     rule_version: int,
     rules: dict[str, Any],
     as_of: date | None = None,
+    start_date: date | None = None,
 ) -> dict[str, Any]:
     """Last completed LA business day, with exclusive end-boundary and null-safe coverage.
 
-    Profit mart is the sole source for sales/profit/ad spend; ad fact contributes clicks only.
+    Profit mart is the sole source for sales/profit/ad spend; ad fact contributes
+    advertiser clicks and attributed sales for ACOS.
     The account/store/item listing mapping avoids cross-store advertiser attribution.
     """
     end = as_of or la_today()
-    periods: dict[str, dict[str, Any]] = {}
-    for days in PERIODS:
-        start = end - timedelta(days=days)
-        params = {"account": account, "sku": sku, "start": start, "end": end}
+    def read_window(start: date, window_end: date, days: int) -> dict[str, Any]:
+        params = {"account": account, "sku": sku, "start": start, "end": window_end}
         sales = (
             session.execute(
                 text(
@@ -141,10 +141,10 @@ def read_sku_metrics(
             else None
         )
         # Missing days or incomplete cost valuation are never silently filled with zero.
-        periods[str(days)] = {
+        return {
             "days": days,
             "from": start.isoformat(),
-            "to_exclusive": end.isoformat(),
+            "to_exclusive": window_end.isoformat(),
             "sales": _number(sales["sales_qty"]),
             "orders": _number(sales["orders"]),
             "revenue": sales_amount,
@@ -165,6 +165,10 @@ def read_sku_metrics(
             and clicks["clicks"] is not None
             and acos is not None,
         }
+
+    periods: dict[str, dict[str, Any]] = {}
+    for days in PERIODS:
+        periods[str(days)] = read_window(end - timedelta(days=days), end, days)
 
     inv = (
         session.execute(
@@ -196,6 +200,7 @@ def read_sku_metrics(
         "sku": sku,
         "business_timezone": "America/Los_Angeles",
         "as_of_exclusive": end.isoformat(),
+        "verified_start_date": start_date.isoformat() if start_date else None,
         "metric_definitions": {
             "acos": "attributed_spend / attributed_sales * 100; null if currency unknown",
             "ad_spend_ratio": "profit mart ad_spend / total sales_amount * 100; not ACOS",
@@ -216,10 +221,18 @@ def read_sku_metrics(
         rules=rules,
         rule_version=rule_version,
     )
+    launch_days = int(rules.get("success_days", 60))
+    launch_window: dict[str, Any] = {}
+    if start_date is not None:
+        launch_end = start_date + timedelta(days=launch_days)
+        if launch_end <= end:
+            # The first complete launch window is immutable; never substitute
+            # the latest rolling window for a historical launch result.
+            launch_window = read_window(start_date, launch_end, launch_days)
     result["launch"] = compute_launch_result(
-        metrics=periods[str(rules.get("success_days", 60))],
+        metrics=launch_window,
         rules=rules,
-        start_date=None,
+        start_date=start_date,
         as_of=end,
     )
     return result
