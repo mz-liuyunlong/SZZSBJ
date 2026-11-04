@@ -9,6 +9,7 @@ import { StatusTagCell } from "@/components/report-table/cells";
 import {
   decideNewProductPurchase,
   getNewProductWorkflows,
+  getNewProductListingCandidates,
   getNewProductAccounts,
   getIndependentNewProductPlans,
   getIndependentNewProductPlan,
@@ -26,6 +27,8 @@ import {
   saveMarketScore,
   verifyNewProductDates,
   type NewProductWorkflowList,
+  type NewProductListingCandidate,
+  type NewProductListingCandidates,
   type NewProductWorkflowRecord,
   type NewProductPurchasePlan,
   type NewProductPurchasePlanList,
@@ -41,7 +44,7 @@ import {
 } from "./newProductApi";
 
 type Action = "market" | "request" | "decision" | "review" | "dates" | "correction" | "correction-decision";
-type PanelTab = "overview" | "records" | "plans" | "corrections" | "rules";
+type PanelTab = "listing" | "overview" | "records" | "plans" | "corrections" | "rules";
 type Draft = {
   score?: number;
   quantity?: number;
@@ -61,7 +64,7 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
   canConfigure: boolean;
 }) {
   const [account, setAccount] = useState("");
-  const [panelTab, setPanelTab] = useState<PanelTab>("overview");
+  const [panelTab, setPanelTab] = useState<PanelTab>(mode === "performance" ? "listing" : "overview");
   const [dashboard, setDashboard] = useState<NewProductDashboard | null>(null);
   const [corrections, setCorrections] = useState<NewProductCorrectionList | null>(null);
   const [correctionRecord, setCorrectionRecord] = useState<NewProductScoreCorrection | null>(null);
@@ -72,6 +75,9 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
   const [accounts, setAccounts] = useState<string[]>([]);
   const [accountsError, setAccountsError] = useState<string | null>(null);
   const [data, setData] = useState<NewProductWorkflowList | null>(null);
+  const [listingData, setListingData] = useState<NewProductListingCandidates | null>(null);
+  const [listingPage, setListingPage] = useState(1);
+  const [listingBusy, setListingBusy] = useState(false);
   const [planData, setPlanData] = useState<NewProductPurchasePlanList | null>(null);
   const [planDetail, setPlanDetail] = useState<NewProductPurchasePlanDetail | null>(null);
   const [planPage, setPlanPage] = useState(1);
@@ -79,6 +85,7 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
   const [skuSearchInput, setSkuSearchInput] = useState("");
   const [skuSearch, setSkuSearch] = useState("");
   const planGuard = useRef(createNewProductAccountGuard());
+  const listingGuard = useRef(createNewProductAccountGuard());
   const boardGuard = useRef(createNewProductAccountGuard());
   const correctionGuard = useRef(createNewProductAccountGuard());
   const [page, setPage] = useState(1);
@@ -104,6 +111,7 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
           requestGuard.current.selectAccount(items[0]);
           reconciliationGuard.current.selectAccount(items[0]);
           planGuard.current.selectAccount(items[0]);
+          listingGuard.current.selectAccount(items[0]);
           boardGuard.current.selectAccount(items[0]);
           correctionGuard.current.selectAccount(items[0]);
           setAccount(items[0]);
@@ -117,6 +125,7 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
       requestGuard.current.invalidate();
       reconciliationGuard.current.invalidate();
       planGuard.current.invalidate();
+      listingGuard.current.invalidate();
       boardGuard.current.invalidate();
       correctionGuard.current.invalidate();
     };
@@ -145,6 +154,31 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
       }
     } finally {
       if (requestGuard.current.isCurrent(ticket)) setBusy(false);
+    }
+  }
+
+  async function loadListingCandidates(next = listingPage, query = skuSearch) {
+    if (!account.trim()) return;
+    const ticket = listingGuard.current.begin(account.trim());
+    setListingBusy(true);
+    try {
+      const result = await getNewProductListingCandidates(ticket.account, next, { sku: query });
+      if (!listingGuard.current.isCurrent(ticket)) return;
+      if (
+        result.source_account_ref !== ticket.account ||
+        result.selection_mode !== "all_listings_pending_new_product_tag" ||
+        result.items.some(item => item.source_account_ref !== ticket.account)
+      ) {
+        throw new Error("Listing 候选数据来源或账户不一致");
+      }
+      setListingData(result);
+      setListingPage(next);
+    } catch (error) {
+      if (listingGuard.current.isCurrent(ticket)) {
+        api.error(error instanceof Error ? error.message : "读取 Listing 候选商品失败");
+      }
+    } finally {
+      if (listingGuard.current.isCurrent(ticket)) setListingBusy(false);
     }
   }
 
@@ -393,6 +427,31 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
   // beyond the first page of unrelated new products.
   const visibleRows = data?.items ?? [];
 
+  const listingColumns: ProColumns<NewProductListingCandidate>[] = [
+    { title: "店铺", dataIndex: "store_name", width: 125,
+      render: (_, row) => row.store_name || row.store_id },
+    { title: "Item ID", dataIndex: "item_id", width: 140 },
+    { title: "SKU", dataIndex: "local_sku", width: 150, render: value => value ?? "—" },
+    { title: "MSKU", dataIndex: "msku", width: 150, render: value => value ?? "—" },
+    { title: "商品名称", dataIndex: "title", ellipsis: true,
+      render: (_, row) => row.title || row.local_name || "—" },
+    { title: "类目", dataIndex: "category", width: 150, ellipsis: true },
+    { title: "Listing 状态", dataIndex: "listing_status", width: 125,
+      render: value => value ?? "—" },
+    { title: "生命周期", dataIndex: "lifecycle_status", width: 125,
+      render: value => value ?? "—" },
+    { title: "7天销量", dataIndex: "sales_7d", width: 90 },
+    { title: "14天销量", dataIndex: "sales_14d", width: 90 },
+    { title: "30天销量", dataIndex: "sales_30d", width: 90 },
+    { title: "可售库存", dataIndex: "available_quantity", width: 100,
+      render: value => value ?? "—" },
+    { title: "WFS 可售", dataIndex: "wfs_available_quantity", width: 100,
+      render: value => value ?? "—" },
+    { title: "上架时间", dataIndex: "listing_start_at_utc", width: 180,
+      render: value => value ?? "—" },
+    { title: "数据更新时间", dataIndex: "calculated_at", width: 190 },
+  ];
+
   const columns: ProColumns<NewProductWorkflowRecord>[] = [
     { title: "SKU", dataIndex: "sku", width: 150 },
     { title: "商品名称", dataIndex: "product_name", ellipsis: true },
@@ -475,6 +534,7 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
           requestGuard.current.selectAccount(value);
           reconciliationGuard.current.selectAccount(value);
           planGuard.current.selectAccount(value);
+          listingGuard.current.selectAccount(value);
           boardGuard.current.selectAccount(value);
           correctionGuard.current.selectAccount(value);
           setAccount(value);
@@ -484,6 +544,9 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
           setRules(null);
           setRuleHistory(null);
           setData(null);
+          setListingData(null);
+          setListingPage(1);
+          setListingBusy(false);
           setPlanData(null);
           setPlanDetail(null);
           setPlanPage(1);
@@ -507,21 +570,41 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
           const query = value.trim();
           setSkuSearch(query);
           void load(1, query);
+          if (mode === "performance") void loadListingCandidates(1, query);
         }}
       />
       <Button type="primary" loading={busy} disabled={!account.trim()}
-        onClick={() => void load(1)}>刷新真实数据</Button>
+        onClick={() => {
+          void load(1);
+          if (mode === "performance") void loadListingCandidates(1);
+        }}>刷新真实数据</Button>
     </Space>
     <Tabs activeKey={panelTab} onChange={next => {
       setPanelTab(next as PanelTab);
       if (next === "rules") void loadRuleHistory();
+      if (next === "listing" && !listingData && account.trim()) void loadListingCandidates(1);
     }} items={[
+      ...(mode === "performance" ? [{ key: "listing", label: "Listing 商品（全量测试）" }] : []),
       { key: "overview", label: mode === "performance" ? "真实新品看板" : "真实打品看板" },
       { key: "records", label: "真实 SKU 明细" },
       { key: "plans", label: "独立新品计划" },
       { key: "corrections", label: "评分修正审核" },
       { key: "rules", label: "草稿规则与历史" },
     ]} />
+    {panelTab === "listing" && mode === "performance" && <>
+      <Alert type="info" showIcon style={{ marginBottom: 12 }}
+        message="Listing 全量测试：暂不按新品标签筛选，此列表包含非新品商品。"
+        description="按账户、店铺、Item ID 读取 Listing 管理的实际商品；只读、不写回、不删除，不自动建立新品采购或打品审批。" />
+      <ReportTableShell label="Listing 商品测试候选">
+        <ProTable<NewProductListingCandidate> rowKey="id"
+          dataSource={listingData?.items ?? []} columns={listingColumns}
+          loading={listingBusy} options={false} search={false}
+          tableAlertRender={false} scroll={{ x: 1800 }}
+          pagination={{ current: listingPage, pageSize: 50,
+            total: listingData?.total ?? 0, showSizeChanger: false,
+            onChange: next => void loadListingCandidates(next) }} />
+      </ReportTableShell>
+    </>}
     {panelTab === "overview" && <>
       <Space wrap style={{ marginBottom: 12 }}>
         <Card size="small"><Typography.Text type="secondary">实际 SKU 数量</Typography.Text>
