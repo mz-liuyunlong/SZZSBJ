@@ -14,6 +14,7 @@ export interface NewProductPeriodMetrics {
   acos: number | null;
   ad_spend_ratio: number | null;
   attributed_sales: number | null;
+  currency_code?: string | null;
   ad_days: number;
   observed_days: number;
   complete_cost_days: number;
