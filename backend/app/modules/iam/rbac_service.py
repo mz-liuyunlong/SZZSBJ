@@ -695,6 +695,20 @@ class RbacService:
         actor: Principal,
         scopes: tuple[tuple[str, str], ...],
     ) -> None:
+        # Persisting a scope that no business endpoint enforces creates a false
+        # authorization promise. Keep legacy rows readable, but reject new grants
+        # until the server-side queries support these dimensions end-to-end.
+        implemented_types = {"source_account", "org_department"}
+        unimplemented = sorted(
+            {scope_type for scope_type, _scope_value in scopes} - implemented_types
+        )
+        if unimplemented:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=422,
+                message="数据权限维度尚未完成服务端强制隔离，不能配置",
+                details={"unsupported_scope_types": unimplemented},
+            )
         requested_source_accounts = {
             scope_value
             for scope_type, scope_value in scopes

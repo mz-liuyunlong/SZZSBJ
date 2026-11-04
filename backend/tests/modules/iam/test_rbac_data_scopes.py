@@ -240,3 +240,17 @@ def test_super_admin_can_assign_role_with_wildcard_scope() -> None:
         ("admin",),
     )
     repository.permissions_for_roles.assert_not_called()
+
+
+@pytest.mark.parametrize("scope_type", ["store", "owner", "sku", "product"])
+def test_even_super_admin_cannot_grant_unenforced_scope_type(scope_type: str) -> None:
+    service, repository = _service()
+    actor = Principal(user_id="1", permissions=frozenset({"*"}))
+
+    with pytest.raises(ApiError) as exc:
+        service._assert_actor_can_grant_scopes(actor, ((scope_type, "*"),))
+
+    assert exc.value.status_code == 422
+    assert exc.value.details["unsupported_scope_types"] == [scope_type]
+    repository.set_role_data_scopes.assert_not_called()
+    repository.set_user_data_scopes.assert_not_called()
