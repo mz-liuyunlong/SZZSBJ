@@ -36,7 +36,7 @@ from tests.db.test_domestic_chain_postgresql import (
     _version,
 )
 
-REVISION = "20261104_0072_clearance_v1"
+REVISION = "20261104_0073_clearance_daily"
 PREVIOUS = "20261027_0061_merge_purchase_main"
 
 
