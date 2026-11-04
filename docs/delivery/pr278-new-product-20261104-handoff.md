@@ -75,3 +75,13 @@
 - PR #278 在 `metrics.py` 增加独立 `spend_currency_verified` 校验：要求广告费用来源币种完整、费用币种与订单销售币种一致、订单利润 MART 币种无空值；ACOS 仍保留归因币种与 NULL 行的严格门禁。没有证据的金额/比率保持空值，不推断为 0 或 USD。
 - `test_new_product_metrics.py` 覆盖归因币种缺失但费用币种可核对、费用币种缺失、跨币种不匹配。新提交的 CI 必须以其实际 Head SHA 核验；不沿用旧通过记录。
 - F03/F04 正式来源对账仍待真实授权数据；F05/F06 正式评分/成功判定的业务合同仍缺负责人批准；F10 Mock UI 仍待负责人签收。
+
+
+## 2026-11-04：Listing 商品全量候选测试（待新品标签字段）
+
+- 负责人批准：新品表现页先测试**当前 Listing 管理全部商品**，不因标签字段尚缺就阻止真实 UI 数据测试。
+- 新增只读 `GET /api/new-products/listing-candidates`：按已授权 `source_account_ref`、`page`、`page_size`、可选 `sku_query` 查询 `mart_listing_management_current`，服务端先筛选再分页，返回 `selection_mode=all_listings_pending_new_product_tag` 和 `read_only=true`。
+- 真实新品表现页新增独立 `Listing 商品（全量测试）` Tab，支持 SKU/MSKU/Item/标题模糊搜索及服务端分页；展示店铺、Item、SKU、名称、类目、状态、7/14/30 日销量、库存和上架日期，不修改现有四个 Mock 视觉验收视图。
+- **单条 Listing = 账户 + 店铺 + Item ID**；不得自动当作唯一 SKU 工作流记录，不创建任何采购申请、评分修正或自动打品判定。
+- **后续接入**：当 Listing 管理提供经批准的新品标签字段、标签值与粒度后，仅在候选只读查询中增加基于该字段的服务端过滤及测试，不删原始 Listing、不清空历史工作流/采购计划。
+- 本期没有实际生产全量拉取、生产数据改写，也没有凭空填充新品标签或规则结果。需以 #278 最新 Head 的 CI 与本人页面验收作为交付证据。
