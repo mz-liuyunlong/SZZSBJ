@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.modules.clearance_center.eligibility import ACTIVE_WFS_LISTING_SQL
 from app.modules.clearance_center.rules import DEFAULT_RULES, evaluate, number
 from app.modules.product_management.daily_sales_costs import (
     load_daily_sales_costs,
@@ -87,7 +88,15 @@ class ClearanceReadRepository:
                  l.wfs_available_quantity,l.inbound_quantity,l.average_rating,
                  l.review_count,l.buybox_status,l.listing_start_at_utc,l.calculated_at,
                  snap.wfs_available_quantity snapshot_wfs_available,
-                 snap.captured_at inventory_captured_at
+                 snap.captured_at inventory_captured_at,
+                 exists (
+                   select 1 from listing_archive_states archive_state
+                   where archive_state.listing_id=l.id
+                     and archive_state.source_account_ref=l.source_account_ref
+                     and archive_state.store_id=l.store_id
+                     and archive_state.item_id=l.item_id
+                     and archive_state.is_archived=true
+                 ) is_archived
             from mart_listing_management_current l
             left join lateral (
               select i.wfs_available_quantity,i.captured_at
@@ -127,13 +136,7 @@ class ClearanceReadRepository:
                                ilike :q)""")
             params["q"] = f"%{keyword.strip()}%"
         if eligible_only:
-            where.extend(
-                [
-                    "l.wfs_available_quantity>0",
-                    "snap.wfs_available_quantity>0",
-                    "snap.captured_at >= now() - interval '72 hours'",
-                ]
-            )
+            where.append(ACTIVE_WFS_LISTING_SQL)
         sql = (
             """
           select l.id::text id,l.source_account_ref,l.store_id,l.store_name,l.item_id,
@@ -158,13 +161,23 @@ class ClearanceReadRepository:
         return [dict(x) for x in self.session.execute(text(sql), params).mappings().all()]
 
     def facets(self, accounts: frozenset[str]) -> dict:
-        """Scope-filtered store and account choices; no N+1 or page bias."""
+        """Scope-filtered stores with current WFS stock and no manual archive."""
         rows = self.session.execute(
-            text("""select source_account_ref,store_id,max(store_name) store_name
-                      from mart_listing_management_current
-                     where source_account_ref=any(:accounts)
-                     group by source_account_ref,store_id
-                     order by source_account_ref,store_id"""),
+            text("""
+                select l.source_account_ref,l.store_id,max(l.store_name) store_name
+                  from mart_listing_management_current l
+                  left join lateral (
+                    select i.wfs_available_quantity,i.captured_at
+                      from fact_walmart_listing_inventory_daily i
+                     where i.source_account_ref=l.source_account_ref
+                       and i.store_id=l.store_id and i.item_id=l.item_id
+                     order by i.snapshot_date_la desc,i.captured_at desc limit 1
+                  ) snap on true
+                 where l.source_account_ref=any(:accounts) and
+            """ + ACTIVE_WFS_LISTING_SQL + """
+                 group by l.source_account_ref,l.store_id
+                 order by l.source_account_ref,l.store_id
+            """),
             {"accounts": list(accounts)},
         ).mappings().all()
         return {
@@ -290,7 +303,14 @@ class ClearanceReadRepository:
                   join mart_listing_management_current l
                     on l.id=e.listing_id and l.source_account_ref=e.source_account_ref
                    and l.store_id=e.store_id and l.item_id=e.item_id
-                where """ + conditions
+                  left join lateral (
+                    select i.wfs_available_quantity,i.captured_at
+                      from fact_walmart_listing_inventory_daily i
+                     where i.source_account_ref=l.source_account_ref
+                       and i.store_id=l.store_id and i.item_id=l.item_id
+                     order by i.snapshot_date_la desc,i.captured_at desc limit 1
+                  ) snap on true
+                where """ + conditions + " and " + ACTIVE_WFS_LISTING_SQL
         total = int(
             self.session.execute(text("select count(*)" + base), params).scalar_one()
         )
@@ -309,18 +329,7 @@ class ClearanceReadRepository:
                        snap.wfs_available_quantity snapshot_wfs_available,
                        snap.captured_at inventory_captured_at,
                        e.evaluation_json,e.rule_config_version,e.quality_status
-                  from ops_clearance_daily_evaluations e
-                  join mart_listing_management_current l
-                    on l.id=e.listing_id and l.source_account_ref=e.source_account_ref
-                   and l.store_id=e.store_id and l.item_id=e.item_id
-                  left join lateral (
-                    select i.wfs_available_quantity,i.captured_at
-                      from fact_walmart_listing_inventory_daily i
-                     where i.source_account_ref=e.source_account_ref
-                       and i.store_id=e.store_id and i.item_id=e.item_id
-                     order by i.snapshot_date_la desc,i.captured_at desc limit 1
-                  ) snap on true
-                 where """ + conditions + """
+                 """ + base + """
                  order by case e.risk_level when 'high' then 0
                                             when 'medium' then 1
                                             when 'unknown' then 2 else 3 end,
@@ -356,9 +365,7 @@ class ClearanceReadRepository:
         """Live WFS-only picker with eligibility-before-pagination and no risk gate."""
         where = [
             "l.source_account_ref=any(:accounts)",
-            "l.wfs_available_quantity>0",
-            "snap.wfs_available_quantity>0",
-            "snap.captured_at>=now()-interval '72 hours'",
+            ACTIVE_WFS_LISTING_SQL,
         ]
         params: dict = {
             "accounts": list(accounts), "limit": page_size,
