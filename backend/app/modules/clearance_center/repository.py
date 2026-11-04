@@ -398,7 +398,16 @@ class ClearanceReadRepository:
                          history_21day_eligible,
                       count(*) filter(where
                          (evaluation_json->>'source_sales_coverage_days_30d')::integer >= 30)
-                         sales_source_30day_covered
+                         sales_source_30day_covered,
+                      count(*) filter(where
+                         coalesce((evaluation_json->>'source_mart_qty_match')::boolean,false)
+                           = false) sales_mart_qty_mismatch,
+                      count(*) filter(where
+                         evaluation_json->>'refund_rate_percent' is not null)
+                           refund_rate_computed,
+                      count(*) filter(where
+                         evaluation_json->>'calc_versions' is null)
+                           missing_calc_version
                    from ops_clearance_daily_evaluations
                    where run_id=cast(:run as uuid)
                      and source_account_ref=any(:accounts)""" + store_filter),
