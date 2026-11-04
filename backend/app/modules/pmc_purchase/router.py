@@ -145,6 +145,14 @@ def list_board(
     _: read_principal,
     accounts: source_scope,
 ) -> SuccessEnvelope[BoardListData, PurchaseReadMeta]:
+    if (
+        query.summary_filter in {"average_cycle", "unstable_sku"}
+        and (
+            session.info.get(ORG_OWNER_SCOPE_SESSION_KEY) is not None
+            or session.info.get(STORE_SCOPE_SESSION_KEY) is not None
+        )
+    ):
+        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
     data, total, freshness, rule = PmcPurchaseReadService(session).list_board(query, accounts)
     return success_response(
         request,
