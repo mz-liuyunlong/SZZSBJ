@@ -29,20 +29,55 @@ PREVIOUS = "20261104_0074_np_plans"
 
 
 def _seed(engine, sku_id: UUID, workflow_id: UUID) -> None:
+    interface_id = uuid4()
+    sync_run_id = uuid4()
     with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO gov_integration_interfaces
+                  (id, provider, interface_key, display_name, method,
+                   endpoint_path, request_kind, handler_key, contract_version,
+                   created_at, updated_at)
+                VALUES
+                  (:id, 'lingxing', 'synthetic-np-test', 'Synthetic NP Acceptance',
+                   'POST', '/synthetic/np/test', 'offset_page',
+                   'synthetic_only', 'test-v1', now(), now())
+                """
+            ),
+            {"id": interface_id},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO gov_integration_sync_runs
+                  (id, interface_id, provider, interface_key, source_account_ref,
+                   trigger_type, status, idempotency_key, queued_at,
+                   work_items_total, work_items_succeeded, work_items_failed,
+                   records_seen, records_written, created_at)
+                VALUES
+                  (:id, :interface_id, 'lingxing', 'synthetic-np-test',
+                   'synthetic-account-a', 'manual', 'succeeded',
+                   'synthetic-np-idempotency', now(), 1, 1, 0, 1, 1, now())
+                """
+            ),
+            {"id": sync_run_id, "interface_id": interface_id},
+        )
         connection.execute(
             text(
                 """
                 INSERT INTO dwd_lingxing_sku_identity_index
                   (id, provider, source_account_ref, lingxing_sku_id,
-                   lingxing_sku_code, is_active, first_seen_at, last_seen_at,
+                   lingxing_sku_code, is_active, first_seen_run_id,
+                   last_seen_run_id, first_seen_at, last_seen_at,
                    created_at, updated_at)
                 VALUES
                   (:id, 'lingxing', 'synthetic-account-a', 'SYNTHETIC-001',
-                   'SYNTHETIC-SKU', true, now(), now(), now(), now())
+                   'SYNTHETIC-SKU', true, :sync_run_id, :sync_run_id,
+                   now(), now(), now(), now())
                 """
             ),
-            {"id": sku_id},
+            {"id": sku_id, "sync_run_id": sync_run_id},
         )
         connection.execute(
             text(
@@ -113,19 +148,22 @@ def test_new_product_plan_correction_and_dashboard_postgresql() -> None:
         with Session(engine) as session:
             count = session.scalar(
                 text(
-                    "SELECT count(*) FROM product_new_purchase_plans "
-                    "WHERE sku_identity_id = :sku"
+                    "SELECT count(*) FROM product_new_purchase_plans WHERE sku_identity_id = :sku"
                 ),
                 {"sku": sku_id},
             )
             assert count == 1
-            saved = session.execute(
-                text(
-                    "SELECT id, snapshot_json, execution_status "
-                    "FROM product_new_purchase_plans WHERE sku_identity_id = :sku"
-                ),
-                {"sku": sku_id},
-            ).mappings().one()
+            saved = (
+                session.execute(
+                    text(
+                        "SELECT id, snapshot_json, execution_status "
+                        "FROM product_new_purchase_plans WHERE sku_identity_id = :sku"
+                    ),
+                    {"sku": sku_id},
+                )
+                .mappings()
+                .one()
+            )
             assert saved["execution_status"] == "not_executed"
             assert saved["snapshot_json"]["formal_score_verified"] is False
             assert saved["snapshot_json"]["creates_pmc_order"] is False
@@ -191,9 +229,7 @@ def test_new_product_plan_correction_and_dashboard_postgresql() -> None:
         assert _version(url, database) == [REVISION]
 
         with engine.connect() as connection:
-            assert connection.scalar(
-                text("SELECT count(*) FROM product_new_purchase_plans")
-            ) == 1
+            assert connection.scalar(text("SELECT count(*) FROM product_new_purchase_plans")) == 1
     finally:
         if engine is not None:
             engine.dispose()
