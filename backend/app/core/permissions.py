@@ -6,7 +6,6 @@ from fastapi import Depends, Request
 from app.core.api import ApiError, ErrorCode
 from app.core.auth import Principal, require_principal
 
-
 # Explicit compatibility aliases for grants created before canonical RBAC v2 keys.
 # Aliases are one-way and operation-specific: read grants never imply write grants.
 _LEGACY_PERMISSION_ALIASES: dict[str, frozenset[str]] = {
