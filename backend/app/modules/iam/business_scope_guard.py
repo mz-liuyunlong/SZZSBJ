@@ -18,7 +18,20 @@ from app.core.api import ApiError, ErrorCode
 from app.core.auth import PREVIEW_PRINCIPAL_ID, Principal, get_optional_principal
 from app.db.session import get_db_session
 
-_UNENFORCED_DIMENSIONS = frozenset({"owner", "sku", "product"})
+_UNENFORCED_DIMENSIONS = frozenset({"sku", "product"})
+_OWNER_REVIEWED_READS = frozenset({
+    "/api/data-pages/filter-options",
+    "/api/sales/daily-sales",
+    "/api/sales/daily-sales/export",
+    "/api/sales/order-profit",
+    "/api/sales/order-profit/export",
+    "/api/sales/order-profit/trend",
+    "/api/sales/order-profit/filter-options",
+    "/api/listings/walmart",
+    "/api/listings/walmart/summary",
+    "/api/listings/walmart/filter-options",
+    "/api/listings/walmart/export",
+})
 _STORE_REVIEWED_GET_PATHS = frozenset({
     "/api/data-pages/filter-options",
     "/api/sales/daily-sales",
@@ -218,6 +231,16 @@ def require_business_scope_coverage(
             code=ErrorCode.DATA_SCOPE_DENIED,
             status_code=403,
             details={"scope_reason": "UNENFORCED_DIMENSION"},
+        )
+
+    owners = scoped["owner"]
+    if owners and (
+        request.method != "GET" or path not in _OWNER_REVIEWED_READS
+    ):
+        raise ApiError(
+            code=ErrorCode.DATA_SCOPE_DENIED,
+            status_code=403,
+            details={"scope_reason": "OWNER_SCOPE_NOT_ENFORCED"},
         )
 
     departments = scoped["org_department"]
