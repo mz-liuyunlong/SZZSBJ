@@ -287,6 +287,22 @@ def _log_access_denial(
         safe_principal,
         ",".join(safe_keys) if safe_keys else "none",
     )
+    if status_code == 403:
+        # IAM observability is best effort. Denial remains 403 even when the
+        # audit table or database is unavailable.
+        from app.modules.iam.access_denial_audit import record_access_denial
+
+        reason = details.get("scope_reason") if details else None
+        record_access_denial(
+            request_id=get_request_id(request),
+            principal_id=safe_principal,
+            method=request.method,
+            route_template=_route_template(request),
+            error_code=code,
+            stage=stage,
+            permission_keys=tuple(safe_keys),
+            scope_reason=reason if isinstance(reason, str) else None,
+        )
 
 
 def _safe_http_headers(headers: Mapping[str, str] | None) -> dict[str, str]:
