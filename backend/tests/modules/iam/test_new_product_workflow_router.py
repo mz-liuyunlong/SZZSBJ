@@ -145,7 +145,9 @@ def test_purchase_plans_refuse_out_of_scope_account() -> None:
 def test_independent_plan_detail_is_not_visible_outside_account_scope() -> None:
     session = MagicMock()
     session.execute.return_value.mappings.return_value.first.return_value = None
-    request = Request({"type": "http", "method": "GET", "path": "/api/new-products/purchase-plans/test"})
+    request = Request(
+        {"type": "http", "method": "GET", "path": "/api/new-products/purchase-plans/test"}
+    )
     with pytest.raises(ApiError) as error:
         get_independent_purchase_plan(
             request=request,
