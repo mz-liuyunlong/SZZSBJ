@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
 from app.core.config import AppEnvironment, get_settings
+from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
 from app.modules.iam.organization_access import (
     ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
     ORG_OWNER_SCOPE_SESSION_KEY,
@@ -113,6 +114,26 @@ class WfsFeeAlertService:
         self.account_owner_pairs = (
             scope.get(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY) if isinstance(scope, dict) else None
         )
+        self.account_stores = (
+            scope.get(STORE_SCOPE_SESSION_KEY) if isinstance(scope, dict) else None
+        )
+
+    def _account_store_clause(self) -> str:
+        if self.account_stores is None:
+            return ""
+        return (
+            " and exists (select 1 from jsonb_to_recordset(cast(:org_account_stores as jsonb)) "
+            "as stores(account_ref text, store_key text) "
+            "where stores.account_ref=source_account_ref and stores.store_key=store_id)"
+        )
+
+    def _account_store_params(self) -> dict[str, object]:
+        if self.account_stores is None:
+            return {}
+        return {"org_account_stores": json.dumps([
+            {"account_ref": account, "store_key": store}
+            for account, store in sorted(self.account_stores)
+        ])}
 
     def _account_owner_clause(self) -> str:
         if self.account_owner_pairs is None:
@@ -175,6 +196,7 @@ class WfsFeeAlertService:
                             else ""
                         )
                         + self._account_owner_clause()
+                        + self._account_store_clause()
                     )
                 ),
                 {
@@ -186,6 +208,7 @@ class WfsFeeAlertService:
                         else {}
                     ),
                     **self._account_owner_params(),
+                    **self._account_store_params(),
                 },
             )
             .mappings()
@@ -668,6 +691,9 @@ class WfsFeeAlertService:
         if self.account_owner_pairs is not None:
             where.append(self._account_owner_clause().removeprefix(" and "))
             params.update(self._account_owner_params())
+        if self.account_stores is not None:
+            where.append(self._account_store_clause().removeprefix(" and "))
+            params.update(self._account_store_params())
         if query.start_date is not None:
             where.append("coalesce(first_alert_at, created_at)::date >= :start_date")
             params["start_date"] = query.start_date
@@ -911,7 +937,7 @@ class WfsFeeAlertService:
     def _assert_case_visible(self, case_id: UUID, account_refs: frozenset[str]) -> None:
         scoped_sql = (
             " and owner_ref=any(:org_owner_refs)" if self.org_owner_refs is not None else ""
-        ) + self._account_owner_clause()
+        ) + self._account_owner_clause() + self._account_store_clause()
         params: dict[str, object] = {
             "case_id": str(case_id),
             "accounts": list(account_refs),
@@ -919,6 +945,7 @@ class WfsFeeAlertService:
         if self.org_owner_refs is not None:
             params["org_owner_refs"] = sorted(self.org_owner_refs)
         params.update(self._account_owner_params())
+        params.update(self._account_store_params())
         exists = self.session.execute(
             text(
                 """
