@@ -58,7 +58,7 @@ def test_legacy_unenforced_dimensions_deny_even_reviewed_reads(dimension: str) -
 
 @pytest.mark.parametrize("path", [
     "/api/operations/plans",
-    "/api/warehouse/wfs-fee-cases",
+    "/api/warehouse/wfs-fee-cases/legacy-compare",
     "/api/pmc/purchase/sku-cycles",
     "/api/products",
     "/api/sales/order-profit",
@@ -80,6 +80,9 @@ def test_store_scoped_user_cannot_read_unreviewed_business_paths(path: str) -> N
     "/api/pmc/purchase/board",
     "/api/pmc/purchase/orders/PO123",
     "/api/pmc/purchase/plans/pending",
+    "/api/after-sales/refunds/items",
+    "/api/warehouse/wfs-fee-cases",
+    "/api/approvals",
 ])
 def test_store_scoped_user_can_reach_reviewed_sql_paths(path: str) -> None:
     session = _session([
@@ -199,3 +202,22 @@ def test_department_scoped_wfs_case_write_contract_allows_only_reviewed_actions(
             _request("/api/warehouse/wfs-fee-alerts/detection-preview", "POST"),
             _principal(), session,
         )
+
+
+def test_store_scoped_user_can_access_reviewed_wfs_write_but_not_bulk_approval() -> None:
+    session = _session([
+        {"origin": "user", "scope_type": "store", "scope_value": "SHOP1|STORE1"},
+    ])
+    require_business_scope_coverage(
+        _request(
+            "/api/warehouse/wfs-fee-cases/00000000-0000-0000-0000-000000000001/follow",
+            "POST",
+        ),
+        _principal(), session,
+    )
+    with pytest.raises(ApiError) as denied:
+        require_business_scope_coverage(
+            _request("/api/approvals/workflow/bulk-approve", "POST"),
+            _principal(), session,
+        )
+    assert denied.value.details == {"scope_reason": "STORE_SCOPE_NOT_ENFORCED"}
