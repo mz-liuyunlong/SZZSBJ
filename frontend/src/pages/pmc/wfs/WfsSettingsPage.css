@@ -140,4 +140,7 @@
 
 /* WFS 异常与提醒: BusinessConfigPage frame (Rocky 2026-11-04); only layout glue here, no colours. */
 .pmc-alert-center__search { width: min(420px, 100%); }
-.pmc-alert-center__footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pmc-alert-center__table-wrap { display: flex; flex-direction: column; height: min(620px, 70vh); min-height: 320px; }
+.pmc-alert-center .report-table-shell { flex-direction: column; }
+.pmc-alert-center .report-table-shell > .ant-pro-table { height: 0; flex: 1 1 0; min-height: 0; }
+.pmc-alert-center .report-table-shell > .ant-pagination { height: 42px; flex: 0 0 42px; min-height: 42px; }

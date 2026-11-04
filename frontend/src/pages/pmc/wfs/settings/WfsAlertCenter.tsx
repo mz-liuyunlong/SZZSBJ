@@ -6,7 +6,7 @@
  * rule saving stays whole-version (PRP pmc-wfs-settings §5).
  */
 import {
-  BellOutlined, CheckCircleOutlined, ExclamationCircleOutlined, HistoryOutlined, QuestionCircleOutlined,
+  BellOutlined, CheckCircleOutlined, ExclamationCircleOutlined, HistoryOutlined,
   ReloadOutlined, UnorderedListOutlined,
 } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
@@ -15,6 +15,7 @@ import { Alert, Button, Card, Descriptions, Empty, Pagination, Select, Space, St
 import { useState } from "react";
 import PageShell from "@/components/page/PageShell";
 import CommittedSearch from "@/components/report-table/CommittedSearch";
+import ReportTableShell from "@/components/report-table/ReportTableShell";
 import ResetButton from "@/components/report-table/ResetButton";
 import { StatusTagCell } from "@/components/report-table/cells";
 import { REPORT_TABLE_PAGE_SIZE_OPTIONS } from "@/components/report-table/pagination";
@@ -24,7 +25,7 @@ import {
 } from "../settingsApi";
 import { RuleHistoryTables } from "./RuleHistoryDrawer";
 import RuleVersionEditor from "./RuleVersionEditor";
-import { SAMPLE_TAG, SETTINGS_HELP_URL, settingsAccess, type SectionProps } from "./settingsShared";
+import { SAMPLE_TAG, settingsAccess, type SectionProps } from "./settingsShared";
 import { sortFromTable, useSettingsListState } from "./useSettingsListState";
 import "../WfsSettingsPage.css";
 
@@ -137,48 +138,48 @@ export default function WfsAlertCenter({ page, scope, permissions, initialTab = 
         <ResetButton aria-label="重置规则筛选" onClick={list.reset} />
       </div>
       {rows.error && <Alert type="error" showIcon message={settingsError(rows.error)} action={<Button size="small" onClick={() => void rows.refetch()}>重试</Button>} />}
-      <ProTable<Row>
-        aria-label="异常与提醒规则表格"
-        rowKey="id"
-        search={false}
-        options={false}
-        toolBarRender={false}
-        tableAlertRender={false}
-        size="small"
-        loading={rows.isFetching}
-        columns={columns}
-        dataSource={(data?.items ?? []).map((r, i) => ({ ...r, id: `${r.rule_key ?? "row"}-${i}` }))}
-        scroll={{ x: 1480 }}
-        pagination={false}
-        onChange={(_, __, sorter, extra) => {
-          if (extra.action !== "sort") return;
-          const s = sortFromTable(sorter, RULE_SORTS, "row_no");
-          list.setSort(s.by, s.order);
-        }}
-        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={rows.error ? "数据加载失败，请查看错误提示并重试" : "当前条件下暂无规则，可重置条件查看"} /> }}
-      />
-      <div className="business-config__list-footer pmc-alert-center__footer">
-        <span>规则改动保存为新版本，从生效日起使用 · 数据来自新系统数据库</span>
-        <Pagination
-          size="small"
-          current={list.pagination.page}
-          pageSize={list.pagination.pageSize}
-          total={data?.total ?? 0}
-          showSizeChanger
-          showQuickJumper
-          pageSizeOptions={REPORT_TABLE_PAGE_SIZE_OPTIONS}
-          showTotal={(n) => `共 ${n} 条`}
-          onChange={(p, size) => list.setPagination(size !== list.pagination.pageSize ? 1 : p, size)}
-        />
+      <div className="pmc-alert-center__table-wrap">
+        <ReportTableShell label="异常与提醒规则表格">
+          <ProTable<Row>
+            rowKey="id"
+            search={false}
+            options={false}
+            toolBarRender={false}
+            tableAlertRender={false}
+            size="small"
+            bordered
+            loading={rows.isFetching}
+            columns={columns}
+            dataSource={(data?.items ?? []).map((r, i) => ({ ...r, id: `${r.rule_key ?? "row"}-${i}` }))}
+            scroll={{ x: 1480, y: "100%" }}
+            pagination={false}
+            onChange={(_, __, sorter, extra) => {
+              if (extra.action !== "sort") return;
+              const s = sortFromTable(sorter, RULE_SORTS, "row_no");
+              list.setSort(s.by, s.order);
+            }}
+            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={rows.error ? "数据加载失败，请查看错误提示并重试" : "当前条件下暂无规则，可重置条件查看"} /> }}
+          />
+          <Pagination
+            className="ant-table-pagination"
+            size="small"
+            current={list.pagination.page}
+            pageSize={list.pagination.pageSize}
+            total={data?.total ?? 0}
+            showSizeChanger
+            showQuickJumper
+            pageSizeOptions={REPORT_TABLE_PAGE_SIZE_OPTIONS}
+            showTotal={(n) => `共 ${n} 条`}
+            onChange={(p, size) => list.setPagination(size !== list.pagination.pageSize ? 1 : p, size)}
+          />
+        </ReportTableShell>
       </div>
+      <div className="business-config__list-footer">规则改动保存为新版本，从生效日起使用 · 数据来自新系统数据库</div>
     </Card>
   );
 
   return (
-    <PageShell
-      page={page}
-      headerActions={<Button href={SETTINGS_HELP_URL} target="_blank" rel="noopener noreferrer" icon={<QuestionCircleOutlined />}>帮助</Button>}
-    >
+    <PageShell page={page}>
       <div className="business-config pmc-alert-center">
         <section className="business-config__header">
           <div className="business-config__heading">
