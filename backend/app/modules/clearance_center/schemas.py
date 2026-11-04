@@ -14,6 +14,7 @@ class Strict(BaseModel):
 
 
 class ListingQuery(Strict):
+    source_account_ref: Annotated[str, StringConstraints(max_length=128)] = ""
     store_id: str = ""
     keyword: Annotated[str, StringConstraints(max_length=128)] = ""
     risk_level: Literal["high", "medium", "low", "unknown"] | None = None
