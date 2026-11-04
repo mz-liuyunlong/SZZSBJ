@@ -27,6 +27,11 @@ function apiPath(skuId: string, action = ""): string {
   return `/api/new-products/workflows/${skuId}${action}`;
 }
 
+export async function getNewProductAccounts(): Promise<string[]> {
+  const result = (await backendRequest<{ items: string[] }>("/api/new-products/source-accounts")).data;
+  return result.items;
+}
+
 export async function getNewProductWorkflows(account: string, page = 1): Promise<NewProductWorkflowList> {
   if (!account.trim()) throw new Error("需要先选择真实数据账户");
   const q = new URLSearchParams({ source_account_ref: account, page: String(page) });

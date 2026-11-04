@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Typography, message } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import dayjs from "dayjs";
@@ -7,6 +7,7 @@ import { StatusTagCell } from "@/components/report-table/cells";
 import {
   decideNewProductPurchase,
   getNewProductWorkflows,
+  getNewProductAccounts,
   getNewProductMetrics,
   requestNewProductPurchase,
   reviewNewProductLaunch,
@@ -22,6 +23,8 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
   canScore: boolean; canRequest: boolean; canApprove: boolean; canReview: boolean;
 }) {
   const [account, setAccount] = useState("");
+  const [accounts, setAccounts] = useState<string[]>([]);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
   const [data, setData] = useState<NewProductWorkflowList | null>(null);
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
@@ -30,6 +33,20 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
   const [action, setAction] = useState<Action>("market");
   const [draft, setDraft] = useState<Draft>({ reason: "" });
   const [api, context] = message.useMessage();
+
+  useEffect(() => {
+    let cancelled = false;
+    void getNewProductAccounts()
+      .then(items => {
+        if (cancelled) return;
+        setAccounts(items);
+        if (items.length === 1) setAccount(items[0]);
+      })
+      .catch(error => {
+        if (!cancelled) setAccountsError(error instanceof Error ? error.message : "账户列表读取失败");
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   async function load(next = page) {
     setBusy(true);
@@ -122,9 +139,11 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
   return <Card title="正式数据 · 新品工作流" size="small">
     {context}
     <Typography.Paragraph type="secondary">此入口读取数据库中的 SKU 身份及新品业务记录。没有选定账户时不会查询；采购审批只生成草稿决定，不会创建 PMC 采购单。</Typography.Paragraph>
+    {accountsError && <Alert type="error" showIcon message={accountsError} />}
     <Space wrap style={{ marginBottom: 16 }}>
-      <Input style={{ width: 250 }} placeholder="输入有权限的 source_account_ref" value={account}
-        onChange={event => { setAccount(event.target.value); setData(null); setPage(1); }} />
+      <Select style={{ width: 250 }} placeholder="选择有权限的数据账户" value={account || undefined}
+        showSearch optionFilterProp="label" options={accounts.map(value => ({ label: value, value }))}
+        onChange={value => { setAccount(value); setData(null); setPage(1); }} />
       <Button type="primary" loading={busy} disabled={!account.trim()} onClick={() => void load(1)}>加载真实数据</Button>
     </Space>
     <ReportTableShell label="真实新品工作流列表">

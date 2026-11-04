@@ -281,6 +281,16 @@ def _edit(
     return after
 
 
+@router.get("/source-accounts", response_model=SuccessEnvelope[dict[str, Any], None])
+def list_source_accounts(
+    request: Request,
+    _: view_principal,
+    accounts: account_scope,
+) -> SuccessEnvelope[dict[str, Any], None]:
+    """Only account refs permitted by the same data scope used for reads and writes."""
+    return success_response(request, data={"items": sorted(accounts)})
+
+
 @router.get("/workflows", response_model=SuccessEnvelope[dict[str, Any], None])
 def list_workflows(
     request: Request,

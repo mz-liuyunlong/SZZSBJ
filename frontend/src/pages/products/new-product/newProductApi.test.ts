@@ -3,6 +3,7 @@ import { backendRequest } from "@/api/backendApi";
 import {
   decideNewProductPurchase,
   getNewProductWorkflows,
+  getNewProductAccounts,
   requestNewProductPurchase,
   saveMarketScore,
 } from "./newProductApi";
@@ -21,6 +22,12 @@ describe("new product server API identity and optimistic lock", () => {
       meta: {},
       request_id: "test-request",
     });
+  });
+
+  it("loads account choices only from the scoped server endpoint", async () => {
+    const accounts = await getNewProductAccounts();
+    expect(accounts).toEqual([]);
+    expect(backendRequest).toHaveBeenCalledWith("/api/new-products/source-accounts");
   });
 
   it("requires a selected account before requesting live data", async () => {
