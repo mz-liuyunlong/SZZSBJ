@@ -81,7 +81,9 @@ def summary(
 ):
     may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
     data = ApprovalService(session).summary(
-        accounts, principal.user_id, may_review,
+        accounts,
+        principal.user_id,
+        may_review,
         is_admin=has_permission(principal, "*"),
         may_review_clearance=has_permission(principal, "action:products:clearance:review"),
     )
@@ -225,22 +227,28 @@ def decide(
             raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422)
         ClearanceService(session).decide(
             approval_id,
-            DecisionWrite(decision=payload.decision, note=payload.note,
-                          expected_version=payload.expected_version),
-            accounts, principal.user_id,
+            DecisionWrite(
+                decision=payload.decision,
+                note=payload.note,
+                expected_version=payload.expected_version,
+            ),
+            accounts,
+            principal.user_id,
         )
     elif kind == "wfs_case_abandon":
         if not has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review"):
             raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
-        ApprovalService(session).decide(
-            approval_id, payload, accounts, principal.user_id, True
-        )
+        ApprovalService(session).decide(approval_id, payload, accounts, principal.user_id, True)
     else:
         if not has_permission(principal, "*"):
             raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
         GenericApprovalService(session).decide(
-            approval_id, accounts, principal.user_id, payload.decision,
-            payload.note, payload.expected_version,
+            approval_id,
+            accounts,
+            principal.user_id,
+            payload.decision,
+            payload.note,
+            payload.expected_version,
         )
     return success_response(request, data={"updated": True}, meta=None)
 
