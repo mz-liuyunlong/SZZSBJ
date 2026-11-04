@@ -151,3 +151,158 @@ def test_worker_disabled_does_not_access_directory_or_database(monkeypatch) -> N
     monkeypatch.setattr("app.modules.iam.organization_tasks.get_session_factory", outside)
     organization_event_tick()
     outside.assert_not_called()
+
+
+def test_signed_callback_requires_feature_switch(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    monkeypatch.setattr(
+        "app.modules.iam.organization_event_router.get_settings",
+        lambda: SimpleNamespace(feishu_org_events_enabled=False),
+    )
+    response = TestClient(create_app()).post(
+        "/api/integrations/feishu/organization-events",
+        content=b"no-access",
+        headers={"Content-Type": "application/json"},
+    )
+    assert response.status_code == 404
+
+
+def test_authenticated_callback_enqueues_and_revokes_in_one_transaction(monkeypatch) -> None:
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+
+    from fastapi.testclient import TestClient
+    from pydantic import SecretStr
+
+    from app.main import create_app
+    from app.modules.iam.organization_events import FeishuEvent, FeishuPayload
+
+    session = MagicMock()
+    enqueue = MagicMock(return_value=True)
+    revoke = MagicMock()
+    monkeypatch.setattr(
+        "app.modules.iam.organization_event_router.get_settings",
+        lambda: SimpleNamespace(
+            feishu_org_events_enabled=True,
+            feishu_app_id=_APP_ID,
+            feishu_org_event_encrypt_key=SecretStr(_KEY),
+            feishu_org_event_verification_token=SecretStr(_TOKEN),
+        ),
+    )
+    monkeypatch.setattr(
+        "app.modules.iam.organization_event_router.decode_feishu_event",
+        lambda **_kwargs: FeishuPayload(
+            challenge=None,
+            event=FeishuEvent(
+                "event-1", "contact.user.deleted_v3", "ou-synthetic", True
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "app.modules.iam.organization_event_router.get_session_factory",
+        lambda: lambda: nullcontext(session),
+    )
+    monkeypatch.setattr(
+        "app.modules.iam.organization_event_router.enqueue_contact_event", enqueue
+    )
+    monkeypatch.setattr(
+        "app.modules.iam.organization_event_router.revoke_linked_sessions", revoke
+    )
+
+    response = TestClient(create_app()).post(
+        "/api/integrations/feishu/organization-events",
+        content=b'{"encrypt":"synthetic"}',
+        headers={"Content-Type": "application/json"},
+    )
+    assert response.status_code == 200
+    assert response.json()["data"] == {"accepted": True}
+    enqueue.assert_called_once()
+    revoke.assert_called_once_with(session, "ou-synthetic")
+    session.commit.assert_called_once()
+
+
+def test_repeated_delivery_does_not_revoke_again(monkeypatch) -> None:
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+
+    from fastapi.testclient import TestClient
+    from pydantic import SecretStr
+
+    from app.main import create_app
+    from app.modules.iam.organization_events import FeishuEvent, FeishuPayload
+
+    session = MagicMock()
+    revoke = MagicMock()
+    monkeypatch.setattr(
+        "app.modules.iam.organization_event_router.get_settings",
+        lambda: SimpleNamespace(
+            feishu_org_events_enabled=True,
+            feishu_app_id=_APP_ID,
+            feishu_org_event_encrypt_key=SecretStr(_KEY),
+            feishu_org_event_verification_token=SecretStr(_TOKEN),
+        ),
+    )
+    monkeypatch.setattr(
+        "app.modules.iam.organization_event_router.decode_feishu_event",
+        lambda **_kwargs: FeishuPayload(
+            challenge=None,
+            event=FeishuEvent(
+                "event-1", "contact.user.deleted_v3", "ou-synthetic", True
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "app.modules.iam.organization_event_router.get_session_factory",
+        lambda: lambda: nullcontext(session),
+    )
+    monkeypatch.setattr(
+        "app.modules.iam.organization_event_router.enqueue_contact_event",
+        lambda *_args: False,
+    )
+    monkeypatch.setattr(
+        "app.modules.iam.organization_event_router.revoke_linked_sessions", revoke
+    )
+    response = TestClient(create_app()).post(
+        "/api/integrations/feishu/organization-events",
+        content=b'{"encrypt":"synthetic"}',
+        headers={"Content-Type": "application/json"},
+    )
+    assert response.status_code == 200
+    revoke.assert_not_called()
+
+
+def test_manual_retry_never_enqueues_non_reviewed_event() -> None:
+    from starlette.requests import Request
+
+    from app.core.auth import Principal
+    from app.modules.iam.organization_event_router import (
+        RetryOrganizationEventsRequest,
+        retry_organization_events,
+    )
+
+    session = MagicMock()
+    session.execute.return_value.scalars.return_value = []
+    request = Request({
+        "type": "http",
+        "method": "POST",
+        "path": "/api/settings/organization/event-inbox/retry",
+        "headers": [],
+    })
+    payload = RetryOrganizationEventsRequest(
+        event_ids=["not-reviewed"], confirmation="确认重新执行飞书组织核对"
+    )
+    with pytest.raises(ApiError) as denied:
+        retry_organization_events(
+            request,
+            payload,
+            Principal(user_id="1", permissions=frozenset({"*"})),
+            session,
+        )
+    assert denied.value.status_code == 422
+    session.rollback.assert_called_once()
+    session.commit.assert_not_called()
