@@ -36,9 +36,9 @@ def test_missing_department_grant_requires_own_verified_owner_binding() -> None:
     ):
         owners = resolve_business_owner_refs(session, principal)
     assert owners == frozenset({"owner-self"})
-    sql = str(session.execute.call_args.args[0])
-    assert "app_users" in sql
-    assert "iam_org_owner_bindings" in sql
+    binding_sql = str(session.execute.call_args_list[0].args[0])
+    assert "app_users" in binding_sql
+    assert "iam_org_owner_bindings" in binding_sql
 
 
 def test_missing_department_grant_without_owner_binding_fails_closed() -> None:
@@ -103,7 +103,6 @@ def test_only_ambiguous_owner_uid_denies_access_without_global_fallback() -> Non
             )
     assert error.value.code == "DATA_SCOPE_DENIED"
     assert error.value.status_code == 403
-
 
 
 def test_organization_scope_rejects_unknown_principal() -> None:
