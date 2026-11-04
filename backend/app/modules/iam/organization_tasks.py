@@ -103,3 +103,20 @@ def organization_event_tick() -> None:
             reschedule_events(session, events, error_code="RECONCILE_FAILURE")
             session.commit()
         logger.error("feishu_org_events_reconcile_failed count=%d", len(events))
+
+
+@celery_app.task(name="iam.access_denial_retention_tick", ignore_result=True)  # type: ignore[misc]
+def access_denial_retention_tick() -> None:
+    """Purge IAM denial audit records older than 30 days.
+
+    Does not access Feishu, edit RBAC policy or interact with production
+    business records. Only the IAM diagnostic table is affected.
+    """
+    from app.modules.iam.access_denial_audit import purge_expired_denials
+
+    try:
+        deleted = purge_expired_denials()
+    except Exception:
+        logger.warning("iam_access_denial_retention_unavailable")
+        return
+    logger.info("iam_access_denial_retention_deleted count=%d", deleted)
