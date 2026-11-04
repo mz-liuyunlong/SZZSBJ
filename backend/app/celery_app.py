@@ -49,6 +49,10 @@ TASK_ROUTES = {
         "queue": INTEGRATION_QUEUE,
         "routing_key": INTEGRATION_QUEUE,
     },
+    "iam.access_denial_retention_tick": {
+        "queue": INTEGRATION_QUEUE,
+        "routing_key": INTEGRATION_QUEUE,
+    },
 }
 
 
@@ -148,6 +152,10 @@ def create_celery_app(
             "feishu-org-event-consumer": {
                 "task": "iam.organization_event_tick",
                 "schedule": 60.0,
+            },
+            "iam-access-denial-retention": {
+                "task": "iam.access_denial_retention_tick",
+                "schedule": crontab(hour=4, minute=30),
             },
         },
     )
