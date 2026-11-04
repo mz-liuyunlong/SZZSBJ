@@ -18,6 +18,7 @@ from app.modules.iam.organization_access import (
     resolve_business_owner_refs,
     resolve_business_account_owner_pairs,
 )
+from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY, resolve_account_store_scope
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.warehouse_wfs.automation_service import preview_persisted_wfs_detection
 from app.modules.warehouse_wfs.schemas import (
@@ -49,6 +50,7 @@ def require_wfs_org_scope(
     """Check the operation grant first; owner restrictions are mandatory per request."""
     session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
     session.info.pop(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY, None)
+    session.info.pop(STORE_SCOPE_SESSION_KEY, None)
     required_permission = permission_for_request(
         request.method, request.url.path, "page:warehouse:wfs-fee-alert:view"
     )
@@ -64,6 +66,9 @@ def require_wfs_org_scope(
         session.info[ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY] = owner_pairs
     elif owners is not None:
         session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owners
+    account_stores = resolve_account_store_scope(session, principal)
+    if account_stores is not None:
+        session.info[STORE_SCOPE_SESSION_KEY] = account_stores
 
 
 router = APIRouter(tags=["WFS-FEE-CASE"], dependencies=[Depends(require_wfs_org_scope)])
