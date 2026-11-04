@@ -210,6 +210,12 @@ class ClearanceReadRepository:
         evaluation["evaluation_run_date_la"] = run["run_date_la"].isoformat()
         evaluation["as_of_date"] = run["as_of_date_la"].isoformat()
         evaluation["daily_evaluation_status"] = evaluation_run_status(run["run_date_la"])
+        if evaluation["daily_evaluation_status"] != "ready":
+            evaluation["historical_candidate_status"] = evaluation.get("candidate_status")
+            evaluation["candidate_status"] = "review_required"
+            evaluation["warnings"] = [
+                *evaluation.get("warnings", []), "DAILY_EVALUATION_STALE"
+            ]
         return {
             "listing": listing, "evaluation": evaluation,
             "rule_config_version": int(row["rule_config_version"]),
