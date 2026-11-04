@@ -134,7 +134,9 @@ def create_celery_app(
             # A UTC-only cron hour would drift by one hour at DST transitions.
             "clearance-daily-los-angeles": {
                 "task": "clearance_center.scheduler_tick",
-                "schedule": crontab(minute="*"),
+                # UTC minute 00 maps to LA minute 00 in PST and PDT;
+                # subsequent 5-minute ticks permit bounded failure retries.
+                "schedule": crontab(minute="*/5"),
             },
             "integration-sync-scheduler": {
                 "task": "integration_sync.scheduler_tick",
