@@ -211,6 +211,7 @@ def read_sku_metrics(
         )
         roi_ready = (
             consistent_currency
+            and sales["sales_currency"] == "USD"
             and cost_days == observed
             and observed == days
             and int(sales["missing_investment_cost_rows"] or 0) == 0
