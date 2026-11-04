@@ -21,6 +21,7 @@ from app.modules.pmc_purchase.gate3_models import (
     DwsPurchaseBoard,
     DwsPurchaseSkuCycle,
 )
+from app.modules.iam.organization_access import ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY
 from app.modules.pmc_purchase.repository import PmcPurchaseReadRepository
 from app.modules.pmc_purchase.schemas import (
     BoardFilterQuery,
@@ -59,6 +60,7 @@ class PmcPurchaseReadService:
     def _row_scoped(self) -> bool:
         return (
             self.repository.org_owner_refs is not None
+            or self.repository.account_owner_pairs is not None
             or self.repository.account_stores is not None
         )
 
@@ -175,6 +177,7 @@ class PmcPurchaseReadService:
         cycles = (
             []
             if self.repository.session.info.get(ORG_OWNER_SCOPE_SESSION_KEY) is not None
+            or self.repository.session.info.get(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY) is not None
             or self.repository.session.info.get(STORE_SCOPE_SESSION_KEY) is not None
             else self.repository.sku_cycles(skus, accounts)
         )
