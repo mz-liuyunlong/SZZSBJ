@@ -4,6 +4,7 @@ import {
   decideNewProductPurchase,
   getNewProductWorkflows,
   getNewProductAccounts,
+  verifyNewProductDates,
   requestNewProductPurchase,
   saveMarketScore,
 } from "./newProductApi";
@@ -54,6 +55,22 @@ describe("new product server API identity and optimistic lock", () => {
       { method: "POST", body: JSON.stringify({
         expected_version: 4, quantity: 250, reason: "近期测试数据符合采购条件",
       }) },
+    );
+  });
+
+  it("sends verified launch dates with optimistic version and evidence", async () => {
+    await verifyNewProductDates(skuId, 3, "2026-08-10", "2026-08-12", "到仓与前台可售已核对");
+    expect(backendRequest).toHaveBeenCalledWith(
+      "/api/new-products/workflows/" + skuId + "/verified-dates",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          expected_version: 3,
+          arrival_date: "2026-08-10",
+          sellable_date: "2026-08-12",
+          evidence: "到仓与前台可售已核对",
+        }),
+      },
     );
   });
 

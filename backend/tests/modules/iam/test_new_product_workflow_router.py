@@ -10,6 +10,7 @@ from app.core.auth import Principal
 from app.core.permissions import require_permission
 from app.modules.new_product_workflow.router import (
     APPROVE,
+    LaunchDateWrite,
     MarketWrite,
     ReviewWrite,
     RuleWrite,
@@ -24,6 +25,16 @@ def test_business_payloads_reject_invalid_scores_and_unplanned_optimization() ->
         MarketWrite(expected_version=0, score=11, reason="市场竞争严重失衡")
     with pytest.raises(ValidationError):
         ReviewWrite(expected_version=1, result="optimize", reason="需要调整广告词")
+
+
+def test_verified_launch_dates_require_evidence() -> None:
+    with pytest.raises(ValidationError):
+        LaunchDateWrite(
+            expected_version=1,
+            arrival_date="2026-08-10",
+            sellable_date="2026-08-12",
+            evidence="短",
+        )
 
 
 def test_rule_write_requires_complete_weighting() -> None:
