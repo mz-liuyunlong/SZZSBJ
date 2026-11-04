@@ -95,7 +95,7 @@ def test_org_scope_permission_is_checked_before_scope_resolution() -> None:
         with pytest.raises(ApiError) as error:
             require_data_page_org_scope(request, principal, session)
     assert error.value.status_code == 403
-    assert error.value.code.value == "FORBIDDEN"
+    assert error.value.code == "FORBIDDEN"
     resolver.assert_not_called()
 
 

@@ -4,7 +4,13 @@ from typing import Annotated
 from fastapi import Depends, Request
 
 from app.core.api import ApiError, ErrorCode
-from app.core.auth import Principal, require_principal
+from app.core.auth import (
+    WALMART_MONITOR_TARGETS_PATH,
+    WALMART_MONITOR_TARGETS_PRINCIPAL_ID,
+    WALMART_MONITOR_TARGETS_READ_PERMISSION,
+    Principal,
+    require_principal,
+)
 
 # Explicit compatibility aliases for grants created before canonical RBAC v2 keys.
 # Aliases are one-way and operation-specific: read grants never imply write grants.
@@ -52,6 +58,17 @@ def require_permission(permission_key: str) -> Callable[..., Principal]:
             else permission_key
         )
         if has_permission(principal, required_key):
+            return principal
+        # Only the fixed read-only machine endpoint may accept its historical
+        # dedicated token permission. Never alias it to the entire monitor page.
+        if (
+            request is not None
+            and request.method == "GET"
+            and request.url.path == WALMART_MONITOR_TARGETS_PATH
+            and permission_key == WALMART_MONITOR_TARGETS_READ_PERMISSION
+            and principal.user_id == WALMART_MONITOR_TARGETS_PRINCIPAL_ID
+            and has_permission(principal, WALMART_MONITOR_TARGETS_READ_PERMISSION)
+        ):
             return principal
         raise ApiError(
             code=ErrorCode.FORBIDDEN,
