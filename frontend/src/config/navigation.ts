@@ -290,6 +290,7 @@ export const navigation: NavigationGroup[] = [
         readOnly: true,
         permissionKey: 'pmc:overview:read',
         viewPermissionKey: 'page:pmc:overview:view',
+        help: { enabled: true, title: '总看板使用说明', helpUrl: '/help/pmc-overview.html', openInNewTab: true },
       }),
       page('pmc', 'purchase_board', '采购看板', '/pmc/purchase-board', {
         status: 'testing',
