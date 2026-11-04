@@ -129,6 +129,49 @@ class ClearanceReadRepository:
         ).mappings().first()
         return dict(row) if row else None
 
+    def snapshot_listing(self, listing: dict, *, run: dict) -> dict | None:
+        """One daily score by full account/store/item identity."""
+        row = self.session.execute(
+            text("""select evaluation_json,rule_config_version,quality_status
+                     from ops_clearance_daily_evaluations
+                    where run_id=cast(:run as uuid)
+                      and source_account_ref=:account and store_id=:store
+                      and item_id=:item and listing_id=cast(:listing_id as uuid)"""),
+            {
+                "run": run["id"], "account": listing["source_account_ref"],
+                "store": listing["store_id"], "item": listing["item_id"],
+                "listing_id": listing["id"],
+            },
+        ).mappings().first()
+        if row is None:
+            return None
+        evaluation = dict(row["evaluation_json"])
+        evaluation["quality_status"] = row["quality_status"]
+        evaluation["evaluation_run_date_la"] = run["run_date_la"].isoformat()
+        evaluation["as_of_date"] = run["as_of_date_la"].isoformat()
+        # The daily decision remains the overnight decision; the UI/current
+        # application selection always uses the independently fetched latest
+        # stock snapshot so a sold-out Listing cannot be submitted later.
+        latest = number(listing.get("snapshot_wfs_available"))
+        evaluation["current_wfs_available"] = str(latest) if latest is not None else None
+        captured = listing.get("inventory_captured_at")
+        evaluation["inventory_captured_at"] = captured.isoformat() if captured else None
+        if (
+            latest is None or latest <= 0 or captured is None or
+            captured.tzinfo is None or
+            datetime.now(LOS_ANGELES) - captured > timedelta(hours=72)
+        ):
+            evaluation["current_inventory_not_eligible"] = True
+            if "WFS_STOCK_UNAVAILABLE_OR_STALE" not in evaluation.get("warnings", []):
+                evaluation["warnings"] = [
+                    *evaluation.get("warnings", []),
+                    "WFS_STOCK_UNAVAILABLE_OR_STALE",
+                ]
+        return {
+            "listing": listing, "evaluation": evaluation,
+            "rule_config_version": int(row["rule_config_version"]),
+        }
+
     def snapshot_page(
         self, accounts: frozenset[str], *, run: dict, store_id: str = "",
         keyword: str = "", risk_level: str | None = None,
