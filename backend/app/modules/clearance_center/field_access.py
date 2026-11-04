@@ -1,10 +1,4 @@
-"""Field-level financial disclosure control for clearance read responses.
-
-Clearance risk classification remains deterministic, but users without the
-existing Daily Sales financial permissions never receive cost/profit formula
-components or explanatory financial signals.
-"""
-
+"""Clearance financial data and financial-signal inference access controls."""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -17,7 +11,7 @@ def mask_clearance_financials(
     can_view_profit: bool,
     can_view_margin: bool,
 ) -> dict[str, Any]:
-    """Mask sensitive calculations in one clearance Listing detail or list."""
+    """Mask amounts and risk classification that reveals undisclosed cost signals."""
     result = deepcopy(data)
     if "items" in result and isinstance(result["items"], list):
         result["items"] = [
@@ -28,36 +22,44 @@ def mask_clearance_financials(
         ]
         return result
 
-    if "current" in result and isinstance(result["current"], dict):
-        result["current"] = mask_clearance_financials(
-            result["current"],
-            can_view_profit=can_view_profit,
-            can_view_margin=can_view_margin,
-        )
-    if "current_case" in result and isinstance(result["current_case"], dict):
-        result["current_case"] = mask_clearance_financials(
-            result["current_case"],
-            can_view_profit=can_view_profit,
-            can_view_margin=can_view_margin,
-        )
+    for nested in ("current", "current_case"):
+        if isinstance(result.get(nested), dict):
+            result[nested] = mask_clearance_financials(
+                result[nested], can_view_profit=can_view_profit,
+                can_view_margin=can_view_margin,
+            )
+
     evaluation = result.get("evaluation")
     if not isinstance(evaluation, dict):
         return result
 
     if not can_view_profit:
-        evaluation["stock_capital_usd"] = None
-        evaluation["high_stock_capital"] = None
-        evaluation["profit_30d_amount"] = None
-        evaluation["refund_loss_30d"] = None
-        evaluation["unit_cost_usd"] = None
-        evaluation["business_signals"] = {}
-        evaluation["business_signal_groups"] = []
+        for name in (
+            "stock_capital_usd", "high_stock_capital", "profit_30d_amount",
+            "refund_loss_30d", "unit_cost_usd", "cost_complete",
+        ):
+            evaluation[name] = None
+        original = evaluation.get("business_signals") or {}
+        visible = {
+            key: value for key, value in original.items()
+            if key not in ("PROFIT", "ADS")
+        }
+        evaluation["business_signals"] = visible
+        evaluation["business_signal_groups"] = sorted(visible)
         evaluation["warnings"] = [
-            reason
-            for reason in evaluation.get("warnings", [])
-            if not str(reason).startswith("PROFIT_")
+            warning for warning in evaluation.get("warnings", [])
+            if not str(warning).startswith(("PROFIT_", "COST_"))
         ]
-        evaluation["cost_complete"] = None
+        # A medium result derived from hidden profitability/ads must not
+        # disclose that its threshold was crossed through a proxy signal.
+        if evaluation.get("risk_level") == "medium" and (
+            "PROFIT" in original or "ADS" in original
+        ):
+            evaluation["risk_level"] = "unknown"
+            evaluation["candidate_status"] = "review_required"
+            evaluation["risk_reasons"] = []
+            evaluation["protections"] = []
+
     if not (can_view_profit and can_view_margin):
         evaluation["margin_30d_percent"] = None
     return result
