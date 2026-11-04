@@ -220,6 +220,21 @@ def test_exclusion_not_found_or_not_enough_raises_anomaly():
     assert "第 1 条" in short.alerts[0].message
 
 
+def test_exclusion_alert_date_prefers_txn_date_then_registered_on():
+    def alert_date(**fields):
+        entry_ = J.ExclusionEntry(
+            1, "202610100001", None, None, None, Decimal("5"), "其他部门", **fields
+        )
+        return compute([], exclusions=[entry_]).alerts[0].date
+
+    assert alert_date(registered_on=date(2026, 10, 22)) == "2026-10-22"
+    assert alert_date() == ""
+    dated = J.ExclusionEntry(
+        1, None, date(2026, 9, 24), None, "运费", Decimal("5"), "其他部门", date(2026, 10, 22)
+    )
+    assert compute([], exclusions=[dated]).alerts[0].date == "2026-09-24"
+
+
 def test_exclusion_by_date_account_and_keyword():
     result = compute(
         [

@@ -302,6 +302,7 @@ def test_line_exclusion_and_exclusion_list_anomaly(service, session):
                     "ref": "202610100001",
                     "amount_cny": "5",
                     "reason": "其他部门",
+                    "registered_on": "2026-10-22",
                 }
             ]
         },
@@ -309,6 +310,7 @@ def test_line_exclusion_and_exclusion_list_anomaly(service, session):
     alerts = [item for item in service.list_anomalies() if item.type == J.ALERT_EXCLUSION]
     assert len(alerts) == 1
     assert alerts[0].line_uid is None
+    assert alerts[0].date == "2026-10-22"
     event(service, lines[1].line_uid, J.KIND_ATTACH_REF, payload={"ref": "202610100001"})
     assert not [item for item in service.list_anomalies() if item.type == J.ALERT_EXCLUSION]
 

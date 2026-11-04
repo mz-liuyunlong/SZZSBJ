@@ -115,6 +115,7 @@ class ExclusionEntry:
     summary_contains: str | None
     amount_cny: Decimal
     reason: str
+    registered_on: date | None = None
 
 
 @dataclass
@@ -411,7 +412,7 @@ def _apply_exclusions(
                 Alert(
                     type=ALERT_EXCLUSION,
                     account_key=entry.account_key or "",
-                    date=entry.txn_date.isoformat() if entry.txn_date else "",
+                    date=_exclusion_date(entry),
                     message=(
                         f"剔除清单第 {entry.entry_no} 条（{label} {entry.reason} "
                         f"¥{abs(entry.amount_cny):.2f}）没找到对应付款或金额不够扣"
@@ -420,6 +421,12 @@ def _apply_exclusions(
                 )
             )
     return alerts
+
+
+def _exclusion_date(entry: ExclusionEntry) -> str:
+    """异常的日期：流水日期优先，按审批单号登记的没有流水日期，用登记日（页面按它筛月份）。"""
+    day = entry.txn_date or entry.registered_on
+    return day.isoformat() if day else ""
 
 
 def _hits(entry: ExclusionEntry, line: ComputedLine) -> bool:

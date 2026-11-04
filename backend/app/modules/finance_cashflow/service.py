@@ -584,6 +584,7 @@ class CashflowService:
                 summary_contains=row.summary_contains,
                 amount_cny=row.amount_cny,
                 reason=row.reason,
+                registered_on=row.registered_on,
             )
             for index, row in enumerate(
                 self.session.scalars(
