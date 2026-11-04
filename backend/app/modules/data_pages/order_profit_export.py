@@ -15,6 +15,7 @@ from app.modules.iam.organization_access import (
     ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
     ORG_OWNER_SCOPE_SESSION_KEY,
 )
+from app.modules.iam.explicit_owner_scope import OWNER_SCOPE_SESSION_KEY
 from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
 
 ZERO = Decimal("0")
@@ -459,6 +460,7 @@ def export_order_profit_csv(
         ORG_OWNER_SCOPE_SESSION_KEY,
         ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
         STORE_SCOPE_SESSION_KEY,
+        OWNER_SCOPE_SESSION_KEY,
     ))
     current_inventory = (
         {} if scope_limited
