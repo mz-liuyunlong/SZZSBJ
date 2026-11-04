@@ -288,11 +288,28 @@ def test_listing_page_and_real_api_with_isolated_postgres(
                     }
                 ),
             )
+            enabled.setattr(preview_router.manual_diagnostic, "apply_async", lambda **_kw: None)
             manual = client.post(
                 "/api/listings/evaluation-runs/manual",
                 json={"confirmation": "CONFIRM_LISTING_CALCULATE_ALL"},
             )
             assert manual.status_code == 403, manual.text
+            global_headers = {"Authorization": "Bearer synthetic-listing-all"}
+            global_request = client.post(
+                "/api/listings/evaluation-runs/manual",
+                json={"confirmation": "CONFIRM_LISTING_CALCULATE_ALL"},
+                headers=global_headers,
+            )
+            assert global_request.status_code == 202, global_request.text
+            request_id = global_request.json()["data"]["id"]
+            own_requests = client.get(
+                "/api/listings/evaluation-runs/manual", headers=global_headers
+            )
+            assert own_requests.status_code == 200, own_requests.text
+            assert [row["id"] for row in own_requests.json()["data"]] == [request_id]
+            scoped_requests = client.get("/api/listings/evaluation-runs/manual")
+            assert scoped_requests.status_code == 200, scoped_requests.text
+            assert scoped_requests.json()["data"] == []
             revert_path = f"/api/listings/evaluation-snapshots/{published_snapshot_id}/revert"
             revert_body = {
                 "reason": "Synthetic correction after reviewed evidence",
@@ -823,6 +840,7 @@ def _seed_real_iam(engine) -> None:
             (9277001, "synthetic-a", "synthetic-listing-a", manager_role_id),
             (9277002, "synthetic-b", "synthetic-listing-b", manager_role_id),
             (9277003, "synthetic-a", "synthetic-listing-viewer", viewer_role_id),
+            (9277004, "*", "synthetic-listing-all", manager_role_id),
         ):
             session.execute(
                 text(
