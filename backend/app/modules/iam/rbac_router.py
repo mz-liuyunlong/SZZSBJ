@@ -371,3 +371,37 @@ def read_permission_diagnostics(
         },
         meta=None,
     )
+
+
+@router.get("/api/settings/rbac/access-denials")
+def read_access_denial_diagnostics(
+    request: Request,
+    _: Annotated[Principal, Depends(require_super_admin)],
+    session: db_session,
+    request_id: Annotated[str | None, Query(max_length=128)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> dict:
+    """Super-admin only; status, canonical route and safe reason without payloads."""
+    from sqlalchemy import text
+
+    from app.core.api import ApiError, ErrorCode
+    from app.modules.iam.access_denial_audit import _SAFE_VALUE
+
+    if request_id is not None and not _SAFE_VALUE.fullmatch(request_id):
+        raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422)
+    rows = session.execute(
+        text("""
+            SELECT request_id, principal_id, method, route_template,
+                   denial_stage, error_code, required_permissions,
+                   scope_reason, created_at
+            FROM iam_access_denial_events
+            WHERE created_at >= now() - interval '30 days'
+              AND (:request_id IS NULL OR request_id = :request_id)
+            ORDER BY created_at DESC, id DESC
+            LIMIT :limit
+        """),
+        {"request_id": request_id, "limit": limit},
+    ).mappings()
+    return success_response(
+        request, data={"items": [dict(row) for row in rows], "retention_days": 30}, meta=None
+    )
