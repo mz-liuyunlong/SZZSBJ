@@ -1,7 +1,7 @@
 """Register new-product and launch-tracking RBAC entries without automatic role grants.
 
-Revision ID: 20261030_0069_new_product_rbac_catalog
-Revises: 20261029_0068_walmart_remote_jobs
+Revision ID: 20261104_0072_new_product_rbac_catalog
+Revises: 20261102_0071_skill_lib
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ from sqlalchemy import text
 from alembic import op
 from app.modules.iam.permission_catalog_v2 import PERMISSION_DEFINITIONS
 
-revision = "20261030_0069_new_product_rbac_catalog"
-down_revision = "20261029_0068_walmart_remote_jobs"
+revision = "20261104_0072_new_product_rbac_catalog"
+down_revision = "20261102_0071_skill_lib"
 branch_labels = None
 depends_on = None
 

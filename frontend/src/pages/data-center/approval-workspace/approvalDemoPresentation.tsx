@@ -3,11 +3,12 @@ import { Button, Tag, Typography } from "antd";
 import type { ProColumns } from "@ant-design/pro-components";
 import type { ReactNode } from "react";
 import type { ApprovalItem } from "./approvalTypes";
+import { getDemoSeed } from "./approvalDemoData";
 import type { ApprovalBusinessKey } from "./approvalBusiness";
 
 export interface ClearanceSku {
   sku: string; msku: string; item: string; name: string;
-  available: number; age: number; target: number; cost: number;
+  available: number; age: number; listingDays?: number; target: number; cost: number;
   price: number; rating: number; returnRate: number;
   sales: [number, number, number];
   revenue: [number, number, number];
@@ -56,6 +57,11 @@ export const demoProfiles: Readonly<Record<string, DemoBusinessProfile>> = {
   "DEMO-PRC-003": { kind: "price", sku: "DEMO-SKU-403", msku: "DEMO-MSKU-403", item: "DEMO-ITEM-403", product: "厨房调味瓶", oldPrice: 12.99, newPrice: 9.49, minPrice: 10.49, oldMargin: 12.5, newMargin: -4.8, monthlySales: 125, linkedClearance: "无" },
 };
 
+export function primaryClearanceSku(row: Pick<ApprovalItem, "id">): ClearanceSku | undefined {
+  const seed = getDemoSeed(row.id);
+  return demoProfiles[row.id]?.clearanceSkus?.find((item) => item.sku === seed?.sku);
+}
+
 const money = (value: number | string | null | undefined) => value == null ? "—" : `$${Number(value).toFixed(2)}`;
 const quantity = (value: number | undefined) => value == null ? "—" : `${value.toLocaleString("zh-CN")} 件`;
 const percent = (n: number | undefined) => n == null ? "—" : `${n.toFixed(1)}%`;
@@ -71,6 +77,7 @@ function col(key: string, title: string, width: number, cell: (r: ApprovalItem) 
 export function demoColumnsForBusiness(
   business: ApprovalBusinessKey,
   onDetail: (item: ApprovalItem) => void,
+  onAction?: (item: ApprovalItem, action: "approve" | "reject") => void,
 ): ProColumns<ApprovalItem>[] | null {
   if (!["purchase", "clearance", "listing", "price"].includes(business)) return null;
   const profile = (row: ApprovalItem) => demoProfiles[row.id];
@@ -90,17 +97,59 @@ export function demoColumnsForBusiness(
     col("amount", "采购金额", 119, r => money(r.amount)),
     common.risk, common.applicant, common.status, common.action,
   ];
-  if (business === "clearance") return [
-    common.title,
-    col("store", "店铺", 121, r => r.source_account_ref),
-    col("qty", "清货目标", 105, r => quantity(profile(r)?.targetQty)),
-    col("methods", "清货方式", 145, r => profile(r)?.methods?.join("、") ?? "—"),
-    col("amount", "库存成本", 114, r => {
-      const ps = profile(r)?.clearanceSkus ?? [];
-      return money(ps.reduce((sum, p) => sum + p.target * p.cost, 0));
-    }),
-    common.risk, common.applicant, common.submitted, common.status, common.action,
-  ];
+  if (business === "clearance") {
+    const clearanceSku = primaryClearanceSku;
+    return [
+      col("title", "商品 ID / 品名", 205, (row) => {
+        const item = clearanceSku(row);
+        return <div className="approval-clearance-cell approval-clearance-cell--product">
+          <strong>{item?.name ?? row.title}</strong>
+          <small>{item?.item ?? "—"}</small>
+        </div>;
+      }),
+      col("sku", "SKU / MSKU", 155, (row) => {
+        const item = clearanceSku(row);
+        return <div className="approval-clearance-cell">
+          <strong>{item?.sku ?? "—"}</strong>
+          <small>{item?.msku ?? "—"}</small>
+        </div>;
+      }),
+      col("storeOwner", "店铺 / 负责人", 135, (row) => {
+        const owner = profile(row)?.owner ?? row.applicant_id ?? "—";
+        return <div className="approval-clearance-cell">
+          <strong>{row.source_account_ref || "—"}</strong>
+          <small>{owner}</small>
+        </div>;
+      }),
+      col("risk", "风险等级", 90, (row) => <Tag color={row.risk_level === "high" ? "red" : row.risk_level === "medium" ? "orange" : "green"}>{riskNames[row.risk_level]}</Tag>),
+      col("submitted", "申请时间", 135, (row) => row.submitted_at
+        ? new Date(row.submitted_at).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+        : "—"),
+      col("reason", "清货原因", 165, (row) => <span className="approval-clearance-cell__reason" title={row.reason}>{row.reason || "—"}</span>),
+      col("methods", "清货方式", 135, (row) => profile(row)?.methods?.join("、") ?? "—"),
+      col("targetQty", "目标清货量", 105, (row) => {
+        const item = clearanceSku(row);
+        return item ? `${quantity(item.target)}` : "—";
+      }),
+      col("stockListing", "WFS 可售 / 上架天数", 135, (row) => {
+        const item = clearanceSku(row);
+        return <div className="approval-clearance-cell">
+          <strong>{item ? quantity(item.available) : "—"}</strong>
+          <small>上架天数：{item?.listingDays == null ? "—" : `${item.listingDays.toLocaleString("zh-CN")} 天`}</small>
+        </div>;
+      }),
+      col("inventoryCost", "库存成本", 115, (row) => {
+        const item = clearanceSku(row);
+        return item ? money(item.available * item.cost) : "—";
+      }),
+      col("status", "审批状态", 105, (row) => <Tag color={row.status === "approved" ? "success" : row.status === "rejected" ? "error" : "processing"}>{titleByStatus[row.status] || row.status}</Tag>),
+      col("action", "操作", 172, (row) => <div className="approval-clearance-actions">
+        <Button type="link" size="small" onClick={() => onDetail(row)}>详情</Button>
+        <Button type="link" size="small" disabled={row.status !== "submitted" || !onAction} onClick={() => onAction?.(row, "approve")}>通过</Button>
+        <Button type="link" size="small" danger disabled={row.status !== "submitted" || !onAction} onClick={() => onAction?.(row, "reject")}>驳回</Button>
+      </div>),
+    ];
+  }
   if (business === "listing") return [
     common.title,
     col("item", "商品ID", 140, r => profile(r)?.item ?? "—"),
@@ -122,4 +171,3 @@ export function demoColumnsForBusiness(
     common.risk, common.applicant, common.status, common.action,
   ];
 }
-

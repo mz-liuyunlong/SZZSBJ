@@ -1,7 +1,7 @@
 """Persist new-product scoring, workflow and immutable audit events.
 
-Revision ID: 20261030_0070_new_product_workflows
-Revises: 20261030_0069_new_product_rbac_catalog
+Revision ID: 20261104_0073_new_product_workflows
+Revises: 20261104_0072_new_product_rbac_catalog
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from alembic import op
 
-revision = "20261030_0070_new_product_workflows"
-down_revision = "20261030_0069_new_product_rbac_catalog"
+revision = "20261104_0073_new_product_workflows"
+down_revision = "20261104_0072_new_product_rbac_catalog"
 branch_labels = None
 depends_on = None
 
