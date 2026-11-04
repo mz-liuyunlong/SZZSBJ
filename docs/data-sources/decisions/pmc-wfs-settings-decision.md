@@ -3,7 +3,7 @@
 - 业务用途：保存 WFS 时效 / 提醒规则、店铺设置、FC 地区映射、创建货件默认值，供异常中心与创建表单读取
 - 需求来源：8088 DEMO `features/pmc-wfs-shipment/drafts/src/app-d.jsx` `TabSettings`、`app-a.jsx` `STORE_SETTINGS_INIT`、`app-b.jsx` `CREATE_DEFAULTS_INIT`
 - 后续接口 PRP：`PRPs/pmc-wfs-settings.md`
-- 总体状态：`READY_FOR_PRP`（全部是本系统自有配置或复用已同步数据；待负责人选 PRP §0 S1–S5）
+- 总体状态：`APPROVED_PENDING_CI`（Rocky 2026-11-03 内容通过；S1–S5 = a；CI 回执后放行）
 
 ## 1. 旧系统与来源调查
 
@@ -18,7 +18,7 @@
 | # | 数据集 | 当前权威来源 | 分类 | 策略 | 需负责人确认 |
 |---|---|---|---|---|---|
 | W1 | 时效 / 提醒规则（11 条默认） | 8088 页面常量 | NEW_SYSTEM_OWNED（`ref_wfs_rule_setting_versions` / `ref_wfs_rule_settings`） | 迁移种子 = 8088 默认；版本化 | 是（S2 / S3） |
-| W2 | 店铺 Walmart 代码、ITS、可创建开关 | #284 `ops_wfs_store_settings` | NEW_SYSTEM_OWNED | 从 #284 摘模型与接口；建表用本单新迁移（0076 起，排在 #282 的 0068–0075 之后），不沿用 #284 的 0072 | 是（S1） |
+| W2 | 店铺 Walmart 代码、ITS、可创建开关 | #284 `ops_wfs_store_settings` | NEW_SYSTEM_OWNED | 从 #284 摘模型与接口；建表用本单新迁移（0077 起；#282 占 0068–0075，#302 占 0076），不沿用 #284 的 0072 | 是（S1） |
 | W3 | 店铺联系人、设施名、电话、邮箱 | 8088 页面（空白，本系统维护，不传 Walmart） | NEW_SYSTEM_OWNED | 加列 | 否 |
 | W4 | 发货地址簿（历史货件退货地址去重） | 领星 WFS 货件 | REBUILD_SYNC（复用 WFS 组 S1 ODS） | 只读 | 否 |
 | W5 | FC 代码 / 邮编 / 城市 / 州 | 领星货件 logistics_code 与收货地址 | REBUILD_SYNC（复用） | 种子 + 只读字段 | 否 |
@@ -37,4 +37,4 @@
 
 ## 负责人决定
 
-（待填写 PRP §0 S1–S5）
+2026-11-03 Rocky（PRP 负责人）：内容通过，S1–S5 按建议项（均为 a）；迁移号从 0077 起；等 CI 回执后正式放行。
