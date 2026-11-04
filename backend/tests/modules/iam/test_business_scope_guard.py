@@ -43,17 +43,23 @@ def test_scope_sources_use_user_override_per_dimension() -> None:
     assert scopes["product"] == frozenset()
 
 
-@pytest.mark.parametrize("dimension", ["sku", "product"])
-def test_legacy_unenforced_dimensions_deny_even_reviewed_reads(dimension: str) -> None:
+@pytest.mark.parametrize(("dimension", "allowed", "denied"), [
+    ("sku", "/api/sales/order-profit", "/api/products"),
+    ("product", "/api/sales/daily-sales", "/api/sales/order-profit"),
+])
+def test_legacy_identity_dimensions_are_only_reviewed_for_specific_reads(
+    dimension: str, allowed: str, denied: str
+) -> None:
     session = _session([
-        {"origin": "role", "scope_type": dimension, "scope_value": "*"},
+        {"origin": "role", "scope_type": dimension, "scope_value": "A1|id-1"},
     ])
+    require_business_scope_coverage(_request(allowed), _principal(), session)
     with pytest.raises(ApiError) as error:
-        require_business_scope_coverage(
-            _request("/api/sales/daily-sales"), _principal(), session
-        )
+        require_business_scope_coverage(_request(denied), _principal(), session)
     assert error.value.status_code == 403
-    assert error.value.details == {"scope_reason": "UNENFORCED_DIMENSION"}
+    assert error.value.details == {
+        "scope_reason": "SKU_SCOPE_NOT_ENFORCED" if dimension == "sku" else "PRODUCT_SCOPE_NOT_ENFORCED"
+    }
 
 
 @pytest.mark.parametrize("path", [
