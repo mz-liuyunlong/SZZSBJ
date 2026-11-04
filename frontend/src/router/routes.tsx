@@ -34,6 +34,7 @@ import ApprovalWorkspacePage from "@/pages/data-center/approval-workspace/Approv
 import ApiDocsPage from "@/pages/data-center/ApiDocsPage";
 import DataImportPage from "@/pages/data-center/DataImportPage";
 import WfsFeeAlertPage from "@/pages/warehouse/WfsFeeAlertPage";
+import OverviewPage from "@/pages/pmc/overview/OverviewPage";
 import PurchaseBoardPage from "@/pages/pmc/purchase-board/PurchaseBoardPage";
 import DomesticWarehousePage from "@/pages/pmc/domestic-warehouse/DomesticWarehousePage";
 import WfsFrontendPage from "@/pages/pmc/wfs/WfsFrontendPage";
@@ -202,6 +203,8 @@ function BusinessRoute({
           <OperationPlanPage page={page} />
         ) : page.key === "warehouse_wfs_fee_alert" ? (
           <WfsFeeAlertPage page={page} permissions={activeUser.permissions} />
+        ) : page.key === "pmc_overview" ? (
+          <OverviewPage page={page} preferenceScope={activeUser.username} />
         ) : page.key === "pmc_purchase_board" ? (
           <PurchaseBoardPage page={page} preferenceScope={activeUser.username} />
         ) : page.key === "pmc_logistics" ? (

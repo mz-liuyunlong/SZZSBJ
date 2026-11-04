@@ -7,7 +7,7 @@ describe("PMC navigation", () => {
     const pmc = navigation.find((group) => group.key === "pmc");
 
     expect(pmc?.children.map((page) => page.key)).toEqual([
-      "pmc_purchase_board",
+      "pmc_overview", "pmc_purchase_board",
       "pmc_logistics", "pmc_domestic_batches", "pmc_packing_approval", "pmc_packing_warehouse",
       "pmc_wfs_pending_packing", "pmc_wfs_board", "pmc_wfs_exceptions", "pmc_wfs_settings",
       "pmc_wfs_settings_fc", "pmc_wfs_settings_defaults", "pmc_wfs_settings_channels", "pmc_wfs_settings_stores",
