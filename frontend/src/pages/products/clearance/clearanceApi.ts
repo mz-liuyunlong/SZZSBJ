@@ -161,10 +161,10 @@ export const fetchClearanceListings = (query: Record<string, string | number | u
 export const fetchEligibleListings = (query: Record<string, string | number | undefined> = {}) =>
   get<ClearancePage<ClearanceRow>>("/eligible-listings" + params(query));
 export const fetchClearanceFacets = () => get<ClearanceFacets>("/facets");
-export const fetchClearanceSummary = (store_id?: string) =>
-  get<ClearanceSummary>("/summary" + params({store_id}));
-export const fetchClearanceReadiness = (store_id?: string) =>
-  get<ClearanceReadiness>("/data-readiness" + params({store_id}));
+export const fetchClearanceSummary = (store_id?: string, source_account_ref?: string) =>
+  get<ClearanceSummary>("/summary" + params({store_id,source_account_ref}));
+export const fetchClearanceReadiness = (store_id?: string, source_account_ref?: string) =>
+  get<ClearanceReadiness>("/data-readiness" + params({store_id,source_account_ref}));
 export const fetchClearanceDetail = (listingId: string) =>
   get<ClearanceRow>("/listings/" + encodeURIComponent(listingId));
 export const fetchClearanceRules = (sourceAccountRef: string) =>
