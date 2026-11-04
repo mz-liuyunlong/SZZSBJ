@@ -261,7 +261,8 @@ class ClearanceService:
         if listing is None:
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
         if (
-            listing["wfs_available_quantity"] is None
+            listing.get("is_archived", False)
+            or listing["wfs_available_quantity"] is None
             or listing["wfs_available_quantity"] <= 0
             or listing["snapshot_wfs_available"] is None
             or listing["snapshot_wfs_available"] <= 0
@@ -448,6 +449,7 @@ class ClearanceService:
                 not captured_at
                 or not captured_at.tzinfo
                 or not timedelta(0) <= datetime.now(UTC) - captured_at <= timedelta(hours=72)
+                or current.get("is_archived", False)
                 or current["snapshot_wfs_available"] is None
                 or current["wfs_available_quantity"] is None
                 or min(current["snapshot_wfs_available"], current["wfs_available_quantity"])
