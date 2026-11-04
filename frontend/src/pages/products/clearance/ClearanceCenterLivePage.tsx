@@ -400,6 +400,12 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
           Item ID {inspect.listing.item_id} · SKU {display(inspect.listing.local_sku)} ·
           MSKU {display(inspect.listing.msku)} · {display(inspect.listing.store_name||inspect.listing.store_id)}
         </div>
+        {inspect.evaluation.daily_evaluation_status==="stale" ? <Alert
+          type="warning" showIcon
+          message="这条 Listing 展示的是历史评估结果"
+          description="今日 LA 00:00 的评估尚未成功，历史风险不会作为今日自动候选；主动申请仍必须通过实时 WFS 库存复核。"
+          style={{marginBottom:12}}
+        /> : null}
         <Tabs items={detailTabs(inspect)} defaultActiveKey="analysis"/>
       </div>:null}
     </Drawer>
