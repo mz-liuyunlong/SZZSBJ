@@ -43,7 +43,7 @@ def test_scope_sources_use_user_override_per_dimension() -> None:
     assert scopes["product"] == frozenset()
 
 
-@pytest.mark.parametrize("dimension", ["owner", "sku", "product"])
+@pytest.mark.parametrize("dimension", ["sku", "product"])
 def test_legacy_unenforced_dimensions_deny_even_reviewed_reads(dimension: str) -> None:
     session = _session([
         {"origin": "role", "scope_type": dimension, "scope_value": "*"},
@@ -221,3 +221,38 @@ def test_store_scoped_user_can_access_reviewed_wfs_write_but_not_bulk_approval()
             _principal(), session,
         )
     assert denied.value.details == {"scope_reason": "STORE_SCOPE_NOT_ENFORCED"}
+
+
+@pytest.mark.parametrize("path", [
+    "/api/sales/daily-sales",
+    "/api/sales/daily-sales/export",
+    "/api/sales/order-profit",
+    "/api/sales/order-profit/export",
+    "/api/listings/walmart",
+    "/api/listings/walmart/filter-options",
+])
+def test_explicit_owner_scope_only_enters_reviewed_data_page_reads(path: str) -> None:
+    session = _session([
+        {"origin": "user", "scope_type": "owner", "scope_value": "A1|UID1"},
+    ])
+    require_business_scope_coverage(_request(path), _principal(), session)
+
+
+@pytest.mark.parametrize(("method", "path"), [
+    ("GET", "/api/products"),
+    ("GET", "/api/pmc/purchase/board"),
+    ("GET", "/api/after-sales/refunds/items"),
+    ("GET", "/api/warehouse/wfs-fee-cases"),
+    ("GET", "/api/listings/tags"),
+    ("POST", "/api/listings/walmart/id/archive"),
+    ("POST", "/api/sales/daily-sales/export"),
+])
+def test_explicit_owner_scope_denies_unreviewed_business_routes(
+    method: str, path: str
+) -> None:
+    session = _session([
+        {"origin": "role", "scope_type": "owner", "scope_value": "A1|UID1"},
+    ])
+    with pytest.raises(ApiError) as denied:
+        require_business_scope_coverage(_request(path, method), _principal(), session)
+    assert denied.value.details == {"scope_reason": "OWNER_SCOPE_NOT_ENFORCED"}
