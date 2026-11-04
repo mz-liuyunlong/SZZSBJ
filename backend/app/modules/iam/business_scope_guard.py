@@ -164,7 +164,7 @@ def _scope_sources(session: Session, user_id: int) -> dict[str, frozenset[str]]:
             role.setdefault(kind, set()).add(str(row["scope_value"]))
     return {
         kind: frozenset(user[kind] if kind in user else role.get(kind, set()))
-        for kind in _UNENFORCED_DIMENSIONS | {"store", "org_department"}
+        for kind in _UNENFORCED_DIMENSIONS | {"store", "owner", "sku", "product", "org_department"}
     }
 
 
