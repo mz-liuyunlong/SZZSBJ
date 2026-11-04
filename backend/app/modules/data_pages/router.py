@@ -63,6 +63,7 @@ from app.modules.iam.organization_access import (
     ORG_OWNER_SCOPE_SESSION_KEY,
     resolve_business_owner_refs,
 )
+from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY, resolve_account_store_scope
 from app.modules.integration_sync.dependencies import require_source_account_scope
 
 _ORG_SCOPED_READS = frozenset(
@@ -85,6 +86,7 @@ def require_data_page_org_scope(
 ) -> None:
     """Check endpoint permission before organization scope and SQL filtering."""
     session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
+    session.info.pop(STORE_SCOPE_SESSION_KEY, None)
     if request.url.path.startswith("/api/sales/order-profit"):
         declared = _ORDER_PROFIT_REGISTRY.permission
     elif request.url.path.startswith("/api/listings/"):
@@ -103,11 +105,15 @@ def require_data_page_org_scope(
             details={"required_permission": required_permission},
         )
     owner_refs = resolve_business_owner_refs(session, principal)
-    if owner_refs is None:
+    account_stores = resolve_account_store_scope(session, principal)
+    if owner_refs is None and account_stores is None:
         return
     if request.method != "GET" or request.url.path not in _ORG_SCOPED_READS:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
-    session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owner_refs
+    if owner_refs is not None:
+        session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owner_refs
+    if account_stores is not None:
+        session.info[STORE_SCOPE_SESSION_KEY] = account_stores
 
 
 router = APIRouter(tags=["DATA-PAGES"], dependencies=[Depends(require_data_page_org_scope)])
