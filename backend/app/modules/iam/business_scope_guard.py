@@ -32,6 +32,44 @@ _STORE_REVIEWED_GET_PATHS = frozenset({
     "/api/pmc/purchase/plans/pending",
 })
 _STORE_REVIEWED_GET_PREFIXES = ("/api/pmc/purchase/orders/",)
+_STORE_REVIEWED_ADDITIONAL_GET = frozenset({
+    "/api/after-sales/refunds/overview",
+    "/api/after-sales/refunds/product-analysis",
+    "/api/after-sales/refunds/items",
+    "/api/warehouse/wfs-fee-cases",
+    "/api/warehouse/wfs-fee-alerts",
+    "/api/approvals",
+    "/api/approvals/summary",
+})
+_STORE_REVIEWED_GET_PATTERNS = (
+    re.compile(r"/api/warehouse/wfs-fee-cases/[0-9A-Fa-f-]{36}"),
+    re.compile(r"/api/approvals/[0-9A-Fa-f-]{36}"),
+    re.compile(r"/api/approvals/wfs-cases/[0-9A-Fa-f-]{36}/detail"),
+    re.compile(r"/api/approvals/legacy/[0-9A-Fa-f-]{36}"),
+)
+_STORE_REVIEWED_POST_PATTERNS = (
+    re.compile(r"/api/warehouse/wfs-fee-cases/[0-9A-Fa-f-]{36}/(follow|archive-request|archive-review|mark-recovered)"),
+    re.compile(r"/api/approvals/wfs-cases/[0-9A-Fa-f-]{36}(/decision)?"),
+    re.compile(r"/api/approvals/[0-9A-Fa-f-]{36}/(decision|supplement)"),
+)
+_STORE_REVIEWED_PUT_PATTERNS = (
+    re.compile(r"/api/warehouse/wfs-fee-alerts/[0-9A-Fa-f-]{36}/case"),
+)
+
+
+def _store_route_reviewed(method: str, path: str) -> bool:
+    if method == "GET":
+        return (
+            path in _STORE_REVIEWED_GET_PATHS
+            or path in _STORE_REVIEWED_ADDITIONAL_GET
+            or any(path.startswith(prefix) for prefix in _STORE_REVIEWED_GET_PREFIXES)
+            or any(pattern.fullmatch(path) for pattern in _STORE_REVIEWED_GET_PATTERNS)
+        )
+    if method == "POST":
+        return any(pattern.fullmatch(path) for pattern in _STORE_REVIEWED_POST_PATTERNS)
+    if method == "PUT":
+        return any(pattern.fullmatch(path) for pattern in _STORE_REVIEWED_PUT_PATTERNS)
+    return False
 _ORG_REVIEWED_GET_PATHS = _STORE_REVIEWED_GET_PATHS | frozenset({
     "/api/after-sales/refunds/overview",
     "/api/after-sales/refunds/product-analysis",
@@ -195,13 +233,7 @@ def require_business_scope_coverage(
 
     stores = scoped["store"]
     if stores and "*" not in stores:
-        reviewed = (
-            request.method == "GET"
-            and (
-                path in _STORE_REVIEWED_GET_PATHS
-                or any(path.startswith(prefix) for prefix in _STORE_REVIEWED_GET_PREFIXES)
-            )
-        )
+        reviewed = _store_route_reviewed(request.method, path)
         if not reviewed:
             raise ApiError(
                 code=ErrorCode.DATA_SCOPE_DENIED,
