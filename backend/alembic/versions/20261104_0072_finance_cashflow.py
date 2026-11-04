@@ -333,7 +333,7 @@ def upgrade() -> None:
         postgresql_where=sa.text("idempotency_key IS NOT NULL"),
     )
     op.create_table(
-        "mart_finance_cash_line_state",
+        "manual_finance_cash_line_state",
         sa.Column(
             "line_uid",
             sa.String(16),
@@ -408,7 +408,7 @@ def downgrade() -> None:
         raise RuntimeError("std_finance_cashflow_lines has data; refusing to drop finance tables")
     for table in (
         "manual_finance_cash_exclusions",
-        "mart_finance_cash_line_state",
+        "manual_finance_cash_line_state",
         "evt_finance_cash_line_reviews",
         "cfg_finance_cash_classify_rules",
         "dim_finance_cash_categories",

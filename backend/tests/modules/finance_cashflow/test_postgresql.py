@@ -12,13 +12,15 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from pydantic import ValidationError
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, func, inspect, select, text
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
+from alembic import command
 from app.core.config import Settings, SettingsError, get_settings, get_test_database_url
 from app.modules.finance_cashflow import journal as J
 from app.modules.finance_cashflow.deploy_load import DeployFileError, load_deploy_data
@@ -43,6 +45,8 @@ from app.modules.product_management.models import ProductPricingRuleVersion
 from tests.modules.finance_cashflow import synth as S
 from tests.modules.finance_cashflow.test_parsing import boc_rows, eleven_account_files
 
+FINANCE_REVISION = "20261104_0072_finance_cashflow"
+PREVIOUS_REVISION = "20261102_0071_skill_lib"
 BATCH_1 = UUID("00000000-0000-0000-0000-000000000001")
 BATCH_2 = UUID("00000000-0000-0000-0000-000000000002")
 BATCH_3 = UUID("00000000-0000-0000-0000-000000000003")
@@ -254,7 +258,7 @@ def test_stale_version_is_rejected(service):
     event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
     with pytest.raises(J.EventRejectedError) as caught:
         event(service, uid, J.KIND_REVIEW2_PASS, expected_version=0)
-    assert caught.value.status_code == 409
+    assert (caught.value.status_code, caught.value.code) == (409, J.ERR_VERSION_CONFLICT)
 
 
 def test_idempotency_key_replays_without_a_second_change(service, session):
@@ -314,6 +318,7 @@ def test_line_exclusion_and_exclusion_list_anomaly(service, session):
     assert len(alerts) == 1
     assert alerts[0].line_uid is None
     assert alerts[0].date == "2026-10-22"
+    assert alerts[0].currency_code == "CNY"
     event(
         service,
         lines[1].line_uid,
@@ -347,7 +352,13 @@ def test_rules_from_seed_and_unpaired_anomaly(service):
     upload(service, S.boc(S.BOC_A, [transfer]))
     line = active(service, "BOC_CNY")[0]
     assert (line.category_code, line.category_source) == ("T02", "规则")
-    assert [item.type for item in service.list_anomalies()] == [J.ALERT_UNPAIRED]
+    anomalies = service.list_anomalies()
+    assert [item.type for item in anomalies] == [J.ALERT_UNPAIRED]
+    listed = service.list_lines(
+        account_key=None, from_date=None, to_date=None, page=1, page_size=2000
+    )
+    line = next(item for item in listed.items if item.line_uid == anomalies[0].line_uid)
+    assert anomalies[0].currency_code == line.currency_code
 
 
 def test_deploy_rules_keep_their_place_in_the_order(service, session):
@@ -696,3 +707,40 @@ def test_script_dry_run_writes_nothing(tmp_path, monkeypatch, capsys, session):
     assert code == 0
     assert capsys.readouterr().out.strip() == "DRY_RUN accounts=1 rules=0 exclusions=0"
     assert session.get(FinanceCashAccount, "FAKE_K") is None
+
+
+def test_empty_database_round_trip_upgrade_downgrade_upgrade():
+    """空库往返：upgrade head → downgrade 0071 → upgrade head；表能删干净再建回来，种子不重复。"""
+    try:
+        url = get_test_database_url(Settings())  # type: ignore[call-arg]
+    except (SettingsError, ValidationError):
+        pytest.skip("isolated PostgreSQL test database is not configured")
+    config = Config(str(Path(__file__).resolve().parents[3] / "alembic.ini"))
+    engine = create_engine(url, poolclass=NullPool, hide_parameters=True)
+    finance_tables = {
+        "dim_finance_cash_accounts",
+        "std_finance_cashflow_lines",
+        "manual_finance_cash_line_state",
+        "manual_finance_cash_exclusions",
+    }
+
+    def state() -> tuple[str, set[str]]:
+        with engine.connect() as connection:
+            revision = str(connection.scalar(text("select version_num from alembic_version")))
+            tables = set(inspect(connection).get_table_names()) & finance_tables
+        return revision, tables
+
+    try:
+        command.upgrade(config, "head")
+        assert state() == (FINANCE_REVISION, finance_tables)
+        with engine.connect() as connection:
+            assert connection.scalar(text("select count(*) from std_finance_cashflow_lines")) == 0
+        command.downgrade(config, PREVIOUS_REVISION)
+        assert state() == (PREVIOUS_REVISION, set())
+        command.upgrade(config, "head")
+        assert state() == (FINANCE_REVISION, finance_tables)
+        with engine.connect() as connection:
+            assert connection.scalar(text("select count(*) from dim_finance_cash_categories")) == 26
+    finally:
+        command.upgrade(config, "head")
+        engine.dispose()

@@ -746,6 +746,7 @@ class CashflowService:
                 date=alert.date,
                 message=alert.message,
                 amount=alert.amount,
+                currency_code=alert.currency_code,
                 line_uid=alert.line_uid,
             )
             for alert in result.alerts
@@ -858,7 +859,9 @@ class CashflowService:
         if replayed is not None:
             return replayed
         if request.expected_version != state.version:
-            raise journal.EventRejectedError(409, "这笔已被别人改过，请刷新后再操作")
+            raise journal.EventRejectedError(
+                409, "这笔已被别人改过，请刷新后再操作", journal.ERR_VERSION_CONFLICT
+            )
         draft = journal.ReviewState(
             manual_category=state.manual_category,
             refs=list(state.refs or []),
@@ -918,7 +921,9 @@ class CashflowService:
         if seen is None:
             return None
         if seen.line_uid != line_uid or seen.kind != request.kind:
-            raise journal.EventRejectedError(409, "这个幂等键已经用在别的操作上")
+            raise journal.EventRejectedError(
+                409, "这个幂等键已经用在别的操作上", journal.ERR_IDEMPOTENCY_KEY_REUSED
+            )
         self.session.rollback()
         return self._event_data(line_uid, replayed=True)
 

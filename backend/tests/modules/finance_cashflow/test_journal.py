@@ -177,6 +177,14 @@ def test_balance_alert_when_previous_balance_is_missing():
         ]
     )
     assert [alert.line_uid for alert in result.alerts if alert.type == J.ALERT_BALANCE] == ["gap"]
+    gap = next(alert for alert in result.alerts if alert.type == J.ALERT_BALANCE)
+    assert gap.currency_code == "CNY"
+
+
+def test_unpaired_alert_carries_the_line_currency():
+    result = compute([line("u", -100, cur="USD", desc="内部调拨")])
+    [alert] = [item for item in result.alerts if item.type == J.ALERT_UNPAIRED]
+    assert (alert.amount, alert.currency_code) == (Decimal("-100"), "USD")
 
 
 def test_pingpong_has_no_balance_alert():
@@ -213,6 +221,7 @@ def test_exclusion_not_found_or_not_enough_raises_anomaly():
     missing = compute([line("a", -80)], exclusions=[entry(100, ref="202610100001")])
     assert [alert.type for alert in missing.alerts] == [J.ALERT_EXCLUSION]
     assert missing.alerts[0].amount == Decimal("100")
+    assert missing.alerts[0].currency_code == "CNY"
     short = compute(
         [line("a", -80, refs=["202610100001"])], exclusions=[entry(100, ref="202610100001")]
     )
@@ -297,21 +306,21 @@ def test_review_flow():
 
 
 @pytest.mark.parametrize(
-    ("stage", "kind", "reason", "status"),
+    ("stage", "kind", "reason", "status", "code"),
     [
-        (J.STAGE_TODO, J.KIND_REVIEW2_PASS, None, 409),
-        (J.STAGE_REJ1, J.KIND_REVIEW2_REJECT, "x", 409),
-        (J.STAGE_OK1, J.KIND_REVIEW1_PASS, None, 409),
-        (J.STAGE_OK2, J.KIND_REVIEW1_REJECT, "x", 409),
-        (J.STAGE_OK2, J.KIND_REVIEW2_PASS, None, 409),
-        (J.STAGE_TODO, J.KIND_REVIEW1_REJECT, " ", 422),
-        (J.STAGE_OK1, J.KIND_REVIEW2_REJECT, None, 422),
+        (J.STAGE_TODO, J.KIND_REVIEW2_PASS, None, 409, J.ERR_STAGE_NOT_ALLOWED),
+        (J.STAGE_REJ1, J.KIND_REVIEW2_REJECT, "x", 409, J.ERR_STAGE_NOT_ALLOWED),
+        (J.STAGE_OK1, J.KIND_REVIEW1_PASS, None, 409, J.ERR_STAGE_NOT_ALLOWED),
+        (J.STAGE_OK2, J.KIND_REVIEW1_REJECT, "x", 409, J.ERR_STAGE_NOT_ALLOWED),
+        (J.STAGE_OK2, J.KIND_REVIEW2_PASS, None, 409, J.ERR_STAGE_NOT_ALLOWED),
+        (J.STAGE_TODO, J.KIND_REVIEW1_REJECT, " ", 422, J.ERR_INVALID_EVENT),
+        (J.STAGE_OK1, J.KIND_REVIEW2_REJECT, None, 422, J.ERR_INVALID_EVENT),
     ],
 )
-def test_review_rejections(stage, kind, reason, status):
+def test_review_rejections(stage, kind, reason, status, code):
     with pytest.raises(J.EventRejectedError) as caught:
         apply(J.ReviewState(stage=stage), kind, reason=reason)
-    assert caught.value.status_code == status
+    assert (caught.value.status_code, caught.value.code) == (status, code)
 
 
 @pytest.mark.parametrize(

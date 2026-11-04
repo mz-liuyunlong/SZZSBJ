@@ -136,6 +136,8 @@ class Alert:
     date: str
     message: str
     amount: Decimal | None
+    # 金额的币种：剔除清单异常按人民币算，填 CNY；其他填这笔流水的币种。
+    currency_code: str
     line_uid: str | None = None
 
 
@@ -216,6 +218,7 @@ def _balance_alerts(lines: Sequence[LineInput]) -> list[Alert]:
                         "账内没有这个余额的上一行，中间可能漏行"
                     ),
                     amount=previous,
+                    currency_code=line.currency_code,
                     line_uid=line.line_uid,
                 )
             )
@@ -286,6 +289,7 @@ def _pair_lines(lines: Sequence[ComputedLine], internal: frozenset[str]) -> list
                 date=line.source.business_date.isoformat(),
                 message=f"{line.source.currency_code} {line.source.amount:.2f} {text[:40]}",
                 amount=line.source.amount,
+                currency_code=line.source.currency_code,
                 line_uid=line.source.line_uid,
             )
         )
@@ -418,6 +422,7 @@ def _apply_exclusions(
                         f"¥{abs(entry.amount_cny):.2f}）没找到对应付款或金额不够扣"
                     ),
                     amount=left,
+                    currency_code="CNY",
                 )
             )
     return alerts
@@ -454,11 +459,20 @@ def _add_exclude_flag(line: ComputedLine) -> None:
 # ---------------------------------------------------------------- 审核状态流转
 
 
+ERR_STAGE_NOT_ALLOWED = "CASHFLOW_STAGE_NOT_ALLOWED"
+ERR_INVALID_EVENT = "CASHFLOW_INVALID_EVENT"
+ERR_VERSION_CONFLICT = "CASHFLOW_VERSION_CONFLICT"
+ERR_IDEMPOTENCY_KEY_REUSED = "CASHFLOW_IDEMPOTENCY_KEY_REUSED"
+
+
 class EventRejectedError(Exception):
-    def __init__(self, status_code: int, message: str) -> None:
+    """人工动作被拒：status_code 和固定错误码 code 一起交给接口层。"""
+
+    def __init__(self, status_code: int, message: str, code: str = ERR_INVALID_EVENT) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.message = message
+        self.code = code
 
 
 @dataclass
@@ -481,7 +495,7 @@ def _required_reason(reason: str | None, label: str) -> str:
 
 def _require_stage(state: ReviewState, allowed: frozenset[str], message: str) -> None:
     if state.stage not in allowed:
-        raise EventRejectedError(409, message)
+        raise EventRejectedError(409, message, ERR_STAGE_NOT_ALLOWED)
 
 
 def apply_event(

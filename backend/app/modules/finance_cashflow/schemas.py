@@ -127,6 +127,8 @@ class CashflowAnomalyRead(BaseModel):
     date: str
     message: str
     amount: Decimal | None = None
+    # amount 的币种：剔除清单异常是 CNY，其他是流水的币种。
+    currency_code: str
     line_uid: str | None = None
 
 

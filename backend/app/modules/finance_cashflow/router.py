@@ -5,7 +5,7 @@ from typing import Annotated, Any
 from urllib.parse import unquote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorEnvelope, SuccessEnvelope, get_request_id, success_response
@@ -42,6 +42,28 @@ db_session = Annotated[Session, Depends(get_db_session)]
 # 这一版只有超级管理员能用，不新增权限点。
 admin_principal = Annotated[Principal, Depends(require_super_admin)]
 
+# 固定错误码，前端按 code 判断，文案只给人看（docs/api/finance-cashflow-import.md 有对照表）。
+ERR_IMPORT_NOT_FOUND = "CASHFLOW_IMPORT_NOT_FOUND"
+ERR_IMPORT_VOIDED = "CASHFLOW_IMPORT_VOIDED"
+ERR_LINE_NOT_FOUND = "CASHFLOW_LINE_NOT_FOUND"
+ERR_STORAGE_NOT_CONFIGURED = "CASHFLOW_STORAGE_NOT_CONFIGURED"
+ERR_UPLOAD_TOO_LARGE = "CASHFLOW_UPLOAD_TOO_LARGE"
+ERR_EMPTY_UPLOAD = "CASHFLOW_EMPTY_UPLOAD"
+ERR_VOID_REASON_REQUIRED = "CASHFLOW_VOID_REASON_REQUIRED"
+
+
+def _too_large() -> ApiError:
+    return ApiError(code=ERR_UPLOAD_TOO_LARGE, status_code=413, message="文件超过上传上限")
+
+
+def _import_not_found() -> ApiError:
+    return ApiError(code=ERR_IMPORT_NOT_FOUND, status_code=404, message="导入批次不存在")
+
+
+def _import_voided() -> ApiError:
+    return ApiError(code=ERR_IMPORT_VOIDED, status_code=409, message="这一批已作废")
+
+
 ERRORS: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorEnvelope},
     403: {"model": ErrorEnvelope},
@@ -56,13 +78,13 @@ ERRORS: dict[int | str, dict[str, Any]] = {
 async def _read_limited_body(request: Request, limit: int) -> bytes:
     declared = request.headers.get("content-length")
     if declared and declared.isdigit() and int(declared) > limit:
-        raise HTTPException(status_code=413)
+        raise _too_large()
     chunks: list[bytes] = []
     size = 0
     async for chunk in request.stream():
         size += len(chunk)
         if size > limit:
-            raise HTTPException(status_code=413)
+            raise _too_large()
         chunks.append(chunk)
     return b"".join(chunks)
 
@@ -83,7 +105,7 @@ async def upload_file(
     settings = get_settings()
     content = await _read_limited_body(request, settings.finance_cashflow_max_upload_bytes)
     if not content:
-        raise HTTPException(status_code=422, detail="文件不能为空")
+        raise ApiError(code=ERR_EMPTY_UPLOAD, status_code=422, message="文件不能为空")
     try:
         data = CashflowService(session, settings).upload(
             import_id=import_id,
@@ -93,9 +115,11 @@ async def upload_file(
             request_id=get_request_id(request),
         )
     except StorageNotConfiguredError as exc:
-        raise HTTPException(status_code=503, detail="MEDIA_STORAGE_ROOT 未配置") from exc
+        raise ApiError(
+            code=ERR_STORAGE_NOT_CONFIGURED, status_code=503, message="原件存储目录未配置"
+        ) from exc
     except ImportVoidedError as exc:
-        raise HTTPException(status_code=409, detail="这一批已作废") from exc
+        raise _import_voided() from exc
     return success_response(request, data=data)
 
 
@@ -136,7 +160,7 @@ def get_import(
     try:
         data = CashflowService(session).get_import(import_id)
     except ImportNotFoundError as exc:
-        raise HTTPException(status_code=404) from exc
+        raise _import_not_found() from exc
     return success_response(request, data=data)
 
 
@@ -154,7 +178,7 @@ def void_import(
     payload: CashflowVoidRequest,
 ) -> SuccessEnvelope[CashflowVoidData, None]:
     if not payload.reason.strip():
-        raise HTTPException(status_code=422, detail="作废必须填原因")
+        raise ApiError(code=ERR_VOID_REASON_REQUIRED, status_code=422, message="作废必须填原因")
     try:
         data = CashflowService(session).void_import(
             import_id, reason=payload.reason, actor=principal.user_id
@@ -167,9 +191,9 @@ def void_import(
             details={"count": len(exc.line_uids), "line_ids": exc.line_uids},
         ) from exc
     except ImportNotFoundError as exc:
-        raise HTTPException(status_code=404) from exc
+        raise _import_not_found() from exc
     except ImportVoidedError as exc:
-        raise HTTPException(status_code=409, detail="这一批已作废") from exc
+        raise _import_voided() from exc
     return success_response(request, data=data)
 
 
@@ -263,8 +287,8 @@ def post_line_event(
         )
     except LineNotFoundError as exc:
         session.rollback()
-        raise HTTPException(status_code=404) from exc
+        raise ApiError(code=ERR_LINE_NOT_FOUND, status_code=404, message="流水不存在") from exc
     except EventRejectedError as exc:
         session.rollback()
-        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+        raise ApiError(code=exc.code, status_code=exc.status_code, message=exc.message) from exc
     return success_response(request, data=data)

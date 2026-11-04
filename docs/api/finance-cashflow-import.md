@@ -46,10 +46,30 @@ body：`{kind, payload, reason, expected_version, idempotency_key}`。`expected_
 
 已初审或已终审的流水，再改类别、单号或剔除，自动退回 todo，并多记一条 `auto_reset` 事件。阶段不允许返回 409；内容不合格返回 422；流水不存在或已作废返回 404。
 
+### 错误码
+
+错误统一放在 `error.code`，前端按 code 判断，`error.message` 只给人看。401 / 403 和请求参数校验（含不带 `expected_version`）沿用全局的 `UNAUTHORIZED`、`FORBIDDEN`、`VALIDATION_ERROR`。
+
+| HTTP | code | 什么时候 |
+|---|---|---|
+| 404 | `CASHFLOW_IMPORT_NOT_FOUND` | 导入批次不存在（详情、作废） |
+| 409 | `CASHFLOW_IMPORT_VOIDED` | 这一批已作废，不能再传文件或再作废 |
+| 409 | `CASHFLOW_IMPORT_HAS_REVIEWED_LINES` | 作废被拦：这批有已审核的流水，`details` 带 `count`、`line_ids` |
+| 422 | `CASHFLOW_VOID_REASON_REQUIRED` | 作废原因只有空格 |
+| 404 | `CASHFLOW_LINE_NOT_FOUND` | 流水不存在或已作废 |
+| 409 | `CASHFLOW_VERSION_CONFLICT` | `expected_version` 和当前版本不符，别人刚改过 |
+| 409 | `CASHFLOW_STAGE_NOT_ALLOWED` | 当前审核阶段不允许这个动作（例如没初审就终审） |
+| 422 / 409 | `CASHFLOW_INVALID_EVENT` | 内容不合格（缺原因、类别不存在、单号不是 12 位、剔除金额无效、不支持的 kind）返回 422；重复挂同一单号、摘不存在的单号、撤销没剔除的流水返回 409 |
+| 409 | `CASHFLOW_IDEMPOTENCY_KEY_REUSED` | 幂等键已经用在别的操作上 |
+| 503 | `CASHFLOW_STORAGE_NOT_CONFIGURED` | `MEDIA_STORAGE_ROOT` 没配 |
+| 413 | `CASHFLOW_UPLOAD_TOO_LARGE` | 文件超过 `FINANCE_CASHFLOW_MAX_UPLOAD_BYTES` |
+| 422 | `CASHFLOW_EMPTY_UPLOAD` | 上传内容为空 |
+
 ## 读时计算的口径
 
 - 类别：整笔剔除 → X01；人工 > 规则 > 待分类。
 - 配对：T02 类；15 天内、方向相反、不同账户；同币种差不超过 1 元，或跨币种按备注 USD 金额；再试一出多入（最多 3 笔）；同一平台多笔 USD 换一笔 CNH 按汇率 6.3~7.6 配，标「汇率区间配对待核」。
 - 折人民币：CNY 原值；USD 用 `ref_product_pricing_rule_versions.usd_cny_rate` 当月生效的统一值（表按店存多行，取当月内最新生效的一行）；当月没有才为空；CNH 为空。不兜底。
 - 剔除清单：按日期顺序在命中流水上按人民币扣；没有人民币金额的流水不扣；扣不完出异常。
+- 异常的 `currency_code`：`amount` 的币种。`剔除未命中` 按人民币算，填 `CNY`；其他填这笔流水的币种。
 - 异常类型：`余额不连续`、`内部转账未配对`、`剔除未命中`（页面显示「要剔除的款没找到」）；`对方账户不在日记账` 只是提示，不算异常。

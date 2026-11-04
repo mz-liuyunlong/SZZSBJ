@@ -1,8 +1,9 @@
 # PRP：财务 · 日记账后端 V1（PR-A）
 
-- 状态：已批准。rocky 2026-11-04 批准（cmsg …L7tpDDPKafcjKzb268RnXET）；本地文件，随 PR 另行入仓。
+- 状态：已批准（rocky 2026-11-04），分支 `fin/journal-backend`，PR #312。
+- 数据源决策：`docs/data-sources/decisions/finance-cashflow-statement-import-decision.md`，结论：文件导入，`NEW_SYSTEM_OWNED`。
 - 底稿：`PRPs/finance-cashflow-statement-import-v1.md`（#289）+ 从 PR-E 草稿（`_deploy_tmp/tickets/20261102_fin-pre-docs/`）挑出的部分 + rocky 2026-11-04 的决定。
-- 分支：实现时另定。前后端分开提：后端（模块、迁移、脚本、测试、配置、依赖、文档）一个 PR；前端接接口的改动等 #305 这轮修改合进工作区后，作为 #305 的后续提交。
+- 前后端分开提：后端（模块、迁移、脚本、测试、配置、依赖、文档）一个 PR；前端接接口的改动等 #305 这轮修改合进工作区后，作为 #305 的后续提交。
 
 ## 1. 目标
 
@@ -51,10 +52,12 @@
 - `dim_finance_cash_categories`：类别编码、大类、名称、是否内部类、是否剔除类。
 - `cfg_finance_cash_classify_rules`：规则类型（对方户名 / 摘要备注）、匹配式、目标类别、顺序。只有种子，无维护接口。
 - `evt_finance_cash_line_reviews`：人工动作事件，只追加。字段：line_uid、kind、payload、reason、操作人、时间、request_id、幂等键。
-- `mart_finance_cash_line_state`：每行的人工当前状态：人工类别、手填单号、剔除金额和原因、审核阶段、原因、版本号。规则类别、配对号、剔除清单命中、异常都在读取时算，不落表，所以规则或流水一变，结果自然跟着变。
+- `manual_finance_cash_line_state`：每行的人工当前状态：人工类别、手填单号、剔除金额和原因、审核阶段、原因、版本号。规则类别、配对号、剔除清单命中、异常都在读取时算，不落表，所以规则或流水一变，结果自然跟着变。
 - `manual_finance_cash_exclusions`：剔除清单：审批单号，或「日期 + 账户 + 摘要关键词」；人民币金额、原因、登记人、登记日。只由脚本 `backend/scripts/finance_cash_deploy_load.py` 写入。
 
 金额 `numeric(18,4)`，全程 Decimal，不经 float；业务日按 Asia/Shanghai（同 #289）。
+
+时区：业务时区 Asia/Shanghai。业务日、月份和页面上显示的时间都按这个时区；入库的时间戳带时区存。
 
 ## 5. 接口（前缀 `/api/finance/cashflow`，统一 envelope）
 
@@ -65,7 +68,7 @@
 - `GET /anomalies`：读时计算；有流水的带 line_uid，找不到流水的单列。
 - `POST /lines/{line_uid}/events`：`{kind, payload, reason, expected_version, idempotency_key}`。
 
-错误：401、403；404；409（状态不允许、版本过期、作废被拦）；413（超 20 MB）；422（参数，含不带 `expected_version`）。文件类型不认识时不算错误：返回 200，`status=rejected`，带 `reject_reason`。
+错误：401、403；404；409（状态不允许、版本过期、作废被拦）；413（超 20 MB）；422（参数，含不带 `expected_version`）。除 401、403 和参数校验外，都带固定错误码 `CASHFLOW_*`，对照表见 `docs/api/finance-cashflow-import.md`。文件类型不认识时不算错误：返回 200，`status=rejected`，带 `reject_reason`。
 
 ## 6. 规则
 

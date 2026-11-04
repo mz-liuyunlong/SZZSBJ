@@ -247,7 +247,7 @@ class FinanceCashLineEvent(Base):
 class FinanceCashLineState(Base):
     """每行的人工当前状态。规则类别、配对、异常都在读取时算，不落这里。"""
 
-    __tablename__ = "mart_finance_cash_line_state"
+    __tablename__ = "manual_finance_cash_line_state"
 
     line_uid: Mapped[str] = mapped_column(
         ForeignKey("std_finance_cashflow_lines.line_uid"), primary_key=True
