@@ -102,3 +102,69 @@ def test_workbench_summary_aggregates_filter_formal_and_legacy_cases() -> None:
     assert "c.owner_ref=any(:org_owner_refs)" in legacy_sql
     for call in session.execute.call_args_list:
         assert call.args[1]["org_owner_refs"] == ["uid-a"]
+
+
+def test_scoped_approvals_do_not_inherit_access_to_unreviewed_approval_types() -> None:
+    """A WFS case grant cannot authorize unrelated approval categories."""
+    service = ApprovalService(_session())
+    condition = service._approval_scope_condition("a")
+    assert "a.approval_type='wfs_case_abandon'" in condition
+    assert "a.approval_type <> 'wfs_case_abandon'" not in condition
+    assert "wc.id::text=a.business_ref" in condition
+    assert "wc.source_account_ref=a.source_account_ref" in condition
+
+
+def test_account_scoped_approval_detail_and_case_actions_enforce_both_identity_keys() -> None:
+    import json
+
+    from app.modules.iam.organization_access import ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY
+
+    session = MagicMock()
+    session.info = {
+        ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY: frozenset({
+            ("ACCOUNT-1", "SHARED-UID"),
+        })
+    }
+    session.execute.return_value.mappings.return_value.first.return_value = None
+    service = ApprovalService(session)
+    with pytest.raises(ApiError) as denied:
+        service._record(UUID(int=1), frozenset({"ACCOUNT-1", "ACCOUNT-2"}), lock=True)
+    assert denied.value.status_code == 404
+    sql, params = session.execute.call_args.args
+    assert "wc.source_account_ref=a.source_account_ref" in str(sql)
+    assert "granted.account_ref=wc.source_account_ref" in str(sql)
+    assert "granted.owner_uid=wc.owner_ref" in str(sql)
+    assert "for update" in str(sql)
+    assert json.loads(params["org_account_owners"]) == [
+        {"account_ref": "ACCOUNT-1", "owner_uid": "SHARED-UID"}
+    ]
+
+    session.execute.reset_mock()
+    with pytest.raises(ApiError):
+        service._case("synthetic", frozenset({"ACCOUNT-1", "ACCOUNT-2"}), lock=True)
+    sql, params = session.execute.call_args.args
+    assert "granted.account_ref=ops_wfs_fee_anomaly_cases.source_account_ref" in str(sql)
+    assert "granted.owner_uid=ops_wfs_fee_anomaly_cases.owner_ref" in str(sql)
+    assert json.loads(params["org_account_owners"])[0]["account_ref"] == "ACCOUNT-1"
+
+
+def test_account_scoped_approval_route_prefers_reviewed_pairs() -> None:
+    from app.modules.iam.organization_access import ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY
+
+    session = MagicMock()
+    session.info = {}
+    principal = Principal(user_id="8", permissions=frozenset({
+        "page:data-center:approval-workspace:view",
+    }))
+    with (
+        patch(
+            "app.modules.approvals.router.resolve_business_account_owner_pairs",
+            return_value=frozenset({("ACCOUNT-1", "SHARED-UID")}),
+        ),
+        patch("app.modules.approvals.router.resolve_business_owner_refs") as legacy,
+    ):
+        require_approval_org_scope(principal, session)
+    legacy.assert_not_called()
+    assert session.info[ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY] == frozenset({
+        ("ACCOUNT-1", "SHARED-UID"),
+    })
