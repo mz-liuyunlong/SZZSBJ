@@ -17,6 +17,12 @@ from app.modules.product_management.daily_sales_costs import (
 
 LOS_ANGELES = ZoneInfo("America/Los_Angeles")
 
+def evaluation_run_status(run_date_la: date, *, today: date | None = None) -> str:
+    """Do not report yesterday's last good run as today's successful evaluation."""
+    current = today or datetime.now(LOS_ANGELES).date()
+    return "ready" if run_date_la == current else "stale"
+
+
 
 def overlay_latest_wfs(evaluation: dict, listing: dict) -> dict:
     """Keep daily risk unchanged, but always show current conservative WFS."""
@@ -203,6 +209,7 @@ class ClearanceReadRepository:
         evaluation["quality_status"] = row["quality_status"]
         evaluation["evaluation_run_date_la"] = run["run_date_la"].isoformat()
         evaluation["as_of_date"] = run["as_of_date_la"].isoformat()
+        evaluation["daily_evaluation_status"] = evaluation_run_status(run["run_date_la"])
         return {
             "listing": listing, "evaluation": evaluation,
             "rule_config_version": int(row["rule_config_version"]),
@@ -286,13 +293,15 @@ class ClearanceReadRepository:
             version = item.pop("rule_config_version")
             quality = item.pop("quality_status")
             evaluation["quality_status"] = quality
+            evaluation["daily_evaluation_status"] = evaluation_run_status(run["run_date_la"])
             items.append({
                 "listing": item, "evaluation": evaluation,
                 "rule_config_version": version,
             })
         return {
             "items": items, "total": total, "page": page, "page_size": page_size,
-            "evaluation_status": "ready", "run_date_la": run["run_date_la"].isoformat(),
+            "evaluation_status": evaluation_run_status(run["run_date_la"]),
+            "run_date_la": run["run_date_la"].isoformat(),
             "as_of_date_la": run["as_of_date_la"].isoformat(),
         }
 
@@ -366,7 +375,7 @@ class ClearanceReadRepository:
         result["eligible_manual"] = eligible["total"]
         result["run_date_la"] = run["run_date_la"].isoformat()
         result["as_of_date_la"] = run["as_of_date_la"].isoformat()
-        result["evaluation_status"] = "ready"
+        result["evaluation_status"] = evaluation_run_status(run["run_date_la"])
         return result
 
     def readiness_report(
@@ -386,6 +395,7 @@ class ClearanceReadRepository:
         if run is None:
             return {
                 "evaluation_status": "not_ready", "run_date_la": None,
+                "expected_run_date_la": datetime.now(LOS_ANGELES).date().isoformat(),
                 "as_of_date_la": None, "total_listings": available,
                 "evaluated_listings": 0, "not_evaluated_listings": available,
                 "missing_sales_window": None, "missing_wfs_stock": None,
@@ -429,8 +439,9 @@ class ClearanceReadRepository:
         ).mappings().one()
         report = {key: int(value) for key, value in rows.items()}
         report.update({
-            "evaluation_status": "ready",
+            "evaluation_status": evaluation_run_status(run["run_date_la"]),
             "run_date_la": run["run_date_la"].isoformat(),
+            "expected_run_date_la": datetime.now(LOS_ANGELES).date().isoformat(),
             "as_of_date_la": run["as_of_date_la"].isoformat(),
             "total_listings": available,
             "evaluated_listings": report.pop("total"),
