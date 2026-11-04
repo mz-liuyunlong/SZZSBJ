@@ -48,6 +48,7 @@ const columns: ProColumns<PeriodRow>[] = [
       financial_currency_unverified: "财务币种未核实",
       margin_unavailable: "利润率不可计算",
       ad_spend_unavailable: "广告费缺失",
+      ad_spend_currency_unverified: "广告费用币种未核实或与销售币种不一致",
       ad_clicks_unavailable: "广告点击缺失",
       ad_coverage_unverified: "广告业务日覆盖未确认",
       attributed_acos_unavailable: "归因 ACOS 不可计算",
