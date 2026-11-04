@@ -446,7 +446,6 @@ class ClearanceReadRepository:
     ) -> dict:
         """Live read-only evidence audit, scoped before counting any Listing."""
         params: dict = {"accounts": list(accounts)}
-        store_filter = " and store_id=:store" if store_id else ""
         if store_id:
             params["store"] = store_id
         eligible_filter = """
