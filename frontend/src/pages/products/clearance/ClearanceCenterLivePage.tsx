@@ -77,7 +77,11 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
   const [chooseStep,setChooseStep] = useState<0|1>(0);
   const [eligible,setEligible] = useState<ClearanceRow[]>([]);
   const [eligibleTotal,setEligibleTotal] = useState(0);
-  const [eligiblePage,setEligiblePage] = useState(1);
+  const eligibleNextPage = useRef(2);
+  const eligibleEpoch = useRef(0);
+  const eligibleFetching = useRef(false);
+  const eligibleRowsRef = useRef<ClearanceRow[]>([]);
+  const [eligibleLoading,setEligibleLoading] = useState(false);
   const [eligibleKeyword,setEligibleKeyword] = useState("");
   const [chosen,setChosen] = useState<ClearanceRow | null>(null);
   const [applicationSource,setApplicationSource] = useState<"manual"|"auto">("manual");
@@ -180,13 +184,43 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
     [facets]);
 
   const loadEligible = useCallback(async (pageNumber:number, search:string) => {
+    if (pageNumber > 1 && eligibleFetching.current) return;
+    const epoch = pageNumber === 1 ? ++eligibleEpoch.current : eligibleEpoch.current;
+    if (pageNumber === 1) {
+      eligibleRowsRef.current = [];
+      eligibleNextPage.current = 2;
+      setEligible([]);
+      setEligibleTotal(0);
+    }
+    eligibleFetching.current = true;
+    setEligibleLoading(true);
     try {
-      const result=await fetchEligibleListings({page:pageNumber,page_size:30,keyword:search,
-        store_id:store,source_account_ref:sourceAccount});
-      setEligible(result.items);
+      const result = await fetchEligibleListings({
+        page:pageNumber,page_size:50,keyword:search,
+        store_id:store,source_account_ref:sourceAccount,
+      });
+      if (eligibleEpoch.current !== epoch) return;
+      const existing = new Set(eligibleRowsRef.current.map(row=>row.listing.id));
+      const next = result.items.filter(row=>!existing.has(row.listing.id));
+      eligibleRowsRef.current = pageNumber === 1
+        ? result.items : [...eligibleRowsRef.current,...next];
+      eligibleNextPage.current = pageNumber+1;
+      setEligible(eligibleRowsRef.current);
       setEligibleTotal(result.total);
-      setEligiblePage(pageNumber);
-    } catch { setEligible([]);setEligibleTotal(0);void messageApi.error("无法读取符合WFS库存条件的商品"); }
+    } catch {
+      if (eligibleEpoch.current !== epoch) return;
+      if (pageNumber === 1) {
+        eligibleRowsRef.current = [];
+        setEligible([]);
+        setEligibleTotal(0);
+      }
+      void messageApi.error("无法读取符合WFS库存条件的商品");
+    } finally {
+      if (eligibleEpoch.current === epoch) {
+        eligibleFetching.current = false;
+        setEligibleLoading(false);
+      }
+    }
   },[store,sourceAccount,messageApi]);
 
   const openApply = (selected:ClearanceRow|null=null, source:"manual"|"auto"="manual") => {
@@ -489,8 +523,20 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
           value={eligibleKeyword} onChange={e=>setEligibleKeyword(e.target.value)}
           onSearch={v=>void loadEligible(1,v.trim())}/>
         <Table size="small" rowKey={r=>r.listing.id} columns={eligibleColumns} dataSource={eligible}
-          pagination={{current:eligiblePage,pageSize:30,total:eligibleTotal,
-            onChange:p=>void loadEligible(p,eligibleKeyword)}} scroll={{y:350,x:650}}/>
+          loading={eligibleLoading && eligible.length===0}
+          pagination={false} scroll={{y:350,x:650}}
+          onScroll={event=>{
+            const area=event.currentTarget;
+            if (area.scrollHeight-area.scrollTop-area.clientHeight<=100
+                && eligibleRowsRef.current.length<eligibleTotal) {
+              void loadEligible(eligibleNextPage.current,eligibleKeyword);
+            }
+          }}/>
+        <div style={{textAlign:"center",padding:6,fontSize:12,color:"#64748b"}}>
+          {eligibleLoading?"正在加载 WFS 商品…":
+            eligible.length<eligibleTotal?`已加载 ${eligible.length} / ${eligibleTotal} 条，向下滚动继续加载`:
+            `已加载全部 ${eligible.length} 条符合条件的商品`}
+        </div>
       </div>:<div>
         <Typography.Paragraph strong>{chosen?.listing.title || "未选择Listing"}</Typography.Paragraph>
         <Typography.Text type="secondary">WFS可售：{qty(chosen?.evaluation.current_wfs_available)} ·
