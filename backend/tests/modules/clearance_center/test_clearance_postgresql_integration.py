@@ -26,6 +26,7 @@ from app.modules.clearance_center.daily import DailyClearanceEvaluation, daily_w
 from app.modules.clearance_center.schemas import ApplicationWrite, DecisionWrite, ProgressWrite
 from app.modules.clearance_center.service import ClearanceService
 from app.modules.data_pages.models import (
+    ListingArchiveState,
     ListingManagementCurrentMart,
     WalmartListingInventoryDailyFact,
     WalmartSalesItemDailyFact,
@@ -323,15 +324,19 @@ def test_daily_evaluation_is_idempotent_and_sql_paginated(clearance_db: Session)
     account = "clearance-ci-daily"
     records = []
     now = datetime.now(UTC)
+    archived_listing_id = None
     for i in range(165):
         listing_id = uuid4()
+        if i == 2:
+            archived_listing_id = listing_id
         name = f"ci-daily-item-{i:04d}"
         records.append(
             ListingManagementCurrentMart(
                 id=listing_id,source_account_ref=account,platform_code="walmart",
                 store_id="ci-daily-store",item_id=name,local_sku=name,
                 msku=name,title=f"Daily clearance item {i}",
-                fulfillment_type="WFS",wfs_available_quantity=Decimal(7),
+                fulfillment_type="WFS",
+                wfs_available_quantity=Decimal(0 if i == 1 else 7),
                 sales_7d=Decimal(0),sales_14d=Decimal(0),sales_30d=Decimal(0),
                 listing_start_at_utc=now-timedelta(days=120),calculated_at=now,
             )
@@ -342,9 +347,24 @@ def test_daily_evaluation_is_idempotent_and_sql_paginated(clearance_db: Session)
                     ZoneInfo("America/Los_Angeles")
                 ).date(),
                 source_account_ref=account,store_id="ci-daily-store",
-                item_id=name,wfs_available_quantity=Decimal(7),captured_at=now,
+                item_id=name,
+                wfs_available_quantity=Decimal(0 if i == 1 else 7),
+                captured_at=now,
             )
         )
+    assert archived_listing_id is not None
+    records.append(
+        ListingArchiveState(
+            id=uuid4(),
+            listing_id=archived_listing_id,
+            source_account_ref=account,
+            store_id="ci-daily-store",
+            item_id="ci-daily-item-0002",
+            is_archived=True,
+            archive_reason="Manual archive before daily clearance evaluation",
+            archived_by="ci-operator",
+        )
+    )
     clearance_db.add_all(records)
     clearance_db.commit()
 
@@ -363,8 +383,8 @@ def test_daily_evaluation_is_idempotent_and_sql_paginated(clearance_db: Session)
     page2 = service.list_listings(
         frozenset({account}),store_id="ci-daily-store",page=2,page_size=15,
     )
-    assert page1["total"] == 165
-    assert page2["total"] == 165
+    assert page1["total"] == 163
+    assert page2["total"] == 163
     assert len(page1["items"]) == len(page2["items"]) == 15
     ids1 = {x["listing"]["id"] for x in page1["items"]}
     ids2 = {x["listing"]["id"] for x in page2["items"]}
@@ -372,10 +392,20 @@ def test_daily_evaluation_is_idempotent_and_sql_paginated(clearance_db: Session)
     assert page1["evaluation_status"] == "ready"
     assert page1["as_of_date_la"] == daily_window(now)[1].isoformat()
     summary = service.summary(frozenset({account}),store_id="ci-daily-store")
-    assert summary["total"] == 165
-    assert summary["eligible_manual"] == 165
+    assert summary["total"] == 163
+    assert summary["eligible_manual"] == 163
     audit = service.repo.readiness_report(frozenset({account}),store_id="ci-daily-store")
-    assert audit["evaluated_listings"] == 165
+    assert audit["evaluated_listings"] == 163
+    # Excluded candidates were not computed or persisted by the midnight job.
+    excluded = clearance_db.execute(
+        text("""
+            select item_id from ops_clearance_daily_evaluations
+             where source_account_ref=:account and store_id=:store
+               and item_id in ('ci-daily-item-0001', 'ci-daily-item-0002')
+        """),
+        {"account": account, "store": "ci-daily-store"},
+    ).all()
+    assert excluded == []
     assert audit["missing_sales_window"] > 0
     assert audit["scheduled_run_status"] == "succeeded"
     assert audit["scheduled_attempt_count"] >= 1
@@ -535,6 +565,7 @@ def test_large_listing_page_uses_bounded_sql_queries(clearance_db: Session) -> N
     assert run is not None
 
     listings = []
+    snapshots = []
     results = []
     for index in range(2500):
         listing_id = uuid4()
@@ -556,6 +587,15 @@ def test_large_listing_page_uses_bounded_sql_queries(clearance_db: Session) -> N
             "listing_start_at_utc": now - timedelta(days=120),
             "calculated_at": now,
         })
+        snapshots.append({
+            "id": uuid4(),
+            "snapshot_date_la": day,
+            "source_account_ref": account,
+            "store_id": store,
+            "item_id": item,
+            "wfs_available_quantity": Decimal(9),
+            "captured_at": now,
+        })
         results.append({
             "id": uuid4(),
             "run_id": UUID(run["id"]),
@@ -574,6 +614,7 @@ def test_large_listing_page_uses_bounded_sql_queries(clearance_db: Session) -> N
     from sqlalchemy import insert
 
     clearance_db.execute(insert(ListingManagementCurrentMart), listings)
+    clearance_db.execute(insert(WalmartListingInventoryDailyFact), snapshots)
     clearance_db.execute(
         text("""
             insert into ops_clearance_daily_evaluations
@@ -679,3 +720,66 @@ def test_refund_uses_completed_effective_date_not_return_application_date(
     # Event correctness is independent of whether account-wide refund sync
     # completeness is proven. No refund signal is certified without a watermark.
     assert metrics["refund_source_complete"] is False
+
+
+def test_archived_listing_is_never_available_for_clearance_request(
+    clearance_db: Session,
+) -> None:
+    account = "clearance-ci-archived-apply"
+    listing_id = _seed_listing(
+        clearance_db,
+        account=account,
+        store="archive-apply-store",
+        item="archive-apply-item",
+    )
+    clearance_db.add(
+        ListingArchiveState(
+            id=uuid4(),
+            listing_id=UUID(listing_id),
+            source_account_ref=account,
+            store_id="archive-apply-store",
+            item_id="archive-apply-item",
+            is_archived=True,
+            archived_by="ci-operator",
+        )
+    )
+    clearance_db.commit()
+    allowed = frozenset({account})
+    service = ClearanceService(clearance_db)
+    assert service.list_listings(allowed, eligible_only=True)["total"] == 0
+    with pytest.raises(ApiError):
+        service.submit(_payload(listing_id, 1), allowed, "operator-1")
+
+
+def test_archive_between_submission_and_approval_blocks_approval(
+    clearance_db: Session,
+) -> None:
+    account = "clearance-ci-archive-before-review"
+    listing_id = _seed_listing(
+        clearance_db,
+        account=account,
+        store="archive-approval-store",
+        item="archive-approval-item",
+    )
+    service = ClearanceService(clearance_db)
+    allowed = frozenset({account})
+    submitted = service.submit(_payload(listing_id, 2), allowed, "operator-1")
+    clearance_db.add(
+        ListingArchiveState(
+            id=uuid4(),
+            listing_id=UUID(listing_id),
+            source_account_ref=account,
+            store_id="archive-approval-store",
+            item_id="archive-approval-item",
+            is_archived=True,
+            archived_by="ci-operator",
+        )
+    )
+    clearance_db.commit()
+    with pytest.raises(ApiError):
+        service.decide(
+            UUID(submitted["approval_id"]),
+            DecisionWrite(decision="approved", expected_version=1),
+            allowed,
+            "reviewer-2",
+        )
