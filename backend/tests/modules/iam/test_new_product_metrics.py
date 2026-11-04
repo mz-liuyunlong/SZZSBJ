@@ -86,7 +86,7 @@ def test_acos_uses_attributed_sales_not_total_sales() -> None:
     assert period["ad_spend_ratio"] == 10
     assert period["attributed_sales"] == 400
     assert period["complete"] is True
-    assert data["score"]["status"] == "evaluated"
+    assert data["score"]["status"] == "provisional"
     assert any("ad.attributed_sales_amount" in sql for sql in session.queries)
 
 

@@ -242,10 +242,14 @@ def read_sku_metrics(
             # The first complete launch window is immutable; never substitute
             # the latest rolling window for a historical launch result.
             launch_window = read_window(start_date, launch_end, launch_days)
-    result["launch"] = compute_launch_result(
-        metrics=launch_window,
-        rules=rules,
-        start_date=start_date,
-        as_of=end,
+    result["launch"] = (
+        compute_launch_result(
+            metrics=launch_window,
+            rules=rules,
+            start_date=start_date,
+            as_of=end,
+        )
+        if rule_version > 0
+        else {"status": "awaiting_approved_rules", "result": None}
     )
     return result

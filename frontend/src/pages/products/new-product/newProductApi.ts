@@ -36,7 +36,8 @@ export interface NewProductMetrics {
     refreshed_at: string | null;
   };
   rule_version: number;
-  score: { status: string; grade?: string | null; score?: number | null };
+  score: { status: string; grade?: string | null; score?: number | null;
+    provisional_score?: number | null; provisional_grade?: string | null };
   launch: { status: string; result: string | null };
 }
 

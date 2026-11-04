@@ -57,7 +57,9 @@ export default function NewProductMetricsPanel({ metrics }: { metrics: NewProduc
       { key: "score", label: "系统评分状态",
         children: metrics.score.status === "evaluated"
           ? `${format(metrics.score.score)} / ${metrics.score.grade ?? "—"}`
-          : "数据不足，暂不出正式评分" },
+          : (metrics.score.status === "provisional"
+            ? "公式待批准（仅预览分，不生成正式评级）"
+            : "数据不足，暂不出正式评分") },
       { key: "launch", label: "打品结论",
         children: metrics.launch.status === "evaluated"
           ? (metrics.launch.result === "success" ? "达标" : "未达标")

@@ -50,12 +50,14 @@ def compute_new_product_score(
         else "D"
     )
     return {
-        "status": "evaluated",
-        "grade": grade,
-        "score": score,
+        "status": "provisional",
+        "grade": None,
+        "score": None,
+        "provisional_grade": grade,
+        "provisional_score": score,
         "components": values,
         "rule_version": rule_version,
-        "note": "Derived from completed 30-day business-mart window; not the demo score.",
+        "note": "Not a formal grade: speed, CPC, CVR, ROI and penalty rules await approval.",
     }
 
 
