@@ -63,6 +63,12 @@ def read_sku_metrics(
                        count(*) FILTER (WHERE sem_ad_spend_amount IS NULL)
                            AS missing_sem_mart_rows,
                        sum(gross_profit_amount) AS profit,
+                       sum(purchase_cost_total_usd) AS purchase_cost_total,
+                       sum(first_leg_cost_total_usd) AS first_leg_cost_total,
+                       count(*) FILTER (
+                           WHERE purchase_cost_total_usd IS NULL
+                              OR first_leg_cost_total_usd IS NULL
+                       ) AS missing_investment_cost_rows,
                        count(DISTINCT business_date_la)
                            FILTER (WHERE cost_status = 'complete') AS complete_cost_days,
                        count(DISTINCT gross_profit_currency_code)
@@ -199,6 +205,19 @@ def read_sku_metrics(
             if total_ad_spend is not None and sales_amount is not None and sales_amount > 0
             else None
         )
+        # Operating ROI reuses Daily Sales; formal grading ROI stays blocked.
+        invested = (_number(sales["purchase_cost_total"]) or 0) + (
+            _number(sales["first_leg_cost_total"]) or 0
+        )
+        roi_ready = (
+            consistent_currency
+            and cost_days == observed
+            and observed == days
+            and int(sales["missing_investment_cost_rows"] or 0) == 0
+            and profit is not None
+            and invested > 0
+        )
+        operating_roi = profit / invested if roi_ready else None
         roas = (
             attributed_sales / attributed_spend
             if ads_same_currency
@@ -259,8 +278,12 @@ def read_sku_metrics(
             "cvr": cvr,
             "ctr": ctr,
             "roas": roas,
-            "roi": None,
-            "roi_status": "awaiting_approved_investment_cost_basis",
+            "roi": operating_roi,
+            "roi_status": (
+                "daily_sales_operating_roi"
+                if roi_ready
+                else "daily_sales_cost_or_coverage_unverified"
+            ),
             "ad_days": int(clicks["ad_days"] or 0),
             "profit": (
                 profit if cost_days == observed and observed > 0 and consistent_currency else None
@@ -378,7 +401,11 @@ def read_sku_metrics(
                 "SKU MART sales_amount * 100, after component currency checks; not ACOS"
             ),
             "roas": "advertising attributed sales / advertising spend; not profit ROI",
-            "roi": "requires an approved investment cost denominator",
+            "roi": (
+                "Daily Sales operating ROI = gross_profit / "
+                "(purchase_cost_total_usd + first_leg_cost_total_usd); "
+                "ratio not percent, not formal new-product grading ROI"
+            ),
         },
         "source_tables": [
             "mart_order_profit_sku_day",

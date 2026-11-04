@@ -41,6 +41,7 @@ const columns: ProColumns<PeriodRow>[] = [
     render: (_, row) => percent(row.ad_spend_ratio) },
   { title: "利润", dataIndex: "profit", width: 95, render: (_, row) => format(row.profit) },
   { title: "利润率", dataIndex: "margin", width: 95, render: (_, row) => percent(row.margin) },
+  { title: "经营 ROI", dataIndex: "roi", width: 100, render: (_, row) => format(row.roi) },
   { title: "覆盖天数", dataIndex: "observed_days", width: 95 },
   { title: "完整成本天数", dataIndex: "complete_cost_days", width: 115 },
   { title: "缺失日数", dataIndex: "missing_days", width: 90,
@@ -92,7 +93,7 @@ export default function NewProductMetricsPanel({ metrics }: { metrics: NewProduc
         format(metrics.order_milestones?.sales_10d) },
       { key: "pace_20", label: "前20日销量", children:
         format(metrics.order_milestones?.sales_20d) },
-      { key: "roi", label: "ROI", children: "待批准投资成本口径，暂不可计算" },
+      { key: "roi", label: "ROI 用途", children: "经营 ROI 采用每日销售公式；正式打品评分 ROI 尚未批准" },
       { key: "purchase", label: "候选采购区间", children:
         metrics.score.purchase_preview?.range
           ? metrics.score.purchase_preview.range.join("–") + "（仅预估，禁止自动采购）"
@@ -126,7 +127,8 @@ export default function NewProductMetricsPanel({ metrics }: { metrics: NewProduc
       利润已包含两项费用，不再重复扣除。ACOS 为 SP 归因花费 / SP 归因销售额；
       广告费占比为总广告费 / 总销售额。
       两者不能互相替代。CPC 为广告归因花费/点击，CVR 为广告归因订单/点击；
-      未经归因核实和完整覆盖不可用于正式评分。ROI 在投资成本口径未批准前为空；
+      未经归因核实和完整覆盖不可用于正式评分。经营 ROI = 利润 /
+      （采购成本 + 头程成本），显示为倍数，缺失数据时留空；正式打品评分 ROI 仍待批准。
       空值表示缺少可验证数据，并不代表零。
     </Typography.Paragraph>
   </>;

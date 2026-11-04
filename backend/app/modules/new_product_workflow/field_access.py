@@ -33,6 +33,7 @@ def redact_new_product_metrics(metrics: dict[str, Any], principal: Principal) ->
                     period[key] = None
         if not can_margin:
             period["margin"] = None
+            period["roi"] = None
         periods[key] = period
 
     score = dict(metrics["score"])

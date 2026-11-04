@@ -11,9 +11,17 @@ from app.modules.new_product_workflow.field_access import redact_new_product_met
 def _sample() -> dict:
     return {
         "periods": {
-            "30": {"sales": 12, "profit": 40, "margin": 18, "acos": 15,
-                   "sp_ad_spend": 20, "sem_ad_spend": 5, "ad_spend": 25,
-                   "ad_spend_ratio": 10},
+            "30": {
+                "sales": 12,
+                "profit": 40,
+                "margin": 18,
+                "acos": 15,
+                "sp_ad_spend": 20,
+                "sem_ad_spend": 5,
+                "ad_spend": 25,
+                "ad_spend_ratio": 10,
+                "roi": 1.2,
+            },
             "60": {"sales": 22, "profit": 60, "margin": 20, "acos": 18},
         },
         "score": {
@@ -44,6 +52,7 @@ def test_view_permission_cannot_reveal_profit_margin_or_derived_grade() -> None:
     for field in ("sp_ad_spend", "sem_ad_spend", "ad_spend", "ad_spend_ratio"):
         assert result["periods"]["30"][field] is None
     assert result["periods"]["30"]["margin"] is None
+    assert result["periods"]["30"]["roi"] is None
     assert result["score"]["status"] == "restricted"
     assert result["score"]["provisional_score"] is None
     assert "components" not in result["score"]
@@ -59,7 +68,9 @@ def test_profit_only_permission_does_not_disclose_margin_or_grade() -> None:
     result = redact_new_product_metrics(_sample(), user)
     assert result["periods"]["30"]["profit"] == 40
     assert result["periods"]["30"]["ad_spend"] == 25
+    assert result["periods"]["30"]["roi"] is None
     assert result["periods"]["30"]["margin"] is None
+    assert result["periods"]["30"]["roi"] is None
     assert result["score"]["provisional_grade"] is None
 
 
@@ -75,6 +86,7 @@ def test_existing_profit_and_margin_grants_preserve_all_values() -> None:
     )
     result = redact_new_product_metrics(_sample(), user)
     assert result["periods"]["30"]["margin"] == 18
+    assert result["periods"]["30"]["roi"] == 1.2
     assert result["score"]["provisional_grade"] == "A"
     assert result["launch"]["provisional_result"] == "success"
 

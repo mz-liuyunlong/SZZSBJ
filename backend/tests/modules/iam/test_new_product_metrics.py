@@ -71,6 +71,9 @@ class _Session:
                     "missing_sp_mart_rows": 0,
                     "missing_sem_mart_rows": self.missing_sem_mart_rows,
                     "profit": 200,
+                    "purchase_cost_total": 150,
+                    "first_leg_cost_total": 50,
+                    "missing_investment_cost_rows": 0,
                     "complete_cost_days": days,
                     "currencies": 1,
                     "sales_currencies": 1,
@@ -127,7 +130,8 @@ def test_acos_uses_attributed_sales_not_total_sales() -> None:
     assert period["acos"] == 25
     assert period["cpc"] == 1.25
     assert period["cvr"] == 18.75
-    assert period["roi"] is None
+    assert period["roi"] == 1
+    assert period["roi_status"] == "daily_sales_operating_roi"
     assert period["roas"] == 4
     assert period["ad_spend_ratio"] == 10
     assert period["attributed_sales"] == 400
@@ -136,7 +140,6 @@ def test_acos_uses_attributed_sales_not_total_sales() -> None:
     assert period["data_issues"] == []
     assert data["score"]["status"] == "provisional"
     assert any("ad.attributed_sales_amount" in sql for sql in session.queries)
-
 
 
 def test_total_ad_spend_includes_sem_without_double_deducting_existing_profit() -> None:
