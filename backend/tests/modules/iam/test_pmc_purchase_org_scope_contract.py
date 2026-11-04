@@ -103,3 +103,93 @@ def test_pending_plan_owner_proof_requires_same_store_and_sku() -> None:
     assert "dws_purchase_board.sku = dwd_purchase_plan.sku" in sql
     assert "dws_purchase_board.owner_uid IN ('owner-approved')" in sql
     assert "dwd_purchase_plan.store_id IS NOT NULL" in sql
+
+
+def test_pmc_store_scope_filters_account_store_pair_in_board_sql() -> None:
+    from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+
+    session = MagicMock()
+    session.info = {
+        ORG_OWNER_SCOPE_SESSION_KEY: frozenset({"owner-approved"}),
+        STORE_SCOPE_SESSION_KEY: frozenset({("ACCOUNT1", "S-01")}),
+    }
+    repository = PmcPurchaseReadRepository(session)
+    statement = repository._board_select(
+        BoardListQuery(), frozenset({"ACCOUNT1", "ACCOUNT2"}), date(2026, 11, 3)
+    )
+    sql = str(
+        statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+    assert "('ACCOUNT1', 'S-01')" in sql
+    assert "owner_uid IN ('owner-approved')" in sql
+    assert "source_account_ref IN ('ACCOUNT1', 'ACCOUNT2')" in sql
+
+
+def test_pmc_pending_plan_is_scoped_by_account_and_store_before_aggregation() -> None:
+    from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+
+    session = MagicMock()
+    session.info = {STORE_SCOPE_SESSION_KEY: frozenset({("ACCOUNT1", "S-01")})}
+    repository = PmcPurchaseReadRepository(session)
+    statement = repository._pending_plan_select(
+        PendingPlanQuery(), frozenset({"ACCOUNT1", "ACCOUNT2"})
+    )
+    sql = str(
+        statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+    assert "('ACCOUNT1', 'S-01')" in sql
+    assert "dwd_purchase_plan.source_account_ref" in sql
+    assert "dwd_purchase_plan.store_id" in sql
+
+
+def test_pmc_store_scope_is_installed_on_reviewed_read_routes_only() -> None:
+    from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+
+    request = Request({
+        "type": "http", "method": "GET",
+        "path": "/api/pmc/purchase/board",
+        "headers": [],
+    })
+    session = MagicMock()
+    session.info = {}
+    principal = Principal(user_id="8", permissions=frozenset({"pmc:purchase:read"}))
+    with (
+        patch(
+            "app.modules.pmc_purchase.router.resolve_business_owner_refs",
+            return_value=frozenset({"owner-approved"}),
+        ),
+        patch(
+            "app.modules.pmc_purchase.router.resolve_account_store_scope",
+            return_value=frozenset({("ACCOUNT1", "S-01")}),
+        ),
+    ):
+        require_pmc_purchase_org_scope(request, principal, session)
+    assert session.info[STORE_SCOPE_SESSION_KEY] == frozenset({("ACCOUNT1", "S-01")})
+    assert session.info[ORG_OWNER_SCOPE_SESSION_KEY] == frozenset({"owner-approved"})
+
+
+def test_pmc_store_scope_disallows_unreviewed_sku_cycle_aggregation() -> None:
+    from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+
+    request = Request({
+        "type": "http", "method": "GET",
+        "path": "/api/pmc/purchase/sku-cycles",
+        "headers": [],
+    })
+    session = MagicMock()
+    session.info = {}
+    principal = Principal(user_id="8", permissions=frozenset({"pmc:purchase:read"}))
+    with (
+        patch(
+            "app.modules.pmc_purchase.router.resolve_business_owner_refs",
+            return_value=None,
+        ),
+        patch(
+            "app.modules.pmc_purchase.router.resolve_account_store_scope",
+            return_value=frozenset({("ACCOUNT1", "S-01")}),
+        ),
+    ):
+        with pytest.raises(ApiError) as error:
+            require_pmc_purchase_org_scope(request, principal, session)
+    assert error.value.status_code == 403
+    assert STORE_SCOPE_SESSION_KEY not in session.info
