@@ -27,12 +27,16 @@ class _Session:
         attributed_currency: str | None = "USD",
         missing_financial_currencies: int = 0,
         missing_ad_currencies: int = 0,
+        missing_spend_currencies: int = 0,
+        spend_currency: str = "USD",
         ad_days: int | None = None,
     ) -> None:
         self.queries: list[str] = []
         self.attributed_currency = attributed_currency
         self.missing_financial_currencies = missing_financial_currencies
         self.missing_ad_currencies = missing_ad_currencies
+        self.missing_spend_currencies = missing_spend_currencies
+        self.spend_currency = spend_currency
         self.ad_days = ad_days
 
     def execute(self, statement: Any, params: dict[str, Any]) -> _Result:
@@ -78,8 +82,9 @@ class _Session:
                     "impressions": 4000,
                     "spend_currencies": 1,
                     "attributed_currencies": 1 if self.attributed_currency else 0,
-                    "spend_currency": "USD",
+                    "spend_currency": self.spend_currency,
                     "attributed_currency": self.attributed_currency,
+                    "missing_spend_currency_rows": self.missing_spend_currencies,
                     "missing_ad_currency_rows": self.missing_ad_currencies,
                     "ad_days": (
                         self.ad_days
@@ -178,6 +183,39 @@ def test_unknown_attribution_currency_never_produces_an_acos_score() -> None:
     assert "attributed_acos_unavailable" in period["data_issues"]
     assert data["score"]["status"] == "insufficient_data"
 
+
+
+def test_ad_spend_ratio_requires_spend_currency_but_not_attribution_currency() -> None:
+    missing_attribution = read_sku_metrics(
+        _Session(attributed_currency=None),
+        account="test-account",
+        sku="TEST-SKU",
+        market_score=8,
+        rule_version=1,
+        rules=DEFAULT_RULES,
+        as_of=date(2026, 11, 1),
+    )["periods"]["30"]
+    assert missing_attribution["acos"] is None
+    assert missing_attribution["ad_spend_ratio"] == 10
+    assert missing_attribution["cpc"] == 1.25
+
+    for session in (
+        _Session(missing_spend_currencies=1),
+        _Session(spend_currency="EUR"),
+    ):
+        period = read_sku_metrics(
+            session,
+            account="test-account",
+            sku="TEST-SKU",
+            market_score=8,
+            rule_version=1,
+            rules=DEFAULT_RULES,
+            as_of=date(2026, 11, 1),
+        )["periods"]["30"]
+        assert period["ad_spend_ratio"] is None
+        assert period["ad_spend"] is None
+        assert period["cpc"] is None
+        assert "ad_spend_currency_unverified" in period["data_issues"]
 
 def test_currency_null_rows_block_aggregation_even_if_distinct_currency_is_one() -> None:
     for session in (

@@ -96,6 +96,8 @@ def read_sku_metrics(
                            AS attributed_currencies,
                        min(ad.ad_spend_currency_code) AS spend_currency,
                        min(ad.attributed_sales_currency_code) AS attributed_currency,
+                       count(*) FILTER (WHERE ad.ad_spend_currency_code IS NULL)
+                           AS missing_spend_currency_rows,
                        count(*) FILTER (
                            WHERE ad.ad_spend_currency_code IS NULL
                               OR ad.attributed_sales_currency_code IS NULL
@@ -143,6 +145,12 @@ def read_sku_metrics(
         )
         attributed_spend = _number(clicks["attributed_spend"])
         attributed_sales = _number(clicks["attributed_sales"])
+        spend_currency_verified = (
+            int(clicks["spend_currencies"] or 0) == 1
+            and int(clicks["missing_spend_currency_rows"] or 0) == 0
+            and clicks["spend_currency"] == sales["sales_currency"]
+            and consistent_currency
+        )
         ads_same_currency = (
             int(clicks["spend_currencies"] or 0) == 1
             and int(clicks["attributed_currencies"] or 0) == 1
@@ -177,7 +185,7 @@ def read_sku_metrics(
         impressions = _number(clicks["impressions"])
         cpc = (
             attributed_spend / clicks_count
-            if ads_same_currency and attributed_spend is not None and clicks_count
+            if spend_currency_verified and attributed_spend is not None and clicks_count
             else None
         )
         cvr = ad_orders / clicks_count * 100 if ad_orders is not None and clicks_count else None
@@ -195,6 +203,8 @@ def read_sku_metrics(
             issues.append("margin_unavailable")
         if ad_spend is None:
             issues.append("ad_spend_unavailable")
+        if not spend_currency_verified:
+            issues.append("ad_spend_currency_unverified")
         if clicks["clicks"] is None:
             issues.append("ad_clicks_unavailable")
         # The ad fact might omit valid zero-spend days; without a publication
@@ -210,7 +220,7 @@ def read_sku_metrics(
             "sales": _number(sales["sales_qty"]),
             "orders": _number(sales["orders"]),
             "revenue": sales_amount if consistent_currency else None,
-            "ad_spend": ad_spend,
+            "ad_spend": ad_spend if spend_currency_verified else None,
             "clicks": int(clicks["clicks"]) if clicks["clicks"] is not None else None,
             "attributed_orders": ad_orders,
             "impressions": impressions,
@@ -226,13 +236,7 @@ def read_sku_metrics(
             ),
             "margin": margin,
             "acos": acos,
-            "ad_spend_ratio": (
-                ad_spend_ratio
-                if consistent_currency
-                and ads_same_currency
-                and clicks["spend_currency"] == sales["sales_currency"]
-                else None
-            ),
+            "ad_spend_ratio": ad_spend_ratio if spend_currency_verified else None,
             "currency_code": sales["sales_currency"] if consistent_currency else None,
             "attributed_sales": attributed_sales if ads_same_currency else None,
             "observed_days": observed,
@@ -338,7 +342,10 @@ def read_sku_metrics(
         "order_milestones": milestones,
         "metric_definitions": {
             "acos": "attributed_spend / attributed_sales * 100; null if currency unknown",
-            "ad_spend_ratio": "profit mart ad_spend / total sales_amount * 100; not ACOS",
+            "ad_spend_ratio": (
+                "profit mart ad_spend / total sales_amount * 100; only if "
+                "advertising spend currency reconciles with sales currency; not ACOS"
+            ),
             "roas": "advertising attributed sales / advertising spend; not profit ROI",
             "roi": "requires an approved investment cost denominator",
         },
