@@ -279,7 +279,7 @@ class ApprovalService:
                 r["status"] == "submitted"
                 and r["applicant_id"] != actor
                 and (
-                    may_review
+                    (may_review and r["approval_type"] == "wfs_case_abandon")
                     or (may_review_clearance and r["approval_type"] == "clearance_request")
                 )
             ),
