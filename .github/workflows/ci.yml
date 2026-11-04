@@ -115,7 +115,7 @@ jobs:
         run: |
           uv sync --frozen
           uv run alembic upgrade head
-          uv run pytest -q -rs tests/modules/clearance_center/test_postgresql_integration.py
+          uv run pytest -q -rs tests/modules/clearance_center/test_clearance_postgresql_integration.py
 
   frontend-if-present:
     runs-on: ubuntu-latest
