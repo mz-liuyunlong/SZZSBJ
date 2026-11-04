@@ -16,6 +16,10 @@ export const resolveCashSource = (value: string | undefined, isDev: boolean): "d
 export const CASH_SOURCE = resolveCashSource(import.meta.env.VITE_FINANCE_CASH_SOURCE as string | undefined, import.meta.env.DEV);
 export const isCashLive = CASH_SOURCE === "api";
 
+/** 每个资金流水页读什么：接口版日记账读接口；开发环境其余页读 Demo；正式构建其余页显示「建设中」。 */
+export const cashViewSource = (view: string, isDev: boolean, live: boolean): "live" | "demo" | "building" =>
+  view === "journal" && live ? "live" : isDev ? "demo" : "building";
+
 export type LineEventKind = "review1_pass" | "review1_reject" | "review2_pass" | "review2_reject" | "set_category" | "attach_ref" | "detach_ref" | "exclude" | "unexclude";
 
 export interface ApiAccount {
@@ -46,7 +50,6 @@ export function toCashAccount(row: ApiAccount): CashAccount {
 }
 
 export function toCashLine(row: ApiLine): LiveCashLine {
-  const excluded = (Number(row.exclude_amount ?? 0) || 0) + (Number(row.list_excluded_cny) || 0);
   return {
     id: `${row.account_key}:${row.business_date}:${row.line_uid.slice(-6)}`,
     uid: row.line_uid,
@@ -69,7 +72,7 @@ export function toCashLine(row: ApiLine): LiveCashLine {
     flags: row.flags,
     masked: false,
     ord: row.file_row_order,
-    excl: excluded || undefined,
+    excl: row.exclude_amount != null || Number(row.list_excluded_cny) > 0,
     stage: row.stage,
     stageReason: row.stage_reason ?? undefined,
     reviewNote: row.review_note ?? undefined,

@@ -19,7 +19,7 @@ import type { NavigationPage } from "@/config/navigation";
 import FinanceBoardFrame, { FinMoney, LOCKED_TIP } from "@/pages/finance/FinanceBoardFrame";
 import CashStockBoard, { CashStockHelp } from "@/pages/finance/cash-flow/CashStockBoard";
 import ImportDrawer from "@/pages/finance/cash-flow/ImportDrawer";
-import { asLive, cashErrorText, isCashLive, postLineEvent, useLiveJournal, useRefreshJournal, type LineEventKind, type LiveCashLine } from "@/pages/finance/cash-flow/journalApi";
+import { asLive, cashErrorText, cashViewSource, isCashLive, postLineEvent, useLiveJournal, useRefreshJournal, type LineEventKind, type LiveCashLine } from "@/pages/finance/cash-flow/journalApi";
 import { ALERT_GUIDE, alertShort, fsFileUrl, toCashAlerts, useApprovals, useStock, type CashAlert, type FsDetail, type FsRecord } from "@/pages/finance/cash-flow/data";
 import "@/pages/finance/cash-flow/cash-flow.css";
 import {
@@ -415,7 +415,8 @@ function AccountsBoard({ data }: { data: CashSnapshot }) {
   const [month, setMonth] = useState(months[months.length - 1] ?? "");
   const overviewFile = useApprovals();
   const overviewDetails = useMemo(() => overviewFile.data?.items ?? {}, [overviewFile.data]);
-  const fx = data.meta.fx[month]?.[0] ?? 7;
+  /* 当月没有汇率就不折算：美元不计入合计，副标题提示缺汇率（不再按 7 估）。 */
+  const fx = data.meta.fx[month]?.[0];
   const coverage = useMemo(() => {
     const out: Record<string, { from: string; to: string; src: string }> = {};
     (data.meta.bank_files ?? []).forEach((file) => {
@@ -431,15 +432,16 @@ function AccountsBoard({ data }: { data: CashSnapshot }) {
     const lines = data.lines.filter((line) => line.acct === account.id && line.m === month);
     return { ...account, ...(data.flow.by_acct[account.id]?.[month] ?? {}), n_lines: lines.length, uncat: lines.filter(isUncat).length };
   });
-  const toCny = (row: Row, value: number | null | undefined) => (value == null ? 0 : row.cur === "USD" ? value * fx : value);
+  const toCny = (row: Row, value: number | null | undefined) => (value == null ? 0 : row.cur !== "USD" ? value : fx == null ? 0 : value * fx);
+  const fxNote = fx == null ? "缺 USD 汇率，合计不含美元" : `汇率 ${fx}`;
   const inExt = rows.reduce((total, row) => total + toCny(row, row.in_ext), 0);
   const outExt = rows.reduce((total, row) => total + toCny(row, row.out_ext), 0);
   const noFlow = noFlowAlerts(data, mergeFeishu(data, overviewDetails)).filter((item) => orphanInScope(item, [], month)).length;
   const uncat = data.lines.filter((line) => line.m === month && isUncat(line)).length;
   const openJournal = (handoff: JournalHandoff) => { writeHandoff(handoff); navigate("/finance/cash/journal"); };
   const cards: ManagementStatCardItem<string>[] = [
-    { key: "in", title: `${month} 外部流入`, subtitle: "折人民币 · 不含内部调拨 / 结汇 / 归集", value: fmtMoney(inExt), tone: "success", icon: icon("入") },
-    { key: "out", title: `${month} 外部流出`, subtitle: `折人民币 · 汇率 ${fx}`, value: fmtMoney(outExt), tone: "danger", icon: icon("出") },
+    { key: "in", title: `${month} 外部流入`, subtitle: `折人民币 · 不含内部调拨 / 结汇 / 归集${fx == null ? ` · ${fxNote}` : ""}`, value: fmtMoney(inExt), tone: "success", icon: icon("入") },
+    { key: "out", title: `${month} 外部流出`, subtitle: `折人民币 · ${fxNote}`, value: fmtMoney(outExt), tone: "danger", icon: icon("出") },
     { key: "uncat", title: "待分类流水", subtitle: "点击到日记账处理", value: uncat, tone: uncat ? "warning" : "normal", icon: icon("?") },
     { key: "no_flow", title: NO_FLOW_TYPE, subtitle: "飞书已同意、没有付款流水，点击到日记账", value: noFlow, tone: noFlow ? "warning" : "normal", icon: icon("单") },
     { key: "pairs", title: "内部配对", subtitle: `未配对 ${data.meta.summary.unpaired ?? 0}`, value: `${data.meta.summary.pairs ?? 0} 对`, tone: "normal", icon: icon("⇄") },
@@ -520,18 +522,21 @@ function JournalBoard({ data, live = false }: { data: CashSnapshot; live?: boole
   const reviewOf = (line: CashLine) => reviews[line.id] ?? baseReview(line);
   /* 接口模式重读后，详情要用最新的那一行，否则带着旧版本号去写会被拒。 */
   const freshLine = lineOpen ? data.lines.find((line) => line.id === lineOpen.id) ?? lineOpen : undefined;
-  /* 接口模式：写一条事件，成功或失败都重读（失败多半是别人刚改过）。 */
-  const send = async (line: CashLine, kind: LineEventKind, fields: { payload?: Record<string, unknown>; reason?: string } = {}, done?: string) => {
+  /* 接口模式：写一条事件，成功或失败都重读（失败多半是别人刚改过）；返回是否写成功。 */
+  const send = async (line: CashLine, kind: LineEventKind, fields: { payload?: Record<string, unknown>; reason?: string } = {}, done?: string): Promise<boolean> => {
     const target = asLive(line);
-    if (!target) return;
+    if (!target) return false;
+    let ok = false;
     try {
       const result = await postLineEvent(target, kind, fields);
+      ok = true;
       if (done) void messageApi.success(done);
       if (result.auto_reset) void messageApi.info("这笔已审过，改动后自动退回待初审");
     } catch (error) {
       void messageApi.error(cashErrorText(error));
     }
     void refresh();
+    return ok;
   };
   /* 初审：审批金额和流水金额有差额 → 必须先写差额说明（不限差额大小）；终审直接通过。 */
   const pass = (line: CashLine, level: 1 | 2, note?: string) => {
@@ -661,7 +666,7 @@ function JournalBoard({ data, live = false }: { data: CashSnapshot; live?: boole
     refs: [{ key: "refs", title: "审批单", dataIndex: "refs", width: 230, tooltip: "这笔付款对应哪张飞书审批单。自动：备注里有单号直接关联；金额 + 收款人 + 45 天内唯一候选自动关联。对不上的在这里输入或选未付审批单", render: (_, row) => (
       <span className="finance-board__stack">
         {row.refs.length > 0 && <Space size={4} wrap>{row.refs.map((ref) => { const item = approvals.get(ref); return <Tooltip key={ref} title={item ? `${item.kind} · ${item.state} · 点击看审批单` : "飞书里没找到"}><Tag bordered={false} className="finance-board__ref" color={item ? STATE_COLOR[item.state] ?? "blue" : "red"} closable={live} onClose={(event) => { event.preventDefault(); void send(row, "detach_ref", { payload: { ref } }); }} onClick={() => item && setApprovalOpen(item)}>{ref}</Tag></Tooltip>; })}</Space>}
-        {live ? <Input size="small" style={{ width: 200 }} placeholder="输入 12 位审批单号，回车" onPressEnter={(event) => { const input = event.currentTarget; const ref = input.value.trim(); if (!/^\d{12}$/.test(ref)) { void messageApi.warning("审批单号是 12 位数字"); return; } input.value = ""; void send(row, "attach_ref", { payload: { ref } }); }} /> : <Tooltip title={LOCKED_TIP}><AutoComplete size="small" disabled style={{ width: 200 }} placeholder="关联审批单（输入或选未付单）" options={openApprovalOptions} /></Tooltip>}
+        {live ? <Input size="small" style={{ width: 200 }} placeholder="输入 12 位审批单号，回车" onPressEnter={(event) => { const input = event.currentTarget; const ref = input.value.trim(); if (!/^\d{12}$/.test(ref)) { void messageApi.warning("审批单号是 12 位数字"); return; } void send(row, "attach_ref", { payload: { ref } }).then((ok) => { if (ok) input.value = ""; }); }} /> : <Tooltip title={LOCKED_TIP}><AutoComplete size="small" disabled style={{ width: 200 }} placeholder="关联审批单（输入或选未付单）" options={openApprovalOptions} /></Tooltip>}
       </span>) }],
     alert: [{ key: "alert", title: "异常", width: 150, tooltip: "这笔流水上待处理的异常（灰色是数据提示，不算异常）；点详情看说明和处理方法", render: (_, row) => {
       const list = alertsOf(row);
@@ -752,14 +757,23 @@ function JournalBoard({ data, live = false }: { data: CashSnapshot; live?: boole
 
 /** 资金流水下的左侧菜单页（2026-11-02 Rocky：做成资金流水的下一级菜单，UI 与正式系统一致；11-04 去掉「异常」页）。 */
 function FinanceCashFlowPage({ page, view }: { page: NavigationPage; view: CashFlowView }) {
+  /* 正式构建不读 Demo（localQuery 只在开发环境启用）：除接口版日记账外一律显示「建设中」，不再一直转圈。 */
+  const source = cashViewSource(view, import.meta.env.DEV, isCashLive);
   const snapshot = useCashSnapshot();
-  const liveJournal = view === "journal" && isCashLive;
+  const liveJournal = source === "live";
   const liveQuery = useLiveJournal(liveJournal);
   const data = liveJournal ? liveQuery.data?.snapshot : snapshot.data;
   const pending = liveJournal ? liveQuery.isPending : snapshot.isPending;
   const failure = liveJournal ? liveQuery.error : snapshot.error;
   const fallbackTitle = { accounts: "账户总览（按月）", journal: "日记账", stock: "备货资金" }[view];
-  const stock = useStock(view === "stock");
+  const stock = useStock(view === "stock" && source === "demo");
+  if (source === "building") return (
+    <PageShell page={page}>
+      <FinanceBoardFrame title={fallbackTitle} preview={false}>
+        <EmptyState title="建设中" description="这一页的数据还没接正式接口" />
+      </FinanceBoardFrame>
+    </PageShell>
+  );
   return (
     <PageShell page={page} headerActions={view === "stock" ? <CashStockHelp data={stock.data} /> : undefined}>
       {view === "stock" ? <CashStockBoard /> : !data ? (

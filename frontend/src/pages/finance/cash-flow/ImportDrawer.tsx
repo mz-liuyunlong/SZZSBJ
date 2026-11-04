@@ -17,6 +17,9 @@ const IMPORT_NODE_TEXT = "每周二 15:00 前，各账户导出「月初到今�
 const NAME_RULE = "原文件名即可（系统按内容认账户，不看文件名）；一次选全部文件";
 const FORMAT_TEXT = "用银行网银或平台后台导出的交易明细原文件（xls、xlsx 或 csv），不要回单 PDF，也不要自己改过的表。每次导「本月 1 日到今天」，重复的流水自动去重。";
 
+/** 和后端 FINANCE_CASHFLOW_MAX_UPLOAD_BYTES 默认值一致：超过的文件不上传。 */
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+
 interface UploadRow { key: string; name: string; result?: ApiFileResult; error?: string }
 
 const uploadSummary = (row: UploadRow) => {
@@ -24,6 +27,7 @@ const uploadSummary = (row: UploadRow) => {
   const result = row.result;
   if (!result) return <Typography.Text type="secondary">上传中…</Typography.Text>;
   if (result.status === "rejected") return <Typography.Text type="danger">拒收：{result.reject_reason}</Typography.Text>;
+  if (result.duplicate_of_file) return <span>整份文件之前已导入过</span>;
   return <span>{result.account_keys.join("、")} · 新增 {result.rows_new} 行，重复 {result.rows_duplicate} 行{result.warnings.length ? <Typography.Text type="warning">（{result.warnings.join("；")}）</Typography.Text> : null}</span>;
 };
 
@@ -92,6 +96,10 @@ function LiveImportDrawer({ open, onClose }: { open: boolean; onClose: () => voi
     const started = files.map((file, index): UploadRow => ({ key: `${importId}-${index}`, name: file.name }));
     setRows(started);
     for (const [index, file] of files.entries()) {
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setRows((current) => current.map((row, position) => (position === index ? { ...row, error: "超过 20MB，未上传" } : row)));
+        continue;
+      }
       const patch: Partial<UploadRow> = await uploadStatement(file, importId).then((result) => ({ result }), (error: unknown) => ({ error: cashErrorText(error) }));
       setRows((current) => current.map((row, position) => (position === index ? { ...row, ...patch } : row)));
     }

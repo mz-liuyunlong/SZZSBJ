@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { buildLiveSnapshot, cashErrorText, nextImportNode, resolveCashSource, type ApiAccount, type ApiAnomaly, type ApiCategory, type ApiLine } from "@/pages/finance/cash-flow/journalApi";
-import { BackendRequestError } from "@/api/backendApi";
+import { describe, expect, it, vi } from "vitest";
+import { buildLiveSnapshot, cashErrorText, cashViewSource, nextImportNode, postLineEvent, resolveCashSource, toCashLine, type ApiAccount, type ApiAnomaly, type ApiCategory, type ApiLine } from "@/pages/finance/cash-flow/journalApi";
+import { backendRequest, BackendRequestError } from "@/api/backendApi";
+
+vi.mock("@/api/backendApi", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/api/backendApi")>()), backendRequest: vi.fn() }));
 
 const line = (over: Partial<ApiLine> = {}): ApiLine => ({
   line_uid: "0123456789abcdef", account_key: "A1", business_date: "2026-10-10", month: "2026-10", time: "10:00:00", currency_code: "USD",
@@ -21,6 +23,37 @@ describe("resolveCashSource", () => {
   });
 });
 
+describe("cashViewSource", () => {
+  it("shows building in production for every view except the live journal", () => {
+    expect(cashViewSource("journal", false, true)).toBe("live");
+    expect(cashViewSource("journal", true, true)).toBe("live");
+    expect(cashViewSource("accounts", false, true)).toBe("building");
+    expect(cashViewSource("stock", false, true)).toBe("building");
+    expect(cashViewSource("journal", false, false)).toBe("building");
+    expect(cashViewSource("accounts", true, true)).toBe("demo");
+    expect(cashViewSource("journal", true, false)).toBe("demo");
+  });
+});
+
+describe("postLineEvent", () => {
+  it("sends kind, payload and reason as given, with the line's version as expected_version", async () => {
+    vi.mocked(backendRequest).mockResolvedValue({ data: { stage: "ok1", version: 8, auto_reset: false } } as never);
+    const target = toCashLine(line({ version: 7 }));
+    const result = await postLineEvent(target, "attach_ref", { payload: { ref: "202610100001" }, reason: "补单" });
+    expect(result).toEqual({ stage: "ok1", version: 8, auto_reset: false });
+    const [url, init] = vi.mocked(backendRequest).mock.calls[0];
+    expect(url).toBe("/api/finance/cashflow/lines/0123456789abcdef/events");
+    expect(init?.method).toBe("POST");
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    expect(body.kind).toBe("attach_ref");
+    expect(body.payload).toEqual({ ref: "202610100001" });
+    expect(body.reason).toBe("补单");
+    expect(body.expected_version).toBe(target.version);
+    expect(body.expected_version).toBe(7);
+    expect(typeof body.idempotency_key).toBe("string");
+  });
+});
+
 describe("buildLiveSnapshot", () => {
   it("maps lines to the page shape, keeping empty cny as null", () => {
     const data = buildLiveSnapshot([account], [category], [line()], []);
@@ -29,7 +62,7 @@ describe("buildLiveSnapshot", () => {
     expect(row.amt).toBe(-12.5);
     expect(row.cny).toBeNull();
     expect(row.cat).toBe("");
-    expect(row.excl).toBeUndefined();
+    expect(row.excl).toBe(false);
     expect(data.accounts[0].stmt).toBe("尾号 0011");
     expect(data.meta.start).toBe("2026-10");
     expect(data.feishu).toEqual([]);
@@ -37,7 +70,7 @@ describe("buildLiveSnapshot", () => {
 
   it("marks excluded lines from either manual amount or the exclusion list", () => {
     const data = buildLiveSnapshot([account], [category], [line({ exclude_amount: "1.0000" }), line({ line_uid: "1123456789abcdef", list_excluded_cny: "5.0000" })], []);
-    expect(data.lines.map((row) => row.excl)).toEqual([1, 5]);
+    expect(data.lines.map((row) => row.excl)).toEqual([true, true]);
   });
 
   it("links anomalies to the page line id and leaves orphans unlinked", () => {

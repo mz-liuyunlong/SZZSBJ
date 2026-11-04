@@ -61,7 +61,8 @@ export interface CashLine {
   ok2?: boolean;
   note?: string;
   parts?: CashPart[];
-  excl?: number;
+  /** Demo 里是剔除金额；接口版只表示「有剔除」。 */
+  excl?: number | boolean;
 }
 
 export interface FeishuPaid {
