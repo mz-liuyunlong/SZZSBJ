@@ -81,6 +81,7 @@ function App() {
   useEffect(() => subscribeAuthSession((event) => {
     if (!isCurrentAuthSessionEvent(event)) return;
     if (event.type === "permissions-changed") {
+      clearServerState();
       void restoreCurrentUser();
       return;
     }
@@ -95,6 +96,23 @@ function App() {
     }
     void restoreCurrentUser();
   }), [restoreCurrentUser]);
+
+  // A different administrator cannot broadcast to this user's auth token.
+  // Revalidate on returning to the application so changed grants or employment
+  // status cannot keep an old React Query cache visible after tab activation.
+  useEffect(() => {
+    const revalidateVisibleSession = () => {
+      if (!readAuthToken() || document.visibilityState !== "visible") return;
+      clearServerState();
+      void restoreCurrentUser();
+    };
+    window.addEventListener("focus", revalidateVisibleSession);
+    document.addEventListener("visibilitychange", revalidateVisibleSession);
+    return () => {
+      window.removeEventListener("focus", revalidateVisibleSession);
+      document.removeEventListener("visibilitychange", revalidateVisibleSession);
+    };
+  }, [restoreCurrentUser]);
 
   const clearLogoutSessionStorage = () => {
     try {
