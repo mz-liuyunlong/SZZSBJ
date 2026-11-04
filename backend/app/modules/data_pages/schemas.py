@@ -383,6 +383,7 @@ class ListingManagementItemRead(StrictSchema):
     listing_start_source_raw: str | None = None
     launch_date_cn: date | None = None
     first_wfs_seen_at_utc: datetime | None = None
+    first_wfs_available_date_la: date | None = None
     category: str | None
     wfs_available_quantity: Money | None
     available_quantity: Money | None

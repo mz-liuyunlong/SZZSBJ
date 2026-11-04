@@ -785,7 +785,7 @@ class ListingManagementService:
             (
                 "listed_at",
                 "上架时间",
-                lambda item: self._listing_start_csv_value(item.listing_start_at_utc),
+                lambda item: self._listing_start_csv_value(item.first_wfs_available_date_la),
             ),
             ("checked_at", "检查时间", lambda item: item.calculated_at),
             (
@@ -1140,6 +1140,7 @@ class ListingManagementService:
             listing_start_source_raw=getattr(row, "listing_start_source_raw", None),
             launch_date_cn=getattr(row, "launch_date_cn", None),
             first_wfs_seen_at_utc=getattr(row, "first_wfs_seen_at_utc", None),
+            first_wfs_available_date_la=getattr(row, "first_wfs_available_date_la", None),
             category=category,
             wfs_available_quantity=listing.wfs_available_quantity,
             available_quantity=listing.available_quantity,

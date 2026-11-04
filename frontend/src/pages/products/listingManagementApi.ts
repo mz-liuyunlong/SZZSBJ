@@ -30,6 +30,7 @@ interface BackendListingItem {
   listing_start_at_utc: string | null;
   listing_start_source_raw?: string | null;
   launch_date_cn?: string | null;
+  first_wfs_available_date_la?: string | null;
   category: string | null;
   wfs_available_quantity: string | null;
   inbound_quantity: string | null;
@@ -191,9 +192,10 @@ const toDateText = (value: string | null): string => {
   return value.slice(0, 10);
 };
 
-export const toListingStartText = (normalizedValue: string | null): string => {
-  if (normalizedValue) return toDateText(normalizedValue);
-  return "";
+// WFS launch is the first positive inventory date in America/Los_Angeles.
+ // Never substitute the ERP Listing creation timestamp or China date.
+export const toListingStartText = (firstWfsDateLa: string | null): string => {
+  return toDateText(firstWfsDateLa);
 };
 
 const toCheckedText = (value: string): string => value.replace("T", " ").slice(0, 16);
@@ -233,7 +235,7 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   productStatus: item.disabled_reason ? "停用" : "启用",
   lifecycle: item.lifecycle_status ?? "待计算",
   fulfillmentMethod: item.fulfillment_type_name?.trim() || item.fulfillment_type?.trim() || "待确认",
-  listedAt: toListingStartText(item.listing_start_at_utc),
+  listedAt: toListingStartText(item.first_wfs_available_date_la ?? null),
   category: item.category ?? "-",
   wfsAvailableInventory: numberValue(item.wfs_available_quantity),
   inboundInventory: numberValue(item.inbound_quantity),

@@ -85,6 +85,7 @@ class ListingManagementRowProjection:
     product_developer_name: str | None
     launch_date_cn: date | None = None
     first_wfs_seen_at_utc: datetime | None = None
+    first_wfs_available_date_la: date | None = None
     effective_title: str | None = None
     effective_strike_price_amount: Decimal | None = None
     effective_strike_price_currency_code: str | None = None
@@ -142,6 +143,7 @@ def _listing_projection(row: Sequence[object]) -> ListingManagementRowProjection
         effective_average_rating=row[17],  # type: ignore[arg-type]
         effective_review_count=row[18],  # type: ignore[arg-type]
         effective_brand=row[19],  # type: ignore[arg-type]
+        first_wfs_available_date_la=row[20],  # type: ignore[arg-type]
     )
 
 
@@ -1190,6 +1192,25 @@ class ListingManagementRepository:
             WalmartMonitorListingCurrent.brand,
             ListingManagementCurrentMart.brand,
         )
+        # The first observed positive WFS *Los Angeles business date* belongs
+        # to the stable account/store/Item ID, not the mutable MSKU.
+        # Do not fall back to the provider Listing creation date or a CN date.
+        # This query is read-only: persisted first-date locking is a separate
+        # migration/deployment step and is not claimed here.
+        first_wfs_available_date_la = (
+            select(func.min(WalmartListingInventoryDailyFact.snapshot_date_la))
+            .where(
+                WalmartListingInventoryDailyFact.source_account_ref
+                == ListingManagementCurrentMart.source_account_ref,
+                WalmartListingInventoryDailyFact.store_id
+                == ListingManagementCurrentMart.store_id,
+                WalmartListingInventoryDailyFact.item_id
+                == ListingManagementCurrentMart.item_id,
+                WalmartListingInventoryDailyFact.wfs_available_quantity >= 1,
+            )
+            .correlate(ListingManagementCurrentMart)
+            .scalar_subquery()
+        )
         statement = (
             select(
                 ListingManagementCurrentMart,
@@ -1212,6 +1233,7 @@ class ListingManagementRepository:
                 effective_rating.label("effective_average_rating"),
                 effective_review_count.label("effective_review_count"),
                 effective_brand.label("effective_brand"),
+                first_wfs_available_date_la.label("first_wfs_available_date_la"),
             )
             .outerjoin(
                 WalmartListingDimension,
