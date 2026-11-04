@@ -127,6 +127,68 @@ def test_wfs_preview_reports_account_day_ad_blocker() -> None:
     assert "DAILY_SALES_ACCOUNT_DAY_AD_SPEND_UNCONFIRMED" in result.missing_evidence
 
 
+def test_confirmed_missing_sales_row_is_zero_only_for_observed_listing() -> None:
+    listing = SimpleNamespace(
+        id=UUID(int=42),
+        fulfillment_type="1",
+        lifecycle_status="稳定期",
+        product_grade=None,
+    )
+    stock = [
+        SimpleNamespace(
+            snapshot_date_la=CUTOFF - timedelta(days=i),
+            wfs_available_quantity=Decimal("10"),
+            available_quantity=Decimal("10"),
+        )
+        for i in range(30)
+    ]
+    sales = [_financial(i) for i in range(30) if i != 2]
+    confirmed = frozenset(CUTOFF - timedelta(days=i) for i in range(30))
+    kwargs = dict(
+        listing=listing,
+        cutoff=CUTOFF,
+        config=ListingGradeRuleConfig(lifecycle={"growth_min_valid_days_30": 30}),
+        rule_version=1,
+        sales=sales,
+        prior=CUTOFF - timedelta(days=31),
+        archive=SimpleNamespace(is_archived=False, archived_at=None, restored_at=None),
+        monitor_rows=[],
+        unconfirmed_account_ad_days=frozenset(),
+    )
+
+    complete = ListingEvaluationPreviewService._from_evidence(
+        **kwargs, stock=stock, confirmed_sales_days=confirmed
+    )
+    assert "ZERO_SALES_DAY_COMPLETENESS_UNVERIFIED" not in complete.missing_evidence
+    assert "SALES_TREND_VALID_DAYS_INSUFFICIENT" not in complete.missing_evidence
+
+    missing_completion = ListingEvaluationPreviewService._from_evidence(
+        **kwargs, stock=stock, confirmed_sales_days=confirmed - {CUTOFF - timedelta(days=2)}
+    )
+    assert "ZERO_SALES_DAY_COMPLETENESS_UNVERIFIED" in missing_completion.missing_evidence
+    assert "SALES_TREND_VALID_DAYS_INSUFFICIENT" in missing_completion.missing_evidence
+
+    stock_without_missing_sales_day = [
+        row for row in stock if row.snapshot_date_la != CUTOFF - timedelta(days=2)
+    ]
+    no_listing_observation = ListingEvaluationPreviewService._from_evidence(
+        **kwargs,
+        stock=stock_without_missing_sales_day,
+        confirmed_sales_days=confirmed,
+    )
+    assert "ZERO_SALES_DAY_COMPLETENESS_UNVERIFIED" in no_listing_observation.missing_evidence
+
+    sales_with_unknown_quantity = list(sales)
+    sales_with_unknown_quantity.append(_financial(2))
+    sales_with_unknown_quantity[-1].sales_qty = None
+    unknown = ListingEvaluationPreviewService._from_evidence(
+        **{**kwargs, "sales": sales_with_unknown_quantity},
+        stock=stock,
+        confirmed_sales_days=confirmed,
+    )
+    assert "ZERO_SALES_DAY_COMPLETENESS_UNVERIFIED" in unknown.missing_evidence
+
+
 def test_account_day_ad_report_total_uses_all_source_rows() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     with engine.begin() as connection:

@@ -54,8 +54,8 @@ def test_page_prefetch_is_bounded_and_does_not_mix_account_or_msku(monkeypatch) 
         Rows(
             [("synthetic-account-a", "synthetic-store", "synthetic-item", None, date(2026, 1, 1))]
         ),
-        Rows([("synthetic-account-a", date(2026, 1, 15), 3)]),
         Rows([]),
+        Rows([("synthetic-account-a", date(2026, 1, 15), 3)]),
     ]
     captured = {}
 
@@ -80,6 +80,8 @@ def test_page_prefetch_is_bounded_and_does_not_mix_account_or_msku(monkeypatch) 
     assert captured[second.id]["stock"] == []
     assert captured[first.id]["prior"] == date(2026, 1, 1)
     assert captured[second.id]["prior"] is None
+    assert captured[first.id]["confirmed_sales_days"] == frozenset()
+    assert captured[second.id]["confirmed_sales_days"] == frozenset()
     assert captured[first.id]["monitor_rows"] == []
     assert len(captured[second.id]["monitor_rows"]) == 1
     sales_sql = str(session.scalars.call_args_list[0].args[0])

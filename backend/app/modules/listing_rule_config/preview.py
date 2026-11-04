@@ -205,7 +205,12 @@ class ListingEvaluationPreviewService:
         return confirmed
 
     def _unconfirmed_account_ad_days(
-        self, accounts: set[str], *, cutoff: date, window_days: int
+        self,
+        accounts: set[str],
+        *,
+        cutoff: date,
+        window_days: int,
+        confirmed_sales_days: dict[str, set[date]] | None = None,
     ) -> dict[str, frozenset[date]]:
         missing = {
             account
@@ -234,8 +239,10 @@ class ListingEvaluationPreviewService:
             for account, business_day, total in rows:
                 if total is not None and total > ZERO:
                     positive_by_account[account].add(business_day)
-            confirmed_by_account = self._confirmed_daily_sales_days(
-                missing, start=start, cutoff=cutoff
+            confirmed_by_account = (
+                confirmed_sales_days
+                if confirmed_sales_days is not None
+                else self._confirmed_daily_sales_days(missing, start=start, cutoff=cutoff)
             )
             for account in missing:
                 unconfirmed_days = days_in_window - (
@@ -354,6 +361,11 @@ class ListingEvaluationPreviewService:
                 .order_by(StandardizedWalmartMonitorListingObservation.captured_at)
             ).all()
         )
+        confirmed_sales_days = self._confirmed_daily_sales_days(
+            {listing.source_account_ref},
+            start=cutoff - timedelta(days=max(30, config.medium_days) - 1),
+            cutoff=cutoff,
+        )
         return self._from_evidence(
             listing=listing,
             cutoff=cutoff,
@@ -365,8 +377,12 @@ class ListingEvaluationPreviewService:
             archive=archive,
             monitor_rows=monitor_rows,
             unconfirmed_account_ad_days=self._unconfirmed_account_ad_days(
-                {listing.source_account_ref}, cutoff=cutoff, window_days=config.medium_days
+                {listing.source_account_ref},
+                cutoff=cutoff,
+                window_days=config.medium_days,
+                confirmed_sales_days=confirmed_sales_days,
             )[listing.source_account_ref],
+            confirmed_sales_days=frozenset(confirmed_sales_days[listing.source_account_ref]),
         )
 
     def evaluate_page(
@@ -481,10 +497,15 @@ class ListingEvaluationPreviewService:
         monitor_by_key = defaultdict(list)
         for row in monitor_rows:
             monitor_by_key[(row.source_account_ref, row.store_id, row.item_id)].append(row)
+        accounts = {listing.source_account_ref for listing in listings}
+        confirmed_sales_days_by_account = self._confirmed_daily_sales_days(
+            accounts, start=start, cutoff=cutoff
+        )
         unconfirmed_ad_days_by_account = self._unconfirmed_account_ad_days(
-            {listing.source_account_ref for listing in listings},
+            accounts,
             cutoff=cutoff,
             window_days=config.medium_days,
+            confirmed_sales_days=confirmed_sales_days_by_account,
         )
 
         return {
@@ -511,6 +532,9 @@ class ListingEvaluationPreviewService:
                 unconfirmed_account_ad_days=unconfirmed_ad_days_by_account[
                     listing.source_account_ref
                 ],
+                confirmed_sales_days=frozenset(
+                    confirmed_sales_days_by_account[listing.source_account_ref]
+                ),
             )
             for listing in listings
         }
@@ -528,6 +552,7 @@ class ListingEvaluationPreviewService:
         archive: ListingArchiveState | None,
         monitor_rows: list[StandardizedWalmartMonitorListingObservation],
         unconfirmed_account_ad_days: frozenset[date],
+        confirmed_sales_days: frozenset[date] = frozenset(),
     ) -> ListingEvaluationPreview:
         archive_state_known = archive is not None
         archived = bool(archive is not None and archive.is_archived)
@@ -572,6 +597,7 @@ class ListingEvaluationPreviewService:
         )
         lifecycle_reason = None
         stock_valid30 = 0
+        sales_by_day = {row.business_date_la: row for row in sales}
         known_stages = {
             "测品期",
             "打品期",
@@ -585,7 +611,6 @@ class ListingEvaluationPreviewService:
             "已归档",
         }
         if not archived:
-            sales_by_day = {row.business_date_la: row for row in sales}
             stock_by_day = {row.snapshot_date_la: row for row in stock}
             business_days = []
             for business_date in sorted(
@@ -593,6 +618,14 @@ class ListingEvaluationPreviewService:
             ):
                 stock_row = stock_by_day.get(business_date)
                 monitor_row = monitor_by_day.get(business_date)
+                sales_row = sales_by_day.get(business_date)
+                sales_qty = (
+                    sales_row.sales_qty
+                    if sales_row is not None
+                    else ZERO
+                    if stock_row is not None and business_date in confirmed_sales_days
+                    else None
+                )
                 strike_abnormal = None
                 buybox_abnormal = None
                 if monitor_row is not None:
@@ -623,11 +656,7 @@ class ListingEvaluationPreviewService:
                     BusinessDay(
                         day=business_date,
                         wfs_qty=stock_row.wfs_available_quantity if stock_row else None,
-                        sales_qty=(
-                            sales_by_day[business_date].sales_qty
-                            if business_date in sales_by_day
-                            else None
-                        ),
+                        sales_qty=sales_qty,
                         available_qty=stock_row.available_quantity if stock_row else None,
                         strike_price_abnormal=strike_abnormal,
                         buybox_abnormal=buybox_abnormal,
@@ -649,12 +678,24 @@ class ListingEvaluationPreviewService:
         missing = [
             "ADS_COST_PUBLICATION_PROOF_MISSING",
             "HISTORICAL_LIFECYCLE_APPROVAL_EVENTS_UNVERIFIED",
-            "ZERO_SALES_DAY_COMPLETENESS_UNVERIFIED",
         ]
-        sales_valid30 = sum(
-            row.sales_qty is not None and row.business_date_la >= cutoff - timedelta(days=29)
+        valid_sales_dates_30 = {
+            row.business_date_la
             for row in sales
+            if row.sales_qty is not None
+            and row.business_date_la in confirmed_sales_days
+            and row.business_date_la >= cutoff - timedelta(days=29)
+        }
+        valid_sales_dates_30.update(
+            row.snapshot_date_la
+            for row in stock
+            if row.snapshot_date_la in confirmed_sales_days
+            and row.snapshot_date_la >= cutoff - timedelta(days=29)
+            and row.snapshot_date_la not in sales_by_day
         )
+        sales_valid30 = len(valid_sales_dates_30)
+        if sales_valid30 < 30:
+            missing.append("ZERO_SALES_DAY_COMPLETENESS_UNVERIFIED")
         if sales_valid30 < config.lifecycle.growth_min_valid_days_30:
             missing.append("SALES_TREND_VALID_DAYS_INSUFFICIENT")
         if unconfirmed_account_ad_days:
