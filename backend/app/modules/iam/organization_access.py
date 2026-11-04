@@ -63,6 +63,64 @@ def authorized_department_ids(
 ORG_OWNER_SCOPE_SESSION_KEY = "szzsbj_org_scoped_owner_refs"
 
 
+def verified_single_account_owner_refs(
+    session: Session, owner_refs: frozenset[str]
+) -> frozenset[str]:
+    """Return only owner UIDs backed by exactly one *known* source account.
+
+    IAM's historical Feishu binding has only an owner_ref key, while business
+    records are keyed by source account too. A reused or account-less UID cannot
+    be safely turned into a global owner grant until an account-specific mapping
+    is reviewed and migrated. Reject it rather than silently widening access.
+    """
+    normalized = frozenset(ref.strip() for ref in owner_refs if ref.strip())
+    if not normalized:
+        return frozenset()
+
+    query = text(
+        """
+        SELECT owner_ref
+        FROM (
+            SELECT owner_uid AS owner_ref, source_account_ref
+            FROM dwd_lingxing_sku_product_info_current
+            WHERE owner_uid IN :refs
+            UNION
+            SELECT product_developer_uid AS owner_ref, source_account_ref
+            FROM dwd_lingxing_sku_product_info_current
+            WHERE product_developer_uid IN :refs
+            UNION
+            SELECT owner_ref, source_account_ref
+            FROM mart_daily_sales_item_day
+            WHERE owner_ref IN :refs
+            UNION
+            SELECT owner_uid AS owner_ref, source_account_ref
+            FROM dws_purchase_board
+            WHERE owner_uid IN :refs
+            UNION
+            SELECT owner_ref, source_account_ref
+            FROM mart_listing_management_current
+            WHERE owner_ref IN :refs
+        ) AS matched
+        GROUP BY owner_ref
+        HAVING COUNT(DISTINCT source_account_ref) = 1
+           AND bool_and(nullif(btrim(source_account_ref), '') IS NOT NULL)
+        """
+    ).bindparams(bindparam("refs", expanding=True))
+    return frozenset(
+        str(value)
+        for value in session.execute(query, {"refs": sorted(normalized)}).scalars()
+    )
+
+
+def _require_unambiguous_owner_refs(
+    session: Session, owner_refs: frozenset[str]
+) -> frozenset[str]:
+    verified = verified_single_account_owner_refs(session, owner_refs)
+    if not verified:
+        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
+    return verified
+
+
 def resolve_business_owner_refs(
     session: Session,
     principal: Principal,
@@ -117,7 +175,7 @@ def resolve_business_owner_refs(
         )
         if not own_owner_refs:
             raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
-        return own_owner_refs
+        return _require_unambiguous_owner_refs(session, own_owner_refs)
 
     departments = authorized_department_ids(session, principal)
     if not departments:
@@ -147,4 +205,4 @@ def resolve_business_owner_refs(
     )
     if not owners:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
-    return owners
+    return _require_unambiguous_owner_refs(session, owners)
