@@ -39,7 +39,7 @@ vi.mock("./settingsApi", async (orig) => ({
   ...(await orig<typeof import("./settingsApi")>()),
   getRules: vi.fn(() => Promise.resolve({ version: { version_no: 1, effective_date: "2026-10-10", reason: "8088 初始", created_by: "system", created_at: "2026-10-10T00:00:00Z" }, rows: [], sample_rows: 0 })),
   listRuleVersions: vi.fn(() => Promise.resolve([])),
-  listRuleRows: vi.fn(() => Promise.resolve({ version: { version_no: 1, effective_date: "2026-10-10", reason: "8088 初始", created_by: "system", created_at: "2026-10-10T00:00:00Z" }, items: [], total: 0, sample_rows: 0, regions: [] })),
+  listRuleRows: vi.fn(() => Promise.resolve({ version: { version_no: 1, effective_date: "2026-10-10", reason: "8088 初始", created_by: "system", created_at: "2026-10-10T00:00:00Z" }, items: [], total: 0, total_rows: 0, sample_rows: 0, regions: [], category_counts: { shipping: 0, transit: 0, receiving: 0, dispute: 0, other: 0 } })),
   listFcRegions: vi.fn(() => Promise.resolve({ items: [], total: 0, states: [] })),
   getCreationDefaults: vi.fn(() => Promise.reject(new Error("offline"))),
   listLogisticsChannels: vi.fn(() => Promise.resolve({ items: [], loaded: false, total: 0, providers: [], methods: [] })),
@@ -86,7 +86,8 @@ describe("WFS frontend pages", () => {
     renderWithQuery(<WfsFrontendPage page={page} />);
     expect(screen.getByRole("region", { name: page.title })).toBeInTheDocument();
     if (settings) {
-      expect(await screen.findByRole("heading", { name: page.title })).toBeInTheDocument();
+      const center = page.key === "pmc_wfs_settings" || page.key === "pmc_wfs_settings_notes";
+      expect(await screen.findByRole("heading", { name: center ? "WFS 异常与提醒" : page.title })).toBeInTheDocument();
       return;
     }
     expect(await screen.findByText(sample.text)).toBeInTheDocument();

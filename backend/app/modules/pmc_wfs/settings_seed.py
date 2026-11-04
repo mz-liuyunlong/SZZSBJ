@@ -182,3 +182,20 @@ CREATION_DEFAULTS: Final = {
     "mixed_boxes": 0,
     "carrier_opt": "own",
 }
+
+# 异常与提醒分类（PMC 设置按「业务配置中心」框架展示的分类按钮，Rocky 2026-11-04）。
+# 按 rule_key 归类；编辑器新增、没有 rule_key 的规则归入「其他」。
+RULE_CATEGORIES: Final[tuple[tuple[str, str, tuple[str, ...]], ...]] = (
+    ("shipping", "创建与发货", ("draftRemind", "pendingNoShip")),
+    ("transit", "物流在途", ("portToDelivered", "etaOverdue", "deliveredNotSigned")),
+    ("receiving", "收货与上架", ("signNoReceipt", "receivingStuck", "internalWarn", "diffTol")),
+    ("dispute", "申诉", ("disputeUrgent",)),
+)
+RULE_CATEGORY_OTHER: Final = "other"
+
+
+def rule_category(rule_key: str | None) -> str:
+    for key, _label, rule_keys in RULE_CATEGORIES:
+        if rule_key in rule_keys:
+            return key
+    return RULE_CATEGORY_OTHER

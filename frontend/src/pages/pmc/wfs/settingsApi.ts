@@ -105,8 +105,25 @@ export interface SortQuery<S extends string> { sort_by: S; sort_order: "asc" | "
 export const RULE_SORTS = ["row_no", "node", "days", "row_effective_date"] as const;
 export const FC_SORTS = ["fc", "zip", "state", "shipments"] as const;
 export const CHANNEL_SORTS = ["provider_name", "channel_id", "channel_name"] as const;
-export interface RuleRowQuery extends PageQuery, SortQuery<(typeof RULE_SORTS)[number]> { region?: string; decided?: boolean }
-export interface RuleRowPage { version: RuleVersion; items: RuleRow[]; total: number; sample_rows: number; regions: string[] }
+export const RULE_CATEGORIES = [
+  { key: "shipping", label: "创建与发货" },
+  { key: "transit", label: "物流在途" },
+  { key: "receiving", label: "收货与上架" },
+  { key: "dispute", label: "申诉" },
+  { key: "other", label: "其他" },
+] as const;
+export type RuleCategory = (typeof RULE_CATEGORIES)[number]["key"];
+export interface RuleRowItem extends RuleRow { category: RuleCategory }
+export interface RuleRowQuery extends PageQuery, SortQuery<(typeof RULE_SORTS)[number]> { region?: string; decided?: boolean; category?: RuleCategory }
+export interface RuleRowPage {
+  version: RuleVersion;
+  items: RuleRowItem[];
+  total: number;
+  total_rows: number;
+  sample_rows: number;
+  regions: string[];
+  category_counts: Record<RuleCategory, number>;
+}
 export interface FcRegionQuery extends PageQuery, SortQuery<(typeof FC_SORTS)[number]> { region?: Region; state?: string }
 export interface FcRegionPage { items: FcRegion[]; total: number; states: string[] }
 export interface ChannelQuery extends PageQuery, SortQuery<(typeof CHANNEL_SORTS)[number]> { provider?: string; method?: string; enabled?: boolean }

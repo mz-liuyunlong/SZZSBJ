@@ -26,8 +26,8 @@
 ### 规则（异常与提醒规则）
 
 - `GET /rules/rows` — 生效版本的规则行，服务端分页（页面列表用）
-  - 查询：`at`（日期，取那天生效的版本，默认今天）、`page`、`page_size`、`keyword`、`search_field` = `all|node|remark|notify`、`region`、`decided`（true = 已确认，false = 示例 · 待定）、`sort_by` = `row_no|node|days|row_effective_date`（默认 `row_no`）、`sort_order`
-  - 返回：`{ version, items: RuleRow[], total, sample_rows, regions }`；`sample_rows` 是整个版本里「示例 · 待定」的条数
+  - 查询：`at`（日期，取那天生效的版本，默认今天）、`page`、`page_size`、`keyword`、`search_field` = `all|node|remark|notify`、`region`、`decided`（true = 已确认，false = 示例 · 待定）、`category` = `shipping|transit|receiving|dispute|other`（创建与发货 / 物流在途 / 收货与上架 / 申诉 / 其他，按 rule_key 归类）、`sort_by` = `row_no|node|days|row_effective_date`（默认 `row_no`）、`sort_order`
+  - 返回：`{ version, items: (RuleRow + category)[], total, total_rows, sample_rows, regions, category_counts }`；`total_rows`、`sample_rows`、`category_counts` 按整个版本统计（供统计卡和分类按钮），`total` 是当前筛选后的条数
 - `GET /rules` — 生效版本的整张规则表（编辑抽屉用；保存仍是整版本）。查询：`at`
 - `GET /rules/versions` — 规则版本历史
 - `POST /rules/versions` — 保存新版本，201
@@ -73,6 +73,7 @@
 
 ## 变更记录
 
+- 2026-11-04 fix4：`GET /rules/rows` 增加 `category` 筛选，返回 `total_rows`、`category_counts` 和每行 `category`；页面改为「业务配置中心」框架（WFS 异常与提醒：提醒规则 / 通知与口径说明 / 版本与修改记录）。
 - 2026-11-03 fix3：`GET /rules/rows` 新增；`/fc-regions`、`/logistics-channels` 改为服务端分页、搜索、筛选、白名单排序，返回下拉选项；前端页面移到「PMC 设置」分组（`/pmc/settings/...`），旧路径重定向。
 - 2026-11-03 fix2：仓库地区增加邮编、地址全称；物流渠道返回领星物流商编号、渠道编号。
 - 2026-11-03 S2 / S3：首版。

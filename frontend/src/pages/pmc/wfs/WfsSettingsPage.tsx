@@ -6,17 +6,18 @@ import type { NavigationPage } from "@/config/navigation";
 import CreationDefaultsSection from "./settings/CreationDefaultsSection";
 import FcRegionsSection from "./settings/FcRegionsSection";
 import LogisticsChannelsSection from "./settings/LogisticsChannelsSection";
-import RuleSettingsSection from "./settings/RuleSettingsSection";
-import { SettingsNotesSection, StoreSettingsSection } from "./settings/SettingsNoticeSection";
+import { StoreSettingsSection } from "./settings/SettingsNoticeSection";
+import WfsAlertCenter from "./settings/WfsAlertCenter";
+import type { SectionProps } from "./settings/settingsShared";
 import { SETTINGS_SECTION_BY_PAGE } from "./settings/settingsShared";
 
 const SECTIONS = {
-  rules: RuleSettingsSection,
+  rules: (props: SectionProps) => <WfsAlertCenter {...props} initialTab="rules" />,
   fc: FcRegionsSection,
   defaults: CreationDefaultsSection,
   channels: LogisticsChannelsSection,
   stores: StoreSettingsSection,
-  notes: SettingsNotesSection,
+  notes: (props: SectionProps) => <WfsAlertCenter {...props} initialTab="notes" />,
 };
 
 export default function WfsSettingsPage({

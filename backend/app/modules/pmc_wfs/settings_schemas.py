@@ -13,6 +13,7 @@ Region = Literal["美西", "美中", "美东", "待定"]
 Transport = Literal["LTL", "SMALL_PARCEL", "FTL"]
 CarrierOpt = Literal["own", "wm"]
 Reason = Field(min_length=2, max_length=500)
+RuleCategory = Literal["shipping", "transit", "receiving", "dispute", "other"]
 
 
 class RuleRow(Strict):
@@ -56,16 +57,23 @@ class RuleRowQuery(Strict):
     search_field: Literal["all", "node", "remark", "notify"] = "all"
     region: str | None = Field(default=None, max_length=32)
     decided: bool | None = None
+    category: RuleCategory | None = None
     sort_by: Literal["row_no", "node", "days", "row_effective_date"] = "row_no"
     sort_order: SortOrder = "asc"
 
 
+class RuleRowItem(RuleRow):
+    category: RuleCategory  # 只读展示用，按 rule_key 归类（settings_seed.RULE_CATEGORIES）
+
+
 class RuleRowPage(Strict):
     version: RuleVersionOut
-    items: list[RuleRow]
+    items: list[RuleRowItem]
     total: int
+    total_rows: int  # whole version
     sample_rows: int  # whole version, not just this page
     regions: list[str]  # 下拉选项
+    category_counts: dict[str, int]  # whole version, every category key present
 
 
 class RuleVersionList(Strict):
