@@ -8,7 +8,7 @@ const keys = (business: "purchase" | "clearance" | "listing" | "price") =>
 describe("V3 dedicated demo list columns and detail profiles", () => {
   it("uses different V3 columns for each business", () => {
     expect(keys("purchase")).toEqual(["title", "supplier", "qty", "due", "amount", "risk", "applicant", "status", "action"]);
-    expect(keys("clearance")).toEqual(["title", "sku", "storeOwner", "risk", "submitted", "reason", "methods", "targetQty", "stockListing", "inventoryCost", "status", "action"]);
+    expect(keys("clearance")).toBeUndefined(); // Clearance now uses real workbench columns.
     expect(keys("listing")).toEqual(["title", "item", "sku", "store", "listingStatus", "risk", "applicant", "submitted", "status", "action"]);
     expect(keys("price")).toEqual(["title", "sku", "oldPrice", "newPrice", "priceDelta", "priceMargin", "risk", "applicant", "status", "action"]);
   });

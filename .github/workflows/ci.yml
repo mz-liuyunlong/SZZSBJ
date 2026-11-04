@@ -6,6 +6,11 @@ on:
   push:
     branches: [dev, main, develop]
 
+# Prevent stale runs for the same PR from occupying the CI queue.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rule-pack-check:
     runs-on: ubuntu-latest
@@ -77,6 +82,40 @@ jobs:
           uv run pytest -q -rs tests/modules/ai_runtime/test_postgresql_acceptance.py
           uv run alembic downgrade 20261027_0063_ai_runtime
           uv run alembic upgrade head
+
+  clearance-v1-postgresql:
+    name: Clearance V1 isolated PostgreSQL application and approval
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: clearance_ci
+          POSTGRES_USER: clearance_ci
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U clearance_ci -d clearance_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      CLEARANCE_CI_TEST: "1"
+      TEST_DATABASE_URL: postgresql+psycopg://clearance_ci:local_ci_only@127.0.0.1:5432/clearance_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Migrate isolated PostgreSQL and verify clearance lifecycle
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run alembic upgrade head
+          uv run pytest -q -rs tests/modules/clearance_center/test_clearance_postgresql_integration.py
 
   frontend-if-present:
     runs-on: ubuntu-latest

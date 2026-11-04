@@ -52,6 +52,17 @@ class ApprovalItem(StrictSchema):
     case_opened_at: datetime | None = None
     follow_count: int | None = None
     follow_log: str | None = None
+    clearance_item_id: str | None = None
+    clearance_product_name: str | None = None
+    clearance_sku: str | None = None
+    clearance_msku: str | None = None
+    clearance_store: str | None = None
+    clearance_owner: str | None = None
+    clearance_methods: list[str] | None = None
+    clearance_target_qty: int | None = None
+    clearance_wfs_available: str | None = None
+    clearance_listing_days: int | None = None
+    clearance_stock_capital: str | None = None
 
 
 class ApprovalListData(StrictSchema):

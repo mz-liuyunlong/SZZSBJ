@@ -32,6 +32,7 @@ import {
 import { riskNames, statusNames } from "../approvalTypes";
 import { WfsCaseApprovalDetail } from "./WfsCaseApprovalDetail";
 import BusinessApprovalDetail from "./BusinessApprovalDetail";
+import ClearanceApprovalDetail from "./ClearanceApprovalDetail";
 
 type ReviewAction = Decision | "resubmit";
 
@@ -40,6 +41,7 @@ interface Props {
   directReviewAction?: "approved" | "rejected";
   selected?: ApprovalItem;
   canReview: boolean;
+  canClearanceReview: boolean;
   canAdmin: boolean;
   canSupplement: boolean;
   canPurchaseSupplement: boolean;
@@ -69,6 +71,7 @@ function ApprovalDetailDrawerInner({
   reviewOnly = false,
   directReviewAction,
   canReview,
+  canClearanceReview,
   canAdmin,
   canSupplement,
   canPurchaseSupplement,
@@ -109,7 +112,8 @@ function ApprovalDetailDrawerInner({
   const mayApprove = Boolean(
     shown && !shown.requires_verification && (shown.status === "submitted" || (shown.case_review && shown.status === "info_required")) &&
     shown.can_review && !shown.data_changed &&
-    (shown.approval_type === "wfs_case_abandon" ? canReview : canAdmin),
+    (shown.approval_type === "wfs_case_abandon" ? canReview :
+      shown.approval_type === "clearance_request" ? canClearanceReview : canAdmin),
   );
   // Derived review action opens the decision modal without a state update in an effect.
   const resolvedAction: ReviewAction | undefined = action ?? (
@@ -140,7 +144,8 @@ function ApprovalDetailDrawerInner({
   const save = async () => {
     if (!shown || !resolvedAction || saving || shown.requires_verification) return;
     if (resolvedAction === "resubmit" ? !maySupplement : !mayApprove) return;
-    if (resolvedAction !== "approved" && note.trim().length < 5) {
+    if (resolvedAction !== "approved" &&
+        (shown.approval_type === "clearance_request" && resolvedAction === "rejected" ? !note.trim() : note.trim().length < 5)) {
       void messageApi.warning("请填写至少 5 个字的处理意见");
       return;
     }
@@ -148,7 +153,7 @@ function ApprovalDetailDrawerInner({
       void messageApi.warning("请确认申请人身份记录缺失的审核风险");
       return;
     }
-    if (resolvedAction === "approved" && shown.risk_level === "high" && !riskConfirmed) {
+    if (resolvedAction === "approved" && shown.risk_level === "high" && shown.approval_type !== "clearance_request" && !riskConfirmed) {
       void messageApi.warning("请确认已审阅高风险业务依据");
       return;
     }
@@ -182,9 +187,10 @@ function ApprovalDetailDrawerInner({
     }
   };
 
-  const detailName = shown?.approval_type === "wfs_case_abandon" ? "WFS费用" : "业务审批";
+  const detailName = shown?.approval_type === "wfs_case_abandon" ? "WFS费用" : shown?.approval_type === "clearance_request" ? "清货审批" : "业务审批";
   const riskLevel = shown?.risk_level ?? selected?.risk_level;
   const isWfs = shown?.approval_type === "wfs_case_abandon";
+  const isClearance = shown?.approval_type === "clearance_request";
 
   return <>
     {holder}
@@ -206,7 +212,7 @@ function ApprovalDetailDrawerInner({
           {!mayApprove && !maySupplement ? <Tag color="default">"当前无可用审核操作"</Tag> : null}
           {maySupplement ? <Button icon={<FileTextOutlined />} onClick={() => openAction("resubmit")}>补充资料后重新提交</Button> : null}
           {mayApprove ? <>
-            <Button icon={<MessageOutlined />} onClick={() => openAction("info_required")}>要求补充资料</Button>
+            {!isClearance ? <Button icon={<MessageOutlined />} onClick={() => openAction("info_required")}>要求补充资料</Button> : null}
             <Button danger icon={<CloseOutlined />} onClick={() => openAction("rejected")}>驳回</Button>
             <Button type="primary" icon={<CheckCircleOutlined />} onClick={() => openAction("approved")}>审批通过</Button>
           </> : null}
@@ -241,6 +247,7 @@ function ApprovalDetailDrawerInner({
             <div className="approval-review__center"><Spin tip="正在读取审批详情"><div className="approval-review__spin-placeholder" /></Spin></div> : null}
           {shown ? <>
             {isWfs ? <WfsCaseApprovalDetail detail={shown} /> :
+              isClearance ? <ClearanceApprovalDetail detail={shown} /> :
               <div className="approval-review__generic"><BusinessApprovalDetail detail={shown} /></div>}
           </> : null}
         </div>
@@ -260,20 +267,20 @@ function ApprovalDetailDrawerInner({
       maskClosable={!saving}
       destroyOnHidden
     >
-      {shown ? <div className="approval-review__modal-context">
+      {shown && !isClearance ? <div className="approval-review__modal-context">
         <ExclamationCircleOutlined />
         <div><strong>{shown.title}</strong><span>{riskLevel ? riskNames[riskLevel] : ""} · {`申请人 ${shown.applicant_id || "未记录"}`}</span></div>
       </div> : null}
       <Form layout="vertical" style={{ marginTop: 18 }}>
-        <Form.Item label={resolvedAction === "approved" ? "审批意见（选填）" : resolvedAction === "rejected" ? "驳回原因（至少 5 个字）" : resolvedAction === "resubmit" ? "补充说明（至少 5 个字）" : "需补充的材料（至少 5 个字）"}>
-          <Input.TextArea rows={4} value={note} onChange={(event) => setNote(event.target.value)} maxLength={4000} showCount placeholder={resolvedAction === "approved" ? "填写审批依据，便于后续追溯" : "请明确原因与下一步要求"} />
+        <Form.Item label={resolvedAction === "approved" ? "审批意见（选填）" : resolvedAction === "rejected" ? (isClearance ? "驳回原因（必填）" : "驳回原因（至少 5 个字）") : resolvedAction === "resubmit" ? "补充说明（至少 5 个字）" : "需补充的材料（至少 5 个字）"}>
+          <Input.TextArea rows={4} style={{resize:"none"}} value={note} onChange={(event) => setNote(event.target.value)} maxLength={4000} showCount placeholder={resolvedAction === "approved" ? "填写审批依据，便于后续追溯" : "请明确原因与下一步要求"} />
         </Form.Item>
         {resolvedAction === "resubmit" ? <Form.Item label="补充证据"><Input.TextArea rows={3} value={evidence} onChange={(event) => setEvidence(event.target.value)} maxLength={4000} showCount /></Form.Item> : null}
         {shown?.case_review && !shown.applicant_id ? <Checkbox checked={identityConfirmed} onChange={(event) => setIdentityConfirmed(event.target.checked)}>
           我确认本 Case 缺少可验证的申请人身份，已核查业务资料并承担当前审核决定。
         </Checkbox> : null}
-        {resolvedAction === "approved" && riskLevel === "high" ? <Checkbox checked={riskConfirmed} onChange={(event) => setRiskConfirmed(event.target.checked)}>我已核对业务金额、申请原因、历史跟进与关联证据，并了解通过后的业务影响。</Checkbox> : null}
-        <Typography.Text type="secondary" className="approval-review__modal-hint">本操作将使用当前登录账号提交，由后端校验权限、业务状态、版本及审批记录。</Typography.Text>
+        {resolvedAction === "approved" && riskLevel === "high" && !isClearance ? <Checkbox checked={riskConfirmed} onChange={(event) => setRiskConfirmed(event.target.checked)}>我已核对业务金额、申请原因、历史跟进与关联证据，并了解通过后的业务影响。</Checkbox> : null}
+        {!isClearance ? <Typography.Text type="secondary" className="approval-review__modal-hint">本操作将使用当前登录账号提交，由后端校验权限、业务状态、版本及审批记录。</Typography.Text> : null}
       </Form>
     </Modal>
   </>;

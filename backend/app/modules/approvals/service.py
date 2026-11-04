@@ -23,6 +23,10 @@ from app.modules.approvals.schemas import (
     ApprovalSummary,
     ApprovalSupplementWrite,
 )
+from app.modules.product_management.daily_sales_costs import (
+    load_daily_sales_costs,
+    normalize_sku_key,
+)
 
 
 def blocked(status: int = 409) -> None:
@@ -252,7 +256,9 @@ class ApprovalService:
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
         return dict(row)
 
-    def _as_item(self, r: dict, actor: str, may_review: bool) -> ApprovalItem:
+    def _as_item(
+        self, r: dict, actor: str, may_review: bool, may_review_clearance: bool = False
+    ) -> ApprovalItem:
         snapshot = r["snapshot"] if isinstance(r["snapshot"], dict) else {}
         return ApprovalItem(
             id=str(r["id"]),
@@ -273,8 +279,102 @@ class ApprovalService:
             reviewed_by=r["reviewed_by"],
             reason=r["reason"],
             follow_log=r.get("follow_log"),
-            can_review=(may_review and r["status"] == "submitted" and r["applicant_id"] != actor),
+            can_review=(
+                r["status"] == "submitted"
+                and r["applicant_id"] != actor
+                and (
+                    (may_review and r["approval_type"] == "wfs_case_abandon")
+                    or (may_review_clearance and r["approval_type"] == "clearance_request")
+                )
+            ),
         )
+
+    def _with_clearance_fields(
+        self,
+        items: list[ApprovalItem],
+        account_refs: frozenset[str],
+    ) -> list[ApprovalItem]:
+        """Fill review table fields from persisted clearance requests."""
+        ids = [x.id for x in items if x.approval_type == "clearance_request"]
+        if not ids:
+            return items
+        rows = (
+            self.session.execute(
+                text("""
+                select c.approval_id::text as approval_id,c.item_id,
+                       c.target_qty,c.methods,c.source_account_ref,c.store_id,
+                       l.local_sku,l.msku,l.title,l.store_name,l.owner_ref,
+                       l.wfs_available_quantity,l.listing_start_at_utc
+                from ops_clearance_requests c
+                join mart_listing_management_current l on l.id=c.listing_id
+                  and l.source_account_ref=c.source_account_ref
+                  and l.store_id=c.store_id and l.item_id=c.item_id
+                where c.approval_id::text=any(:ids)
+                  and c.source_account_ref=any(:accounts)
+            """),
+                {"ids": ids, "accounts": list(account_refs)},
+            )
+            .mappings()
+            .all()
+        )
+        lookup = {r["approval_id"]: r for r in rows}
+        costs_by_account = {
+            account: load_daily_sales_costs(self.session, source_account_ref=account)
+            for account in {str(r["source_account_ref"]) for r in rows}
+        }
+        result = []
+        for item in items:
+            r = lookup.get(item.id)
+            if r is None:
+                result.append(item)
+                continue
+            started = r["listing_start_at_utc"]
+            listing_days = (
+                max(0, (datetime.now(UTC).date() - started.astimezone(UTC).date()).days)
+                if started is not None and started.tzinfo is not None
+                else None
+            )
+            sku = normalize_sku_key(r["local_sku"])
+            unit_cost = None
+            cost = costs_by_account.get(str(r["source_account_ref"]), {}).get(sku) if sku else None
+            if (
+                cost is not None
+                and cost.purchase_cost_unit_cny is not None
+                and cost.first_leg_cost_unit_cny is not None
+                and cost.exchange_rate is not None
+                and cost.exchange_rate > 0
+                and not cost.root_missing_codes
+            ):
+                unit_cost = (
+                    cost.purchase_cost_unit_cny + cost.first_leg_cost_unit_cny
+                ) / cost.exchange_rate
+            stock_capital = (
+                str(unit_cost * r["wfs_available_quantity"])
+                if unit_cost is not None and r["wfs_available_quantity"] is not None
+                else None
+            )
+            result.append(
+                item.model_copy(
+                    update={
+                        "clearance_stock_capital": stock_capital,
+                        "clearance_item_id": r["item_id"],
+                        "clearance_product_name": r["title"],
+                        "clearance_sku": r["local_sku"],
+                        "clearance_msku": r["msku"],
+                        "clearance_store": r["store_name"] or r["store_id"],
+                        "clearance_owner": r["owner_ref"],
+                        "clearance_methods": r["methods"],
+                        "clearance_target_qty": r["target_qty"],
+                        "clearance_wfs_available": (
+                            str(r["wfs_available_quantity"])
+                            if r["wfs_available_quantity"] is not None
+                            else None
+                        ),
+                        "clearance_listing_days": listing_days,
+                    }
+                )
+            )
+        return result
 
     def legacy_unverified(
         self, query: ApprovalQuery, account_refs: frozenset[str]
@@ -554,12 +654,14 @@ class ApprovalService:
         account_refs: frozenset[str],
         actor: str,
         is_admin: bool,
+        may_review_clearance: bool = False,
     ) -> tuple[ApprovalListData, int]:
         """Page formal approvals and current WFS Case decisions without duplicates."""
         params: dict = {
             "accounts": list(account_refs),
             "actor": actor,
             "is_admin": is_admin,
+            "clearance_reviewer": may_review_clearance,
             "limit": query.page_size,
             "offset": (query.page - 1) * query.page_size,
         }
@@ -573,7 +675,8 @@ class ApprovalService:
         formal_where = [
             "a.source_account_ref=any(:accounts)",
             formal_status,
-            "(a.approval_type='wfs_case_abandon' or a.applicant_id=:actor or :is_admin)",
+            "(a.approval_type='wfs_case_abandon' or a.applicant_id=:actor or :is_admin "
+            "or (a.approval_type='clearance_request' and :clearance_reviewer))",
         ]
         case_status = (
             ["c.status='archive_pending'", "c.archive_review_status='pending'"]
@@ -631,7 +734,9 @@ class ApprovalService:
                    a.snapshot->>'pending_recover_amount' as amount,
                    a.snapshot->>'currency_code' as currency_code,
                    a.submitted_at, a.reviewed_at, a.reviewed_by, a.reason,
-                   (a.status='submitted' and a.applicant_id<>:actor) as can_review,
+                   (a.status='submitted' and a.applicant_id<>:actor and
+                    (a.approval_type='wfs_case_abandon' or :is_admin or
+                     (a.approval_type='clearance_request' and :clearance_reviewer))) as can_review,
                    false as requires_verification, false as case_review,
                    a.submitted_at as sort_time,
                    (select wc.follow_log from ops_wfs_fee_anomaly_cases wc
@@ -704,7 +809,11 @@ class ApprovalService:
             .mappings()
             .all()
         )
-        return ApprovalListData(items=[ApprovalItem(**dict(row)) for row in rows]), total
+        return ApprovalListData(
+            items=self._with_clearance_fields(
+                [ApprovalItem(**dict(row)) for row in rows], account_refs
+            )
+        ), total
 
     def list_requests(
         self,
@@ -713,9 +822,12 @@ class ApprovalService:
         actor: str,
         may_review: bool,
         is_admin: bool = False,
+        may_review_clearance: bool = False,
     ) -> tuple[ApprovalListData, int]:
         if may_review and query.view != "created":
-            return self._list_pending_with_legacy(query, account_refs, actor, is_admin)
+            return self._list_pending_with_legacy(
+                query, account_refs, actor, is_admin, may_review_clearance
+            )
         status_clause = (
             "a.status in ('submitted','info_required')"
             if query.tab == "pending"
@@ -726,21 +838,27 @@ class ApprovalService:
         where = [
             "a.source_account_ref=any(:accounts)",
             status_clause,
-            "(a.approval_type='wfs_case_abandon' or a.applicant_id=:actor or :is_admin)",
+            "(a.applicant_id=:actor or :is_admin "
+            "or (a.approval_type='clearance_request' and :clearance_reviewer) "
+            "or (a.approval_type='wfs_case_abandon' and :may_review_wfs))",
         ]
         params: dict = {
             "accounts": list(account_refs),
             "actor": actor,
             "is_admin": is_admin,
+            "clearance_reviewer": may_review_clearance,
+            "may_review_wfs": may_review,
             "limit": query.page_size,
             "offset": (query.page - 1) * query.page_size,
         }
-        if not may_review:
-            where.append("a.applicant_id=:actor")
-        elif query.view == "created":
+        if query.view == "created":
             where.append("a.applicant_id=:actor")
         elif query.view == "mine":
             where.append("a.applicant_id<>:actor")
+            if not may_review and not is_admin:
+                where.append("a.approval_type='clearance_request' and :clearance_reviewer")
+        elif not may_review and not may_review_clearance and not is_admin:
+            where.append("a.applicant_id=:actor")
         if query.approval_type:
             where.append("a.approval_type=:kind")
             params["kind"] = query.approval_type
@@ -775,7 +893,10 @@ class ApprovalService:
             .all()
         )
         return ApprovalListData(
-            items=[self._as_item(dict(r), actor, may_review) for r in rows]
+            items=self._with_clearance_fields(
+                [self._as_item(dict(r), actor, may_review, may_review_clearance) for r in rows],
+                account_refs,
+            )
         ), int(total)
 
     def summary(
@@ -784,6 +905,7 @@ class ApprovalService:
         actor: str,
         may_review: bool,
         is_admin: bool = False,
+        may_review_clearance: bool = False,
     ) -> ApprovalSummary:
         row = (
             self.session.execute(
@@ -794,14 +916,16 @@ class ApprovalService:
               count(*) filter (where status='info_required') info_required,
               count(*) filter (where status='approved') approved
             from app_approval_requests where source_account_ref=any(:accounts)
-              and (:may_review or applicant_id=:actor)
-              and (approval_type='wfs_case_abandon' or applicant_id=:actor or :is_admin)
+              and (applicant_id=:actor or :is_admin
+                   or (:may_review and approval_type='wfs_case_abandon')
+                   or (:clearance_reviewer and approval_type='clearance_request'))
         """),
                 {
                     "accounts": list(account_refs),
                     "actor": actor,
                     "may_review": may_review,
                     "is_admin": is_admin,
+                    "clearance_reviewer": may_review_clearance,
                 },
             )
             .mappings()
@@ -862,15 +986,18 @@ class ApprovalService:
         actor: str,
         may_review: bool,
         is_admin: bool = False,
+        may_review_clearance: bool = False,
     ) -> ApprovalDetail:
         record = self._record(approval_id, account_refs)
-        if (not may_review and record["applicant_id"] != actor) or (
-            record["approval_type"] != "wfs_case_abandon"
-            and not is_admin
-            and record["applicant_id"] != actor
-        ):
+        permitted = (
+            record["applicant_id"] == actor
+            or is_admin
+            or (record["approval_type"] == "wfs_case_abandon" and may_review)
+            or (record["approval_type"] == "clearance_request" and may_review_clearance)
+        )
+        if not permitted:
             raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
-        item = self._as_item(record, actor, may_review)
+        item = self._as_item(record, actor, may_review, may_review_clearance)
         events = (
             self.session.execute(
                 text("""
@@ -888,12 +1015,20 @@ class ApprovalService:
             "finance_exception",
             "access_change",
             "operations_plan_ack",
+            "clearance_request",
         ):
+            current_clearance = None
+            if record["approval_type"] == "clearance_request":
+                from app.modules.clearance_center.service import ClearanceService
+
+                current_clearance = ClearanceService(self.session).request_detail(
+                    UUID(record["business_ref"]), account_refs
+                )
             return ApprovalDetail(
                 **item.model_dump(),
                 snapshot=record["snapshot"],
                 evidence=record["evidence"],
-                current_case=None,
+                current_case=current_clearance,
                 data_changed=False,
                 can_supplement=(
                     record["status"] == "info_required" and record["applicant_id"] == actor

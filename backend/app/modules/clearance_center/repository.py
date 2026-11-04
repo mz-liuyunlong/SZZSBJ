@@ -1,0 +1,906 @@
+"""Read-only Listing aggregation for WFS clearance, using existing governed MARTs."""
+
+from __future__ import annotations
+
+from datetime import date, datetime, timedelta
+from decimal import Decimal
+from zoneinfo import ZoneInfo
+
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from app.modules.clearance_center.eligibility import ACTIVE_WFS_LISTING_SQL
+from app.modules.clearance_center.rules import DEFAULT_RULES, evaluate, number
+from app.modules.product_management.daily_sales_costs import (
+    load_daily_sales_costs,
+    normalize_sku_key,
+)
+
+LOS_ANGELES = ZoneInfo("America/Los_Angeles")
+
+def evaluation_run_status(run_date_la: date, *, today: date | None = None) -> str:
+    """Do not report yesterday's last good run as today's successful evaluation."""
+    current = today or datetime.now(LOS_ANGELES).date()
+    return "ready" if run_date_la == current else "stale"
+
+
+
+def overlay_latest_wfs(evaluation: dict, listing: dict) -> dict:
+    """Keep daily risk unchanged, but always show current conservative WFS."""
+    result = dict(evaluation)
+    result["warnings"] = list(evaluation.get("warnings", []))
+    result["evaluated_wfs_available"] = evaluation.get("current_wfs_available")
+    current_mart = number(listing.get("wfs_available_quantity"))
+    current_snapshot = number(listing.get("snapshot_wfs_available"))
+    minimum = (
+        min(current_mart, current_snapshot)
+        if current_mart is not None and current_snapshot is not None else None
+    )
+    result["current_wfs_available"] = str(minimum) if minimum is not None else None
+    captured = listing.get("inventory_captured_at")
+    result["inventory_captured_at"] = captured.isoformat() if captured is not None else None
+    now = datetime.now(LOS_ANGELES)
+    fresh = bool(
+        captured is not None and captured.tzinfo is not None and
+        timedelta(0) <= now - captured <= timedelta(hours=72)
+    )
+    if minimum is None or minimum <= 0 or not fresh:
+        result["current_inventory_not_eligible"] = True
+        if "WFS_STOCK_UNAVAILABLE_OR_STALE" not in result["warnings"]:
+            result["warnings"].append("WFS_STOCK_UNAVAILABLE_OR_STALE")
+    else:
+        result["current_inventory_not_eligible"] = False
+        result["warnings"] = [
+            x for x in result["warnings"]
+            if x != "WFS_STOCK_UNAVAILABLE_OR_STALE"
+        ]
+    return result
+
+
+class ClearanceReadRepository:
+    def __init__(self, session: Session):
+        self.session = session
+
+    def rules(self, account: str) -> tuple[dict, int]:
+        row = (
+            self.session.execute(
+                text("""
+            select rules_json,version from ops_clearance_rule_sets where source_account_ref=:account
+        """),
+                {"account": account},
+            )
+            .mappings()
+            .first()
+        )
+        return (
+            ({**DEFAULT_RULES, **row["rules_json"]}, int(row["version"]))
+            if row
+            else (dict(DEFAULT_RULES), 0)
+        )
+
+    def listing(
+        self, listing_id: str, accounts: frozenset[str], *, lock: bool = False
+    ) -> dict | None:
+        sql = """
+          select l.id::text id,l.source_account_ref,l.store_id,l.store_name,l.item_id,
+                 l.local_sku,l.msku,l.title,l.picture_url,l.owner_ref,l.listing_status,
+                 l.fulfillment_type,l.sale_price_amount,l.sale_price_currency_code,
+                 l.wfs_available_quantity,l.inbound_quantity,l.average_rating,
+                 l.review_count,l.buybox_status,l.listing_start_at_utc,l.calculated_at,
+                 snap.wfs_available_quantity snapshot_wfs_available,
+                 snap.captured_at inventory_captured_at,
+                 exists (
+                   select 1 from listing_archive_states archive_state
+                   where archive_state.listing_id=l.id
+                     and archive_state.source_account_ref=l.source_account_ref
+                     and archive_state.store_id=l.store_id
+                     and archive_state.item_id=l.item_id
+                     and archive_state.is_archived=true
+                 ) is_archived
+            from mart_listing_management_current l
+            left join lateral (
+              select i.wfs_available_quantity,i.captured_at
+                from fact_walmart_listing_inventory_daily i
+               where i.source_account_ref=l.source_account_ref
+                 and i.store_id=l.store_id and i.item_id=l.item_id
+               order by i.snapshot_date_la desc, i.captured_at desc limit 1
+            ) snap on true
+           where l.id=cast(:id as uuid) and l.source_account_ref=any(:accounts)
+        """
+        if lock:
+            # Locks only the request-source Listing, not the inventory snapshot.
+            sql += " for update of l"
+        row = (
+            self.session.execute(text(sql), {"id": listing_id, "accounts": list(accounts)})
+            .mappings()
+            .first()
+        )
+        return dict(row) if row else None
+
+    def listings(
+        self,
+        accounts: frozenset[str],
+        *,
+        store_id: str = "",
+        keyword: str = "",
+        eligible_only: bool = False,
+    ) -> list[dict]:
+        where = ["l.source_account_ref=any(:accounts)"]
+        params: dict = {"accounts": list(accounts)}
+        if store_id:
+            where.append("l.store_id=:store")
+            params["store"] = store_id
+        if keyword:
+            where.append("""(l.item_id ilike :q or coalesce(l.msku,'') ilike :q
+                             or coalesce(l.local_sku,'') ilike :q or coalesce(l.title,'')
+                               ilike :q)""")
+            params["q"] = f"%{keyword.strip()}%"
+        if eligible_only:
+            where.append(ACTIVE_WFS_LISTING_SQL)
+        sql = (
+            """
+          select l.id::text id,l.source_account_ref,l.store_id,l.store_name,l.item_id,
+                 l.local_sku,l.msku,l.title,l.picture_url,l.owner_ref,l.listing_status,
+                 l.fulfillment_type,l.sale_price_amount,l.sale_price_currency_code,
+                 l.wfs_available_quantity,l.inbound_quantity,l.average_rating,
+                 l.review_count,l.buybox_status,l.listing_start_at_utc,l.calculated_at,
+                 snap.wfs_available_quantity snapshot_wfs_available,
+                 snap.captured_at inventory_captured_at
+            from mart_listing_management_current l
+            left join lateral (
+              select i.wfs_available_quantity,i.captured_at
+                from fact_walmart_listing_inventory_daily i
+               where i.source_account_ref=l.source_account_ref
+                 and i.store_id=l.store_id and i.item_id=l.item_id
+               order by i.snapshot_date_la desc, i.captured_at desc limit 1
+            ) snap on true
+           where """
+            + " and ".join(where)
+            + " order by l.source_account_ref,l.store_id,l.item_id"
+        )
+        return [dict(x) for x in self.session.execute(text(sql), params).mappings().all()]
+
+    def facets(self, accounts: frozenset[str]) -> dict:
+        """Scope-filtered stores with current WFS stock and no manual archive."""
+        rows = self.session.execute(
+            text("""
+                select l.source_account_ref,l.store_id,max(l.store_name) store_name
+                  from mart_listing_management_current l
+                  left join lateral (
+                    select i.wfs_available_quantity,i.captured_at
+                      from fact_walmart_listing_inventory_daily i
+                     where i.source_account_ref=l.source_account_ref
+                       and i.store_id=l.store_id and i.item_id=l.item_id
+                     order by i.snapshot_date_la desc,i.captured_at desc limit 1
+                  ) snap on true
+                 where l.source_account_ref=any(:accounts) and
+            """ + ACTIVE_WFS_LISTING_SQL + """
+                 group by l.source_account_ref,l.store_id
+                 order by l.source_account_ref,l.store_id
+            """),
+            {"accounts": list(accounts)},
+        ).mappings().all()
+        return {
+            "stores": [
+                {
+                    "source_account_ref": row["source_account_ref"],
+                    "store_id": row["store_id"],
+                    "store_name": row["store_name"],
+                }
+                for row in rows
+            ],
+            "accounts": sorted({row["source_account_ref"] for row in rows}),
+        }
+
+    def today_run_health(self) -> dict:
+        """Current LA-day scheduler status without exposing cross-account Listing data."""
+        local_day = datetime.now(LOS_ANGELES).date()
+        row = self.session.execute(
+            text("""
+                select status,attempt_count,started_at,finished_at,
+                       next_retry_at,error_code
+                  from ops_clearance_daily_runs
+                 where run_date_la=:day
+            """),
+            {"day": local_day},
+        ).mappings().first()
+        if row is None:
+            return {
+                "expected_run_date_la": local_day.isoformat(),
+                "scheduled_run_status": "missing",
+                "scheduled_attempt_count": 0,
+                "scheduled_started_at": None,
+                "scheduled_finished_at": None,
+                "scheduled_next_retry_at": None,
+                "scheduled_error_code": None,
+            }
+        return {
+            "expected_run_date_la": local_day.isoformat(),
+            "scheduled_run_status": row["status"],
+            "scheduled_attempt_count": int(row["attempt_count"]),
+            "scheduled_started_at": (
+                row["started_at"].isoformat() if row["started_at"] else None
+            ),
+            "scheduled_finished_at": (
+                row["finished_at"].isoformat() if row["finished_at"] else None
+            ),
+            "scheduled_next_retry_at": (
+                row["next_retry_at"].isoformat() if row["next_retry_at"] else None
+            ),
+            "scheduled_error_code": row["error_code"],
+        }
+
+    def latest_completed_run(self) -> dict | None:
+        row = self.session.execute(
+            text("""select id::text id,run_date_la,as_of_date_la,status,
+                           started_at,finished_at,listing_count,quality_json
+                    from ops_clearance_daily_runs
+                    where status='succeeded' and finished_at is not null
+                    order by run_date_la desc limit 1""")
+        ).mappings().first()
+        return dict(row) if row else None
+
+    def snapshot_listing(self, listing: dict, *, run: dict) -> dict | None:
+        """One daily score by full account/store/item identity."""
+        row = self.session.execute(
+            text("""select evaluation_json,rule_config_version,quality_status
+                     from ops_clearance_daily_evaluations
+                    where run_id=cast(:run as uuid)
+                      and source_account_ref=:account and store_id=:store
+                      and item_id=:item and listing_id=cast(:listing_id as uuid)"""),
+            {
+                "run": run["id"], "account": listing["source_account_ref"],
+                "store": listing["store_id"], "item": listing["item_id"],
+                "listing_id": listing["id"],
+            },
+        ).mappings().first()
+        if row is None:
+            return None
+        evaluation = overlay_latest_wfs(dict(row["evaluation_json"]), listing)
+        evaluation["quality_status"] = row["quality_status"]
+        evaluation["evaluation_run_date_la"] = run["run_date_la"].isoformat()
+        evaluation["as_of_date"] = run["as_of_date_la"].isoformat()
+        evaluation["daily_evaluation_status"] = evaluation_run_status(run["run_date_la"])
+        if evaluation["daily_evaluation_status"] != "ready":
+            evaluation["historical_candidate_status"] = evaluation.get("candidate_status")
+            evaluation["candidate_status"] = "review_required"
+            evaluation["warnings"] = [
+                *evaluation.get("warnings", []), "DAILY_EVALUATION_STALE"
+            ]
+        return {
+            "listing": listing, "evaluation": evaluation,
+            "rule_config_version": int(row["rule_config_version"]),
+        }
+
+    def snapshot_page(
+        self, accounts: frozenset[str], *, run: dict, store_id: str = "",
+        keyword: str = "", risk_level: str | None = None,
+        candidate_status: str | None = None, page: int = 1,
+        page_size: int = 50, financial_sort: bool = True,
+    ) -> dict:
+        """SQL-filtered count and LIMIT/OFFSET against persisted daily results."""
+        where = ["e.run_id=cast(:run as uuid)", "e.source_account_ref=any(:accounts)"]
+        params: dict = {
+            "run": run["id"], "accounts": list(accounts), "limit": page_size,
+            "offset": (page - 1) * page_size,
+        }
+        if store_id:
+            where.append("e.store_id=:store")
+            params["store"] = store_id
+        if keyword:
+            where.append("""(e.item_id ilike :q or coalesce(l.local_sku,'') ilike :q
+                              or coalesce(l.msku,'') ilike :q or
+                              coalesce(l.title,'') ilike :q)""")
+            params["q"] = f"%{keyword.strip()}%"
+        if risk_level:
+            where.append("e.risk_level=:risk")
+            params["risk"] = risk_level
+        if candidate_status:
+            where.append("e.candidate_status=:candidate")
+            params["candidate"] = candidate_status
+        conditions = " and ".join(where)
+        base = """ from ops_clearance_daily_evaluations e
+                  join mart_listing_management_current l
+                    on l.id=e.listing_id and l.source_account_ref=e.source_account_ref
+                   and l.store_id=e.store_id and l.item_id=e.item_id
+                  left join lateral (
+                    select i.wfs_available_quantity,i.captured_at
+                      from fact_walmart_listing_inventory_daily i
+                     where i.source_account_ref=l.source_account_ref
+                       and i.store_id=l.store_id and i.item_id=l.item_id
+                     order by i.snapshot_date_la desc,i.captured_at desc limit 1
+                  ) snap on true
+                where """ + conditions + " and " + ACTIVE_WFS_LISTING_SQL
+        total = int(
+            self.session.execute(text("select count(*)" + base), params).scalar_one()
+        )
+        sort_capital = "e.stock_capital_usd desc nulls last," if financial_sort else ""
+        sort_profit = (
+            "e.profit_30d_amount asc nulls last, "
+            "e.refund_loss_30d desc nulls last,"
+            if financial_sort else ""
+        )
+        sql = """select l.id::text id,l.source_account_ref,l.store_id,l.store_name,
+                       l.item_id,l.local_sku,l.msku,l.title,l.picture_url,l.owner_ref,
+                       l.listing_status,l.fulfillment_type,l.sale_price_amount,
+                       l.sale_price_currency_code,l.wfs_available_quantity,
+                       l.inbound_quantity,l.average_rating,l.review_count,
+                       l.buybox_status,l.listing_start_at_utc,l.calculated_at,
+                       snap.wfs_available_quantity snapshot_wfs_available,
+                       snap.captured_at inventory_captured_at,
+                       e.evaluation_json,e.rule_config_version,e.quality_status
+                 """ + base + """
+                 order by case e.risk_level when 'high' then 0
+                                            when 'medium' then 1
+                                            when 'unknown' then 2 else 3 end,
+                          """ + sort_capital + """
+                          e.coverage_days desc nulls last,
+                          """ + sort_profit + """
+                          e.source_account_ref,e.store_id,e.item_id
+                 limit :limit offset :offset"""
+        records = self.session.execute(text(sql), params).mappings().all()
+        items = []
+        for row in records:
+            item = dict(row)
+            evaluation = overlay_latest_wfs(item.pop("evaluation_json"), item)
+            version = item.pop("rule_config_version")
+            quality = item.pop("quality_status")
+            evaluation["quality_status"] = quality
+            evaluation["daily_evaluation_status"] = evaluation_run_status(run["run_date_la"])
+            items.append({
+                "listing": item, "evaluation": evaluation,
+                "rule_config_version": version,
+            })
+        return {
+            "items": items, "total": total, "page": page, "page_size": page_size,
+            "evaluation_status": evaluation_run_status(run["run_date_la"]),
+            "run_date_la": run["run_date_la"].isoformat(),
+            "as_of_date_la": run["as_of_date_la"].isoformat(),
+        }
+
+    def manual_eligible_page(
+        self, accounts: frozenset[str], *, store_id: str = "", keyword: str = "",
+        page: int = 1, page_size: int = 50,
+    ) -> dict:
+        """Live WFS-only picker with eligibility-before-pagination and no risk gate."""
+        where = [
+            "l.source_account_ref=any(:accounts)",
+            ACTIVE_WFS_LISTING_SQL,
+        ]
+        params: dict = {
+            "accounts": list(accounts), "limit": page_size,
+            "offset": (page - 1) * page_size,
+        }
+        if store_id:
+            where.append("l.store_id=:store")
+            params["store"] = store_id
+        if keyword:
+            where.append("""(l.item_id ilike :q or coalesce(l.msku,'') ilike :q
+                              or coalesce(l.local_sku,'') ilike :q
+                              or coalesce(l.title,'') ilike :q)""")
+            params["q"] = f"%{keyword.strip()}%"
+        identity = """
+            from mart_listing_management_current l
+            left join lateral (
+                select i.wfs_available_quantity,i.captured_at
+                from fact_walmart_listing_inventory_daily i
+                where i.source_account_ref=l.source_account_ref
+                  and i.store_id=l.store_id and i.item_id=l.item_id
+                order by i.snapshot_date_la desc,i.captured_at desc limit 1
+            ) snap on true
+            where """ + " and ".join(where)
+        count = int(self.session.execute(text("select count(*) " + identity), params).scalar_one())
+        sql = """select l.id::text id,l.source_account_ref,l.store_id,l.store_name,
+                        l.item_id,l.local_sku,l.msku,l.title,l.picture_url,l.owner_ref,
+                        l.listing_status,l.fulfillment_type,l.sale_price_amount,
+                        l.sale_price_currency_code,l.wfs_available_quantity,
+                        l.inbound_quantity,l.average_rating,l.review_count,
+                        l.buybox_status,l.listing_start_at_utc,l.calculated_at,
+                        snap.wfs_available_quantity snapshot_wfs_available,
+                        snap.captured_at inventory_captured_at """ + identity + """
+                order by l.source_account_ref,l.store_id,l.item_id
+                limit :limit offset :offset"""
+        page_rows = [dict(x) for x in self.session.execute(text(sql), params).mappings()]
+        return {"rows": page_rows, "total": count, "page": page, "page_size": page_size}
+
+    def daily_summary(self, accounts: frozenset[str], *, run: dict, store_id: str = "") -> dict:
+        where = ["e.run_id=cast(:run as uuid)", "e.source_account_ref=any(:accounts)"]
+        params: dict = {"run": run["id"], "accounts": list(accounts)}
+        if store_id:
+            where.append("e.store_id=:store")
+            params["store"] = store_id
+        base = """
+            from ops_clearance_daily_evaluations e
+            join mart_listing_management_current l
+              on l.id=e.listing_id and l.source_account_ref=e.source_account_ref
+             and l.store_id=e.store_id and l.item_id=e.item_id
+            left join lateral (
+              select i.wfs_available_quantity,i.captured_at
+                from fact_walmart_listing_inventory_daily i
+               where i.source_account_ref=l.source_account_ref
+                 and i.store_id=l.store_id and i.item_id=l.item_id
+               order by i.snapshot_date_la desc,i.captured_at desc limit 1
+            ) snap on true
+            where """ + " and ".join(where) + " and " + ACTIVE_WFS_LISTING_SQL
+        row = self.session.execute(
+            text("""select count(*) total,
+                    count(*) filter(where e.risk_level='high' and e.candidate_status='auto') high,
+                    count(*) filter(where e.risk_level='medium' and e.candidate_status='auto') medium,
+                    count(*) filter(where e.candidate_status='observe') observe,
+                    count(*) filter(where e.candidate_status='review_required') review_required
+            """ + base),
+            params,
+        ).mappings().one()
+        result = {key: int(value) for key, value in row.items()}
+        eligible = self.manual_eligible_page(
+            accounts, store_id=store_id, page=1, page_size=1
+        )
+        result["eligible_manual"] = eligible["total"]
+        result["run_date_la"] = run["run_date_la"].isoformat()
+        result["as_of_date_la"] = run["as_of_date_la"].isoformat()
+        result["evaluation_status"] = evaluation_run_status(run["run_date_la"])
+        return result
+
+    def readiness_report(
+        self, accounts: frozenset[str], *, store_id: str = "",
+    ) -> dict:
+        """Live read-only evidence audit, scoped before counting any Listing."""
+        params: dict = {"accounts": list(accounts)}
+        if store_id:
+            params["store"] = store_id
+        eligible_filter = """
+            from mart_listing_management_current l
+            left join lateral (
+              select i.wfs_available_quantity,i.captured_at
+                from fact_walmart_listing_inventory_daily i
+               where i.source_account_ref=l.source_account_ref
+                 and i.store_id=l.store_id and i.item_id=l.item_id
+               order by i.snapshot_date_la desc,i.captured_at desc limit 1
+            ) snap on true
+            where l.source_account_ref=any(:accounts)
+        """
+        if store_id:
+            eligible_filter += " and l.store_id=:store"
+        eligible_filter += " and " + ACTIVE_WFS_LISTING_SQL
+        available = int(self.session.execute(
+            text("select count(*) " + eligible_filter), params
+        ).scalar_one())
+        run = self.latest_completed_run()
+        run_health = self.today_run_health()
+        if run is None:
+            return {
+                **run_health,
+                "evaluation_status": "not_ready", "run_date_la": None,
+                "expected_run_date_la": datetime.now(LOS_ANGELES).date().isoformat(),
+                "as_of_date_la": None, "total_listings": available,
+                "evaluated_listings": 0, "not_evaluated_listings": available,
+                "missing_sales_window": None, "missing_wfs_stock": None,
+                "missing_profit_cost": None, "missing_listing_start": None,
+                "history_21day_eligible": None,
+                "refund_period_data_complete": False,
+            }
+        params["run"] = run["id"]
+        rows = self.session.execute(
+            text("""select count(*) total,
+                      count(*) filter(where quality_status='complete') complete,
+                      count(*) filter(where quality_status='partial') partial,
+                      count(*) filter(where quality_status='stale') stale,
+                      count(*) filter(where evaluation_json->'warnings'
+                               ? 'SALES_WINDOW_UNVERIFIED') missing_sales_window,
+                      count(*) filter(where evaluation_json->'warnings'
+                               ? 'WFS_STOCK_UNAVAILABLE_OR_STALE') missing_wfs_stock,
+                      count(*) filter(where evaluation_json->'warnings'
+                               ? 'PROFIT_COST_INCOMPLETE') missing_profit_cost,
+                      count(*) filter(where evaluation_json->'warnings'
+                               ? 'LISTING_START_UNKNOWN') missing_listing_start,
+                      count(*) filter(where
+                         (evaluation_json->>'positive_stock_days_30d')::integer >= 21)
+                         history_21day_eligible,
+                      count(*) filter(where
+                         (evaluation_json->>'source_sales_coverage_days_30d')::integer >= 30)
+                         sales_source_30day_covered,
+                      count(*) filter(where
+                         coalesce((evaluation_json->>'source_mart_qty_match')::boolean,false)
+                           = false) sales_mart_qty_mismatch,
+                      count(*) filter(where
+                         evaluation_json->>'refund_rate_percent' is not null)
+                           refund_rate_computed,
+                      count(*) filter(where
+                         evaluation_json->>'calc_versions' is null)
+                           missing_calc_version
+                   from ops_clearance_daily_evaluations e
+                   join mart_listing_management_current l
+                     on l.id=e.listing_id
+                    and l.source_account_ref=e.source_account_ref
+                    and l.store_id=e.store_id and l.item_id=e.item_id
+                   left join lateral (
+                     select i.wfs_available_quantity,i.captured_at
+                       from fact_walmart_listing_inventory_daily i
+                      where i.source_account_ref=l.source_account_ref
+                        and i.store_id=l.store_id and i.item_id=l.item_id
+                      order by i.snapshot_date_la desc,i.captured_at desc limit 1
+                   ) snap on true
+                   where e.run_id=cast(:run as uuid)
+                     and e.source_account_ref=any(:accounts)"""
+                 + (" and e.store_id=:store" if store_id else "")
+                 + " and " + ACTIVE_WFS_LISTING_SQL),
+            params,
+        ).mappings().one()
+        report = {key: int(value) for key, value in rows.items()}
+        report.update({
+            **run_health,
+            "evaluation_status": evaluation_run_status(run["run_date_la"]),
+            "run_date_la": run["run_date_la"].isoformat(),
+            "expected_run_date_la": datetime.now(LOS_ANGELES).date().isoformat(),
+            "as_of_date_la": run["as_of_date_la"].isoformat(),
+            "total_listings": available,
+            "evaluated_listings": report.pop("total"),
+            "not_evaluated_listings": max(available - int(rows["total"]), 0),
+            "refund_period_data_complete": False,
+            "refund_coverage_note": (
+                "Refund events are event-date based; no verified per-day refund "
+                "sync watermark is available. Absence is not treated as zero."
+            ),
+        })
+        return report
+
+    def evidence(
+        self, listings: list[dict], *, as_of: date | None = None,
+        cost_cache: dict[str, dict] | None = None,
+    ) -> dict[tuple[str, str, str], dict]:
+        """Aggregate only requested Listing identities; never join by SKU alone."""
+        if not listings:
+            return {}
+        day = as_of or datetime.now(LOS_ANGELES).date()
+        accounts = sorted({str(x["source_account_ref"]) for x in listings})
+        ids = sorted({str(x["item_id"]) for x in listings})
+        params = {"accounts": accounts, "items": ids, "day": day}
+        sales = (
+            self.session.execute(
+                text("""
+          select source_account_ref,store_id,item_id,
+            sum(sales_qty) filter(where business_date_la between :day - 29 and :day) sales30,
+            sum(gross_sales_qty) filter(where business_date_la between :day - 29 and :day)
+              gross_sales30,
+            sum(gross_sales_qty) filter(where business_date_la between :day - 6 and :day)
+              gross_sales7,
+            sum(gross_sales_qty) filter(where business_date_la between :day - 13 and :day - 7)
+              gross_sales_prev7,
+            sum(sales_qty) filter(where business_date_la between :day - 6 and :day) sales7,
+            sum(sales_qty) filter(where business_date_la between :day - 13 and :day - 7) prev7,
+            sum(sales_amount) filter(where business_date_la between :day - 29 and :day) revenue30,
+            sum(sales_amount) filter(where business_date_la between :day - 6 and :day) revenue7,
+            sum(sales_amount) filter(where business_date_la between :day - 13 and :day - 7)
+              revenue_prev7,
+            sum(gross_profit_amount) filter(where business_date_la between :day - 29 and :day)
+              profit30,
+            sum(gross_profit_amount) filter(where business_date_la between :day - 6 and :day)
+              profit7,
+            sum(gross_profit_amount) filter(where business_date_la between :day - 13 and :day
+              - 7) profit_prev7,
+            sum(coalesce(ad_spend_amount,0)+coalesce(sem_ad_spend_amount,0))
+                filter(where business_date_la between :day - 6 and :day) ad7,
+            sum(coalesce(ad_spend_amount,0)+coalesce(sem_ad_spend_amount,0))
+                filter(where business_date_la between :day - 13 and :day - 7) ad_prev7,
+            count(*) filter(where business_date_la between :day - 29 and :day and cost_status
+              <> 'complete') incomplete_cost_rows,
+            count(*) filter(where business_date_la between :day - 29 and :day) sales_rows,
+            count(*) filter(where business_date_la between :day - 29 and :day and
+              gross_profit_amount is null) missing_profit_rows,
+            count(*) filter(where business_date_la between :day - 29 and :day and
+              calculation_warnings_json ? 'sales_history_30d_incomplete') incomplete_history_rows,
+            count(distinct business_date_la) filter(where business_date_la between :day - 29
+              and :day) recorded_days,
+            string_agg(distinct calc_version,',') calc_versions
+          from mart_daily_sales_item_day
+          where source_account_ref=any(:accounts) and item_id=any(:items)
+            and business_date_la between :day - 29 and :day
+          group by source_account_ref,store_id,item_id
+        """),
+                params,
+            )
+            .mappings()
+            .all()
+        )
+        # A missing per-Listing daily MART row is not zero sales.
+        # Verify all 30 source dates for the exact store and no unresolved allocations.
+        store_history = (
+            self.session.execute(
+                text("""
+          select source_account_ref,store_id,
+            count(distinct business_date_la)
+              filter(where allocation_status='direct') covered_days,
+            count(distinct business_date_la)
+              filter(where allocation_status='direct'
+                and business_date_la between :day - 6 and :day) last7_days,
+            count(distinct business_date_la)
+              filter(where allocation_status='direct'
+                and business_date_la between :day - 13 and :day - 7) prev7_days,
+            count(*) filter(where allocation_status<>'direct') unresolved_rows,
+            count(*) filter(where allocation_status<>'direct'
+                and business_date_la between :day - 6 and :day) last7_unresolved,
+            count(*) filter(where allocation_status<>'direct'
+                and business_date_la between :day - 13 and :day - 7) prev7_unresolved
+          from fact_walmart_sales_item_daily
+          where source_account_ref=any(:accounts)
+            and business_date_la between :day - 29 and :day
+          group by source_account_ref,store_id
+        """),
+                params,
+            )
+            .mappings()
+            .all()
+        )
+        source_item_sales = (
+            self.session.execute(
+                text("""
+          select source_account_ref,store_id,item_id,
+            sum(coalesce(sales_qty,0))
+              filter(where allocation_status='direct') source_sales_qty,
+            sum(coalesce(sales_qty,0))
+              filter(where allocation_status='direct'
+                and business_date_la between :day - 6 and :day) last7_source_qty,
+            sum(coalesce(sales_qty,0))
+              filter(where allocation_status='direct'
+                and business_date_la between :day - 13 and :day - 7) prev7_source_qty,
+            count(*) filter(where allocation_status<>'direct') unresolved_rows,
+            count(*) filter(where sales_qty is null) missing_qty_rows
+          from fact_walmart_sales_item_daily
+          where source_account_ref=any(:accounts) and item_id=any(:items)
+            and business_date_la between :day - 29 and :day
+          group by source_account_ref,store_id,item_id
+        """),
+                params,
+            )
+            .mappings()
+            .all()
+        )
+        snapshots = (
+            self.session.execute(
+                text("""
+          select source_account_ref,store_id,item_id,
+            count(distinct snapshot_date_la) filter(
+              where wfs_available_quantity is not null
+                and (captured_at at time zone 'America/Los_Angeles')::date=snapshot_date_la
+            ) snapshot_days,
+            count(distinct snapshot_date_la) filter(
+              where wfs_available_quantity>0
+                and (captured_at at time zone 'America/Los_Angeles')::date=snapshot_date_la
+            ) positive_stock_days
+          from fact_walmart_listing_inventory_daily
+          where source_account_ref=any(:accounts) and item_id=any(:items)
+            and snapshot_date_la between :day - 29 and :day
+          group by source_account_ref,store_id,item_id
+        """),
+                params,
+            )
+            .mappings()
+            .all()
+        )
+        refunds = (
+            self.session.execute(
+                text("""
+          select source_account_ref,store_id,item_id,
+            sum(coalesce(return_qty,0)) refund_qty,
+            sum(coalesce(refund_loss_amount,0)) filter(where refund_loss_effective=true)
+              refund_loss,
+            count(distinct return_order_id) refund_orders
+          from after_sales_refund_items
+          where source_account_ref=any(:accounts) and item_id=any(:items)
+            and platform_code='walmart' and refund_effective=true
+            and refund_effective_date between :day - 29 and :day
+            and store_id is not null and item_id is not null
+          group by source_account_ref,store_id,item_id
+        """),
+                params,
+            )
+            .mappings()
+            .all()
+        )
+        costs: dict[str, dict] = cost_cache if cost_cache is not None else {}
+        for account in accounts:
+            if account not in costs:
+                costs[account] = load_daily_sales_costs(
+                    self.session, source_account_ref=account
+                )
+
+        def key(row: dict) -> tuple[str, str, str]:
+            return (
+                str(row["source_account_ref"]),
+                str(row["store_id"]),
+                str(row["item_id"]),
+            )
+
+        s_map = {key(r): dict(r) for r in sales}
+        i_map = {key(r): dict(r) for r in snapshots}
+        r_map = {key(r): dict(r) for r in refunds}
+        source_map = {key(r): dict(r) for r in source_item_sales}
+        store_history_map = {
+            (str(r["source_account_ref"]), str(r["store_id"])): dict(r) for r in store_history
+        }
+        now = datetime.now(LOS_ANGELES)
+        out: dict[tuple[str, str, str], dict] = {}
+        for listing in listings:
+            k = key(listing)
+            s = s_map.get(k, {})
+            i = i_map.get(k, {})
+            r = r_map.get(k, {})
+            source = source_map.get(k, {})
+            history = store_history_map.get(k[:2], {})
+            source_qty = number(source.get("source_sales_qty"))
+            # Store-wide evidence may prove a day is represented but does not
+            # by itself prove that every Walmart page was captured. Be
+            # conservative: incomplete source dates or unresolved allocations
+            # invalidate the affected sales window, never manufacture zero.
+            gross30 = number(s.get("gross_sales30"))
+            gross7 = number(s.get("gross_sales7"))
+            gross_prev7 = number(s.get("gross_sales_prev7"))
+            source_last7 = number(source.get("last7_source_qty"))
+            source_prev7 = number(source.get("prev7_source_qty"))
+            matching_7 = (
+                (source_last7 is None and gross7 is None)
+                or (source_last7 is not None and gross7 is not None
+                    and source_last7 == gross7)
+            )
+            matching_prev7 = (
+                (source_prev7 is None and gross_prev7 is None)
+                or (source_prev7 is not None and gross_prev7 is not None
+                    and source_prev7 == gross_prev7)
+            )
+            mart_matches_source = bool(
+                (source_qty is None and gross30 is None)
+                or (source_qty is not None and gross30 is not None
+                    and source_qty == gross30)
+            )
+            verified_30 = bool(
+                history.get("covered_days", 0) >= 30
+                and not history.get("unresolved_rows")
+                and not source.get("unresolved_rows")
+                and not source.get("missing_qty_rows")
+                and mart_matches_source
+            )
+            verified_7 = bool(
+                matching_7
+                and history.get("last7_days", 0) >= 7
+                and not history.get("last7_unresolved")
+                and not source.get("unresolved_rows")
+                and not source.get("missing_qty_rows")
+            )
+            verified_prev7 = bool(
+                matching_prev7
+                and history.get("prev7_days", 0) >= 7
+                and not history.get("prev7_unresolved")
+                and not source.get("unresolved_rows")
+                and not source.get("missing_qty_rows")
+            )
+            zero_sales_verified = bool(
+                verified_30 and (source_qty is None or source_qty == 0)
+                and (number(s.get("sales30")) in (None, Decimal(0)))
+            )
+            if zero_sales_verified and s.get("sales30") is None:
+                s = {**s, "sales30": Decimal(0)}
+            if verified_7 and s.get("sales7") is None and number(
+                source.get("last7_source_qty")
+            ) in (None, Decimal(0)):
+                s = {**s, "sales7": Decimal(0), "revenue7": Decimal(0)}
+            if verified_prev7 and s.get("prev7") is None and number(
+                source.get("prev7_source_qty")
+            ) in (None, Decimal(0)):
+                s = {**s, "prev7": Decimal(0), "revenue_prev7": Decimal(0)}
+            captured = listing.get("inventory_captured_at")
+            inventory_fresh = bool(
+                captured
+                and captured.tzinfo
+                and timedelta(0) <= now - captured <= timedelta(hours=72)
+            )
+            # A 30-day empty fact set is not proof of 30 days of zero orders.
+            sales_complete = bool(
+                verified_30
+                and not s.get("incomplete_history_rows")
+                and (s.get("sales_rows") or zero_sales_verified)
+            )
+            sales_7d_complete = bool(verified_7 and s.get("sales7") is not None)
+            sales_prev_7d_complete = bool(
+                verified_prev7 and s.get("prev7") is not None
+            )
+            complete_costs = bool(
+                sales_complete
+                and s.get("sales_rows")
+                and s.get("incomplete_cost_rows") == 0
+                and s.get("missing_profit_rows") == 0
+            )
+            started = listing.get("listing_start_at_utc")
+            listing_days = (
+                (day - started.astimezone(LOS_ANGELES).date()).days
+                if started is not None and started.tzinfo
+                else None
+            )
+            sku_key = normalize_sku_key(listing.get("local_sku"))
+            cost = costs.get(k[0], {}).get(sku_key) if sku_key else None
+            unit_cost_usd: Decimal | None = None
+            if (
+                cost is not None
+                and cost.purchase_cost_unit_cny is not None
+                and cost.first_leg_cost_unit_cny is not None
+                and cost.exchange_rate is not None
+                and cost.exchange_rate > 0
+                and not cost.root_missing_codes
+            ):
+                unit_cost_usd = (
+                    cost.purchase_cost_unit_cny + cost.first_leg_cost_unit_cny
+                ) / cost.exchange_rate
+            out[k] = {
+                **s,
+                **r,
+                "positive_stock_days": int(i.get("positive_stock_days") or 0),
+                "inventory_snapshot_days": int(i.get("snapshot_days") or 0),
+                "inventory_fresh": inventory_fresh,
+                "sales_complete": sales_complete,
+                "sales_7d_complete": sales_7d_complete,
+                "sales_prev_7d_complete": sales_prev_7d_complete,
+                "zero_sales_verified": zero_sales_verified,
+                "source_sales_coverage_days_30d": int(history.get("covered_days") or 0),
+                "source_sales_coverage_days_7d": int(history.get("last7_days") or 0),
+                "source_sales_coverage_days_prev7": int(history.get("prev7_days") or 0),
+                "source_mart_qty_match": mart_matches_source,
+                "source_mart_7d_qty_match": matching_7,
+                "source_mart_prev7_qty_match": matching_prev7,
+                "refund_source_complete": False,
+                "cost_complete": complete_costs,
+                "listing_days": listing_days,
+                "unit_cost_usd": unit_cost_usd,
+                "as_of_date": day.isoformat(),
+            }
+        return out
+
+    def evaluated(self, listing: dict, metrics: dict, rules: dict) -> dict:
+        day = date.fromisoformat(metrics["as_of_date"])
+        # The latest captured inventory is safer than a coalesced cached MART value.
+        current = dict(listing)
+        current["wfs_available_quantity"] = listing.get("snapshot_wfs_available")
+        value = evaluate(current, metrics, rules, as_of=day)
+        qty = number(current.get("wfs_available_quantity"))
+        unit_cost = metrics.get("unit_cost_usd")
+        value["stock_capital_usd"] = (
+            str(qty * unit_cost) if qty is not None and unit_cost is not None else None
+        )
+        value["high_stock_capital"] = bool(
+            qty is not None
+            and unit_cost is not None
+            and qty * unit_cost >= Decimal(str(rules["high_stock_capital_usd"]))
+        )
+        alerts: list[str] = []
+        inbound = number(listing.get("inbound_quantity"))
+        if inbound is not None and inbound > 0:
+            alerts.append("INBOUND_STOCK_PRESENT")
+        if listing.get("buybox_status") in ("未拥有", "LOST", "NOT_OWNED", "secondary", "other"):
+            alerts.append("BUYBOX_ISSUE")
+        value["conflict_alerts"] = alerts
+        value["current_wfs_available"] = str(qty) if qty is not None else None
+        value["inventory_captured_at"] = (
+            listing["inventory_captured_at"].isoformat()
+            if listing.get("inventory_captured_at")
+            else None
+        )
+        value["snapshot_coverage_days_30d"] = metrics["inventory_snapshot_days"]
+        value["positive_stock_days_30d"] = metrics["positive_stock_days"]
+        value["sales_complete"] = metrics["sales_complete"]
+        value["source_sales_coverage_days_30d"] = metrics["source_sales_coverage_days_30d"]
+        value["source_sales_coverage_days_7d"] = metrics["source_sales_coverage_days_7d"]
+        value["source_sales_coverage_days_prev7"] = metrics["source_sales_coverage_days_prev7"]
+        value["source_mart_qty_match"] = metrics["source_mart_qty_match"]
+        value["refund_source_complete"] = False
+        value["cost_complete"] = metrics["cost_complete"]
+        value["calc_versions"] = metrics.get("calc_versions")
+        value["as_of_date"] = metrics["as_of_date"]
+        value["sales_30d"] = str(metrics["sales30"]) if metrics.get("sales30") is not None else None
+        value["unit_cost_usd"] = str(unit_cost) if unit_cost is not None else None
+        value["profit_30d_amount"] = (
+            str(metrics["profit30"])
+            if metrics.get("cost_complete") and metrics.get("profit30") is not None
+            else None
+        )
+        value["refund_loss_30d"] = (
+            str(metrics["refund_loss"]) if metrics.get("refund_loss") is not None else None
+        )
+        return value

@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
-from app.core.api import SuccessEnvelope, success_response
+from app.core.api import ApiError, ErrorCode, SuccessEnvelope, success_response
 from app.core.auth import Principal, require_principal
 from app.core.permissions import has_any_permission, has_permission, require_permission
 from app.db.session import get_db_session
@@ -27,6 +27,13 @@ from app.modules.approvals.schemas import (
 )
 from app.modules.approvals.service import ApprovalService
 from app.modules.approvals.workflow import ApprovalWorkflow
+from app.modules.clearance_center.field_access import mask_clearance_financials
+from app.modules.clearance_center.schemas import DecisionWrite
+from app.modules.clearance_center.service import ClearanceService
+from app.modules.data_pages.field_access import (
+    ORDER_PROFIT_GROSS_PROFIT_PERMISSION,
+    ORDER_PROFIT_MARGIN_PERMISSION,
+)
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.warehouse_wfs.schemas import WfsFeeArchiveRequestWrite
 
@@ -56,13 +63,23 @@ def list_approvals(
     accounts: account_scope,
 ):
     approved = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
+    clearance_review = has_permission(principal, "action:products:clearance:review")
     data, total = ApprovalService(session).list_requests(
         query,
         accounts,
         principal.user_id,
         approved,
         is_admin=has_permission(principal, "*"),
+        may_review_clearance=clearance_review,
     )
+    if not has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION):
+        data = data.model_copy(
+            update={
+                "items": [
+                    item.model_copy(update={"clearance_stock_capital": None}) for item in data.items
+                ]
+            }
+        )
     return success_response(
         request,
         data=data,
@@ -76,7 +93,11 @@ def summary(
 ):
     may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
     data = ApprovalService(session).summary(
-        accounts, principal.user_id, may_review, is_admin=has_permission(principal, "*")
+        accounts,
+        principal.user_id,
+        may_review,
+        is_admin=has_permission(principal, "*"),
+        may_review_clearance=has_permission(principal, "action:products:clearance:review"),
     )
     return success_response(request, data=data, meta=None)
 
@@ -159,7 +180,16 @@ def get_approval(
         principal.user_id,
         may_review,
         is_admin=has_permission(principal, "*"),
+        may_review_clearance=has_permission(principal, "action:products:clearance:review"),
     )
+
+    if data.approval_type == "clearance_request" and data.current_case is not None:
+        safe = mask_clearance_financials(
+            data.current_case,
+            can_view_profit=has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION),
+            can_view_margin=has_permission(principal, ORDER_PROFIT_MARGIN_PERMISSION),
+        )
+        data = data.model_copy(update={"current_case": safe})
     return success_response(request, data=data, meta=None)
 
 
@@ -205,15 +235,32 @@ def decide(
     approval_id: UUID,
     payload: ApprovalDecisionWrite,
     session: db_session,
-    principal: archive_review_principal,
+    principal: view_principal,
     accounts: account_scope,
 ):
-    may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
     record = ApprovalService(session)._record(approval_id, accounts)
-    if record["approval_type"] != "wfs_case_abandon":
+    kind = record["approval_type"]
+    if kind == "clearance_request":
+        if not has_permission(principal, "action:products:clearance:review"):
+            raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+        if payload.decision not in ("approved", "rejected"):
+            raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422)
+        ClearanceService(session).decide(
+            approval_id,
+            DecisionWrite(
+                decision=payload.decision,
+                note=payload.note,
+                expected_version=payload.expected_version,
+            ),
+            accounts,
+            principal.user_id,
+        )
+    elif kind == "wfs_case_abandon":
+        if not has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review"):
+            raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+        ApprovalService(session).decide(approval_id, payload, accounts, principal.user_id, True)
+    else:
         if not has_permission(principal, "*"):
-            from app.core.api import ApiError, ErrorCode
-
             raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
         GenericApprovalService(session).decide(
             approval_id,
@@ -222,10 +269,6 @@ def decide(
             payload.decision,
             payload.note,
             payload.expected_version,
-        )
-    else:
-        ApprovalService(session).decide(
-            approval_id, payload, accounts, principal.user_id, may_review
         )
     return success_response(request, data={"updated": True}, meta=None)
 
