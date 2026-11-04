@@ -399,7 +399,8 @@ class ClearanceReadRepository:
         return report
 
     def evidence(
-        self, listings: list[dict], *, as_of: date | None = None
+        self, listings: list[dict], *, as_of: date | None = None,
+        cost_cache: dict[str, dict] | None = None,
     ) -> dict[tuple[str, str, str], dict]:
         """Aggregate only requested Listing identities; never join by SKU alone."""
         if not listings:
@@ -547,9 +548,12 @@ class ClearanceReadRepository:
             .mappings()
             .all()
         )
-        costs: dict[str, dict] = {}
+        costs: dict[str, dict] = cost_cache if cost_cache is not None else {}
         for account in accounts:
-            costs[account] = load_daily_sales_costs(self.session, source_account_ref=account)
+            if account not in costs:
+                costs[account] = load_daily_sales_costs(
+                    self.session, source_account_ref=account
+                )
 
         def key(row: dict) -> tuple[str, str, str]:
             return (
