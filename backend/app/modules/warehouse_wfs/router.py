@@ -14,7 +14,9 @@ from app.db.session import get_db_session
 from app.modules.approvals.service import ApprovalService
 from app.modules.iam.organization_access import (
     ORG_OWNER_SCOPE_SESSION_KEY,
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
     resolve_business_owner_refs,
+    resolve_business_account_owner_pairs,
 )
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.warehouse_wfs.automation_service import preview_persisted_wfs_detection
@@ -46,6 +48,7 @@ def require_wfs_org_scope(
 ) -> None:
     """Check the operation grant first; owner restrictions are mandatory per request."""
     session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
+    session.info.pop(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY, None)
     required_permission = permission_for_request(
         request.method, request.url.path, "page:warehouse:wfs-fee-alert:view"
     )
@@ -55,8 +58,11 @@ def require_wfs_org_scope(
             status_code=403,
             details={"required_permission": required_permission},
         )
-    owners = resolve_business_owner_refs(session, principal)
-    if owners is not None:
+    owner_pairs = resolve_business_account_owner_pairs(session, principal)
+    owners = None if owner_pairs else resolve_business_owner_refs(session, principal)
+    if owner_pairs:
+        session.info[ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY] = owner_pairs
+    elif owners is not None:
         session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owners
 
 
