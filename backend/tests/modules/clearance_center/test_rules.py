@@ -165,3 +165,16 @@ def test_fractional_business_thresholds_are_configurable() -> None:
 def test_rules_reject_silent_or_invalid_overrides(change: dict) -> None:
     with pytest.raises(ValueError):
         validate_rules(change)
+
+
+def test_refund_loss_does_not_get_subtracted_twice_from_daily_profit() -> None:
+    value = check(
+        120,
+        30,
+        revenue30=100,
+        profit30=-10,
+        refund_qty=5,
+        refund_loss=500,
+    )
+    assert value["margin_30d_percent"] == "-10"
+    assert "AFTER_SALES" in value["business_signal_groups"]
