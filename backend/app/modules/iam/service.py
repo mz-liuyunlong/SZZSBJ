@@ -138,6 +138,8 @@ class IamService:
             raise ApiError(code=ErrorCode.UNAUTHORIZED, status_code=401)
         if int(user["is_active"]) != 1:
             raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+        if self.repository.has_pending_feishu_revocation(int(user["id"])):
+            raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
 
         access_token, access_token_hash, expires_at = issue_access_token()
         self.repository.create_session(
