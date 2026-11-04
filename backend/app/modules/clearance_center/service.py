@@ -67,7 +67,9 @@ class ClearanceService:
         except ValueError:
             fail(422)
         listing = self.repo.listing(listing_id, accounts)
-        if not listing:
+        if not listing or listing.get("is_archived", False):
+            # Archived Listings remain available through immutable approval history,
+            # but are not re-evaluated or displayed as active clearance products.
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
         run = self.repo.latest_completed_run()
         if run is not None:
