@@ -50,8 +50,29 @@ def filter_rows(board: OverviewBoard, q: OverviewFilterQuery) -> list[dict[str, 
     return [r for r in board.rows if _matches(r, q)]
 
 
+def _sorted(rows: list[dict[str, Any]], q: OverviewItemsQuery) -> list[dict[str, Any]]:
+    if q.sort_by is None:
+        return rows  # snapshot order = 8088 problem priority
+    key = q.sort_by
+    present = [r for r in rows if r.get(key) is not None]
+    missing = [r for r in rows if r.get(key) is None]
+    present.sort(key=lambda r: (r[key], r["item_id"]), reverse=q.sort_order == "desc")
+    return present + missing  # empty values always last
+
+
+def category_counts(board: OverviewBoard, q: OverviewFilterQuery) -> dict[str, int]:
+    base = q.model_copy(update={"cats": []})
+    counts = dict.fromkeys(CATEGORIES, 0)
+    for r in board.rows:
+        if _matches(r, base):
+            for c in r["cats"]:
+                if c in counts:
+                    counts[c] += 1
+    return counts
+
+
 def list_items(board: OverviewBoard, q: OverviewItemsQuery) -> tuple[list[OverviewItemRow], int]:
-    rows = filter_rows(board, q)
+    rows = _sorted(filter_rows(board, q), q)
     start = (q.page - 1) * q.page_size
     return [row_out(r) for r in rows[start : start + q.page_size]], len(rows)
 

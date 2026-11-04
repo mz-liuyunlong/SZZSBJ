@@ -36,6 +36,15 @@ describe("overview api", () => {
     expect(vi.mocked(backendRequest).mock.calls[0][0]).toBe("/api/pmc/overview/items?only_issue=true&page=2&page_size=100");
   });
 
+  it("sends the whitelisted sort and reads category counts", async () => {
+    vi.mocked(backendRequest).mockResolvedValue({ data: { items: [], category_counts: { 已断货: 3 } }, meta: { total: 0 } } as never);
+    const result = await listOverviewItems(createInitialOverviewFilters(), 1, 50, undefined, { by: "supply", order: "asc" });
+    expect(result.categoryCounts).toEqual({ 已断货: 3 });
+    expect(vi.mocked(backendRequest).mock.calls[0][0]).toBe(
+      "/api/pmc/overview/items?only_issue=true&page=1&page_size=50&sort_by=supply&sort_order=asc",
+    );
+  });
+
   it("exports everything when no filter is given", async () => {
     vi.mocked(backendRequest).mockResolvedValue({ data: { items: [] } } as never);
     await getOverviewExport();
