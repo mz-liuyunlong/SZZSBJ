@@ -125,17 +125,13 @@ class DailyClearanceEvaluation:
                        and i.store_id=l.store_id and i.item_id=l.item_id
                      order by i.snapshot_date_la desc,i.captured_at desc limit 1
                   ) snap on true
-                 where (:account is null or
-                        (l.source_account_ref,l.store_id,l.item_id) >
-                        (:account,:store,:item))
-                 order by l.source_account_ref,l.store_id,l.item_id
-                 limit :limit"""
-        params = {
-            "account": cursor[0] if cursor else None,
-            "store": cursor[1] if cursor else None,
-            "item": cursor[2] if cursor else None,
-            "limit": BATCH_SIZE,
-        }
+                 where 1=1"""
+        params: dict = {"limit": BATCH_SIZE}
+        if cursor is not None:
+            sql += """ and (l.source_account_ref,l.store_id,l.item_id)
+                            > (:account,:store,:item)"""
+            params.update({"account": cursor[0], "store": cursor[1], "item": cursor[2]})
+        sql += " order by l.source_account_ref,l.store_id,l.item_id limit :limit"
         return [dict(x) for x in self.session.execute(text(sql), params).mappings()]
 
     def _persist(self, run_id: str, listing: dict, evaluation: dict, version: int, now: datetime) -> None:
