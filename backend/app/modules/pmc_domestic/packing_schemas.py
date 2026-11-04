@@ -195,6 +195,10 @@ class ListingChoice(Strict):
     msku: str | None
     listing_version: str
     cross_store: bool
+    # Listing found through the attributed ItemID whose own local SKU is set and differs
+    # from the row SKU (rule v2, 2026-10-31): offered, but flagged for the approver.
+    local_sku: str | None = None
+    sku_mismatch: bool = False
 
 
 class EditOptions(Strict):
