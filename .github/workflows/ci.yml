@@ -69,14 +69,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version-file: .python-version
-      - name: Migrate isolated PostgreSQL to 0061 and validate AI runtime
+      - name: Validate AI runtime migration rollback before audit migrations
         working-directory: backend
         run: |
           uv sync --frozen
-          uv run alembic upgrade head
-          uv run pytest -q -rs tests/modules/ai_runtime/test_postgresql_acceptance.py
+          uv run alembic upgrade 20261027_0064_ai_runtime_skill_context
           uv run alembic downgrade 20261027_0063_ai_runtime
           uv run alembic upgrade head
+          uv run pytest -q -rs tests/modules/ai_runtime/test_postgresql_acceptance.py
 
   frontend-if-present:
     runs-on: ubuntu-latest
