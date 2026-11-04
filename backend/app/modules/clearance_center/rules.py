@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal, ROUND_CEILING
+from decimal import ROUND_CEILING, Decimal
 from typing import Any
 
 RULE_VERSION = "clearance-v1-20261104"
