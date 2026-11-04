@@ -40,6 +40,23 @@ class LoadCounts:
     exclusions: int
 
 
+def _int_field(row: dict[str, Any], key: str, section: str, index: int) -> int:
+    value = row.get(key)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise DeployFileError(f"{section} 第 {index} 条 {key} 不合格")
+    return value
+
+
+def _date_field(row: dict[str, Any], key: str, section: str, index: int) -> date | None:
+    value = row.get(key)
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError) as exc:
+        raise DeployFileError(f"{section} 第 {index} 条 {key} 不合格") from exc
+
+
 def _accounts(raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -68,7 +85,11 @@ def _accounts(raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "account_no_last4": str(row.get("account_no_last4") or "")[-4:],
                 "identity_hint": identity,
                 "is_active": bool(row.get("is_active", True)),
-                "sort_order": int(row.get("sort_order") or index),
+                "sort_order": (
+                    _int_field(row, "sort_order", "accounts", index)
+                    if row.get("sort_order") is not None
+                    else index
+                ),
             }
         )
     return out
@@ -93,7 +114,7 @@ def _rules(raw: list[dict[str, Any]], categories: frozenset[str]) -> list[dict[s
                 "rule_type": row["rule_type"],
                 "pattern": pattern,
                 "category_code": row["category_code"],
-                "sort_order": int(row["sort_order"]),
+                "sort_order": _int_field(row, "sort_order", "rules", index),
                 "source": "deploy",
             }
         )
@@ -106,9 +127,12 @@ def _exclusions(raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not str(row.get("entry_key") or "").strip():
             raise DeployFileError(f"exclusions 第 {index} 条缺 entry_key")
         ref = str(row.get("ref") or "").strip() or None
-        txn_date = date.fromisoformat(row["txn_date"]) if row.get("txn_date") else None
+        txn_date = _date_field(row, "txn_date", "exclusions", index)
+        registered_on = _date_field(row, "registered_on", "exclusions", index)
         if not ref and txn_date is None:
             raise DeployFileError(f"exclusions 第 {index} 条要有 ref，或者 txn_date")
+        if ref and txn_date is None and registered_on is None:
+            raise DeployFileError(f"exclusions 第 {index} 条 registered_on 不合格")
         try:
             amount = Decimal(str(row.get("amount_cny")))
         except InvalidOperation as exc:
@@ -127,9 +151,7 @@ def _exclusions(raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "amount_cny": amount,
                 "reason": row["reason"],
                 "registered_by": str(row.get("registered_by") or "导入脚本"),
-                "registered_on": (
-                    date.fromisoformat(row["registered_on"]) if row.get("registered_on") else None
-                ),
+                "registered_on": registered_on,
             }
         )
     return out

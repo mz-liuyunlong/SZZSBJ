@@ -77,6 +77,14 @@ class LineNotFoundError(Exception):
     pass
 
 
+class ImportHasReviewedLinesError(Exception):
+    """这一批作废后会有已审核的流水被一起作废；要先退回审核。"""
+
+    def __init__(self, line_uids: list[str]) -> None:
+        super().__init__("import has reviewed lines")
+        self.line_uids = line_uids
+
+
 def store_original(root: Path, sha256: str, kind: str, content: bytes) -> str:
     """原件按内容存放，同内容只留一份；返回相对 root 的路径。先写临时文件再改名，不留半截。"""
     relative = STORAGE_SUBDIR / sha256[:2] / f"{sha256}{FILE_SUFFIX.get(kind, '.bin')}"
@@ -407,6 +415,10 @@ class CashflowService:
             raise ImportNotFoundError
         if batch.status == STATUS_VOIDED:
             raise ImportVoidedError
+        blocked = self._reviewed_lines_only_in(import_id)
+        if blocked:
+            self.session.rollback()
+            raise ImportHasReviewedLinesError(blocked)
         batch.status = STATUS_VOIDED
         batch.voided_at = datetime.now(UTC)
         batch.voided_by = actor
@@ -423,6 +435,52 @@ class CashflowService:
             self._refresh_attribution(uid)
         self.session.commit()
         return CashflowVoidData(import_id=import_id, lines_affected=len(uids))
+
+    def _reviewed_lines_only_in(self, import_id: UUID) -> list[str]:
+        """只属于这一批、且已初审或终审的流水。也出现在别的未作废批次的，作废时只退归属，不拦。"""
+        uids = set(
+            self.session.scalars(
+                select(FinanceCashLineOccurrence.line_uid).where(
+                    FinanceCashLineOccurrence.import_id == import_id
+                )
+            )
+        )
+        if not uids:
+            return []
+        shared = set(
+            self.session.scalars(
+                select(FinanceCashLineOccurrence.line_uid)
+                .join(
+                    FinanceCashImport,
+                    FinanceCashImport.import_id == FinanceCashLineOccurrence.import_id,
+                )
+                .where(
+                    FinanceCashLineOccurrence.line_uid.in_(uids),
+                    FinanceCashLineOccurrence.import_id != import_id,
+                    FinanceCashImport.status != STATUS_VOIDED,
+                )
+            )
+        )
+        only_here = sorted(uids - shared)
+        if not only_here:
+            return []
+        # 锁住流水行：审核动作也先锁这一行，检查和作废之间不会插进新的审核。
+        self.session.execute(
+            select(FinanceCashLine.line_uid)
+            .where(FinanceCashLine.line_uid.in_(only_here))
+            .order_by(FinanceCashLine.line_uid)
+            .with_for_update()
+        )
+        return list(
+            self.session.scalars(
+                select(FinanceCashLineState.line_uid)
+                .where(
+                    FinanceCashLineState.line_uid.in_(only_here),
+                    FinanceCashLineState.stage.in_([journal.STAGE_OK1, journal.STAGE_OK2]),
+                )
+                .order_by(FinanceCashLineState.line_uid)
+            )
+        )
 
     def _file_result(self, raw: FinanceCashRawFile) -> CashflowFileResult:
         quality = self.session.get(FinanceCashImportQuality, raw.file_id)
@@ -505,6 +563,7 @@ class CashflowService:
     def _usd_rate_lookup(self) -> Callable[[date], Decimal | None]:
         rows = self.session.scalars(
             select(ProductPricingRuleVersion).where(
+                ProductPricingRuleVersion.rule_key == "product_management",
                 ProductPricingRuleVersion.is_active.is_(True),
                 ProductPricingRuleVersion.usd_cny_rate.is_not(None),
             )
@@ -795,18 +854,10 @@ class CashflowService:
         if line is None or line.voided_at is not None:
             raise LineNotFoundError
         state = self._state_for_update(line_uid)
-        if request.idempotency_key:
-            replay = self.session.scalars(
-                select(FinanceCashLineEvent).where(
-                    FinanceCashLineEvent.idempotency_key == request.idempotency_key
-                )
-            ).first()
-            if replay is not None:
-                if replay.line_uid != line_uid or replay.kind != request.kind:
-                    raise journal.EventRejectedError(409, "这个幂等键已经用在别的操作上")
-                self.session.rollback()
-                return self._event_data(line_uid, replayed=True)
-        if request.expected_version is not None and request.expected_version != state.version:
+        replayed = self._replay_if_seen(line_uid, request)
+        if replayed is not None:
+            return replayed
+        if request.expected_version != state.version:
             raise journal.EventRejectedError(409, "这笔已被别人改过，请刷新后再操作")
         draft = journal.ReviewState(
             manual_category=state.manual_category,
@@ -842,8 +893,34 @@ class CashflowService:
             version=state.version,
             auto_reset=auto_reset,
         )
-        self.session.commit()
+        try:
+            self.session.commit()
+        except IntegrityError:
+            # 并发时两个请求可能都没查到同一个幂等键，后到的在这里撞唯一索引，按重放处理。
+            self.session.rollback()
+            replayed = self._replay_if_seen(line_uid, request)
+            if replayed is None:
+                raise
+            return replayed
         return data
+
+    def _find_event_by_key(self, key: str) -> FinanceCashLineEvent | None:
+        return self.session.scalars(
+            select(FinanceCashLineEvent).where(FinanceCashLineEvent.idempotency_key == key)
+        ).first()
+
+    def _replay_if_seen(
+        self, line_uid: str, request: CashflowLineEventRequest
+    ) -> CashflowLineEventData | None:
+        if not request.idempotency_key:
+            return None
+        seen = self._find_event_by_key(request.idempotency_key)
+        if seen is None:
+            return None
+        if seen.line_uid != line_uid or seen.kind != request.kind:
+            raise journal.EventRejectedError(409, "这个幂等键已经用在别的操作上")
+        self.session.rollback()
+        return self._event_data(line_uid, replayed=True)
 
     def _category_codes(self) -> frozenset[str]:
         return frozenset(self.session.scalars(select(FinanceCashCategory.code)))

@@ -12,7 +12,6 @@
 |---|---|
 | `MEDIA_STORAGE_ROOT` | 原件存放根目录，文件落在 `finance/cashflow/<sha 前两位>/<sha>.<扩展名>`。没配时上传返回 503，不写到别处。 |
 | `FINANCE_CASHFLOW_MAX_UPLOAD_BYTES` | 单文件上限，默认 20 MB（20971520）。 |
-| `UPLOADS_STORAGE_ROOT`、`EXPORTS_STORAGE_ROOT` | 预留，本期不用。 |
 
 账户和带名字的分类规则不进仓库，上线时用 `backend/scripts/finance_cash_deploy_load.py` 导入。没导入账户时，上传被拒收并写明「没登记」。
 
@@ -23,7 +22,7 @@
 | `POST /imports` | 上传一个文件 | 请求体是文件字节；`X-File-Name`（URL 编码）；多文件用同一个 `X-Import-Id`（UUID）归入一批。文件内容不认识时仍返回 200，`file.status=rejected` 并带 `reject_reason`；同一文件已在未作废批次中时 `duplicate_of_file=true`，不新增。 |
 | `GET /imports` | 批次列表 | `status`、`from`、`to`、`page`、`page_size`（最大 200） |
 | `GET /imports/{import_id}` | 批次详情 | 每个文件的识别结果、行数、质量告警 |
-| `POST /imports/{import_id}/void` | 整批作废 | body `{reason}`，必填。只出现在这批的流水标作废；也出现在更早批次的，归属退回最近一个未作废批次。 |
+| `POST /imports/{import_id}/void` | 整批作废 | body `{reason}`，必填。只出现在这批的流水标作废；也出现在别的未作废批次的，归属退回最近一个未作废批次。只属于这一批的流水里有已初审或已终审的，拒绝作废，什么都不改：409，错误码 `CASHFLOW_IMPORT_HAS_REVIEWED_LINES`，`details` 带 `count` 和 `line_ids`；要先退回这些流水的审核。 |
 | `GET /accounts` | 账户 | 含流水条数、最近文件名、覆盖区间、来源（表头 / 首末笔）。不返回识别用的完整账号。 |
 | `GET /categories` | 类别字典 | 26 个类别 |
 | `GET /lines` | 日记账流水 | `account_key`、`from`、`to`、`page`、`page_size`（最大 2000）；日期倒序 |
@@ -32,7 +31,7 @@
 
 ### 人工动作
 
-body：`{kind, payload, reason, expected_version, idempotency_key}`。`expected_version` 不符返回 409；`idempotency_key` 已用过则不重复执行，返回 `replayed=true`。
+body：`{kind, payload, reason, expected_version, idempotency_key}`。`expected_version` 必填，不带返回 422，不符返回 409；`idempotency_key` 已用过则不重复执行，返回 `replayed=true`。
 
 | kind | payload / reason | 规则 |
 |---|---|---|

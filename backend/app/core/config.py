@@ -211,14 +211,6 @@ class Settings(BaseSettings):
         ge=1,
         validation_alias="FINANCE_CASHFLOW_MAX_UPLOAD_BYTES",
     )
-    uploads_storage_root: Path | None = Field(
-        default=None,
-        validation_alias="UPLOADS_STORAGE_ROOT",
-    )
-    exports_storage_root: Path | None = Field(
-        default=None,
-        validation_alias="EXPORTS_STORAGE_ROOT",
-    )
     media_cache_enabled: bool = Field(
         default=False,
         validation_alias="MEDIA_CACHE_ENABLED",

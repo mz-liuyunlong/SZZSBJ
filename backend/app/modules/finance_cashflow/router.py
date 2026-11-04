@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
-from app.core.api import ErrorEnvelope, SuccessEnvelope, get_request_id, success_response
+from app.core.api import ApiError, ErrorEnvelope, SuccessEnvelope, get_request_id, success_response
 from app.core.auth import Principal
 from app.core.config import get_settings
 from app.core.permissions import require_super_admin
@@ -29,6 +29,7 @@ from app.modules.finance_cashflow.schemas import (
 )
 from app.modules.finance_cashflow.service import (
     CashflowService,
+    ImportHasReviewedLinesError,
     ImportNotFoundError,
     ImportVoidedError,
     LineNotFoundError,
@@ -158,6 +159,13 @@ def void_import(
         data = CashflowService(session).void_import(
             import_id, reason=payload.reason, actor=principal.user_id
         )
+    except ImportHasReviewedLinesError as exc:
+        raise ApiError(
+            code="CASHFLOW_IMPORT_HAS_REVIEWED_LINES",
+            status_code=409,
+            message="这一批里有已审核的流水，要先退回审核才能作废",
+            details={"count": len(exc.line_uids), "line_ids": exc.line_uids},
+        ) from exc
     except ImportNotFoundError as exc:
         raise HTTPException(status_code=404) from exc
     except ImportVoidedError as exc:

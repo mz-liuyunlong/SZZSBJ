@@ -31,16 +31,20 @@ def main() -> int:
     session = get_session_factory()()
     try:
         counts = load_deploy_data(session, data)
+        if args.apply:
+            session.commit()
+        else:
+            session.rollback()
     except DeployFileError as exc:
         session.rollback()
         print(f"FILE_INVALID: {exc}")
         return 2
+    except Exception as exc:  # noqa: BLE001  数据库报错可能带账号，只打印类型
+        session.rollback()
+        print(f"WRITE_FAILED: {type(exc).__name__}")
+        return 3
     finally:
-        if not args.apply:
-            session.rollback()
-    if args.apply:
-        session.commit()
-    session.close()
+        session.close()
     mode = "APPLIED" if args.apply else "DRY_RUN"
     print(f"{mode} accounts={counts.accounts} rules={counts.rules} exclusions={counts.exclusions}")
     return 0

@@ -134,7 +134,7 @@ class CashflowLineEventRequest(BaseModel):
     kind: str = Field(max_length=32)
     payload: dict[str, Any] = Field(default_factory=dict)
     reason: str | None = Field(default=None, max_length=500)
-    expected_version: int | None = None
+    expected_version: int = Field(ge=0)
     idempotency_key: str | None = Field(default=None, max_length=128)
 
 

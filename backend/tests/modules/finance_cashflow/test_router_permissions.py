@@ -12,6 +12,7 @@ from app.core.auth import Principal, get_optional_principal
 from app.core.config import get_settings
 from app.db.session import get_db_session
 from app.main import create_app
+from app.modules.finance_cashflow.service import CashflowService, ImportHasReviewedLinesError
 
 UID = "0123456789abcdef"
 IMPORT_ID = "00000000-0000-0000-0000-0000000000a1"
@@ -89,3 +90,24 @@ def test_default_upload_limit_is_20_mb(monkeypatch):
     get_settings.cache_clear()
     assert get_settings().finance_cashflow_max_upload_bytes == 20 * 1024 * 1024
     get_settings.cache_clear()
+
+
+def test_event_without_expected_version_is_422(client_for):
+    response = client_for(super_admin()).post(
+        f"/api/finance/cashflow/lines/{UID}/events", json={"kind": "review1_pass"}
+    )
+    assert response.status_code == 422
+
+
+def test_void_blocked_returns_code_count_and_line_ids(client_for, monkeypatch):
+    def refuse(self, import_id, *, reason, actor):
+        raise ImportHasReviewedLinesError([UID])
+
+    monkeypatch.setattr(CashflowService, "void_import", refuse)
+    response = client_for(super_admin()).post(
+        f"/api/finance/cashflow/imports/{IMPORT_ID}/void", json={"reason": "传错了"}
+    )
+    assert response.status_code == 409
+    error = response.json()["error"]
+    assert error["code"] == "CASHFLOW_IMPORT_HAS_REVIEWED_LINES"
+    assert error["details"] == {"count": 1, "line_ids": [UID]}

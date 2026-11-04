@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import sys
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -17,7 +19,7 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
-from app.core.config import Settings, SettingsError, get_test_database_url
+from app.core.config import Settings, SettingsError, get_settings, get_test_database_url
 from app.modules.finance_cashflow import journal as J
 from app.modules.finance_cashflow.deploy_load import DeployFileError, load_deploy_data
 from app.modules.finance_cashflow.models import (
@@ -32,6 +34,7 @@ from app.modules.finance_cashflow.models import (
 from app.modules.finance_cashflow.schemas import CashflowLineEventRequest
 from app.modules.finance_cashflow.service import (
     CashflowService,
+    ImportHasReviewedLinesError,
     ImportVoidedError,
     LineNotFoundError,
     StorageNotConfiguredError,
@@ -257,8 +260,8 @@ def test_stale_version_is_rejected(service):
 def test_idempotency_key_replays_without_a_second_change(service, session):
     upload(service, S.boc(S.BOC_A, boc_rows()))
     uid = active(service, "BOC_CNY")[0].line_uid
-    event(service, uid, J.KIND_REVIEW1_PASS, idempotency_key="k1")
-    replay = event(service, uid, J.KIND_REVIEW1_PASS, idempotency_key="k1")
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0, idempotency_key="k1")
+    replay = event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0, idempotency_key="k1")
     assert replay.replayed is True
     assert replay.version == 1
 
@@ -268,24 +271,24 @@ def test_event_on_voided_line_is_not_found(service):
     uid = active(service, "BOC_CNY")[0].line_uid
     service.void_import(BATCH_1, reason="x", actor="admin")
     with pytest.raises(LineNotFoundError):
-        event(service, uid, J.KIND_REVIEW1_PASS)
+        event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
 
 
 def test_review_state_survives_void_and_reimport(service):
     content = S.boc(S.BOC_A, boc_rows())
     upload(service, content, batch=BATCH_1)
     uid = active(service, "BOC_CNY")[0].line_uid
-    event(service, uid, J.KIND_REVIEW1_PASS)
+    event(service, uid, J.KIND_REVIEW1_REJECT, reason="再看", expected_version=0)
     service.void_import(BATCH_1, reason="x", actor="admin")
     upload(service, content, batch=BATCH_2)
     line = next(item for item in active(service, "BOC_CNY") if item.line_uid == uid)
-    assert line.stage == J.STAGE_OK1
+    assert line.stage == J.STAGE_REJ1
 
 
 def test_line_exclusion_and_exclusion_list_anomaly(service, session):
     upload(service, S.boc(S.BOC_A, boc_rows()))
     lines = active(service, "BOC_CNY")
-    event(service, lines[0].line_uid, J.KIND_EXCLUDE, reason="其他部门")
+    event(service, lines[0].line_uid, J.KIND_EXCLUDE, reason="其他部门", expected_version=0)
     assert (
         next(
             item for item in active(service, "BOC_CNY") if item.line_uid == lines[0].line_uid
@@ -311,7 +314,13 @@ def test_line_exclusion_and_exclusion_list_anomaly(service, session):
     assert len(alerts) == 1
     assert alerts[0].line_uid is None
     assert alerts[0].date == "2026-10-22"
-    event(service, lines[1].line_uid, J.KIND_ATTACH_REF, payload={"ref": "202610100001"})
+    event(
+        service,
+        lines[1].line_uid,
+        J.KIND_ATTACH_REF,
+        payload={"ref": "202610100001"},
+        expected_version=0,
+    )
     assert not [item for item in service.list_anomalies() if item.type == J.ALERT_EXCLUSION]
 
 
@@ -464,3 +473,226 @@ def test_deploy_load_is_repeatable_and_validates(session: Session):
     ):
         with pytest.raises(DeployFileError):
             load_deploy_data(session, bad)
+
+
+def _void_blocked(service, batch):
+    with pytest.raises(ImportHasReviewedLinesError) as caught:
+        service.void_import(batch, reason="x", actor="admin")
+    return caught.value.line_uids
+
+
+@pytest.mark.parametrize("final", [False, True])
+def test_void_refused_while_only_here_lines_are_reviewed(service, session, final):
+    upload(service, S.boc(S.BOC_A, boc_rows()), batch=BATCH_1)
+    uid = active(service, "BOC_CNY")[0].line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    version = 1
+    if final:
+        event(service, uid, J.KIND_REVIEW2_PASS, expected_version=1)
+        version = 2
+    assert _void_blocked(service, BATCH_1) == [uid]
+    assert session.get(FinanceCashImport, BATCH_1).status == "parsed"
+    assert len(active(service, "BOC_CNY")) == 3
+    # 先退回审核（改类别会自动退回待初审），才能作废
+    event(
+        service,
+        uid,
+        J.KIND_SET_CATEGORY,
+        payload={"category_code": "G01"},
+        expected_version=version,
+    )
+    assert service.void_import(BATCH_1, reason="x", actor="admin").lines_affected == 3
+    assert active(service, "BOC_CNY") == []
+
+
+def test_void_allowed_after_final_reject_sends_line_back(service):
+    upload(service, S.boc(S.BOC_A, boc_rows()), batch=BATCH_1)
+    uid = active(service, "BOC_CNY")[0].line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    event(service, uid, J.KIND_REVIEW2_REJECT, reason="再看", expected_version=1)
+    service.void_import(BATCH_1, reason="x", actor="admin")
+    assert active(service, "BOC_CNY") == []
+
+
+def test_void_allowed_when_reviewed_line_is_shared_with_another_batch(service, session):
+    rows = boc_rows("R", 3)
+    upload(service, S.boc(S.BOC_A, rows), batch=BATCH_1)
+    upload(service, S.boc(S.BOC_A, rows[:2], range_=("20261001", "20261029")), batch=BATCH_2)
+    shared = session.scalars(
+        select(FinanceCashLine).where(FinanceCashLine.source_ref == "R000000")
+    ).one()
+    event(service, shared.line_uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    service.void_import(BATCH_2, reason="x", actor="admin")
+    session.refresh(shared)
+    assert shared.voided_at is None
+    assert shared.last_import_id == BATCH_1
+    line = next(item for item in active(service, "BOC_CNY") if item.line_uid == shared.line_uid)
+    assert line.stage == J.STAGE_OK1
+
+
+def test_void_counts_a_batch_voided_earlier_as_gone(service):
+    rows = boc_rows("R", 2)
+    upload(service, S.boc(S.BOC_A, rows), batch=BATCH_1)
+    upload(service, S.boc(S.BOC_A, rows, range_=("20261001", "20261029")), batch=BATCH_2)
+    service.void_import(BATCH_1, reason="x", actor="admin")
+    uid = active(service, "BOC_CNY")[0].line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    assert _void_blocked(service, BATCH_2) == [uid]
+
+
+def test_concurrent_idempotency_key_returns_replay_not_500(service, session, monkeypatch):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    uid = active(service, "BOC_CNY")[0].line_uid
+    event(
+        service,
+        uid,
+        J.KIND_SET_CATEGORY,
+        payload={"category_code": "G01"},
+        expected_version=0,
+        idempotency_key="race",
+    )
+    # 模拟另一个请求：第一次查幂等键时还没查到，提交时才撞唯一索引。
+    real = service._find_event_by_key
+    calls = iter([None])
+    monkeypatch.setattr(service, "_find_event_by_key", lambda key: next(calls, real(key)))
+    result = event(
+        service,
+        uid,
+        J.KIND_SET_CATEGORY,
+        payload={"category_code": "G02"},
+        expected_version=1,
+        idempotency_key="race",
+    )
+    assert result.replayed is True
+    line = next(item for item in active(service, "BOC_CNY") if item.line_uid == uid)
+    assert (line.category_code, line.version) == ("G01", 1)
+
+
+def test_rate_only_reads_product_management_rule(service, session):
+    usd = ("来账", "20261010", "10:00:00", "USD", "10", "10", "X", "", "U1", "")
+    upload(service, S.boc(S.BOC_A, [usd]))
+    other = _pricing_rule(Decimal("9.9"))
+    other.rule_key = "other_rule"
+    session.add(other)
+    session.flush()
+    assert active(service, "BOC_USD")[0].amount_cny is None
+
+
+FAKE_ACCOUNT_NO = "000011112222333"
+
+
+def _run_script(tmp_path, monkeypatch, data, *flags):
+    spec = importlib.util.spec_from_file_location(
+        "finance_cash_deploy_load",
+        Path(__file__).resolve().parents[3] / "scripts/finance_cash_deploy_load.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    path = tmp_path / "deploy.json"
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["finance_cash_deploy_load.py", "--file", str(path), *flags])
+    return module.main()
+
+
+def _fake_account(**over):
+    return {
+        "account_key": "FAKE_K",
+        "display_name": "假账户",
+        "entity": "甲",
+        "currency_code": "CNY",
+        "kind": "对公",
+        "provider": "boc",
+        "account_no_last4": "0333",
+        "identity": {"inquiry_account": FAKE_ACCOUNT_NO, "currency": "CNY"},
+        **over,
+    }
+
+
+def _require_test_database():
+    try:
+        get_test_database_url(Settings())  # type: ignore[call-arg]
+    except (SettingsError, ValidationError):
+        pytest.skip("isolated PostgreSQL test database is not configured")
+
+
+def test_script_write_failure_prints_only_the_error_type(tmp_path, monkeypatch, capsys):
+    _require_test_database()
+    get_settings.cache_clear()
+    code = _run_script(
+        tmp_path, monkeypatch, {"accounts": [_fake_account(account_key="K" * 65)]}, "--apply"
+    )
+    output = capsys.readouterr()
+    assert code == 3
+    assert output.out.startswith("WRITE_FAILED: ")
+    assert FAKE_ACCOUNT_NO not in output.out + output.err
+
+
+@pytest.mark.parametrize(
+    ("data", "message"),
+    [
+        (
+            {"rules": [{"rule_type": "text", "pattern": "假", "category_code": "C01"}]},
+            "FILE_INVALID: rules 第 1 条 sort_order 不合格",
+        ),
+        (
+            {
+                "rules": [
+                    {
+                        "rule_type": "text",
+                        "pattern": "假",
+                        "category_code": "C01",
+                        "sort_order": "x",
+                    }
+                ]
+            },
+            "FILE_INVALID: rules 第 1 条 sort_order 不合格",
+        ),
+        (
+            {
+                "exclusions": [
+                    {"entry_key": "e", "txn_date": "秘密日期", "amount_cny": "1", "reason": "x"}
+                ]
+            },
+            "FILE_INVALID: exclusions 第 1 条 txn_date 不合格",
+        ),
+        (
+            {
+                "exclusions": [
+                    {
+                        "entry_key": "e",
+                        "ref": "202610100001",
+                        "registered_on": "秘密日期",
+                        "amount_cny": "1",
+                        "reason": "x",
+                    }
+                ]
+            },
+            "FILE_INVALID: exclusions 第 1 条 registered_on 不合格",
+        ),
+        (
+            {
+                "exclusions": [
+                    {"entry_key": "e", "ref": "202610100001", "amount_cny": "1", "reason": "x"}
+                ]
+            },
+            "FILE_INVALID: exclusions 第 1 条 registered_on 不合格",
+        ),
+    ],
+)
+def test_script_bad_file_reports_only_row_and_field(tmp_path, monkeypatch, capsys, data, message):
+    _require_test_database()
+    get_settings.cache_clear()
+    code = _run_script(tmp_path, monkeypatch, data)
+    output = capsys.readouterr()
+    assert code == 2
+    assert output.out.strip() == message
+    assert "秘密日期" not in output.out + output.err
+
+
+def test_script_dry_run_writes_nothing(tmp_path, monkeypatch, capsys, session):
+    _require_test_database()
+    get_settings.cache_clear()
+    code = _run_script(tmp_path, monkeypatch, {"accounts": [_fake_account()]})
+    assert code == 0
+    assert capsys.readouterr().out.strip() == "DRY_RUN accounts=1 rules=0 exclusions=0"
+    assert session.get(FinanceCashAccount, "FAKE_K") is None
