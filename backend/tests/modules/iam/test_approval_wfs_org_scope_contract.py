@@ -75,3 +75,30 @@ def test_approval_scope_is_applied_to_each_request() -> None:
     ):
         require_approval_org_scope(principal, session)
     assert session.info[ORG_OWNER_SCOPE_SESSION_KEY] == frozenset({"uid-b"})
+
+
+def test_workbench_summary_aggregates_filter_formal_and_legacy_cases() -> None:
+    session = _session()
+    session.execute.return_value.mappings.return_value.one.side_effect = [
+        {
+            "pending": 0,
+            "high_risk": 0,
+            "info_required": 0,
+            "approved": 0,
+        },
+        {
+            "total": 0,
+            "still_pending": 0,
+            "info_required": 0,
+            "high_risk": 0,
+            "approved": 0,
+        },
+    ]
+    ApprovalService(session).summary(frozenset({"A1"}), actor="actor", may_review=True)
+    assert session.execute.call_count == 2
+    formal_sql = str(session.execute.call_args_list[0].args[0])
+    legacy_sql = str(session.execute.call_args_list[1].args[0])
+    assert "wc.owner_ref=any(:org_owner_refs)" in formal_sql
+    assert "c.owner_ref=any(:org_owner_refs)" in legacy_sql
+    for call in session.execute.call_args_list:
+        assert call.args[1]["org_owner_refs"] == ["uid-a"]
