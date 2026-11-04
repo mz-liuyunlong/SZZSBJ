@@ -23,6 +23,7 @@ from app.modules.decodo.router import (
 from app.modules.decodo.router import (
     settings_router as decodo_settings_router,
 )
+from app.modules.iam.business_scope_guard import require_business_scope_coverage
 from app.modules.iam.organization_event_router import router as organization_event_router
 from app.modules.iam.organization_owner_router import router as organization_owner_router
 from app.modules.iam.organization_sync_router import router as organization_sync_router
@@ -70,7 +71,10 @@ async def app_lifespan(_: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     application = FastAPI(
         title="YC System API",
-        dependencies=[Depends(enforce_protected_by_default)],
+        dependencies=[
+            Depends(enforce_protected_by_default),
+            Depends(require_business_scope_coverage),
+        ],
         docs_url=None,
         lifespan=app_lifespan,
         redoc_url=None,
