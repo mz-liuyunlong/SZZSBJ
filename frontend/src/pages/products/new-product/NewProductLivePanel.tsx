@@ -115,6 +115,7 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
           boardGuard.current.selectAccount(items[0]);
           correctionGuard.current.selectAccount(items[0]);
           setAccount(items[0]);
+          if (mode === "performance") void loadListingCandidates(1, "", items[0]);
         }
       })
       .catch(error => {
@@ -157,9 +158,11 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
     }
   }
 
-  async function loadListingCandidates(next = listingPage, query = skuSearch) {
-    if (!account.trim()) return;
-    const ticket = listingGuard.current.begin(account.trim());
+  async function loadListingCandidates(
+    next = listingPage, query = skuSearch, sourceAccount = account.trim(),
+  ) {
+    if (!sourceAccount) return;
+    const ticket = listingGuard.current.begin(sourceAccount);
     setListingBusy(true);
     try {
       const result = await getNewProductListingCandidates(ticket.account, next, { sku: query });
@@ -558,6 +561,7 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
           setRecord(null);
           setPage(1);
           setBusy(false);
+          if (mode === "performance") void loadListingCandidates(1, "", value);
         }} />
       <Input.Search
         style={{ width: 255 }}
