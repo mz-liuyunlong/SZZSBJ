@@ -142,7 +142,7 @@ def test_real_clearance_listing_application_approval_and_progress(clearance_db: 
             approval_id,
             DecisionWrite(decision="approved", expected_version=1),
             allowed,
-            "operator-1"
+            "operator-1",
         )
     decision = service.decide(
         approval_id,
@@ -268,9 +268,7 @@ def test_zero_sales_requires_full_store_source_history(clearance_db: Session) ->
     account = "clearance-ci-account"
     store = "ci-zero-store"
     item = "ci-zero-item"
-    listing_id = _seed_listing(
-        clearance_db, account=account, store=store, item=item, available=40
-    )
+    listing_id = _seed_listing(clearance_db, account=account, store=store, item=item, available=40)
     now = datetime.now(UTC)
     business_day = now.astimezone(ZoneInfo("America/Los_Angeles")).date()
     for days_ago in range(1, 22):
@@ -300,9 +298,7 @@ def test_zero_sales_requires_full_store_source_history(clearance_db: Session) ->
             )
         )
     clearance_db.commit()
-    candidate = ClearanceService(clearance_db).listing_detail(
-        listing_id, frozenset({account})
-    )
+    candidate = ClearanceService(clearance_db).listing_detail(listing_id, frozenset({account}))
     evaluation = candidate["evaluation"]
     assert evaluation["source_sales_coverage_days_30d"] == 30
     assert evaluation["positive_stock_days_30d"] >= 21
