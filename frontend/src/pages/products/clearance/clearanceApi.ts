@@ -35,6 +35,10 @@ export interface ClearanceEvaluation {
   inventory_captured_at: string | null;
   stock_capital_usd: string | null;
   unit_cost_usd: string | null;
+  high_stock_capital?: boolean;
+  conflict_alerts?: string[];
+  profit_30d_amount?: string | null;
+  refund_loss_30d?: string | null;
   sales_30d: string | null;
   margin_30d_percent: string | null;
   refund_rate_percent: string | null;
