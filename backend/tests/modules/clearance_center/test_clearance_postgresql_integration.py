@@ -299,8 +299,16 @@ def test_zero_sales_requires_full_store_source_history(clearance_db: Session) ->
             )
         )
     clearance_db.commit()
-    candidate = ClearanceService(clearance_db).listing_detail(listing_id, frozenset({account}))
-    evaluation = candidate["evaluation"]
+    # Evaluate source evidence directly; the public Listing detail only
+    # labels auto-candidates after a completed midnight run.
+    service = ClearanceService(clearance_db)
+    listing = service.repo.listing(listing_id, frozenset({account}))
+    assert listing is not None
+    rules, _ = service.repo.rules(account)
+    evidence = service.repo.evidence([listing])
+    evaluation = service.repo.evaluated(
+        listing, evidence[(account, store, item)], rules
+    )
     assert evaluation["source_sales_coverage_days_30d"] == 30
     assert evaluation["positive_stock_days_30d"] >= 21
     assert evaluation["risk_level"] == "high"
