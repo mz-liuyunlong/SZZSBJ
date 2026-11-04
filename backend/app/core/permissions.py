@@ -90,9 +90,12 @@ def require_any_permission(*permission_keys: str) -> Callable[..., Principal]:
 
     def dependency(
         principal: Annotated[Principal, Depends(require_principal)],
+        request: Request = None,
     ) -> Principal:
         if has_any_permission(principal, normalized):
             return principal
+        if request is not None:
+            request.state.denied_permission_keys = normalized
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
 
     return dependency
@@ -100,7 +103,10 @@ def require_any_permission(*permission_keys: str) -> Callable[..., Principal]:
 
 def require_super_admin(
     principal: Annotated[Principal, Depends(require_principal)],
+    request: Request = None,
 ) -> Principal:
     if "*" in principal.permissions:
         return principal
+    if request is not None:
+        request.state.denied_permission_keys = ("*",)
     raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
