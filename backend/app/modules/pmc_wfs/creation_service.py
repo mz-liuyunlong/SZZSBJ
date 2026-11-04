@@ -1,7 +1,7 @@
 """Count-based commands with scope, row locks and replay-safe operation snapshots."""
 
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import IntegrityError
@@ -11,6 +11,7 @@ from app.core.config import get_settings
 from app.modules.pmc_domestic.packing_rules import fingerprint
 from app.modules.pmc_domestic.packing_service import conflict, missing
 from app.modules.pmc_wfs.allocation import allocate
+from app.modules.pmc_wfs.creation_config import CREATION_MODES, POLL_MAX_ATTEMPTS, creation_mode
 from app.modules.pmc_wfs.creation_models import (
     WfsBoxHold,
     WfsCreation,
@@ -18,8 +19,10 @@ from app.modules.pmc_wfs.creation_models import (
     WfsCreationTicket,
 )
 from app.modules.pmc_wfs.creation_schemas import (
+    CreationDefaultsRead,
     OperationList,
     OperationRead,
+    ProbeResult,
     ShipmentRead,
     TicketRead,
 )
@@ -27,15 +30,48 @@ from app.modules.pmc_wfs.repository import domestic_packing_lock_key
 
 
 def guard_write(session):
-    """V2 stays local/test; isolated test instances need not share the business DB port."""
+    """Local/test keep the original database checks. Any other environment writes only when
+    the owner switched creation on (``WFS_CREATION_MODE`` = single / batch)."""
     env = get_settings().app_env.value
     url = session.get_bind().url
-    if env not in {"local", "test"} or url.host not in {"127.0.0.1", "localhost"}:
+    if env not in {"local", "test"}:
+        if creation_mode() not in CREATION_MODES:
+            raise ApiError(code="WFS_CREATION_DISABLED", status_code=403)
+        return
+    if url.host not in {"127.0.0.1", "localhost"}:
         raise ApiError(code="WFS_LOCAL_ONLY", status_code=403)
     if env == "test" and not (url.database or "").startswith("wfs_v2_test_"):
         raise ApiError(code="WFS_ISOLATED_TEST_DATABASE_REQUIRED", status_code=403)
     if env == "local" and (url.database != "szzsbj_dev" or url.port != 55432):
         raise ApiError(code="WFS_LOCAL_ONLY", status_code=403)
+
+
+def creation_defaults(session, account):
+    """WFS 设置 · 创建默认值 for one account (8088 defaults when never saved)."""
+    from app.modules.pmc_wfs.settings_models import WfsCreationDefaults
+    from app.modules.pmc_wfs.settings_seed import CREATION_DEFAULTS
+
+    row = session.get(WfsCreationDefaults, account)
+    if row is None:
+        return {**CREATION_DEFAULTS, "saved": False}
+    return {
+        "transport": row.transport,
+        "ship_date_offset": row.ship_date_offset,
+        "pallet_boxes": row.pallet_boxes,
+        "mixed_boxes": row.mixed_boxes,
+        "carrier_opt": row.carrier_opt,
+        "saved": True,
+    }
+
+
+def default_delivery_at(defaults):
+    """Expected delivery = today (Asia/Shanghai) + ship_date_offset days, midnight local."""
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+
+    zone = ZoneInfo("Asia/Shanghai")
+    day = datetime.now(zone).date() + timedelta(days=int(defaults["ship_date_offset"]))
+    return datetime(day.year, day.month, day.day, tzinfo=zone)
 
 
 AUTOMATIC_CHECKS_RULE_VERSION = "wfs-v2-20261029"
@@ -122,10 +158,21 @@ class CreationService:
                     state=t.state,
                     allocation=t.allocation,
                     shipments=[
-                        ShipmentRead(shipment_id=sid, label_state=value["state"])
+                        ShipmentRead(
+                            shipment_id=sid,
+                            label_state=value["state"],
+                            fc=(t.result.get("shipments", {}).get(sid) or {}).get("fc"),
+                        )
                         for sid, value in t.result.get("labels", {}).items()
                     ],
                     error_code=t.error_code,
+                    error_message=t.result.get("error_message"),
+                    submissions=int(t.result.get("submissions", 0)),
+                    polls=(t.result.get("polling") or {}).get("count"),
+                    max_polls=(t.result.get("polling") or {}).get("max", POLL_MAX_ATTEMPTS)
+                    if t.result.get("polling")
+                    else None,
+                    next_poll_at=(t.result.get("polling") or {}).get("next_at"),
                 )
                 for t in tickets
             ],
@@ -194,6 +241,11 @@ class CreationService:
                     for s in preview.selections
                 ],
             }
+            # WFS 设置 · 创建默认值: recorded with the operation; fills the delivery date.
+            defaults = creation_defaults(self.s, cmd.source_account_ref)
+            snapshot["creation_defaults"] = defaults
+            if not snapshot.get("expected_delivery_at"):
+                snapshot["expected_delivery_at"] = default_delivery_at(defaults).isoformat()
             self.gateway.validate(snapshot)  # Reject before any persistent hold when disabled.
             # Machine checks only. They are evidence for the human approver, never an
             # approval: the operation waits in AWAITING_APPROVAL until approve() runs.
@@ -324,11 +376,16 @@ class CreationService:
         return self.read(ident)
 
     def recover(self, ident, actor, action):
+        """reconcile = read back now; labels = fetch missing labels; retry = resend FAILED
+        tickets (after a read-back by the same order id, in the worker)."""
         guard_write(self.s)
+        if action == "retry":
+            return self.retry(ident, actor)
         op = self.operation(ident)
         if not manually_approved(op):
             conflict("WFS_APPROVAL_REQUIRED")
-        self.gateway.validate(op.snapshot)
+        if not (self.gateway.enabled or getattr(self.gateway, "preview_enabled", False)):
+            self.gateway.validate(op.snapshot)
         self.s.add(
             WfsCreationEvent(
                 operation_id=op.id,
@@ -345,6 +402,95 @@ class CreationService:
         self.s.expire_all()
         return self.read(ident)
 
+    def retry(self, ident, actor):
+        """FAILED tickets only. Boxes are held again first; while anything of this operation
+        is still being submitted (RUNNING) a retry is refused."""
+        try:
+            self.s.execute(text("SET LOCAL lock_timeout='5s'"))
+            op = self.operation(ident, lock=True)
+            if not manually_approved(op):
+                conflict("WFS_APPROVAL_REQUIRED")
+            self.gateway.validate(op.snapshot)
+            tickets = list(
+                self.s.scalars(
+                    select(WfsCreationTicket)
+                    .where(WfsCreationTicket.operation_id == op.id)
+                    .order_by(WfsCreationTicket.number)
+                    .with_for_update()
+                )
+            )
+            if any(t.state in ("RUNNING", "QUEUED", "UNKNOWN") for t in tickets):
+                raise ApiError(
+                    code="WFS_SUBMITTING",
+                    status_code=409,
+                    message="这批货件正在提交或等待 Walmart 结果，不能重复提交",
+                )
+            failed = [t for t in tickets if t.state == "FAILED"]
+            if not failed:
+                conflict("WFS_NOTHING_TO_RETRY")
+            for ticket in failed:
+                self._hold_again(ticket)
+                ticket.state, ticket.error_code = "QUEUED", None
+            op.state = "QUEUED"
+            self.s.add(
+                WfsCreationEvent(
+                    operation_id=op.id,
+                    actor_uid=actor,
+                    kind="requested_retry",
+                    evidence={"tickets": [str(t.id) for t in failed]},
+                )
+            )
+            self.s.commit()
+        except IntegrityError:
+            self.s.rollback()
+            raise ApiError(
+                code="WFS_BOXES_OCCUPIED_OR_INVALID",
+                status_code=409,
+                message="这票的箱子已被其他货件占用，不能重试",
+            ) from None
+        except Exception:
+            self.s.rollback()
+            raise
+        try:
+            self.dispatch(str(ident), "retry")
+        except Exception:
+            self.s.add(
+                WfsCreationEvent(
+                    operation_id=ident, actor_uid=actor, kind="dispatch_failed", evidence={}
+                )
+            )
+            self.s.commit()
+        self.s.expire_all()
+        return self.read(ident)
+
+    def _hold_again(self, ticket):
+        ranges = ticket.allocation["ranges"]
+        for order_id in {r["order_id"] for r in ranges}:
+            order = self.base.order(UUID(str(order_id)), lock=True)
+            box = self.base.detail(order.id).order.box_set
+            if not box or any(
+                r["box_version"] != box.version for r in ranges if r["order_id"] == order_id
+            ):
+                conflict("BOX_VERSION_CHANGED")
+        if self.s.scalar(
+            select(func.count()).select_from(WfsBoxHold).where(WfsBoxHold.ticket_id == ticket.id)
+        ):
+            return  # still held (e.g. an old ticket failed before release existed)
+        self.s.add_all(
+            [
+                WfsBoxHold(
+                    ticket_id=ticket.id,
+                    order_id=UUID(str(r["order_id"])),
+                    box_line_id=UUID(str(r["line_id"])),
+                    box_version=r["box_version"],
+                    box_ordinal=i,
+                )
+                for r in ranges
+                for i in range(r["start"], r["end"] + 1)
+            ]
+        )
+        self.s.flush()
+
     def optional_preview(self, cmd):
         allocation = self.preview(cmd)
         snapshot = {
@@ -358,8 +504,40 @@ class CreationService:
         }
         if snapshot["order"]["source_account_ref"] != cmd.source_account_ref:
             missing()
-        self.gateway.validate(snapshot)
+        defaults = creation_defaults(self.s, cmd.source_account_ref)
+        snapshot["creation_defaults"] = defaults
+        if not snapshot.get("expected_delivery_at"):
+            snapshot["expected_delivery_at"] = default_delivery_at(defaults).isoformat()
+        if not getattr(self.gateway, "preview_enabled", self.gateway.enabled):
+            self.gateway.validate(snapshot)
         return {"preview_hash": allocation.preview_hash, "result": self.gateway.preview(snapshot)}
+
+    def defaults(self, account):
+        if account not in self.base.accounts:
+            raise ApiError(code="DATA_SCOPE_DENIED", status_code=403)
+        values = creation_defaults(self.s, account)
+        return CreationDefaultsRead(
+            source_account_ref=account,
+            expected_delivery_date=default_delivery_at(values).date().isoformat(),
+            **values,
+        )
+
+    def probe(self, store_id):
+        """Read-only Walmart connectivity check for one store (探测, no shipment created)."""
+        if self.base.stores is not None and store_id not in self.base.stores:
+            raise ApiError(code="DATA_SCOPE_DENIED", status_code=403)
+        probe = getattr(self.gateway, "probe", None)
+        if probe is None:
+            self.gateway.validate({})
+        try:
+            return ProbeResult(**probe(store_id))
+        except ApiError:
+            raise
+        except Exception as error:
+            code = getattr(error, "code", None) or "WFS_PROBE_FAILED"
+            raise ApiError(
+                code="WFS_PROBE_FAILED", status_code=502, message=f"探测失败：{code}"
+            ) from None
 
     def label(self, ident, shipment_id):
         import base64

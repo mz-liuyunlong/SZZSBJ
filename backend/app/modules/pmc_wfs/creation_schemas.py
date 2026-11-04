@@ -86,13 +86,15 @@ class CreationCommand(AllocationCommand):
     preview_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
     idempotency_key: UUID
     return_address: ReturnAddress
-    expected_delivery_at: AwareDatetime
+    # Empty = WFS 设置 · 创建默认值 (today + ship_date_offset days).
+    expected_delivery_at: AwareDatetime | None = None
     its: bool = Field(strict=True, default=False)
 
 
 class ShipmentRead(Strict):
     shipment_id: str
     label_state: Literal["PENDING", "READY", "FAILED"] = "PENDING"
+    fc: str | None = None  # Walmart 分配的仓库（创建返回）
 
 
 class TicketRead(Strict):
@@ -102,6 +104,11 @@ class TicketRead(Strict):
     allocation: AllocationTicket
     shipments: list[ShipmentRead]
     error_code: str | None = None
+    error_message: str | None = None  # Walmart's reason or ours, shown to users
+    submissions: int = 0
+    polls: int | None = None  # read-backs done while 提交中 (every 3 min, max 10)
+    max_polls: int | None = None
+    next_poll_at: datetime | None = None
 
 
 class OperationRead(Strict):
@@ -126,3 +133,24 @@ class Capabilities(Strict):
     creation_enabled: bool
     preview_enabled: bool
     reason: str | None = None
+    mode: Literal["off", "probe", "single", "batch"] = "off"
+
+
+class CreationDefaultsRead(Strict):
+    """WFS 设置 · 创建默认值 as used by the creation dialog."""
+
+    source_account_ref: str
+    transport: str
+    ship_date_offset: int
+    pallet_boxes: int
+    mixed_boxes: int
+    carrier_opt: str
+    saved: bool
+    expected_delivery_date: str  # today + ship_date_offset (Asia/Shanghai)
+
+
+class ProbeResult(Strict):
+    ok: bool
+    status_code: int
+    store_code: str
+    recent_shipments: int

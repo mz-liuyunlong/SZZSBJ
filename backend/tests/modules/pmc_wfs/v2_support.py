@@ -17,29 +17,50 @@ from app.modules.pmc_wfs.creation_worker import DefinitiveRejection, run_operati
 
 
 class SyntheticGateway:
+    """Stands in for Walmart. ``applied`` = whether an ambiguous create really happened."""
+
     enabled = True
+    preview_enabled = True
+    reason = None
 
     def __init__(self):
         self.creates = []
+        self.reads = []
+        self.labels = []
+        self.created = set()
         self.fail_label = False
         self.unknown = False
+        self.applied = True
+        self.accepted_without_ids = False
         self.reject = False
+        self.fc = None
 
     def validate(self, snapshot):
         assert snapshot["source_account_ref"].startswith("wfs-fixture-")
 
+    def _shipment(self, ticket_id):
+        sid = "TEST" + ticket_id.replace("-", "")[:20]
+        return {"shipment_id": sid, "fc": self.fc} if self.fc else sid
+
     def create(self, ticket_id, snapshot, allocation):
         self.creates.append(ticket_id)
         if self.reject:
-            raise DefinitiveRejection()
+            raise DefinitiveRejection("Invalid returnAddress.postalCode")
         if self.unknown:
+            if self.applied:
+                self.created.add(ticket_id)
             raise TimeoutError()
-        return ["TEST-" + ticket_id]
+        self.created.add(ticket_id)
+        if self.accepted_without_ids:
+            return []
+        return [self._shipment(ticket_id)]
 
     def reconcile(self, ticket_id, snapshot):
-        return ["TEST-" + ticket_id] if ticket_id in self.creates else None
+        self.reads.append(ticket_id)
+        return [self._shipment(ticket_id)] if ticket_id in self.created else None
 
-    def label(self, shipment_id, snapshot):
+    def label(self, shipment_id, snapshot, cartons=None):
+        self.labels.append((shipment_id, cartons))
         if self.fail_label:
             raise TimeoutError()
         return b"%PDF-1.4\n% synthetic WFS test label\n%%EOF"
@@ -83,6 +104,7 @@ def install_v2_schema(conn):
                 "dwd_lingxing_sku_",
                 "ops_pmc_wfs_",
                 "evt_pmc_wfs_",
+                "ref_wfs_",
             )
         ):
             continue

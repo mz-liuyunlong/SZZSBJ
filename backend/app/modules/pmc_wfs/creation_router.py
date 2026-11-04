@@ -1,4 +1,4 @@
-"""V2 endpoints remain fail-closed without a reviewed external write adapter."""
+"""V2 endpoints; Walmart is reached only through the reviewed adapter and WFS_CREATION_MODE."""
 
 from typing import Annotated, Any
 from uuid import UUID
@@ -8,14 +8,17 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from app.core.api import SuccessEnvelope
 from app.core.auth import Principal
 from app.core.permissions import require_permission
+from app.modules.pmc_wfs.creation_config import creation_mode
 from app.modules.pmc_wfs.creation_schemas import (
     AllocationCommand,
     AllocationPreview,
     ApprovalCommand,
     Capabilities,
     CreationCommand,
+    CreationDefaultsRead,
     OperationList,
     OperationRead,
+    ProbeResult,
 )
 from app.modules.pmc_wfs.creation_service import CreationService
 from app.modules.pmc_wfs.gateway import get_creation_gateway
@@ -63,10 +66,23 @@ def capabilities(request: Request, svc: Creation):
         request,
         Capabilities(
             creation_enabled=svc.gateway.enabled,
-            preview_enabled=svc.gateway.enabled,
-            reason=None if svc.gateway.enabled else "Walmart 创建与探测尚未启用，可先核对分箱方案",
+            preview_enabled=getattr(svc.gateway, "preview_enabled", svc.gateway.enabled),
+            reason=getattr(svc.gateway, "reason", None) or None,
+            mode=creation_mode()
+            if svc.gateway.enabled or getattr(svc.gateway, "preview_enabled", False)
+            else "off",
         ),
     )
+
+
+@router.get("/creation-defaults", response_model=SuccessEnvelope[CreationDefaultsRead, dict])
+def defaults(request: Request, svc: Creation, actor: Create, source_account_ref: str):
+    return response(request, svc.defaults(source_account_ref))
+
+
+@router.post("/creation-probe", response_model=SuccessEnvelope[ProbeResult, dict])
+def probe(request: Request, svc: Creation, actor: Preview, store_id: str):
+    return response(request, svc.probe(store_id))
 
 
 @router.post(
@@ -123,6 +139,16 @@ def operation(request: Request, ident: UUID, svc: Creation):
 )
 def reconcile(request: Request, ident: UUID, svc: Creation, actor: Reconcile):
     return response(request, svc.recover(ident, actor.user_id, "reconcile"))
+
+
+@router.post(
+    "/creation-operations/{ident}/retry",
+    response_model=SuccessEnvelope[OperationRead, dict],
+    responses=V2_ERRORS,
+)
+def retry(request: Request, ident: UUID, svc: Creation, actor: Approve):
+    """Resend FAILED tickets (read back by the same order id first, in the worker)."""
+    return response(request, svc.recover(ident, actor.user_id, "retry"))
 
 
 @router.post(

@@ -131,21 +131,163 @@ def test_disabled_gateway_leaves_no_hold(case):
     assert svc.list(order.id, 1, 20).total == 0
 
 
-def test_unknown_then_reconcile_does_not_recreate(case, engine):
+def test_unknown_then_poll_does_not_recreate(case, engine):
+    """No trustworthy answer -> 提交中, read back by our order id; never a second POST."""
     session, svc, gateway, account, order, *_ = case
     gateway.unknown = True
     op = approved(svc, svc.submit(command(svc, account, order), "fixture"))
     factory = factory_for(engine)
-    run_operation(factory, gateway, op.id)
+    scheduled = []
+    schedule = lambda ident, action, delay: scheduled.append((action, delay))  # noqa: E731
+    run_operation(factory, gateway, op.id, schedule=schedule)
     session.expire_all()
-    assert svc.read(op.id).state == "UNKNOWN"
+    current = svc.read(op.id)
+    assert current.state == "RUNNING"
+    assert all(t.state == "RUNNING" and t.polls == 0 and t.max_polls == 10 for t in current.tickets)
+    assert scheduled == [("poll", 180)]
     assert len(gateway.creates) == 2
-    run_operation(factory, gateway, op.id)
+    run_operation(factory, gateway, op.id)  # a duplicate execute does nothing
     assert len(gateway.creates) == 2
-    run_operation(factory, gateway, op.id, "reconcile")
+    run_operation(factory, gateway, op.id, "poll", schedule=schedule)
     session.expire_all()
     assert svc.read(op.id).state == "SUCCEEDED"
-    assert len(gateway.creates) == 2
+    assert len(gateway.creates) == 2 and len(gateway.reads) == 2
+    assert scheduled == [("poll", 180)]  # nothing left to poll
+
+
+def test_poll_ten_times_then_failed_and_boxes_released(case, engine):
+    session, svc, gateway, account, order, *_ = case
+    gateway.unknown, gateway.applied = True, False  # Walmart never created it
+    op = approved(svc, svc.submit(command(svc, account, order), "fixture"))
+    assert svc.base.detail(order.id).available_boxes == 10
+    factory = factory_for(engine)
+    scheduled = []
+    schedule = lambda ident, action, delay: scheduled.append(action)  # noqa: E731
+    run_operation(factory, gateway, op.id, schedule=schedule)
+    for _ in range(9):
+        run_operation(factory, gateway, op.id, "poll", schedule=schedule)
+    session.expire_all()
+    current = svc.read(op.id)
+    assert current.state == "RUNNING" and current.tickets[0].polls == 9
+    run_operation(factory, gateway, op.id, "poll", schedule=schedule)
+    session.expire_all()
+    current = svc.read(op.id)
+    assert current.state == "FAILED"
+    assert {t.error_code for t in current.tickets} == {"WFS_RESULT_TIMEOUT"}
+    assert "共 10 次" in current.tickets[0].error_message
+    assert len(scheduled) == 10 and len(gateway.creates) == 2
+    assert len(gateway.reads) == 20
+    assert svc.base.detail(order.id).available_boxes == 30  # boxes back on the order
+
+
+def test_rejection_shows_reason_releases_boxes_and_retry_reads_back_first(case, engine):
+    session, svc, gateway, account, order, *_ = case
+    gateway.reject = True
+    dispatched = []
+    svc.dispatch = lambda ident, action: dispatched.append(action)
+    op = approved(svc, svc.submit(command(svc, account, order), "fixture"))
+    factory = factory_for(engine)
+    run_operation(factory, gateway, op.id)
+    session.expire_all()
+    current = svc.read(op.id)
+    assert current.state == "FAILED"
+    assert current.tickets[0].error_message == "Invalid returnAddress.postalCode"
+    assert current.tickets[0].error_code == "WFS_PLATFORM_REJECTED"
+    assert svc.base.detail(order.id).available_boxes == 30
+    gateway.reject = False
+    retried = svc.recover(op.id, "approver-1", "retry")
+    assert retried.state == "QUEUED" and dispatched[-1] == "retry"
+    assert svc.base.detail(order.id).available_boxes == 10  # held again
+    run_operation(factory, gateway, op.id, "retry")
+    session.expire_all()
+    current = svc.read(op.id)
+    assert current.state == "SUCCEEDED"
+    assert all(t.submissions == 2 and t.error_message is None for t in current.tickets)
+    # Each ticket was read back before being sent again with the same order id.
+    assert len(gateway.reads) == 2 and len(gateway.creates) == 4
+    assert len(set(gateway.creates)) == 2
+
+
+def test_retry_finds_late_shipment_without_resending(case, engine):
+    session, svc, gateway, account, order, *_ = case
+    gateway.unknown, gateway.applied = True, False
+    op = approved(svc, svc.submit(command(svc, account, order, (20,)), "fixture"))
+    factory = factory_for(engine)
+    run_operation(factory, gateway, op.id)
+    for _ in range(10):
+        run_operation(factory, gateway, op.id, "poll")
+    session.expire_all()
+    assert svc.read(op.id).state == "FAILED"
+    gateway.created.update(gateway.creates)  # Walmart shows it late
+    svc.dispatch = lambda *_: None
+    svc.recover(op.id, "approver-1", "retry")
+    run_operation(factory, gateway, op.id, "retry")
+    session.expire_all()
+    assert svc.read(op.id).state == "SUCCEEDED"
+    assert len(gateway.creates) == 1  # never posted a second time
+
+
+def test_no_resubmit_while_submitting(case, engine):
+    session, svc, gateway, account, order, *_ = case
+    gateway.unknown = True
+    op = approved(svc, svc.submit(command(svc, account, order), "fixture"))
+    run_operation(factory_for(engine), gateway, op.id)
+    with pytest.raises(ApiError) as err:
+        svc.recover(op.id, "approver-1", "retry")
+    assert err.value.code == "WFS_SUBMITTING"
+    session.rollback()
+    with pytest.raises(ApiError) as err:
+        approved(svc, op)
+    assert err.value.details["reason"] == "WFS_APPROVAL_NOT_PENDING"
+    session.rollback()
+
+
+def test_retry_refused_when_boxes_taken_meanwhile(case, engine):
+    session, svc, gateway, account, order, *_ = case
+    gateway.reject = True
+    op = approved(svc, svc.submit(command(svc, account, order, (30,)), "fixture"))
+    run_operation(factory_for(engine), gateway, op.id)
+    session.expire_all()
+    assert svc.base.detail(order.id).available_boxes == 30
+    other = svc.submit(command(svc, account, order, (30,)), "fixture")  # takes all boxes
+    assert other.state == "AWAITING_APPROVAL"
+    with pytest.raises(ApiError) as err:
+        svc.recover(op.id, "approver-1", "retry")
+    assert err.value.code == "WFS_BOXES_OCCUPIED_OR_INVALID"
+    session.rollback()
+
+
+def test_defaults_from_settings_and_fc_from_walmart(case, engine):
+    from app.modules.pmc_wfs.creation_models import WfsCreation
+    from app.modules.pmc_wfs.settings_models import WfsCreationDefaults
+
+    session, svc, gateway, account, order, *_ = case
+    session.merge(
+        WfsCreationDefaults(
+            source_account_ref=account,
+            transport="LTL",
+            ship_date_offset=20,
+            pallet_boxes=16,
+            mixed_boxes=2,
+            carrier_opt="own",
+            updated_by="fixture",
+        )
+    )
+    session.commit()
+    defaults = svc.defaults(account)
+    assert defaults.saved and defaults.ship_date_offset == 20 and defaults.mixed_boxes == 2
+    cmd = command(svc, account, order, (20,)).model_copy(update={"expected_delivery_at": None})
+    op = svc.submit(cmd, "fixture")
+    snapshot = session.get(WfsCreation, op.id).snapshot
+    assert snapshot["creation_defaults"]["mixed_boxes"] == 2
+    assert snapshot["expected_delivery_at"].startswith(defaults.expected_delivery_date)
+    gateway.fc = "ATL1-TEST"
+    approved(svc, op)
+    run_operation(factory_for(engine), gateway, op.id)
+    session.expire_all()
+    shipment = svc.read(op.id).tickets[0].shipments[0]
+    assert shipment.fc == "ATL1-TEST"
+    assert gateway.labels[0][1] == 20  # one shipment: carton count = ticket boxes
 
 
 def test_labels_retry_only_and_scope(case, engine):
@@ -460,3 +602,33 @@ def test_approval_ref_is_validated():
     with pytest.raises(ValidationError):
         ApprovalCommand(approval_ref="has space")
     assert ApprovalCommand(approval_ref="rocky-written:2026-11-01#1").approval_ref
+
+
+def test_http_defaults_capabilities_and_retry(case, engine):
+    _, svc, gateway, account, order, *_ = case
+    gateway.reject = True
+    app = app_for(engine, account, gateway)
+    prefix = "/api/pmc/wfs/pending-packing"
+    with TestClient(app) as client:
+        caps = client.get(prefix + "/capabilities").json()["data"]
+        assert caps["creation_enabled"] is True and caps["preview_enabled"] is True
+        defaults = client.get(prefix + "/creation-defaults", params={"source_account_ref": account})
+        assert defaults.status_code == 200, defaults.text
+        assert defaults.json()["data"]["ship_date_offset"] == 15  # 8088 default
+        denied = client.get(prefix + "/creation-defaults", params={"source_account_ref": "x"})
+        assert denied.status_code == 403
+        body = command(svc, account, order, (20,)).model_dump(mode="json")
+        body["expected_delivery_at"] = None
+        created = client.post(prefix + "/creation-operations", json=body).json()["data"]
+        approved = client.post(
+            prefix + f"/creation-operations/{created['id']}/approve",
+            json={"approval_ref": "rocky-written:http#2"},
+        ).json()["data"]
+        assert approved["state"] == "FAILED"
+        assert approved["tickets"][0]["error_message"] == "Invalid returnAddress.postalCode"
+        gateway.reject = False
+        retried = client.post(prefix + f"/creation-operations/{created['id']}/retry")
+        assert retried.status_code == 200, retried.text
+        assert retried.json()["data"]["state"] == "SUCCEEDED"
+        again = client.post(prefix + f"/creation-operations/{created['id']}/retry")
+        assert again.status_code == 409
