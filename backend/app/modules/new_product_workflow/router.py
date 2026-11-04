@@ -364,7 +364,8 @@ def get_workflow_metrics(
     rule = (
         session.execute(
             text(
-                "SELECT version, rule_json FROM product_new_rule_versions ORDER BY version DESC LIMIT 1"
+                "SELECT version, rule_json FROM product_new_rule_versions "
+                "ORDER BY version DESC LIMIT 1"
             )
         )
         .mappings()

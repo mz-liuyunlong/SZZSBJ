@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
-from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -198,7 +197,7 @@ def read_sku_metrics(
         "business_timezone": "America/Los_Angeles",
         "as_of_exclusive": end.isoformat(),
         "metric_definitions": {
-            "acos": "attributed_spend / attributed_sales * 100; unavailable when missing or mixed currency",
+            "acos": "attributed_spend / attributed_sales * 100; null if currency unknown",
             "ad_spend_ratio": "profit mart ad_spend / total sales_amount * 100; not ACOS",
         },
         "source_tables": [
