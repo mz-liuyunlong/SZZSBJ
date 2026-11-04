@@ -222,4 +222,29 @@ def apply_snapshot(
             """),
             {**user, "department_ids": json.dumps(user["department_ids"]), "run_id": run_id},
         )
+    # A rejected employee must not regain an old token after later reactivation.
+    # Revoke within the same transaction as the accepted snapshot, not during
+    # preview, and only for local accounts explicitly linked to Feishu.
+    session.execute(
+        text(
+            """
+            UPDATE app_sessions AS s
+            SET revoked_at = now()
+            FROM app_users AS u
+            WHERE s.user_id = u.id
+              AND s.revoked_at IS NULL
+              AND u.feishu_open_id IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM iam_feishu_employees AS e
+                  WHERE e.open_id = u.feishu_open_id
+                    AND e.last_seen_run_id = :run_id
+                    AND e.is_active IS TRUE
+                    AND e.is_resigned IS NOT TRUE
+                    AND e.is_frozen IS NOT TRUE
+              )
+            """
+        ),
+        {"run_id": run_id},
+    )
     return str(run_id)
