@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
@@ -10,7 +11,10 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
 from app.core.config import AppEnvironment, get_settings
-from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
+from app.modules.iam.organization_access import (
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
+    ORG_OWNER_SCOPE_SESSION_KEY,
+)
 from app.modules.product_management.daily_sales_costs import (
     load_daily_sales_costs,
     normalize_sku_key,
@@ -106,6 +110,26 @@ class WfsFeeAlertService:
         self.org_owner_refs = (
             scope.get(ORG_OWNER_SCOPE_SESSION_KEY) if isinstance(scope, dict) else None
         )
+        self.account_owner_pairs = (
+            scope.get(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY) if isinstance(scope, dict) else None
+        )
+
+    def _account_owner_clause(self) -> str:
+        if self.account_owner_pairs is None:
+            return ""
+        return (
+            " and exists (select 1 from jsonb_to_recordset(cast(:org_account_owners as jsonb)) "
+            "as allowed(account_ref text, owner_uid text) "
+            "where allowed.account_ref=source_account_ref and allowed.owner_uid=owner_ref)"
+        )
+
+    def _account_owner_params(self) -> dict[str, object]:
+        if self.account_owner_pairs is None:
+            return {}
+        return {"org_account_owners": json.dumps([
+            {"account_ref": account, "owner_uid": owner}
+            for account, owner in sorted(self.account_owner_pairs)
+        ])}
 
     def list_cases(
         self,
@@ -150,6 +174,7 @@ class WfsFeeAlertService:
                             if self.org_owner_refs is not None
                             else ""
                         )
+                        + self._account_owner_clause()
                     )
                 ),
                 {
@@ -160,6 +185,7 @@ class WfsFeeAlertService:
                         if self.org_owner_refs is not None
                         else {}
                     ),
+                    **self._account_owner_params(),
                 },
             )
             .mappings()
@@ -639,6 +665,9 @@ class WfsFeeAlertService:
         if self.org_owner_refs is not None:
             where.append("owner_ref = any(:org_owner_refs)")
             params["org_owner_refs"] = sorted(self.org_owner_refs)
+        if self.account_owner_pairs is not None:
+            where.append(self._account_owner_clause().removeprefix(" and "))
+            params.update(self._account_owner_params())
         if query.start_date is not None:
             where.append("coalesce(first_alert_at, created_at)::date >= :start_date")
             params["start_date"] = query.start_date
@@ -882,13 +911,14 @@ class WfsFeeAlertService:
     def _assert_case_visible(self, case_id: UUID, account_refs: frozenset[str]) -> None:
         scoped_sql = (
             " and owner_ref=any(:org_owner_refs)" if self.org_owner_refs is not None else ""
-        )
+        ) + self._account_owner_clause()
         params: dict[str, object] = {
             "case_id": str(case_id),
             "accounts": list(account_refs),
         }
         if self.org_owner_refs is not None:
             params["org_owner_refs"] = sorted(self.org_owner_refs)
+        params.update(self._account_owner_params())
         exists = self.session.execute(
             text(
                 """
