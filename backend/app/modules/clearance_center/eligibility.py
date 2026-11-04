@@ -14,9 +14,6 @@ ACTIVE_WFS_LISTING_SQL = """
     and not exists (
         select 1 from listing_archive_states archived
         where archived.listing_id = l.id
-          and archived.source_account_ref = l.source_account_ref
-          and archived.store_id = l.store_id
-          and archived.item_id = l.item_id
           and archived.is_archived = true
     )
 """
