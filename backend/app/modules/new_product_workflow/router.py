@@ -30,13 +30,13 @@ from app.modules.new_product_workflow.field_access import redact_new_product_met
 from app.modules.new_product_workflow.metrics import la_today, read_sku_metrics
 from app.modules.new_product_workflow.purchase_plans import create_independent_purchase_plan
 from app.modules.new_product_workflow.reconciliation import reconcile_new_product_source
+from app.modules.new_product_workflow.rules import DEFAULT_RULES
 from app.modules.new_product_workflow.scoring_contract import (
     CONFIRMED_PURCHASE_BANDS,
     formal_policy_gate,
     market_review_readiness,
     normalized_purchase_bands,
 )
-from app.modules.new_product_workflow.rules import DEFAULT_RULES
 
 VIEW = "page:products:new-product-analysis:view"
 TRACK_VIEW = "page:products:launch-tracking:view"
