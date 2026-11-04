@@ -74,6 +74,16 @@ def read_sku_metrics(
                 text(
                     """
                 SELECT sum(ad.num_ads_clicks) AS clicks,
+                       sum(ad.ad_spend_amount) AS attributed_spend,
+                       sum(ad.attributed_sales_amount) AS attributed_sales,
+                       count(DISTINCT ad.ad_spend_currency_code)
+                         FILTER (WHERE ad.ad_spend_currency_code IS NOT NULL)
+                           AS spend_currencies,
+                       count(DISTINCT ad.attributed_sales_currency_code)
+                         FILTER (WHERE ad.attributed_sales_currency_code IS NOT NULL)
+                           AS attributed_currencies,
+                       min(ad.ad_spend_currency_code) AS spend_currency,
+                       min(ad.attributed_sales_currency_code) AS attributed_currency,
                        count(DISTINCT ad.business_date_la) AS ad_days
                 FROM fact_walmart_ad_item_sp_daily AS ad
                 WHERE ad.source_account_ref = :account
@@ -109,9 +119,26 @@ def read_sku_metrics(
             )
             else None
         )
+        attributed_spend = _number(clicks["attributed_spend"])
+        attributed_sales = _number(clicks["attributed_sales"])
+        ads_same_currency = (
+            int(clicks["spend_currencies"] or 0) == 1
+            and int(clicks["attributed_currencies"] or 0) == 1
+            and clicks["spend_currency"] == clicks["attributed_currency"]
+        )
         acos = (
+            (attributed_spend / attributed_sales * 100)
+            if (
+                ads_same_currency
+                and attributed_spend is not None
+                and attributed_sales is not None
+                and attributed_sales > 0
+            )
+            else None
+        )
+        ad_spend_ratio = (
             (ad_spend / sales_amount * 100)
-            if (ad_spend is not None and sales_amount is not None and sales_amount > 0)
+            if ad_spend is not None and sales_amount is not None and sales_amount > 0
             else None
         )
         # Missing days or incomplete cost valuation are never silently filled with zero.
@@ -128,13 +155,16 @@ def read_sku_metrics(
             "profit": profit if cost_days == observed and observed > 0 else None,
             "margin": margin,
             "acos": acos,
+            "ad_spend_ratio": ad_spend_ratio,
+            "attributed_sales": attributed_sales if ads_same_currency else None,
             "observed_days": observed,
             "complete_cost_days": cost_days,
             "complete": observed == days
             and cost_days == days
             and margin is not None
             and ad_spend is not None
-            and clicks["clicks"] is not None,
+            and clicks["clicks"] is not None
+            and acos is not None,
         }
 
     inv = (
@@ -167,6 +197,10 @@ def read_sku_metrics(
         "sku": sku,
         "business_timezone": "America/Los_Angeles",
         "as_of_exclusive": end.isoformat(),
+        "metric_definitions": {
+            "acos": "attributed_spend / attributed_sales * 100; unavailable when missing or mixed currency",
+            "ad_spend_ratio": "profit mart ad_spend / total sales_amount * 100; not ACOS",
+        },
         "source_tables": [
             "mart_order_profit_sku_day",
             "fact_walmart_ad_item_sp_daily",
