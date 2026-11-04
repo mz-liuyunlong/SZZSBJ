@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
+
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
-from typing import Annotated
 
 
 class Strict(BaseModel):
