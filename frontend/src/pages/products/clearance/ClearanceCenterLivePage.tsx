@@ -338,6 +338,10 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
           showIcon message="每日清货评估尚未生成"
           description="清货分析暂不展示未验证的风险结果；主动申请仍使用最新有效 WFS 可售库存。"
           style={{marginBottom:12}}/>:null}
+        {summary?.evaluation_status==="stale" && !error?<Alert type="warning"
+          showIcon message="今日美国太平洋时间的清货评估尚未成功"
+          description={`上次成功评估：${summary.run_date_la||"未知"}。历史结果不会作为今日自动风险候选；主动申请仍读取实时有效 WFS 库存。`}
+          style={{marginBottom:12}}/>:null}
         {summary?.evaluation_status==="ready" && !error?<Alert type="info"
           showIcon message={`最近评估：${summary.run_date_la}（美国太平洋时间）· 经营数据截至 ${summary.as_of_date_la}`}
           description={readiness?.not_evaluated_listings
