@@ -123,6 +123,16 @@ class ClearanceService:
                     else Decimal("-1")
                 ),
                 -(x["evaluation"]["coverage_days"] or -1),
+                (
+                    Decimal(x["evaluation"]["profit_30d_amount"])
+                    if x["evaluation"]["profit_30d_amount"] is not None
+                    else Decimal("999999999999")
+                ),
+                -(
+                    Decimal(x["evaluation"]["refund_loss_30d"])
+                    if x["evaluation"]["refund_loss_30d"] is not None
+                    else Decimal("-1")
+                ),
                 x["listing"]["source_account_ref"],
                 x["listing"]["store_id"],
                 x["listing"]["item_id"],
