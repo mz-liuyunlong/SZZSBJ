@@ -81,3 +81,74 @@ def test_wfs_scoped_user_is_limited_to_verified_owners() -> None:
     ):
         require_wfs_org_scope(request, principal, session)
     assert session.info[ORG_OWNER_SCOPE_SESSION_KEY] == frozenset({"uid-restricted"})
+
+
+def test_wfs_account_owner_pairs_gate_list_detail_and_mutations() -> None:
+    import json
+
+    from app.modules.iam.organization_access import ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY
+
+    session = MagicMock()
+    session.info = {
+        ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY: frozenset({
+            ("source-a", "same-uid"),
+        })
+    }
+    session.execute.return_value.scalar_one.return_value = 0
+    session.execute.return_value.mappings.return_value.all.return_value = []
+    WfsFeeAlertService(session).list_cases(
+        WfsFeeCaseQuery(), frozenset({"source-a", "source-b"})
+    )
+    for call in session.execute.call_args_list:
+        statement, params = call.args
+        assert "allowed.account_ref=source_account_ref" in str(statement)
+        assert "allowed.owner_uid=owner_ref" in str(statement)
+        assert json.loads(params["org_account_owners"]) == [
+            {"account_ref": "source-a", "owner_uid": "same-uid"}
+        ]
+
+    session.execute.reset_mock()
+    session.execute.return_value.mappings.return_value.first.return_value = None
+    with pytest.raises(ApiError):
+        WfsFeeAlertService(session).get_case(UUID(int=1), frozenset({"source-a", "source-b"}))
+    statement, params = session.execute.call_args.args
+    assert "allowed.account_ref=source_account_ref" in str(statement)
+    assert json.loads(params["org_account_owners"])[0]["account_ref"] == "source-a"
+
+    session.execute.reset_mock()
+    session.execute.return_value.first.return_value = None
+    with pytest.raises(ApiError):
+        WfsFeeAlertService(session).ensure_case_visible(
+            UUID(int=1), frozenset({"source-a", "source-b"})
+        )
+    statement, params = session.execute.call_args.args
+    assert "allowed.owner_uid=owner_ref" in str(statement)
+    assert "FOR UPDATE" in str(statement)
+    assert json.loads(params["org_account_owners"])[0]["owner_uid"] == "same-uid"
+
+
+def test_wfs_router_install_account_owner_scope_without_legacy_identity() -> None:
+    from app.modules.iam.organization_access import ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY
+
+    request = Request({
+        "type": "http", "method": "GET",
+        "path": "/api/warehouse/wfs-fee-cases",
+        "headers": [],
+    })
+    principal = Principal(
+        user_id="8", permissions=frozenset({"page:warehouse:wfs-fee-alert:view"})
+    )
+    session = MagicMock()
+    session.info = {}
+    with (
+        patch(
+            "app.modules.warehouse_wfs.router.resolve_business_account_owner_pairs",
+            return_value=frozenset({("source-a", "same-uid")}),
+        ),
+        patch("app.modules.warehouse_wfs.router.resolve_business_owner_refs") as legacy,
+    ):
+        require_wfs_org_scope(request, principal, session)
+    legacy.assert_not_called()
+    assert session.info[ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY] == frozenset({
+        ("source-a", "same-uid")
+    })
