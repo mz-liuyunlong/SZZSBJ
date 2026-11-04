@@ -7,7 +7,7 @@ create PMC plans, issue purchase orders, or invent attribution/advertising metri
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
@@ -29,6 +29,13 @@ from app.modules.new_product_workflow.dashboard import read_new_product_dashboar
 from app.modules.new_product_workflow.field_access import redact_new_product_metrics
 from app.modules.new_product_workflow.metrics import la_today, read_sku_metrics
 from app.modules.new_product_workflow.purchase_plans import create_independent_purchase_plan
+from app.modules.new_product_workflow.reconciliation import reconcile_new_product_source
+from app.modules.new_product_workflow.scoring_contract import (
+    CONFIRMED_PURCHASE_BANDS,
+    formal_policy_gate,
+    market_review_readiness,
+    normalized_purchase_bands,
+)
 from app.modules.new_product_workflow.rules import DEFAULT_RULES
 
 VIEW = "page:products:new-product-analysis:view"
@@ -123,6 +130,7 @@ class RuleWrite(StrictPayload):
     min_sales: int = Field(gt=0)
     min_margin: float = Field(ge=-100, le=100)
     max_acos: float = Field(ge=0, le=100)
+    purchase_bands: dict[Literal["S", "A", "B", "C", "D", "Pass"], tuple[int, int]] | None = None
 
     @model_validator(mode="after")
     def check_weights(self) -> RuleWrite:
@@ -130,6 +138,9 @@ class RuleWrite(StrictPayload):
             raise ValueError("all five weights must add up to 100")
         if any(value < 0 or value > 100 for value in self.weights.values()):
             raise ValueError("weight values must be between 0 and 100")
+        normalized_purchase_bands(
+            {"purchase_bands": self.purchase_bands} if self.purchase_bands else {}
+        )
         return self
 
 
@@ -923,6 +934,48 @@ def get_workflow(
     return success_response(request, data={**identity, **_state(session, sku_id, lock=False)})
 
 
+@router.get(
+    "/workflows/{sku_id}/reconciliation",
+    response_model=SuccessEnvelope[dict[str, Any], None],
+)
+def get_workflow_reconciliation(
+    request: Request,
+    sku_id: UUID,
+    session: db_session,
+    principal: view_principal,
+    accounts: account_scope,
+    days: Literal[7, 14, 30, 60, 90] = 30,
+) -> SuccessEnvelope[dict[str, Any], None]:
+    """Read-only SKU/account integrity verification, never source certification."""
+    identity = _identity(session, sku_id, accounts)
+    sku = identity["lingxing_sku_code"]
+    if not sku:
+        _block(422)
+    end = la_today()
+    show_finance = (
+        has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION)
+        and has_permission(principal, ORDER_PROFIT_MARGIN_PERMISSION)
+    )
+    report = reconcile_new_product_source(
+        session,
+        account=identity["source_account_ref"],
+        sku=sku,
+        start=end - timedelta(days=days),
+        end=end,
+        include_financial_values=show_finance,
+    )
+    listed_date = report["mapping"]["first_listing_date"]
+    report["market_review_readiness"] = market_review_readiness(
+        date.fromisoformat(listed_date) if listed_date else None,
+        today_la=end,
+    )
+    report["confirmed_purchase_bands"] = {
+        grade: list(bounds) for grade, bounds in CONFIRMED_PURCHASE_BANDS.items()
+    }
+    report["formal_grade_status"] = "awaiting_approved_scoring_contract"
+    return success_response(request, data=report)
+
+
 @router.get("/workflows/{sku_id}/metrics", response_model=SuccessEnvelope[dict[str, Any], None])
 def get_workflow_metrics(
     request: Request,
@@ -1069,7 +1122,13 @@ def read_rules(
         .mappings()
         .first()
     )
-    return success_response(request, data=dict(row) if row else {"version": 0, "rule_json": None})
+    response = dict(row) if row else {"version": 0, "rule_json": None}
+    draft_rules = dict(row["rule_json"]) if row else {}
+    response["confirmed_purchase_bands"] = {
+        grade: list(bounds) for grade, bounds in normalized_purchase_bands(draft_rules).items()
+    }
+    response["formal_policy"] = formal_policy_gate(draft_rules)
+    return success_response(request, data=response)
 
 
 @router.put("/rules", response_model=SuccessEnvelope[dict[str, Any], None])
@@ -1090,7 +1149,12 @@ def write_rules(
     if version != payload.expected_version:
         _block(409)
     new_version = version + 1
-    rules = payload.model_dump(exclude={"reason", "expected_version"})
+    rules = payload.model_dump(
+        exclude={"reason", "expected_version"}, exclude_none=True
+    )
+    rules["purchase_bands"] = {
+        grade: list(bounds) for grade, bounds in normalized_purchase_bands(rules).items()
+    }
     session.execute(
         text("""
         INSERT INTO product_new_rule_versions (version, rule_json, actor, reason)

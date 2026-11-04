@@ -20,6 +20,7 @@ export interface NewProductPeriodMetrics {
   cvr?: number | null;
   ctr?: number | null;
   roi?: number | null;
+  roas?: number | null;
   roi_status?: string;
   impressions?: number | null;
   attributed_orders?: number | null;
@@ -55,10 +56,50 @@ export interface NewProductMetrics {
     refreshed_at: string | null;
   };
   rule_version: number;
+  formal_policy?: { status: string; blockers: string[]; auto_publish: boolean };
   score: { status: string; grade?: string | null; score?: number | null;
     provisional_score?: number | null; provisional_grade?: string | null;
+    purchase_preview?: { status: string; suggested_qty: number | null; range: number[] | null };
+    formal_policy?: { status: string; blockers: string[]; auto_publish: boolean };
     approved_correction_dimensions?: string[] };
   launch: { status: string; result: string | null };
+}
+
+export interface NewProductReconciliation {
+  account: string;
+  sku: string;
+  window: { from: string; to_exclusive: string; days: number };
+  mapping: {
+    listing_rows: number; stores: number; item_ids: number;
+    store_item_pairs: number; first_listing_date: string | null;
+  };
+  market_review_readiness: { status: string; elapsed_days: number | null };
+  sales: {
+    mart_days: number; recorded_zero_days: number;
+    item_mart_days: number; cost_missing_rows: number;
+    currency: string | null;
+  };
+  ads: {
+    candidate_rows: number; matched_rows: number; unmatched_rows: number;
+    observed_days: number; spend_currency: string | null;
+    attributed_currency: string | null;
+  };
+  finance: {
+    visibility: "authorized" | "restricted";
+    sku_sales_amount?: number | null;
+    item_sales_amount?: number | null;
+    sales_difference?: number | null;
+    gross_profit_amount?: number | null;
+    ad_spend_amount?: number | null;
+    attributed_sales_amount?: number | null;
+    roas?: number | null;
+  };
+  status: string;
+  zero_sales_days_verification: string;
+  issues: string[];
+  read_only: boolean;
+  formal_grade_status: string;
+  confirmed_purchase_bands: Record<string, [number, number]>;
 }
 
 export type NewProductRealMode = "performance" | "tracking";
@@ -100,6 +141,8 @@ export interface NewProductCorrectionList {
 
 export interface NewProductDraftRules {
   version: number;
+  confirmed_purchase_bands?: Record<string, [number, number]>;
+  formal_policy?: { status: string; blockers: string[]; auto_publish: boolean };
   rule_json: {
     weights: Record<"market" | "order" | "ads" | "profit" | "trust", number>;
     success_days: 30 | 60 | 90;
@@ -311,6 +354,15 @@ export const verifyNewProductDates = (
 
 export async function getNewProductRules(): Promise<NewProductDraftRules> {
   return (await backendRequest<NewProductDraftRules>("/api/new-products/rules")).data;
+}
+
+export async function getNewProductReconciliation(
+  skuId: string,
+  days: 7 | 14 | 30 | 60 | 90 = 30,
+): Promise<NewProductReconciliation> {
+  return (await backendRequest<NewProductReconciliation>(
+    apiPath(skuId, `/reconciliation?days=${days}`),
+  )).data;
 }
 
 export async function getNewProductMetrics(skuId: string): Promise<NewProductMetrics> {

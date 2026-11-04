@@ -29,6 +29,7 @@ const columns: ProColumns<PeriodRow>[] = [
     render: (_, row) => format(row.attributed_sales) },
   { title: "ACOS", dataIndex: "acos", width: 85, render: (_, row) => percent(row.acos) },
   { title: "CPC", dataIndex: "cpc", width: 85, render: (_, row) => format(row.cpc) },
+  { title: "广告ROAS", dataIndex: "roas", width: 95, render: (_, row) => format(row.roas) },
   { title: "CVR", dataIndex: "cvr", width: 85, render: (_, row) => percent(row.cvr) },
   { title: "归因订单", dataIndex: "attributed_orders", width: 110,
     render: (_, row) => format(row.attributed_orders) },
@@ -86,6 +87,10 @@ export default function NewProductMetricsPanel({ metrics }: { metrics: NewProduc
       { key: "pace_20", label: "前20日销量", children:
         format(metrics.order_milestones?.sales_20d) },
       { key: "roi", label: "ROI", children: "待批准投资成本口径，暂不可计算" },
+      { key: "purchase", label: "候选采购区间", children:
+        metrics.score.purchase_preview?.range
+          ? metrics.score.purchase_preview.range.join("–") + "（仅预估，禁止自动采购）"
+          : "等级尚未批准，需人工确认" },
       { key: "score", label: "系统评分状态",
         children: metrics.score.status === "evaluated"
           ? `${format(metrics.score.score)} / ${metrics.score.grade ?? "—"}`
@@ -108,7 +113,7 @@ export default function NewProductMetricsPanel({ metrics }: { metrics: NewProduc
     <ReportTableShell label="真实30、60、90天经营指标">
       <ProTable<PeriodRow> rowKey="key" dataSource={rows} columns={columns}
         options={false} search={false} pagination={false} size="small" bordered
-        scroll={{ x: 2050 }} />
+        scroll={{ x: 2200 }} />
     </ReportTableShell>
     <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>
       ACOS 为广告归因花费 / 广告归因销售额；广告费占比为总广告费 / 总销售额。

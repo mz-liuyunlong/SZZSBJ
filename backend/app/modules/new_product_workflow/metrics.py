@@ -10,6 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.modules.new_product_workflow.rules import compute_launch_result, compute_new_product_score
+from app.modules.new_product_workflow.scoring_contract import formal_policy_gate
 
 PERIODS = (30, 60, 90)
 
@@ -163,6 +164,12 @@ def read_sku_metrics(
             if ad_spend is not None and sales_amount is not None and sales_amount > 0
             else None
         )
+        roas = (
+            attributed_sales / attributed_spend
+            if ads_same_currency and attributed_sales is not None
+            and attributed_spend is not None and attributed_spend > 0
+            else None
+        )
         clicks_count = _number(clicks["clicks"])
         ad_orders = _number(clicks["attributed_orders"])
         impressions = _number(clicks["impressions"])
@@ -208,6 +215,7 @@ def read_sku_metrics(
             "cpc": cpc,
             "cvr": cvr,
             "ctr": ctr,
+            "roas": roas,
             "roi": None,
             "roi_status": "awaiting_approved_investment_cost_basis",
             "ad_days": int(clicks["ad_days"] or 0),
@@ -216,7 +224,12 @@ def read_sku_metrics(
             ),
             "margin": margin,
             "acos": acos,
-            "ad_spend_ratio": ad_spend_ratio if consistent_currency else None,
+            "ad_spend_ratio": (
+                ad_spend_ratio
+                if consistent_currency and ads_same_currency
+                and clicks["spend_currency"] == sales["sales_currency"]
+                else None
+            ),
             "currency_code": sales["sales_currency"] if consistent_currency else None,
             "attributed_sales": attributed_sales if ads_same_currency else None,
             "observed_days": observed,
@@ -323,6 +336,8 @@ def read_sku_metrics(
         "metric_definitions": {
             "acos": "attributed_spend / attributed_sales * 100; null if currency unknown",
             "ad_spend_ratio": "profit mart ad_spend / total sales_amount * 100; not ACOS",
+            "roas": "advertising attributed sales / advertising spend; not profit ROI",
+            "roi": "requires an approved investment cost denominator",
         },
         "source_tables": [
             "mart_order_profit_sku_day",
@@ -333,6 +348,7 @@ def read_sku_metrics(
         "periods": periods,
         "inventory": inventory,
         "rule_version": rule_version,
+        "formal_policy": formal_policy_gate(rules),
     }
     result["score"] = compute_new_product_score(
         market_score=market_score,

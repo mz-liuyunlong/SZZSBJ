@@ -13,6 +13,7 @@ import {
   getIndependentNewProductPlans,
   getIndependentNewProductPlan,
   getNewProductMetrics,
+  getNewProductReconciliation,
   getNewProductDashboard,
   getNewProductScoreCorrections,
   getNewProductRules,
@@ -30,6 +31,7 @@ import {
   type NewProductPurchasePlanList,
   type NewProductPurchasePlanDetail,
   type NewProductMetrics,
+  type NewProductReconciliation,
   type NewProductDashboard,
   type NewProductScoreCorrection,
   type NewProductCorrectionList,
@@ -84,6 +86,9 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
   const [submitting, setSubmitting] = useState(false);
   const requestGuard = useRef(createNewProductAccountGuard());
   const [metricData, setMetricData] = useState<NewProductMetrics | null>(null);
+  const [reconciliation, setReconciliation] = useState<NewProductReconciliation | null>(null);
+  const [reconcileBusy, setReconcileBusy] = useState(false);
+  const reconciliationGuard = useRef(createNewProductAccountGuard());
   const [record, setRecord] = useState<NewProductWorkflowRecord | null>(null);
   const [action, setAction] = useState<Action>("market");
   const [draft, setDraft] = useState<Draft>({ reason: "" });
@@ -97,6 +102,7 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
         setAccounts(items);
         if (items.length === 1) {
           requestGuard.current.selectAccount(items[0]);
+          reconciliationGuard.current.selectAccount(items[0]);
           planGuard.current.selectAccount(items[0]);
           boardGuard.current.selectAccount(items[0]);
           correctionGuard.current.selectAccount(items[0]);
@@ -109,6 +115,7 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
     return () => {
       cancelled = true;
       requestGuard.current.invalidate();
+      reconciliationGuard.current.invalidate();
       planGuard.current.invalidate();
       boardGuard.current.invalidate();
       correctionGuard.current.invalidate();
@@ -277,6 +284,29 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
     }
   }
 
+  async function inspectReconciliation(row: NewProductWorkflowRecord) {
+    if (row.source_account_ref !== account.trim()) {
+      api.error("对账账户与当前选择不一致");
+      return;
+    }
+    const ticket = reconciliationGuard.current.begin(row.source_account_ref);
+    setReconcileBusy(true);
+    try {
+      const report = await getNewProductReconciliation(row.sku_identity_id, 30);
+      if (!reconciliationGuard.current.isCurrent(ticket)) return;
+      if (report.account !== ticket.account || report.sku !== row.sku) {
+        throw new Error("对账记录与当前账户或SKU不一致，已拒绝展示");
+      }
+      setReconciliation(report);
+    } catch (error) {
+      if (reconciliationGuard.current.isCurrent(ticket)) {
+        api.error(error instanceof Error ? error.message : "来源对账查询失败");
+      }
+    } finally {
+      if (reconciliationGuard.current.isCurrent(ticket)) setReconcileBusy(false);
+    }
+  }
+
   function open(row: NewProductWorkflowRecord, nextAction: Action) {
     setRecord(row);
     setCorrectionRecord(null);
@@ -385,9 +415,11 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
       pending_market: "待市场评分", scored: "已评分", pending_purchase: "待审核",
       approved_draft: "草稿已批准", rejected: "已驳回",
     } as Record<string, string>)[String(v ?? "pending_market")] ?? String(v ?? "待市场评分")} color={v === "approved_draft" ? "success" : v === "rejected" ? "error" : "processing"}/> },
-    { title: "操作", key: "actions", width: 250, render: (_, row) => {
+    { title: "操作", key: "actions", width: 345, render: (_, row) => {
       const state = row.status ?? "pending_market";
       return <Space wrap size={0}><Button type="link" onClick={() => void inspectMetrics(row)}>经营指标</Button>
+        <Button type="link" loading={reconcileBusy}
+          onClick={() => void inspectReconciliation(row)}>来源对账</Button>
         {canScore && state === "pending_market" && <Button type="link" onClick={() => open(row, "market")}>市场评分</Button>}
         {canScore && (state === "scored" || state === "pending_purchase" || state === "rejected")
           && <Button type="link" onClick={() => open(row, "correction")}>评分修正</Button>}
@@ -441,6 +473,7 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
         showSearch optionFilterProp="label" options={accounts.map(value => ({ label: value, value }))}
         onChange={value => {
           requestGuard.current.selectAccount(value);
+          reconciliationGuard.current.selectAccount(value);
           planGuard.current.selectAccount(value);
           boardGuard.current.selectAccount(value);
           correctionGuard.current.selectAccount(value);
@@ -458,6 +491,7 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
           setSkuSearchInput("");
           setSkuSearch("");
           setMetricData(null);
+          setReconciliation(null);
           setRecord(null);
           setPage(1);
           setBusy(false);
@@ -550,6 +584,16 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
       <Alert type="warning" showIcon style={{ marginBottom: 12 }}
         message="规则版本仍为草稿，不会自动发布正式 S/A/B/C/D 等级或代替经营数据口径验收。" />
       <Descriptions size="small" column={2} items={[
+        { key: "bands", label: "已确认等级采购区间", span: 2,
+          children: rules?.confirmed_purchase_bands
+            ? Object.entries(rules.confirmed_purchase_bands).map(
+              ([grade, range]) => `${grade}级 ${range[0]}–${range[1]}`,
+            ).join("、")
+            : "S 400–600、A 300–500、B 200–400、C 150–250、D/Pass 不采购" },
+        { key: "formal", label: "正式评分启用状态", span: 2,
+          children: rules?.formal_policy?.status === "blocked"
+            ? "待批准（禁止自动评级和正式采购建议）"
+            : "未取得完整批准证据" },
         { key: "version", label: "当前草稿版本", children: rules ? "V" + rules.version : "未加载" },
         { key: "author", label: "最近修改人", children: rules?.actor ?? "—" },
         { key: "reason", label: "修改依据", children: rules?.reason ?? "—" },
@@ -633,6 +677,55 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
           { key: "snapshot", label: "评分证据", children: "正式评分尚未认证" },
           { key: "execution", label: "执行状态", children: "未执行采购（非 PMC 采购单）" },
         ]} />
+      </>}
+    </Modal>
+    <Modal title="真实数据来源对账（只读）" open={reconciliation !== null}
+      footer={null} width={840} onCancel={() => setReconciliation(null)}>
+      {reconciliation && <>
+        <Alert type={reconciliation.status === "blocked" ? "warning" : "info"} showIcon
+          message={reconciliation.status === "blocked"
+            ? "实际来源存在未解决问题，禁止用于正式评分与采购决策"
+            : "派生表初步一致；未证明上游发布完整性，不能视为生产实数验收"}
+          style={{ marginBottom: 12 }} />
+        <Descriptions size="small" column={2} bordered items={[
+          { key: "account", label: "来源账户", children: reconciliation.account },
+          { key: "sku", label: "SKU", children: reconciliation.sku },
+          { key: "days", label: "业务日窗口", children:
+            `${reconciliation.window.from} 至 ${reconciliation.window.to_exclusive}（不含）` },
+          { key: "listing", label: "Listing / 店铺 / Item", children:
+            `${reconciliation.mapping.listing_rows} / ${reconciliation.mapping.stores} / ${reconciliation.mapping.item_ids}` },
+          { key: "salesDays", label: "销售日覆盖", children:
+            `${reconciliation.sales.mart_days} / ${reconciliation.window.days}` },
+          { key: "zeroDays", label: "已记录零销量天数", children:
+            reconciliation.sales.recorded_zero_days },
+          { key: "adDays", label: "广告事实日覆盖", children:
+            `${reconciliation.ads.observed_days} / ${reconciliation.window.days}` },
+          { key: "adMap", label: "广告映射匹配 / 未匹配", children:
+            `${reconciliation.ads.matched_rows} / ${reconciliation.ads.unmatched_rows}` },
+          { key: "currency", label: "广告费用 / 归因销售币种", children:
+            `${reconciliation.ads.spend_currency ?? "未知"} / ${reconciliation.ads.attributed_currency ?? "未知"}` },
+          { key: "finance", label: "财务可见性", children:
+            reconciliation.finance.visibility === "authorized" ? "已授权" : "受限" },
+          { key: "diff", label: "销售额汇总差异", children:
+            reconciliation.finance.visibility === "authorized"
+              ? (reconciliation.finance.sales_difference ?? "无法核对") : "权限不足" },
+          { key: "roas", label: "广告 ROAS（非 ROI）", children:
+            reconciliation.finance.visibility === "authorized"
+              ? (reconciliation.finance.roas ?? "未知") : "权限不足" },
+          { key: "readiness", label: "上架30天提醒", children:
+            reconciliation.market_review_readiness.status === "ready_for_market_review"
+              ? "已满30天" : "待达到或核验上架30天" },
+          { key: "formal", label: "正式评分等级", children: "等待规则与实际对账批准" },
+        ]} />
+        <Typography.Paragraph strong style={{ marginTop: 12 }}>
+          数据核对问题（{reconciliation.issues.length}项）
+        </Typography.Paragraph>
+        {reconciliation.issues.length
+          ? <Space size={[4, 4]} wrap>{reconciliation.issues.map(code =>
+            <Typography.Text code key={code}>{code}</Typography.Text>)}</Space>
+          : <Typography.Text>未发现派生数据异常，但上游零销量日发布完整性仍未认证。</Typography.Text>}
+        <Alert type="warning" showIcon style={{ marginTop: 12 }}
+          message="没有来源同步任务的日期覆盖证明时，缺失记录不能解释为销量零；本查询不修改数据库。" />
       </>}
     </Modal>
     <Modal title="真实经营数据及评分依据" open={metricData !== null} footer={null}

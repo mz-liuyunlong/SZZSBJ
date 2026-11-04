@@ -116,6 +116,7 @@ def test_acos_uses_attributed_sales_not_total_sales() -> None:
     assert period["cpc"] == 1.25
     assert period["cvr"] == 18.75
     assert period["roi"] is None
+    assert period["roas"] == 4
     assert period["ad_spend_ratio"] == 10
     assert period["attributed_sales"] == 400
     assert period["complete"] is True

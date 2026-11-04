@@ -11,6 +11,7 @@ import {
   requestNewProductScoreCorrection,
   decideNewProductScoreCorrection,
   getNewProductRulesHistory,
+  getNewProductReconciliation,
   verifyNewProductDates,
   requestNewProductPurchase,
   saveMarketScore,
@@ -75,6 +76,13 @@ describe("new product server API identity and optimistic lock", () => {
       { method: "POST", body: JSON.stringify({
         decision: "approved", note: "已核对订单业务日和原始日志",
       }) },
+    );
+  });
+
+  it("reads real scoped SKU source reconciliation without changing business data", async () => {
+    await getNewProductReconciliation(skuId, 30);
+    expect(backendRequest).toHaveBeenCalledWith(
+      `/api/new-products/workflows/${skuId}/reconciliation?days=30`,
     );
   });
 

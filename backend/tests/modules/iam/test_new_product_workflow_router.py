@@ -17,6 +17,7 @@ from app.modules.new_product_workflow.router import (
     ReviewWrite,
     RuleWrite,
     _identity,
+    get_workflow_reconciliation,
     get_independent_purchase_plan,
     list_independent_purchase_plans,
     list_workflows,
@@ -225,6 +226,7 @@ def test_workflow_router_registered_without_exposing_real_purchase_execution() -
     paths = {route.path for route in router.routes}
     assert "/api/new-products/workflows" in paths
     assert "/api/new-products/workflows/{sku_id}/purchase-decision" in paths
+    assert "/api/new-products/workflows/{sku_id}/reconciliation" in paths
     assert "/api/new-products/dashboard" in paths
     assert "/api/new-products/score-corrections" in paths
     assert "/api/new-products/workflows/{sku_id}/score-correction" in paths

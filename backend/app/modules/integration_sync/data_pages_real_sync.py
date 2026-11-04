@@ -1226,22 +1226,29 @@ class DataPagesRealSyncRunner:
                     "insert into fact_walmart_ad_item_sp_daily "
                     "(id, business_date_la, source_account_ref, advertiser_id, store_id, item_id, msku, "
                     "campaign_id, ad_group_id, ad_item_id, source_line_hash, source_key, ad_spend_amount, "
-                    "ad_spend_currency_code, attributed_sales_amount, attributed_orders, attributed_units, "
-                    "advertised_sku_sales_amount, advertised_sku_units, num_ads_clicks, num_ads_shown, acos, "
+                    "ad_spend_currency_code, attributed_sales_amount, attributed_sales_currency_code, "
+                    "attributed_orders, attributed_units, "
+                    "advertised_sku_sales_amount, advertised_sku_sales_currency_code, "
+                    "advertised_sku_units, num_ads_clicks, num_ads_shown, acos, "
                     "roas, cpc, ctr, cvr, synced_at, created_at, updated_at) values (:id, :business_date_la, "
                     ":source_account_ref, :advertiser_id, :store_id, :item_id, :msku, :campaign_id, "
                     ":ad_group_id, :ad_item_id, :source_line_hash, :source_key, :ad_spend_amount, "
-                    ":ad_spend_currency_code, :attributed_sales_amount, :attributed_orders, :attributed_units, "
-                    ":advertised_sku_sales_amount, :advertised_sku_units, :num_ads_clicks, :num_ads_shown, "
+                    ":ad_spend_currency_code, :attributed_sales_amount, :attributed_sales_currency_code, "
+                    ":attributed_orders, :attributed_units, "
+                    ":advertised_sku_sales_amount, :advertised_sku_sales_currency_code, "
+                    ":advertised_sku_units, :num_ads_clicks, :num_ads_shown, "
                     ":acos, :roas, :cpc, :ctr, :cvr, :synced_at, :created_at, :updated_at) on conflict "
                     "(business_date_la, source_account_ref, advertiser_id, source_line_hash) do update set "
                     "store_id = excluded.store_id, item_id = excluded.item_id, msku = excluded.msku, "
                     "campaign_id = excluded.campaign_id, ad_group_id = excluded.ad_group_id, "
                     "ad_item_id = excluded.ad_item_id, source_key = excluded.source_key, "
                     "ad_spend_amount = excluded.ad_spend_amount, "
+                    "ad_spend_currency_code = excluded.ad_spend_currency_code, "
                     "attributed_sales_amount = excluded.attributed_sales_amount, "
+                    "attributed_sales_currency_code = excluded.attributed_sales_currency_code, "
                     "attributed_orders = excluded.attributed_orders, attributed_units = excluded.attributed_units, "
                     "advertised_sku_sales_amount = excluded.advertised_sku_sales_amount, "
+                    "advertised_sku_sales_currency_code = excluded.advertised_sku_sales_currency_code, "
                     "advertised_sku_units = excluded.advertised_sku_units, num_ads_clicks = excluded.num_ads_clicks, "
                     "num_ads_shown = excluded.num_ads_shown, acos = excluded.acos, roas = excluded.roas, "
                     "cpc = excluded.cpc, ctr = excluded.ctr, cvr = excluded.cvr, "
@@ -1261,11 +1268,17 @@ class DataPagesRealSyncRunner:
                     "source_line_hash": line_hash,
                     "source_key": _field(row, "key"),
                     "ad_spend_amount": _decimal(row.get("adSpend")),
-                    "ad_spend_currency_code": "USD",
+                    "ad_spend_currency_code": _explicit_ad_spend_currency(row),
                     "attributed_sales_amount": _decimal(row.get("attributedSales")),
+                    "attributed_sales_currency_code": _explicit_ad_amount_currency(
+                        row, attributed=True
+                    ),
                     "attributed_orders": _decimal(row.get("attributedOrders")),
                     "attributed_units": _decimal(row.get("attributedUnits")),
                     "advertised_sku_sales_amount": _decimal(row.get("advertisedSkuSales")),
+                    "advertised_sku_sales_currency_code": _explicit_ad_amount_currency(
+                        row, attributed=False
+                    ),
                     "advertised_sku_units": _decimal(row.get("advertisedSkuUnits")),
                     "num_ads_clicks": _int(row.get("numAdsClicks")),
                     "num_ads_shown": _int(row.get("numAdsShown")),
@@ -1770,6 +1783,29 @@ def _field(row: dict[str, Any], *names: str) -> str | None:
             if text_value:
                 return text_value
     return None
+
+
+def _explicit_ad_spend_currency(row: dict[str, Any]) -> str | None:
+    """Do not infer the advertiser billing currency from the US marketplace."""
+    value = _field(row, "adSpendCurrencyCode", "adSpendCurrency", "currencyCode", "currency")
+    if value is None:
+        return None
+    currency = value.upper()
+    return currency if len(currency) == 3 and currency.isalpha() else None
+
+
+def _explicit_ad_amount_currency(row: dict[str, Any], *, attributed: bool) -> str | None:
+    """Only currency provided explicitly by the advertising report can be trusted."""
+    keys = (
+        ("attributedSalesCurrencyCode", "attributedSalesCurrency", "currencyCode", "currency")
+        if attributed
+        else ("advertisedSkuSalesCurrencyCode", "advertisedSkuSalesCurrency", "currencyCode", "currency")
+    )
+    value = _field(row, *keys)
+    if value is None:
+        return None
+    currency = value.upper()
+    return currency if len(currency) == 3 and currency.isalpha() else None
 
 
 def _single_scalar(value: object) -> str | None:

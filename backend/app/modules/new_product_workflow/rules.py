@@ -5,12 +5,19 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from app.modules.new_product_workflow.scoring_contract import (
+    CONFIRMED_PURCHASE_BANDS,
+    formal_policy_gate,
+    purchase_preview,
+)
+
 DEFAULT_RULES: dict[str, Any] = {
     "weights": {"market": 15, "order": 30, "ads": 20, "profit": 25, "trust": 10},
     "success_days": 60,
     "min_sales": 200,
     "min_margin": 0,
     "max_acos": 35,
+    "purchase_bands": {k: list(v) for k, v in CONFIRMED_PURCHASE_BANDS.items()},
 }
 
 
@@ -62,6 +69,8 @@ def compute_new_product_score(
         "score": None,
         "provisional_grade": grade,
         "provisional_score": score,
+        "purchase_preview": purchase_preview(grade, None, rules),
+        "formal_policy": formal_policy_gate(rules),
         "components": values,
         "approved_correction_dimensions": sorted(applied),
         "rule_version": rule_version,

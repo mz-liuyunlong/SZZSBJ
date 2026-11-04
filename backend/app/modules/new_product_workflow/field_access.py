@@ -43,6 +43,7 @@ def redact_new_product_metrics(metrics: dict[str, Any], principal: Principal) ->
         }
     )
     score.pop("components", None)
+    score.pop("purchase_preview", None)  # Grade-based range may leak protected margins
     # The pass/fail result also depends on the protected margin.
     launch = {**metrics["launch"], "status": "restricted", "result": None}
     launch.pop("provisional_result", None)
