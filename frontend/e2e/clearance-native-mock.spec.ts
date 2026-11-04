@@ -29,6 +29,8 @@ type Recorded = {method:string;path:string;body:unknown};
 async function prepare(page:Page, writes:Recorded[], dailyReady: boolean | "stale" = true){
   const ready = dailyReady === true;
   const status = dailyReady === "stale" ? "stale" : ready ? "ready" : "not_ready";
+  const runDate = ready ? "2026-11-04" : dailyReady === "stale" ? "2026-11-03" : null;
+  const asOfDate = ready ? "2026-11-03" : dailyReady === "stale" ? "2026-11-02" : null;
   await page.addInitScript(()=>localStorage.setItem("szzsbj_auth_token","synthetic-clearance-live"));
   await page.route("**/api/**",async route=>{
     const url = new URL(route.request().url());
@@ -41,8 +43,8 @@ async function prepare(page:Page, writes:Recorded[], dailyReady: boolean | "stal
     else if(path==="/api/products/clearance-center/listings")data={
       items:ready?[fixture]:[],total:ready?1:0,page:1,page_size:50,
       evaluation_status:status,
-      run_date_la:dailyReady?"2026-11-02":null,
-      as_of_date_la:dailyReady?"2026-11-02":null,
+      run_date_la:runDate,
+      as_of_date_la:asOfDate,
     };
     else if(path==="/api/products/clearance-center/facets")data={
       accounts:["TEST-ACCOUNT"],
@@ -50,8 +52,8 @@ async function prepare(page:Page, writes:Recorded[], dailyReady: boolean | "stal
     };
     else if(path==="/api/products/clearance-center/data-readiness")data={
       evaluation_status:status,
-      run_date_la:dailyReady?"2026-11-02":null,
-      as_of_date_la:dailyReady?"2026-11-02":null,
+      run_date_la:runDate,
+      as_of_date_la:asOfDate,
       total_listings:1,evaluated_listings:ready?1:0,
       not_evaluated_listings:ready?0:1,
       missing_sales_window:ready?0:null,
@@ -65,8 +67,8 @@ async function prepare(page:Page, writes:Recorded[], dailyReady: boolean | "stal
       total:ready?1:0,high:0,medium:ready?1:0,
       observe:0,review_required:0,eligible_manual:1,
       evaluation_status:status,
-      run_date_la:dailyReady?"2026-11-02":null,
-      as_of_date_la:dailyReady?"2026-11-02":null,
+      run_date_la:runDate,
+      as_of_date_la:asOfDate,
     };
     else if(path.endsWith("/rules"))data={source_account_ref:"TEST-ACCOUNT",version:0,
       rules:{high_coverage_days:180,medium_coverage_days:90,assisted_coverage_days:60}};
