@@ -12,6 +12,7 @@ from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.warehouse_wfs.automation_service import WfsBatchDetectionPreview
+from app.modules.warehouse_wfs.router import require_wfs_org_scope
 from app.modules.warehouse_wfs.schemas import (
     WfsFeeAlertListData,
     WfsFeeAlertRead,
@@ -30,6 +31,9 @@ def _app(*permissions: str):
         {"synthetic-account"}
     )
     application.dependency_overrides[get_db_session] = lambda: MagicMock(spec=Session)
+    # Permission-route tests intentionally isolate page/action grants from the
+    # separate organization SQL guard tested in IAM's WFS scope contract tests.
+    application.dependency_overrides[require_wfs_org_scope] = lambda: None
     return application
 
 
