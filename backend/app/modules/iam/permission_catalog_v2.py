@@ -164,6 +164,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
             _page("finance", "ad_cost", "广告费用", 50),
             _page("finance", "ad_bill", "广告账单", 60),
             _page("finance", "performance_report", "业绩报表", 70),
+            _page("finance", "settlement_profit", "结算利润", 80),
         ),
     ),
     ModuleDefinition(
@@ -328,6 +329,13 @@ ACTIONS: tuple[ActionDefinition, ...] = (
         "high",
     ),
     ActionDefinition("settings_role_management", "view_audit", "查看权限审计", 50),
+    ActionDefinition("finance_settlement_profit", "adjust", "结算利润人工调整", 10),
+    ActionDefinition("finance_settlement_profit", "review-first", "结算利润初审", 20),
+    ActionDefinition("finance_settlement_profit", "review-final", "结算利润终审", 30, "high"),
+    ActionDefinition(
+        "finance_settlement_profit", "close-month", "结算利润结账 / 反结账", 40, "high"
+    ),
+    ActionDefinition("finance_settlement_profit", "config", "维护纯利设置", 50, "high"),
 )
 
 FIELDS: tuple[FieldDefinition, ...] = (
@@ -337,6 +345,9 @@ FIELDS: tuple[FieldDefinition, ...] = (
     FieldDefinition("sales_order_profit", "profit_margin", "利润率", 20, "high"),
     FieldDefinition("settings_user_management", "phone", "手机号", 10, "high"),
     FieldDefinition("settings_user_management", "email", "邮箱", 20, "high"),
+    FieldDefinition("finance_settlement_profit", "cost", "结算利润货本", 10, "high"),
+    FieldDefinition("finance_settlement_profit", "net-profit", "结算利润纯利", 20, "high"),
+    FieldDefinition("finance_settlement_profit", "company-cost", "公司级费用", 30, "high"),
 )
 
 MODULE_NAMES = {module.module_key: module.name for module in MODULES}

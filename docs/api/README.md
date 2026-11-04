@@ -30,3 +30,4 @@ settings.md
 - `wfs-fee-anomaly-auto-detection.md`（WFS 结算采集、只读检测预览与案件写入门禁）
 - `pmc-domestic-batch-board-api.md`（PMC 国内仓批次看板只读 API）
 - `keyword-planning-v11.md`（关键词 V1.1 本地开发契约；未部署、未开放正式投放）
+- `finance-settlement-profit-api.md`（财务 · 结算利润 V2 读写接口：权限、数据范围、幂等、乐观锁、结账）

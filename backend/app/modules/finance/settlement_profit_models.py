@@ -763,6 +763,41 @@ class SettlementMonthClose(_ManualAudit, _Timestamps, Base):
     )
 
 
+class SettlementWriteLog(Base):
+    """Append-only log of every settlement profit write request (PRP §5, PR-4).
+
+    One row per (actor, endpoint, Idempotency-Key): replaying the same key within 24 hours
+    returns ``response``; a different body under the same key is refused.  It is also the
+    audit trail (before / after) for writes whose state row is updated in place, such as
+    month close / reopen and the 纯利 settings.  Never updated or deleted.
+    """
+
+    __tablename__ = "manual_settlement_write_log"
+    __table_args__ = (
+        UniqueConstraint(
+            "actor_id", "endpoint", "idempotency_key", name="uq_manual_settlement_write_log_idem"
+        ),
+        CheckConstraint("idempotency_key <> ''", name="write_log_idem_not_blank"),
+        Index("ix_manual_settlement_write_log_acted_at", "acted_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    actor_role: Mapped[str] = mapped_column(String(64), nullable=False)
+    endpoint: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    acted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    reason: Mapped[str | None] = mapped_column(Text)
+    before: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    after: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    response: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    status_code: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
 # --------------------------------------------------------------------------- CFG
 
 

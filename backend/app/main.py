@@ -23,6 +23,7 @@ from app.modules.decodo.router import (
 from app.modules.decodo.router import (
     settings_router as decodo_settings_router,
 )
+from app.modules.finance.settlement_profit.router import router as finance_settlement_profit_router
 from app.modules.iam.password_reset_router import router as password_reset_router
 from app.modules.iam.rbac_router import router as rbac_router
 from app.modules.iam.router import router as iam_router
@@ -110,6 +111,7 @@ def create_app() -> FastAPI:
     application.include_router(walmart_monitor_targets_router)
     application.include_router(walmart_scf_router)
     application.include_router(walmart_remote_router)
+    application.include_router(finance_settlement_profit_router)
 
     @application.get("/health", response_model=SuccessEnvelope[HealthData, None])
     def health_check(request: Request) -> SuccessEnvelope[HealthData, None]:

@@ -41,6 +41,7 @@
 - 拦截码：`FX_MISSING`、`RECONCILE_FAILED`、`UNASSIGNED_PENDING`、`OWNER_MISSING`、`OWNER_SALES_ZERO`。
 - 当月只要有一笔对不上店铺的损耗异动还没指定店铺，所有店铺都不能结账（Rocky 2026-11-03 确认）。
 - 订单审核状态：最新一次审核晚于最新一次调整时，取审核结果（初审通过 / 终审通过 / 退回）。有调整时为 `adjusted`，有原因待处理时为 `pending`，其余为 `auto`。
+- 撤销调整（PR-4）：早于该行最后一次调整变化（调整或撤销时间，`StoreMonthInput.adjustment_changed_at`）的审核不再有效；撤销后没有有效调整、也没有新审核的行为 `pending`（回到待初审）。
 
 ## 版本与结账
 
