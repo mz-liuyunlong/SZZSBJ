@@ -22,11 +22,11 @@ from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.clearance_center.schemas import ApplicationWrite, DecisionWrite, ProgressWrite
 from app.modules.clearance_center.service import ClearanceService
-from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.data_pages.models import (
     ListingManagementCurrentMart,
     WalmartListingInventoryDailyFact,
 )
+from app.modules.integration_sync.dependencies import require_source_account_scope
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("CLEARANCE_CI_TEST") != "1",
