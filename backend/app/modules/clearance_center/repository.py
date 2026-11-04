@@ -290,6 +290,71 @@ class ClearanceReadRepository:
         result["evaluation_status"] = "ready"
         return result
 
+    def readiness_report(
+        self, accounts: frozenset[str], *, store_id: str = "",
+    ) -> dict:
+        """Live read-only evidence audit, scoped before counting any Listing."""
+        params: dict = {"accounts": list(accounts)}
+        store_filter = " and store_id=:store" if store_id else ""
+        if store_id:
+            params["store"] = store_id
+        available = int(self.session.execute(
+            text("""select count(*) from mart_listing_management_current
+                     where source_account_ref=any(:accounts)""" + store_filter),
+            params,
+        ).scalar_one())
+        run = self.latest_completed_run()
+        if run is None:
+            return {
+                "evaluation_status": "not_ready", "run_date_la": None,
+                "as_of_date_la": None, "total_listings": available,
+                "evaluated_listings": 0, "not_evaluated_listings": available,
+                "missing_sales_window": None, "missing_wfs_stock": None,
+                "missing_profit_cost": None, "missing_listing_start": None,
+                "history_21day_eligible": None,
+                "refund_period_data_complete": False,
+            }
+        params["run"] = run["id"]
+        rows = self.session.execute(
+            text("""select count(*) total,
+                      count(*) filter(where quality_status='complete') complete,
+                      count(*) filter(where quality_status='partial') partial,
+                      count(*) filter(where quality_status='stale') stale,
+                      count(*) filter(where evaluation_json->'warnings'
+                               ? 'SALES_WINDOW_UNVERIFIED') missing_sales_window,
+                      count(*) filter(where evaluation_json->'warnings'
+                               ? 'WFS_STOCK_UNAVAILABLE_OR_STALE') missing_wfs_stock,
+                      count(*) filter(where evaluation_json->'warnings'
+                               ? 'PROFIT_COST_INCOMPLETE') missing_profit_cost,
+                      count(*) filter(where evaluation_json->'warnings'
+                               ? 'LISTING_START_UNKNOWN') missing_listing_start,
+                      count(*) filter(where
+                         (evaluation_json->>'positive_stock_days_30d')::integer >= 21)
+                         history_21day_eligible,
+                      count(*) filter(where
+                         (evaluation_json->>'source_sales_coverage_days_30d')::integer >= 30)
+                         sales_source_30day_covered
+                   from ops_clearance_daily_evaluations
+                   where run_id=cast(:run as uuid)
+                     and source_account_ref=any(:accounts)""" + store_filter),
+            params,
+        ).mappings().one()
+        report = {key: int(value) for key, value in rows.items()}
+        report.update({
+            "evaluation_status": "ready",
+            "run_date_la": run["run_date_la"].isoformat(),
+            "as_of_date_la": run["as_of_date_la"].isoformat(),
+            "total_listings": available,
+            "evaluated_listings": report.pop("total"),
+            "not_evaluated_listings": max(available - int(rows["total"]), 0),
+            "refund_period_data_complete": False,
+            "refund_coverage_note": (
+                "Refund events are event-date based; no verified per-day refund "
+                "sync watermark is available. Absence is not treated as zero."
+            ),
+        })
+        return report
+
     def evidence(
         self, listings: list[dict], *, as_of: date | None = None
     ) -> dict[tuple[str, str, str], dict]:
