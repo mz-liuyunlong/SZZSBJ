@@ -1,7 +1,8 @@
 """Finance cashflow: statement import and journal review tables.
 
-No account numbers or counterparty names here: accounts and named rules are loaded at
-deployment time by scripts/finance_cash_deploy_load.py from a file outside the repository.
+No account numbers or platform, vendor, institution or bank names here: accounts and rules
+that mention them are loaded at deployment time by scripts/finance_cash_deploy_load.py from a
+file outside the repository.
 """
 
 # ruff: noqa: E501
@@ -48,22 +49,16 @@ CATEGORIES = [
     ("X01", "剔除", "非本公司 / 其他部门"),
 ]
 RULES = [
-    ("party", "住房公积金管理中心|公积金中心", "G05", 10),
-    ("party", "社会保险|社保基金|人力资源和社会保障|医疗保障局", "G04", 20),
-    ("party", "税务局|国家金库|税务", "F02", 30),
     ("text", "出口退税|退税|电子退库", "R01", 50),
     ("text", "^收费 \\d{4}/\\d{2}/\\d{2}-", "F01", 60),
-    ("text", "Payment from Walmart|Payment from STRIPE|收款-AMAZON|^收款-", "T03", 70),
+    ("text", "^收款-", "T03", 70),
     ("text", "专用账户入账", "T03", 80),
     ("text", "Transfer from connected account|资金归集至专用账户", "T02", 90),
     ("text", "Maintenance fee|短信收费|SMSP Service Charge", "F01", 100),
-    ("text", "Card charge \\(WALMART SERVICES", "S01", 110),
-    ("text", "Card charge \\((SHOPIFY|Amazon|AMZN)", "S03", 120),
-    ("text", "Card charge \\((OPENAI|GOOGLE|THE ECONOMIST)", "G02", 130),
-    ("text", "Payment to BANK OF CHINA|往来款", "T02", 140),
+    ("text", "往来款", "T02", 140),
     ("text", "FX向资金账户转账|店铺或资金账户向FX转账", "T02", 150),
     ("text", "个税", "F02", 160),
-    ("text", "印花税|增值税|税费|税款|缴税|国家金库", "F02", 170),
+    ("text", "印花税|增值税|税费|税款|缴税", "F02", 170),
     ("text", "公积金", "G05", 180),
     ("text", "社保", "G04", 190),
     ("text", "薪资|工资|奖金|离职补偿|兼职.*薪|年会奖", "G03", 200),
@@ -74,13 +69,8 @@ RULES = [
     ("text", "结汇|换汇|FX向资金账户|向FX转账|汇率\\d+\\.\\d+/(USD|CNY)", "T02", 250),
     ("text", "专用账户入账|归集", "T02", 260),
     ("text", "归集", "T02", 270),
-    (
-        "text",
-        "内部调拨|现金支取|提现转入|预转存|转入.*对公|对公转入|派安盈.*转入|提现至|银座对公转入",
-        "T02",
-        280,
-    ),
-    ("text", "代收沃尔玛|沃尔玛回款|(^|\\s)入账(\\s|$)|平台回款|店铺回款", "T03", 290),
+    ("text", "内部调拨|现金支取|提现转入|预转存|转入.*对公|对公转入|提现至", "T02", 280),
+    ("text", "(^|\\s)入账(\\s|$)|平台回款|店铺回款", "T03", 290),
     ("text", "账户往来|银行往来", "T02", 300),
     ("text", "备用金", "T04", 310),
     ("text", "兼职|人工费|劳务", "G03", 320),
@@ -90,18 +80,13 @@ RULES = [
     ("text", "海外仓|美东仓|美西仓|仓库费用报销", "L03", 360),
     ("text", "广告", "S01", 370),
     ("text", "测评|礼品卡|返现|测品|返款|评测|自采|代采|直评|\\d{3}-\\d{7}-\\d{7}", "S02", 380),
-    (
-        "text",
-        "店铺托管|申述|申诉|沃尔玛账号|tiktok账户|facebook账户|instagram账户|账户\\d+个|扣款",
-        "S03",
-        390,
-    ),
+    ("text", "店铺托管|申述|申诉|账户\\d+个|扣款", "S03", 390),
     ("text", "营业执照|税务罚款|劳动仲裁|劳动诉讼|赔偿|搬仓库|罚款", "G07", 400),
-    ("text", "油费|高速|打滴|滴滴|车费|出行", "G08", 410),
+    ("text", "油费|高速|车费|出行", "G08", 410),
     ("text", "工作流|AI 助手|AI助手|通信充值|系统费用|垃圾袋|耗材", "G02", 420),
     (
         "text",
-        "店铺租金|店铺注册|店铺申诉|亚马逊扣费|亚马逊扣款|独立站扣费|账号费用|UPC|店铺公司使用费|平台费|虚拟卡|亚马逊店铺",
+        "店铺租金|店铺注册|店铺申诉|独立站扣费|账号费用|UPC|店铺公司使用费|平台费|虚拟卡",
         "S03",
         430,
     ),
@@ -117,7 +102,7 @@ RULES = [
     ("text", "下午茶|餐费|聚餐|零食|礼品|团建|端午|中秋|年会|福利|体检|茶饮", "G06", 540),
     (
         "text",
-        "chatgpt|苹果云|域名|google|谷歌|youtube|邮箱|服务器|话费|打印|办公用品|纸巾|线路|软件|会员费|会员|作图|网线|云文档|wps|顾问",
+        "域名|邮箱|服务器|话费|打印|办公用品|纸巾|线路|软件|会员费|会员|作图|网线|云文档|顾问",
         "G02",
         550,
     ),

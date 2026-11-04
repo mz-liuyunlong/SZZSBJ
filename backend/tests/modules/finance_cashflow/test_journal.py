@@ -130,7 +130,7 @@ def test_pingpong_usd_to_cnh_paired_by_rate_range_and_flagged():
 
 
 def test_not_in_journal_is_a_hint_not_an_anomaly():
-    result = compute([line("x", -5, desc="内部调拨 银座")])
+    result = compute([line("x", -5, desc="内部调拨 忽略")])
     assert [alert.type for alert in result.alerts] == [J.HINT_NOT_IN_JOURNAL]
 
 

@@ -55,7 +55,7 @@ def _broken_chains(lines: list[Line], seed: Seed) -> list[str]:
     broken: list[str] = []
     for account_key, group in by_account.items():
         if seed.accounts[account_key].provider == "pingpong":
-            continue  # PingPong 子账户不做链校验
+            continue  # 这个平台的子账户不做链校验
         previous = None
         for line in sorted(group, key=lambda x: x.file_row_order):
             if line.balance_after is None:

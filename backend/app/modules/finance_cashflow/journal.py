@@ -25,7 +25,7 @@ EXCLUDE_CATEGORY = "X01"
 MAX_COMBO_POOL = 30
 APPROVAL_REF = re.compile(r"^\d{12}$")
 USD_IN_MEMO = re.compile(r"USD\s*([\d,]+(?:\.\d+)?)")
-NOT_IN_JOURNAL = re.compile(r"忽略|银座|派安盈账户往来")
+NOT_IN_JOURNAL = re.compile(r"忽略")
 SOURCE_MANUAL = "人工"
 SOURCE_RULE = "规则"
 
@@ -322,7 +322,7 @@ def _pair_one_to_many(candidates: Sequence[ComputedLine], used: set[str]) -> Non
 
 
 def _pair_fx_range(candidates: Sequence[ComputedLine], used: set[str]) -> None:
-    """PingPong 多笔 USD 换一笔 CNH：按汇率区间配，标待核。"""
+    """同一平台多笔 USD 换一笔 CNH：按汇率区间配，标待核。"""
     usd_out = [
         line
         for line in candidates

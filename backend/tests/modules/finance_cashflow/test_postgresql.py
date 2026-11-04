@@ -341,6 +341,33 @@ def test_rules_from_seed_and_unpaired_anomaly(service):
     assert [item.type for item in service.list_anomalies()] == [J.ALERT_UNPAIRED]
 
 
+def test_deploy_rules_keep_their_place_in_the_order(service, session):
+    transfer = (
+        "往账",
+        "20261010",
+        "10:00:00",
+        "CNY",
+        "100",
+        "900",
+        "假单位",
+        "",
+        "T1",
+        "内部调拨 假服务商",
+    )
+    upload(service, S.boc(S.BOC_A, [transfer]))
+    assert active(service, "BOC_CNY")[0].category_code == "T02"
+    earlier = {"rule_type": "text", "pattern": "假服务商", "category_code": "G02", "sort_order": 5}
+    load_deploy_data(session, {"rules": [earlier]})
+    assert active(service, "BOC_CNY")[0].category_code == "G02"
+    later = {"rule_type": "text", "pattern": "假服务商", "category_code": "G02", "sort_order": 9999}
+    load_deploy_data(session, {"rules": [later]})
+    assert active(service, "BOC_CNY")[0].category_code == "T02"
+    party = {"rule_type": "party", "pattern": "假单位", "category_code": "C01", "sort_order": 9999}
+    load_deploy_data(session, {"rules": [party]})
+    line = active(service, "BOC_CNY")[0]
+    assert (line.category_code, line.category_source) == ("C01", "规则")
+
+
 def test_cny_amount_uses_month_rate(service, session):
     usd = ("来账", "20261010", "10:00:00", "USD", "10", "10", "X", "", "U1", "")
     upload(service, S.boc(S.BOC_A, [usd]))

@@ -73,7 +73,7 @@ _DT_PATTERNS = (
         "ymd",
     ),
     (re.compile(r"^(\d{4})(\d{2})(\d{2})$"), "ymd"),
-    (re.compile(r"^(\d{2})-(\d{2})-(\d{4})$"), "mdy"),  # 派安盈 MM-DD-YYYY
+    (re.compile(r"^(\d{2})-(\d{2})-(\d{4})$"), "mdy"),  # MM-DD-YYYY
 )
 
 
