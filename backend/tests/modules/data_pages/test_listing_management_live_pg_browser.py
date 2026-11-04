@@ -34,7 +34,7 @@ from app.modules.data_pages.models import (
 from app.modules.iam.security import token_hash
 from app.modules.integration_sync.models import IntegrationInterface, IntegrationSyncConfig
 from app.modules.integration_sync.wfs_first_stock import observe_first_wfs_stock
-from app.modules.listing_rule_config import preview_router
+from app.modules.listing_rule_config import lifecycle_router, preview_router
 from app.modules.listing_rule_config.models import ListingEvaluationRun, ListingEvaluationSnapshot
 from app.modules.walmart_monitor.models import (
     RawWalmartMonitorEvent,
@@ -105,6 +105,7 @@ def test_listing_page_and_real_api_with_isolated_postgres(
                     item_id=sku,
                     local_sku=sku,
                     msku="SYNTHETIC-LISTING-A2-MSKU" if sku.endswith("A2") else None,
+                    fulfillment_type="1" if sku == "SYNTHETIC-LISTING-A" else None,
                     listing_status="离线" if sku.endswith("A2") else "在线",
                     wfs_available_quantity=None if sku.endswith("A2") else 0,
                     calculated_at=datetime.now(UTC),
@@ -331,9 +332,52 @@ def test_listing_page_and_real_api_with_isolated_postgres(
             assert reverted.status_code == 200, reverted.text
             assert reverted.json()["data"]["publication_status"] == "reverted"
             assert client.post(revert_path, json=revert_body).status_code == 409
+            enabled.setattr(
+                lifecycle_router,
+                "get_settings",
+                lambda: get_settings().model_copy(
+                    update={"listing_evaluation_publish_enabled": True}
+                ),
+            )
+            adjustment_request = client.post(
+                "/api/listings/lifecycle-adjustments",
+                json={
+                    "listing_id": str(active_listing_id),
+                    "requested_stage": "测品期",
+                    "reason": "Synthetic human review of new Listing",
+                    "confirmation": "CONFIRM_LISTING_LIFECYCLE",
+                },
+            )
+            assert adjustment_request.status_code == 200, adjustment_request.text
+            adjustment_id = adjustment_request.json()["data"]["id"]
+            decision_path = f"/api/listings/lifecycle-adjustments/{adjustment_id}/decision"
+            decision_body = {
+                "decision": "approved",
+                "note": "Synthetic independent reviewer decision",
+                "confirmation": "CONFIRM_LISTING_LIFECYCLE",
+            }
+            assert client.post(decision_path, json=decision_body).status_code == 403
+            foreign_decision = client.post(
+                decision_path,
+                json=decision_body,
+                headers={"Authorization": "Bearer synthetic-listing-b"},
+            )
+            assert foreign_decision.status_code == 404, foreign_decision.text
+            approved = client.post(
+                decision_path,
+                json=decision_body,
+                headers={"Authorization": "Bearer synthetic-listing-a-reviewer"},
+            )
+            assert approved.status_code == 200, approved.text
+            assert approved.json()["data"]["status"] == "approved"
+            assert client.post(decision_path, json=decision_body).status_code == 409
         with Session(engine) as session:
             assert (
                 session.get(ListingManagementCurrentMart, active_listing_id).product_grade is None
+            )
+            assert (
+                session.get(ListingManagementCurrentMart, active_listing_id).lifecycle_status
+                == "测品期"
             )
             assert session.get(ListingEvaluationSnapshot, published_snapshot_id).reverted_at
         with TestClient(app) as anonymous:
@@ -796,6 +840,8 @@ def _seed_real_iam(engine) -> None:
             "action:products:listing-management:edit-analysis-link",
             "action:products:listing-management:calculate-all",
             "action:products:listing-management:revert-evaluation",
+            "action:products:listing-management:request-lifecycle",
+            "action:products:listing-management:approve-lifecycle",
         )
         for permission in permissions:
             session.execute(
@@ -841,6 +887,7 @@ def _seed_real_iam(engine) -> None:
             (9277002, "synthetic-b", "synthetic-listing-b", manager_role_id),
             (9277003, "synthetic-a", "synthetic-listing-viewer", viewer_role_id),
             (9277004, "*", "synthetic-listing-all", manager_role_id),
+            (9277005, "synthetic-a", "synthetic-listing-a-reviewer", manager_role_id),
         ):
             session.execute(
                 text(

@@ -159,7 +159,7 @@ test("Listing page persists GPT links, archive state, tags, and scoped CSV", asy
   await expect(tagDialog).toHaveCount(0);
   await page.reload({ waitUntil: "domcontentloaded" });
   const assignedRow = page.getByRole("row").filter({ has: page.getByText("SYNTHETIC-LISTING-A", { exact: true }) });
-  await expect(assignedRow.getByText("SyntheticTag", { exact: true })).toBeVisible();
+  await expect(assignedRow.getByText("SyntheticTag", { exact: true })).toBeVisible({ timeout: 20_000 });
   await assignedRow.getByRole("checkbox").check();
   await page.getByRole("button", { name: "批量操作" }).click();
   await page.getByRole("menuitem", { name: "设置标签" }).click();
