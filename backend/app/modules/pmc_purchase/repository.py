@@ -10,11 +10,12 @@ from collections.abc import Sequence
 from datetime import date, timedelta
 from typing import Any
 
-from sqlalchemy import Select, Text, and_, cast, exists, func, or_, select
+from sqlalchemy import Select, Text, and_, cast, exists, func, or_, select, tuple_
 from sqlalchemy.orm import Session
 
 from app.modules.data_pages.models import LingxingStoreDimension
 from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
+from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
 from app.modules.pmc_purchase.calculations import AVERAGE_CYCLE_WINDOW_DAYS
 from app.modules.pmc_purchase.gate3_models import (
     DwdPurchasePlan,
@@ -60,6 +61,9 @@ class PmcPurchaseReadRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
         self.org_owner_refs: frozenset[str] | None = session.info.get(ORG_OWNER_SCOPE_SESSION_KEY)
+        self.account_stores: frozenset[tuple[str, str]] | None = session.info.get(
+            STORE_SCOPE_SESSION_KEY
+        )
 
     # -- rules --
 
@@ -88,6 +92,8 @@ class PmcPurchaseReadRepository:
     ) -> list[Any]:
         b = DwsPurchaseBoard
         clauses: list[Any] = [b.source_account_ref.in_(sorted(accounts))]
+        if self.account_stores is not None:
+            clauses.append(tuple_(b.source_account_ref, b.store_id).in_(sorted(self.account_stores)))
         if self.org_owner_refs is not None:
             clauses.append(b.owner_uid.in_(self.org_owner_refs))
         if query.owner_uid:
@@ -197,6 +203,12 @@ class PmcPurchaseReadRepository:
             DwsPurchaseBoard.source_account_ref.in_(sorted(accounts)),
             DwsPurchaseBoard.order_sn == order_sn,
         )
+        if self.account_stores is not None:
+            statement = statement.where(
+                tuple_(DwsPurchaseBoard.source_account_ref, DwsPurchaseBoard.store_id).in_(
+                    sorted(self.account_stores)
+                )
+            )
         if self.org_owner_refs is not None:
             statement = statement.where(DwsPurchaseBoard.owner_uid.in_(self.org_owner_refs))
         return list(
@@ -214,6 +226,12 @@ class PmcPurchaseReadRepository:
             DwdPurchasePlan.source_account_ref.in_(sorted(accounts)),
             DwdPurchasePlan.plan_sn.in_(list(plan_sns)),
         )
+        if self.account_stores is not None:
+            statement = statement.where(
+                tuple_(DwdPurchasePlan.source_account_ref, DwdPurchasePlan.store_id).in_(
+                    sorted(self.account_stores)
+                )
+            )
         if self.org_owner_refs is not None:
             statement = statement.where(
                 DwdPurchasePlan.sku.in_(
@@ -259,6 +277,8 @@ class PmcPurchaseReadRepository:
             p.plan_sn.is_not(None),
             ~converted,
         ]
+        if self.account_stores is not None:
+            clauses.append(tuple_(p.source_account_ref, p.store_id).in_(sorted(self.account_stores)))
         if self.org_owner_refs is not None:
             # A matching SKU in a different store does not establish ownership.
             # Unattributed plans fail closed until a reviewed owner mapping exists.
@@ -298,10 +318,16 @@ class PmcPurchaseReadRepository:
 
     # -- dimensions --
 
-    def store_names(self, accounts: frozenset[str]) -> dict[str, str | None]:
+    def store_names(self, accounts: frozenset[str]) -> dict[tuple[str, str], str | None]:
         statement = select(LingxingStoreDimension).where(
             LingxingStoreDimension.source_account_ref.in_(sorted(accounts))
         )
+        if self.account_stores is not None:
+            statement = statement.where(
+                tuple_(LingxingStoreDimension.source_account_ref, LingxingStoreDimension.store_id).in_(
+                    sorted(self.account_stores)
+                )
+            )
         if self.org_owner_refs is not None:
             statement = statement.where(
                 LingxingStoreDimension.store_id.in_(
@@ -313,4 +339,7 @@ class PmcPurchaseReadRepository:
                     )
                 )
             )
-        return {row.store_id: row.store_name for row in self.session.scalars(statement)}
+        return {
+            (row.source_account_ref, row.store_id): row.store_name
+            for row in self.session.scalars(statement)
+        }
