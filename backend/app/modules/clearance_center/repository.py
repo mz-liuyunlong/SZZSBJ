@@ -1,4 +1,5 @@
 """Read-only Listing aggregation for WFS clearance, using existing governed MARTs."""
+
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
@@ -9,7 +10,10 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.modules.clearance_center.rules import DEFAULT_RULES, evaluate, number
-from app.modules.product_management.daily_sales_costs import load_daily_sales_costs, normalize_sku_key
+from app.modules.product_management.daily_sales_costs import (
+    load_daily_sales_costs,
+    normalize_sku_key,
+)
 
 LOS_ANGELES = ZoneInfo("America/Los_Angeles")
 
@@ -19,12 +23,25 @@ class ClearanceReadRepository:
         self.session = session
 
     def rules(self, account: str) -> tuple[dict, int]:
-        row = self.session.execute(text("""
+        row = (
+            self.session.execute(
+                text("""
             select rules_json,version from ops_clearance_rule_sets where source_account_ref=:account
-        """), {"account": account}).mappings().first()
-        return ({**DEFAULT_RULES, **row["rules_json"]}, int(row["version"])) if row else (dict(DEFAULT_RULES), 0)
+        """),
+                {"account": account},
+            )
+            .mappings()
+            .first()
+        )
+        return (
+            ({**DEFAULT_RULES, **row["rules_json"]}, int(row["version"]))
+            if row
+            else (dict(DEFAULT_RULES), 0)
+        )
 
-    def listing(self, listing_id: str, accounts: frozenset[str], *, lock: bool = False) -> dict | None:
+    def listing(
+        self, listing_id: str, accounts: frozenset[str], *, lock: bool = False
+    ) -> dict | None:
         sql = """
           select l.id::text id,l.source_account_ref,l.store_id,l.store_name,l.item_id,
                  l.local_sku,l.msku,l.title,l.picture_url,l.owner_ref,l.listing_status,
@@ -46,11 +63,21 @@ class ClearanceReadRepository:
         if lock:
             # Locks only the request-source Listing, not the inventory snapshot.
             sql += " for update of l"
-        row = self.session.execute(text(sql), {"id": listing_id, "accounts": list(accounts)}).mappings().first()
+        row = (
+            self.session.execute(text(sql), {"id": listing_id, "accounts": list(accounts)})
+            .mappings()
+            .first()
+        )
         return dict(row) if row else None
 
-    def listings(self, accounts: frozenset[str], *, store_id: str = "", keyword: str = "",
-                 eligible_only: bool = False) -> list[dict]:
+    def listings(
+        self,
+        accounts: frozenset[str],
+        *,
+        store_id: str = "",
+        keyword: str = "",
+        eligible_only: bool = False,
+    ) -> list[dict]:
         where = ["l.source_account_ref=any(:accounts)"]
         params: dict = {"accounts": list(accounts)}
         if store_id:
@@ -61,9 +88,15 @@ class ClearanceReadRepository:
                              or coalesce(l.local_sku,'') ilike :q or coalesce(l.title,'') ilike :q)""")
             params["q"] = f"%{keyword.strip()}%"
         if eligible_only:
-            where.extend(["l.wfs_available_quantity>0", "snap.wfs_available_quantity>0",
-                          "snap.captured_at >= now() - interval '72 hours'"])
-        sql = """
+            where.extend(
+                [
+                    "l.wfs_available_quantity>0",
+                    "snap.wfs_available_quantity>0",
+                    "snap.captured_at >= now() - interval '72 hours'",
+                ]
+            )
+        sql = (
+            """
           select l.id::text id,l.source_account_ref,l.store_id,l.store_name,l.item_id,
                  l.local_sku,l.msku,l.title,l.picture_url,l.owner_ref,l.listing_status,
                  l.fulfillment_type,l.sale_price_amount,l.sale_price_currency_code,
@@ -79,10 +112,15 @@ class ClearanceReadRepository:
                  and i.store_id=l.store_id and i.item_id=l.item_id
                order by i.snapshot_date_la desc, i.captured_at desc limit 1
             ) snap on true
-           where """ + " and ".join(where) + " order by l.source_account_ref,l.store_id,l.item_id"
+           where """
+            + " and ".join(where)
+            + " order by l.source_account_ref,l.store_id,l.item_id"
+        )
         return [dict(x) for x in self.session.execute(text(sql), params).mappings().all()]
 
-    def evidence(self, listings: list[dict], *, as_of: date | None = None) -> dict[tuple[str, str, str], dict]:
+    def evidence(
+        self, listings: list[dict], *, as_of: date | None = None
+    ) -> dict[tuple[str, str, str], dict]:
         """Aggregate only requested Listing identities; never join by SKU alone."""
         if not listings:
             return {}
@@ -90,7 +128,9 @@ class ClearanceReadRepository:
         accounts = sorted({str(x["source_account_ref"]) for x in listings})
         ids = sorted({str(x["item_id"]) for x in listings})
         params = {"accounts": accounts, "items": ids, "day": day}
-        sales = self.session.execute(text("""
+        sales = (
+            self.session.execute(
+                text("""
           select source_account_ref,store_id,item_id,
             sum(sales_qty) filter(where business_date_la between :day - 29 and :day) sales30,
             sum(sales_qty) filter(where business_date_la between :day - 6 and :day) sales7,
@@ -116,8 +156,15 @@ class ClearanceReadRepository:
           where source_account_ref=any(:accounts) and item_id=any(:items)
             and business_date_la between :day - 29 and :day
           group by source_account_ref,store_id,item_id
-        """), params).mappings().all()
-        snapshots = self.session.execute(text("""
+        """),
+                params,
+            )
+            .mappings()
+            .all()
+        )
+        snapshots = (
+            self.session.execute(
+                text("""
           select source_account_ref,store_id,item_id,
             count(distinct snapshot_date_la) filter(where wfs_available_quantity is not null) snapshot_days,
             count(distinct snapshot_date_la) filter(where wfs_available_quantity>0) positive_stock_days
@@ -125,8 +172,15 @@ class ClearanceReadRepository:
           where source_account_ref=any(:accounts) and item_id=any(:items)
             and snapshot_date_la between :day - 29 and :day
           group by source_account_ref,store_id,item_id
-        """), params).mappings().all()
-        refunds = self.session.execute(text("""
+        """),
+                params,
+            )
+            .mappings()
+            .all()
+        )
+        refunds = (
+            self.session.execute(
+                text("""
           select source_account_ref,store_id,item_id,
             sum(coalesce(return_qty,0)) refund_qty,
             sum(coalesce(refund_loss_amount,0)) filter(where refund_loss_effective=true) refund_loss,
@@ -137,11 +191,20 @@ class ClearanceReadRepository:
             and return_order_at::date between :day - 29 and :day
             and store_id is not null and item_id is not null
           group by source_account_ref,store_id,item_id
-        """), params).mappings().all()
+        """),
+                params,
+            )
+            .mappings()
+            .all()
+        )
         costs: dict[str, dict] = {}
         for account in accounts:
             costs[account] = load_daily_sales_costs(self.session, source_account_ref=account)
-        key = lambda row: (str(row["source_account_ref"]), str(row["store_id"]), str(row["item_id"]))
+        key = lambda row: (
+            str(row["source_account_ref"]),
+            str(row["store_id"]),
+            str(row["item_id"]),
+        )
         s_map = {key(r): dict(r) for r in sales}
         i_map = {key(r): dict(r) for r in snapshots}
         r_map = {key(r): dict(r) for r in refunds}
@@ -153,28 +216,50 @@ class ClearanceReadRepository:
             i = i_map.get(k, {})
             r = r_map.get(k, {})
             captured = listing.get("inventory_captured_at")
-            inventory_fresh = bool(captured and captured.tzinfo and
-                                   timedelta(0) <= now - captured <= timedelta(hours=72))
+            inventory_fresh = bool(
+                captured
+                and captured.tzinfo
+                and timedelta(0) <= now - captured <= timedelta(hours=72)
+            )
             # A 30-day empty fact set is not proof of 30 days of zero orders.
             sales_complete = bool(s.get("sales_rows") and not s.get("incomplete_history_rows"))
-            complete_costs = bool(s.get("sales_rows") and s.get("incomplete_cost_rows") == 0 and
-                                  s.get("missing_profit_rows") == 0)
+            complete_costs = bool(
+                s.get("sales_rows")
+                and s.get("incomplete_cost_rows") == 0
+                and s.get("missing_profit_rows") == 0
+            )
             started = listing.get("listing_start_at_utc")
-            listing_days = ((now.date() - started.astimezone(LOS_ANGELES).date()).days
-                            if started is not None and started.tzinfo else None)
+            listing_days = (
+                (now.date() - started.astimezone(LOS_ANGELES).date()).days
+                if started is not None and started.tzinfo
+                else None
+            )
             sku_key = normalize_sku_key(listing.get("local_sku"))
             cost = costs.get(k[0], {}).get(sku_key) if sku_key else None
             unit_cost_usd: Decimal | None = None
-            if (cost is not None and cost.purchase_cost_unit_cny is not None
+            if (
+                cost is not None
+                and cost.purchase_cost_unit_cny is not None
                 and cost.first_leg_cost_unit_cny is not None
-                and cost.exchange_rate is not None and cost.exchange_rate > 0
-                and not cost.root_missing_codes):
-                unit_cost_usd = (cost.purchase_cost_unit_cny + cost.first_leg_cost_unit_cny) / cost.exchange_rate
-            out[k] = {**s, **r, "positive_stock_days": int(i.get("positive_stock_days") or 0),
+                and cost.exchange_rate is not None
+                and cost.exchange_rate > 0
+                and not cost.root_missing_codes
+            ):
+                unit_cost_usd = (
+                    cost.purchase_cost_unit_cny + cost.first_leg_cost_unit_cny
+                ) / cost.exchange_rate
+            out[k] = {
+                **s,
+                **r,
+                "positive_stock_days": int(i.get("positive_stock_days") or 0),
                 "inventory_snapshot_days": int(i.get("snapshot_days") or 0),
-                "inventory_fresh": inventory_fresh, "sales_complete": sales_complete,
-                "cost_complete": complete_costs, "listing_days": listing_days,
-                "unit_cost_usd": unit_cost_usd, "as_of_date": day.isoformat()}
+                "inventory_fresh": inventory_fresh,
+                "sales_complete": sales_complete,
+                "cost_complete": complete_costs,
+                "listing_days": listing_days,
+                "unit_cost_usd": unit_cost_usd,
+                "as_of_date": day.isoformat(),
+            }
         return out
 
     def evaluated(self, listing: dict, metrics: dict, rules: dict) -> dict:
@@ -185,10 +270,15 @@ class ClearanceReadRepository:
         value = evaluate(current, metrics, rules, as_of=day)
         qty = number(current.get("wfs_available_quantity"))
         unit_cost = metrics.get("unit_cost_usd")
-        value["stock_capital_usd"] = str(qty * unit_cost) if qty is not None and unit_cost is not None else None
+        value["stock_capital_usd"] = (
+            str(qty * unit_cost) if qty is not None and unit_cost is not None else None
+        )
         value["current_wfs_available"] = str(qty) if qty is not None else None
-        value["inventory_captured_at"] = (listing["inventory_captured_at"].isoformat()
-                                           if listing.get("inventory_captured_at") else None)
+        value["inventory_captured_at"] = (
+            listing["inventory_captured_at"].isoformat()
+            if listing.get("inventory_captured_at")
+            else None
+        )
         value["snapshot_coverage_days_30d"] = metrics["inventory_snapshot_days"]
         value["positive_stock_days_30d"] = metrics["positive_stock_days"]
         value["sales_complete"] = metrics["sales_complete"]
