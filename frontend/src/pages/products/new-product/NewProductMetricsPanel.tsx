@@ -34,6 +34,8 @@ const columns: ProColumns<PeriodRow>[] = [
   { title: "利润率", dataIndex: "margin", width: 95, render: (_, row) => percent(row.margin) },
   { title: "覆盖天数", dataIndex: "observed_days", width: 95 },
   { title: "完整成本天数", dataIndex: "complete_cost_days", width: 115 },
+  { title: "缺失日数", dataIndex: "missing_days", width: 90,
+    render: (_, row) => row.missing_days ?? "—" },
   { title: "数据状态", key: "complete", width: 95,
     render: (_, row) => <Tag color={row.complete ? "success" : "warning"}>
       {row.complete ? "完整" : "数据不足"}
@@ -51,6 +53,8 @@ export default function NewProductMetricsPanel({ metrics }: { metrics: NewProduc
       { key: "account", label: "账户", children: metrics.account },
       { key: "date", label: "数据截止（不含）", children: metrics.as_of_exclusive },
       { key: "version", label: "规则版本", children: `V${metrics.rule_version}` },
+      { key: "visibility", label: "财务字段权限",
+        children: metrics.financial_visibility === "restricted" ? "受限（服务端脱敏）" : "已授权" },
       { key: "start", label: "已确认观察起点", children: metrics.verified_start_date ?? "待确认" },
       { key: "available", label: "可售库存", children: format(metrics.inventory.available) },
       { key: "wfs", label: "WFS 可售", children: format(metrics.inventory.wfs_available) },
@@ -67,7 +71,9 @@ export default function NewProductMetricsPanel({ metrics }: { metrics: NewProduc
     ]} />
     {(metrics.score.status !== "evaluated" || metrics.launch.status !== "evaluated") &&
       <Alert type="warning" showIcon
-        message="指标或观察起点尚未完整验证，不生成正式评分及打品终态"
+        message={metrics.financial_visibility === "restricted"
+          ? "当前账号没有查看订单利润及利润率的完整字段权限，敏感指标和衍生结论已由服务端脱敏"
+          : "指标或观察起点尚未完整验证，不生成正式评分及打品终态"}
         style={{ marginBottom: 12 }} />}
     <ReportTableShell label="真实30、60、90天经营指标">
       <ProTable<PeriodRow> rowKey="key" dataSource={rows} columns={columns}

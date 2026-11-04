@@ -49,14 +49,14 @@ def read_sku_metrics(
             session.execute(
                 text(
                     """
-                SELECT count(*) AS observed_days,
+                SELECT count(DISTINCT business_date_la) AS observed_days,
                        sum(sales_qty) AS sales_qty,
                        sum(order_count) AS orders,
                        sum(sales_amount) AS sales_amount,
                        sum(ad_spend_amount) AS ad_spend,
                        sum(gross_profit_amount) AS profit,
-                       sum(CASE WHEN cost_status = 'complete' THEN 1 ELSE 0 END)
-                           AS complete_cost_days,
+                       count(DISTINCT business_date_la)
+                           FILTER (WHERE cost_status = 'complete') AS complete_cost_days,
                        count(DISTINCT gross_profit_currency_code)
                            FILTER (WHERE gross_profit_currency_code IS NOT NULL) AS currencies,
                        count(DISTINCT sales_currency_code)
@@ -150,7 +150,23 @@ def read_sku_metrics(
             if ad_spend is not None and sales_amount is not None and sales_amount > 0
             else None
         )
-        # Missing days or incomplete cost valuation are never silently filled with zero.
+        # Never infer that an absent MART day means a genuine zero-sales day.
+        # A source publication/completeness ledger is required for that distinction.
+        issues: list[str] = []
+        if observed != days:
+            issues.append("missing_business_day_coverage")
+        if cost_days != observed or observed == 0:
+            issues.append("incomplete_cost_coverage")
+        if not consistent_currency:
+            issues.append("financial_currency_unverified")
+        if margin is None:
+            issues.append("margin_unavailable")
+        if ad_spend is None:
+            issues.append("ad_spend_unavailable")
+        if clicks["clicks"] is None:
+            issues.append("ad_clicks_unavailable")
+        if acos is None:
+            issues.append("attributed_acos_unavailable")
         return {
             "days": days,
             "from": start.isoformat(),
@@ -170,13 +186,10 @@ def read_sku_metrics(
             "currency_code": sales["sales_currency"] if consistent_currency else None,
             "attributed_sales": attributed_sales if ads_same_currency else None,
             "observed_days": observed,
+            "missing_days": max(days - observed, 0),
             "complete_cost_days": cost_days,
-            "complete": observed == days
-            and cost_days == days
-            and margin is not None
-            and ad_spend is not None
-            and clicks["clicks"] is not None
-            and acos is not None,
+            "data_issues": issues,
+            "complete": not issues,
         }
 
     periods: dict[str, dict[str, Any]] = {}

@@ -21,7 +21,8 @@ from app.core.auth import Principal
 from app.core.permissions import require_any_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
-from app.modules.new_product_workflow.metrics import read_sku_metrics
+from app.modules.new_product_workflow.field_access import redact_new_product_metrics
+from app.modules.new_product_workflow.metrics import la_today, read_sku_metrics
 from app.modules.new_product_workflow.rules import DEFAULT_RULES
 
 VIEW = "page:products:new-product-analysis:view"
@@ -77,6 +78,12 @@ class LaunchDateWrite(VersionedPayload):
     arrival_date: date
     sellable_date: date
     evidence: str = Field(min_length=5, max_length=1000)
+
+    @model_validator(mode="after")
+    def verify_actual_dates(self) -> LaunchDateWrite:
+        if max(self.arrival_date, self.sellable_date) > la_today():
+            raise ValueError("Actual arrival and sellable dates cannot be in the future")
+        return self
 
 
 class RuleWrite(StrictPayload):
@@ -388,7 +395,7 @@ def get_workflow_metrics(
     request: Request,
     sku_id: UUID,
     session: db_session,
-    _: view_principal,
+    principal: view_principal,
     accounts: account_scope,
 ) -> SuccessEnvelope[dict[str, Any], None]:
     identity = _identity(session, sku_id, accounts)
@@ -411,19 +418,19 @@ def get_workflow_metrics(
         if state["arrival_date"] and state["sellable_date"] and state["dates_verified_by"]
         else None
     )
+    metrics = read_sku_metrics(
+        session,
+        account=identity["source_account_ref"],
+        sku=sku,
+        market_score=state["market_score"],
+        rule_version=int(rule["version"]) if rule else 0,
+        rules=dict(rule["rule_json"]) if rule else DEFAULT_RULES,
+        start_date=verified_start,
+    )
     return success_response(
         request,
-        data=read_sku_metrics(
-            session,
-            account=identity["source_account_ref"],
-            sku=sku,
-            market_score=state["market_score"],
-            rule_version=int(rule["version"]) if rule else 0,
-            rules=dict(rule["rule_json"]) if rule else DEFAULT_RULES,
-            start_date=verified_start,
-        ),
+        data=redact_new_product_metrics(metrics, principal),
     )
-
 
 @router.post(
     "/workflows/{sku_id}/market",

@@ -17,7 +17,9 @@ export interface NewProductPeriodMetrics {
   currency_code?: string | null;
   ad_days: number;
   observed_days: number;
+  missing_days?: number;
   complete_cost_days: number;
+  data_issues?: string[];
   complete: boolean;
 }
 
@@ -27,6 +29,7 @@ export interface NewProductMetrics {
   business_timezone: string;
   as_of_exclusive: string;
   verified_start_date?: string | null;
+  financial_visibility?: "authorized" | "restricted";
   source_tables: string[];
   periods: Record<"30" | "60" | "90", NewProductPeriodMetrics>;
   inventory: {

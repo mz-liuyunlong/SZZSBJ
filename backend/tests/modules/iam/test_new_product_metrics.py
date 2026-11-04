@@ -86,6 +86,8 @@ def test_acos_uses_attributed_sales_not_total_sales() -> None:
     assert period["ad_spend_ratio"] == 10
     assert period["attributed_sales"] == 400
     assert period["complete"] is True
+    assert period["missing_days"] == 0
+    assert period["data_issues"] == []
     assert data["score"]["status"] == "provisional"
     assert any("ad.attributed_sales_amount" in sql for sql in session.queries)
 
@@ -122,4 +124,5 @@ def test_unknown_attribution_currency_never_produces_an_acos_score() -> None:
     assert period["acos"] is None
     assert period["ad_spend_ratio"] == 10
     assert period["complete"] is False
+    assert "attributed_acos_unavailable" in period["data_issues"]
     assert data["score"]["status"] == "insufficient_data"

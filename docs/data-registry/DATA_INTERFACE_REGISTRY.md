@@ -309,3 +309,14 @@ Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源�
 ## PMC-PURCHASE-UNIFIED-SYNC（2026-10-27）
 
 状态：已撤回（2026-10-28）。按负责人要求，任务中心、采购父子接管及统一调度变更恢复 main；不注册或启用采购父任务。原同步入口保持 main 行为。当前整改证据见 `docs/delivery/pmc-scope-rectification-20261028.md`。
+
+
+## 2026-11-04 PR #278 新品表现与打品跟踪接口登记（Draft；尚未上线）
+
+| 数据/接口 | 来源和粒度 | 权限与边界 | 状态和文档 |
+|---|---|---|---|
+| `/api/new-products/workflows`、`/source-accounts`、`/workflows/{sku_id}` | Lingxing SKU 身份与新系统草稿，来源账户+SKU 身份 | 已登录 + 来源账户数据范围；带行版本写入与事件审计 | draft；[接口](../../docs/api/new-product-performance-draft-v1.md) |
+| `/api/new-products/workflows/{sku_id}/metrics` | 按 LA 业务日的 MART、广告事实表、Listing DIM、库存 read model | 无销量日不自动补零；ACOS 缺归因/币种为空；利润、利润率及衍生评级由后端检查订单利润字段权限 | partial，待真实 SKU 对账；[数据决策](../../docs/data-sources/decisions/new-product-performance-source-decision.md) |
+| 新品市场评分、采购草稿、到货/可售日期、复盘、规则版本 | `product_new_workflows` / `product_new_workflow_events` / `product_new_rule_versions` | 与 PMC 无写入关系；尚不构成正式独立采购计划；需权限和版本乐观锁 | draft；[SOP](../../docs/sop/new-product-performance-draft.md) |
+
+注：尚无正式评分分档/独立采购计划的已批准数据源决策；`NEED_OWNER_DECISION` 仍是阻塞，不得将相关能力标为 implemented。

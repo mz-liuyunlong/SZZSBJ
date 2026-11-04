@@ -27,6 +27,16 @@ def test_business_payloads_reject_invalid_scores_and_unplanned_optimization() ->
         ReviewWrite(expected_version=1, result="optimize", reason="需要调整广告词")
 
 
+def test_future_dates_cannot_be_falsely_confirmed_as_actual() -> None:
+    with pytest.raises(ValidationError):
+        LaunchDateWrite(
+            expected_version=1,
+            arrival_date="2099-01-01",
+            sellable_date="2099-01-02",
+            evidence="未来日期尚未实际发生",
+        )
+
+
 def test_verified_launch_dates_require_evidence() -> None:
     with pytest.raises(ValidationError):
         LaunchDateWrite(
