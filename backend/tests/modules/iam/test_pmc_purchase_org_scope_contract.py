@@ -72,7 +72,6 @@ def test_restricted_org_cannot_use_unreviewed_purchase_routes(
             assert ORG_OWNER_SCOPE_SESSION_KEY not in session.info
 
 
-
 def test_pending_plan_conversion_is_scoped_to_same_source_account() -> None:
     """A plan number from a different account cannot suppress a pending plan."""
     session = MagicMock()
@@ -95,9 +94,7 @@ def test_pending_plan_owner_proof_requires_same_store_and_sku() -> None:
     session = MagicMock()
     session.info = {ORG_OWNER_SCOPE_SESSION_KEY: frozenset({"owner-approved"})}
     repository = PmcPurchaseReadRepository(session)
-    statement = repository._pending_plan_select(
-        PendingPlanQuery(), frozenset({"ACCOUNT1"})
-    )
+    statement = repository._pending_plan_select(PendingPlanQuery(), frozenset({"ACCOUNT1"}))
     sql = str(
         statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
     )
