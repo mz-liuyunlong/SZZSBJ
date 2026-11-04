@@ -23,6 +23,12 @@ interface OwnerCandidate {
   employee_name: string | null;
   is_active: boolean;
 }
+interface AccountOwnerCandidate extends OwnerCandidate {
+  source_account_ref: string;
+}
+interface AccountOwnerBindingEvent extends OwnerBindingEvent {
+  source_account_ref: string;
+}
 interface OrganizationSyncRun {
   run_id: string;
   snapshot_hash: string;
@@ -82,6 +88,10 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
   const [search, setSearch] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [ownerCandidates, setOwnerCandidates] = useState<OwnerCandidate[]>([]);
+  const [accountOwnerCandidates, setAccountOwnerCandidates] = useState<AccountOwnerCandidate[]>([]);
+  const [accountOwnerLoading, setAccountOwnerLoading] = useState(false);
+  const [accountOwnerHistory, setAccountOwnerHistory] = useState<AccountOwnerCandidate>();
+  const [accountOwnerEvents, setAccountOwnerEvents] = useState<AccountOwnerBindingEvent[]>([]);
   const [ownerSaving, setOwnerSaving] = useState<string>();
   const [historyOwner, setHistoryOwner] = useState<string>();
   const [historyEvents, setHistoryEvents] = useState<OwnerBindingEvent[]>([]);
@@ -216,6 +226,50 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
     setOwnerCandidates(response.data);
   };
 
+  const reloadAccountOwnerCandidates = async () => {
+    setAccountOwnerLoading(true);
+    try {
+      const response = await backendRequest<AccountOwnerCandidate[]>(
+        "/api/settings/organization/account-owner-candidates",
+      );
+      setAccountOwnerCandidates(response.data);
+    } catch {
+      void notice.error("账号负责人列表读取失败，请检查授权及数据库迁移");
+    } finally {
+      setAccountOwnerLoading(false);
+    }
+  };
+
+  const accountOwnerUrl = (item: AccountOwnerCandidate) => (
+    `/api/settings/organization/account-owner-bindings/${encodeURIComponent(item.source_account_ref)}/${encodeURIComponent(item.owner_ref)}`
+  );
+
+  const bindAccountOwner = async (item: AccountOwnerCandidate, openId?: string) => {
+    const path = accountOwnerUrl(item);
+    if (openId) {
+      await backendRequest(path, {
+        method: "PUT", body: JSON.stringify({ feishu_open_id: openId }),
+      });
+    } else {
+      await backendRequest(path, { method: "DELETE" });
+    }
+    await reloadAccountOwnerCandidates();
+    void notice.success("账号负责人绑定已记录并更新");
+  };
+
+  const showAccountOwnerHistory = async (item: AccountOwnerCandidate) => {
+    setAccountOwnerHistory(item);
+    setAccountOwnerEvents([]);
+    try {
+      const response = await backendRequest<AccountOwnerBindingEvent[]>(
+        `${accountOwnerUrl(item)}/events`,
+      );
+      setAccountOwnerEvents(response.data);
+    } catch {
+      void notice.error("账号负责人历史读取失败");
+    }
+  };
+
   const showBindingHistory = async (ownerRef: string) => {
     setHistoryOwner(ownerRef);
     setHistoryLoading(true);
@@ -266,6 +320,7 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
               setOwnerCandidates(owners.data);
               setSyncRuns(runs.data);
               void reloadEventInbox();
+              void reloadAccountOwnerCandidates();
             }
           } catch {
             if (alive) setError("负责人候选数据加载失败，请检查业务数据表和管理员权限。");
@@ -377,6 +432,52 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
         </Card>
       )}
       {canSync && (
+        <Card title="领星负责人 · 按来源账号绑定" style={{ marginTop: 16 }}
+          extra={<Button size="small" onClick={() => void reloadAccountOwnerCandidates()}>刷新候选</Button>}>
+          <Alert type="info" showIcon style={{ marginBottom: 12 }}
+            message="同一个负责人 UID 在不同来源账号必须分别审核绑定"
+            description="仅使用业务数据中已验证的账号与负责人组合。不会通过姓名自动关联，也不会给员工增加角色或数据访问权限。" />
+          <Table<AccountOwnerCandidate>
+            rowKey={row => `${row.source_account_ref}|${row.owner_ref}`}
+            loading={accountOwnerLoading}
+            dataSource={accountOwnerCandidates}
+            pagination={{ pageSize: 10 }}
+            size="small"
+            columns={[
+              { title: "来源账号", dataIndex: "source_account_ref", width: 145 },
+              { title: "负责人 UID", dataIndex: "owner_ref", width: 170 },
+              { title: "现有绑定", dataIndex: "employee_name",
+                render: value => value || "未绑定" },
+              { title: "审核关联员工", width: 260, render: (_, row) => (
+                <Select
+                  allowClear
+                  showSearch
+                  optionFilterProp="label"
+                  style={{ width: "100%" }}
+                  placeholder="选择有效飞书员工"
+                  loading={ownerSaving === `${row.source_account_ref}|${row.owner_ref}`}
+                  value={row.is_active ? row.feishu_open_id || undefined : undefined}
+                  options={(data?.users ?? [])
+                    .filter(user => user.is_active && !user.is_resigned && !user.is_frozen)
+                    .map(user => ({ value: user.open_id, label: user.name }))}
+                  onChange={async value => {
+                    setOwnerSaving(`${row.source_account_ref}|${row.owner_ref}`);
+                    try { await bindAccountOwner(row, value); }
+                    catch { void notice.error("账号负责人绑定失败，请核实来源账号及员工身份"); }
+                    finally { setOwnerSaving(undefined); }
+                  }}
+                />
+              ) },
+              { title: "历史", width: 90, render: (_, row) => (
+                <Button type="link" size="small" onClick={() => void showAccountOwnerHistory(row)}>
+                  查看
+                </Button>
+              ) },
+            ]}
+          />
+        </Card>
+      )}
+      {canSync && (
         <Card title="飞书组织变更事件" style={{ marginTop: 16 }}
           extra={<Button size="small" onClick={() => void reloadEventInbox()}>刷新事件</Button>}>
           {eventInboxError && (
@@ -426,6 +527,28 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
             ]} />
         </Card>
       )}
+      <Modal
+        title={accountOwnerHistory ? `账号负责人变更记录：${accountOwnerHistory.source_account_ref} / ${accountOwnerHistory.owner_ref}` : "账号负责人变更记录"}
+        open={Boolean(accountOwnerHistory)}
+        onCancel={() => setAccountOwnerHistory(undefined)}
+        footer={null}
+        width={760}
+        destroyOnHidden>
+        <Table<AccountOwnerBindingEvent>
+          rowKey="id" size="small"
+          dataSource={accountOwnerEvents} pagination={{ pageSize: 8 }}
+          columns={[
+            { title: "操作时间", dataIndex: "created_at" },
+            { title: "动作", dataIndex: "event_type",
+              render: value => value === "bind" ? "审核绑定" : "解除绑定" },
+            { title: "原员工", dataIndex: "previous_open_id", ellipsis: true,
+              render: value => value || "-" },
+            { title: "新员工", dataIndex: "new_open_id", ellipsis: true,
+              render: value => value || "-" },
+            { title: "操作人", dataIndex: "actor_user_id" },
+          ]}
+        />
+      </Modal>
       <Modal
         title={historyOwner ? `负责人绑定记录：${historyOwner}` : "负责人绑定记录"}
         open={Boolean(historyOwner)}
