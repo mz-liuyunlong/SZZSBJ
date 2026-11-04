@@ -281,6 +281,12 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
       <Descriptions.Item label="Listing评分">{display(row.listing.average_rating)}</Descriptions.Item>
       <Descriptions.Item label="评论数">{display(row.listing.review_count)}</Descriptions.Item>
       <Descriptions.Item label="建议清货量">{qty(row.evaluation.suggested_qty)}</Descriptions.Item>
+      <Descriptions.Item label="补货及购物车提醒" span={3}>
+        {row.evaluation.conflict_alerts?.length
+          ? row.evaluation.conflict_alerts.map(alert=>alert==="INBOUND_STOCK_PRESENT"
+            ? "存在在途库存" : alert==="BUYBOX_ISSUE" ? "购物车异常" : alert).join("、")
+          : "无已确认提醒"}
+      </Descriptions.Item>
       <Descriptions.Item label="风险依据" span={3}>{row.evaluation.risk_reasons.join("、")||"暂无自动风险依据"}</Descriptions.Item>
       {row.evaluation.warnings.length?<Descriptions.Item label="数据待核实" span={3}>
         {row.evaluation.warnings.join("、")}</Descriptions.Item>:null}
