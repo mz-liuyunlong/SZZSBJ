@@ -19,8 +19,8 @@ from app.modules.new_product_workflow.router import (
     _identity,
     get_independent_purchase_plan,
     list_independent_purchase_plans,
-    list_workflows,
     list_listing_candidates,
+    list_workflows,
     router,
 )
 
