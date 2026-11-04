@@ -4,6 +4,7 @@ Clearance risk classification remains deterministic, but users without the
 existing Daily Sales financial permissions never receive cost/profit formula
 components or explanatory financial signals.
 """
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -51,7 +52,8 @@ def mask_clearance_financials(
         evaluation["business_signals"] = {}
         evaluation["business_signal_groups"] = []
         evaluation["warnings"] = [
-            reason for reason in evaluation.get("warnings", [])
+            reason
+            for reason in evaluation.get("warnings", [])
             if not str(reason).startswith("PROFIT_")
         ]
         evaluation["cost_complete"] = None
