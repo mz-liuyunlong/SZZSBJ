@@ -1,100 +1,174 @@
-/* PMC 总看板 layout; shares tokens with the purchase board (scrolling page, sticky table header). */
+/*
+ * PMC 总看板 layout: same full-height report frame as 采购看板 (page card → toolbar card →
+ * stat cards → ReportTableShell with internal scroll and fixed pagination). Colors, radius and
+ * spacing come from Ant Design tokens only (docs/design-system/DESIGN_TOKENS.md).
+ */
 .pmc-overview {
+  display: flex;
   width: 100%;
+  height: 100%;
   min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .pmc-overview__page-card {
   position: relative;
-  border: 1px solid #dce3ed;
-  border-radius: 14px;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+  border-color: var(--admin-border-soft);
+  border-radius: var(--admin-radius);
+}
+
+.pmc-overview__page-card > .ant-card-body {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  padding: 16px 18px;
 }
 
 .pmc-overview__title-row {
   display: flex;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .pmc-overview__title-row h1 {
   margin: 0 0 4px;
-  font-size: 20px;
+  color: var(--admin-text);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.3;
 }
 
-.pmc-overview__title-row p {
-  max-width: 760px;
-  margin: 0;
-  color: #667085;
+.pmc-overview__tabs {
+  flex: 0 0 auto;
 }
 
-.pmc-overview__meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  font-size: 12px;
-}
-
-.pmc-overview__error {
+.pmc-overview__tabs > .ant-tabs-nav {
   margin-bottom: 12px;
 }
 
-.pmc-overview__cards {
-  margin-bottom: 8px;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+.pmc-overview__toolbar-card {
+  flex: 0 0 auto;
+  margin-bottom: 12px;
+  border-color: var(--admin-border-soft);
+  background: var(--admin-surface-soft);
 }
 
 .pmc-overview__toolbar {
   display: flex;
+  min-width: 0;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
 }
 
-.pmc-overview__switch {
+.pmc-overview__search {
+  width: min(420px, 100%);
+}
+
+.pmc-overview__toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: 4px;
+  white-space: nowrap;
 }
 
-.pmc-overview__shell-head {
+.pmc-overview__toolbar-actions {
+  margin-left: auto;
+}
+
+.pmc-overview__cards {
+  flex: 0 0 auto;
+  margin-bottom: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
+
+.pmc-overview__error {
+  flex: 0 0 auto;
+  margin-bottom: 12px;
+}
+
+.pmc-overview__table-wrap {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 10px;
-  margin: 8px 0;
+  min-width: 0;
+  min-height: 280px;
+  flex: 1 1 0;
+  flex-direction: column;
 }
 
-.pmc-overview__mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+.pmc-overview__tab-scroll {
+  min-height: 0;
+  flex: 1 1 0;
+  overflow: auto;
 }
 
-.pmc-overview__neg {
-  color: #d92d20;
+.pmc-overview__tab-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.pmc-overview__warn {
-  color: #b54708;
+.pmc-overview__row {
+  cursor: pointer;
+}
+
+.pmc-overview__row-risk {
+  cursor: pointer;
 }
 
 .pmc-overview__row-risk > td {
-  background: #fff7f6;
+  background: color-mix(in srgb, var(--admin-danger) 7%, var(--admin-surface));
 }
 
 .pmc-overview__row-hl > td {
-  background: #fffaeb;
+  background: color-mix(in srgb, var(--admin-warning) 9%, var(--admin-surface));
 }
 
-.pmc-overview__foot {
-  margin-top: 12px;
-  color: #475467;
-  font-size: 12px;
-  line-height: 1.7;
+.pmc-overview__sku-cell,
+.pmc-overview__main-cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.pmc-overview__store-more {
+  margin-left: 4px;
+}
+
+.pmc-overview__mono {
+  font-family: ui-monospace, monospace;
+}
+
+.pmc-overview__neg {
+  color: var(--admin-danger);
+}
+
+.pmc-overview__warn {
+  color: var(--admin-warning);
+}
+
+.pmc-overview__drawer h4 {
+  margin: 16px 0 8px;
+}
+
+.pmc-overview__drawer h4:first-child {
+  margin-top: 0;
 }
 
 .pmc-overview__kv-grid {
@@ -106,36 +180,26 @@
 .pmc-overview__kv {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .pmc-overview__kv > span {
-  color: #667085;
+  color: var(--admin-text-secondary);
   font-size: 12px;
 }
 
 .pmc-overview__note {
-  margin-bottom: 6px;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 4px;
 }
 
 .pmc-overview__formula > div {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
-.pmc-overview__set-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  gap: 8px 24px;
-}
-
-.pmc-overview__set-group {
-  grid-column: 1 / -1;
-}
-
-.pmc-overview__set-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 6px 0;
-  border-bottom: 1px solid #f2f4f7;
+.pmc-overview__title-row .ant-tag {
+  max-width: 100%;
+  white-space: normal;
 }

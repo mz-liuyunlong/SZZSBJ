@@ -247,6 +247,47 @@ def test_items_filters(snap_file: Path) -> None:
     assert ids(cats=["严重过剩", "已断货"]) == []
     assert ids(keyword="sku-b") == ["200"]
     _envelope(client.get("/api/pmc/overview/items", params={"page_size": 7}), 422)
+    _envelope(client.get("/api/pmc/overview/items", params={"sort_by": "sku"}), 422)
+
+
+def test_items_accept_page_size_from_the_query_string(snap_file: Path) -> None:
+    # Regression 2026-11-04: the page always sends page_size; "50" must not be a 422.
+    client = TestClient(_app(READ))
+    for size in ("50", "100", "200", "500", "1000"):
+        url = f"/api/pmc/overview/items?only_issue=true&page=1&page_size={size}"
+        body = _envelope(client.get(url))
+        assert body["meta"]["page_size"] == int(size)
+        assert body["meta"]["total"] == 2
+
+
+def test_items_sort_whitelist_and_category_counts(snap_file: Path) -> None:
+    client = TestClient(_app(READ))
+    body = _envelope(client.get("/api/pmc/overview/items", params={"only_issue": "false"}))
+    counts = body["data"]["category_counts"]
+    assert counts["已断货"] == 1
+    assert counts["严重过剩"] == 1
+    assert sum(1 for v in counts.values() if v) == len([k for k, v in counts.items() if v])
+    narrowed = _envelope(
+        client.get("/api/pmc/overview/items", params={"only_issue": "false", "cats": ["已断货"]})
+    )
+    assert narrowed["data"]["category_counts"] == counts  # cats do not narrow the buttons
+    asc = _envelope(
+        client.get(
+            "/api/pmc/overview/items",
+            params={"only_issue": "false", "sort_by": "supply", "sort_order": "asc"},
+        )
+    )
+    desc = _envelope(
+        client.get(
+            "/api/pmc/overview/items",
+            params={"only_issue": "false", "sort_by": "supply", "sort_order": "desc"},
+        )
+    )
+    supply_asc = [r["supply"] for r in asc["data"]["items"]]
+    assert supply_asc == sorted(supply_asc)
+    assert [r["item_id"] for r in desc["data"]["items"]] == [
+        r["item_id"] for r in reversed(asc["data"]["items"])
+    ]
     _envelope(client.get("/api/pmc/overview/items", params={"cats": ["nope"]}), 422)
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class StrictSchema(BaseModel):
@@ -55,9 +55,28 @@ class OverviewFilterQuery(StrictSchema):
     only_issue: bool = True
 
 
+# Same choices as the shared report table (REPORT_TABLE_PAGE_SIZE_OPTIONS).
+PAGE_SIZES = (50, 100, 200, 500, 1000)
+# Server-side sort whitelist (column key → row field); default = 8088 problem priority.
+type OverviewSort = Literal[
+    "daily", "wm_available", "supply", "cover", "oos_days", "n30", "gap_days"
+]
+
+
 class OverviewItemsQuery(OverviewFilterQuery):
     page: int = Field(default=1, ge=1)
-    page_size: Literal[50, 100, 200, 500] = 50
+    # Plain int + membership check: a ``Literal[50, ...]`` never matches the query string "50",
+    # which made every real list request fail with 422 (fix 2026-11-04).
+    page_size: int = 50
+    sort_by: OverviewSort | None = None
+    sort_order: Literal["asc", "desc"] = "desc"
+
+    @field_validator("page_size")
+    @classmethod
+    def _page_size_allowed(cls, value: int) -> int:
+        if value not in PAGE_SIZES:
+            raise ValueError("page_size must be one of 50/100/200/500/1000")
+        return value
 
 
 # --- fragments -------------------------------------------------------------------------------
@@ -182,6 +201,8 @@ class OverviewSummaryData(StrictSchema):
 
 class OverviewItemListData(StrictSchema):
     items: list[OverviewItemRow]
+    # Per category, over the rows matching every filter except ``cats`` (category buttons).
+    category_counts: dict[str, int] = Field(default_factory=dict)
 
 
 class OverviewFilterOptionsData(StrictSchema):

@@ -10,12 +10,12 @@ import {
   getOverviewWarehouses,
   listOverviewItems,
 } from "@/pages/pmc/overview/overviewApi";
-import type { OverviewFilters } from "@/pages/pmc/overview/overviewTypes";
+import type { OverviewFilters, OverviewSort } from "@/pages/pmc/overview/overviewTypes";
 
 export const overviewKeys = {
   summary: ["pmc-overview", "summary"] as const,
-  items: (filters: OverviewFilters, page: number, pageSize: number) => (
-    ["pmc-overview", "items", buildOverviewFilterQuery(filters).toString(), page, pageSize] as const
+  items: (filters: OverviewFilters, page: number, pageSize: number, sort?: OverviewSort) => (
+    ["pmc-overview", "items", buildOverviewFilterQuery(filters).toString(), page, pageSize, sort?.by ?? "", sort?.order ?? ""] as const
   ),
   item: (itemId: string) => ["pmc-overview", "item", itemId] as const,
   options: ["pmc-overview", "options"] as const,
@@ -29,9 +29,11 @@ export const useOverviewSummaryQuery = () => useQuery({
   staleTime: SERVER_STATE_STALE_TIME.summary,
 });
 
-export const useOverviewItemsQuery = (filters: OverviewFilters, page: number, pageSize: number) => useQuery({
-  queryKey: overviewKeys.items(filters, page, pageSize),
-  queryFn: ({ signal }) => listOverviewItems(filters, page, pageSize, signal),
+export const useOverviewItemsQuery = (
+  filters: OverviewFilters, page: number, pageSize: number, sort: OverviewSort = { order: "desc" },
+) => useQuery({
+  queryKey: overviewKeys.items(filters, page, pageSize, sort),
+  queryFn: ({ signal }) => listOverviewItems(filters, page, pageSize, signal, sort),
   staleTime: SERVER_STATE_STALE_TIME.list,
   placeholderData: keepPreviousData,
 });

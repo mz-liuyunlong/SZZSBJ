@@ -22,8 +22,17 @@ export const OVERVIEW_CATEGORIES = [
 ] as const;
 export type OverviewCategory = (typeof OVERVIEW_CATEGORIES)[number];
 
-export const OVERVIEW_PAGE_SIZES = [50, 100, 200, 500] as const;
+/** Same choices as the shared report table (REPORT_TABLE_PAGE_SIZE_OPTIONS). */
+export const OVERVIEW_PAGE_SIZES = [50, 100, 200, 500, 1000] as const;
 export type OverviewPageSize = (typeof OVERVIEW_PAGE_SIZES)[number];
+
+/** Server-side sort whitelist (`sort_by`); none = 8088 problem priority. */
+export const OVERVIEW_SORTS = ["daily", "wm_available", "supply", "cover", "oos_days", "n30", "gap_days"] as const;
+export type OverviewSortKey = (typeof OVERVIEW_SORTS)[number];
+export interface OverviewSort {
+  by?: OverviewSortKey;
+  order: "asc" | "desc";
+}
 
 export interface OverviewFilters {
   storeId?: string;
@@ -225,5 +234,7 @@ export interface OverviewReadMeta {
 export interface OverviewItemPage {
   rows: OverviewItemRow[];
   total: number;
+  /** Per category over rows matching every filter except `cats` (category buttons). */
+  categoryCounts?: Partial<Record<OverviewCategory, number>>;
   meta?: OverviewReadMeta;
 }

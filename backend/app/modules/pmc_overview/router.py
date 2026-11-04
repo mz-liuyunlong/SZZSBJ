@@ -114,7 +114,7 @@ def get_summary(
     response_model=SuccessEnvelope[OverviewItemListData, OverviewReadMeta],
     responses=READ_ERRORS,
     operation_id="listPmcOverviewItems",
-    summary="ItemID 主表（按问题优先级排序，分页）",
+    summary="ItemID 主表（默认按问题优先级，可按白名单字段排序，分页）",
 )
 def list_items(
     request: Request,
@@ -126,7 +126,9 @@ def list_items(
     rows, total = service.list_items(board, query)
     return success_response(
         request,
-        data=OverviewItemListData(items=rows),
+        data=OverviewItemListData(
+            items=rows, category_counts=service.category_counts(board, query)
+        ),
         meta=_meta(board, page=query.page, page_size=query.page_size, total=total),
     )
 

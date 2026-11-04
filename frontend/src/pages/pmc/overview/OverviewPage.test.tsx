@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { navigation } from "@/config/navigation";
 import OverviewPage from "@/pages/pmc/overview/OverviewPage";
@@ -52,7 +52,7 @@ beforeAll(() => {
 beforeEach(() => {
   clearPageStateCache();
   vi.mocked(getOverviewSummary).mockResolvedValue(syntheticSummary);
-  vi.mocked(listOverviewItems).mockResolvedValue({ rows: [syntheticRow()], total: 1 });
+  vi.mocked(listOverviewItems).mockResolvedValue({ rows: [syntheticRow()], total: 1, categoryCounts: { 已断货: 1 } });
   vi.mocked(getOverviewFilterOptions).mockResolvedValue({ stores: [], owners: ["Ann"], categories: [] });
 });
 
@@ -67,21 +67,46 @@ describe("OverviewPage", () => {
     expect(pmc?.children[0]).toMatchObject({ key: "pmc_overview", path: "/pmc/overview", readOnly: true });
   });
 
-  it("shows the data day, cards and rows, and filters by card", async () => {
+  it("uses the report pattern: ReportTableShell + ProTable, cards filter on the server", async () => {
     renderPage();
-    expect((await screen.findAllByText("2026-11-02")).length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { level: 1, name: "PMC 总看板" })).toBeInTheDocument();
     expect(await screen.findByText("SKU-A")).toBeInTheDocument();
-    expect(listOverviewItems).toHaveBeenLastCalledWith(expect.objectContaining({ onlyIssue: true, cats: [] }), 1, 50, expect.anything());
+    const shell = screen.getByRole("region", { name: "ItemID 主表" });
+    expect(shell).toHaveClass("report-table-shell");
+    expect(within(shell).getAllByRole("table").length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/2026-11-02/)).length).toBeGreaterThan(0);
+    expect(listOverviewItems).toHaveBeenLastCalledWith(
+      expect.objectContaining({ onlyIssue: true, cats: [] }), 1, 50, expect.anything(), { order: "desc" },
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /^已断货：/ }));
     await waitFor(() => expect(listOverviewItems).toHaveBeenLastCalledWith(
-      expect.objectContaining({ cats: ["已断货"], onlyIssue: true }), 1, 50, expect.anything(),
+      expect.objectContaining({ cats: ["已断货"], onlyIssue: true }), 1, 50, expect.anything(), { order: "desc" },
     ));
 
     fireEvent.click(screen.getByRole("button", { name: /^ItemID 总数：/ }));
     await waitFor(() => expect(listOverviewItems).toHaveBeenLastCalledWith(
-      expect.objectContaining({ cats: [], onlyIssue: false }), 1, 50, expect.anything(),
+      expect.objectContaining({ cats: [], onlyIssue: false }), 1, 50, expect.anything(), { order: "desc" },
     ));
+  });
+
+  it("commits the keyword search to the server, sorts on the server and resets", async () => {
+    renderPage();
+    await screen.findByText("SKU-A");
+    fireEvent.change(screen.getByRole("textbox", { name: "搜索 ItemID" }), { target: { value: " SKU-A " } });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "搜索 ItemID" }), { key: "Enter", code: "Enter" });
+    await waitFor(() => expect(listOverviewItems).toHaveBeenLastCalledWith(
+      expect.objectContaining({ keyword: "SKU-A" }), 1, 50, expect.anything(), { order: "desc" },
+    ));
+
+    const shell = screen.getByRole("region", { name: "ItemID 主表" });
+    fireEvent.click(within(shell).getAllByText("全链路供应")[0]);
+    await waitFor(() => expect(listOverviewItems).toHaveBeenLastCalledWith(
+      expect.objectContaining({ keyword: "SKU-A" }), 1, 50, expect.anything(), expect.objectContaining({ by: "supply" }),
+    ));
+
+    fireEvent.click(screen.getByRole("button", { name: "重置总看板筛选" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "搜索 ItemID" })).toHaveValue(""));
   });
 
   it("says the snapshot is missing instead of showing sample data", async () => {

@@ -8,6 +8,7 @@ import type {
   OverviewItemPage,
   OverviewReadMeta,
   OverviewRules,
+  OverviewSort,
   OverviewSummary,
   OverviewWarehouseData,
 } from "@/pages/pmc/overview/overviewTypes";
@@ -34,15 +35,25 @@ export async function listOverviewItems(
   page: number,
   pageSize: number,
   signal?: AbortSignal,
+  sort: OverviewSort = { order: "desc" },
 ): Promise<OverviewItemPage> {
   const query = buildOverviewFilterQuery(filters);
   query.set("page", String(page));
   query.set("page_size", String(pageSize));
-  const response = await backendRequest<{ items: OverviewItemPage["rows"] }, OverviewReadMeta>(
-    `${BASE}/items?${query.toString()}`,
-    { signal },
-  );
-  return { rows: response.data.items, total: response.meta?.total ?? 0, meta: response.meta };
+  if (sort.by) {
+    query.set("sort_by", sort.by);
+    query.set("sort_order", sort.order);
+  }
+  const response = await backendRequest<
+    { items: OverviewItemPage["rows"]; category_counts?: OverviewItemPage["categoryCounts"] },
+    OverviewReadMeta
+  >(`${BASE}/items?${query.toString()}`, { signal });
+  return {
+    rows: response.data.items,
+    total: response.meta?.total ?? 0,
+    categoryCounts: response.data.category_counts,
+    meta: response.meta,
+  };
 }
 
 export async function getOverviewItem(itemId: string, signal?: AbortSignal): Promise<OverviewItemDetail> {
