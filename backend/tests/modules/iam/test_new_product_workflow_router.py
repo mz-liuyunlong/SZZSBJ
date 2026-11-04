@@ -17,6 +17,7 @@ from app.modules.new_product_workflow.router import (
     ReviewWrite,
     RuleWrite,
     _identity,
+    list_independent_purchase_plans,
     list_workflows,
     router,
 )
@@ -125,6 +126,23 @@ def test_list_rejects_account_outside_principal_scope() -> None:
     assert error.value.status_code == 403
 
 
+def test_purchase_plans_refuse_out_of_scope_account() -> None:
+    request = Request(
+        {"type": "http", "method": "GET", "path": "/api/new-products/purchase-plans"}
+    )
+    with pytest.raises(ApiError) as error:
+        list_independent_purchase_plans(
+            request=request,
+            session=MagicMock(),
+            _=Principal(user_id="42", permissions=frozenset()),
+            accounts=frozenset({"account-a"}),
+            source_account_ref="account-b",
+            page=1,
+            page_size=50,
+        )
+    assert error.value.status_code == 403
+
+
 def test_unknown_sku_identity_fails_closed() -> None:
     session = MagicMock()
     session.execute.return_value.mappings.return_value.first.return_value = None
@@ -141,5 +159,6 @@ def test_workflow_router_registered_without_exposing_real_purchase_execution() -
     paths = {route.path for route in router.routes}
     assert "/api/new-products/workflows" in paths
     assert "/api/new-products/workflows/{sku_id}/purchase-decision" in paths
+    assert "/api/new-products/purchase-plans" in paths
     assert "/api/new-products/rules" in paths
     assert "/api/new-products/execute-purchase" not in paths

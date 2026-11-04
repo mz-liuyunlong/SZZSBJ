@@ -28,3 +28,10 @@
 - 满足历史观察窗口时，正式 API 必须返回 `launch.status=awaiting_approved_rules`、`launch.result=null`，不能仅因通过草稿阈值返回正式成功/失败。
 - 所有动作的 `reason`、`note`、`evidence` 必须至少有 5 个非空白字符。
 - 同账户请求以最后一次为准；切换账户必须丢弃旧查询结果；跨账户 API 响应应按异常处理而不是混合显示。
+
+## 独立新品计划（审批持久化）
+- 人工批准申请后，`POST /api/new-products/workflows/{sku_id}/purchase-decision` 会在同一事务保存审批状态、独立计划和审计事件。每个 SKU 与工作流计划唯一，不会重复生成。
+- `GET /api/new-products/purchase-plans?source_account_ref=<account>&page=<n>` 分页查看当前账号范围内的独立计划；越权 403。
+- 计划编号 `NP-<UUID>`，带申请数量、市场分、规则版本、审批人、审批意见、业务版本和不可变快照。
+- 计划状态 approved / not_executed **不表示下单、付款、入库或 PMC 采购单**。未批准的正式评分分档不因人工批准而自动成为有效评级。
+- 既有旧版 approved_draft 记录不自动补造计划；历史回填需额外批准。

@@ -10,6 +10,7 @@ import {
   decideNewProductPurchase,
   getNewProductWorkflows,
   getNewProductAccounts,
+  getIndependentNewProductPlans,
   getNewProductMetrics,
   requestNewProductPurchase,
   reviewNewProductLaunch,
@@ -17,6 +18,8 @@ import {
   verifyNewProductDates,
   type NewProductWorkflowList,
   type NewProductWorkflowRecord,
+  type NewProductPurchasePlan,
+  type NewProductPurchasePlanList,
   type NewProductMetrics,
 } from "./newProductApi";
 
@@ -30,6 +33,9 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
   const [accounts, setAccounts] = useState<string[]>([]);
   const [accountsError, setAccountsError] = useState<string | null>(null);
   const [data, setData] = useState<NewProductWorkflowList | null>(null);
+  const [planData, setPlanData] = useState<NewProductPurchasePlanList | null>(null);
+  const [planPage, setPlanPage] = useState(1);
+  const planGuard = useRef(createNewProductAccountGuard());
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -48,6 +54,7 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
         setAccounts(items);
         if (items.length === 1) {
           requestGuard.current.selectAccount(items[0]);
+          planGuard.current.selectAccount(items[0]);
           setAccount(items[0]);
         }
       })
@@ -57,6 +64,7 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
     return () => {
       cancelled = true;
       requestGuard.current.invalidate();
+      planGuard.current.invalidate();
     };
   }, []);
 
@@ -71,12 +79,30 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
       }
       setData(result);
       setPage(next);
+      void loadPlans(1);
     } catch (error) {
       if (requestGuard.current.isCurrent(ticket)) {
         api.error(error instanceof Error ? error.message : "读取真实数据失败");
       }
     } finally {
       if (requestGuard.current.isCurrent(ticket)) setBusy(false);
+    }
+  }
+
+  async function loadPlans(next = planPage) {
+    const ticket = planGuard.current.begin(account.trim());
+    try {
+      const result = await getIndependentNewProductPlans(ticket.account, next);
+      if (!planGuard.current.isCurrent(ticket)) return;
+      if (result.items.some(plan => plan.source_account_ref !== ticket.account)) {
+        throw new Error("采购计划账户不一致，已拒绝展示");
+      }
+      setPlanData(result);
+      setPlanPage(next);
+    } catch (error) {
+      if (planGuard.current.isCurrent(ticket)) {
+        api.error(error instanceof Error ? error.message : "独立新品计划读取失败");
+      }
     }
   }
 
@@ -139,7 +165,9 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
         await reviewNewProductLaunch(id, version, draft.result, draft.reason, draft.nextReview);
       }
       setRecord(null);
-      api.success("已记录到新品草稿流程");
+      api.success(action === "decision" && draft.decision === "approved_draft"
+        ? "审批已记录，独立新品计划已创建（未执行采购）"
+        : "已记录到新品工作流");
       await load(page);
     } catch (error) {
       api.error(error instanceof Error ? error.message : "提交失败");
@@ -161,6 +189,8 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
     { title: "账户", dataIndex: "source_account_ref", width: 130 },
     { title: "市场评分", dataIndex: "market_score", width: 95, render: v => v ?? "待评分" },
     { title: "申请采购量", dataIndex: "purchase_request_qty", width: 110, render: v => v ?? "—" },
+    { title: "独立计划编号", dataIndex: "plan_number", width: 300,
+      render: v => v ?? "—" },
     { title: "业务状态", dataIndex: "status", width: 130, render: v => <StatusTagCell label={({
       pending_market: "待市场评分", scored: "已评分", pending_purchase: "待审核",
       approved_draft: "草稿已批准", rejected: "已驳回",
@@ -177,9 +207,20 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
     } },
   ];
 
+  const planColumns: ProColumns<NewProductPurchasePlan>[] = [
+    { title: "独立计划编号", dataIndex: "plan_number", width: 330 },
+    { title: "SKU", dataIndex: "sku", width: 160 },
+    { title: "审批数量", dataIndex: "quantity", width: 100 },
+    { title: "审核人", dataIndex: "approved_by", width: 130 },
+    { title: "审核意见", dataIndex: "approval_note", ellipsis: true },
+    { title: "创建时间", dataIndex: "created_at", width: 180 },
+    { title: "执行状态", key: "execution_status", width: 120,
+      render: () => <StatusTagCell label="未执行采购" color="warning" /> },
+  ];
+
   return <Card title="正式数据 · 新品工作流" size="small">
     {context}
-    <Typography.Paragraph type="secondary">此入口读取数据库中的 SKU 身份及新品业务记录。没有选定账户时不会查询；采购审批只生成草稿决定，不会创建 PMC 采购单。</Typography.Paragraph>
+    <Typography.Paragraph type="secondary">此入口读取真实 SKU 和独立新品记录。人工批准后原子化生成独立计划；计划不会执行采购，也不写入 PMC。</Typography.Paragraph>
     {accountsError && <Alert type="error" showIcon message={accountsError} />}
     <Space wrap style={{ marginBottom: 16 }}>
       <Select style={{ width: 250 }} placeholder="选择有权限的数据账户"
@@ -187,8 +228,11 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
         showSearch optionFilterProp="label" options={accounts.map(value => ({ label: value, value }))}
         onChange={value => {
           requestGuard.current.selectAccount(value);
+          planGuard.current.selectAccount(value);
           setAccount(value);
           setData(null);
+          setPlanData(null);
+          setPlanPage(1);
           setMetricData(null);
           setRecord(null);
           setPage(1);
@@ -200,6 +244,13 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
       <ProTable<NewProductWorkflowRecord> rowKey="sku_identity_id" dataSource={data?.items ?? []} columns={columns} loading={busy}
         options={false} search={false} tableAlertRender={false} scroll={{ x: 1450 }} pagination={{ current: page, pageSize: 50, total: data?.total ?? 0,
           onChange: next => void load(next), showSizeChanger: false }} />
+    </ReportTableShell>
+    <ReportTableShell label="独立新品计划（已批准，尚未执行采购）">
+      <ProTable<NewProductPurchasePlan> rowKey="id" dataSource={planData?.items ?? []}
+        columns={planColumns} options={false} search={false} tableAlertRender={false}
+        scroll={{ x: 1200 }} pagination={{ current: planPage, pageSize: 50,
+          total: planData?.total ?? 0, showSizeChanger: false,
+          onChange: next => void loadPlans(next) }} />
     </ReportTableShell>
     <Modal title="真实经营数据及评分依据" open={metricData !== null} footer={null}
       onCancel={() => setMetricData(null)} width={1120}>
@@ -220,7 +271,7 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
         </Form.Item>}
         {action === "decision" && <Form.Item label="审批决定" required>
           <Select value={draft.decision} onChange={value => setDraft(s => ({ ...s, decision: value }))}
-            options={[{ label: "批准草稿（不生成采购单）", value: "approved_draft" },
+            options={[{ label: "批准并生成独立新品计划（不执行采购）", value: "approved_draft" },
               { label: "驳回", value: "rejected" }]} />
         </Form.Item>}
         {action === "dates" && <>
@@ -249,7 +300,7 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
             onChange={event => setDraft(s => ({ ...s, reason: event.target.value }))} />
         </Form.Item>
       </Form>
-      <Alert type="info" showIcon message="正式采购执行需走现有采购/审批模块，不在此草稿界面直接生成订单。" />
+      <Alert type="info" showIcon message="审批通过仅在新品模块生成独立计划，不会执行采购、不接 PMC；正式评分分档仍待批准。" />
     </Modal>
   </Card>;
 }

@@ -23,6 +23,7 @@ from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.new_product_workflow.field_access import redact_new_product_metrics
 from app.modules.new_product_workflow.metrics import la_today, read_sku_metrics
+from app.modules.new_product_workflow.purchase_plans import create_independent_purchase_plan
 from app.modules.new_product_workflow.rules import DEFAULT_RULES
 
 VIEW = "page:products:new-product-analysis:view"
@@ -297,6 +298,23 @@ def _edit(
         )
         after = _state(session, sku_id, lock=False)
 
+    if isinstance(payload, DecisionWrite) and payload.decision == "approved_draft":
+        # Both the independent plan and the audit event commit with the approval.
+        number = create_independent_purchase_plan(
+            session,
+            workflow_id=after["id"],
+            sku_identity_id=sku_id,
+            source_account_ref=identity["source_account_ref"],
+            quantity=int(before["purchase_request_qty"]),
+            market_score=int(before["market_score"]),
+            rule_version=int(rule_version),
+            approval_workflow_version=int(after["row_version"]),
+            approved_by=principal.user_id,
+            approval_note=reason,
+            purchase_reason=before["purchase_reason"] or "",
+        )
+        after = {**after, "plan_number": number}
+
     session.execute(
         text("""
             INSERT INTO product_new_workflow_events
@@ -365,7 +383,9 @@ def list_workflows(
                workflow.review_result, workflow.review_reason,
                workflow.review_due_at, workflow.reviewed_by, workflow.reviewed_at,
                workflow.arrival_date, workflow.sellable_date,
-               workflow.date_evidence, workflow.dates_verified_by, workflow.dates_verified_at
+               workflow.date_evidence, workflow.dates_verified_by, workflow.dates_verified_at,
+               plan.plan_number, plan.id AS plan_id,
+               plan.execution_status AS plan_execution_status
         FROM dwd_lingxing_sku_identity_index AS identity
         LEFT JOIN products AS p ON p.id = identity.product_id AND p.deleted_at IS NULL
         LEFT JOIN dwd_lingxing_sku_product_info_current AS detail
@@ -374,9 +394,61 @@ def list_workflows(
         LEFT JOIN product_new_workflows AS workflow
           ON workflow.sku_identity_id = identity.id
          AND workflow.source_account_ref = identity.source_account_ref
+        LEFT JOIN product_new_purchase_plans AS plan
+          ON plan.workflow_id = workflow.id
+         AND plan.source_account_ref = identity.source_account_ref
         WHERE identity.source_account_ref = :account AND identity.is_active IS TRUE
         ORDER BY identity.id LIMIT :size OFFSET :skip
     """),
+            params,
+        )
+        .mappings()
+        .all()
+    )
+    return success_response(
+        request, data={"items": [dict(row) for row in rows], "page": page, "total": int(total)}
+    )
+
+
+@router.get("/purchase-plans", response_model=SuccessEnvelope[dict[str, Any], None])
+def list_independent_purchase_plans(
+    request: Request,
+    session: db_session,
+    _: view_principal,
+    accounts: account_scope,
+    source_account_ref: str = Query(min_length=1, max_length=128),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
+) -> SuccessEnvelope[dict[str, Any], None]:
+    if source_account_ref not in accounts:
+        _block(403, ErrorCode.DATA_SCOPE_DENIED)
+    params = {"account": source_account_ref, "size": page_size, "skip": (page - 1) * page_size}
+    total = session.execute(
+        text(
+            "SELECT count(*) FROM product_new_purchase_plans "
+            "WHERE source_account_ref = :account"
+        ),
+        {"account": source_account_ref},
+    ).scalar_one()
+    rows = (
+        session.execute(
+            text(
+                """
+                SELECT plan.id, plan.plan_number, plan.sku_identity_id,
+                       plan.source_account_ref, identity.lingxing_sku_code AS sku,
+                       plan.quantity, plan.status, plan.execution_status,
+                       plan.market_score, plan.rule_version, plan.approved_by,
+                       plan.approval_note, plan.created_at,
+                       plan.approval_workflow_version
+                FROM product_new_purchase_plans AS plan
+                JOIN dwd_lingxing_sku_identity_index AS identity
+                  ON identity.id = plan.sku_identity_id
+                 AND identity.source_account_ref = plan.source_account_ref
+                WHERE plan.source_account_ref = :account
+                ORDER BY plan.created_at DESC, plan.id DESC
+                LIMIT :size OFFSET :skip
+                """
+            ),
             params,
         )
         .mappings()

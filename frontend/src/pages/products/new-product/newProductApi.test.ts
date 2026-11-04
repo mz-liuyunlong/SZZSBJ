@@ -3,6 +3,7 @@ import { backendRequest } from "@/api/backendApi";
 import {
   decideNewProductPurchase,
   getNewProductWorkflows,
+  getIndependentNewProductPlans,
   getNewProductAccounts,
   verifyNewProductDates,
   requestNewProductPurchase,
@@ -29,6 +30,18 @@ describe("new product server API identity and optimistic lock", () => {
     const accounts = await getNewProductAccounts();
     expect(accounts).toEqual([]);
     expect(backendRequest).toHaveBeenCalledWith("/api/new-products/source-accounts");
+  });
+
+  it("queries independent plans only within the selected account", async () => {
+    await getIndependentNewProductPlans("account-a", 3);
+    expect(backendRequest).toHaveBeenCalledWith(
+      "/api/new-products/purchase-plans?source_account_ref=account-a&page=3",
+    );
+  });
+
+  it("refuses independent plan queries without an account", async () => {
+    await expect(getIndependentNewProductPlans("")).rejects.toThrow("需要先选择真实数据账户");
+    expect(backendRequest).not.toHaveBeenCalled();
   });
 
   it("requires a selected account before requesting live data", async () => {

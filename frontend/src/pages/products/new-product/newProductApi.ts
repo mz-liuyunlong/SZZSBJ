@@ -57,6 +57,9 @@ export interface NewProductWorkflowRecord {
   row_version: number | null;
   market_score: number | null;
   purchase_request_qty: number | null;
+  plan_id?: string | null;
+  plan_number?: string | null;
+  plan_execution_status?: string | null;
   review_result: "observe" | "optimize" | "success" | "failure" | null;
   arrival_date?: string | null;
   sellable_date?: string | null;
@@ -65,6 +68,29 @@ export interface NewProductWorkflowRecord {
 
 export interface NewProductWorkflowList {
   items: NewProductWorkflowRecord[];
+  page: number;
+  total: number;
+}
+
+export interface NewProductPurchasePlan {
+  id: string;
+  plan_number: string;
+  sku_identity_id: string;
+  source_account_ref: string;
+  sku: string;
+  quantity: number;
+  status: "approved";
+  execution_status: "not_executed";
+  market_score: number;
+  rule_version: number;
+  approved_by: string;
+  approval_note: string;
+  approval_workflow_version: number;
+  created_at: string;
+}
+
+export interface NewProductPurchasePlanList {
+  items: NewProductPurchasePlan[];
   page: number;
   total: number;
 }
@@ -83,6 +109,16 @@ export async function getNewProductWorkflows(account: string, page = 1): Promise
   if (!account.trim()) throw new Error("需要先选择真实数据账户");
   const q = new URLSearchParams({ source_account_ref: account, page: String(page) });
   return (await backendRequest<NewProductWorkflowList>(`/api/new-products/workflows?${q}`)).data;
+}
+
+export async function getIndependentNewProductPlans(
+  account: string, page = 1,
+): Promise<NewProductPurchasePlanList> {
+  if (!account.trim()) throw new Error("需要先选择真实数据账户");
+  const q = new URLSearchParams({ source_account_ref: account, page: String(page) });
+  return (await backendRequest<NewProductPurchasePlanList>(
+    `/api/new-products/purchase-plans?${q}`,
+  )).data;
 }
 
 export async function getNewProductWorkflow(skuId: string) {
