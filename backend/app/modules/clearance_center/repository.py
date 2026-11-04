@@ -370,6 +370,8 @@ class ClearanceReadRepository:
                 text("""
           select source_account_ref,store_id,item_id,
             sum(sales_qty) filter(where business_date_la between :day - 29 and :day) sales30,
+            sum(gross_sales_qty) filter(where business_date_la between :day - 29 and :day)
+              gross_sales30,
             sum(sales_qty) filter(where business_date_la between :day - 6 and :day) sales7,
             sum(sales_qty) filter(where business_date_la between :day - 13 and :day - 7) prev7,
             sum(sales_amount) filter(where business_date_la between :day - 29 and :day) revenue30,
@@ -463,10 +465,14 @@ class ClearanceReadRepository:
             self.session.execute(
                 text("""
           select source_account_ref,store_id,item_id,
-            count(distinct snapshot_date_la) filter(where wfs_available_quantity is not null)
-              snapshot_days,
-            count(distinct snapshot_date_la) filter(where wfs_available_quantity>0)
-              positive_stock_days
+            count(distinct snapshot_date_la) filter(
+              where wfs_available_quantity is not null
+                and (captured_at at time zone 'America/Los_Angeles')::date=snapshot_date_la
+            ) snapshot_days,
+            count(distinct snapshot_date_la) filter(
+              where wfs_available_quantity>0
+                and (captured_at at time zone 'America/Los_Angeles')::date=snapshot_date_la
+            ) positive_stock_days
           from fact_walmart_listing_inventory_daily
           where source_account_ref=any(:accounts) and item_id=any(:items)
             and snapshot_date_la between :day - 29 and :day
@@ -530,11 +536,18 @@ class ClearanceReadRepository:
             # by itself prove that every Walmart page was captured. Be
             # conservative: incomplete source dates or unresolved allocations
             # invalidate the affected sales window, never manufacture zero.
+            gross30 = number(s.get("gross_sales30"))
+            mart_matches_source = bool(
+                (source_qty is None and gross30 is None)
+                or (source_qty is not None and gross30 is not None
+                    and source_qty == gross30)
+            )
             verified_30 = bool(
                 history.get("covered_days", 0) >= 30
                 and not history.get("unresolved_rows")
                 and not source.get("unresolved_rows")
                 and not source.get("missing_qty_rows")
+                and mart_matches_source
             )
             verified_7 = bool(
                 history.get("last7_days", 0) >= 7
@@ -617,6 +630,7 @@ class ClearanceReadRepository:
                 "source_sales_coverage_days_30d": int(history.get("covered_days") or 0),
                 "source_sales_coverage_days_7d": int(history.get("last7_days") or 0),
                 "source_sales_coverage_days_prev7": int(history.get("prev7_days") or 0),
+                "source_mart_qty_match": mart_matches_source,
                 "cost_complete": complete_costs,
                 "listing_days": listing_days,
                 "unit_cost_usd": unit_cost_usd,
@@ -659,6 +673,7 @@ class ClearanceReadRepository:
         value["source_sales_coverage_days_30d"] = metrics["source_sales_coverage_days_30d"]
         value["source_sales_coverage_days_7d"] = metrics["source_sales_coverage_days_7d"]
         value["source_sales_coverage_days_prev7"] = metrics["source_sales_coverage_days_prev7"]
+        value["source_mart_qty_match"] = metrics["source_mart_qty_match"]
         value["cost_complete"] = metrics["cost_complete"]
         value["calc_versions"] = metrics.get("calc_versions")
         value["as_of_date"] = metrics["as_of_date"]
