@@ -1,4 +1,5 @@
 """Pure V1 clearance rule regressions: no database or upstream APIs required."""
+
 from datetime import date
 
 import pytest
@@ -14,12 +15,23 @@ def listing(qty: int = 150, *, rating: float = 4.5):
 
 def metrics(sales: int = 30, **overrides):
     baseline = {
-        "sales30": sales, "sales7": 5, "prev7": 5,
-        "revenue30": 300, "revenue7": 70, "revenue_prev7": 70,
-        "profit30": 50, "profit7": 5, "profit_prev7": 5,
-        "ad7": 5, "ad_prev7": 5, "refund_qty": 0,
-        "positive_stock_days": 25, "inventory_fresh": True,
-        "sales_complete": True, "cost_complete": True, "listing_days": 100,
+        "sales30": sales,
+        "sales7": 5,
+        "prev7": 5,
+        "revenue30": 300,
+        "revenue7": 70,
+        "revenue_prev7": 70,
+        "profit30": 50,
+        "profit7": 5,
+        "profit_prev7": 5,
+        "ad7": 5,
+        "ad_prev7": 5,
+        "refund_qty": 0,
+        "positive_stock_days": 25,
+        "inventory_fresh": True,
+        "sales_complete": True,
+        "cost_complete": True,
+        "listing_days": 100,
     }
     baseline.update(overrides)
     return baseline
@@ -50,8 +62,7 @@ def test_assisted_coverage_needs_two_distinct_groups():
     only_profit = check(75, 30, profit30=-5, profit7=-1, profit_prev7=-1)
     assert only_profit["risk_level"] == "low"
     assert only_profit["business_signal_groups"] == ["PROFIT"]
-    with_sales = check(75, 30, profit30=-5, profit7=-1, profit_prev7=-1,
-                       sales7=2, prev7=20)
+    with_sales = check(75, 30, profit30=-5, profit7=-1, profit_prev7=-1, sales7=2, prev7=20)
     assert with_sales["risk_level"] == "medium"
     assert with_sales["business_signal_groups"] == ["PROFIT", "SALES"]
 
@@ -64,8 +75,16 @@ def test_sales_drop_requires_prior_sample_and_absolute_drop():
 
 
 def test_ads_compare_nonoverlapping_windows_and_require_loss():
-    base = dict(sales7=5, prev7=10, ad7=20, ad_prev7=5,
-                revenue7=100, revenue_prev7=100, profit7=-2, profit_prev7=5)
+    base = dict(
+        sales7=5,
+        prev7=10,
+        ad7=20,
+        ad_prev7=5,
+        revenue7=100,
+        revenue_prev7=100,
+        profit7=-2,
+        profit_prev7=5,
+    )
     result = check(75, 30, profit30=40, **base)
     assert "ADS" in result["business_signal_groups"]
     result = check(75, 30, profit30=40, **{**base, "profit7": 2})
