@@ -6,7 +6,7 @@ import socket
 import subprocess
 import threading
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from io import StringIO
 from pathlib import Path
@@ -34,6 +34,8 @@ from app.modules.data_pages.models import (
 from app.modules.iam.security import token_hash
 from app.modules.integration_sync.models import IntegrationInterface, IntegrationSyncConfig
 from app.modules.integration_sync.wfs_first_stock import observe_first_wfs_stock
+from app.modules.listing_rule_config import preview_router
+from app.modules.listing_rule_config.models import ListingEvaluationRun, ListingEvaluationSnapshot
 from app.modules.walmart_monitor.models import (
     RawWalmartMonitorEvent,
     StandardizedWalmartMonitorListingObservation,
@@ -210,6 +212,43 @@ def test_listing_page_and_real_api_with_isolated_postgres(
         )
         session.commit()
 
+    with Session(engine) as session:
+        published_listing = session.get(ListingManagementCurrentMart, active_listing_id)
+        assert published_listing is not None
+        published_listing.lifecycle_status = "启动期"
+        published_listing.product_grade = "B"
+        run = ListingEvaluationRun(
+            schedule_date_cn=date(2026, 10, 16),
+            cutoff_date_la=date(2026, 10, 14),
+            status="succeeded",
+            rule_version=1,
+            total_listings=1,
+            processed_listings=1,
+            published_count=1,
+            attempt_count=1,
+        )
+        session.add(run)
+        session.flush()
+        published_snapshot = ListingEvaluationSnapshot(
+            run_id=run.id,
+            listing_id=published_listing.id,
+            source_account_ref=published_listing.source_account_ref,
+            store_id=published_listing.store_id,
+            item_id=published_listing.item_id,
+            cutoff_date_la=run.cutoff_date_la,
+            lifecycle_candidate="启动期",
+            grade_candidate="B",
+            rule_version=1,
+            evidence_json=[],
+            publication_status="published",
+            published=True,
+            published_at=datetime.now(UTC),
+            published_by="system:listing-evaluation",
+        )
+        session.add(published_snapshot)
+        session.commit()
+        published_snapshot_id = published_snapshot.id
+
     _seed_real_iam(engine)
     app = create_app()
 
@@ -238,6 +277,48 @@ def test_listing_page_and_real_api_with_isolated_postgres(
 
     app.add_api_route("/__listing_test__/seed_extra", seed_cross_page_rows, methods=["POST"])
     with TestClient(app, headers={"Authorization": "Bearer synthetic-listing-a"}) as client:
+        with monkeypatch.context() as enabled:
+            enabled.setattr(
+                preview_router,
+                "get_settings",
+                lambda: get_settings().model_copy(
+                    update={
+                        "listing_evaluation_publish_enabled": True,
+                        "listing_evaluation_manual_enabled": True,
+                    }
+                ),
+            )
+            manual = client.post(
+                "/api/listings/evaluation-runs/manual",
+                json={"confirmation": "CONFIRM_LISTING_CALCULATE_ALL"},
+            )
+            assert manual.status_code == 403, manual.text
+            revert_path = f"/api/listings/evaluation-snapshots/{published_snapshot_id}/revert"
+            revert_body = {
+                "reason": "Synthetic correction after reviewed evidence",
+                "confirmation": "CONFIRM_LISTING_EVALUATION_REVERT",
+            }
+            denied = client.post(
+                revert_path,
+                json=revert_body,
+                headers={"Authorization": "Bearer synthetic-listing-viewer"},
+            )
+            assert denied.status_code == 403, denied.text
+            foreign = client.post(
+                revert_path,
+                json=revert_body,
+                headers={"Authorization": "Bearer synthetic-listing-b"},
+            )
+            assert foreign.status_code == 404, foreign.text
+            reverted = client.post(revert_path, json=revert_body)
+            assert reverted.status_code == 200, reverted.text
+            assert reverted.json()["data"]["publication_status"] == "reverted"
+            assert client.post(revert_path, json=revert_body).status_code == 409
+        with Session(engine) as session:
+            assert (
+                session.get(ListingManagementCurrentMart, active_listing_id).product_grade is None
+            )
+            assert session.get(ListingEvaluationSnapshot, published_snapshot_id).reverted_at
         with TestClient(app) as anonymous:
             assert anonymous.get("/api/listings/walmart").status_code == 401
         me = client.get("/api/auth/me")
@@ -696,6 +777,8 @@ def _seed_real_iam(engine) -> None:
             "action:products:listing-management:archive",
             "action:products:listing-management:restore",
             "action:products:listing-management:edit-analysis-link",
+            "action:products:listing-management:calculate-all",
+            "action:products:listing-management:revert-evaluation",
         )
         for permission in permissions:
             session.execute(
