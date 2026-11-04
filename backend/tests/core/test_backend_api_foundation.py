@@ -126,6 +126,68 @@ def test_permission_dependency_fails_closed_and_allows_matching_key() -> None:
     application.dependency_overrides.clear()
 
 
+def test_authentication_denial_logs_safe_stage(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING, logger="app.core.api"):
+        response = TestClient(create_app()).get(
+            "/api/auth/me",
+            headers={"X-Request-ID": "pr287-auth-denied", "Authorization": "Bearer private-token"},
+        )
+    assert response.status_code == 401
+    assert "stage=authentication" in caplog.text
+    assert "request_id=pr287-auth-denied" in caplog.text
+    assert "private-token" not in caplog.text
+
+
+def test_permission_denial_logs_canonical_gate_without_url_values(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    application = create_app()
+    gate = require_permission("page:settings:role-management:view")
+
+    @application.get("/denied-user/{private_id}")
+    def protected(
+        _: Annotated[Principal, Depends(gate)],
+    ) -> dict[str, bool]:
+        return {"ok": True}
+
+    application.dependency_overrides[get_optional_principal] = lambda: _principal()
+    with caplog.at_level(logging.WARNING, logger="app.core.api"):
+        response = TestClient(application).get(
+            "/denied-user/private-uid",
+            params={"access_token": "private-query-secret"},
+            headers={"X-Request-ID": "pr287-permission-denied"},
+        )
+
+    assert response.status_code == 403
+    assert "stage=permission" in caplog.text
+    assert "principal=test-user" in caplog.text
+    assert "required_permissions=page:settings:role-management:view" in caplog.text
+    assert "route=/denied-user/{private_id}" in caplog.text
+    assert "private-uid" not in caplog.text
+    assert "private-query-secret" not in caplog.text
+    application.dependency_overrides.clear()
+
+
+def test_data_scope_denial_has_distinct_stage_and_no_scope_values(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    application = create_app()
+
+    @application.get("/scope-denied/{private_store}")
+    def protected() -> None:
+        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
+
+    application.dependency_overrides[get_optional_principal] = lambda: _principal()
+    with caplog.at_level(logging.WARNING, logger="app.core.api"):
+        response = TestClient(application).get("/scope-denied/private-store-name")
+
+    assert response.status_code == 403
+    assert "stage=data_scope" in caplog.text
+    assert "route=/scope-denied/{private_store}" in caplog.text
+    assert "private-store-name" not in caplog.text
+    application.dependency_overrides.clear()
+
+
 def test_404_and_405_use_safe_envelopes() -> None:
     client = TestClient(create_app())
 
