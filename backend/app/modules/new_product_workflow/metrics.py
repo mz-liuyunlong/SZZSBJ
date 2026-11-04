@@ -34,6 +34,7 @@ def read_sku_metrics(
     rules: dict[str, Any],
     as_of: date | None = None,
     start_date: date | None = None,
+    score_overrides: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """Last completed LA business day, with exclusive end-boundary and null-safe coverage.
 
@@ -84,6 +85,8 @@ def read_sku_metrics(
                 SELECT sum(ad.num_ads_clicks) AS clicks,
                        sum(ad.ad_spend_amount) AS attributed_spend,
                        sum(ad.attributed_sales_amount) AS attributed_sales,
+                       sum(ad.attributed_orders) AS attributed_orders,
+                       sum(ad.num_ads_shown) AS impressions,
                        count(DISTINCT ad.ad_spend_currency_code)
                          FILTER (WHERE ad.ad_spend_currency_code IS NOT NULL)
                            AS spend_currencies,
@@ -160,6 +163,16 @@ def read_sku_metrics(
             if ad_spend is not None and sales_amount is not None and sales_amount > 0
             else None
         )
+        clicks_count = _number(clicks["clicks"])
+        ad_orders = _number(clicks["attributed_orders"])
+        impressions = _number(clicks["impressions"])
+        cpc = (
+            attributed_spend / clicks_count
+            if ads_same_currency and attributed_spend is not None and clicks_count
+            else None
+        )
+        cvr = ad_orders / clicks_count * 100 if ad_orders is not None and clicks_count else None
+        ctr = clicks_count / impressions * 100 if clicks_count is not None and impressions else None
         # Never infer that an absent MART day means a genuine zero-sales day.
         # A source publication/completeness ledger is required for that distinction.
         issues: list[str] = []
@@ -190,6 +203,13 @@ def read_sku_metrics(
             "revenue": sales_amount if consistent_currency else None,
             "ad_spend": ad_spend,
             "clicks": int(clicks["clicks"]) if clicks["clicks"] is not None else None,
+            "attributed_orders": ad_orders,
+            "impressions": impressions,
+            "cpc": cpc,
+            "cvr": cvr,
+            "ctr": ctr,
+            "roi": None,
+            "roi_status": "awaiting_approved_investment_cost_basis",
             "ad_days": int(clicks["ad_days"] or 0),
             "profit": (
                 profit if cost_days == observed and observed > 0 and consistent_currency else None
@@ -209,6 +229,66 @@ def read_sku_metrics(
     periods: dict[str, dict[str, Any]] = {}
     for days in PERIODS:
         periods[str(days)] = read_window(end - timedelta(days=days), end, days)
+
+    # Sales milestones are observations, not an approved score band.
+    milestones: dict[str, Any] = {
+        "first_order_date": None,
+        "days_to_first_order": None,
+        "sales_7d": None,
+        "sales_10d": None,
+        "sales_20d": None,
+        "coverage_20d": None,
+        "status": "awaiting_verified_sellable_date",
+    }
+    if start_date is not None:
+        pace = (
+            session.execute(
+                text(
+                    """
+                    SELECT min(business_date_la) FILTER (WHERE sales_qty > 0)
+                        AS first_order_date,
+                        sum(sales_qty) FILTER (
+                            WHERE business_date_la < :start + 7
+                        ) AS sales_7d,
+                        sum(sales_qty) FILTER (
+                            WHERE business_date_la < :start + 10
+                        ) AS sales_10d,
+                        sum(sales_qty) FILTER (
+                            WHERE business_date_la < :start + 20
+                        ) AS sales_20d,
+                        count(DISTINCT business_date_la) FILTER (
+                            WHERE business_date_la < :start + 7
+                        ) AS coverage_7d,
+                        count(DISTINCT business_date_la) FILTER (
+                            WHERE business_date_la < :start + 10
+                        ) AS coverage_10d,
+                        count(DISTINCT business_date_la) FILTER (
+                            WHERE business_date_la < :start + 20
+                        ) AS coverage_20d
+                    FROM mart_order_profit_sku_day
+                    WHERE source_account_ref = :account AND local_sku = :sku
+                      AND business_date_la >= :start
+                      AND business_date_la < :end
+                    """
+                ),
+                {"account": account, "sku": sku, "start": start_date, "end": end},
+            )
+            .mappings()
+            .one()
+        )
+        milestones["coverage_20d"] = int(pace["coverage_20d"] or 0)
+        if (end - start_date).days < 20 or int(pace["coverage_20d"] or 0) != 20:
+            milestones["status"] = "insufficient_business_day_coverage"
+        else:
+            milestones["status"] = "observed_not_formally_scored"
+            first = pace["first_order_date"]
+            milestones["first_order_date"] = first.isoformat() if first else None
+            milestones["days_to_first_order"] = (
+                (first - start_date).days if first else None
+            )
+            for window in (7, 10, 20):
+                if int(pace[f"coverage_{window}d"] or 0) == window:
+                    milestones[f"sales_{window}d"] = _number(pace[f"sales_{window}d"])
 
     inv = (
         session.execute(
@@ -241,6 +321,7 @@ def read_sku_metrics(
         "business_timezone": "America/Los_Angeles",
         "as_of_exclusive": end.isoformat(),
         "verified_start_date": start_date.isoformat() if start_date else None,
+        "order_milestones": milestones,
         "metric_definitions": {
             "acos": "attributed_spend / attributed_sales * 100; null if currency unknown",
             "ad_spend_ratio": "profit mart ad_spend / total sales_amount * 100; not ACOS",
@@ -260,6 +341,7 @@ def read_sku_metrics(
         metrics=periods["30"],
         rules=rules,
         rule_version=rule_version,
+        overrides=score_overrides,
     )
     launch_days = int(rules.get("success_days", 60))
     launch_window: dict[str, Any] = {}

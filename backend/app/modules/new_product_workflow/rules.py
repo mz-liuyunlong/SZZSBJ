@@ -20,6 +20,7 @@ def compute_new_product_score(
     metrics: dict[str, Any],
     rules: dict[str, Any],
     rule_version: int,
+    overrides: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     if market_score is None or not metrics.get("complete"):
         return {"status": "insufficient_data", "grade": None, "rule_version": rule_version}
@@ -36,6 +37,12 @@ def compute_new_product_score(
         "profit": max(0.0, min(10.0, (float(margin) + 20) / 5)),
         "trust": 10.0 if metrics["complete"] else 0.0,
     }
+    applied = overrides or {}
+    if any(key not in ("order", "ads", "profit", "trust") for key in applied):
+        raise ValueError("unsupported provisional scoring correction dimension")
+    if any(value < 0 or value > 10 for value in applied.values()):
+        raise ValueError("provisional correction score must be within 0-10")
+    values.update(applied)
     weights = rules.get("weights", DEFAULT_RULES["weights"])
     score = round(sum(values[key] * weights[key] for key in values) / 100, 2)
     grade = (
@@ -56,6 +63,7 @@ def compute_new_product_score(
         "provisional_grade": grade,
         "provisional_score": score,
         "components": values,
+        "approved_correction_dimensions": sorted(applied),
         "rule_version": rule_version,
         "note": "Not a formal grade: speed, CPC, CVR, ROI and penalty rules await approval.",
     }

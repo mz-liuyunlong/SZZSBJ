@@ -28,6 +28,10 @@ const columns: ProColumns<PeriodRow>[] = [
   { title: "广告归因销售额", dataIndex: "attributed_sales", width: 125,
     render: (_, row) => format(row.attributed_sales) },
   { title: "ACOS", dataIndex: "acos", width: 85, render: (_, row) => percent(row.acos) },
+  { title: "CPC", dataIndex: "cpc", width: 85, render: (_, row) => format(row.cpc) },
+  { title: "CVR", dataIndex: "cvr", width: 85, render: (_, row) => percent(row.cvr) },
+  { title: "归因订单", dataIndex: "attributed_orders", width: 110,
+    render: (_, row) => format(row.attributed_orders) },
   { title: "广告费占比", dataIndex: "ad_spend_ratio", width: 105,
     render: (_, row) => percent(row.ad_spend_ratio) },
   { title: "利润", dataIndex: "profit", width: 95, render: (_, row) => format(row.profit) },
@@ -71,6 +75,17 @@ export default function NewProductMetricsPanel({ metrics }: { metrics: NewProduc
       { key: "start", label: "已确认观察起点", children: metrics.verified_start_date ?? "待确认" },
       { key: "available", label: "可售库存", children: format(metrics.inventory.available) },
       { key: "wfs", label: "WFS 可售", children: format(metrics.inventory.wfs_available) },
+      { key: "first_order", label: "首次出单时间", children:
+        metrics.order_milestones?.first_order_date ?? "日期覆盖或观察起点待确认" },
+      { key: "first_order_days", label: "首次出单间隔（天）", children:
+        metrics.order_milestones?.days_to_first_order ?? "—" },
+      { key: "pace_7", label: "前7日销量", children:
+        format(metrics.order_milestones?.sales_7d) },
+      { key: "pace_10", label: "前10日销量", children:
+        format(metrics.order_milestones?.sales_10d) },
+      { key: "pace_20", label: "前20日销量", children:
+        format(metrics.order_milestones?.sales_20d) },
+      { key: "roi", label: "ROI", children: "待批准投资成本口径，暂不可计算" },
       { key: "score", label: "系统评分状态",
         children: metrics.score.status === "evaluated"
           ? `${format(metrics.score.score)} / ${metrics.score.grade ?? "—"}`
@@ -93,11 +108,13 @@ export default function NewProductMetricsPanel({ metrics }: { metrics: NewProduc
     <ReportTableShell label="真实30、60、90天经营指标">
       <ProTable<PeriodRow> rowKey="key" dataSource={rows} columns={columns}
         options={false} search={false} pagination={false} size="small" bordered
-        scroll={{ x: 1750 }} />
+        scroll={{ x: 2050 }} />
     </ReportTableShell>
     <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>
       ACOS 为广告归因花费 / 广告归因销售额；广告费占比为总广告费 / 总销售额。
-      两者不能互相替代。空值表示缺少可验证的数据，并不代表零。
+      两者不能互相替代。CPC 为广告归因花费/点击，CVR 为广告归因订单/点击；
+      未经归因核实和完整覆盖不可用于正式评分。ROI 在投资成本口径未批准前为空；
+      空值表示缺少可验证数据，并不代表零。
     </Typography.Paragraph>
   </>;
 }

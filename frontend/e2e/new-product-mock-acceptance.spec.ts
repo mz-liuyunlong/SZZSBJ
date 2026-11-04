@@ -56,6 +56,7 @@ for (const mode of [
     });
     await page.goto(`/#${mode.path}`);
     await expect(page.getByRole("heading", { name: mode.name, exact: true })).toBeVisible();
+    await page.getByRole("tab", { name: "Mock 样式验收 · 明细" }).click();
     await expect(page.locator(".npd-page .ant-pro-table").first()).toBeVisible();
     await expect(page.getByText(mode.table, { exact: true })).toBeVisible();
     await page.screenshot({
@@ -64,7 +65,7 @@ for (const mode of [
       animations: "disabled",
     });
 
-    await page.getByRole("tab", { name: mode.board }).click();
+    await page.getByRole("tab", { name: "Mock 样式验收 · 看板" }).click();
     await expect(page.locator(".npd-board")).toBeVisible();
     await expect(page.locator(".npd-board canvas").first()).toBeVisible();
     await page.screenshot({

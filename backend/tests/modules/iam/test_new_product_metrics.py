@@ -62,6 +62,8 @@ class _Session:
                     "clicks": 80,
                     "attributed_spend": 100,
                     "attributed_sales": 400,
+                    "attributed_orders": 15,
+                    "impressions": 4000,
                     "spend_currencies": 1,
                     "attributed_currencies": 1 if self.attributed_currency else 0,
                     "spend_currency": "USD",
@@ -72,6 +74,18 @@ class _Session:
                         if self.ad_days is not None
                         else (params["end"] - params["start"]).days
                     ),
+                }
+            )
+        if "AS first_order_date" in sql:
+            return _Result(
+                {
+                    "first_order_date": date(2026, 8, 3),
+                    "sales_7d": 21,
+                    "sales_10d": 30,
+                    "sales_20d": 60,
+                    "coverage_7d": 7,
+                    "coverage_10d": 10,
+                    "coverage_20d": 20,
                 }
             )
         if "FROM mart_listing_management_current" in sql:
@@ -99,6 +113,9 @@ def test_acos_uses_attributed_sales_not_total_sales() -> None:
     )
     period = data["periods"]["30"]
     assert period["acos"] == 25
+    assert period["cpc"] == 1.25
+    assert period["cvr"] == 18.75
+    assert period["roi"] is None
     assert period["ad_spend_ratio"] == 10
     assert period["attributed_sales"] == 400
     assert period["complete"] is True
@@ -122,7 +139,9 @@ def test_launch_uses_verified_first_window_not_latest_rolling_period() -> None:
     )
     assert data["verified_start_date"] == "2026-08-01"
     assert data["launch"] == {"status": "awaiting_approved_rules", "result": None}
-    assert len(session.queries) == 9  # 3 rolling windows, 1 launch window and inventory
+    assert len(session.queries) == 10  # 3 windows, launch window, milestones and inventory
+    assert data["order_milestones"]["days_to_first_order"] == 2
+    assert data["order_milestones"]["sales_7d"] == 21
 
 
 def test_candidate_failure_does_not_become_a_formal_launch_failure() -> None:

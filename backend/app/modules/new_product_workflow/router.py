@@ -18,9 +18,14 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode, SuccessEnvelope, get_request_id, success_response
 from app.core.auth import Principal
-from app.core.permissions import require_any_permission, require_permission
+from app.core.permissions import has_permission, require_any_permission, require_permission
 from app.db.session import get_db_session
+from app.modules.data_pages.field_access import (
+    ORDER_PROFIT_GROSS_PROFIT_PERMISSION,
+    ORDER_PROFIT_MARGIN_PERMISSION,
+)
 from app.modules.integration_sync.dependencies import require_source_account_scope
+from app.modules.new_product_workflow.dashboard import read_new_product_dashboard
 from app.modules.new_product_workflow.field_access import redact_new_product_metrics
 from app.modules.new_product_workflow.metrics import la_today, read_sku_metrics
 from app.modules.new_product_workflow.purchase_plans import create_independent_purchase_plan
@@ -94,6 +99,17 @@ class LaunchDateWrite(VersionedPayload):
         if max(self.arrival_date, self.sellable_date) > la_today():
             raise ValueError("Actual arrival and sellable dates cannot be in the future")
         return self
+
+
+class ScoreCorrectionWrite(VersionedPayload):
+    dimension: Literal["order", "ads", "profit", "trust"]
+    target_score: float = Field(ge=0, le=10)
+    reason: str = Field(min_length=5, max_length=1000)
+
+
+class ScoreCorrectionDecision(StrictPayload):
+    decision: Literal["approved", "rejected"]
+    note: str = Field(min_length=5, max_length=1000)
 
 
 class RuleWrite(StrictPayload):
@@ -207,6 +223,15 @@ def _edit(
         }
     elif isinstance(payload, DecisionWrite):
         if status != "pending_purchase" or not before["purchase_request_qty"]:
+            _block(409)
+        pending = session.execute(
+            text(
+                "SELECT EXISTS(SELECT 1 FROM product_new_score_corrections "
+                "WHERE sku_identity_id = :sku AND status = 'pending')"
+            ),
+            {"sku": sku_id},
+        ).scalar_one()
+        if pending:
             _block(409)
         reason = payload.note.strip()
         changes = {
@@ -336,6 +361,351 @@ def _edit(
     )
     session.commit()
     return after
+
+
+
+def _approved_corrections(session: Session, sku_id: UUID) -> dict[str, float]:
+    rows = (
+        session.execute(
+            text(
+                """
+                SELECT DISTINCT ON (dimension) dimension, requested_score
+                FROM product_new_score_corrections
+                WHERE sku_identity_id = :sku AND status = 'approved'
+                ORDER BY dimension, reviewed_at DESC, id DESC
+                """
+            ),
+            {"sku": sku_id},
+        )
+        .mappings()
+        .all()
+    )
+    return {row["dimension"]: float(row["requested_score"]) for row in rows}
+
+
+def _financial_correction_allowed(principal: Principal, dimension: str) -> bool:
+    if dimension != "profit":
+        return True
+    return has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION) and (
+        has_permission(principal, ORDER_PROFIT_MARGIN_PERMISSION)
+    )
+
+
+@router.get("/dashboard", response_model=SuccessEnvelope[dict[str, Any], None])
+def get_new_product_dashboard(
+    request: Request,
+    session: db_session,
+    _: view_principal,
+    accounts: account_scope,
+    source_account_ref: str = Query(min_length=1, max_length=128),
+) -> SuccessEnvelope[dict[str, Any], None]:
+    if source_account_ref not in accounts:
+        _block(403, ErrorCode.DATA_SCOPE_DENIED)
+    return success_response(
+        request,
+        data=read_new_product_dashboard(session, account=source_account_ref),
+    )
+
+
+@router.get("/score-corrections", response_model=SuccessEnvelope[dict[str, Any], None])
+def list_score_corrections(
+    request: Request,
+    session: db_session,
+    principal: view_principal,
+    accounts: account_scope,
+    source_account_ref: str = Query(min_length=1, max_length=128),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
+) -> SuccessEnvelope[dict[str, Any], None]:
+    if source_account_ref not in accounts:
+        _block(403, ErrorCode.DATA_SCOPE_DENIED)
+    allow_profit = _financial_correction_allowed(principal, "profit")
+    params = {
+        "account": source_account_ref,
+        "allow_profit": allow_profit,
+        "skip": (page - 1) * page_size,
+        "size": page_size,
+    }
+    where = (
+        "WHERE source_account_ref = :account "
+        "AND (:allow_profit OR dimension <> 'profit')"
+    )
+    count = session.execute(
+        text("SELECT count(*) FROM product_new_score_corrections " + where),
+        params,
+    ).scalar_one()
+    rows = (
+        session.execute(
+            text(
+                "SELECT id, sku_identity_id, source_account_ref, dimension, "
+                "from_score, requested_score, rule_version, status, "
+                "reason, requested_by, reviewed_by, review_note, created_at, "
+                "reviewed_at FROM product_new_score_corrections "
+                + where
+                + " ORDER BY created_at DESC, id DESC LIMIT :size OFFSET :skip"
+            ),
+            params,
+        )
+        .mappings()
+        .all()
+    )
+    return success_response(
+        request,
+        data={"items": [dict(row) for row in rows], "total": int(count), "page": page},
+    )
+
+
+@router.post(
+    "/workflows/{sku_id}/score-correction",
+    response_model=SuccessEnvelope[dict[str, Any], None],
+)
+def request_score_correction(
+    request: Request,
+    sku_id: UUID,
+    payload: ScoreCorrectionWrite,
+    session: db_session,
+    principal: Annotated[Principal, Depends(require_permission(SCORE))],
+    accounts: account_scope,
+) -> SuccessEnvelope[dict[str, Any], None]:
+    identity = _identity(session, sku_id, accounts)
+    before = _state(session, sku_id, lock=True)
+    if (
+        before["id"] is None
+        or before["row_version"] != payload.expected_version
+        or before["status"] not in ("scored", "pending_purchase", "rejected")
+    ):
+        _block(409)
+    if not _financial_correction_allowed(principal, payload.dimension):
+        _block(403)
+    rule = (
+        session.execute(
+            text(
+                "SELECT version, rule_json FROM product_new_rule_versions "
+                "ORDER BY version DESC LIMIT 1"
+            )
+        )
+        .mappings()
+        .first()
+    )
+    metrics = read_sku_metrics(
+        session,
+        account=identity["source_account_ref"],
+        sku=identity["lingxing_sku_code"],
+        market_score=before["market_score"],
+        rule_version=int(rule["version"]) if rule else 0,
+        rules=dict(rule["rule_json"]) if rule else DEFAULT_RULES,
+        score_overrides=_approved_corrections(session, sku_id),
+    )
+    components = metrics["score"].get("components", {})
+    original = components.get(payload.dimension)
+    if original is None or abs(float(original) - payload.target_score) < 0.01:
+        _block(422)
+    correction_id = uuid4()
+    evidence = {
+        "account": identity["source_account_ref"],
+        "sku_identity_id": str(sku_id),
+        "dimension": payload.dimension,
+        "before": float(original),
+        "requested": payload.target_score,
+        "rule_version": metrics["rule_version"],
+        "as_of_exclusive": metrics["as_of_exclusive"],
+        "data_issues": metrics["periods"]["30"]["data_issues"],
+        "formal_grade_approved": False,
+    }
+    inserted = session.execute(
+        text(
+            """
+            INSERT INTO product_new_score_corrections
+              (id, workflow_id, sku_identity_id, source_account_ref,
+               dimension, from_score, requested_score, rule_version,
+               status, reason, requested_by, evidence_json)
+            VALUES
+              (:id, :workflow, :sku, :account, :dimension,
+               :original, :requested, :rule_version, 'pending',
+               :reason, :actor, CAST(:evidence AS jsonb))
+            ON CONFLICT DO NOTHING RETURNING id
+            """
+        ),
+        {
+            "id": correction_id,
+            "workflow": before["id"],
+            "sku": sku_id,
+            "account": identity["source_account_ref"],
+            "dimension": payload.dimension,
+            "original": float(original),
+            "requested": payload.target_score,
+            "rule_version": metrics["rule_version"],
+            "reason": payload.reason.strip(),
+            "actor": principal.user_id,
+            "evidence": json.dumps(evidence),
+        },
+    ).scalar_one_or_none()
+    if inserted is None:
+        _block(409)
+    session.execute(
+        text(
+            "UPDATE product_new_workflows SET row_version = row_version + 1, "
+            "updated_at = now() WHERE id = :workflow"
+        ),
+        {"workflow": before["id"]},
+    )
+    session.execute(
+        text(
+            """
+            INSERT INTO product_new_workflow_events
+              (id, workflow_id, action, actor, reason, before_json, after_json, request_id)
+            VALUES
+              (:id, :workflow, 'correction_requested', :actor, :reason,
+               CAST(:before AS jsonb), CAST(:after AS jsonb), :request)
+            """
+        ),
+        {
+            "id": uuid4(),
+            "workflow": before["id"],
+            "actor": principal.user_id,
+            "reason": payload.reason.strip(),
+            "before": json.dumps({"dimension": payload.dimension, "value": original}),
+            "after": json.dumps(evidence),
+            "request": get_request_id(request),
+        },
+    )
+    session.commit()
+    return success_response(
+        request,
+        data={"id": correction_id, "status": "pending", "formal_grade": None},
+    )
+
+
+@router.post(
+    "/score-corrections/{correction_id}/decision",
+    response_model=SuccessEnvelope[dict[str, Any], None],
+)
+def decide_score_correction(
+    request: Request,
+    correction_id: UUID,
+    payload: ScoreCorrectionDecision,
+    session: db_session,
+    principal: Annotated[Principal, Depends(require_permission(APPROVE))],
+    accounts: account_scope,
+) -> SuccessEnvelope[dict[str, Any], None]:
+    row = (
+        session.execute(
+            text(
+                "SELECT * FROM product_new_score_corrections WHERE id = :id "
+                "AND source_account_ref = ANY(:accounts) FOR UPDATE"
+            ),
+            {"id": correction_id, "accounts": sorted(accounts)},
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        _block(404, ErrorCode.NOT_FOUND)
+    if row["status"] != "pending" or row["requested_by"] == principal.user_id:
+        _block(409)
+    if not _financial_correction_allowed(principal, row["dimension"]):
+        _block(403)
+    state = _state(session, row["sku_identity_id"], lock=True)
+    if state["status"] not in ("scored", "pending_purchase", "rejected"):
+        _block(409)
+    saved = session.execute(
+        text(
+            "UPDATE product_new_score_corrections SET status = :decision, "
+            "reviewed_by = :actor, review_note = :note, reviewed_at = now() "
+            "WHERE id = :id AND status = 'pending' RETURNING id"
+        ),
+        {
+            "id": correction_id,
+            "decision": payload.decision,
+            "actor": principal.user_id,
+            "note": payload.note.strip(),
+        },
+    ).scalar_one_or_none()
+    if saved is None:
+        _block(409)
+    # A corrected score invalidates a pending quantity request.
+    clear_purchase = payload.decision == "approved" and state["status"] == "pending_purchase"
+    if clear_purchase:
+        session.execute(
+            text(
+                "UPDATE product_new_workflows SET status = 'scored', "
+                "purchase_request_qty = NULL, purchase_reason = NULL, "
+                "row_version = row_version + 1, updated_at = now() WHERE id = :id"
+            ),
+            {"id": state["id"]},
+        )
+    else:
+        session.execute(
+            text(
+                "UPDATE product_new_workflows SET row_version = row_version + 1, "
+                "updated_at = now() WHERE id = :id"
+            ),
+            {"id": state["id"]},
+        )
+    session.execute(
+        text(
+            """
+            INSERT INTO product_new_workflow_events
+              (id, workflow_id, action, actor, reason, before_json, after_json, request_id)
+            VALUES
+              (:id, :workflow, 'correction_decided', :actor, :reason,
+               CAST(:before AS jsonb), CAST(:after AS jsonb), :request)
+            """
+        ),
+        {
+            "id": uuid4(),
+            "workflow": state["id"],
+            "actor": principal.user_id,
+            "reason": payload.note.strip(),
+            "before": json.dumps({"correction_id": str(correction_id), "status": "pending"}),
+            "after": json.dumps(
+                {
+                    "correction_id": str(correction_id),
+                    "status": payload.decision,
+                    "purchase_request_invalidated": clear_purchase,
+                    "formal_score_approved": False,
+                }
+            ),
+            "request": get_request_id(request),
+        },
+    )
+    session.commit()
+    return success_response(
+        request,
+        data={
+            "id": correction_id,
+            "status": payload.decision,
+            "purchase_request_invalidated": clear_purchase,
+        },
+    )
+
+
+@router.get("/rules/history", response_model=SuccessEnvelope[dict[str, Any], None])
+def list_rule_history(
+    request: Request,
+    session: db_session,
+    _: view_principal,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
+) -> SuccessEnvelope[dict[str, Any], None]:
+    total = session.execute(
+        text("SELECT count(*) FROM product_new_rule_versions")
+    ).scalar_one()
+    rows = (
+        session.execute(
+            text(
+                "SELECT version, actor, reason, created_at, rule_json "
+                "FROM product_new_rule_versions "
+                "ORDER BY version DESC LIMIT :size OFFSET :skip"
+            ),
+            {"size": page_size, "skip": (page - 1) * page_size},
+        )
+        .mappings()
+        .all()
+    )
+    return success_response(
+        request, data={"items": [dict(row) for row in rows], "total": int(total)}
+    )
 
 
 @router.get("/source-accounts", response_model=SuccessEnvelope[dict[str, Any], None])
@@ -527,6 +897,7 @@ def get_workflow_metrics(
         if state["arrival_date"] and state["sellable_date"] and state["dates_verified_by"]
         else None
     )
+    overrides = _approved_corrections(session, sku_id)
     metrics = read_sku_metrics(
         session,
         account=identity["source_account_ref"],
@@ -535,6 +906,7 @@ def get_workflow_metrics(
         rule_version=int(rule["version"]) if rule else 0,
         rules=dict(rule["rule_json"]) if rule else DEFAULT_RULES,
         start_date=verified_start,
+        score_overrides=overrides,
     )
     return success_response(
         request,

@@ -171,7 +171,7 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  const state=useNewProductStore(),c=state.config;
  const preferenceKey=mode==="performance"?"products:new-product:columns":"products:launch-tracking:columns";
  const stored=useMemo(()=>readUserPreference<{keys:string[];widths:Record<string,number>}>(username,preferenceKey,1),[username,preferenceKey]);
- const [widths,setWidths]=useState<Record<string,number>>(stored?.widths??{}),[cardKey,setCardKey]=useState("total"),[tab,setTab]=useState("list"),[trackingTab,setTrackingTab]=useState<TrackingWorkflowTab>("all"),[period,setPeriod]=useState<30|60|90>(60),[reviewProduct,setReviewProduct]=useState<ProductSample|null>(null),[reviewState,setReviewState]=useState<TrackState>("观察中"),[reviewDate,setReviewDate]=useState(""),[workflowTab,setWorkflowTab]=useState<ProductWorkflowTab>("all"),[filter,setFilter]=useState(empty),[field,setField]=useState<Filter["field"]>("sku"),[query,setQuery]=useState("");
+ const [widths,setWidths]=useState<Record<string,number>>(stored?.widths??{}),[cardKey,setCardKey]=useState("total"),[tab,setTab]=useState("live"),[trackingTab,setTrackingTab]=useState<TrackingWorkflowTab>("all"),[period,setPeriod]=useState<30|60|90>(60),[reviewProduct,setReviewProduct]=useState<ProductSample|null>(null),[reviewState,setReviewState]=useState<TrackState>("观察中"),[reviewDate,setReviewDate]=useState(""),[workflowTab,setWorkflowTab]=useState<ProductWorkflowTab>("all"),[filter,setFilter]=useState(empty),[field,setField]=useState<Filter["field"]>("sku"),[query,setQuery]=useState("");
  const [setting,setSetting]=useState(false),[columnsOpen,setColumnsOpen]=useState(false),[detail,setDetail]=useState<ProductSample|null>(null);
  const [market,setMarket]=useState<ProductSample|null>(null),[purchase,setPurchase]=useState<ProductSample|null>(null);
  const [correction,setCorrection]=useState<{p:ProductSample;d:Exclude<Dimension,"market">}|null>(null);
@@ -218,7 +218,11 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  <div className="npd-header"><div><Typography.Title level={4}>{mode==="performance"?"新品表现":"打品跟踪"}</Typography.Title>
  <Typography.Text type="secondary">{mode==="performance"?"测品评分 · 采购建议 · 开发人员表现":"采购后追踪 · 类目深挖 · 运营人员表现"}</Typography.Text></div>
  <Space><Typography.Text type="secondary">新品测评与采购跟踪</Typography.Text></Space></div>
- <Tabs activeKey={tab} onChange={setTab} items={[{key:"list",label:mode==="performance"?"新品表现":"打品跟踪"},{key:"board",label:mode==="performance"?"新品表现看板":"打品跟踪看板"},{key:"live",label:"正式数据"}]}/>
+ <Tabs activeKey={tab} onChange={setTab} items={[
+ {key:"live",label:mode==="performance"?"真实新品表现 · 明细与看板":"真实打品跟踪 · 明细与看板"},
+ {key:"list",label:"Mock 样式验收 · 明细"},
+ {key:"board",label:"Mock 样式验收 · 看板"}
+ ]}/>
  {tab!=="live"&&<div className="npd-toolbar">
  <ReportFacetSelect mode="multiple" ariaLabel="类目" placeholder="全部类目" value={filter.category} options={opts(state.products.map(p=>p.category))} onChange={v=>setFilter(f=>({...f,category:Array.isArray(v)?v:[]}))}/>
  <ReportFacetSelect mode="multiple" ariaLabel="开发人员" placeholder="开发人员" value={filter.developer} options={opts(state.products.map(p=>p.developer))} onChange={v=>setFilter(f=>({...f,developer:Array.isArray(v)?v:[]}))}/>
@@ -229,7 +233,7 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  <ResetButton onClick={()=>{setFilter(empty());setQuery("");setField("sku");}}/>
  <div className="npd-actions"><Space>{mode==="tracking"&&<Select value={period} onChange={setPeriod} style={{width:115}} options={[30,60,90].map(n=>({value:n,label:n+"天观察"}))}/>}<Button onClick={()=>{setCardKey("total");setWorkflowTab("all");setTrackingTab("all");setFilter(empty());setQuery("");api.success("已刷新当前筛选视图");}}>刷新</Button><Button onClick={()=>setColumnsOpen(true)}>列配置</Button>
  <Button type="primary" onClick={()=>setSetting(true)}>{mode==="performance"?"新品表现配置":"打品跟踪配置"}</Button></Space></div></div>}
- {tab==="live"?<NewProductLivePanel canScore={canScore} canRequest={canRequest} canApprove={canManage} canReview={canReview}/>:tab==="board"?<Board mode={mode} products={rows} c={mode==="tracking"?{...c,successWindow:period}:c} onCardSelect={key=>{setCardKey(key);setTab("list");}} onMarket={p=>{if(!canScore)return;setMarket(p);setScore(null);setReason("");}}/>:
+ {tab==="live"?<NewProductLivePanel mode={mode} canScore={canScore} canRequest={canRequest} canApprove={canManage} canReview={canReview} canConfigure={canConfigure}/>:tab==="board"?<Board mode={mode} products={rows} c={mode==="tracking"?{...c,successWindow:period}:c} onCardSelect={key=>{setCardKey(key);setTab("list");}} onMarket={p=>{if(!canScore)return;setMarket(p);setScore(null);setReason("");}}/>:
  <><div className="npd-board"><DashboardCards mode={mode} products={rows} c={{...c,successWindow:period}} activeKey={cardKey} onSelect={setCardKey}/></div>
  {mode==="performance"&&<Tabs className="npd-workflow-tabs" activeKey={workflowTab} onChange={x=>setWorkflowTab(x as ProductWorkflowTab)} items={[
  {key:"all",label:"全部新品 ("+rows.length+")"},

@@ -6,6 +6,11 @@ import {
   getIndependentNewProductPlans,
   getIndependentNewProductPlan,
   getNewProductAccounts,
+  getNewProductDashboard,
+  getNewProductScoreCorrections,
+  requestNewProductScoreCorrection,
+  decideNewProductScoreCorrection,
+  getNewProductRulesHistory,
   verifyNewProductDates,
   requestNewProductPurchase,
   saveMarketScore,
@@ -31,6 +36,51 @@ describe("new product server API identity and optimistic lock", () => {
     const accounts = await getNewProductAccounts();
     expect(accounts).toEqual([]);
     expect(backendRequest).toHaveBeenCalledWith("/api/new-products/source-accounts");
+  });
+
+  it("does not allow out-of-scope real dashboard and correction queries without account", async () => {
+    await expect(getNewProductDashboard("")).rejects.toThrow("需要先选择真实数据账户");
+    await expect(getNewProductScoreCorrections("")).rejects.toThrow("需要先选择真实数据账户");
+    expect(backendRequest).not.toHaveBeenCalled();
+  });
+
+  it("queries real category/owner status board by selected account", async () => {
+    await getNewProductDashboard("account & east");
+    expect(backendRequest).toHaveBeenCalledWith(
+      "/api/new-products/dashboard?source_account_ref=account+%26+east",
+    );
+  });
+
+  it("queries score corrections by scoped account and does not trust bare client filters", async () => {
+    await getNewProductScoreCorrections("account-a", 2);
+    expect(backendRequest).toHaveBeenCalledWith(
+      "/api/new-products/score-corrections?source_account_ref=account-a&page=2",
+    );
+  });
+
+  it("creates and reviews a versioned score correction", async () => {
+    await requestNewProductScoreCorrection(skuId, 3, "order", 6, "首单速度人工复核需要调整");
+    expect(backendRequest).toHaveBeenCalledWith(
+      `/api/new-products/workflows/${skuId}/score-correction`,
+      { method: "POST", body: JSON.stringify({
+        expected_version: 3,
+        dimension: "order",
+        target_score: 6,
+        reason: "首单速度人工复核需要调整",
+      }) },
+    );
+    await decideNewProductScoreCorrection(skuId, "approved", "已核对订单业务日和原始日志");
+    expect(backendRequest).toHaveBeenCalledWith(
+      `/api/new-products/score-corrections/${skuId}/decision`,
+      { method: "POST", body: JSON.stringify({
+        decision: "approved", note: "已核对订单业务日和原始日志",
+      }) },
+    );
+  });
+
+  it("loads historical configuration versions as drafts", async () => {
+    await getNewProductRulesHistory(3);
+    expect(backendRequest).toHaveBeenCalledWith("/api/new-products/rules/history?page=3");
   });
 
   it("queries independent plans only within the selected account", async () => {

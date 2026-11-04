@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createNewProductAccountGuard } from "./newProductAccountGuard";
-import { Alert, Button, Card, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Typography, message } from "antd";
+import { Alert, Button, Card, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Tabs, Typography, message } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import dayjs from "dayjs";
 import NewProductMetricsPanel from "./NewProductMetricsPanel";
@@ -13,6 +13,13 @@ import {
   getIndependentNewProductPlans,
   getIndependentNewProductPlan,
   getNewProductMetrics,
+  getNewProductDashboard,
+  getNewProductScoreCorrections,
+  getNewProductRules,
+  getNewProductRulesHistory,
+  requestNewProductScoreCorrection,
+  decideNewProductScoreCorrection,
+  updateNewProductDraftRules,
   requestNewProductPurchase,
   reviewNewProductLaunch,
   saveMarketScore,
@@ -23,15 +30,43 @@ import {
   type NewProductPurchasePlanList,
   type NewProductPurchasePlanDetail,
   type NewProductMetrics,
+  type NewProductDashboard,
+  type NewProductScoreCorrection,
+  type NewProductCorrectionList,
+  type NewProductDraftRules,
+  type NewProductRulesHistory,
+  type NewProductRealMode,
 } from "./newProductApi";
 
-type Action = "market" | "request" | "decision" | "review" | "dates";
-type Draft = { score?: number; quantity?: number; reason: string; decision?: "approved_draft" | "rejected"; result?: "observe" | "optimize"; nextReview?: string; arrivalDate?: string; sellableDate?: string };
+type Action = "market" | "request" | "decision" | "review" | "dates" | "correction" | "correction-decision";
+type PanelTab = "overview" | "records" | "plans" | "corrections" | "rules";
+type Draft = {
+  score?: number;
+  quantity?: number;
+  reason: string;
+  decision?: "approved_draft" | "rejected";
+  correctionDecision?: "approved" | "rejected";
+  dimension?: "order" | "ads" | "trust";
+  result?: "observe" | "optimize";
+  nextReview?: string;
+  arrivalDate?: string;
+  sellableDate?: string;
+};
 
-export default function NewProductLivePanel({ canScore, canRequest, canApprove, canReview }: {
+export default function NewProductLivePanel({ mode, canScore, canRequest, canApprove, canReview, canConfigure }: {
+  mode: NewProductRealMode;
   canScore: boolean; canRequest: boolean; canApprove: boolean; canReview: boolean;
+  canConfigure: boolean;
 }) {
   const [account, setAccount] = useState("");
+  const [panelTab, setPanelTab] = useState<PanelTab>("overview");
+  const [dashboard, setDashboard] = useState<NewProductDashboard | null>(null);
+  const [corrections, setCorrections] = useState<NewProductCorrectionList | null>(null);
+  const [correctionRecord, setCorrectionRecord] = useState<NewProductScoreCorrection | null>(null);
+  const [rules, setRules] = useState<NewProductDraftRules | null>(null);
+  const [ruleHistory, setRuleHistory] = useState<NewProductRulesHistory | null>(null);
+  const [ruleReason, setRuleReason] = useState("");
+  const [ruleSaving, setRuleSaving] = useState(false);
   const [accounts, setAccounts] = useState<string[]>([]);
   const [accountsError, setAccountsError] = useState<string | null>(null);
   const [data, setData] = useState<NewProductWorkflowList | null>(null);
@@ -39,6 +74,8 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
   const [planDetail, setPlanDetail] = useState<NewProductPurchasePlanDetail | null>(null);
   const [planPage, setPlanPage] = useState(1);
   const planGuard = useRef(createNewProductAccountGuard());
+  const boardGuard = useRef(createNewProductAccountGuard());
+  const correctionGuard = useRef(createNewProductAccountGuard());
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -58,6 +95,8 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
         if (items.length === 1) {
           requestGuard.current.selectAccount(items[0]);
           planGuard.current.selectAccount(items[0]);
+          boardGuard.current.selectAccount(items[0]);
+          correctionGuard.current.selectAccount(items[0]);
           setAccount(items[0]);
         }
       })
@@ -68,6 +107,8 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
       cancelled = true;
       requestGuard.current.invalidate();
       planGuard.current.invalidate();
+      boardGuard.current.invalidate();
+      correctionGuard.current.invalidate();
     };
   }, []);
 
@@ -83,6 +124,8 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
       setData(result);
       setPage(next);
       void loadPlans(1);
+      void loadDashboard();
+      void loadCorrections();
     } catch (error) {
       if (requestGuard.current.isCurrent(ticket)) {
         api.error(error instanceof Error ? error.message : "读取真实数据失败");
@@ -129,6 +172,81 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
     }
   }
 
+  async function loadDashboard() {
+    if (!account.trim()) return;
+    const ticket = boardGuard.current.begin(account.trim());
+    try {
+      const next = await getNewProductDashboard(ticket.account);
+      if (!boardGuard.current.isCurrent(ticket)) return;
+      if (next.account !== ticket.account) throw new Error("正式看板账户校验失败");
+      setDashboard(next);
+    } catch (error) {
+      if (boardGuard.current.isCurrent(ticket)) {
+        api.error(error instanceof Error ? error.message : "真实看板读取失败");
+      }
+    }
+  }
+
+  async function loadCorrections() {
+    if (!account.trim()) return;
+    const ticket = correctionGuard.current.begin(account.trim());
+    try {
+      const next = await getNewProductScoreCorrections(ticket.account);
+      if (!correctionGuard.current.isCurrent(ticket)) return;
+      if (next.items.some(item => item.source_account_ref !== ticket.account)) {
+        throw new Error("评分修正账户范围不一致");
+      }
+      setCorrections(next);
+    } catch (error) {
+      if (correctionGuard.current.isCurrent(ticket)) {
+        api.error(error instanceof Error ? error.message : "修正记录读取失败");
+      }
+    }
+  }
+
+  async function loadRuleHistory() {
+    try {
+      const [current, history] = await Promise.all([
+        getNewProductRules(),
+        getNewProductRulesHistory(),
+      ]);
+      setRules({
+        ...current,
+        rule_json: current.rule_json ?? {
+          weights: { market: 15, order: 30, ads: 20, profit: 25, trust: 10 },
+          success_days: 60, min_sales: 200, min_margin: 0, max_acos: 35,
+        },
+      });
+      setRuleHistory(history);
+    } catch (error) {
+      api.error(error instanceof Error ? error.message : "草稿规则历史读取失败");
+    }
+  }
+
+  async function saveDraftRules() {
+    if (!canConfigure || !rules?.rule_json || ruleReason.trim().length < 5) {
+      api.warning("需要配置权限、草稿规则和至少5字的变更说明");
+      return;
+    }
+    if (Object.values(rules.rule_json.weights).reduce((sum, weight) => sum + weight, 0) !== 100) {
+      api.warning("五维权重之和必须为100%");
+      return;
+    }
+    setRuleSaving(true);
+    try {
+      await updateNewProductDraftRules({
+        ...rules.rule_json, expected_version: rules.version, reason: ruleReason,
+      });
+      await loadRuleHistory();
+      setRuleReason("");
+      api.success("草稿规则版本已记录，未自动成为正式评分依据");
+    } catch (error) {
+      api.error(error instanceof Error ? error.message : "规则版本提交失败");
+    } finally {
+      setRuleSaving(false);
+    }
+  }
+
   async function inspectMetrics(row: NewProductWorkflowRecord) {
     if (row.source_account_ref !== account.trim()) {
       api.error("当前数据账户不一致，已拒绝读取");
@@ -154,22 +272,44 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
 
   function open(row: NewProductWorkflowRecord, nextAction: Action) {
     setRecord(row);
+    setCorrectionRecord(null);
     setAction(nextAction);
     setDraft({ reason: "" });
   }
 
+  function openCorrectionDecision(item: NewProductScoreCorrection) {
+    setRecord(null);
+    setCorrectionRecord(item);
+    setAction("correction-decision");
+    setDraft({ reason: "" });
+  }
+
   async function submit() {
-    if (!record) return;
+    if (!record && !correctionRecord) return;
     if (draft.reason.trim().length < 5) {
       api.warning("原因至少填写5个字");
       return;
     }
-    const version = record.row_version ?? 0;
-    const id = record.sku_identity_id;
+    const version = record?.row_version ?? 0;
+    const id = record?.sku_identity_id ?? "";
     setBusy(true);
     setSubmitting(true);
     try {
-      if (action === "market") {
+      if (action === "correction-decision") {
+        if (!canApprove || !correctionRecord || !draft.correctionDecision) {
+          throw new Error("没有修正审核权限或决定为空");
+        }
+        await decideNewProductScoreCorrection(
+          correctionRecord.id, draft.correctionDecision, draft.reason,
+        );
+      } else if (action === "correction") {
+        if (!canScore || !draft.dimension || draft.score == null) {
+          throw new Error("没有修正申请权限或维度和分数为空");
+        }
+        await requestNewProductScoreCorrection(
+          id, version, draft.dimension, draft.score, draft.reason,
+        );
+      } else if (action === "market") {
         if (!canScore || draft.score == null) throw new Error("没有评分权限或评分为空");
         await saveMarketScore(id, version, draft.score, draft.reason);
       } else if (action === "request") {
@@ -188,6 +328,7 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
         await reviewNewProductLaunch(id, version, draft.result, draft.reason, draft.nextReview);
       }
       setRecord(null);
+      setCorrectionRecord(null);
       api.success(action === "decision" && draft.decision === "approved_draft"
         ? "审批已记录，独立新品计划已创建（未执行采购）"
         : "已记录到新品工作流");
@@ -200,6 +341,27 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
     }
   }
 
+  const statusLabels: Record<string, string> = {
+    pending_market: "待市场评分", scored: "已评分",
+    pending_purchase: "待采购审批", approved_draft: "独立计划已批准",
+    rejected: "已驳回",
+  };
+  const trackingLabels: Record<string, string> = {
+    not_in_pool: "未进入打品池", awaiting_sellable: "待确认可售",
+    observing: "观察中", optimize: "需要优化", due_review: "待复盘",
+  };
+  const getTrackingStatus = (row: NewProductWorkflowRecord): string => {
+    if (row.status !== "approved_draft") return "not_in_pool";
+    if (!row.arrival_date || !row.sellable_date) return "awaiting_sellable";
+    if (row.review_result === "optimize") return "optimize";
+    return "observing";
+  };
+  const groupBoard = mode === "performance" ? "purchase_status" : "tracking_status";
+  const groupNames = dashboard?.groups[groupBoard] ?? [];
+  const visibleRows = mode === "tracking"
+    ? (data?.items ?? []).filter(row => row.status === "approved_draft")
+    : (data?.items ?? []);
+
   const columns: ProColumns<NewProductWorkflowRecord>[] = [
     { title: "SKU", dataIndex: "sku", width: 150 },
     { title: "商品名称", dataIndex: "product_name", ellipsis: true },
@@ -211,6 +373,10 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
     { title: "已确认可售日", dataIndex: "sellable_date", width: 130, render: v => v ?? "—" },
     { title: "账户", dataIndex: "source_account_ref", width: 130 },
     { title: "市场评分", dataIndex: "market_score", width: 95, render: v => v ?? "待评分" },
+    { title: "打品阶段", width: 125, key: "tracking-stage",
+      render: (_, row) => trackingLabels[getTrackingStatus(row)] },
+    { title: "复盘结果", dataIndex: "review_result", width: 115,
+      render: v => v === "optimize" ? "需要优化" : v === "observe" ? "继续观察" : "—" },
     { title: "申请采购量", dataIndex: "purchase_request_qty", width: 110, render: v => v ?? "—" },
     { title: "独立计划编号", dataIndex: "plan_number", width: 300,
       render: v => v ?? "—" },
@@ -222,6 +388,8 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
       const state = row.status ?? "pending_market";
       return <Space wrap size={0}><Button type="link" onClick={() => void inspectMetrics(row)}>经营指标</Button>
         {canScore && state === "pending_market" && <Button type="link" onClick={() => open(row, "market")}>市场评分</Button>}
+        {canScore && (state === "scored" || state === "pending_purchase" || state === "rejected")
+          && <Button type="link" onClick={() => open(row, "correction")}>评分修正</Button>}
         {canRequest && (state === "scored" || state === "rejected") && <Button type="link" onClick={() => open(row, "request")}>采购申请</Button>}
         {canApprove && state === "pending_purchase" && <Button type="link" onClick={() => open(row, "decision")}>草稿审批</Button>}
         {canReview && state === "approved_draft" && <Button type="link" onClick={() => open(row, "dates")}>确认到货/可售日</Button>}
@@ -243,7 +411,26 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
       render: (_, row) => <Button type="link" onClick={() => void inspectPlan(row)}>详情</Button> },
   ];
 
-  return <Card title="正式数据 · 新品工作流" size="small">
+  const correctionColumns: ProColumns<NewProductScoreCorrection>[] = [
+    { title: "SKU 身份", dataIndex: "sku_identity_id", width: 280 },
+    { title: "维度", dataIndex: "dimension", width: 90,
+      render: v => ({
+        order: "出单速度", ads: "广告有效性", profit: "利润空间",
+        trust: "数据可信度",
+      } as Record<string, string>)[String(v)] ?? String(v) },
+    { title: "原始分", dataIndex: "from_score", width: 95 },
+    { title: "申请分", dataIndex: "requested_score", width: 95 },
+    { title: "原因", dataIndex: "reason", ellipsis: true },
+    { title: "状态", dataIndex: "status", width: 110,
+      render: v => v === "approved" ? "已批准（仅预估）"
+        : v === "rejected" ? "已驳回" : "待审核" },
+    { title: "操作", key: "action", width: 105,
+      render: (_, item) => item.status === "pending" && canApprove
+        ? <Button type="link" onClick={() => openCorrectionDecision(item)}>审核</Button>
+        : "—" },
+  ];
+
+  return <Card title={mode === "performance" ? "真实新品表现" : "真实打品跟踪"} size="small">
     {context}
     <Typography.Paragraph type="secondary">此入口读取真实 SKU 和独立新品记录。人工批准后原子化生成独立计划；计划不会执行采购，也不写入 PMC。</Typography.Paragraph>
     {accountsError && <Alert type="error" showIcon message={accountsError} />}
@@ -254,7 +441,14 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
         onChange={value => {
           requestGuard.current.selectAccount(value);
           planGuard.current.selectAccount(value);
+          boardGuard.current.selectAccount(value);
+          correctionGuard.current.selectAccount(value);
           setAccount(value);
+          setDashboard(null);
+          setCorrections(null);
+          setCorrectionRecord(null);
+          setRules(null);
+          setRuleHistory(null);
           setData(null);
           setPlanData(null);
           setPlanDetail(null);
@@ -266,18 +460,142 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
         }} />
       <Button type="primary" loading={busy} disabled={!account.trim()} onClick={() => void load(1)}>加载真实数据</Button>
     </Space>
-    <ReportTableShell label="真实新品工作流列表">
-      <ProTable<NewProductWorkflowRecord> rowKey="sku_identity_id" dataSource={data?.items ?? []} columns={columns} loading={busy}
+    <Tabs activeKey={panelTab} onChange={next => {
+      setPanelTab(next as PanelTab);
+      if (next === "rules") void loadRuleHistory();
+    }} items={[
+      { key: "overview", label: mode === "performance" ? "真实新品看板" : "真实打品看板" },
+      { key: "records", label: "真实 SKU 明细" },
+      { key: "plans", label: "独立新品计划" },
+      { key: "corrections", label: "评分修正审核" },
+      { key: "rules", label: "草稿规则与历史" },
+    ]} />
+    {panelTab === "overview" && <>
+      <Space wrap style={{ marginBottom: 12 }}>
+        <Card size="small"><Typography.Text type="secondary">实际 SKU 数量</Typography.Text>
+          <Typography.Title level={4}>{dashboard?.total ?? "—"}</Typography.Title></Card>
+        <Card size="small"><Typography.Text type="secondary">正式评级 / 成功率</Typography.Text>
+          <Typography.Title level={5}>尚未批准</Typography.Title></Card>
+        <Card size="small"><Typography.Text type="secondary">账户</Typography.Text>
+          <Typography.Text>{dashboard?.account ?? "尚未加载"}</Typography.Text></Card>
+      </Space>
+      <Alert type="info" showIcon style={{ marginBottom: 12 }}
+        message="此看板只展示数据库真实分类与状态数量；尚无已批准评分阈值，不生成虚假的正式等级或打品成功率。" />
+      <ReportTableShell label="真实业务状态分布">
+        <ProTable rowKey="name" search={false} options={false} pagination={false}
+          dataSource={groupNames} columns={[
+            { title: "业务阶段", dataIndex: "name",
+              render: (_, item) => groupBoard === "purchase_status"
+                ? (statusLabels[item.name] ?? item.name)
+                : (trackingLabels[item.name] ?? item.name) },
+            { title: "SKU 数", dataIndex: "count" },
+          ]} />
+      </ReportTableShell>
+      <ReportTableShell label="真实类目 / 负责人分布">
+        <ProTable rowKey="id" search={false} options={false} pagination={false}
+          dataSource={(["category", "developer", "operator"] as const).flatMap(kind =>
+            (dashboard?.groups[kind] ?? []).map(row => ({
+              id: kind + ":" + row.name, kind, ...row,
+            })),
+          )}
+          columns={[
+            { title: "分组", dataIndex: "kind",
+              render: value => ({ category: "类目", developer: "开发人员", operator: "运营人员" } as Record<string,string>)[String(value)] },
+            { title: "名称", dataIndex: "name" },
+            { title: "SKU 数", dataIndex: "count" },
+          ]} />
+      </ReportTableShell>
+    </>}
+    {panelTab === "records" && <ReportTableShell label="真实新品工作流列表">
+      <ProTable<NewProductWorkflowRecord> rowKey="sku_identity_id" dataSource={visibleRows} columns={columns} loading={busy}
         options={false} search={false} tableAlertRender={false} scroll={{ x: 1450 }} pagination={{ current: page, pageSize: 50, total: data?.total ?? 0,
           onChange: next => void load(next), showSizeChanger: false }} />
-    </ReportTableShell>
-    <ReportTableShell label="独立新品计划（已批准，尚未执行采购）">
+    </ReportTableShell>}
+    {panelTab === "plans" && <ReportTableShell label="独立新品计划（已批准，尚未执行采购）">
       <ProTable<NewProductPurchasePlan> rowKey="id" dataSource={planData?.items ?? []}
         columns={planColumns} options={false} search={false} tableAlertRender={false}
         scroll={{ x: 1200 }} pagination={{ current: planPage, pageSize: 50,
           total: planData?.total ?? 0, showSizeChanger: false,
           onChange: next => void loadPlans(next) }} />
-    </ReportTableShell>
+    </ReportTableShell>}
+    {panelTab === "corrections" && <ReportTableShell label="评分修正申请和审核（仅预估）">
+      <ProTable<NewProductScoreCorrection> rowKey="id"
+        dataSource={corrections?.items ?? []} columns={correctionColumns}
+        options={false} search={false} pagination={{ pageSize: 50 }}
+        scroll={{ x: 1100 }} />
+    </ReportTableShell>}
+    {panelTab === "rules" && <>
+      <Alert type="warning" showIcon style={{ marginBottom: 12 }}
+        message="规则版本仍为草稿，不会自动发布正式 S/A/B/C/D 等级或代替经营数据口径验收。" />
+      <Descriptions size="small" column={2} items={[
+        { key: "version", label: "当前草稿版本", children: rules ? "V" + rules.version : "未加载" },
+        { key: "author", label: "最近修改人", children: rules?.actor ?? "—" },
+        { key: "reason", label: "修改依据", children: rules?.reason ?? "—" },
+        { key: "history", label: "历史版本数", children: ruleHistory?.total ?? "—" },
+      ]} />
+      <ReportTableShell label="已保存的规则历史">
+        <ProTable rowKey="version" dataSource={ruleHistory?.items ?? []}
+          options={false} search={false} pagination={false}
+          columns={[
+            { title: "版本", dataIndex: "version", width: 80 },
+            { title: "修改人", dataIndex: "actor", width: 120 },
+            { title: "变更说明", dataIndex: "reason" },
+            { title: "创建时间", dataIndex: "created_at", width: 190 },
+          ]} />
+      </ReportTableShell>
+      {canConfigure && rules?.rule_json && <>
+        <Typography.Title level={5} style={{ marginTop: 12 }}>
+          草稿规则编辑（不会自动发布正式评级）
+        </Typography.Title>
+        <Space wrap style={{ marginBottom: 12 }}>
+          {(["market", "order", "ads", "profit", "trust"] as const).map(key => (
+            <div key={key} style={{ width: 126 }}>
+              <Typography.Text type="secondary">{({
+                market: "市场", order: "出单", ads: "广告",
+                profit: "利润", trust: "可信度",
+              } as const)[key]}权重</Typography.Text>
+              <InputNumber min={0} max={100} precision={0} style={{ width: "100%" }}
+                value={rules.rule_json!.weights[key]}
+                onChange={v => setRules(current => current?.rule_json
+                  ? { ...current, rule_json: {
+                    ...current.rule_json, weights: {
+                      ...current.rule_json.weights, [key]: v ?? 0,
+                    },
+                  } } : current)} />
+            </div>
+          ))}
+          <div style={{ width: 126 }}>
+            <Typography.Text type="secondary">观察期</Typography.Text>
+            <Select style={{ width: "100%" }} value={rules.rule_json.success_days}
+              options={[30, 60, 90].map(v => ({ value: v, label: v + "天" }))}
+              onChange={v => setRules(current => current?.rule_json
+                ? { ...current, rule_json: {
+                  ...current.rule_json, success_days: v as 30 | 60 | 90,
+                } } : current)} />
+          </div>
+          {(["min_sales", "min_margin", "max_acos"] as const).map(key => (
+            <div key={key} style={{ width: 130 }}>
+              <Typography.Text type="secondary">{({
+                min_sales: "最低销量", min_margin: "最低利润率",
+                max_acos: "最高ACOS",
+              } as const)[key]}</Typography.Text>
+              <InputNumber style={{ width: "100%" }} precision={key === "min_sales" ? 0 : 2}
+                min={key === "min_margin" ? -100 : key === "min_sales" ? 1 : 0}
+                max={key === "min_sales" ? undefined : 100}
+                value={rules.rule_json![key]}
+                onChange={v => setRules(current => current?.rule_json
+                  ? { ...current, rule_json: { ...current.rule_json, [key]: v ?? 0 } }
+                  : current)} />
+            </div>
+          ))}
+        </Space>
+        <Input.TextArea rows={2} value={ruleReason} onChange={e => setRuleReason(e.target.value)}
+          placeholder="草稿规则变更说明（至少5字）" style={{ marginTop: 12 }} />
+        <Button type="primary" loading={ruleSaving} onClick={() => void saveDraftRules()}>
+          保存当前草稿规则新版本（不发布正式评分）
+        </Button>
+      </>}
+    </>}
     <Modal title="独立新品计划详情（未执行采购）" open={planDetail !== null}
       onCancel={() => setPlanDetail(null)} footer={null} width={710}>
       {planDetail && <>
@@ -299,11 +617,42 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
       onCancel={() => setMetricData(null)} width={1120}>
       {metricData && <NewProductMetricsPanel metrics={metricData} />}
     </Modal>
-    <Modal title={action === "market" ? "市场评分" : action === "request" ? "申请采购" :
-      action === "decision" ? "审批采购草稿" : action === "dates" ? "确认打品观察起点" : "打品复盘"} open={!!record} confirmLoading={busy}
-      onCancel={() => setRecord(null)} onOk={() => void submit()} okText="保存">
+    <Modal title={action === "correction" ? "申请修正预估评分"
+      : action === "correction-decision" ? "审核评分修正"
+      : action === "market" ? "市场评分" : action === "request" ? "申请采购" :
+      action === "decision" ? "审批采购草稿" : action === "dates" ? "确认打品观察起点" : "打品复盘"} open={!!record || !!correctionRecord} confirmLoading={busy}
+      onCancel={() => { setRecord(null); setCorrectionRecord(null); }}
+      onOk={() => void submit()} okText="保存">
       <Form layout="vertical">
         <Typography.Paragraph>{record?.sku} · {record?.product_name}</Typography.Paragraph>
+        {action === "correction" && <>
+          <Form.Item label="需要修正的预估维度" required>
+            <Select value={draft.dimension}
+              onChange={value => setDraft(s => ({ ...s, dimension: value }))}
+              options={[
+                { value: "order", label: "出单速度" },
+                { value: "ads", label: "广告有效性" },
+                { value: "trust", label: "数据可信度" },
+              ]} />
+          </Form.Item>
+          <Form.Item label="调整后分数（仅预估，0–10）" required>
+            <InputNumber min={0} max={10} precision={2} value={draft.score}
+              onChange={value => setDraft(s => ({ ...s, score: value ?? undefined }))}
+              style={{ width: "100%" }} />
+          </Form.Item>
+        </>}
+        {action === "correction-decision" && <>
+          <Typography.Paragraph>
+            维度：{correctionRecord?.dimension} · 原始分 {correctionRecord?.from_score}
+            · 申请分 {correctionRecord?.requested_score}
+          </Typography.Paragraph>
+          <Form.Item label="审核决定" required>
+            <Select value={draft.correctionDecision}
+              onChange={value => setDraft(s => ({ ...s, correctionDecision: value }))}
+              options={[{ label: "批准预估修正", value: "approved" },
+                { label: "驳回", value: "rejected" }]} />
+          </Form.Item>
+        </>}
         {action === "market" && <Form.Item label="市场评分（0–10）" required>
           <InputNumber min={0} max={10} precision={0} value={draft.score}
             onChange={value => setDraft(s => ({ ...s, score: value ?? undefined }))} style={{ width: "100%" }} />
