@@ -67,20 +67,22 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
-    bind.execute(
+    # A rollback must not erase live role grants or silently change access rights.
+    grants = bind.execute(
         text(
             """
-            DELETE FROM app_role_permissions
-            WHERE permission_key IN (
-                SELECT permission_key
-                FROM app_permissions
-                WHERE page_key IN ('products_new_product_analysis', 'products_launch_tracking')
-                  AND permission_key <> :existing_page_permission
-            )
+            SELECT count(*)
+            FROM app_role_permissions AS grant_record
+            JOIN app_permissions AS permission
+              ON permission.permission_key = grant_record.permission_key
+            WHERE permission.page_key IN ('products_new_product_analysis', 'products_launch_tracking')
+              AND permission.permission_key <> :existing_page_permission
             """
         ),
         {"existing_page_permission": EXISTING_PAGE_PERMISSION},
-    )
+    ).scalar_one()
+    if grants:
+        raise RuntimeError("NEW_PRODUCT_RBAC_DOWNGRADE_BLOCKED_ACTIVE_GRANTS")
     bind.execute(
         text(
             """
