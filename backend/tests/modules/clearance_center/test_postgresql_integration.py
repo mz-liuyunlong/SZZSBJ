@@ -145,6 +145,15 @@ def test_real_clearance_listing_application_approval_and_progress(clearance_db: 
             "reviewer-3",
         )
 
+    # A request approved for price reductions and ads cannot report WFS removals.
+    with pytest.raises(ApiError):
+        service.progress(
+            request_id,
+            ProgressWrite(sold_qty=0, removed_qty=1, disposed_qty=0, expected_version=2),
+            allowed,
+            "operator-1",
+        )
+
     finished = service.progress(
         request_id,
         ProgressWrite(sold_qty=4, removed_qty=0, disposed_qty=0, expected_version=2),
