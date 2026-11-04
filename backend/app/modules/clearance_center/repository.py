@@ -273,6 +273,20 @@ class ClearanceReadRepository:
         value["stock_capital_usd"] = (
             str(qty * unit_cost) if qty is not None and unit_cost is not None else None
         )
+        value["high_stock_capital"] = bool(
+            qty is not None
+            and unit_cost is not None
+            and qty * unit_cost >= Decimal(str(rules["high_stock_capital_usd"]))
+        )
+        alerts: list[str] = []
+        inbound = number(listing.get("inbound_quantity"))
+        if inbound is not None and inbound > 0:
+            alerts.append("INBOUND_STOCK_PRESENT")
+        if listing.get("buybox_status") in (
+            "未拥有", "LOST", "NOT_OWNED", "secondary", "other"
+        ):
+            alerts.append("BUYBOX_ISSUE")
+        value["conflict_alerts"] = alerts
         value["current_wfs_available"] = str(qty) if qty is not None else None
         value["inventory_captured_at"] = (
             listing["inventory_captured_at"].isoformat()
