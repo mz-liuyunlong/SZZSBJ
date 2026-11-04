@@ -7,6 +7,7 @@ No production connection, no external Walmart calls and no mock clearance rows.
 from __future__ import annotations
 
 import os
+from time import perf_counter
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -14,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, event, select, text
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError
@@ -506,3 +507,111 @@ def test_clearance_review_permission_is_not_wfs_review_permission(
         evaluation = detail.json()["data"]["evaluation"]
         assert evaluation["stock_capital_usd"] is None
         assert evaluation["margin_30d_percent"] is None
+
+
+def test_large_listing_page_uses_bounded_sql_queries(clearance_db: Session) -> None:
+    """2500 Listings: SQL counting and paging must not become a per-item query loop."""
+    account = "clearance-ci-pagination-load"
+    store = "ci-pagination-load-store"
+    now = datetime.now(UTC)
+    day = now.astimezone(ZoneInfo("America/Los_Angeles")).date()
+    run_id = str(uuid4())
+    clearance_db.execute(
+        text("""
+            insert into ops_clearance_daily_runs
+                (id,run_date_la,as_of_date_la,status,started_at,finished_at)
+            values (cast(:id as uuid),:day,:as_of,'succeeded',:now,:now)
+            on conflict (run_date_la) do nothing
+        """),
+        {"id": run_id, "day": day, "as_of": day - timedelta(days=1), "now": now},
+    )
+    clearance_db.commit()
+    run = ClearanceService(clearance_db).repo.latest_completed_run()
+    assert run is not None
+
+    listings = []
+    results = []
+    for index in range(2500):
+        listing_id = uuid4()
+        item = f"ci-load-{index:05d}"
+        listings.append({
+            "id": listing_id,
+            "source_account_ref": account,
+            "platform_code": "walmart",
+            "store_id": store,
+            "item_id": item,
+            "local_sku": item,
+            "msku": item,
+            "title": f"Page load synthetic Listing {index}",
+            "fulfillment_type": "WFS",
+            "wfs_available_quantity": Decimal(9),
+            "sales_7d": Decimal(0),
+            "sales_14d": Decimal(0),
+            "sales_30d": Decimal(0),
+            "listing_start_at_utc": now - timedelta(days=120),
+            "calculated_at": now,
+        })
+        results.append({
+            "id": uuid4(),
+            "run_id": UUID(run["id"]),
+            "listing_id": listing_id,
+            "source_account_ref": account,
+            "store_id": store,
+            "item_id": item,
+            "risk_level": "high",
+            "candidate_status": "auto",
+            "quality_status": "partial",
+            "rule_version": "ci-load-fixture",
+            "rule_config_version": 0,
+            "evaluation_json": {"risk_level": "high", "candidate_status": "auto"},
+            "evaluated_at": now,
+        })
+    from sqlalchemy import insert
+
+    clearance_db.execute(insert(ListingManagementCurrentMart), listings)
+    clearance_db.execute(
+        text("""
+            insert into ops_clearance_daily_evaluations
+                (id,run_id,listing_id,source_account_ref,store_id,item_id,
+                 risk_level,candidate_status,quality_status,
+                 rule_version,rule_config_version,evaluation_json,evaluated_at)
+            values (:id,:run_id,:listing_id,:source_account_ref,:store_id,:item_id,
+                    :risk_level,:candidate_status,:quality_status,
+                    :rule_version,:rule_config_version,
+                    cast(:evaluation_json as jsonb),:evaluated_at)
+        """),
+        [
+            {**row, "evaluation_json": '{"risk_level":"high","candidate_status":"auto"}'}
+            for row in results
+        ],
+    )
+    clearance_db.commit()
+
+    service = ClearanceService(clearance_db)
+    statements: list[str] = []
+
+    def count_sql(_conn, _cursor, statement, _parameters, _context, _many):
+        if statement.lstrip().lower().startswith("select"):
+            statements.append(statement)
+
+    engine = clearance_db.get_bind()
+    event.listen(engine, "before_cursor_execute", count_sql)
+    started = perf_counter()
+    try:
+        first = service.repo.snapshot_page(
+            frozenset({account}), run=run, store_id=store, page=1, page_size=100
+        )
+        last = service.repo.snapshot_page(
+            frozenset({account}), run=run, store_id=store, page=25, page_size=100
+        )
+    finally:
+        duration = perf_counter() - started
+        event.remove(engine, "before_cursor_execute", count_sql)
+
+    assert first["total"] == last["total"] == 2500
+    assert len(first["items"]) == len(last["items"]) == 100
+    assert {x["listing"]["id"] for x in first["items"]}.isdisjoint(
+        {x["listing"]["id"] for x in last["items"]}
+    )
+    assert len(statements) == 4, "SQL query count must not grow with Listing count"
+    assert duration < 15, f"Two 100-row SQL pages took {duration:.2f}s"
