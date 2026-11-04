@@ -169,6 +169,36 @@ def test_permission_denial_logs_canonical_gate_without_url_values(
     application.dependency_overrides.clear()
 
 
+def test_multiple_action_denial_logs_missing_gate_without_sensitive_query(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from app.core.permissions import require_any_permission
+
+    application = create_app()
+    gate = require_any_permission(
+        "action:settings:user-management:edit",
+        "action:settings:user-management:assign-role",
+    )
+
+    @application.patch("/role-gate/{private_identifier}")
+    def protected(_: Annotated[Principal, Depends(gate)]) -> dict[str, bool]:
+        return {"ok": True}
+
+    application.dependency_overrides[get_optional_principal] = lambda: _principal()
+    with caplog.at_level(logging.WARNING, logger="app.core.api"):
+        response = TestClient(application).patch(
+            "/role-gate/private-user-id",
+            params={"secret": "not-for-audit"},
+        )
+    assert response.status_code == 403
+    assert "stage=permission" in caplog.text
+    assert "action:settings:user-management:edit" in caplog.text
+    assert "action:settings:user-management:assign-role" in caplog.text
+    assert "not-for-audit" not in caplog.text
+    assert "private-user-id" not in caplog.text
+    application.dependency_overrides.clear()
+
+
 def test_data_scope_denial_has_distinct_stage_and_no_scope_values(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
