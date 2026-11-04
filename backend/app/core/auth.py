@@ -253,6 +253,8 @@ def enforce_protected_by_default(
     principal: Annotated[Principal | None, Depends(get_optional_principal)],
 ) -> None:
     path = request.scope.get("path")
+    if principal is not None:
+        request.state.authenticated_principal_id = principal.user_id
     if path in PUBLIC_ENDPOINT_PATHS or path in PUBLIC_AUTH_ENDPOINT_PATHS:
         return
     if (
