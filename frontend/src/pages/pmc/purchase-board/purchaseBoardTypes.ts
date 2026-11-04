@@ -228,7 +228,7 @@ export interface MoneyByCurrency {
 }
 
 export interface PurchaseBoardSummary {
-  scopeLimited: boolean;
+  scopeLimited?: boolean;
   awaitingArrivalOrders: number;
   arrivalOverdueOrders: number;
   purchaseOverdueOrders: number;
@@ -260,7 +260,7 @@ export interface PurchaseOrderPlanRef {
 }
 
 export interface PurchaseOrderDetail {
-  scopeLimited: boolean;
+  scopeLimited?: boolean;
   purchaseOrderSn: string;
   orderStatus: number | null;
   orderDate: string | null;
