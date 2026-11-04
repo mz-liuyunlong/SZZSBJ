@@ -121,9 +121,24 @@ def upgrade() -> None:
     bind = op.get_bind()
     for key, label, action_key, page_key in (
         ("action:products:clearance:apply", "清货申请", "apply", "products_clearance_center"),
-        ("action:products:clearance:review", "清货审批", "review", "data_center_approval_workspace"),
-        ("action:products:clearance:configure", "清货规则配置", "configure", "products_clearance_center"),
-        ("action:products:clearance:progress", "清货执行进度", "progress", "products_clearance_center"),
+        (
+            "action:products:clearance:review",
+            "清货审批",
+            "review",
+            "data_center_approval_workspace",
+        ),
+        (
+            "action:products:clearance:configure",
+            "清货规则配置",
+            "configure",
+            "products_clearance_center",
+        ),
+        (
+            "action:products:clearance:progress",
+            "清货执行进度",
+            "progress",
+            "products_clearance_center",
+        ),
     ):
         bind.execute(
             sa.text(
