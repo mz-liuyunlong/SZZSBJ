@@ -40,3 +40,7 @@
 6. 供应链到货、不可售/重新上架、暂停售卖对观察期的影响。
 
 以上任一项尚未核实均不允许宣称相关正式接口或采购自动化 READY。数据源门禁参见 `docs/delivery/backend-data-source-decision-gate.md`。
+
+## 聚合完整性补充
+- 仅通过 `count(distinct currency_code)=1` 不能证明全部日明细都具备币种；只要存在 NULL 币种行，就把该期间相关财务或广告归因计算视为不可验证。
+- 广告事实表可能只记录存在广告活动的日期；没有来源发布证明时，`ad_days < days` 不能被推断为确实零广告。返回 `ad_coverage_unverified`，不生成完整评分。

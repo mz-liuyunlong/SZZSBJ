@@ -44,6 +44,7 @@ const columns: ProColumns<PeriodRow>[] = [
       margin_unavailable: "利润率不可计算",
       ad_spend_unavailable: "广告费缺失",
       ad_clicks_unavailable: "广告点击缺失",
+      ad_coverage_unverified: "广告业务日覆盖未确认",
       attributed_acos_unavailable: "归因 ACOS 不可计算",
     } as Record<string, string>)[code] ?? code).join("、") || "—" },
   { title: "数据状态", key: "complete", width: 95,

@@ -10,10 +10,10 @@ from app.core.auth import Principal
 from app.core.permissions import require_permission
 from app.modules.new_product_workflow.router import (
     APPROVE,
+    DecisionWrite,
     LaunchDateWrite,
     MarketWrite,
     PurchaseWrite,
-    DecisionWrite,
     ReviewWrite,
     RuleWrite,
     _identity,

@@ -62,7 +62,11 @@ def read_sku_metrics(
                        count(DISTINCT sales_currency_code)
                            FILTER (WHERE sales_currency_code IS NOT NULL) AS sales_currencies,
                        min(sales_currency_code) AS sales_currency,
-                       min(gross_profit_currency_code) AS profit_currency
+                       min(gross_profit_currency_code) AS profit_currency,
+                       count(*) FILTER (
+                           WHERE sales_currency_code IS NULL
+                              OR gross_profit_currency_code IS NULL
+                       ) AS missing_currency_rows
                 FROM mart_order_profit_sku_day
                 WHERE source_account_ref = :account AND local_sku = :sku
                   AND business_date_la >= :start AND business_date_la < :end
@@ -88,6 +92,10 @@ def read_sku_metrics(
                            AS attributed_currencies,
                        min(ad.ad_spend_currency_code) AS spend_currency,
                        min(ad.attributed_sales_currency_code) AS attributed_currency,
+                       count(*) FILTER (
+                           WHERE ad.ad_spend_currency_code IS NULL
+                              OR ad.attributed_sales_currency_code IS NULL
+                       ) AS missing_ad_currency_rows,
                        count(DISTINCT ad.business_date_la) AS ad_days
                 FROM fact_walmart_ad_item_sp_daily AS ad
                 WHERE ad.source_account_ref = :account
@@ -115,6 +123,7 @@ def read_sku_metrics(
             int(sales["currencies"] or 0) == 1
             and int(sales["sales_currencies"] or 0) == 1
             and sales["sales_currency"] == sales["profit_currency"]
+            and int(sales["missing_currency_rows"] or 0) == 0
         )
         margin = (
             (profit / sales_amount * 100)
@@ -134,6 +143,7 @@ def read_sku_metrics(
             int(clicks["spend_currencies"] or 0) == 1
             and int(clicks["attributed_currencies"] or 0) == 1
             and clicks["spend_currency"] == clicks["attributed_currency"]
+            and int(clicks["missing_ad_currency_rows"] or 0) == 0
         )
         acos = (
             (attributed_spend / attributed_sales * 100)
@@ -165,6 +175,10 @@ def read_sku_metrics(
             issues.append("ad_spend_unavailable")
         if clicks["clicks"] is None:
             issues.append("ad_clicks_unavailable")
+        # The ad fact might omit valid zero-spend days; without a publication
+        # ledger those days cannot be declared complete or invented as zeros.
+        if int(clicks["ad_days"] or 0) != days:
+            issues.append("ad_coverage_unverified")
         if acos is None:
             issues.append("attributed_acos_unavailable")
         return {
