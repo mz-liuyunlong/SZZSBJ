@@ -211,12 +211,14 @@ class ClearanceReadRepository:
         costs: dict[str, dict] = {}
         for account in accounts:
             costs[account] = load_daily_sales_costs(self.session, source_account_ref=account)
+
         def key(row: dict) -> tuple[str, str, str]:
             return (
                 str(row["source_account_ref"]),
                 str(row["store_id"]),
                 str(row["item_id"]),
             )
+
         s_map = {key(r): dict(r) for r in sales}
         i_map = {key(r): dict(r) for r in snapshots}
         r_map = {key(r): dict(r) for r in refunds}
