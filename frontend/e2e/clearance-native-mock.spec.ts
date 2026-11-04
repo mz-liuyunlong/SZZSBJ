@@ -146,3 +146,39 @@ test("stale midnight evaluation is blocked but live WFS picker remains available
   await page.getByRole("button",{name:"申请 SKU"}).click();
   await expect(page.getByText("真实接口验收商品")).toBeVisible();
 });
+
+
+test("analysis Listing scroll fetches 50 at a time without page buttons",async({page})=>{
+  const requestedPages:number[]=[];
+  await prepare(page,[]);
+  await page.route("**/api/products/clearance-center/listings?**",async route=>{
+    const url=new URL(route.request().url());
+    const current=Number(url.searchParams.get("page")||1);
+    requestedPages.push(current);
+    const start=(current-1)*50;
+    const items=Array.from({length:Math.max(0,Math.min(50,110-start))},(_,i)=>({
+      ...fixture,
+      listing:{
+        ...fixture.listing,
+        id:`00000000-0000-4000-8000-${String(start+i).padStart(12,"0")}`,
+        item_id:`TEST-WFS-${String(start+i).padStart(4,"0")}`,
+        title:`可售 WFS Listing ${start+i+1}`,
+      },
+    }));
+    await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({
+      success:true,data:{items,total:110,page:current,page_size:50,
+        evaluation_status:"ready",run_date_la:"2026-11-04",
+        as_of_date_la:"2026-11-03"},
+      error:null,meta:{},request_id:"clearance-infinite-scroll",
+    })});
+  });
+  await page.goto("/#/products/clearance-center");
+  await expect(page.getByText("已加载 50 / 110 条")).toBeVisible();
+  await expect(page.getByRole("button",{name:"下一页"})).toHaveCount(0);
+  const body=page.locator(".clearance-live-list .ant-table-body");
+  await body.evaluate(node=>{node.scrollTop=node.scrollHeight;node.dispatchEvent(new Event("scroll"));});
+  await expect(page.getByText("已加载 100 / 110 条")).toBeVisible();
+  await body.evaluate(node=>{node.scrollTop=node.scrollHeight;node.dispatchEvent(new Event("scroll"));});
+  await expect(page.getByText("已加载全部 110 条 Listing")).toBeVisible();
+  expect(requestedPages).toEqual([1,2,3]);
+});
