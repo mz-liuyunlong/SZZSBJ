@@ -42,6 +42,7 @@ def read_sku_metrics(
     The account/store/item listing mapping avoids cross-store advertiser attribution.
     """
     end = as_of or la_today()
+
     def read_window(start: date, window_end: date, days: int) -> dict[str, Any]:
         params = {"account": account, "sku": sku, "start": start, "end": window_end}
         sales = (
