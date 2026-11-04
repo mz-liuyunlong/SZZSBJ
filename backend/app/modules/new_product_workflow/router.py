@@ -43,6 +43,9 @@ router = APIRouter(prefix="/api/new-products", tags=["New Product Draft Workflow
 db_session = Annotated[Session, Depends(get_db_session)]
 account_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
 view_principal = Annotated[Principal, Depends(require_any_permission(VIEW, TRACK_VIEW))]
+WorkflowStatus = Literal[
+    "pending_market", "scored", "pending_purchase", "approved_draft", "rejected"
+]
 
 
 class StrictPayload(BaseModel):
@@ -584,26 +587,35 @@ def decide_score_correction(
     principal: Annotated[Principal, Depends(require_permission(APPROVE))],
     accounts: account_scope,
 ) -> SuccessEnvelope[dict[str, Any], None]:
-    row = (
-        session.execute(
-            text(
-                "SELECT * FROM product_new_score_corrections WHERE id = :id "
-                "AND source_account_ref = ANY(:accounts) FOR UPDATE"
-            ),
-            {"id": correction_id, "accounts": sorted(accounts)},
-        )
-        .mappings()
-        .first()
+    # Lock the workflow before the correction for every writer.
+    # A correction-first reviewer can deadlock a workflow-first applicant.
+    scoped = (
+        "SELECT * FROM product_new_score_corrections WHERE id = :id "
+        "AND source_account_ref = ANY(:accounts)"
     )
+    params = {"id": correction_id, "accounts": sorted(accounts)}
+    initial = session.execute(text(scoped), params).mappings().first()
+    if initial is None:
+        _block(404, ErrorCode.NOT_FOUND)
+    state = _state(session, initial["sku_identity_id"], lock=True)
+    row = session.execute(text(scoped + " FOR UPDATE"), params).mappings().first()
     if row is None:
         _block(404, ErrorCode.NOT_FOUND)
     if row["status"] != "pending" or row["requested_by"] == principal.user_id:
         _block(409)
     if not _financial_correction_allowed(principal, row["dimension"]):
         _block(403)
-    state = _state(session, row["sku_identity_id"], lock=True)
     if state["status"] not in ("scored", "pending_purchase", "rejected"):
         _block(409)
+    if payload.decision == "approved":
+        # Draft configuration updates and decisions share the advisory lock.
+        # Evidence made under an older version must be resubmitted, not approved.
+        session.execute(text("SELECT pg_advisory_xact_lock(92114470)"))
+        current_version = session.execute(
+            text("SELECT COALESCE(MAX(version), 0) FROM product_new_rule_versions")
+        ).scalar_one()
+        if int(row["rule_version"]) != int(current_version):
+            _block(409)
     saved = session.execute(
         text(
             "UPDATE product_new_score_corrections SET status = :decision, "
@@ -721,56 +733,106 @@ def list_workflows(
     source_account_ref: str = Query(min_length=1, max_length=128),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
+    status: WorkflowStatus | None = None,
+    sku_query: str | None = None,
 ) -> SuccessEnvelope[dict[str, Any], None]:
+    """Apply workflow phase and SKU search in PostgreSQL before paging.
+
+    The launch tracking page must not filter the first 50 unscoped items
+    client-side or it can silently lose approved workflows.
+    """
     if source_account_ref not in accounts:
         _block(403, ErrorCode.DATA_SCOPE_DENIED)
-    params = {"account": source_account_ref, "size": page_size, "skip": (page - 1) * page_size}
+    if sku_query is not None and len(sku_query) > 128:
+        _block(422)
+    params: dict[str, Any] = {
+        "account": source_account_ref,
+        "size": page_size,
+        "skip": (page - 1) * page_size,
+    }
+    filters = ""
+    if status is not None:
+        params["status"] = status
+        filters += " AND COALESCE(workflow.status, 'pending_market') = :status"
+    if sku_query and sku_query.strip():
+        params["sku_query"] = sku_query.strip()
+        filters += (
+            " AND POSITION(LOWER(:sku_query) IN "
+            "LOWER(COALESCE(identity.lingxing_sku_code, ''))) > 0"
+        )
+
+    where = "WHERE identity.source_account_ref = :account AND identity.is_active IS TRUE"
     total = session.execute(
-        text("""
-        SELECT count(*) FROM dwd_lingxing_sku_identity_index
-        WHERE source_account_ref = :account AND is_active IS TRUE
-    """),
-        {"account": source_account_ref},
+        text(
+            "SELECT count(*) FROM dwd_lingxing_sku_identity_index AS identity "
+            "LEFT JOIN product_new_workflows AS workflow "
+            "ON workflow.sku_identity_id = identity.id "
+            "AND workflow.source_account_ref = identity.source_account_ref "
+            + where
+            + filters
+        ),
+        params,
     ).scalar_one()
     rows = (
         session.execute(
-            text("""
-        SELECT identity.id AS sku_identity_id, identity.lingxing_sku_code AS sku,
-               identity.source_account_ref,
-               COALESCE(p.product_name, detail.product_name) AS product_name,
-               p.category, detail.product_developer_name AS developer,
-               detail.owner_name AS operator, detail.source_observed_at AS product_observed_at,
-               workflow.id AS workflow_id, workflow.status,
-               workflow.row_version, workflow.market_score, workflow.market_reason,
-               workflow.purchase_request_qty, workflow.purchase_reason,
-               workflow.purchase_review_by, workflow.purchase_review_at,
-               workflow.review_result, workflow.review_reason,
-               workflow.review_due_at, workflow.reviewed_by, workflow.reviewed_at,
-               workflow.arrival_date, workflow.sellable_date,
-               workflow.date_evidence, workflow.dates_verified_by, workflow.dates_verified_at,
-               plan.plan_number, plan.id AS plan_id,
-               plan.execution_status AS plan_execution_status
-        FROM dwd_lingxing_sku_identity_index AS identity
-        LEFT JOIN products AS p ON p.id = identity.product_id AND p.deleted_at IS NULL
-        LEFT JOIN dwd_lingxing_sku_product_info_current AS detail
-          ON detail.identity_id = identity.id
-         AND detail.source_account_ref = identity.source_account_ref
-        LEFT JOIN product_new_workflows AS workflow
-          ON workflow.sku_identity_id = identity.id
-         AND workflow.source_account_ref = identity.source_account_ref
-        LEFT JOIN product_new_purchase_plans AS plan
-          ON plan.workflow_id = workflow.id
-         AND plan.source_account_ref = identity.source_account_ref
-        WHERE identity.source_account_ref = :account AND identity.is_active IS TRUE
-        ORDER BY identity.id LIMIT :size OFFSET :skip
-    """),
+            text(
+                """
+                SELECT identity.id AS sku_identity_id, identity.lingxing_sku_code AS sku,
+                       identity.source_account_ref,
+                       COALESCE(p.product_name, detail.product_name) AS product_name,
+                       p.category, detail.product_developer_name AS developer,
+                       detail.owner_name AS operator,
+                       detail.source_observed_at AS product_observed_at,
+                       workflow.id AS workflow_id, workflow.status,
+                       workflow.row_version, workflow.market_score,
+                       workflow.market_reason, workflow.purchase_request_qty,
+                       workflow.purchase_reason,
+                       workflow.purchase_review_by, workflow.purchase_review_at,
+                       workflow.review_result, workflow.review_reason,
+                       workflow.review_due_at, workflow.reviewed_by,
+                       workflow.reviewed_at,
+                       CASE
+                           WHEN workflow.status IS DISTINCT FROM 'approved_draft'
+                               THEN 'not_in_pool'
+                           WHEN workflow.arrival_date IS NULL
+                                OR workflow.sellable_date IS NULL THEN 'awaiting_sellable'
+                           WHEN workflow.review_result = 'optimize' THEN 'optimize'
+                           WHEN workflow.review_due_at IS NOT NULL
+                                AND workflow.review_due_at <=
+                                    timezone('America/Los_Angeles', now())::date
+                               THEN 'due_review'
+                           ELSE 'observing'
+                       END AS tracking_status,
+                       workflow.arrival_date, workflow.sellable_date,
+                       workflow.date_evidence, workflow.dates_verified_by,
+                       workflow.dates_verified_at,
+                       plan.plan_number, plan.id AS plan_id,
+                       plan.execution_status AS plan_execution_status
+                FROM dwd_lingxing_sku_identity_index AS identity
+                LEFT JOIN products AS p
+                    ON p.id = identity.product_id AND p.deleted_at IS NULL
+                LEFT JOIN dwd_lingxing_sku_product_info_current AS detail
+                    ON detail.identity_id = identity.id
+                   AND detail.source_account_ref = identity.source_account_ref
+                LEFT JOIN product_new_workflows AS workflow
+                    ON workflow.sku_identity_id = identity.id
+                   AND workflow.source_account_ref = identity.source_account_ref
+                LEFT JOIN product_new_purchase_plans AS plan
+                    ON plan.workflow_id = workflow.id
+                   AND plan.source_account_ref = identity.source_account_ref
+                """
+                + where
+                + filters
+                + " ORDER BY identity.id LIMIT :size OFFSET :skip"
+            ),
             params,
         )
         .mappings()
         .all()
     )
     return success_response(
-        request, data={"items": [dict(row) for row in rows], "page": page, "total": int(total)}
+        request,
+        data={"items": [dict(row) for row in rows], "page": page, "total": int(total)},
     )
 
 

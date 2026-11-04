@@ -110,6 +110,20 @@ describe("new product server API identity and optimistic lock", () => {
     expect(backendRequest).not.toHaveBeenCalled();
   });
 
+  it("paginates only approved workflows in real tracking mode", async () => {
+    await getNewProductWorkflows("account-a", 2, { status: "approved_draft" });
+    expect(backendRequest).toHaveBeenCalledWith(
+      "/api/new-products/workflows?source_account_ref=account-a&page=2&status=approved_draft",
+    );
+  });
+
+  it("searches exact SKU text in the scoped database query", async () => {
+    await getNewProductWorkflows("account-a", 1, { sku: "  SKU & 02  " });
+    expect(backendRequest).toHaveBeenCalledWith(
+      "/api/new-products/workflows?source_account_ref=account-a&page=1&sku_query=SKU+%26+02",
+    );
+  });
+
   it("encodes source account and page in server read", async () => {
     await getNewProductWorkflows("store & co", 2);
     expect(backendRequest).toHaveBeenCalledWith(

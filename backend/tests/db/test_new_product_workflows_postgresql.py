@@ -20,7 +20,11 @@ from app.core.api import ApiError
 from app.core.auth import Principal
 from app.modules.new_product_workflow.dashboard import read_new_product_dashboard
 from app.modules.new_product_workflow.purchase_plans import create_independent_purchase_plan
-from app.modules.new_product_workflow.router import get_independent_purchase_plan
+from app.modules.new_product_workflow.router import (
+    ScoreCorrectionDecision,
+    decide_score_correction,
+    get_independent_purchase_plan,
+)
 from tests.db.domestic_postgresql_support import admin_url, create_database, drop_database
 from tests.db.test_domestic_chain_postgresql import _alembic, _version
 
@@ -116,6 +120,26 @@ def _create_plan(engine, workflow_id: UUID, sku_id: UUID, barrier: Barrier, acto
             return error.status_code
 
 
+def _decide_correction(engine, correction_id: UUID, barrier: Barrier, actor: str) -> int:
+    with Session(engine) as session:
+        barrier.wait(timeout=20)
+        try:
+            decide_score_correction(
+                request=Request({"type": "http", "method": "POST", "path": "/"}),
+                correction_id=correction_id,
+                payload=ScoreCorrectionDecision(
+                    decision="approved", note="业务日原始日志已核对且同意预估评分修正"
+                ),
+                session=session,
+                principal=Principal(user_id=actor, permissions=frozenset()),
+                accounts=frozenset({"synthetic-account-a"}),
+            )
+            return 200
+        except ApiError as error:
+            session.rollback()
+            return error.status_code
+
+
 def test_new_product_plan_correction_and_dashboard_postgresql() -> None:
     url = admin_url()
     database = create_database(url, "npworkflows")
@@ -178,6 +202,7 @@ def test_new_product_plan_correction_and_dashboard_postgresql() -> None:
                 )
             assert denied.value.status_code == 404
 
+        correction_id = uuid4()
         with engine.begin() as connection:
             connection.execute(
                 text(
@@ -193,7 +218,7 @@ def test_new_product_plan_correction_and_dashboard_postgresql() -> None:
                        CAST('{}' AS jsonb))
                     """
                 ),
-                {"id": uuid4(), "workflow": workflow_id, "sku": sku_id},
+                {"id": correction_id, "workflow": workflow_id, "sku": sku_id},
             )
         with pytest.raises(IntegrityError):
             with engine.begin() as connection:
@@ -213,6 +238,32 @@ def test_new_product_plan_correction_and_dashboard_postgresql() -> None:
                     ),
                     {"id": uuid4(), "workflow": workflow_id, "sku": sku_id},
                 )
+
+        decision_barrier = Barrier(2)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(
+                _decide_correction, engine, correction_id, decision_barrier, "approver-a",
+            )
+            second = executor.submit(
+                _decide_correction, engine, correction_id, decision_barrier, "approver-b",
+            )
+            outcomes = sorted([first.result(timeout=40), second.result(timeout=40)])
+        assert outcomes == [200, 409]
+        with engine.connect() as connection:
+            assert connection.scalar(
+                text(
+                    "SELECT count(*) FROM product_new_score_corrections "
+                    "WHERE id = :id AND status = 'approved'"
+                ),
+                {"id": correction_id},
+            ) == 1
+            assert connection.scalar(
+                text(
+                    "SELECT count(*) FROM product_new_workflow_events "
+                    "WHERE workflow_id = :workflow AND action = 'correction_decided'"
+                ),
+                {"workflow": workflow_id},
+            ) == 1
 
         blocked = _alembic(url, database, PREVIOUS, command="downgrade")
         assert blocked.returncode != 0

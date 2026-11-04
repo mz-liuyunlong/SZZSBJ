@@ -73,6 +73,9 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
   const [planData, setPlanData] = useState<NewProductPurchasePlanList | null>(null);
   const [planDetail, setPlanDetail] = useState<NewProductPurchasePlanDetail | null>(null);
   const [planPage, setPlanPage] = useState(1);
+  const [correctionPage, setCorrectionPage] = useState(1);
+  const [skuSearchInput, setSkuSearchInput] = useState("");
+  const [skuSearch, setSkuSearch] = useState("");
   const planGuard = useRef(createNewProductAccountGuard());
   const boardGuard = useRef(createNewProductAccountGuard());
   const correctionGuard = useRef(createNewProductAccountGuard());
@@ -112,11 +115,14 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
     };
   }, []);
 
-  async function load(next = page) {
+  async function load(next = page, query = skuSearch) {
     const ticket = requestGuard.current.begin(account.trim());
     setBusy(true);
     try {
-      const result = await getNewProductWorkflows(ticket.account, next);
+      const result = await getNewProductWorkflows(ticket.account, next, {
+        status: mode === "tracking" ? "approved_draft" : undefined,
+        sku: query,
+      });
       if (!requestGuard.current.isCurrent(ticket)) return;
       if (result.items.some(row => row.source_account_ref !== ticket.account)) {
         throw new Error("后端返回跨账户记录，已拒绝展示");
@@ -187,16 +193,17 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
     }
   }
 
-  async function loadCorrections() {
+  async function loadCorrections(nextPage = 1) {
     if (!account.trim()) return;
     const ticket = correctionGuard.current.begin(account.trim());
     try {
-      const next = await getNewProductScoreCorrections(ticket.account);
+      const result = await getNewProductScoreCorrections(ticket.account, nextPage);
       if (!correctionGuard.current.isCurrent(ticket)) return;
-      if (next.items.some(item => item.source_account_ref !== ticket.account)) {
+      if (result.items.some(item => item.source_account_ref !== ticket.account)) {
         throw new Error("评分修正账户范围不一致");
       }
-      setCorrections(next);
+      setCorrections(result);
+      setCorrectionPage(nextPage);
     } catch (error) {
       if (correctionGuard.current.isCurrent(ticket)) {
         api.error(error instanceof Error ? error.message : "修正记录读取失败");
@@ -350,17 +357,11 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
     not_in_pool: "未进入打品池", awaiting_sellable: "待确认可售",
     observing: "观察中", optimize: "需要优化", due_review: "待复盘",
   };
-  const getTrackingStatus = (row: NewProductWorkflowRecord): string => {
-    if (row.status !== "approved_draft") return "not_in_pool";
-    if (!row.arrival_date || !row.sellable_date) return "awaiting_sellable";
-    if (row.review_result === "optimize") return "optimize";
-    return "observing";
-  };
   const groupBoard = mode === "performance" ? "purchase_status" : "tracking_status";
   const groupNames = dashboard?.groups[groupBoard] ?? [];
-  const visibleRows = mode === "tracking"
-    ? (data?.items ?? []).filter(row => row.status === "approved_draft")
-    : (data?.items ?? []);
+  // Server filters before LIMIT/OFFSET, so tracking cannot hide approved SKUs
+  // beyond the first page of unrelated new products.
+  const visibleRows = data?.items ?? [];
 
   const columns: ProColumns<NewProductWorkflowRecord>[] = [
     { title: "SKU", dataIndex: "sku", width: 150 },
@@ -374,7 +375,7 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
     { title: "账户", dataIndex: "source_account_ref", width: 130 },
     { title: "市场评分", dataIndex: "market_score", width: 95, render: v => v ?? "待评分" },
     { title: "打品阶段", width: 125, key: "tracking-stage",
-      render: (_, row) => trackingLabels[getTrackingStatus(row)] },
+      render: (_, row) => trackingLabels[row.tracking_status ?? "not_in_pool"] ?? "—" },
     { title: "复盘结果", dataIndex: "review_result", width: 115,
       render: v => v === "optimize" ? "需要优化" : v === "observe" ? "继续观察" : "—" },
     { title: "申请采购量", dataIndex: "purchase_request_qty", width: 110, render: v => v ?? "—" },
@@ -453,12 +454,29 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
           setPlanData(null);
           setPlanDetail(null);
           setPlanPage(1);
+          setCorrectionPage(1);
+          setSkuSearchInput("");
+          setSkuSearch("");
           setMetricData(null);
           setRecord(null);
           setPage(1);
           setBusy(false);
         }} />
-      <Button type="primary" loading={busy} disabled={!account.trim()} onClick={() => void load(1)}>加载真实数据</Button>
+      <Input.Search
+        style={{ width: 255 }}
+        placeholder="搜索 SKU（真实数据）"
+        value={skuSearchInput}
+        allowClear
+        disabled={!account.trim() || submitting}
+        onChange={event => setSkuSearchInput(event.target.value)}
+        onSearch={value => {
+          const query = value.trim();
+          setSkuSearch(query);
+          void load(1, query);
+        }}
+      />
+      <Button type="primary" loading={busy} disabled={!account.trim()}
+        onClick={() => void load(1)}>刷新真实数据</Button>
     </Space>
     <Tabs activeKey={panelTab} onChange={next => {
       setPanelTab(next as PanelTab);
@@ -521,7 +539,11 @@ export default function NewProductLivePanel({ mode, canScore, canRequest, canApp
     {panelTab === "corrections" && <ReportTableShell label="评分修正申请和审核（仅预估）">
       <ProTable<NewProductScoreCorrection> rowKey="id"
         dataSource={corrections?.items ?? []} columns={correctionColumns}
-        options={false} search={false} pagination={{ pageSize: 50 }}
+        options={false} search={false} pagination={{
+          current: correctionPage, pageSize: 50,
+          total: corrections?.total ?? 0, showSizeChanger: false,
+          onChange: next => void loadCorrections(next),
+        }}
         scroll={{ x: 1100 }} />
     </ReportTableShell>}
     {panelTab === "rules" && <>

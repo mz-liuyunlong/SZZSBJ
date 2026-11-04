@@ -133,6 +133,8 @@ export interface NewProductWorkflowRecord {
   plan_id?: string | null;
   plan_number?: string | null;
   plan_execution_status?: string | null;
+  tracking_status?: "not_in_pool" | "awaiting_sellable" | "observing" | "optimize" | "due_review";
+  review_due_at?: string | null;
   review_result: "observe" | "optimize" | "success" | "failure" | null;
   arrival_date?: string | null;
   sellable_date?: string | null;
@@ -193,9 +195,14 @@ export async function getNewProductAccounts(): Promise<string[]> {
   return result.items;
 }
 
-export async function getNewProductWorkflows(account: string, page = 1): Promise<NewProductWorkflowList> {
+export async function getNewProductWorkflows(
+  account: string, page = 1,
+  options: { status?: "approved_draft"; sku?: string } = {},
+): Promise<NewProductWorkflowList> {
   if (!account.trim()) throw new Error("需要先选择真实数据账户");
   const q = new URLSearchParams({ source_account_ref: account, page: String(page) });
+  if (options.status) q.set("status", options.status);
+  if (options.sku?.trim()) q.set("sku_query", options.sku.trim());
   return (await backendRequest<NewProductWorkflowList>(`/api/new-products/workflows?${q}`)).data;
 }
 

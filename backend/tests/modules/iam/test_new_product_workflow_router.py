@@ -127,6 +127,51 @@ def test_list_rejects_account_outside_principal_scope() -> None:
     assert error.value.status_code == 403
 
 
+def test_tracking_filters_before_paging_and_scopes_all_sql() -> None:
+    session = MagicMock()
+    list_workflows(
+        request=Request({"type": "http", "method": "GET", "path": "/api/new-products/workflows"}),
+        session=session,
+        _=Principal(user_id="reader", permissions=frozenset()),
+        accounts=frozenset({"account-a"}),
+        source_account_ref="account-a",
+        page=2,
+        page_size=50,
+        status="approved_draft",
+        sku_query="SYNTHETIC",
+    )
+    calls = session.execute.call_args_list
+    assert len(calls) == 2
+    for call in calls:
+        statement, params = call.args
+        query = str(statement)
+        assert "source_account_ref = :account" in query
+        assert "COALESCE(workflow.status, 'pending_market') = :status" in query
+        assert "POSITION(LOWER(:sku_query)" in query
+        assert params["status"] == "approved_draft"
+        assert params["sku_query"] == "SYNTHETIC"
+        assert params["account"] == "account-a"
+    assert "AS tracking_status" in str(calls[1].args[0])
+    assert calls[1].args[1]["skip"] == 50
+
+
+def test_workflow_sku_search_rejects_oversize_before_database() -> None:
+    session = MagicMock()
+    with pytest.raises(ApiError) as error:
+        list_workflows(
+            request=Request({"type": "http", "method": "GET", "path": "/api/new-products/workflows"}),
+            session=session,
+            _=Principal(user_id="reader", permissions=frozenset()),
+            accounts=frozenset({"account-a"}),
+            source_account_ref="account-a",
+            page=1,
+            page_size=50,
+            sku_query="x" * 129,
+        )
+    assert error.value.status_code == 422
+    session.execute.assert_not_called()
+
+
 def test_purchase_plans_refuse_out_of_scope_account() -> None:
     request = Request({"type": "http", "method": "GET", "path": "/api/new-products/purchase-plans"})
     with pytest.raises(ApiError) as error:
