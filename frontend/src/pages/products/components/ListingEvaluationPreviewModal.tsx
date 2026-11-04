@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Alert, Descriptions, Modal, Skeleton, Tag, Typography } from "antd";
 import { backendRequest } from "@/api/backendApi";
 import type { ListingManagementRow } from "@/pages/products/listingManagementData";
+import ListingLifecycleAdjustmentPanel from "@/pages/products/components/ListingLifecycleAdjustmentPanel";
 
 interface Diagnostic {
   listing_id: string;
@@ -24,8 +25,10 @@ interface Diagnostic {
 interface Props {
   listing: ListingManagementRow | null;
   onClose: () => void;
+  permissions?: readonly string[];
+  onApplied?: () => void;
 }
-export default function ListingEvaluationPreviewModal({ listing, onClose }: Props) {
+export default function ListingEvaluationPreviewModal({ listing, onClose, permissions = [], onApplied = () => {} }: Props) {
   const [data, setData] = useState<Diagnostic | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -82,6 +85,8 @@ export default function ListingEvaluationPreviewModal({ listing, onClose }: Prop
             )) : <Typography.Text>无</Typography.Text>}
           </>
         ) : null}
+      {listing && <ListingLifecycleAdjustmentPanel key={listing.id} listingId={listing.id} permissions={permissions}
+        onApplied={onApplied} />}
     </Modal>
   );
 }

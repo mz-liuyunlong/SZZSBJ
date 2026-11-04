@@ -57,6 +57,7 @@ def test_batch_uses_keyset_pagination_and_one_fixed_rule(monkeypatch) -> None:
                 current_lifecycle="启动期",
                 current_grade=None,
                 lifecycle_candidate="启动期",
+                lifecycle_evidence_reason="synthetic lifecycle evidence",
                 grade_candidate=None,
                 valid_short=0,
                 valid_medium=0,

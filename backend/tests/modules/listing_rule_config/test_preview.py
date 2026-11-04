@@ -11,7 +11,9 @@ from fastapi import Request
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
+from app.core.api import ApiError
 from app.modules.listing_rule_config.evaluation import FinancialDay, grade_listing
+from app.modules.listing_rule_config.models import ListingEvaluationSnapshot
 from app.modules.listing_rule_config.preview import (
     ListingEvaluationPreviewService,
     archive_has_post_cutoff_event,
@@ -19,7 +21,10 @@ from app.modules.listing_rule_config.preview import (
     lifecycle_allows_grade,
     stockout_candidate,
 )
-from app.modules.listing_rule_config.preview_router import list_evaluation_runs
+from app.modules.listing_rule_config.preview_router import (
+    list_evaluation_runs,
+    list_evaluation_snapshots,
+)
 from app.modules.listing_rule_config.schemas import ListingGradeRuleConfig
 
 CUTOFF = date(2026, 10, 24)
@@ -68,6 +73,121 @@ def test_account_day_zero_ad_spend_blocks_diagnostic_grade() -> None:
         unconfirmed_account_ad_days=frozenset({CUTOFF - timedelta(days=3)}),
     )
     assert (grade, short, medium, margin) == (None, 6, 13, None)
+
+
+def test_certified_stockout_recovery_needs_contiguous_streak_and_prior_stage() -> None:
+    listing = SimpleNamespace(
+        id=UUID(int=170),
+        fulfillment_type="1",
+        lifecycle_status="断货期",
+        product_grade=None,
+    )
+    kwargs = dict(
+        listing=listing,
+        cutoff=CUTOFF,
+        config=ListingGradeRuleConfig(),
+        rule_version=1,
+        sales=[_financial(i) for i in range(30)],
+        prior=CUTOFF - timedelta(days=31),
+        archive=None,
+        monitor_rows=[],
+        unconfirmed_account_ad_days=frozenset(),
+        confirmed_sales_days=frozenset(CUTOFF - timedelta(days=i) for i in range(30)),
+        stockout_previous_stage="稳定期",
+    )
+    stock = [
+        SimpleNamespace(
+            snapshot_date_la=CUTOFF - timedelta(days=i),
+            wfs_available_quantity=Decimal("0" if 1 <= i <= 7 else "10"),
+            available_quantity=Decimal("0" if 1 <= i <= 7 else "10"),
+        )
+        for i in range(30)
+    ]
+    recovered = ListingEvaluationPreviewService._from_evidence(**kwargs, stock=stock)
+    assert recovered.lifecycle_candidate == "稳定期"
+    assert recovered.lifecycle_evidence_reason == "成熟稳定期保护"
+
+    missing_day = [row for row in stock if row.snapshot_date_la != CUTOFF - timedelta(days=4)]
+    blocked = ListingEvaluationPreviewService._from_evidence(**kwargs, stock=missing_day)
+    assert blocked.lifecycle_candidate is None
+    assert "LIFECYCLE_TRANSITION_EVIDENCE_INCOMPLETE" in blocked.missing_evidence
+
+
+def test_long_stockout_enters_repair_and_certified_days_can_exit() -> None:
+    listing = SimpleNamespace(
+        id=UUID(int=171),
+        fulfillment_type="1",
+        lifecycle_status="断货期",
+        product_grade=None,
+    )
+    stock = [
+        SimpleNamespace(
+            snapshot_date_la=CUTOFF - timedelta(days=i),
+            wfs_available_quantity=Decimal("0" if 1 <= i <= 26 else "10"),
+            available_quantity=Decimal("0" if 1 <= i <= 26 else "10"),
+        )
+        for i in range(30)
+    ]
+    kwargs = dict(
+        listing=listing,
+        cutoff=CUTOFF,
+        config=ListingGradeRuleConfig(),
+        rule_version=1,
+        sales=[_financial(i) for i in range(30)],
+        stock=stock,
+        prior=CUTOFF - timedelta(days=31),
+        archive=None,
+        monitor_rows=[],
+        unconfirmed_account_ad_days=frozenset(),
+        confirmed_sales_days=frozenset(CUTOFF - timedelta(days=i) for i in range(30)),
+        stockout_previous_stage="稳定期",
+    )
+    long_recovery = ListingEvaluationPreviewService._from_evidence(**kwargs)
+    assert long_recovery.lifecycle_candidate == "修复期"
+    assert long_recovery.lifecycle_evidence_reason == "长期断货恢复，进入修复验收"
+
+    listing.lifecycle_status = "修复期"
+    repaired_stock = [
+        SimpleNamespace(
+            snapshot_date_la=CUTOFF - timedelta(days=i),
+            wfs_available_quantity=Decimal("10"),
+            available_quantity=Decimal("10"),
+        )
+        for i in range(30)
+    ]
+    repair_kwargs = {
+        **kwargs,
+        "stock": repaired_stock,
+        "repair_entry_date": CUTOFF - timedelta(days=14),
+        "repair_reasons": ("stockout",),
+    }
+    accepted = ListingEvaluationPreviewService._from_evidence(**repair_kwargs)
+    assert accepted.lifecycle_candidate != "修复期"
+    repair_kwargs["repair_entry_date"] = CUTOFF - timedelta(days=13)
+    pending = ListingEvaluationPreviewService._from_evidence(**repair_kwargs)
+    assert pending.lifecycle_candidate == "修复期"
+
+
+def test_repair_entry_uses_published_reason_without_guessing() -> None:
+    listing = SimpleNamespace(id=UUID(int=173), lifecycle_status="修复期")
+    snapshot = ListingEvaluationSnapshot(
+        listing_id=listing.id,
+        current_lifecycle="稳定期",
+        lifecycle_candidate="修复期",
+        lifecycle_evidence_reason="购物车异常持续超过门槛",
+        cutoff_date_la=CUTOFF - timedelta(days=3),
+        published=True,
+    )
+    session = MagicMock(spec=Session)
+    session.scalars.return_value.all.return_value = [snapshot]
+    result = ListingEvaluationPreviewService(session)._stage_entries([listing], cutoff=CUTOFF)
+    assert result[listing.id][1:] == (
+        CUTOFF - timedelta(days=3),
+        ("buybox_abnormal",),
+    )
+    snapshot.lifecycle_evidence_reason = None
+    result = ListingEvaluationPreviewService(session)._stage_entries([listing], cutoff=CUTOFF)
+    assert result[listing.id][2] == ()
 
 
 def test_diagnostic_financial_grade_matches_pure_evaluator() -> None:
@@ -125,6 +245,35 @@ def test_wfs_preview_reports_account_day_ad_blocker() -> None:
     )
     assert result.grade_candidate is None
     assert "DAILY_SALES_ACCOUNT_DAY_AD_SPEND_UNCONFIRMED" in result.missing_evidence
+
+
+def test_unverified_existing_stage_blocks_publication_but_manual_stage_is_preserved() -> None:
+    listing = SimpleNamespace(
+        id=UUID(int=3),
+        fulfillment_type="1",
+        lifecycle_status="测品期",
+        product_grade=None,
+    )
+    kwargs = dict(
+        listing=listing,
+        cutoff=CUTOFF,
+        config=ListingGradeRuleConfig(),
+        rule_version=1,
+        sales=[_financial(i) for i in range(14)],
+        stock=[],
+        prior=None,
+        archive=SimpleNamespace(is_archived=False, archived_at=None, restored_at=None),
+        monitor_rows=[],
+        unconfirmed_account_ad_days=frozenset(),
+    )
+    unknown = ListingEvaluationPreviewService._from_evidence(**kwargs)
+    assert "HISTORICAL_LIFECYCLE_APPROVAL_EVENTS_UNVERIFIED" in unknown.missing_evidence
+    approved = ListingEvaluationPreviewService._from_evidence(
+        **kwargs, lifecycle_history_confirmed=True, manual_stage_protected=True
+    )
+    assert approved.lifecycle_candidate == "测品期"
+    assert "HISTORICAL_LIFECYCLE_APPROVAL_EVENTS_UNVERIFIED" not in approved.missing_evidence
+    assert "ADS_COST_PUBLICATION_PROOF_MISSING" not in approved.missing_evidence
 
 
 def test_confirmed_missing_sales_row_is_zero_only_for_observed_listing() -> None:
@@ -218,6 +367,12 @@ def test_account_day_ad_report_total_uses_all_source_rows() -> None:
                 "synthetic-b": {CUTOFF},
             }
         )
+        service._confirmed_ad_report_days = MagicMock(
+            return_value={
+                "synthetic-a": {CUTOFF, CUTOFF - timedelta(days=1)},
+                "synthetic-b": {CUTOFF},
+            }
+        )
         unconfirmed = service._unconfirmed_account_ad_days(
             {"synthetic-a", "synthetic-b"}, cutoff=CUTOFF, window_days=3
         )
@@ -228,6 +383,7 @@ def test_account_day_ad_report_total_uses_all_source_rows() -> None:
     with Session(engine) as session:
         service = ListingEvaluationPreviewService(session)
         service._confirmed_daily_sales_days = MagicMock(return_value={"synthetic-a": set()})
+        service._confirmed_ad_report_days = MagicMock(return_value={"synthetic-a": set()})
         without_completion_event = service._unconfirmed_account_ad_days(
             {"synthetic-a"}, cutoff=CUTOFF, window_days=3
         )
@@ -244,24 +400,35 @@ def test_daily_sales_completion_requires_next_day_and_latest_validated_event() -
             "2026-01-14",
             "SYNC_SALESTAT_DAY_PENDING",
             datetime(2026, 1, 15, 11, tzinfo=UTC),
+            "running",
         ),
         (
             "synthetic-a",
             "2026-01-14",
             "SYNC_SALESTAT_DAY_VALIDATED",
             datetime(2026, 1, 15, 9, tzinfo=UTC),
+            "succeeded",
         ),
         (
             "synthetic-a",
             "2026-01-13",
             "SYNC_SALESTAT_DAY_VALIDATED",
             datetime(2026, 1, 14, 9, tzinfo=UTC),
+            "succeeded",
         ),
         (
             "synthetic-b",
             "2026-01-14",
             "SYNC_SALESTAT_DAY_VALIDATED",
             datetime(2026, 1, 14, 20, tzinfo=UTC),
+            "succeeded",
+        ),
+        (
+            "synthetic-b",
+            "2026-01-13",
+            "SYNC_SALESTAT_DAY_VALIDATED",
+            datetime(2026, 1, 14, 9, tzinfo=UTC),
+            "failed",
         ),
     ]
     confirmed = ListingEvaluationPreviewService(session)._confirmed_daily_sales_days(
@@ -270,6 +437,76 @@ def test_daily_sales_completion_requires_next_day_and_latest_validated_event() -
         cutoff=date(2026, 1, 14),
     )
     assert confirmed == {"synthetic-a": {date(2026, 1, 13)}, "synthetic-b": set()}
+
+
+def test_wfs_completion_requires_successful_full_listing_run() -> None:
+    session = MagicMock(spec=Session)
+    session.execute.return_value.all.return_value = [
+        ("synthetic-a", "2026-01-14"),
+        ("synthetic-a", "invalid-day"),
+        ("synthetic-other", "2026-01-14"),
+    ]
+
+    confirmed = ListingEvaluationPreviewService(session)._confirmed_wfs_days(
+        {"synthetic-a", "synthetic-b"},
+        start=date(2026, 1, 13),
+        cutoff=date(2026, 1, 15),
+    )
+
+    assert confirmed == {"synthetic-a": {date(2026, 1, 14)}, "synthetic-b": set()}
+    statement = session.execute.call_args.args[0]
+    assert "gov_integration_sync_runs.status" in str(statement)
+    assert "succeeded" in statement.compile().params.values()
+    assert "SYNC_WFS_INVENTORY_DAY_VALIDATED" in statement.compile().params.values()
+
+
+def test_ad_report_completion_requires_final_post_midnight_capture() -> None:
+    session = MagicMock(spec=Session)
+    session.execute.return_value.all.return_value = [
+        (
+            "synthetic-a",
+            "2026-01-14",
+            "SYNC_AD_REPORT_DAY_PENDING",
+            datetime(2026, 1, 15, 12, tzinfo=UTC),
+            "running",
+        ),
+        (
+            "synthetic-a",
+            "2026-01-14",
+            "SYNC_AD_REPORT_DAY_VALIDATED",
+            datetime(2026, 1, 15, 9, tzinfo=UTC),
+            "succeeded",
+        ),
+        (
+            "synthetic-a",
+            "2026-01-13",
+            "SYNC_AD_REPORT_DAY_VALIDATED",
+            datetime(2026, 1, 14, 9, tzinfo=UTC),
+            "succeeded",
+        ),
+        (
+            "synthetic-b",
+            "2026-01-14",
+            "SYNC_AD_REPORT_DAY_VALIDATED",
+            datetime(2026, 1, 14, 20, tzinfo=UTC),
+            "succeeded",
+        ),
+        (
+            "synthetic-b",
+            "2026-01-13",
+            "SYNC_AD_REPORT_DAY_VALIDATED",
+            datetime(2026, 1, 14, 9, tzinfo=UTC),
+            "failed",
+        ),
+    ]
+    confirmed = ListingEvaluationPreviewService(session)._confirmed_ad_report_days(
+        {"synthetic-a", "synthetic-b"},
+        start=date(2026, 1, 13),
+        cutoff=date(2026, 1, 14),
+    )
+    assert confirmed == {"synthetic-a": {date(2026, 1, 13)}, "synthetic-b": set()}
+    statement = session.execute.call_args.args[0]
+    assert "walmartAdItemSpList" in statement.compile().params.values()
 
 
 def test_grade_candidate_honors_configured_lifecycle_scope() -> None:
@@ -405,6 +642,80 @@ def test_run_list_does_not_expose_global_attempt_state_to_scoped_viewer() -> Non
     assert item.started_at is None and item.finished_at is None
     assert item.error_code is None
     assert "source_account_ref IN" in str(session.execute.call_args.args[0])
+
+
+def test_run_snapshot_detail_is_account_scoped_and_exposes_safe_evidence_codes() -> None:
+    run_id = UUID(int=66)
+    row = SimpleNamespace(
+        id=UUID(int=67),
+        listing_id=UUID(int=68),
+        store_id="synthetic-store",
+        item_id="synthetic-item",
+        msku=None,
+        cutoff_date_la=date(2026, 1, 14),
+        current_lifecycle=None,
+        current_grade=None,
+        lifecycle_candidate="启动期",
+        grade_candidate=None,
+        valid_short=0,
+        valid_medium=0,
+        valid_stock_days_30=7,
+        rule_version=1,
+        rule_source="database",
+        evidence_json=["DAILY_SALES_ACCOUNT_DAY_AD_SPEND_UNCONFIRMED"],
+        publication_status="blocked",
+        published=False,
+    )
+    session = MagicMock(spec=Session)
+    session.scalar.return_value = 1
+    session.scalars.return_value.all.return_value = [row]
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/listings/evaluation-runs/66/snapshots",
+            "headers": [],
+        }
+    )
+
+    response = list_evaluation_snapshots(
+        request=request,
+        run_id=run_id,
+        session=session,
+        account_refs=frozenset({"synthetic-visible-account"}),
+        limit=50,
+        offset=0,
+    )
+
+    assert response.data.total == 1
+    assert response.data.items[0].missing_evidence == row.evidence_json
+    assert "source_account_ref IN" in str(session.scalar.call_args.args[0])
+    assert "source_account_ref IN" in str(session.scalars.call_args.args[0])
+
+
+def test_run_snapshot_detail_hides_inaccessible_run() -> None:
+    session = MagicMock(spec=Session)
+    session.scalar.return_value = 0
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/listings/evaluation-runs/66/snapshots",
+            "headers": [],
+        }
+    )
+
+    with pytest.raises(ApiError) as exc:
+        list_evaluation_snapshots(
+            request=request,
+            run_id=UUID(int=66),
+            session=session,
+            account_refs=frozenset({"synthetic-other-account"}),
+            limit=50,
+            offset=0,
+        )
+    assert exc.value.status_code == 404
+    session.scalars.assert_not_called()
 
 
 def test_low_positive_stock_does_not_qualify_as_stockout() -> None:

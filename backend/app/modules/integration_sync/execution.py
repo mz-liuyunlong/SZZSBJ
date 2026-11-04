@@ -403,6 +403,15 @@ class SyncRunExecutionService:
                         safe_details={"business_date": business_date.isoformat()},
                     )
                     self.session.commit()
+                if run.interface_key == "walmartAdItemSpList":
+                    self._event(
+                        run.id,
+                        "running",
+                        "running",
+                        "SYNC_AD_REPORT_DAY_PENDING",
+                        safe_details={"business_date": business_date.isoformat()},
+                    )
+                    self.session.commit()
                 runner = DataPagesRealSyncRunner(
                     session=self.session,
                     client=client,
@@ -706,6 +715,19 @@ class SyncRunExecutionService:
             runner.summary.ad_rows = runner._write_ads(ad_rows)
             heartbeat()
             runner._resolve_ads(ad_rows)
+            if (
+                run_id is not None
+                and runner.ad_report_capture_complete
+                and len(runner.advertiser_ids) == len(advertisers)
+                and len(runner.advertiser_ids) <= runner.max_advertisers
+            ):
+                self._event(
+                    run_id,
+                    "running",
+                    "running",
+                    "SYNC_AD_REPORT_DAY_VALIDATED",
+                    safe_details={"business_date": runner.business_date.isoformat()},
+                )
 
         else:
             raise ValueError("unsupported Data Pages interface")

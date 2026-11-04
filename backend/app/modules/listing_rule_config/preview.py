@@ -32,7 +32,11 @@ from app.modules.listing_rule_config.evaluation import (
     grade_listing,
     lifecycle_listing,
 )
-from app.modules.listing_rule_config.models import ListingGradeRuleVersion
+from app.modules.listing_rule_config.models import (
+    ListingEvaluationSnapshot,
+    ListingGradeRuleVersion,
+    ListingLifecycleAdjustment,
+)
 from app.modules.listing_rule_config.schemas import ListingGradeRuleConfig
 from app.modules.walmart_monitor.models import StandardizedWalmartMonitorListingObservation
 
@@ -162,6 +166,108 @@ class ListingEvaluationPreviewService:
         self.session = session
         self._unconfirmed_ad_days_cache: dict[tuple[str, date, int], frozenset[date]] = {}
 
+    def _stage_entries(
+        self, listings: Sequence[ListingManagementCurrentMart], *, cutoff: date
+    ) -> dict[UUID, tuple[str | None, date | None, tuple[str, ...]]]:
+        """Use only immutable, non-reverted published transitions after rollout."""
+        target_ids = [row.id for row in listings if row.lifecycle_status in {"断货期", "修复期"}]
+        if not target_ids:
+            return {}
+        entries = self.session.scalars(
+            select(ListingEvaluationSnapshot)
+            .where(
+                ListingEvaluationSnapshot.listing_id.in_(target_ids),
+                ListingEvaluationSnapshot.published.is_(True),
+                ListingEvaluationSnapshot.reverted_at.is_(None),
+                ListingEvaluationSnapshot.cutoff_date_la <= cutoff,
+                ListingEvaluationSnapshot.lifecycle_candidate.in_(("断货期", "修复期")),
+                ListingEvaluationSnapshot.current_lifecycle.is_distinct_from(
+                    ListingEvaluationSnapshot.lifecycle_candidate
+                ),
+            )
+            .order_by(
+                ListingEvaluationSnapshot.listing_id,
+                ListingEvaluationSnapshot.cutoff_date_la.desc(),
+            )
+        ).all()
+        latest: dict[tuple[UUID, str], ListingEvaluationSnapshot] = {}
+        for row in entries:
+            latest.setdefault((row.listing_id, row.lifecycle_candidate), row)
+        result: dict[UUID, tuple[str | None, date | None, tuple[str, ...]]] = {}
+        for listing in listings:
+            stockout = latest.get((listing.id, "断货期"))
+            repair = latest.get((listing.id, "修复期"))
+            repair_reasons: tuple[str, ...] = ()
+            if repair is not None:
+                repair_reasons = {
+                    "长期断货恢复，进入修复验收": ("stockout",),
+                    "划线价异常持续超过门槛": ("strike_price_abnormal",),
+                    "购物车异常持续超过门槛": ("buybox_abnormal",),
+                }.get(repair.lifecycle_evidence_reason, ())
+            result[listing.id] = (
+                stockout.current_lifecycle if stockout is not None else None,
+                repair.cutoff_date_la if repair is not None else None,
+                repair_reasons,
+            )
+        return result
+
+    def _confirmed_lifecycle_states(
+        self, listings: Sequence[ListingManagementCurrentMart], *, cutoff: date
+    ) -> tuple[set[UUID], set[UUID]]:
+        """Current state is historical evidence only when its event predates cutoff."""
+        tracked = {row.id: row.lifecycle_status for row in listings if row.lifecycle_status}
+        if not tracked:
+            return set(), set()
+        cutoff_end = datetime.combine(
+            cutoff + timedelta(days=1), datetime.min.time(), LOS_ANGELES
+        ).astimezone(UTC)
+        approved = self.session.execute(
+            select(
+                ListingLifecycleAdjustment.listing_id,
+                ListingLifecycleAdjustment.requested_stage,
+            )
+            .where(
+                ListingLifecycleAdjustment.listing_id.in_(tracked),
+                ListingLifecycleAdjustment.status == "approved",
+                ListingLifecycleAdjustment.decided_at < cutoff_end,
+            )
+            .order_by(
+                ListingLifecycleAdjustment.listing_id,
+                ListingLifecycleAdjustment.decided_at.desc(),
+            )
+        ).all()
+        last_manual: dict[UUID, str] = {}
+        for listing_id, stage in approved:
+            last_manual.setdefault(listing_id, stage)
+        confirmed = {
+            listing_id for listing_id, stage in last_manual.items() if tracked[listing_id] == stage
+        }
+        manual = set(confirmed)
+        prior = self.session.execute(
+            select(
+                ListingEvaluationSnapshot.listing_id, ListingEvaluationSnapshot.lifecycle_candidate
+            )
+            .where(
+                ListingEvaluationSnapshot.listing_id.in_(tracked),
+                ListingEvaluationSnapshot.published.is_(True),
+                ListingEvaluationSnapshot.reverted_at.is_(None),
+                ListingEvaluationSnapshot.published_at < cutoff_end,
+            )
+            .order_by(
+                ListingEvaluationSnapshot.listing_id,
+                ListingEvaluationSnapshot.published_at.desc(),
+            )
+        ).all()
+        last_published: dict[UUID, str | None] = {}
+        for listing_id, stage in prior:
+            last_published.setdefault(listing_id, stage)
+        confirmed.update(
+            listing_id
+            for listing_id, stage in last_published.items()
+            if listing_id not in last_manual and tracked[listing_id] == stage
+        )
+        return confirmed, manual
+
     def _confirmed_daily_sales_days(
         self, accounts: set[str], *, start: date, cutoff: date
     ) -> dict[str, set[date]]:
@@ -172,6 +278,7 @@ class ListingEvaluationPreviewService:
                 date_text,
                 IntegrationSyncRunEvent.message_code,
                 IntegrationSyncRunEvent.occurred_at,
+                IntegrationSyncRun.status,
             )
             .join(IntegrationSyncRun, IntegrationSyncRun.id == IntegrationSyncRunEvent.run_id)
             .where(
@@ -191,7 +298,7 @@ class ListingEvaluationPreviewService:
         ).all()
         confirmed: dict[str, set[date]] = {account: set() for account in accounts}
         seen: set[tuple[str, date]] = set()
-        for account, day_text, message_code, occurred_at in rows:
+        for account, day_text, message_code, occurred_at, run_status in rows:
             business_day = date.fromisoformat(day_text)
             key = (account, business_day)
             if key in seen:
@@ -199,6 +306,83 @@ class ListingEvaluationPreviewService:
             seen.add(key)
             if (
                 message_code == "SYNC_SALESTAT_DAY_VALIDATED"
+                and run_status == "succeeded"
+                and occurred_at.astimezone(LOS_ANGELES).date() > business_day
+            ):
+                confirmed[account].add(business_day)
+        return confirmed
+
+    def _confirmed_wfs_days(
+        self, accounts: set[str], *, start: date, cutoff: date
+    ) -> dict[str, set[date]]:
+        """Only finalized, complete Listing captures can certify a WFS business day."""
+        date_text = IntegrationSyncRunEvent.safe_details["business_date"].astext
+        rows = self.session.execute(
+            select(IntegrationSyncRun.source_account_ref, date_text)
+            .join(IntegrationSyncRun, IntegrationSyncRun.id == IntegrationSyncRunEvent.run_id)
+            .where(
+                IntegrationSyncRun.source_account_ref.in_(accounts),
+                IntegrationSyncRun.interface_key == "walmartListingList",
+                IntegrationSyncRun.status == "succeeded",
+                IntegrationSyncRunEvent.message_code == "SYNC_WFS_INVENTORY_DAY_VALIDATED",
+                date_text.between(start.isoformat(), cutoff.isoformat()),
+            )
+        ).all()
+        confirmed: dict[str, set[date]] = {account: set() for account in accounts}
+        for account, day_text in rows:
+            if account not in confirmed or not day_text:
+                continue
+            try:
+                confirmed[account].add(date.fromisoformat(day_text))
+            except ValueError:
+                continue
+        return confirmed
+
+    def _confirmed_ad_report_days(
+        self, accounts: set[str], *, start: date, cutoff: date
+    ) -> dict[str, set[date]]:
+        """A positive ad sum is usable only after the account-day report was captured."""
+        date_text = IntegrationSyncRunEvent.safe_details["business_date"].astext
+        rows = self.session.execute(
+            select(
+                IntegrationSyncRun.source_account_ref,
+                date_text,
+                IntegrationSyncRunEvent.message_code,
+                IntegrationSyncRunEvent.occurred_at,
+                IntegrationSyncRun.status,
+            )
+            .join(IntegrationSyncRun, IntegrationSyncRun.id == IntegrationSyncRunEvent.run_id)
+            .where(
+                IntegrationSyncRun.source_account_ref.in_(accounts),
+                IntegrationSyncRun.interface_key == "walmartAdItemSpList",
+                IntegrationSyncRunEvent.message_code.in_(
+                    ("SYNC_AD_REPORT_DAY_PENDING", "SYNC_AD_REPORT_DAY_VALIDATED")
+                ),
+                date_text.between(start.isoformat(), cutoff.isoformat()),
+            )
+            .order_by(
+                IntegrationSyncRun.source_account_ref,
+                date_text,
+                IntegrationSyncRunEvent.occurred_at.desc(),
+                IntegrationSyncRunEvent.id.desc(),
+            )
+        ).all()
+        confirmed: dict[str, set[date]] = {account: set() for account in accounts}
+        seen: set[tuple[str, date]] = set()
+        for account, day_text, message_code, occurred_at, run_status in rows:
+            if account not in confirmed or not day_text:
+                continue
+            try:
+                business_day = date.fromisoformat(day_text)
+            except ValueError:
+                continue
+            key = (account, business_day)
+            if key in seen:
+                continue
+            seen.add(key)
+            if (
+                message_code == "SYNC_AD_REPORT_DAY_VALIDATED"
+                and run_status == "succeeded"
                 and occurred_at.astimezone(LOS_ANGELES).date() > business_day
             ):
                 confirmed[account].add(business_day)
@@ -244,9 +428,12 @@ class ListingEvaluationPreviewService:
                 if confirmed_sales_days is not None
                 else self._confirmed_daily_sales_days(missing, start=start, cutoff=cutoff)
             )
+            confirmed_ad_days = self._confirmed_ad_report_days(missing, start=start, cutoff=cutoff)
             for account in missing:
                 unconfirmed_days = days_in_window - (
-                    positive_by_account[account] & confirmed_by_account[account]
+                    positive_by_account[account]
+                    & confirmed_by_account[account]
+                    & confirmed_ad_days[account]
                 )
                 self._unconfirmed_ad_days_cache[(account, cutoff, window_days)] = frozenset(
                     unconfirmed_days
@@ -315,13 +502,32 @@ class ListingEvaluationPreviewService:
                     WalmartListingInventoryDailyFact.snapshot_date_la.between(
                         cutoff
                         - timedelta(
-                            days=max(30, config.inventory_repair.stockout_consecutive_days) - 1
+                            days=max(
+                                30,
+                                config.inventory_repair.long_stockout_days + 2,
+                                config.inventory_repair.stockout_repair_valid_days,
+                            )
+                            - 1
                         ),
                         cutoff,
                     ),
                 )
             ).all()
         )
+        confirmed_wfs_days = self._confirmed_wfs_days(
+            {listing.source_account_ref},
+            start=cutoff
+            - timedelta(
+                days=max(
+                    30,
+                    config.inventory_repair.long_stockout_days + 2,
+                    config.inventory_repair.stockout_repair_valid_days,
+                )
+                - 1
+            ),
+            cutoff=cutoff,
+        )[listing.source_account_ref]
+        stock = [row for row in stock if row.snapshot_date_la in confirmed_wfs_days]
         prior = self.session.scalar(
             select(WalmartListingInventoryDailyFact.snapshot_date_la)
             .where(
@@ -336,6 +542,14 @@ class ListingEvaluationPreviewService:
             )
             .limit(1)
         )
+        if (
+            prior is not None
+            and prior
+            not in self._confirmed_wfs_days(
+                {listing.source_account_ref}, start=prior, cutoff=prior
+            )[listing.source_account_ref]
+        ):
+            prior = None
         archive = self.session.scalar(
             select(ListingArchiveState).where(ListingArchiveState.listing_id == listing.id)
         )
@@ -366,6 +580,12 @@ class ListingEvaluationPreviewService:
             start=cutoff - timedelta(days=max(30, config.medium_days) - 1),
             cutoff=cutoff,
         )
+        confirmed_lifecycle, manual_lifecycle = self._confirmed_lifecycle_states(
+            [listing], cutoff=cutoff
+        )
+        stockout_previous_stage, repair_entry_date, repair_reasons = self._stage_entries(
+            [listing], cutoff=cutoff
+        ).get(listing.id, (None, None, ()))
         return self._from_evidence(
             listing=listing,
             cutoff=cutoff,
@@ -383,6 +603,11 @@ class ListingEvaluationPreviewService:
                 confirmed_sales_days=confirmed_sales_days,
             )[listing.source_account_ref],
             confirmed_sales_days=frozenset(confirmed_sales_days[listing.source_account_ref]),
+            lifecycle_history_confirmed=listing.id in confirmed_lifecycle,
+            manual_stage_protected=listing.id in manual_lifecycle,
+            stockout_previous_stage=stockout_previous_stage,
+            repair_entry_date=repair_entry_date,
+            repair_reasons=repair_reasons,
         )
 
     def evaluate_page(
@@ -417,7 +642,12 @@ class ListingEvaluationPreviewService:
 
         start = cutoff - timedelta(days=max(30, config.medium_days) - 1)
         stock_start = cutoff - timedelta(
-            days=max(30, config.inventory_repair.stockout_consecutive_days) - 1
+            days=max(
+                30,
+                config.inventory_repair.long_stockout_days + 2,
+                config.inventory_repair.stockout_repair_valid_days,
+            )
+            - 1
         )
         prior_cutoff = cutoff - timedelta(
             days=config.inventory_repair.stockout_consecutive_days - 1
@@ -434,6 +664,11 @@ class ListingEvaluationPreviewService:
                 WalmartListingInventoryDailyFact.snapshot_date_la.between(stock_start, cutoff),
             )
         ).all()
+        confirmed_wfs_days_by_account = self._confirmed_wfs_days(
+            {listing.source_account_ref for listing in listings},
+            start=stock_start,
+            cutoff=cutoff,
+        )
         prior_rows = self.session.execute(
             select(
                 WalmartListingInventoryDailyFact.source_account_ref,
@@ -491,13 +726,35 @@ class ListingEvaluationPreviewService:
             sales_by_key[(row.source_account_ref, row.store_id, row.item_id, row.msku)].append(row)
         stock_by_key = defaultdict(list)
         for row in stock_rows:
-            stock_by_key[(row.source_account_ref, row.store_id, row.item_id, row.msku)].append(row)
+            if row.snapshot_date_la in confirmed_wfs_days_by_account[row.source_account_ref]:
+                stock_by_key[(row.source_account_ref, row.store_id, row.item_id, row.msku)].append(
+                    row
+                )
         prior_by_key = {(row[0], row[1], row[2], row[3]): row[4] for row in prior_rows}
+        prior_dates = [row[4] for row in prior_rows if row[4] is not None]
+        confirmed_prior_days_by_account = (
+            self._confirmed_wfs_days(
+                {listing.source_account_ref for listing in listings},
+                start=min(prior_dates),
+                cutoff=max(prior_dates),
+            )
+            if prior_dates
+            else {}
+        )
+        prior_by_key = {
+            key: business_day
+            for key, business_day in prior_by_key.items()
+            if business_day in confirmed_prior_days_by_account.get(key[0], set())
+        }
         archive_by_id = {row.listing_id: row for row in archive_rows}
         monitor_by_key = defaultdict(list)
         for row in monitor_rows:
             monitor_by_key[(row.source_account_ref, row.store_id, row.item_id)].append(row)
         accounts = {listing.source_account_ref for listing in listings}
+        confirmed_lifecycle, manual_lifecycle = self._confirmed_lifecycle_states(
+            listings, cutoff=cutoff
+        )
+        stage_entries = self._stage_entries(listings, cutoff=cutoff)
         confirmed_sales_days_by_account = self._confirmed_daily_sales_days(
             accounts, start=start, cutoff=cutoff
         )
@@ -535,6 +792,11 @@ class ListingEvaluationPreviewService:
                 confirmed_sales_days=frozenset(
                     confirmed_sales_days_by_account[listing.source_account_ref]
                 ),
+                lifecycle_history_confirmed=listing.id in confirmed_lifecycle,
+                manual_stage_protected=listing.id in manual_lifecycle,
+                stockout_previous_stage=stage_entries.get(listing.id, (None, None, ()))[0],
+                repair_entry_date=stage_entries.get(listing.id, (None, None, ()))[1],
+                repair_reasons=stage_entries.get(listing.id, (None, None, ()))[2],
             )
             for listing in listings
         }
@@ -553,6 +815,11 @@ class ListingEvaluationPreviewService:
         monitor_rows: list[StandardizedWalmartMonitorListingObservation],
         unconfirmed_account_ad_days: frozenset[date],
         confirmed_sales_days: frozenset[date] = frozenset(),
+        lifecycle_history_confirmed: bool = False,
+        manual_stage_protected: bool = False,
+        stockout_previous_stage: str | None = None,
+        repair_entry_date: date | None = None,
+        repair_reasons: tuple[str, ...] = (),
     ) -> ListingEvaluationPreview:
         archive_state_known = archive is not None
         archived = bool(archive is not None and archive.is_archived)
@@ -596,6 +863,7 @@ class ListingEvaluationPreviewService:
             consecutive_days=config.inventory_repair.stockout_consecutive_days,
         )
         lifecycle_reason = None
+        lifecycle_complete = False
         stock_valid30 = 0
         sales_by_day = {row.business_date_la: row for row in sales}
         known_stages = {
@@ -612,6 +880,34 @@ class ListingEvaluationPreviewService:
         }
         if not archived:
             stock_by_day = {row.snapshot_date_la: row for row in stock}
+            stockout_days_before_recovery = None
+            if listing.lifecycle_status == "断货期" and stockout_previous_stage is not None:
+                today_stock = stock_by_day.get(cutoff)
+                if today_stock is not None and (today_stock.wfs_available_quantity or ZERO) > ZERO:
+                    cursor = cutoff - timedelta(days=1)
+                    count = 0
+                    while (
+                        cursor in stock_by_day
+                        and stock_by_day[cursor].wfs_available_quantity == ZERO
+                    ):
+                        count += 1
+                        cursor -= timedelta(days=1)
+                    preceding = stock_by_day.get(cursor)
+                    if count > config.inventory_repair.long_stockout_days or (
+                        count >= config.inventory_repair.stockout_consecutive_days
+                        and preceding is not None
+                        and (preceding.wfs_available_quantity or ZERO) > ZERO
+                    ):
+                        stockout_days_before_recovery = count
+            repair_stock_valid_days = (
+                sum(
+                    row.snapshot_date_la >= repair_entry_date
+                    and (row.wfs_available_quantity or ZERO) > ZERO
+                    for row in stock
+                )
+                if repair_entry_date is not None
+                else None
+            )
             business_days = []
             for business_date in sorted(
                 set(sales_by_day) | set(stock_by_day) | set(monitor_by_day)
@@ -668,17 +964,27 @@ class ListingEvaluationPreviewService:
                 days=business_days,
                 first_effective_stock=prior is not None,
                 config=config,
+                stockout_previous_stage=stockout_previous_stage,
+                stockout_days_before_recovery=stockout_days_before_recovery,
+                repair_stock_valid_days=repair_stock_valid_days,
+                repair_reasons=repair_reasons,
                 fulfillment_type=listing.fulfillment_type or "",
             )
             lifecycle_reason = lifecycle_result.reason
+            lifecycle_complete = lifecycle_result.evidence_complete
             stock_valid30 = lifecycle_result.valid_stock_days_30
             # This is a diagnostic based on current stage, not a proven stage as of cutoff.
             if lifecycle_result.evidence_complete:
                 stage = lifecycle_result.stage
-        missing = [
-            "ADS_COST_PUBLICATION_PROOF_MISSING",
-            "HISTORICAL_LIFECYCLE_APPROVAL_EVENTS_UNVERIFIED",
-        ]
+        if manual_stage_protected:
+            stage = listing.lifecycle_status
+            lifecycle_reason = "已批准的人工生命周期优先"
+            lifecycle_complete = True
+        missing: list[str] = []
+        if listing.lifecycle_status is not None and not lifecycle_history_confirmed:
+            missing.append("HISTORICAL_LIFECYCLE_APPROVAL_EVENTS_UNVERIFIED")
+        if not lifecycle_complete:
+            missing.append("LIFECYCLE_TRANSITION_EVIDENCE_INCOMPLETE")
         valid_sales_dates_30 = {
             row.business_date_la
             for row in sales

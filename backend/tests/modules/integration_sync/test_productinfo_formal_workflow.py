@@ -490,6 +490,56 @@ def test_ad_execution_does_not_run_sales_or_refund_fetches() -> None:
     runner._refresh_order_profit_mart.assert_called_once_with()
 
 
+@pytest.mark.parametrize(
+    ("capture_complete", "advertiser_count", "expected_marker"),
+    [(True, 1, True), (False, 1, False), (True, 2, False)],
+)
+def test_ad_completion_marker_requires_entire_account_report(
+    capture_complete: bool, advertiser_count: int, expected_marker: bool
+) -> None:
+    session = MagicMock(spec=Session)
+    service = SyncRunExecutionService(session)
+    service._event = MagicMock()
+    runner = MagicMock(max_advertisers=1)
+    runner.business_date = date(2026, 1, 15)
+    runner.ad_report_capture_complete = capture_complete
+    runner.summary = SimpleNamespace()
+    runner._fetch_page_all.return_value = [
+        {"advertiserId": f"synthetic-advertiser-{index}"} for index in range(advertiser_count)
+    ]
+    runner._fetch_ads_all.return_value = []
+
+    service._execute_data_pages_interface("walmartAdItemSpList", runner, run_id=UUID(int=44))
+
+    marker_codes = [call.args[3] for call in service._event.call_args_list]
+    assert ("SYNC_AD_REPORT_DAY_VALIDATED" in marker_codes) is expected_marker
+
+
+@pytest.mark.parametrize(
+    "advertisers",
+    [
+        [{"advertiserId": "synthetic-a"}, {"advertiserId": "synthetic-a"}],
+        [{"advertiserId": "synthetic-a"}, {}],
+    ],
+)
+def test_ad_completion_marker_rejects_unaddressable_advertisers(advertisers: list[dict]) -> None:
+    session = MagicMock(spec=Session)
+    service = SyncRunExecutionService(session)
+    service._event = MagicMock()
+    runner = MagicMock(max_advertisers=10)
+    runner.business_date = date(2026, 1, 15)
+    runner.ad_report_capture_complete = True
+    runner.summary = SimpleNamespace()
+    runner._fetch_page_all.return_value = advertisers
+    runner._fetch_ads_all.return_value = []
+
+    service._execute_data_pages_interface("walmartAdItemSpList", runner, run_id=UUID(int=44))
+
+    assert "SYNC_AD_REPORT_DAY_VALIDATED" not in [
+        call.args[3] for call in service._event.call_args_list
+    ]
+
+
 def test_data_pages_mart_failure_rolls_back_day_and_continues(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

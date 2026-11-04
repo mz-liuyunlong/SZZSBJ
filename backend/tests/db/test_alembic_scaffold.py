@@ -33,6 +33,9 @@ MERGED_HEAD_REVISION_0071 = "20261102_0071_merge_listing_tags_and_walmart_gatewa
 SKILL_0070_REVISION = "20261102_0070_ai_skill_soft_delete"
 SKILL_0071_REVISION = "20261102_0071_skill_lib"
 MERGED_HEAD_REVISION_0072 = "20261102_0072_list_skill_merge"
+LISTING_DEFAULT_RULE_REVISION = "20261104_0073_listing_grade_default_rule"
+LISTING_LIFECYCLE_REVISION = "20261104_0074_listing_lifecycle_adjustment"
+LISTING_MANUAL_EVALUATION_REVISION = "20261104_0075_listing_manual_evaluation_request"
 WFS_DETECTION_HEAD_REVISION = "20261026_0061_wfs_fee_detection_evidence"
 SYNC_ANOMALY_HEAD_REVISION = "20261027_0062_sync_anomaly_center"
 AI_RUNTIME_PREVIOUS_REVISION = "20261027_0063_ai_runtime"
@@ -79,7 +82,19 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20261026_0055_purchase_board_draft_no",
         LISTING_INTEGRATION_HEAD_REVISION,
     }
-    assert script.get_heads() == [MERGED_HEAD_REVISION_0072]
+    assert script.get_heads() == [LISTING_MANUAL_EVALUATION_REVISION]
+    assert (
+        script.get_revision(LISTING_MANUAL_EVALUATION_REVISION).down_revision
+        == LISTING_LIFECYCLE_REVISION
+    )
+    assert (
+        script.get_revision(LISTING_LIFECYCLE_REVISION).down_revision
+        == LISTING_DEFAULT_RULE_REVISION
+    )
+    assert (
+        script.get_revision(LISTING_DEFAULT_RULE_REVISION).down_revision
+        == MERGED_HEAD_REVISION_0072
+    )
     assert set(script.get_revision(MERGED_HEAD_REVISION_0072).down_revision) == {
         MERGED_HEAD_REVISION_0071,
         SKILL_0071_REVISION,
@@ -371,6 +386,6 @@ def test_revision_files_have_unique_ids_and_form_one_connected_graph() -> None:
                     revisions.append(ast.literal_eval(node.value))
     assert len(revisions) == len(set(revisions)), "duplicate full Alembic revision ID"
     script = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
-    assert script.get_heads() == [MERGED_HEAD_REVISION_0072]
+    assert script.get_heads() == [LISTING_MANUAL_EVALUATION_REVISION]
     assert len(script.get_bases()) == 1
     assert {item.revision for item in script.walk_revisions()} == set(revisions)

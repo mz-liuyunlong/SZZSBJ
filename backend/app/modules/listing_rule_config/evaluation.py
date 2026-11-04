@@ -265,6 +265,10 @@ def lifecycle_listing(
         previous_stage = stockout_previous_stage
 
     if previous_stage == "修复期":
+        if not repair_reasons:
+            return LifecycleResult(
+                "修复期", "缺少修复阶段入场记录", valid_stock30, consecutive, False
+            )
         if repair_stock_valid_days is None and "stockout" in repair_reasons:
             return LifecycleResult(
                 "修复期", "缺少修复累计有效有货日", valid_stock30, consecutive, False

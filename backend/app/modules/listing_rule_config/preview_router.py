@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -16,9 +17,11 @@ from app.core.auth import Principal
 from app.core.config import get_settings
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
+from app.modules.data_pages.models import ListingManagementCurrentMart
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.listing_rule_config.evaluation import rating_cutoff_la
 from app.modules.listing_rule_config.models import (
+    ListingEvaluationManualRequest,
     ListingEvaluationRun,
     ListingEvaluationSnapshot,
     ListingGradeFollowUpTask,
@@ -27,6 +30,8 @@ from app.modules.listing_rule_config.preview import (
     ListingEvaluationPreview,
     ListingEvaluationPreviewService,
 )
+from app.modules.listing_rule_config.publish import ListingEvaluationPublisher
+from app.modules.listing_rule_config.tasks import account_scope_hash, manual_diagnostic
 
 router = APIRouter(prefix="/api/listings", tags=["Listing Evaluation Preview"])
 DB = Annotated[Session, Depends(get_db_session)]
@@ -35,6 +40,165 @@ view = Depends(require_permission("page:products:listing-management:view"))
 follow_up_writer = Annotated[
     Principal, Depends(require_permission("action:products:listing-management:manage-followups"))
 ]
+manual_calculator = Annotated[
+    Principal, Depends(require_permission("action:products:listing-management:calculate-all"))
+]
+reverter = Annotated[
+    Principal, Depends(require_permission("action:products:listing-management:revert-evaluation"))
+]
+
+
+class ManualEvaluationRequest(BaseModel):
+    confirmation: Literal["CONFIRM_LISTING_CALCULATE_ALL"]
+
+
+class ManualEvaluationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    schedule_date_cn: date
+    cutoff_date_la: date
+    status: str
+    run_id: UUID | None
+    error_code: str | None
+
+
+class EvaluationRevertRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=5, max_length=500)
+    confirmation: Literal["CONFIRM_LISTING_EVALUATION_REVERT"]
+
+
+class EvaluationRevertRead(BaseModel):
+    snapshot_id: UUID
+    listing_id: UUID
+    publication_status: str
+    reverted_at: datetime
+    reverted_by: str
+
+
+@router.post(
+    "/evaluation-snapshots/{snapshot_id}/revert",
+    response_model=SuccessEnvelope[EvaluationRevertRead, dict[str, str]],
+    responses={
+        403: {"model": ErrorEnvelope},
+        404: {"model": ErrorEnvelope},
+        409: {"model": ErrorEnvelope},
+        503: {"model": ErrorEnvelope},
+    },
+)
+def revert_evaluation_snapshot(
+    request: Request,
+    snapshot_id: UUID,
+    payload: EvaluationRevertRequest,
+    session: DB,
+    account_refs: scope,
+    principal: reverter,
+):
+    if not get_settings().listing_evaluation_publish_enabled:
+        raise ApiError(code="LISTING_EVALUATION_PUBLICATION_DISABLED", status_code=503)
+    snapshot = ListingEvaluationPublisher(session).revert_snapshot(
+        snapshot_id=snapshot_id,
+        actor=principal.user_id,
+        reason=payload.reason,
+        account_refs=account_refs,
+    )
+    return success_response(
+        request,
+        data=EvaluationRevertRead(
+            snapshot_id=snapshot.id,
+            listing_id=snapshot.listing_id,
+            publication_status=snapshot.publication_status,
+            reverted_at=snapshot.reverted_at,
+            reverted_by=snapshot.reverted_by,
+        ),
+        meta={"source": "audited_publication_revert"},
+    )
+
+
+@router.post(
+    "/evaluation-runs/manual",
+    status_code=202,
+    response_model=SuccessEnvelope[ManualEvaluationRead, dict[str, str]],
+    responses={
+        403: {"model": ErrorEnvelope},
+        409: {"model": ErrorEnvelope},
+        503: {"model": ErrorEnvelope},
+    },
+)
+def request_manual_evaluation(
+    request: Request,
+    _payload: ManualEvaluationRequest,
+    session: DB,
+    account_refs: scope,
+    principal: manual_calculator,
+):
+    """Queue one all-account diagnostic without publishing any Listing values."""
+    if not get_settings().listing_evaluation_manual_enabled:
+        raise ApiError(code="LISTING_EVALUATION_MANUAL_DISABLED", status_code=503)
+    accounts = set(
+        session.scalars(select(ListingManagementCurrentMart.source_account_ref).distinct()).all()
+    )
+    if not accounts or not accounts.issubset(account_refs):
+        raise ApiError(code="LISTING_EVALUATION_ALL_SCOPE_REQUIRED", status_code=403)
+    now = datetime.now(UTC)
+    schedule_date_cn = now.astimezone(ZoneInfo("Asia/Shanghai")).date()
+    active = session.scalar(
+        select(ListingEvaluationManualRequest.id)
+        .where(
+            ListingEvaluationManualRequest.status.in_(("queued", "running")),
+            ListingEvaluationManualRequest.schedule_date_cn == schedule_date_cn,
+        )
+        .limit(1)
+    )
+    if active is not None:
+        raise ApiError(code="LISTING_EVALUATION_ALREADY_QUEUED", status_code=409)
+    row = ListingEvaluationManualRequest(
+        requested_by=principal.user_id,
+        requested_at=now,
+        schedule_date_cn=schedule_date_cn,
+        cutoff_date_la=rating_cutoff_la(now),
+        account_scope_hash=account_scope_hash(accounts),
+        status="queued",
+    )
+    session.add(row)
+    session.commit()
+    try:
+        manual_diagnostic.apply_async(args=[str(row.id)])
+    except Exception:
+        row.status = "failed"
+        row.error_code = "LISTING_EVALUATION_QUEUE_UNAVAILABLE"
+        row.finished_at = datetime.now(UTC)
+        session.commit()
+        raise ApiError(code="LISTING_EVALUATION_QUEUE_UNAVAILABLE", status_code=503) from None
+    return success_response(
+        request,
+        data=ManualEvaluationRead.model_validate(row),
+        meta={"source": "manual_diagnostic_request"},
+    )
+
+
+@router.get(
+    "/evaluation-runs/manual",
+    response_model=SuccessEnvelope[list[ManualEvaluationRead], dict[str, str]],
+)
+def list_manual_evaluation_requests(
+    request: Request,
+    session: DB,
+    principal: manual_calculator,
+):
+    rows = session.scalars(
+        select(ListingEvaluationManualRequest)
+        .where(ListingEvaluationManualRequest.requested_by == principal.user_id)
+        .order_by(ListingEvaluationManualRequest.requested_at.desc())
+        .limit(20)
+    ).all()
+    return success_response(
+        request,
+        data=[ManualEvaluationRead.model_validate(row) for row in rows],
+        meta={"source": "manual_diagnostic_requests"},
+    )
 
 
 @router.get(
@@ -161,6 +325,38 @@ class ListingEvaluationRunList(BaseModel):
     total: int
 
 
+class ListingEvaluationSnapshotItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    listing_id: UUID
+    store_id: str
+    item_id: str
+    msku: str | None
+    cutoff_date_la: date
+    current_lifecycle: str | None
+    current_grade: str | None
+    lifecycle_candidate: str | None
+    grade_candidate: str | None
+    valid_short: int
+    valid_medium: int
+    valid_stock_days_30: int
+    rule_version: int
+    rule_source: str
+    missing_evidence: list[str] = Field(default_factory=list)
+    publication_status: str
+    published: bool
+    published_at: datetime | None = None
+    published_by: str | None = None
+    publication_error_code: str | None = None
+    reverted_at: datetime | None = None
+
+
+class ListingEvaluationSnapshotList(BaseModel):
+    items: list[ListingEvaluationSnapshotItem]
+    total: int
+
+
 class ListingFollowUpItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -201,6 +397,7 @@ def list_evaluation_runs(
             ListingEvaluationSnapshot.source_account_ref.in_(account_refs),
         )
     )
+
     rows = list(
         session.scalars(
             select(ListingEvaluationRun)
@@ -263,6 +460,52 @@ def list_evaluation_runs(
             total=count,
         ),
         meta={"source": "read_only_diagnostic"},
+    )
+
+
+@router.get(
+    "/evaluation-runs/{run_id}/snapshots",
+    response_model=SuccessEnvelope[ListingEvaluationSnapshotList, dict[str, str]],
+    responses={403: {"model": ErrorEnvelope}, 404: {"model": ErrorEnvelope}},
+    dependencies=[view],
+)
+def list_evaluation_snapshots(
+    request: Request,
+    run_id: UUID,
+    session: DB,
+    account_refs: scope,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+):
+    """Return only this viewer's Listing results and safe evidence codes."""
+    scoped = (
+        ListingEvaluationSnapshot.run_id == run_id,
+        ListingEvaluationSnapshot.source_account_ref.in_(account_refs),
+    )
+    total = session.scalar(
+        select(func.count()).select_from(ListingEvaluationSnapshot).where(*scoped)
+    )
+    if not total:
+        raise ApiError(code="LISTING_EVALUATION_RUN_NOT_FOUND", status_code=404)
+    rows = session.scalars(
+        select(ListingEvaluationSnapshot)
+        .where(*scoped)
+        .order_by(ListingEvaluationSnapshot.id)
+        .offset(offset)
+        .limit(limit)
+    ).all()
+    return success_response(
+        request,
+        data=ListingEvaluationSnapshotList(
+            items=[
+                ListingEvaluationSnapshotItem.model_validate(row).model_copy(
+                    update={"missing_evidence": list(row.evidence_json or [])}
+                )
+                for row in rows
+            ],
+            total=total,
+        ),
+        meta={"source": "scoped_diagnostic_snapshots"},
     )
 
 

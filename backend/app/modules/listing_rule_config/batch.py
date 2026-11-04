@@ -164,10 +164,6 @@ class ListingEvaluationBatchService:
             for listing in listings:
                 result = evaluations[listing.id]
                 evidence = list(result.missing_evidence)
-                # This run is deliberately diagnostic-only until upstream ad/cost
-                # completeness and historical workflow contracts are approved.
-                if "ADS_COST_PUBLICATION_PROOF_MISSING" not in evidence:
-                    evidence.append("ADS_COST_PUBLICATION_PROOF_MISSING")
                 blocked = bool(evidence)
                 snapshot = ListingEvaluationSnapshot(
                     run_id=run_id,
@@ -180,6 +176,7 @@ class ListingEvaluationBatchService:
                     current_lifecycle=result.current_lifecycle,
                     current_grade=result.current_grade,
                     lifecycle_candidate=result.lifecycle_candidate,
+                    lifecycle_evidence_reason=result.lifecycle_evidence_reason,
                     grade_candidate=result.grade_candidate,
                     valid_short=result.valid_short,
                     valid_medium=result.valid_medium,
@@ -222,6 +219,7 @@ class ListingEvaluationBatchService:
             .where(
                 ListingEvaluationSnapshot.run_id == run_id,
                 ListingEvaluationSnapshot.published.is_(True),
+                ListingEvaluationSnapshot.reverted_at.is_(None),
                 ListingEvaluationSnapshot.grade_candidate.in_(("C", "D")),
             )
         ).all()

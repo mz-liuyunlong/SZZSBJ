@@ -22,6 +22,7 @@ def test_rule_read_reports_actual_runtime_flags(monkeypatch, enabled: bool) -> N
         lambda: SimpleNamespace(
             listing_evaluation_preview_enabled=enabled,
             listing_evaluation_scheduler_enabled=enabled,
+            listing_evaluation_manual_enabled=enabled,
             listing_evaluation_publish_enabled=False,
         ),
     )
@@ -41,6 +42,7 @@ def test_rule_read_reports_actual_runtime_flags(monkeypatch, enabled: bool) -> N
 
     assert response.data.preview_enabled is enabled
     assert response.data.scheduler_enabled is enabled
+    assert response.data.manual_enabled is enabled
     assert response.data.publish_enabled is False
     assert response.data.can_edit is False
 
@@ -52,6 +54,7 @@ def test_rule_save_response_keeps_runtime_status(monkeypatch) -> None:
         lambda: SimpleNamespace(
             listing_evaluation_preview_enabled=True,
             listing_evaluation_scheduler_enabled=True,
+            listing_evaluation_manual_enabled=False,
             listing_evaluation_publish_enabled=False,
         ),
     )
@@ -79,4 +82,5 @@ def test_rule_save_response_keeps_runtime_status(monkeypatch) -> None:
 
     assert response.data.scheduler_enabled is True
     assert response.data.preview_enabled is True
+    assert response.data.manual_enabled is False
     assert response.data.publish_enabled is False

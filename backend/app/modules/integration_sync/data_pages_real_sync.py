@@ -429,6 +429,7 @@ class DataPagesRealSyncRunner:
         self._listing_capture_by_row_id: dict[int, datetime] = {}
         self.listing_complete_day: date | None = None
         self.listing_page_count = 0
+        self.ad_report_capture_complete = True
         self.store_ids: tuple[str, ...] = ()
         self.advertiser_ids: tuple[str, ...] = ()
 
@@ -622,6 +623,7 @@ class DataPagesRealSyncRunner:
         page_no = 1
         rows: list[dict[str, Any]] = []
         previous_signature: str | None = None
+        declared_total: int | None = None
         while page_no <= spec.default_max_pages:
             response = self._request_page(
                 parser_key,
@@ -637,7 +639,15 @@ class DataPagesRealSyncRunner:
             previous_signature = signature
             rows.extend(current)
             total = _total_of(response.response_json)
+            if parser_key == "walmart_advertiser_list":
+                if total is None or (declared_total is not None and total != declared_total):
+                    self.ad_report_capture_complete = False
+                declared_total = total
             if not current or len(current) < size or (total and len(rows) >= total):
+                if parser_key == "walmart_advertiser_list" and (
+                    declared_total is None or len(rows) != declared_total
+                ):
+                    self.ad_report_capture_complete = False
                 return rows
             page_no += 1
         raise DataPagesRealSyncError(f"DATA_PAGES_MAX_PAGES_EXCEEDED:{spec.interface_key}")
@@ -671,6 +681,7 @@ class DataPagesRealSyncRunner:
         size = min(self.page_size, 200)
         rows: list[dict[str, Any]] = []
         previous_signature: str | None = None
+        declared_total: int | None = None
         for page_no in range(1, spec.default_max_pages + 1):
             response = self._request_page(
                 "walmart_ad_item_sp_list",
@@ -685,7 +696,13 @@ class DataPagesRealSyncRunner:
                 raise DataPagesRealSyncError("DATA_PAGES_PAGINATION_STALLED:walmartAdItemSpList")
             previous_signature = signature
             rows.extend(current)
+            total = _total_of(response.response_json)
+            if total is None or (declared_total is not None and total != declared_total):
+                self.ad_report_capture_complete = False
+            declared_total = total
             if not current or len(current) < size:
+                if declared_total is None or len(rows) != declared_total:
+                    self.ad_report_capture_complete = False
                 return rows
         raise DataPagesRealSyncError("DATA_PAGES_MAX_PAGES_EXCEEDED:walmartAdItemSpList")
 
@@ -965,6 +982,11 @@ class DataPagesRealSyncRunner:
                     **_timestamps(),
                 },
             )
+            # An incomplete retry must not replace inventory facts previously
+            # certified by a successful full-day Listing capture.
+            if self.listing_complete_day is None:
+                count += 1
+                continue
             self.session.execute(
                 text(
                     "insert into fact_walmart_listing_inventory_daily "

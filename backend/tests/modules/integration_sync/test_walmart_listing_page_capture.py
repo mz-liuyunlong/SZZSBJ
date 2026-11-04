@@ -32,6 +32,65 @@ def _response(
     )
 
 
+@pytest.mark.parametrize(
+    ("total", "expected_complete"),
+    [(1, True), (None, False), (2, False)],
+)
+def test_ad_report_page_total_controls_completion_marker(
+    monkeypatch, total: int | None, expected_complete: bool
+) -> None:
+    runner = real_sync.DataPagesRealSyncRunner(
+        session=MagicMock(),
+        client=MagicMock(),
+        source_account_ref="synthetic-account",
+        business_date=date(2026, 1, 15),
+        page_size=2,
+        campaign_type="SP",
+        max_advertisers=2,
+    )
+    row = {"advertiserId": "synthetic-advertiser"}
+    response = real_sync.ProviderResponse(
+        parser_key="walmart_ad_item_sp_list",
+        response_json={"code": 0, "data": {"total": total}},
+        rows=(row,),
+        page_no=1,
+        page_size=2,
+        pulled_at=datetime(2026, 1, 16, tzinfo=UTC),
+        provider_code=0,
+        response_code=200,
+    )
+    monkeypatch.setattr(runner, "_request_page", lambda *_args, **_kwargs: response)
+
+    assert runner._fetch_ads_all("synthetic-advertiser") == [row]
+    assert runner.ad_report_capture_complete is expected_complete
+
+
+def test_advertiser_list_missing_total_cannot_certify_account_day(monkeypatch) -> None:
+    runner = real_sync.DataPagesRealSyncRunner(
+        session=MagicMock(),
+        client=MagicMock(),
+        source_account_ref="synthetic-account",
+        business_date=date(2026, 1, 15),
+        page_size=2,
+        campaign_type="SP",
+        max_advertisers=2,
+    )
+    response = real_sync.ProviderResponse(
+        parser_key="walmart_advertiser_list",
+        response_json={"code": 0, "data": {}},
+        rows=({"advertiserId": "synthetic-advertiser"},),
+        page_no=1,
+        page_size=2,
+        pulled_at=datetime(2026, 1, 16, tzinfo=UTC),
+        provider_code=0,
+        response_code=200,
+    )
+    monkeypatch.setattr(runner, "_request_page", lambda *_args, **_kwargs: response)
+
+    assert len(runner._fetch_page_all("walmart_advertiser_list", runner._advertiser_body)) == 1
+    assert runner.ad_report_capture_complete is False
+
+
 def test_duplicate_listing_uses_its_own_page_capture_time(monkeypatch) -> None:
     first_at = datetime(2026, 1, 15, 15, 59, tzinfo=UTC)
     stocked_at = datetime(2026, 1, 15, 16, 1, tzinfo=UTC)
@@ -87,11 +146,7 @@ def test_duplicate_listing_uses_its_own_page_capture_time(monkeypatch) -> None:
         for call in session.execute.call_args_list
         if "insert into fact_walmart_listing_inventory_daily" in str(call.args[0])
     ]
-    assert [row["snapshot_date_la"] for row in inventory_writes] == [
-        date(2026, 1, 15),
-        date(2026, 1, 15),
-        date(2026, 1, 15),
-    ]
+    assert inventory_writes == []  # Incomplete retry cannot overwrite certified daily facts.
 
 
 def test_listing_capture_crossing_la_midnight_keeps_fact_days_separate(monkeypatch) -> None:
@@ -124,10 +179,7 @@ def test_listing_capture_crossing_la_midnight_keeps_fact_days_separate(monkeypat
         for call in runner.session.execute.call_args_list
         if "insert into fact_walmart_listing_inventory_daily" in str(call.args[0])
     ]
-    assert [row["snapshot_date_la"] for row in inventory_writes] == [
-        date(2026, 1, 15),
-        date(2026, 1, 16),
-    ]
+    assert inventory_writes == []
 
 
 @pytest.mark.parametrize(
@@ -218,9 +270,17 @@ def test_listing_completion_accepts_two_same_day_pages_with_exact_total(monkeypa
     )
     monkeypatch.setattr(runner, "_request_page", lambda *_args, **_kwargs: next(responses))
 
-    assert len(runner._fetch_offset_all("walmart_listing_list", runner._listing_body)) == 3
+    rows = runner._fetch_offset_all("walmart_listing_list", runner._listing_body)
+    assert len(rows) == 3
     assert runner.listing_complete_day == date(2026, 1, 15)
     assert runner.listing_page_count == 2
+    runner._write_listings(rows)
+    inventory_writes = [
+        call.args[1]
+        for call in runner.session.execute.call_args_list
+        if "insert into fact_walmart_listing_inventory_daily" in str(call.args[0])
+    ]
+    assert [row["snapshot_date_la"] for row in inventory_writes] == [date(2026, 1, 15)] * 3
 
 
 @pytest.mark.parametrize(

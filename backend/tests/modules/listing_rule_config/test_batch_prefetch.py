@@ -37,6 +37,7 @@ def fact(account: str, msku: str | None):
         store_id="synthetic-store",
         item_id="synthetic-item",
         msku=msku,
+        snapshot_date_la=date(2026, 1, 15),
     )
 
 
@@ -51,11 +52,14 @@ def test_page_prefetch_is_bounded_and_does_not_mix_account_or_msku(monkeypatch) 
         Rows([fact("synthetic-account-b", None)]),
     ]
     session.execute.side_effect = [
+        Rows([("synthetic-account-a", "2026-01-15")]),
         Rows(
             [("synthetic-account-a", "synthetic-store", "synthetic-item", None, date(2026, 1, 1))]
         ),
+        Rows([("synthetic-account-a", "2026-01-01")]),
         Rows([]),
         Rows([("synthetic-account-a", date(2026, 1, 15), 3)]),
+        Rows([]),
     ]
     captured = {}
 
@@ -73,7 +77,7 @@ def test_page_prefetch_is_bounded_and_does_not_mix_account_or_msku(monkeypatch) 
 
     assert result == {first.id: first.id, second.id: second.id}
     assert session.scalars.call_count == 4
-    assert session.execute.call_count == 3
+    assert session.execute.call_count == 6
     assert len(captured[first.id]["sales"]) == 1
     assert len(captured[second.id]["sales"]) == 1
     assert len(captured[first.id]["stock"]) == 1

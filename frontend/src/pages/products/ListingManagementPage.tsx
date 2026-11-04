@@ -223,6 +223,7 @@ const columnGroups: RuntimeColumnGroup[] = [
 interface ListingManagementPageProps {
   page: NavigationPage;
   preferenceScope?: string;
+  permissions?: readonly string[];
 }
 
 
@@ -240,7 +241,7 @@ interface ListingGptAnalysisFormValues {
   adAnalysisUrl: string;
 }
 
-function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingManagementPageProps) {
+function ListingManagementPage({ page, preferenceScope = "anonymous", permissions = [] }: ListingManagementPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const [gptAnalysisForm] = Form.useForm<ListingGptAnalysisFormValues>();
   const [managedTags, setManagedTags] = useState<CustomProductTag[]>([]);
@@ -915,8 +916,9 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
     <PageShell page={page}>
       {messageContextHolder}
       <ListingRuleConfigDrawer open={ruleConfigOpen} onClose={() => setRuleConfigOpen(false)} />
-      <ListingEvaluationMonitor open={evaluationMonitorOpen} onClose={() => setEvaluationMonitorOpen(false)} />
-      <ListingEvaluationPreviewModal listing={evaluationListing} onClose={() => setEvaluationListing(null)} />
+      <ListingEvaluationMonitor open={evaluationMonitorOpen} onClose={() => setEvaluationMonitorOpen(false)} permissions={permissions} />
+      <ListingEvaluationPreviewModal listing={evaluationListing} onClose={() => setEvaluationListing(null)}
+        permissions={permissions} onApplied={() => { refreshListingData(); setEvaluationListing(null); }} />
       <div ref={listingManagementPageRootRef} className="listing-management">
         <Card size="small" className="listing-management__page-card">
           <RequestLoadingOverlay spinning={isTableRequesting} label="正在加载Listing数据，请稍候" />

@@ -195,6 +195,7 @@ class ListingGradeRuleRead(BaseModel):
     storage_ready: bool = True
     preview_enabled: bool = False
     scheduler_enabled: bool = False
+    manual_enabled: bool = False
     publish_enabled: bool = False
 
 

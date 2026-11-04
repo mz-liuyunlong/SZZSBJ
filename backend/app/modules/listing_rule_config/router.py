@@ -40,6 +40,7 @@ def _with_runtime_flags(result: ListingGradeRuleRead) -> ListingGradeRuleRead:
         update={
             "preview_enabled": settings.listing_evaluation_preview_enabled,
             "scheduler_enabled": settings.listing_evaluation_scheduler_enabled,
+            "manual_enabled": settings.listing_evaluation_manual_enabled,
             "publish_enabled": settings.listing_evaluation_publish_enabled,
         }
     )
