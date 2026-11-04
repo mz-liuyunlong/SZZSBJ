@@ -31,6 +31,33 @@ _STORE_REVIEWED_GET_PATHS = frozenset({
     "/api/pmc/purchase/plans/pending",
 })
 _STORE_REVIEWED_GET_PREFIXES = ("/api/pmc/purchase/orders/",)
+_ORG_REVIEWED_GET_PATHS = _STORE_REVIEWED_GET_PATHS | frozenset({
+    "/api/after-sales/refunds/overview",
+    "/api/after-sales/refunds/product-analysis",
+    "/api/after-sales/refunds/items",
+    "/api/product-management/skus",
+    "/api/product-management/skus/summary",
+    "/api/product-management/options",
+    "/api/product-management/skus/export",
+    "/api/warehouse/wfs-fee-cases",
+    "/api/warehouse/wfs-fee-alerts",
+    "/api/approvals",
+    "/api/approvals/summary",
+})
+_ORG_REVIEWED_GET_PREFIXES = (
+    *_STORE_REVIEWED_GET_PREFIXES,
+    "/api/product-management/skus/",
+    "/api/warehouse/wfs-fee-cases/",
+    "/api/approvals/",
+)
+_ORG_REVIEWED_WRITE_PATHS = frozenset({
+    "/api/product-management/skus/export",
+})
+_ORG_REVIEWED_WRITE_PREFIXES = (
+    "/api/warehouse/wfs-fee-cases/",
+    "/api/warehouse/wfs-fee-alerts/",
+    "/api/approvals/",
+)
 _NON_BUSINESS_PREFIXES = (
     "/api/settings/",
     "/api/auth/",
@@ -46,13 +73,13 @@ def _scope_sources(session: Session, user_id: int) -> dict[str, frozenset[str]]:
         SELECT 'user' AS origin, scope_type, scope_value
         FROM app_user_data_scopes
         WHERE user_id = :user_id
-          AND scope_type IN ('store', 'owner', 'sku', 'product')
+          AND scope_type IN ('store', 'owner', 'sku', 'product', 'org_department')
         UNION ALL
         SELECT 'role' AS origin, r.scope_type, r.scope_value
         FROM app_user_roles ur
         JOIN app_role_data_scopes r ON r.role_id = ur.role_id
         WHERE ur.user_id = :user_id
-          AND r.scope_type IN ('store', 'owner', 'sku', 'product')
+          AND r.scope_type IN ('store', 'owner', 'sku', 'product', 'org_department')
         """),
         {"user_id": user_id},
     ).mappings()
@@ -66,8 +93,53 @@ def _scope_sources(session: Session, user_id: int) -> dict[str, frozenset[str]]:
             role.setdefault(kind, set()).add(str(row["scope_value"]))
     return {
         kind: frozenset(user[kind] if kind in user else role.get(kind, set()))
-        for kind in _UNENFORCED_DIMENSIONS | {"store"}
+        for kind in _UNENFORCED_DIMENSIONS | {"store", "org_department"}
     }
+
+
+def _has_own_feishu_owner_binding(session: Session, user_id: int) -> bool:
+    """Own reviewed identity also restricts business routes without a department grant."""
+    return bool(session.scalar(text("""
+        SELECT EXISTS (
+            SELECT 1
+            FROM app_users u
+            JOIN iam_feishu_employees e ON e.open_id = u.feishu_open_id
+            WHERE u.id = :user_id
+              AND e.is_active IS TRUE
+              AND e.is_resigned IS NOT TRUE
+              AND e.is_frozen IS NOT TRUE
+              AND e.last_seen_run_id = (
+                  SELECT id FROM iam_feishu_org_sync_runs
+                  ORDER BY applied_at DESC, id DESC LIMIT 1
+              )
+              AND (
+                  EXISTS (
+                      SELECT 1 FROM iam_org_owner_account_bindings b
+                      WHERE b.feishu_open_id = e.open_id AND b.is_active IS TRUE
+                  )
+                  OR EXISTS (
+                      SELECT 1 FROM iam_org_owner_bindings b
+                      WHERE b.feishu_open_id = e.open_id AND b.is_active IS TRUE
+                  )
+              )
+        )
+    """), {"user_id": user_id}))
+
+
+def _org_route_reviewed(method: str, path: str) -> bool:
+    if method == "GET":
+        return (
+            path in _ORG_REVIEWED_GET_PATHS
+            or any(path.startswith(prefix) for prefix in _ORG_REVIEWED_GET_PREFIXES)
+        )
+    if method == "POST":
+        return (
+            path in _ORG_REVIEWED_WRITE_PATHS
+            or any(path.startswith(prefix) for prefix in _ORG_REVIEWED_WRITE_PREFIXES)
+        )
+    if method in {"PUT", "PATCH"}:
+        return path.startswith("/api/warehouse/wfs-fee-alerts/")
+    return False
 
 
 def require_business_scope_coverage(
@@ -97,6 +169,21 @@ def require_business_scope_coverage(
             code=ErrorCode.DATA_SCOPE_DENIED,
             status_code=403,
             details={"scope_reason": "UNENFORCED_DIMENSION"},
+        )
+
+    departments = scoped["org_department"]
+    organization_restricted = (
+        bool(departments and "*" not in departments)
+        or (
+            not departments
+            and _has_own_feishu_owner_binding(session, user_id)
+        )
+    )
+    if organization_restricted and not _org_route_reviewed(request.method, path):
+        raise ApiError(
+            code=ErrorCode.DATA_SCOPE_DENIED,
+            status_code=403,
+            details={"scope_reason": "ORGANIZATION_SCOPE_NOT_ENFORCED"},
         )
 
     stores = scoped["store"]
