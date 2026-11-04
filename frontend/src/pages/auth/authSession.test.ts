@@ -49,6 +49,18 @@ describe("auth session synchronization", () => {
     unsubscribe();
   });
 
+  it("revalidates only permission events for the current session token", () => {
+    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "current-token");
+
+    expect(isCurrentAuthSessionEvent({
+      type: "permissions-changed", token: "old-token",
+    })).toBe(false);
+    expect(isCurrentAuthSessionEvent({
+      type: "permissions-changed", token: "current-token",
+    })).toBe(true);
+    expect(localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe("current-token");
+  });
+
   it("ignores stale and duplicate events while accepting the matching logout", () => {
     localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "new-token");
 
