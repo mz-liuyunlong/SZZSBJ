@@ -43,6 +43,31 @@ class RuleSetOut(Strict):
     sample_rows: int  # rows still 示例 · 待定 (decided = False)
 
 
+SortOrder = Literal["asc", "desc"]
+
+
+class RuleRowQuery(Strict):
+    """Paged rule rows of the version in force (SEARCH_FILTER_SORT_RULES: whitelisted sort)."""
+
+    at: date | None = None
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=50, ge=1, le=1000)
+    keyword: str | None = Field(default=None, max_length=100)
+    search_field: Literal["all", "node", "remark", "notify"] = "all"
+    region: str | None = Field(default=None, max_length=32)
+    decided: bool | None = None
+    sort_by: Literal["row_no", "node", "days", "row_effective_date"] = "row_no"
+    sort_order: SortOrder = "asc"
+
+
+class RuleRowPage(Strict):
+    version: RuleVersionOut
+    items: list[RuleRow]
+    total: int
+    sample_rows: int  # whole version, not just this page
+    regions: list[str]  # 下拉选项
+
+
 class RuleVersionList(Strict):
     items: list[RuleVersionOut]
 
@@ -67,8 +92,21 @@ class FcRegionOut(Strict):
     updated_at: datetime | None = None
 
 
+class FcRegionQuery(Strict):
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=50, ge=1, le=1000)
+    keyword: str | None = Field(default=None, max_length=100)
+    search_field: Literal["all", "fc", "zip", "address"] = "all"
+    region: Region | None = None
+    state: str | None = Field(default=None, max_length=8)
+    sort_by: Literal["fc", "zip", "state", "shipments"] = "fc"
+    sort_order: SortOrder = "asc"
+
+
 class FcRegionList(Strict):
     items: list[FcRegionOut]
+    total: int
+    states: list[str]  # 下拉选项：看板上出现过的州
 
 
 class FcRegionUpdate(Strict):
@@ -106,9 +144,24 @@ class LogisticsChannelOut(Strict):
     enabled: bool
 
 
+class ChannelQuery(Strict):
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=50, ge=1, le=1000)
+    keyword: str | None = Field(default=None, max_length=100)
+    search_field: Literal["all", "channel_id", "channel_name", "provider"] = "all"
+    provider: str | None = Field(default=None, max_length=255)
+    method: str | None = Field(default=None, max_length=128)
+    enabled: bool | None = None
+    sort_by: Literal["provider_name", "channel_id", "channel_name"] = "provider_name"
+    sort_order: SortOrder = "asc"
+
+
 class LogisticsChannelList(Strict):
     items: list[LogisticsChannelOut]
     loaded: bool  # False = WFS 组尚未导入渠道文件
+    total: int
+    providers: list[str]  # 下拉选项
+    methods: list[str]
 
 
 class SettingsChangeOut(Strict):

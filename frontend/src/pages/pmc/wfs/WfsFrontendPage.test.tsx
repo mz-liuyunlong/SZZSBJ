@@ -8,7 +8,7 @@ import { navigation } from "@/config/navigation";
 import WfsFrontendPage from "./WfsFrontendPage";
 import WfsQueryPage from "./WfsQueryPage";
 
-const pages = navigation.find((group) => group.key === "pmc")!.children.filter((page) => page.sidebarSection === "pmc-wfs" || page.sidebarSection === "pmc-wfs-settings");
+const pages = navigation.find((group) => group.key === "pmc")!.children.filter((page) => page.sidebarSection === "pmc-wfs" || (page.sidebarSection === "pmc-settings" && page.key.startsWith("pmc_wfs_")));
 vi.mock("./pendingPackingQueries", () => ({ usePendingPacking: () => ({
   list: { data: { data: { items: [], total: 0 } }, isFetching: false },
   summary: { data: { data: { completed: 0, ready: 0, test: 0, waiting: 0, no_box: 0, filled_not_done: 0, available_boxes: 0, available_units: 0 } } },
@@ -39,9 +39,10 @@ vi.mock("./settingsApi", async (orig) => ({
   ...(await orig<typeof import("./settingsApi")>()),
   getRules: vi.fn(() => Promise.resolve({ version: { version_no: 1, effective_date: "2026-10-10", reason: "8088 初始", created_by: "system", created_at: "2026-10-10T00:00:00Z" }, rows: [], sample_rows: 0 })),
   listRuleVersions: vi.fn(() => Promise.resolve([])),
-  listFcRegions: vi.fn(() => Promise.resolve([])),
+  listRuleRows: vi.fn(() => Promise.resolve({ version: { version_no: 1, effective_date: "2026-10-10", reason: "8088 初始", created_by: "system", created_at: "2026-10-10T00:00:00Z" }, items: [], total: 0, sample_rows: 0, regions: [] })),
+  listFcRegions: vi.fn(() => Promise.resolve({ items: [], total: 0, states: [] })),
   getCreationDefaults: vi.fn(() => Promise.reject(new Error("offline"))),
-  listLogisticsChannels: vi.fn(() => Promise.resolve({ items: [], loaded: false })),
+  listLogisticsChannels: vi.fn(() => Promise.resolve({ items: [], loaded: false, total: 0, providers: [], methods: [] })),
   listSettingsChanges: vi.fn(() => Promise.resolve({ items: [], total: 0 })),
 }));
 
@@ -79,11 +80,15 @@ describe("WFS frontend pages", () => {
       pmc_wfs_pending_packing: { text: "当前条件下暂无已打包完成单据", header: "系统打包单", search: "搜索待发货打包单" },
       pmc_wfs_board: { text: /^当前条件下暂无货件/, header: "Shipment ID", search: "搜索WFS货件看板" },
       pmc_wfs_exceptions: { text: "当前条件下暂无异常货件", header: "货件号", search: "搜索异常中心" },
-      pmc_wfs_settings: { text: "数据来自新系统数据库" },
     };
-    const sample = samples[page.key] ?? (page.sidebarSection === "pmc-wfs-settings" ? samples.pmc_wfs_settings : undefined)!;
+    const settings = page.sidebarSection === "pmc-settings";
+    const sample = settings ? { text: page.title } : samples[page.key];
     renderWithQuery(<WfsFrontendPage page={page} />);
     expect(screen.getByRole("region", { name: page.title })).toBeInTheDocument();
+    if (settings) {
+      expect(await screen.findByRole("heading", { name: page.title })).toBeInTheDocument();
+      return;
+    }
     expect(await screen.findByText(sample.text)).toBeInTheDocument();
     if (sample.header && sample.search) {
       expect(screen.getByRole("columnheader", { name: sample.header })).toBeInTheDocument();

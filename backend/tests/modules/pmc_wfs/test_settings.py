@@ -21,7 +21,11 @@ from app.modules.integration_sync.dependencies import require_source_account_sco
 from app.modules.pmc_wfs.lingxing_models import WfsBoardPublication, WfsShipmentBoardRow
 from app.modules.pmc_wfs.settings_models import SETTINGS_TABLES
 from app.modules.pmc_wfs.settings_service import parse_fc_address
-from app.modules.pmc_wfs.source_models import SOURCE_FILE_TABLES
+from app.modules.pmc_wfs.source_models import (
+    SOURCE_FILE_TABLES,
+    LingxingLogisticsChannelOds,
+    PmcWfsSourceFile,
+)
 from tests.modules.pmc_wfs.schema_support import integration_target, run_migration
 
 MIGRATION = "20261103_0077_wfs_settings.py"
@@ -239,6 +243,27 @@ def test_rules_seed_versions_and_effective_date(db):
     assert changes["total"] == 1 and changes["items"][0]["reason"] == "测试新版本"
 
 
+def test_rule_rows_server_paging_filter_sort(db):
+    client = _client(db, READ)
+    path = "/api/pmc/wfs/settings/rules/rows"
+    first = _ok(client.get(path, params={"page_size": 4}))
+    assert first["version"]["version_no"] == 1 and first["total"] == 11
+    assert len(first["items"]) == 4 and first["sample_rows"] == 5
+    assert "全部" in first["regions"]
+    second = _ok(client.get(path, params={"page_size": 4, "page": 3}))
+    assert len(second["items"]) == 3
+    samples = _ok(client.get(path, params={"decided": "false"}))
+    assert samples["total"] == 5 and all(not r["decided"] for r in samples["items"])
+    assert (
+        _ok(client.get(path, params={"keyword": "Dispute", "search_field": "node"}))["total"] == 1
+    )
+    west = _ok(client.get(path, params={"region": "美西"}))
+    assert [r["region"] for r in west["items"]] == ["美西"]
+    by_days = _ok(client.get(path, params={"sort_by": "days", "sort_order": "desc"}))["items"]
+    assert [r["days"] for r in by_days] == sorted((r["days"] for r in by_days), reverse=True)
+    assert client.get(path, params={"sort_by": "remark"}).status_code == 422
+
+
 def test_fc_regions_default_by_state_then_saved(db):
     _board(
         db,
@@ -253,6 +278,19 @@ def test_fc_regions_default_by_state_then_saved(db):
     assert items["LAX9T"]["zip"] == "91752" and items["ATL2"]["state"] == "GA"
     assert items["ATL2"]["zip"] == "30336"
     assert items["ATL2"]["address"] == "2 B Rd, Atlanta, GA 30336"
+    assert "name" in items["ATL2"]  # API keeps the field; the page no longer shows it
+    path = "/api/pmc/wfs/settings/fc-regions"
+    page = _ok(client.get(path, params={"page_size": 1}))
+    assert page["total"] == 2 and len(page["items"]) == 1 and page["states"] == ["CA", "GA"]
+    hit = _ok(client.get(path, params={"keyword": "atlanta", "search_field": "address"}))
+    assert [i["fc"] for i in hit["items"]] == ["ATL2"] and hit["total"] == 1
+    assert _ok(client.get(path, params={"keyword": "91752", "search_field": "zip"}))["total"] == 1
+    assert _ok(client.get(path, params={"region": "美西"}))["items"][0]["fc"] == "LAX9T"
+    assert _ok(client.get(path, params={"state": "GA", "region": "美西"}))["total"] == 0
+    ordered = _ok(client.get(path, params={"sort_by": "fc", "sort_order": "desc"}))["items"]
+    assert [i["fc"] for i in ordered] == ["LAX9T", "ATL2"]
+    assert client.get(path, params={"sort_by": "name"}).status_code == 422
+    assert client.get(path, params={"page_size": 5000}).status_code == 422
     saved = _ok(
         client.put(
             "/api/pmc/wfs/settings/fc-regions/ATL2",
@@ -297,7 +335,62 @@ def test_creation_defaults_and_scope(db):
 
 def test_logistics_channels_empty_until_loaded(db):
     data = _ok(_client(db, READ).get("/api/pmc/wfs/settings/logistics-channels"))
-    assert data == {"items": [], "loaded": False}
+    assert data == {"items": [], "loaded": False, "total": 0, "providers": [], "methods": []}
+
+
+def test_logistics_channels_server_paging_and_filters(db):
+    file_id = uuid4()
+    db.add(
+        PmcWfsSourceFile(
+            id=file_id,
+            source="lingxing",
+            endpoint="logistics_channels",
+            scope_key="wfs",
+            batch_label="t",
+            source_path="t.json",
+            sha256="0" * 64,
+            byte_size=1,
+            row_count=3,
+            loaded_rows=3,
+            is_current=True,
+            loaded_by="test",
+        )
+    )
+    db.flush()
+    for cid, name, pid, pname, method, enabled in (
+        ("11918", "WFS-FedEx", "6899", "WFS", None, "1"),
+        ("12873", "美东直航卡派", "6995", "众壹物流", "海卡", "1"),
+        ("6277", "OA快船-卡派", "5651", "云驼", None, "0"),
+    ):
+        db.add(
+            LingxingLogisticsChannelOds(
+                file_id=file_id,
+                channel_id=cid,
+                channel_name=name,
+                provider_id=pid,
+                provider_name=pname,
+                method_name=method,
+                enabled=enabled,
+                payload_json={},
+            )
+        )
+    db.flush()
+    client = _client(db, READ)
+    path = "/api/pmc/wfs/settings/logistics-channels"
+    first = _ok(client.get(path, params={"page_size": 2}))
+    assert first["loaded"] is True and first["total"] == 3 and len(first["items"]) == 2
+    assert first["providers"] == sorted(["WFS", "众壹物流", "云驼"])
+    assert first["methods"] == ["海卡"]
+    by_id = _ok(client.get(path, params={"keyword": "1191", "search_field": "channel_id"}))
+    assert [i["channel_name"] for i in by_id["items"]] == ["WFS-FedEx"]
+    by_provider = _ok(client.get(path, params={"keyword": "6995", "search_field": "provider"}))
+    assert by_provider["total"] == 1
+    assert _ok(client.get(path, params={"enabled": "false"}))["items"][0]["channel_id"] == "6277"
+    assert _ok(client.get(path, params={"method": "海卡"}))["total"] == 1
+    assert _ok(client.get(path, params={"provider": "WFS", "enabled": "true"}))["total"] == 1
+    by_id = _ok(client.get(path, params={"sort_by": "channel_id", "sort_order": "desc"}))
+    assert [i["channel_id"] for i in by_id["items"]] == ["6277", "12873", "11918"]
+    assert client.get(path, params={"sort_by": "enabled"}).status_code == 422
 
 
 def test_writes_need_manage_permission(db):

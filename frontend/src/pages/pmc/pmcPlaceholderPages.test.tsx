@@ -12,7 +12,7 @@ describe("PMC navigation", () => {
       "pmc_logistics", "pmc_logistics_forecast", "pmc_logistics_alerts", "pmc_logistics_carriers",
       "pmc_domestic_batches", "pmc_packing_approval", "pmc_packing_warehouse",
       "pmc_wfs_pending_packing", "pmc_wfs_board", "pmc_wfs_exceptions", "pmc_wfs_settings",
-      "pmc_wfs_settings_fc", "pmc_wfs_settings_defaults", "pmc_wfs_settings_channels", "pmc_wfs_settings_stores",
+      "pmc_wfs_settings_fc", "pmc_wfs_settings_defaults", "pmc_wfs_settings_channels", "pmc_logistics_settings", "pmc_wfs_settings_stores",
       "pmc_wfs_settings_notes",
     ]);
   });

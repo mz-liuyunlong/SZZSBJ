@@ -1,25 +1,139 @@
-/* WFS settings: PageShell clips overflow, so this wrapper is the page's own scroll container. */
-.wfs-settings {
+/* PMC 设置: same compact structure as the PMC domestic pages; colors and radius come from Ant tokens. */
+.pmc-settings {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  min-height: 0;
-  overflow-y: auto;
-  padding-bottom: 16px;
-}
-
-.wfs-settings__stack {
   width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.wfs-settings__select {
-  width: 120px;
+.pmc-settings__page-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-color: var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius-lg);
 }
 
-.wfs-settings__note {
-  margin-top: 12px;
+.pmc-settings__page-card > .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 16px 18px;
 }
 
-.wfs-settings__sample-row > td {
-  background: #fffbe6 !important;
+.pmc-settings__page-card > .ant-card-body > .ant-alert {
+  flex-shrink: 0;
+  margin-bottom: 8px;
+}
+
+.pmc-settings__title-row {
+  display: flex;
+  flex-shrink: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.pmc-settings__title-row h3.ant-typography {
+  margin: 0 0 6px;
+}
+
+.pmc-settings__toolbar-card {
+  flex-shrink: 0;
+  margin-bottom: 12px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.pmc-settings__toolbar-card > .ant-card-body {
+  padding: 12px;
+}
+
+.pmc-settings__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pmc-settings__toolbar .report-filter-select {
+  width: 150px;
+  flex: 0 0 150px;
+}
+
+.pmc-settings__search {
+  width: 460px;
+  min-width: 320px;
+  max-width: 460px;
+  flex: 1 1 400px;
+}
+
+.pmc-settings__summary-row {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.pmc-settings__table-wrap {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pmc-settings .report-table-shell {
+  flex-direction: column;
+}
+
+.pmc-settings .report-table-shell > .ant-pro-table {
+  height: 0;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.pmc-settings .report-table-shell > .ant-pagination {
+  height: 42px;
+  flex: 0 0 42px;
+  min-height: 42px;
+}
+
+.pmc-settings__region {
+  width: 90px;
+}
+
+.pmc-settings__form-card > .ant-card-body {
+  overflow-y: auto;
+}
+
+@media (max-width: 900px) {
+  .pmc-settings {
+    overflow-y: auto;
+  }
+
+  .pmc-settings__page-card {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
+  .pmc-settings__table-wrap {
+    min-height: 420px;
+  }
+}
+
+.pmc-settings__drawer-stack {
+  width: 100%;
 }

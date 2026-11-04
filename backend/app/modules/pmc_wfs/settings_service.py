@@ -12,7 +12,7 @@ import re
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError
@@ -27,12 +27,16 @@ from app.modules.pmc_wfs.settings_models import (
 )
 from app.modules.pmc_wfs.settings_schemas import (
     ChangeQuery,
+    ChannelQuery,
     CreationDefaultsOut,
     CreationDefaultsUpdate,
     FcRegionOut,
+    FcRegionQuery,
     FcRegionUpdate,
     LogisticsChannelOut,
     RuleRow,
+    RuleRowPage,
+    RuleRowQuery,
     RuleSetOut,
     RuleVersionCreate,
     RuleVersionOut,
@@ -74,6 +78,7 @@ def _row_out(r: WfsRuleSetting) -> RuleRow:
 
 _ZIP = re.compile(r"^\d{5}(-\d{4})?$")
 _COUNTRY = {"US", "USA", "UNITED STATES", "美国"}
+ENABLED_VALUES = ("1", "true", "True", "启用")
 
 
 def parse_fc_address(
@@ -141,6 +146,50 @@ class WfsSettingsService:
 
     def get_effective_rules(self, at: date | None = None) -> RuleSetOut:
         return self._ruleset(self.effective_version(at))
+
+    def page_rule_rows(self, query: RuleRowQuery) -> RuleRowPage:
+        """Rows of the version in force, filtered / sorted / paged in SQL. Saving still replaces
+        the whole version (``create_version``); the editor reads the full set from ``/rules``."""
+        version = self.effective_version(query.at)
+        rule = WfsRuleSetting
+        base = select(rule).where(rule.version_id == version.id)
+        stmt = base
+        k = (query.keyword or "").strip()
+        if k:
+            cols = {"node": rule.node, "remark": rule.remark, "notify": rule.notify}
+            pool = (
+                list(cols.values()) if query.search_field == "all" else [cols[query.search_field]]
+            )
+            stmt = stmt.where(or_(*(c.ilike(f"%{k}%") for c in pool)))
+        if query.region:
+            stmt = stmt.where(rule.region == query.region)
+        if query.decided is not None:
+            stmt = stmt.where(rule.decided.is_(query.decided))
+        total = self.session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        column = getattr(rule, query.sort_by)
+        order = column.desc() if query.sort_order == "desc" else column.asc()
+        rows = self.session.scalars(
+            stmt.order_by(order, rule.row_no)
+            .offset((query.page - 1) * query.page_size)
+            .limit(query.page_size)
+        )
+        sample = self.session.scalar(
+            select(func.count()).select_from(base.where(rule.decided.is_(False)).subquery())
+        )
+        regions = sorted(
+            v
+            for v in self.session.scalars(
+                select(rule.region).where(rule.version_id == version.id).distinct()
+            )
+            if v
+        )
+        return RuleRowPage(
+            version=_version_out(version),
+            items=[_row_out(r) for r in rows],
+            total=total,
+            sample_rows=sample or 0,
+            regions=regions,
+        )
 
     def list_versions(self) -> list[RuleVersionOut]:
         versions = self.session.scalars(
@@ -241,6 +290,41 @@ class WfsSettingsService:
             )
         return items
 
+    def page_fc_regions(self, query: FcRegionQuery) -> tuple[list[FcRegionOut], int, list[str]]:
+        """Server-side filter + page over the FC list (aggregated from the current board)."""
+        items = self.list_fc_regions()
+        states = sorted({i.state for i in items if i.state})
+        k = (query.keyword or "").strip().lower()
+
+        def fields(i: FcRegionOut) -> dict[str, str]:
+            return {"fc": i.fc, "zip": i.zip or "", "address": i.address or ""}
+
+        def hit(i: FcRegionOut) -> bool:
+            if not k:
+                return True
+            f = fields(i)
+            pool = f.values() if query.search_field == "all" else [f[query.search_field]]
+            return any(k in v.lower() for v in pool)
+
+        rows = [
+            i
+            for i in items
+            if hit(i)
+            and (query.region is None or i.region == query.region)
+            and (query.state is None or i.state == query.state)
+        ]
+        key = query.sort_by  # whitelisted in FcRegionQuery
+        rows.sort(key=lambda i: i.fc)
+        rows.sort(
+            key=lambda i: (
+                getattr(i, key) is None,
+                getattr(i, key) or 0 if key == "shipments" else getattr(i, key) or "",
+            ),
+            reverse=query.sort_order == "desc",
+        )
+        start = (query.page - 1) * query.page_size
+        return rows[start : start + query.page_size], len(rows), states
+
     def update_fc_region(self, fc: str, cmd: FcRegionUpdate, actor: str) -> FcRegionOut:
         row = self.session.get(WfsFcRegion, fc)
         if row is None and fc not in self._board_fcs():
@@ -313,21 +397,66 @@ class WfsSettingsService:
 
     # ---- read-only dictionary / log -------------------------------------------------
 
-    def logistics_channels(self) -> tuple[list[LogisticsChannelOut], bool]:
+    def logistics_channels(
+        self, query: ChannelQuery | None = None
+    ) -> tuple[list[LogisticsChannelOut], bool, int, list[str], list[str]]:
+        """Read-only Lingxing channel file; filtered and paged in SQL."""
+        query = query or ChannelQuery()
+        ods = LingxingLogisticsChannelOds
         current = select(PmcWfsSourceFile.id).where(
             PmcWfsSourceFile.source == "lingxing",
             PmcWfsSourceFile.endpoint == "logistics_channels",
             PmcWfsSourceFile.is_current.is_(True),
         )
-        rows = list(
-            self.session.scalars(
-                select(LingxingLogisticsChannelOds)
-                .where(LingxingLogisticsChannelOds.file_id.in_(current))
-                .order_by(
-                    LingxingLogisticsChannelOds.provider_name,
-                    LingxingLogisticsChannelOds.channel_id,
-                )
+        base = select(ods).where(ods.file_id.in_(current))
+        loaded = bool(self.session.scalar(select(func.count()).select_from(base.subquery())))
+        providers = sorted(
+            v
+            for v in self.session.scalars(
+                select(ods.provider_name).where(ods.file_id.in_(current)).distinct()
             )
+            if v
+        )
+        methods = sorted(
+            v
+            for v in self.session.scalars(
+                select(ods.method_name).where(ods.file_id.in_(current)).distinct()
+            )
+            if v
+        )
+        stmt = base
+        k = (query.keyword or "").strip()
+        if k:
+            like = f"%{k}%"
+            cols = {
+                "channel_id": [ods.channel_id],
+                "channel_name": [ods.channel_name],
+                "provider": [ods.provider_id, ods.provider_name],
+            }
+            pool = (
+                [c for group in cols.values() for c in group]
+                if query.search_field == "all"
+                else cols[query.search_field]
+            )
+            stmt = stmt.where(or_(*(c.ilike(like) for c in pool)))
+        if query.provider:
+            stmt = stmt.where(ods.provider_name == query.provider)
+        if query.method:
+            stmt = stmt.where(ods.method_name == query.method)
+        if query.enabled is not None:
+            on = func.trim(func.coalesce(ods.enabled, "")).in_(ENABLED_VALUES)
+            stmt = stmt.where(on if query.enabled else ~on)
+        total = self.session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        rows = self.session.scalars(
+            stmt.order_by(
+                getattr(ods, query.sort_by).desc()
+                if query.sort_order == "desc"
+                else getattr(ods, query.sort_by).asc(),
+                ods.provider_name,
+                ods.channel_id,
+            )
+            .offset((query.page - 1) * query.page_size)
+            .limit(query.page_size)
         )
         items = [
             LogisticsChannelOut(
@@ -336,11 +465,11 @@ class WfsSettingsService:
                 channel_id=r.channel_id,
                 channel_name=r.channel_name,
                 method_name=r.method_name,
-                enabled=(r.enabled or "").strip() in ("1", "true", "True", "启用"),
+                enabled=(r.enabled or "").strip() in ENABLED_VALUES,
             )
             for r in rows
         ]
-        return items, bool(items)
+        return items, loaded, total, providers, methods
 
     def list_changes(self, query: ChangeQuery) -> tuple[list[SettingsChangeOut], int]:
         stmt = select(WfsSettingsChange)
