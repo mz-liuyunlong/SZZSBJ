@@ -15,7 +15,7 @@ const BANK_IMPORT_ID = "bank";
 const ACCEPT = ".xlsx,.xls,.csv";
 const IMPORT_NODE_TEXT = "每周二 15:00 前，各账户导出「月初到今天」一次性全部上传";
 const NAME_RULE = "原文件名即可（系统按内容认账户，不看文件名）；一次选全部文件";
-const FORMAT_TEXT = "四颗洋葱中行 / 掌上便捷中行：企业网银「交易明细」导出 xls（不是回单 PDF）；掌上便捷银座（深通村镇）：交易明细查询列表 xlsx；派安盈两个账户：Transactions 导出 CSV；万里汇：交易导出 xlsx；PingPong：账单明细 xlsx。每次导「本月 1 日到今天」，重复的流水自动去重。招商银行不要。";
+const FORMAT_TEXT = "用银行网银或平台后台导出的交易明细原文件（xls、xlsx 或 csv），不要回单 PDF，也不要自己改过的表。每次导「本月 1 日到今天」，重复的流水自动去重。";
 
 interface UploadRow { key: string; name: string; result?: ApiFileResult; error?: string }
 
