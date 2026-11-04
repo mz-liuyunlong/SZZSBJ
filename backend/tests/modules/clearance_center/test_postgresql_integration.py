@@ -10,6 +10,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
@@ -25,6 +26,7 @@ from app.modules.clearance_center.service import ClearanceService
 from app.modules.data_pages.models import (
     ListingManagementCurrentMart,
     WalmartListingInventoryDailyFact,
+    WalmartSalesItemDailyFact,
 )
 from app.modules.integration_sync.dependencies import require_source_account_scope
 
@@ -260,3 +262,50 @@ def test_clearance_http_contract_and_unified_approval_routes(clearance_db: Sessi
         )
         assert task.status_code == 200, task.text
         assert task.json()["data"]["total"] == 1
+
+
+def test_zero_sales_requires_full_store_source_history(clearance_db: Session) -> None:
+    account = "clearance-ci-account"
+    store = "ci-zero-store"
+    item = "ci-zero-item"
+    listing_id = _seed_listing(
+        clearance_db, account=account, store=store, item=item, available=40
+    )
+    now = datetime.now(UTC)
+    business_day = now.astimezone(ZoneInfo("America/Los_Angeles")).date()
+    for days_ago in range(1, 22):
+        clearance_db.add(
+            WalmartListingInventoryDailyFact(
+                id=uuid4(),
+                snapshot_date_la=business_day - timedelta(days=days_ago),
+                source_account_ref=account,
+                store_id=store,
+                item_id=item,
+                wfs_available_quantity=Decimal(40),
+                captured_at=now - timedelta(days=days_ago),
+            )
+        )
+    for days_ago in range(30):
+        clearance_db.add(
+            WalmartSalesItemDailyFact(
+                id=uuid4(),
+                business_date_la=business_day - timedelta(days=days_ago),
+                source_account_ref=account,
+                platform_code="walmart",
+                store_id=store,
+                item_id="other-item-with-actual-sales",
+                sales_qty=Decimal(1),
+                allocation_status="direct",
+                synced_at=now,
+            )
+        )
+    clearance_db.commit()
+    candidate = ClearanceService(clearance_db).listing_detail(
+        listing_id, frozenset({account})
+    )
+    evaluation = candidate["evaluation"]
+    assert evaluation["source_sales_coverage_days_30d"] == 30
+    assert evaluation["positive_stock_days_30d"] >= 21
+    assert evaluation["risk_level"] == "high"
+    assert evaluation["candidate_status"] == "auto"
+    assert "VERIFIED_ZERO_SALES_WITH_WFS_STOCK" in evaluation["risk_reasons"]
