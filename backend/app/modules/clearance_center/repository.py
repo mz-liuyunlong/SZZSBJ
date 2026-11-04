@@ -170,6 +170,42 @@ class ClearanceReadRepository:
             .mappings()
             .all()
         )
+        # A missing per-Listing daily MART row is not zero sales.
+        # Verify all 30 source dates for the exact store and no unresolved allocations.
+        store_history = (
+            self.session.execute(
+                text("""
+          select source_account_ref,store_id,
+            count(distinct business_date_la)
+              filter(where allocation_status='direct') covered_days,
+            count(*) filter(where allocation_status<>'direct') unresolved_rows
+          from fact_walmart_sales_item_daily
+          where source_account_ref=any(:accounts)
+            and business_date_la between :day - 29 and :day
+          group by source_account_ref,store_id
+        """),
+                params,
+            )
+            .mappings()
+            .all()
+        )
+        source_item_sales = (
+            self.session.execute(
+                text("""
+          select source_account_ref,store_id,item_id,
+            sum(coalesce(sales_qty,0)) source_sales_qty,
+            count(*) filter(where allocation_status<>'direct') unresolved_rows,
+            count(*) filter(where sales_qty is null) missing_qty_rows
+          from fact_walmart_sales_item_daily
+          where source_account_ref=any(:accounts) and item_id=any(:items)
+            and business_date_la between :day - 29 and :day
+          group by source_account_ref,store_id,item_id
+        """),
+                params,
+            )
+            .mappings()
+            .all()
+        )
         snapshots = (
             self.session.execute(
                 text("""
@@ -222,6 +258,11 @@ class ClearanceReadRepository:
         s_map = {key(r): dict(r) for r in sales}
         i_map = {key(r): dict(r) for r in snapshots}
         r_map = {key(r): dict(r) for r in refunds}
+        source_map = {key(r): dict(r) for r in source_item_sales}
+        store_history_map = {
+            (str(r["source_account_ref"]), str(r["store_id"])): dict(r)
+            for r in store_history
+        }
         now = datetime.now(LOS_ANGELES)
         out: dict[tuple[str, str, str], dict] = {}
         for listing in listings:
@@ -229,6 +270,18 @@ class ClearanceReadRepository:
             s = s_map.get(k, {})
             i = i_map.get(k, {})
             r = r_map.get(k, {})
+            source = source_map.get(k, {})
+            history = store_history_map.get(k[:2], {})
+            source_qty = number(source.get("source_sales_qty"))
+            zero_sales_verified = bool(
+                history.get("covered_days", 0) >= 30
+                and not history.get("unresolved_rows")
+                and not source.get("unresolved_rows")
+                and not source.get("missing_qty_rows")
+                and (source_qty is None or source_qty == 0)
+            )
+            if zero_sales_verified and s.get("sales30") is None:
+                s = {**s, "sales30": Decimal(0)}
             captured = listing.get("inventory_captured_at")
             inventory_fresh = bool(
                 captured
@@ -236,7 +289,10 @@ class ClearanceReadRepository:
                 and timedelta(0) <= now - captured <= timedelta(hours=72)
             )
             # A 30-day empty fact set is not proof of 30 days of zero orders.
-            sales_complete = bool(s.get("sales_rows") and not s.get("incomplete_history_rows"))
+            sales_complete = bool(
+                (s.get("sales_rows") and not s.get("incomplete_history_rows"))
+                or (zero_sales_verified and number(s.get("sales30")) == 0)
+            )
             complete_costs = bool(
                 s.get("sales_rows")
                 and s.get("incomplete_cost_rows") == 0
@@ -269,6 +325,8 @@ class ClearanceReadRepository:
                 "inventory_snapshot_days": int(i.get("snapshot_days") or 0),
                 "inventory_fresh": inventory_fresh,
                 "sales_complete": sales_complete,
+                "zero_sales_verified": zero_sales_verified,
+                "source_sales_coverage_days_30d": int(history.get("covered_days") or 0),
                 "cost_complete": complete_costs,
                 "listing_days": listing_days,
                 "unit_cost_usd": unit_cost_usd,
@@ -308,6 +366,7 @@ class ClearanceReadRepository:
         value["snapshot_coverage_days_30d"] = metrics["inventory_snapshot_days"]
         value["positive_stock_days_30d"] = metrics["positive_stock_days"]
         value["sales_complete"] = metrics["sales_complete"]
+        value["source_sales_coverage_days_30d"] = metrics["source_sales_coverage_days_30d"]
         value["cost_complete"] = metrics["cost_complete"]
         value["calc_versions"] = metrics.get("calc_versions")
         value["as_of_date"] = metrics["as_of_date"]
