@@ -76,8 +76,36 @@ _RULES: tuple[RequestPermissionRule, ...] = (
         True,
     ),
     RequestPermissionRule(
+        "POST",
+        "/api/listings/lifecycle-adjustments",
+        "action:products:listing-management:request-lifecycle",
+        True,
+    ),
+    RequestPermissionRule(
+        "POST",
+        "/api/listings/lifecycle-adjustments/",
+        "action:products:listing-management:approve-lifecycle",
+    ),
+    RequestPermissionRule(
+        "POST",
+        "/api/listings/evaluation-runs/manual",
+        "action:products:listing-management:calculate-all",
+        True,
+    ),
+    RequestPermissionRule(
+        "POST",
+        "/api/listings/evaluation-snapshots/",
+        "action:products:listing-management:revert-evaluation",
+    ),
+    RequestPermissionRule(
         "GET",
         "/api/listings/walmart/export",
+        "action:products:listing-management:export",
+        True,
+    ),
+    RequestPermissionRule(
+        "POST",
+        "/api/listings/walmart/export/search",
         "action:products:listing-management:export",
         True,
     ),
@@ -102,6 +130,18 @@ _RULES: tuple[RequestPermissionRule, ...] = (
         "DELETE",
         "/api/listings/tags/",
         "action:products:listing-management:manage-tags",
+    ),
+    RequestPermissionRule(
+        "POST",
+        "/api/listings/walmart/search",
+        "page:products:listing-management:view",
+        True,
+    ),
+    RequestPermissionRule(
+        "POST",
+        "/api/listings/walmart/summary/search",
+        "page:products:listing-management:view",
+        True,
     ),
     RequestPermissionRule(
         "POST",

@@ -287,6 +287,18 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ActionDefinition(
         "products_listing_management", "manage_followups", "处理C/D等级跟进", 70, "high"
     ),
+    ActionDefinition(
+        "products_listing_management", "request_lifecycle", "申请调整Listing生命周期", 80, "high"
+    ),
+    ActionDefinition(
+        "products_listing_management", "approve_lifecycle", "审批Listing生命周期调整", 90, "high"
+    ),
+    ActionDefinition(
+        "products_listing_management", "calculate_all", "计算全部Listing", 100, "high"
+    ),
+    ActionDefinition(
+        "products_listing_management", "revert_evaluation", "撤回Listing评级发布", 110, "high"
+    ),
     ActionDefinition("sales_daily_sales", "export", "导出每日销售", 10),
     ActionDefinition("sales_order_profit", "export", "导出订单利润", 10),
     ActionDefinition("warehouse_wfs_fee_alert", "mark-recovered", "确认WFS费用已追回", 30, "high"),

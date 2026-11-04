@@ -31,6 +31,6 @@ describe("ProductTagAssignmentModal", () => {
     expect(confirmButton).toBeEnabled();
 
     fireEvent.click(confirmButton);
-    expect(onConfirm).toHaveBeenCalledWith(["新品"]);
+    expect(onConfirm).toHaveBeenCalledWith(["新品"], "append");
   });
 });

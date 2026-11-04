@@ -28,7 +28,8 @@ interface RuntimeColumnConfigDrawerProps {
   appliedKeys: string[];
   onApply: (keys: string[]) => void;
   onClose: () => void;
-  onSaveTemplate: () => void;
+  onSaveTemplate: (keys: string[]) => void;
+  savedTemplateKeys?: string[];
 }
 
 const withFixedColumns = (keys: string[], fixedKeys: string[]) => [
@@ -45,6 +46,7 @@ function RuntimeColumnConfigDrawer({
   onApply,
   onClose,
   onSaveTemplate,
+  savedTemplateKeys,
 }: RuntimeColumnConfigDrawerProps) {
   const [search, setSearch] = useState("");
   const [draftKeys, setDraftKeys] = useState(() => withFixedColumns(appliedKeys, fixedKeys));
@@ -136,8 +138,14 @@ function RuntimeColumnConfigDrawer({
       </Typography.Paragraph>
       <div className="runtime-column-config__tools">
         <Typography.Text strong>选择模板</Typography.Text>
-        <Select aria-label="选择模板" disabled placeholder="选择模板" options={[]} />
-        <Button onClick={onSaveTemplate}>保存为新模板</Button>
+        <Select
+          aria-label="选择模板"
+          placeholder="选择模板"
+          disabled={!savedTemplateKeys?.length}
+          options={savedTemplateKeys?.length ? [{ value: "saved", label: "我的列模板" }] : []}
+          onChange={() => savedTemplateKeys && setDraftKeys(withFixedColumns(savedTemplateKeys, fixedKeys))}
+        />
+        <Button onClick={() => onSaveTemplate(draftKeys)}>保存为新模板</Button>
       </div>
       <Input
         allowClear

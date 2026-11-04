@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ErrorEnvelope, SuccessEnvelope, success_response
 from app.core.auth import Principal
+from app.core.config import get_settings
 from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.listing_rule_config.schemas import (
@@ -33,6 +34,18 @@ ERRORS = {
 }
 
 
+def _with_runtime_flags(result: ListingGradeRuleRead) -> ListingGradeRuleRead:
+    settings = get_settings()
+    return result.model_copy(
+        update={
+            "preview_enabled": settings.listing_evaluation_preview_enabled,
+            "scheduler_enabled": settings.listing_evaluation_scheduler_enabled,
+            "manual_enabled": settings.listing_evaluation_manual_enabled,
+            "publish_enabled": settings.listing_evaluation_publish_enabled,
+        }
+    )
+
+
 @router.get(
     "",
     response_model=SuccessEnvelope[ListingGradeRuleRead, dict[str, str]],
@@ -43,6 +56,7 @@ def get_rule(request: Request, session: DB, principal: read_principal):
     result = ListingGradeRuleService(session).get(
         can_edit=has_permission(principal, WRITE),
     )
+    result = _with_runtime_flags(result)
     return success_response(request, data=result, meta={"source": result.source})
 
 
@@ -59,6 +73,7 @@ def update_rule(
         request=payload,
         actor=principal.user_id,
     )
+    result = _with_runtime_flags(result)
     return success_response(request, data=result, meta={"source": "database"})
 
 

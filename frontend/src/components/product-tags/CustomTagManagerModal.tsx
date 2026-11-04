@@ -11,20 +11,25 @@ import "./CustomTagManagerModal.css";
 
 export interface CustomProductTag {
   id: string | number;
+  sourceAccountRef?: string;
   name: string;
   color: string;
   usage: number;
+  isActive?: boolean;
 }
 
 export interface CustomProductTagMutation {
   name: string;
   color: string;
+  sourceAccountRef?: string;
+  isActive?: boolean;
 }
 
 interface CustomTagManagerModalProps {
   open: boolean;
   onClose: () => void;
   initialTags?: CustomProductTag[];
+  accountRefs?: string[];
   loading?: boolean;
   onTagsChange?: (tags: CustomProductTag[]) => void;
   onCreateTag?: (payload: CustomProductTagMutation) => Promise<CustomProductTag>;
@@ -52,10 +57,12 @@ const isDuplicateTagName = (
   tags: CustomProductTag[],
   name: string,
   exceptId?: CustomProductTag["id"] | null,
+  accountRef?: string,
 ) => {
   const normalized = normalizeTagName(name).toLocaleLowerCase();
   return tags.some((tag) => (
     tag.id !== exceptId
+    && (!accountRef || !tag.sourceAccountRef || tag.sourceAccountRef === accountRef)
     && normalizeTagName(tag.name).toLocaleLowerCase() === normalized
   ));
 };
@@ -104,6 +111,7 @@ function CustomTagManagerModal({
   open,
   onClose,
   initialTags = [],
+  accountRefs = [],
   loading = false,
   onTagsChange,
   onCreateTag,
@@ -113,6 +121,7 @@ function CustomTagManagerModal({
   const tags = initialTags;
   const [createName, setCreateName] = useState("");
   const [createColor, setCreateColor] = useState(TAG_COLORS[0].value);
+  const [createAccountRef, setCreateAccountRef] = useState("");
   const [editingId, setEditingId] = useState<CustomProductTag["id"] | null>(null);
   const [editName, setEditName] = useState("");
   const [editColor, setEditColor] = useState(TAG_COLORS[0].value);
@@ -124,11 +133,12 @@ function CustomTagManagerModal({
   const toastTimerRef = useRef<number | null>(null);
 
   const busy = loading || isMutating;
+  const selectedAccountRef = accountRefs.length === 1 ? accountRefs[0] : createAccountRef;
   const normalizedCreateName = normalizeTagName(createName);
-  const createError = normalizedCreateName && isDuplicateTagName(tags, normalizedCreateName)
+  const createError = normalizedCreateName && isDuplicateTagName(tags, normalizedCreateName, null, selectedAccountRef)
     ? "已有同名标签，请换一个名称"
     : "";
-  const addDisabled = !normalizedCreateName || Boolean(createError) || busy;
+  const addDisabled = !normalizedCreateName || (accountRefs.length > 1 && !selectedAccountRef) || Boolean(createError) || busy;
 
   const editingTag = useMemo(
     () => tags.find((tag) => tag.id === editingId),
@@ -144,7 +154,7 @@ function CustomTagManagerModal({
     ? ""
     : !normalizedEditName
       ? "标签名称不能为空"
-      : isDuplicateTagName(tags, normalizedEditName, editingId)
+    : isDuplicateTagName(tags, normalizedEditName, editingId, editingTag?.sourceAccountRef)
         ? "已有同名标签"
         : "";
   const saveDisabled = Boolean(editError) || busy;
@@ -210,7 +220,7 @@ function CustomTagManagerModal({
 
     try {
       const createdTag = onCreateTag
-        ? await onCreateTag({ name: normalizedCreateName, color: createColor })
+        ? await onCreateTag({ name: normalizedCreateName, color: createColor, sourceAccountRef: selectedAccountRef })
         : {
           id: nextTagId(tags),
           name: normalizedCreateName,
@@ -252,7 +262,7 @@ function CustomTagManagerModal({
 
       commitTags((current) => current.map((tag) => (
         tag.id === editingId
-          ? updatedTag ?? { ...tag, name: normalizedEditName, color: editColor }
+          ? updatedTag ? { ...updatedTag, usage: tag.usage } : { ...tag, name: normalizedEditName, color: editColor }
           : tag
       )));
 
@@ -292,6 +302,28 @@ function CustomTagManagerModal({
       setToast(`已删除「${tagName}」`);
     } catch {
       setToast("标签删除失败，请稍后重试");
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const toggleActive = async (tag: CustomProductTag) => {
+    const nextActive = tag.isActive === false;
+    setIsMutating(true);
+    try {
+      const updatedTag = onUpdateTag
+        ? await onUpdateTag(String(tag.id), {
+          name: tag.name,
+          color: tag.color,
+          isActive: nextActive,
+        })
+        : { ...tag, isActive: nextActive };
+      commitTags((current) => current.map((item) => item.id === tag.id
+        ? { ...updatedTag, usage: item.usage }
+        : item));
+      setToast(nextActive ? "标签已启用" : "标签已停用");
+    } catch {
+      setToast("标签状态更新失败，请稍后重试");
     } finally {
       setIsMutating(false);
     }
@@ -350,6 +382,22 @@ function CustomTagManagerModal({
             </div>
 
             <form onSubmit={(event) => { void addTag(event); }}>
+              {accountRefs.length > 1 && (
+                <label className="custom-tag-manager__label" htmlFor="customTagManagerAccount">
+                  所属账号
+                  <select
+                    id="customTagManagerAccount"
+                    value={createAccountRef}
+                    onChange={(event) => setCreateAccountRef(event.target.value)}
+                    required
+                  >
+                    <option value="">请选择账号</option>
+                    {accountRefs.map((accountRef) => (
+                      <option key={accountRef} value={accountRef}>{accountRef}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <div className="custom-tag-manager__form-row">
                 <div className="custom-tag-manager__input-wrap">
                   <label
@@ -465,9 +513,21 @@ function CustomTagManagerModal({
                       style={{ background: tag.color }}
                     />
                     <span className="custom-tag-manager__tag-name">{tag.name}</span>
+                    {tag.isActive === false && <span className="custom-tag-manager__usage">已停用</span>}
+                    {accountRefs.length > 1 && tag.sourceAccountRef && (
+                      <span className="custom-tag-manager__usage">{tag.sourceAccountRef}</span>
+                    )}
                   </div>
                   <div className="custom-tag-manager__usage">{tag.usage} 个产品</div>
                   <div className="custom-tag-manager__actions">
+                    <button
+                      type="button"
+                      className="custom-tag-manager__text-btn"
+                      disabled={busy}
+                      onClick={() => { void toggleActive(tag); }}
+                    >
+                      {tag.isActive === false ? "启用" : "停用"}
+                    </button>
                     <button
                       type="button"
                       className="custom-tag-manager__text-btn"

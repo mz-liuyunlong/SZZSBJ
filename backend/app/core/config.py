@@ -54,6 +54,13 @@ class Settings(BaseSettings):
     listing_evaluation_scheduler_enabled: bool = Field(
         default=False, validation_alias="LISTING_EVALUATION_SCHEDULER_ENABLED"
     )
+    listing_evaluation_manual_enabled: bool = Field(
+        default=False, validation_alias="LISTING_EVALUATION_MANUAL_ENABLED"
+    )
+    listing_evaluation_followup_notifications_enabled: bool = Field(
+        default=False,
+        validation_alias="LISTING_EVALUATION_FOLLOWUP_NOTIFICATIONS_ENABLED",
+    )
     listing_evaluation_publish_enabled: bool = Field(
         default=False, validation_alias="LISTING_EVALUATION_PUBLISH_ENABLED"
     )

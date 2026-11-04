@@ -203,14 +203,14 @@ def test_existing_mart_date_is_not_backfilled(session: Session) -> None:
     assert rows(session) == []
 
 
-def test_pending_is_not_finalized_after_mart_verified_date(session: Session) -> None:
+def test_pending_first_stock_ignores_unrelated_mart_start_date(session: Session) -> None:
     observe(session, "0", moment(13, 1))
     insert_existing_mart_date(session)
 
     observe(session, "2", moment(14, 4))
 
-    assert rows(session)[0][1] is None
-    assert rows(session)[0][3] == "pending"
+    assert str(rows(session)[0][1]) == "2026-10-14"
+    assert rows(session)[0][3] == "wfs_first_stock"
 
 
 def test_dimension_msku_reassignment_blocks_new_msku_capture(session: Session) -> None:

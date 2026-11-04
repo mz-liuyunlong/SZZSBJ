@@ -43,11 +43,13 @@ def utc_now() -> datetime:
 
 
 class ListingEvaluationRun(Base):
-    """One idempotent diagnostic run per China calendar date."""
+    """An immutable diagnostic attempt for a China calendar date."""
 
     __tablename__ = "biz_listing_evaluation_runs"
     __table_args__ = (
-        UniqueConstraint("schedule_date_cn", name="uq_listing_evaluation_run_schedule_date"),
+        UniqueConstraint(
+            "schedule_date_cn", "attempt_count", name="uq_listing_evaluation_run_date_attempt"
+        ),
         CheckConstraint(
             "status IN ('queued', 'running', 'succeeded', 'partial', 'failed')",
             name="status",
@@ -81,6 +83,9 @@ class ListingEvaluationRun(Base):
     blocked_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
+    published_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     attempt_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
@@ -96,8 +101,29 @@ class ListingEvaluationRun(Base):
     )
 
 
+class ListingEvaluationManualRequest(Base):
+    """Durable, scope-bound request for one all-Listing diagnostic run."""
+
+    __tablename__ = "biz_listing_evaluation_manual_requests"
+    __table_args__ = (
+        CheckConstraint("status IN ('queued', 'running', 'succeeded', 'failed')", name="status"),
+        Index("ix_listing_evaluation_manual_status", "status", "requested_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    requested_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    schedule_date_cn: Mapped[date] = mapped_column(Date, nullable=False)
+    cutoff_date_la: Mapped[date] = mapped_column(Date, nullable=False)
+    account_scope_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
+    run_id: Mapped[UUID | None] = mapped_column(ForeignKey("biz_listing_evaluation_runs.id"))
+    error_code: Mapped[str | None] = mapped_column(String(128))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class ListingEvaluationSnapshot(Base):
-    """Immutable-per-run diagnostic snapshot; never writes the current Listing grade."""
+    """Frozen run evidence with an audited, one-time publication decision."""
 
     __tablename__ = "biz_listing_evaluation_snapshots"
     __table_args__ = (
@@ -125,6 +151,7 @@ class ListingEvaluationSnapshot(Base):
     current_lifecycle: Mapped[str | None] = mapped_column(String(64))
     current_grade: Mapped[str | None] = mapped_column(String(64))
     lifecycle_candidate: Mapped[str | None] = mapped_column(String(64))
+    lifecycle_evidence_reason: Mapped[str | None] = mapped_column(Text)
     grade_candidate: Mapped[str | None] = mapped_column(String(64))
     valid_short: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     valid_medium: Mapped[int] = mapped_column(
@@ -159,6 +186,12 @@ class ListingEvaluationSnapshot(Base):
     published: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    published_by: Mapped[str | None] = mapped_column(String(128))
+    publication_error_code: Mapped[str | None] = mapped_column(String(128))
+    reverted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reverted_by: Mapped[str | None] = mapped_column(String(128))
+    revert_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
@@ -204,3 +237,28 @@ class ListingGradeFollowUpTask(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
     )
+
+
+class ListingLifecycleAdjustment(Base):
+    """Audited two-person manual stage decision; later automatic runs cannot override it."""
+
+    __tablename__ = "biz_listing_lifecycle_adjustments"
+    __table_args__ = (
+        CheckConstraint("status IN ('pending', 'approved', 'rejected')", name="status"),
+        Index("ix_listing_lifecycle_adjustment_scope", "source_account_ref", "listing_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    listing_id: Mapped[UUID] = mapped_column(nullable=False)
+    source_account_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    store_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    item_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    expected_stage: Mapped[str | None] = mapped_column(String(64))
+    requested_stage: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    requested_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    decided_by: Mapped[str | None] = mapped_column(String(128))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decision_note: Mapped[str | None] = mapped_column(Text)

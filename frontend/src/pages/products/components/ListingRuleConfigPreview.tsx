@@ -67,6 +67,9 @@ const initialRule = (): ListingGradeRuleRead => ({
   source: "default",
   can_edit: true,
   storage_ready: true,
+  preview_enabled: true,
+  scheduler_enabled: false,
+  publish_enabled: false,
 });
 
 let stored = initialRule();

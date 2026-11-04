@@ -394,6 +394,24 @@ class SyncRunExecutionService:
 
         with data_pages_client() as client:
             for business_date in days:
+                if run.interface_key == "saleStatPageList":
+                    self._event(
+                        run.id,
+                        "running",
+                        "running",
+                        "SYNC_SALESTAT_DAY_PENDING",
+                        safe_details={"business_date": business_date.isoformat()},
+                    )
+                    self.session.commit()
+                if run.interface_key == "walmartAdItemSpList":
+                    self._event(
+                        run.id,
+                        "running",
+                        "running",
+                        "SYNC_AD_REPORT_DAY_PENDING",
+                        safe_details={"business_date": business_date.isoformat()},
+                    )
+                    self.session.commit()
                 runner = DataPagesRealSyncRunner(
                     session=self.session,
                     client=client,
@@ -498,6 +516,15 @@ class SyncRunExecutionService:
                     + summary.mart_order_profit_rows
                     + summary.mart_listing_rows
                 )
+                if run.interface_key == "saleStatPageList":
+                    self._event(
+                        run.id,
+                        "running",
+                        "running",
+                        "SYNC_SALESTAT_DAY_VALIDATED",
+                        safe_details={"business_date": business_date.isoformat()},
+                    )
+                    self.session.commit()
                 self._heartbeat_data_pages_lock(run.id)
 
         completed = self.repository.get_run_for_update(run.id)
@@ -688,6 +715,19 @@ class SyncRunExecutionService:
             runner.summary.ad_rows = runner._write_ads(ad_rows)
             heartbeat()
             runner._resolve_ads(ad_rows)
+            if (
+                run_id is not None
+                and runner.ad_report_capture_complete
+                and len(runner.advertiser_ids) == len(advertisers)
+                and len(runner.advertiser_ids) <= runner.max_advertisers
+            ):
+                self._event(
+                    run_id,
+                    "running",
+                    "running",
+                    "SYNC_AD_REPORT_DAY_VALIDATED",
+                    safe_details={"business_date": runner.business_date.isoformat()},
+                )
 
         else:
             raise ValueError("unsupported Data Pages interface")
@@ -750,7 +790,7 @@ class SyncRunExecutionService:
                 page_size=page_size,
                 campaign_type=DATA_PAGES_DEFAULT_CAMPAIGN_TYPE,
                 max_advertisers=DATA_PAGES_DEFAULT_MAX_ADVERTISERS,
-                heartbeat=lambda: self._heartbeat_lock(run.id),
+                heartbeat=lambda: self._heartbeat_data_pages_lock(run.id),
             )
             stores = runner._fetch_offset_all(
                 "seller_list_multi_platform",
@@ -761,24 +801,37 @@ class SyncRunExecutionService:
 
             runner.summary.store_rows = runner._write_stores(stores)
             runner.summary.listing_rows = runner._write_listings(listings)
-            self._heartbeat_lock(run.id)
+            self._heartbeat_data_pages_lock(run.id)
             runner.summary.mart_listing_rows = runner._refresh_listing_mart()
+            self._heartbeat_data_pages_lock(run.id)
+            completed = self.repository.get_run_for_update(run.id)
+            if completed is None:
+                raise DataPagesRealSyncError("SYNC_RUN_NOT_FOUND")
+            if completed.status != "running":
+                raise DataPagesRealSyncError("SYNC_RUN_NOT_RUNNING")
+            from_status = completed.status
+            if runner.listing_complete_day is not None and runner.summary.listing_skipped_rows == 0:
+                self._event(
+                    run.id,
+                    "running",
+                    "running",
+                    "SYNC_WFS_INVENTORY_DAY_VALIDATED",
+                    safe_details={
+                        "business_date": runner.listing_complete_day.isoformat(),
+                        "page_count": runner.listing_page_count,
+                        "row_count": runner.summary.listing_rows,
+                    },
+                )
+            completed.status = "succeeded"
+            completed.finished_at = utc_now()
+            completed.work_items_succeeded = 1
+            completed.work_items_failed = 0
+            completed.records_seen = runner.summary.store_rows + runner.summary.listing_rows
+            completed.records_written = runner.summary.mart_listing_rows
+            completed.error_code = None
+            completed.error_message = None
+            self._event(completed.id, from_status, "succeeded", "SYNC_RUN_SUCCEEDED")
             runner.session.commit()
-
-        completed = self.repository.get_run_for_update(run.id)
-        if completed is None:
-            return
-        from_status = completed.status
-        completed.status = "succeeded"
-        completed.finished_at = utc_now()
-        completed.work_items_succeeded = 1
-        completed.work_items_failed = 0
-        completed.records_seen = runner.summary.store_rows + runner.summary.listing_rows
-        completed.records_written = runner.summary.mart_listing_rows
-        completed.error_code = None
-        completed.error_message = None
-        self._event(completed.id, from_status, "succeeded", "SYNC_RUN_SUCCEEDED")
-        self.session.commit()
 
     def _data_pages_business_dates_for_run(
         self,

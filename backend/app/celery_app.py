@@ -116,6 +116,10 @@ def create_celery_app(
                 "task": "listing_evaluation.scheduler_tick",
                 "schedule": 60.0,
             },
+            "listing-evaluation-followup-reminders": {
+                "task": "listing_evaluation.followup_tick",
+                "schedule": 60.0,
+            },
             "ai-keyword-recovery": {
                 "task": "ai_runtime.recover_keyword_jobs",
                 "schedule": 60.0,

@@ -236,6 +236,9 @@ def test_0071_real_historical_migration_preserves_jobs_and_blocks_populated_roll
     env["TEST_DATABASE_URL"] = target.render_as_string(hide_password=False)
     env.pop("PRODUCTION_MIGRATIONS_AUTHORIZED", None)
     root = Path(__file__).resolve().parents[3]
+    expected_head = ScriptDirectory.from_config(
+        Config(str(root / "alembic.ini"))
+    ).get_current_head()
 
     def migrate(operation: str, revision: str) -> None:
         result = subprocess.run(
@@ -330,10 +333,7 @@ def test_0071_real_historical_migration_preserves_jobs_and_blocks_populated_roll
         )
         assert result.returncode != 0
         with engine.begin() as cx:
-            assert (
-                cx.scalar(text("SELECT version_num FROM alembic_version"))
-                == "20261102_0071_skill_lib"
-            )
+            assert cx.scalar(text("SELECT version_num FROM alembic_version")) == expected_head
             assert cx.scalar(text("SELECT count(*) FROM ai_skill_revisions")) == 3
         engine.dispose()
     finally:

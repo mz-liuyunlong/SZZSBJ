@@ -133,7 +133,7 @@ def _listing_mart_refresh_sql() -> str:
         "sum(sales_qty) filter (where business_date_la between :day - 13 and :day) sales_14d,"
         "sum(sales_qty) filter (where business_date_la between :day - 29 and :day) sales_30d "
         "from mart_daily_sales_item_day where source_account_ref=:account and business_date_la between :day - 29 and :day "
-        "group by store_id,item_id), ads as (select store_id,item_id,msku,sum(coalesce(ad_spend_amount,0)) ad_spend_30d "
+        "group by store_id,item_id), ads as (select store_id,item_id,msku,sum(ad_spend_amount) ad_spend_30d "
         "from fact_walmart_ad_item_sp_daily where source_account_ref=:account and business_date_la between :day - 29 and :day "
         "and store_id is not null and item_id is not null and msku is not null and trim(msku)<>'' group by store_id,item_id,msku) "
         "insert into mart_listing_management_current as current_listing "
@@ -145,7 +145,7 @@ def _listing_mart_refresh_sql() -> str:
         "select gen_random_uuid(),l.source_account_ref,l.platform_code,l.store_id,l.store_name,l.item_id,l.msku,l.local_sku,"
         "l.local_name,l.title,l.picture_url,l.item_url,l.price_amount,l.price_currency_code,l.standard_status,"
         "l.fulfillment_type,l.fulfillment_type_name,NULL::timestamptz,l.wfs_available_quantity,l.available_quantity,"
-        "coalesce(s.sales_7d,0),coalesce(s.sales_14d,0),coalesce(s.sales_30d,0),coalesce(a.ad_spend_30d,0),'USD',"
+        "coalesce(s.sales_7d,0),coalesce(s.sales_14d,0),coalesce(s.sales_30d,0),a.ad_spend_30d,case when a.ad_spend_30d is null then null else 'USD' end,"
         "l.average_rating,l.review_count,l.brand,l.gtin,l.upc,'[]'::jsonb,'[]'::jsonb,"
         "jsonb_build_object('runner',cast(:runner as text),'as_of_date',cast(:day as text),"
         "'ads_match_key','store_id+item_id+msku'),:now,:now,:now from dim_walmart_listings l "
@@ -426,7 +426,10 @@ class DataPagesRealSyncRunner:
         self.max_advertisers = max(1, max_advertisers)
         self.heartbeat = heartbeat
         self.summary = DataPagesRealSyncSummary(source_account_ref, business_date)
-        self._listing_capture_by_identity: dict[tuple[str, str, str], datetime] = {}
+        self._listing_capture_by_row_id: dict[int, datetime] = {}
+        self.listing_complete_day: date | None = None
+        self.listing_page_count = 0
+        self.ad_report_capture_complete = True
         self.store_ids: tuple[str, ...] = ()
         self.advertiser_ids: tuple[str, ...] = ()
 
@@ -540,12 +543,17 @@ class DataPagesRealSyncRunner:
     ) -> list[dict[str, Any]]:
         spec = DATA_PAGES_SYNC_INTERFACE_SPECS_BY_KEY[parser_key]
         if parser_key == "walmart_listing_list":
-            self._listing_capture_by_identity.clear()
+            self._listing_capture_by_row_id.clear()
+            self.listing_complete_day = None
+            self.listing_page_count = 0
         size = max(self.page_size, minimum_page_size)
         offset = 0
         page_no = 1
         rows: list[dict[str, Any]] = []
         previous_signature: str | None = None
+        listing_total: int | None = None
+        listing_total_consistent = True
+        listing_capture_dates: set[date] = set()
         while page_no <= spec.default_max_pages:
             response = self._request_page(
                 parser_key,
@@ -559,19 +567,21 @@ class DataPagesRealSyncRunner:
                 raise DataPagesRealSyncError(f"DATA_PAGES_PAGINATION_STALLED:{spec.interface_key}")
             previous_signature = signature
             if parser_key == "walmart_listing_list":
+                # A Listing may occur on more than one page while stock changes.
+                # Keep each row's actual capture time, not the first page's time.
                 for listing_row in current:
-                    identity = listing_identity(
-                        _field(listing_row, "store_id", "sid"),
-                        _field(listing_row, "item_id", "itemId"),
-                        _field(listing_row, "msku"),
-                    )
-                    if identity is None:
-                        continue
-                    earlier = self._listing_capture_by_identity.get(identity)
-                    if earlier is None or response.pulled_at < earlier:
-                        self._listing_capture_by_identity[identity] = response.pulled_at
+                    self._listing_capture_by_row_id[id(listing_row)] = response.pulled_at
+                self.listing_page_count = page_no
+                if response.pulled_at.utcoffset() is None:
+                    listing_total_consistent = False
+                else:
+                    listing_capture_dates.add(response.pulled_at.astimezone(LA_TZ).date())
             rows.extend(current)
             total = _total_of(response.response_json)
+            if parser_key == "walmart_listing_list":
+                if total is None or (listing_total is not None and total != listing_total):
+                    listing_total_consistent = False
+                listing_total = total
             if (
                 parser_key == "order_v2_list"
                 and total is not None
@@ -582,6 +592,20 @@ class DataPagesRealSyncRunner:
                 # explicitly reports more order rows. Never silently omit orders.
                 raise DataPagesRealSyncError("DATA_PAGES_ORDER_PAGINATION_INCOMPLETE")
             if not current or len(current) < size or (total and len(rows) >= total):
+                if parser_key == "walmart_listing_list":
+                    keys = [
+                        (_field(row, "store_id", "sid"), _field(row, "item_id", "itemId"))
+                        for row in rows
+                    ]
+                    if (
+                        listing_total_consistent
+                        and bool(rows)
+                        and listing_total == len(rows)
+                        and all(store and item for store, item in keys)
+                        and len(set(keys)) == len(keys)
+                        and len(listing_capture_dates) == 1
+                    ):
+                        self.listing_complete_day = next(iter(listing_capture_dates))
                 return rows
             offset += size
             page_no += 1
@@ -599,6 +623,7 @@ class DataPagesRealSyncRunner:
         page_no = 1
         rows: list[dict[str, Any]] = []
         previous_signature: str | None = None
+        declared_total: int | None = None
         while page_no <= spec.default_max_pages:
             response = self._request_page(
                 parser_key,
@@ -614,7 +639,15 @@ class DataPagesRealSyncRunner:
             previous_signature = signature
             rows.extend(current)
             total = _total_of(response.response_json)
+            if parser_key == "walmart_advertiser_list":
+                if total is None or (declared_total is not None and total != declared_total):
+                    self.ad_report_capture_complete = False
+                declared_total = total
             if not current or len(current) < size or (total and len(rows) >= total):
+                if parser_key == "walmart_advertiser_list" and (
+                    declared_total is None or len(rows) != declared_total
+                ):
+                    self.ad_report_capture_complete = False
                 return rows
             page_no += 1
         raise DataPagesRealSyncError(f"DATA_PAGES_MAX_PAGES_EXCEEDED:{spec.interface_key}")
@@ -648,6 +681,7 @@ class DataPagesRealSyncRunner:
         size = min(self.page_size, 200)
         rows: list[dict[str, Any]] = []
         previous_signature: str | None = None
+        declared_total: int | None = None
         for page_no in range(1, spec.default_max_pages + 1):
             response = self._request_page(
                 "walmart_ad_item_sp_list",
@@ -662,7 +696,13 @@ class DataPagesRealSyncRunner:
                 raise DataPagesRealSyncError("DATA_PAGES_PAGINATION_STALLED:walmartAdItemSpList")
             previous_signature = signature
             rows.extend(current)
+            total = _total_of(response.response_json)
+            if total is None or (declared_total is not None and total != declared_total):
+                self.ad_report_capture_complete = False
+            declared_total = total
             if not current or len(current) < size:
+                if declared_total is None or len(rows) != declared_total:
+                    self.ad_report_capture_complete = False
                 return rows
         raise DataPagesRealSyncError("DATA_PAGES_MAX_PAGES_EXCEEDED:walmartAdItemSpList")
 
@@ -846,20 +886,20 @@ class DataPagesRealSyncRunner:
         # walmart/list is a current-state endpoint.
         # Snapshot it using the actual capture date in Los Angeles.
         # Never stamp a historical runner business_date onto current inventory.
-        captured_at = _now()
-        snapshot_date_la = captured_at.astimezone(LA_TZ).date()
-
+        fallback_captured_at = _now()
         count = 0
         for row in rows:
+            captured_at = self._listing_capture_by_row_id.get(id(row)) or fallback_captured_at
+            if captured_at.utcoffset() is None:
+                raise DataPagesRealSyncError("DATA_PAGES_LISTING_CAPTURE_TIME_INVALID")
+            snapshot_date_la = captured_at.astimezone(LA_TZ).date()
             item_id = _field(row, "item_id", "itemId")
             store_id = _field(row, "store_id", "sid")
             if not item_id or not store_id:
                 self.summary.listing_skipped_rows += 1
                 continue
             identity = listing_identity(store_id, item_id, _field(row, "msku"))
-            captured_listing_at = (
-                self._listing_capture_by_identity.get(identity) if identity is not None else None
-            )
+            captured_listing_at = self._listing_capture_by_row_id.get(id(row)) if identity else None
             if captured_listing_at is not None:
                 observe_first_wfs_stock(
                     self.session,
@@ -942,6 +982,11 @@ class DataPagesRealSyncRunner:
                     **_timestamps(),
                 },
             )
+            # An incomplete retry must not replace inventory facts previously
+            # certified by a successful full-day Listing capture.
+            if self.listing_complete_day is None:
+                count += 1
+                continue
             self.session.execute(
                 text(
                     "insert into fact_walmart_listing_inventory_daily "
@@ -1464,7 +1509,7 @@ class DataPagesRealSyncRunner:
                 "from fact_walmart_refund_items where source_account_ref = :account and business_date_la = :day "
                 "and store_id is not null and item_id is not null group by 1,2,3,4), "
                 "a as (select source_account_ref, business_date_la, store_id, item_id, msku, "
-                "sum(coalesce(ad_spend_amount,0)) ad_spend from fact_walmart_ad_item_sp_daily "
+                "sum(ad_spend_amount) ad_spend from fact_walmart_ad_item_sp_daily "
                 "where source_account_ref = :account and business_date_la = :day and store_id is not null "
                 "and item_id is not null and msku is not null and trim(msku) <> '' group by 1,2,3,4,5), "
                 "sem_raw as (select task_id,created_at,nullif(row_json ->> 'Date','')::date sem_date,"
@@ -1506,7 +1551,7 @@ class DataPagesRealSyncRunner:
                 "o.store_id,l.store_name,o.item_id,l.msku,coalesce(nullif(trim(l.local_sku),''),o.item_id),"
                 "l.local_name,l.title,l.picture_url,o.sales_qty,o.order_count,o.sales_amount,o.currency_code,"
                 "o.sample_amount,o.sales_excluding_sample,r.return_qty,r.refund_amount,r.refund_currency_code,"
-                "coalesce(a.ad_spend,0),coalesce(sem.sem_ad_spend,0),'USD',case when o.sales_amount > 0 then coalesce(a.ad_spend,0)/o.sales_amount "
+                "a.ad_spend,coalesce(sem.sem_ad_spend,0),case when a.ad_spend is null then null else 'USD' end,case when o.sales_amount > 0 and a.ad_spend is not null then a.ad_spend/o.sales_amount "
                 "else null end,inv.wfs_available_quantity,"
                 "coalesce(commission.commission_rate,:default_commission_rate),"
                 "o.sales_amount*coalesce(commission.commission_rate,:default_commission_rate),"

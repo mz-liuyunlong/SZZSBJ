@@ -52,14 +52,16 @@ export function getCachedResource<T>(
 
   const promise = loader()
     .then((value) => {
-      resourceCache.set(key, {
-        value,
-        updatedAt: now(),
-      });
+      if (resourceCache.get(key)?.promise === promise) {
+        resourceCache.set(key, {
+          value,
+          updatedAt: now(),
+        });
+      }
       return value;
     })
     .catch((error) => {
-      resourceCache.delete(key);
+      if (resourceCache.get(key)?.promise === promise) resourceCache.delete(key);
       throw error;
     });
 

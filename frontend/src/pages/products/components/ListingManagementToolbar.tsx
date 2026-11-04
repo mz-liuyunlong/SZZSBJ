@@ -56,6 +56,7 @@ const normalizeSelected = (values?: string[], legacyValue?: string) => (
 const archiveStatusOptions: ReportFilterOption[] = [
   { value: "active", label: "未归档" },
   { value: "archived", label: "已归档" },
+  { value: "unknown", label: "状态未确认" },
 ];
 
 const listingStatusOptions: ReportFilterOption[] = [
@@ -65,6 +66,9 @@ const listingStatusOptions: ReportFilterOption[] = [
   "离线",
   "拥有",
   "未拥有",
+  "SYSTEM PROBLEM",
+  "IN REVIEW",
+  "ERROR",
 ].map((value) => ({ value, label: value }));
 
 function ListingManagementToolbar({
@@ -150,8 +154,8 @@ function ListingManagementToolbar({
     <div className="listing-management__toolbar" role="search" aria-label="Listing 管理筛选">
       <ReportFacetSelect
         mode="multiple"
-        ariaLabel="产品类型"
-        placeholder="产品类型"
+        ariaLabel="平台类目"
+        placeholder="平台类目"
         unit="个类型"
         value={normalizeSelected(filters.productTypes, filters.productType)}
         options={productTypes}
@@ -176,8 +180,8 @@ function ListingManagementToolbar({
       />
       <ReportFacetSelect
         mode="multiple"
-        ariaLabel="产品状态"
-        placeholder="产品状态"
+        ariaLabel="产品与Listing状态"
+        placeholder="产品与Listing状态"
         unit="个状态"
         value={normalizeSelected(filters.productStatuses, filters.productStatus)}
         options={listingStatusOptions}

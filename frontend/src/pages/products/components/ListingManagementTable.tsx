@@ -4,6 +4,7 @@ import {
   Space,
   Tag,
   Popconfirm,
+  Popover,
   Tooltip } from "antd"; import { ProTable,
   type ProColumns } from "@ant-design/pro-components"; import type { Key } from "react"; import ReportTableShell,
   {   ReportTableSelectionBar,
@@ -43,7 +44,7 @@ const minColumnWidths: Record<string, number> = {
   category: 120,
   wfsAvailableInventory: 140,
   inboundInventory: 130,
-  sales90Days: 130,
+  sales30Days: 130,
   adSpend30Days: 140,
   disabledReason: 130,
   listingStatus: 130,
@@ -51,6 +52,12 @@ const minColumnWidths: Record<string, number> = {
   walmartSeller: 140,
   resold: 120,
   checkedAt: 160,
+  dataUpdatedAt: 160,
+  monitorSource: 140,
+  monitorAgeHours: 150,
+  monitorStatus: 130,
+  monitorError: 150,
+  monitorImageCount: 120,
   rating: 100,
   reviewCount: 110,
   brand: 130,
@@ -74,6 +81,7 @@ const statusColorMap: Record<string, string> = {
 
 interface ListingManagementTableProps {
   rows: ListingManagementRow[];
+  tagColors?: Record<string, string>;
   total: number;
   appliedColumnKeys: string[];
   columnWidths: Record<string, number>;
@@ -85,6 +93,9 @@ interface ListingManagementTableProps {
   onCurrentPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   onSelectionChange: (keys: Key[]) => void;
+  sortField?: string;
+  sortOrder?: "asc" | "desc";
+  onSortChange?: (key: string, order: "asc" | "desc" | null) => void;
   onOpenDetail: (row: ListingManagementRow) => void;
   onOpenGptAnalysis?: (row: ListingManagementRow) => void;
   onOpenEvaluation?: (row: ListingManagementRow) => void;
@@ -99,6 +110,7 @@ interface ListingManagementTableProps {
 
 function ListingManagementTable({
   rows,
+  tagColors = {},
   total,
   appliedColumnKeys,
   columnWidths,
@@ -110,6 +122,9 @@ function ListingManagementTable({
   onCurrentPageChange,
   onPageSizeChange,
   onSelectionChange,
+  sortField,
+  sortOrder,
+  onSortChange,
   onOpenDetail,
   onOpenGptAnalysis,
   onOpenEvaluation,
@@ -148,11 +163,27 @@ function ListingManagementTable({
       fixed: "left",
       onHeaderCell: headerCell,
       render: (_, row) => (
-        <ImageCell
-          image={row.image}
-          label={`Listing 图片：${row.productName}`}
-          placement="right"
-        />
+        <Space size={2}>
+          <ImageCell
+            image={row.image}
+            label={`Listing 图片：${row.productName}`}
+            placement="right"
+          />
+          {(row.monitorImages?.length ?? 0) > 1 && (
+            <Popover
+              title="监控商品图片"
+              content={
+                <Space wrap>
+                  {row.monitorImages?.map((image, index) => (
+                    <ImageCell key={`${row.id}-image-${index}`} image={image} label={`监控图片 ${index + 1}`} placement="right" />
+                  ))}
+                </Space>
+              }
+            >
+              <Button size="small" type="link">+{(row.monitorImages?.length ?? 1) - 1}</Button>
+            </Popover>
+          )}
+        </Space>
       ),
     },
     productIdName: {
@@ -160,7 +191,7 @@ function ListingManagementTable({
       title: title("productIdName", fieldTitle.productIdName ?? "商品ID/品名"),
       width: columnWidths.productIdName,
       fixed: "left",
-      sorter: (a, b) => a.productId.localeCompare(b.productId),
+      sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => (
         <ProductIdentityCell
@@ -174,10 +205,7 @@ function ListingManagementTable({
       title: title("skuMsku", fieldTitle.skuMsku ?? "SKU/MSKU"),
       width: columnWidths.skuMsku,
       fixed: "left",
-      sorter: (a, b) => (
-        a.sku.localeCompare(b.sku)
-        || a.msku.localeCompare(b.msku)
-      ),
+      sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => (
         <SkuMskuIdentityCell
@@ -192,7 +220,7 @@ function ListingManagementTable({
       title: title("msku", fieldTitle.msku),
       width: columnWidths.msku,
       fixed: "left",
-      sorter: (a, b) => a.msku.localeCompare(b.msku),
+      sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => (
         <CopyableTextCell
@@ -209,7 +237,7 @@ function ListingManagementTable({
       title: title("productId", fieldTitle.productId),
       width: columnWidths.productId,
       fixed: "left",
-      sorter: (a, b) => a.productId.localeCompare(b.productId),
+      sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => (
         <CopyableTextCell
@@ -237,7 +265,7 @@ function ListingManagementTable({
       dataIndex: "sku",
       title: title("sku", fieldTitle.sku),
       width: columnWidths.sku,
-      sorter: (a, b) => a.sku.localeCompare(b.sku),
+      sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => (
         <CopyableTextCell
@@ -252,7 +280,7 @@ function ListingManagementTable({
       title: title("productName", fieldTitle.productName),
       width: columnWidths.productName,
       ellipsis: true,
-      sorter: (a, b) => a.productName.localeCompare(b.productName),
+      sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => (
         <CopyableTextCell
@@ -283,18 +311,18 @@ function ListingManagementTable({
       dataIndex: "listPrice",
       title: title("listPrice", fieldTitle.listPrice),
       width: columnWidths.listPrice,
-      sorter: (a, b) => a.listPrice - b.listPrice,
+      sorter: true,
       onHeaderCell: headerCell,
-      render: (_, row) => `$${row.listPrice.toFixed(2)}`,
+      render: (_, row) => row.listPriceKnown === false ? "-" : `${row.listPriceCurrency || "币种未知"} ${row.listPrice.toFixed(2)}`,
     },
     salePrice: {
       key: "salePrice",
       dataIndex: "salePrice",
       title: title("salePrice", fieldTitle.salePrice),
       width: columnWidths.salePrice,
-      sorter: (a, b) => a.salePrice - b.salePrice,
+      sorter: true,
       onHeaderCell: headerCell,
-      render: (_, row) => `$${row.salePrice.toFixed(2)}`,
+      render: (_, row) => row.salePriceKnown === false ? "-" : `${row.salePriceCurrency || "币种未知"} ${row.salePrice.toFixed(2)}`,
     },
     productStatus: {
       key: "productStatus",
@@ -320,7 +348,7 @@ function ListingManagementTable({
     },
     gptAnalysis: {
       key: "gptAnalysis",
-      title: title("gptAnalysis", fieldTitle.gptAnalysis ?? "GPT分析"),
+      title: title("gptAnalysis", fieldTitle.gptAnalysis ?? "GPT分析链接"),
       width: columnWidths.gptAnalysis,
       align: "center",
       onHeaderCell: headerCell,
@@ -341,8 +369,13 @@ function ListingManagementTable({
       dataIndex: "listedAt",
       title: title("listedAt", fieldTitle.listedAt),
       width: columnWidths.listedAt,
-      sorter: (a, b) => a.listedAt.localeCompare(b.listedAt),
+      sorter: true,
       onHeaderCell: headerCell,
+      render: (_, row) => (
+        <Tooltip title={`日期来源：${row.listingDateSource || "未知"}`}>
+          <span>{row.listedAt || "待核实"}</span>
+        </Tooltip>
+      ),
     },
     category: {
       key: "category",
@@ -356,23 +389,25 @@ function ListingManagementTable({
       dataIndex: "wfsAvailableInventory",
       title: title("wfsAvailableInventory", fieldTitle.wfsAvailableInventory),
       width: columnWidths.wfsAvailableInventory,
-      sorter: (a, b) => a.wfsAvailableInventory - b.wfsAvailableInventory,
+      sorter: true,
       onHeaderCell: headerCell,
+      render: (_, row) => row.wfsAvailableInventoryKnown === false ? "未同步" : row.wfsAvailableInventory,
     },
     inboundInventory: {
       key: "inboundInventory",
       dataIndex: "inboundInventory",
       title: title("inboundInventory", fieldTitle.inboundInventory),
       width: columnWidths.inboundInventory,
-      sorter: (a, b) => a.inboundInventory - b.inboundInventory,
+      sorter: true,
       onHeaderCell: headerCell,
+      render: (_, row) => row.inboundInventoryKnown === false ? "未同步" : row.inboundInventory,
     },
-    sales90Days: {
-      key: "sales90Days",
-      dataIndex: "sales90Days",
-      title: title("sales90Days", fieldTitle.sales90Days),
-      width: columnWidths.sales90Days,
-      sorter: (a, b) => a.sales90Days - b.sales90Days,
+    sales30Days: {
+      key: "sales30Days",
+      dataIndex: "sales30Days",
+      title: title("sales30Days", fieldTitle.sales30Days),
+      width: columnWidths.sales30Days,
+      sorter: true,
       onHeaderCell: headerCell,
     },
     adSpend30Days: {
@@ -380,9 +415,9 @@ function ListingManagementTable({
       dataIndex: "adSpend30Days",
       title: title("adSpend30Days", fieldTitle.adSpend30Days),
       width: columnWidths.adSpend30Days,
-      sorter: (a, b) => a.adSpend30Days - b.adSpend30Days,
+      sorter: true,
       onHeaderCell: headerCell,
-      render: (_, row) => `$${row.adSpend30Days.toFixed(2)}`,
+      render: (_, row) => row.adSpend30DaysKnown === false ? "未同步" : `${row.adSpend30Days.toFixed(2)}`,
     },
     disabledReason: {
       key: "disabledReason",
@@ -428,7 +463,55 @@ function ListingManagementTable({
       dataIndex: "checkedAt",
       title: title("checkedAt", fieldTitle.checkedAt),
       width: columnWidths.checkedAt,
-      sorter: (a, b) => a.checkedAt.localeCompare(b.checkedAt),
+      sorter: true,
+      onHeaderCell: headerCell,
+    },
+    dataUpdatedAt: {
+      key: "dataUpdatedAt",
+      dataIndex: "dataUpdatedAt",
+      title: title("dataUpdatedAt", fieldTitle.dataUpdatedAt),
+      width: columnWidths.dataUpdatedAt,
+      onHeaderCell: headerCell,
+    },
+    monitorSource: {
+      key: "monitorSource",
+      dataIndex: "monitorSource",
+      title: title("monitorSource", fieldTitle.monitorSource),
+      width: columnWidths.monitorSource,
+      onHeaderCell: headerCell,
+    },
+    monitorAgeHours: {
+      key: "monitorAgeHours",
+      dataIndex: "monitorAgeHours",
+      title: title("monitorAgeHours", fieldTitle.monitorAgeHours),
+      width: columnWidths.monitorAgeHours,
+      onHeaderCell: headerCell,
+      render: (_, row) => row.monitorAgeHours == null
+        ? <Tag>无监控记录</Tag>
+        : row.monitorAgeHours >= 48
+          ? <Tag color="orange">{row.monitorAgeHours}小时（超48小时）</Tag>
+          : <Tag color="green">{row.monitorAgeHours}小时</Tag>,
+    },
+    monitorStatus: {
+      key: "monitorStatus",
+      dataIndex: "monitorStatus",
+      title: title("monitorStatus", fieldTitle.monitorStatus),
+      width: columnWidths.monitorStatus,
+      onHeaderCell: headerCell,
+    },
+    monitorError: {
+      key: "monitorError",
+      dataIndex: "monitorError",
+      title: title("monitorError", fieldTitle.monitorError),
+      width: columnWidths.monitorError,
+      onHeaderCell: headerCell,
+      render: (_, row) => row.monitorError || "-",
+    },
+    monitorImageCount: {
+      key: "monitorImageCount",
+      dataIndex: "monitorImageCount",
+      title: title("monitorImageCount", fieldTitle.monitorImageCount),
+      width: columnWidths.monitorImageCount,
       onHeaderCell: headerCell,
     },
     rating: {
@@ -436,16 +519,18 @@ function ListingManagementTable({
       dataIndex: "rating",
       title: title("rating", fieldTitle.rating),
       width: columnWidths.rating,
-      sorter: (a, b) => a.rating - b.rating,
+      sorter: true,
       onHeaderCell: headerCell,
+      render: (_, row) => row.ratingKnown === false ? "无评分" : row.rating,
     },
     reviewCount: {
       key: "reviewCount",
       dataIndex: "reviewCount",
       title: title("reviewCount", fieldTitle.reviewCount),
       width: columnWidths.reviewCount,
-      sorter: (a, b) => a.reviewCount - b.reviewCount,
+      sorter: true,
       onHeaderCell: headerCell,
+      render: (_, row) => row.reviewCountKnown === false ? "未同步" : row.reviewCount,
     },
     brand: {
       key: "brand",
@@ -462,7 +547,7 @@ function ListingManagementTable({
       onHeaderCell: headerCell,
       render: (_, row) => (
         <Space size={4} wrap>
-          {row.tags.map((tag) => <Tag key={tag} color="blue">{tag}</Tag>)}
+          {row.tags.map((tag) => <Tag key={tag} color={tagColors[`${row.sourceAccountRef}:${tag}`] || "blue"}>{tag}</Tag>)}
         </Space>
       ),
     },
@@ -472,6 +557,17 @@ function ListingManagementTable({
       title: title("gtin", fieldTitle.gtin),
       width: columnWidths.gtin,
       onHeaderCell: headerCell,
+    },
+    archiveStatus: {
+      key: "archiveStatus",
+      title: title("archiveStatus", fieldTitle.archiveStatus),
+      width: columnWidths.archiveStatus,
+      onHeaderCell: headerCell,
+      render: (_, row) => !row.archiveStateKnown
+        ? <Tag>状态未知</Tag>
+        : row.isArchived
+          ? <Tag color="orange">已归档</Tag>
+          : <Tag color="green">未归档</Tag>,
     },
     archiveReason: {
       key: "archiveReason",
@@ -549,6 +645,11 @@ function ListingManagementTable({
   // changes. Updated records are replaced immutably by the page's mutation handlers.
   const optimizedColumns = columns.map((column) => ({
     ...column,
+    sortOrder: sortField !== undefined && column.sorter
+      ? column.key === sortField
+        ? sortOrder === "desc" ? "descend" as const : "ascend" as const
+        : null
+      : column.sortOrder,
     shouldCellUpdate: (record: ListingManagementRow, previous: ListingManagementRow) => (
       record !== previous
     ),
@@ -564,6 +665,16 @@ function ListingManagementTable({
     >
       <ProTable<ListingManagementRow>
         rowKey="id"
+        onChange={(_, __, sorter, extra) => {
+          if (extra.action !== "sort" || Array.isArray(sorter)) return;
+          const field = String(sorter.columnKey ?? "");
+          // ProTable can report `ascend` again after dataSource refresh; use the
+          // controlled page state to advance the same column's sort direction.
+          const nextOrder = field && field === sortField
+            ? sortOrder === "asc" ? "desc" : null
+            : sorter.order === "ascend" ? "asc" : sorter.order === "descend" ? "desc" : null;
+          onSortChange?.(field, nextOrder);
+        }}
         search={false}
         options={false}
         dataSource={rows}
@@ -578,6 +689,7 @@ function ListingManagementTable({
         tableLayout="fixed"
         rowSelection={{
           fixed: true,
+          preserveSelectedRowKeys: true,
           selectedRowKeys,
           columnWidth: 48,
           onChange: onSelectionChange,

@@ -104,7 +104,8 @@ fi
 # These terms are not allowed in rule content because they pollute the blank project scope.
 # Exclude this script from the search so the check patterns themselves do not trigger failures.
 forbidden_patterns=(
-  'SZZSBJ|Szzsbj|szzsbj|SKYC|Skyc|skyc'
+  'SZZSBJ|Szzsbj|szzsbj'
+  'SKYC|Skyc|skyc'
   'CLAUDE\.md'
   '@your-github-username|@your-|real-owner-or-team'
 )
@@ -121,11 +122,16 @@ rule_pack_content_scan_paths=(
 )
 
 for pattern in "${forbidden_patterns[@]}"; do
+  scan_excludes=(--exclude='check-rule-pack.sh')
+  if [[ "$pattern" == 'SZZSBJ|Szzsbj|szzsbj' ]]; then
+    # This project-specific handoff must identify its own repository; other checks still scan it.
+    scan_excludes+=(--exclude='PR277_Listing_98_issue_Codex_handoff_20261030.md')
+  fi
   if grep -RInE "$pattern" "${rule_pack_content_scan_paths[@]}" \
     --exclude-dir=.git --exclude-dir=old-system --exclude-dir=.venv --exclude-dir=.pytest_cache --exclude-dir=.ruff_cache --exclude-dir=.mypy_cache \
     --exclude-dir=node_modules \
     --exclude-dir=dist \
-    --exclude='check-rule-pack.sh'; then
+    "${scan_excludes[@]}"; then
     echo "Forbidden or conflicting rule-pack content detected: $pattern" >&2
     exit 1
   fi

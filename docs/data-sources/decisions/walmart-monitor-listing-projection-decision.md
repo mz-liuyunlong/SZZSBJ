@@ -59,6 +59,15 @@ monitor ingestion. This avoids losing monitor authority when the Lingxing Listin
 - A category change/recovery alert remains a monitor-producer responsibility. The new system keeps
   every standardized observation so those events can be audited and replayed.
 
+## PR #277 proposed read-only diagnostics extension
+
+Pending PR review, Listing Management may expose the latest L3 attempt's timestamp, source,
+outcome and a validated safe error code alongside the L9 **last successful** observation time and
+business values. The lookup is limited by the same `source_account_ref + store_id + item_id` as
+the visible Listing. A failed attempt must never overwrite successful title, price, images or
+their freshness timestamp. The API does not expose RAW payloads or unvalidated error text. This
+extension is a proposed contract change, not production deployment approval.
+
 ## Owner approval
 
 The owner explicitly approved implementing the monitor consumption path together with PR #260 on

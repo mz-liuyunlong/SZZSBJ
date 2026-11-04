@@ -39,6 +39,8 @@ EVENT_KEYS = frozenset(
         "approval_pending",
         "ai_completed",
         "finance_completed",
+        "listing_grade_followup_reminder",
+        "listing_grade_followup_overdue",
     }
 )
 VALID_MODELS = re.compile(r"^[a-zA-Z0-9_.:/-]{2,100}$")
@@ -611,10 +613,10 @@ def _post_feishu(row: Any, text_value: str) -> None:
             raise ConfigError("FEISHU_REJECTED", 502)
 
 
-@router.post("/notifications/queue")
-def enqueue_notification(
-    request: Request, payload: NotifyRequest, principal: admin_perm
-) -> SuccessEnvelope[dict[str, int], None]:
+def queue_notification(
+    payload: NotifyRequest, *, actor: str, audit_when_empty: bool = False
+) -> int:
+    """Queue through the existing route and dedupe policy; no outbound call here."""
     if payload.event_key not in EVENT_KEYS:
         raise ApiError(code="EVENT_NOT_ALLOWED", status_code=422)
     # No outgoing action here. A scheduled worker can dispatch explicitly queued deliveries.
@@ -632,7 +634,7 @@ def enqueue_notification(
             .first()
         )
         if template is not None and not template["enabled"]:
-            return success_response(request, data={"queued": 0})
+            return 0
         rendered = payload.text
         if template:
             rendered = (
@@ -701,9 +703,22 @@ def enqueue_notification(
             )
             if result.first():
                 created += 1
-        _audit(session, principal.user_id, "notification.enqueue", payload.event_key)
+        if created or audit_when_empty:
+            _audit(session, actor, "notification.enqueue", payload.event_key)
         session.commit()
-    return success_response(request, data={"queued": created})
+    return created
+
+
+@router.post("/notifications/queue")
+def enqueue_notification(
+    request: Request, payload: NotifyRequest, principal: admin_perm
+) -> SuccessEnvelope[dict[str, int], None]:
+    return success_response(
+        request,
+        data={
+            "queued": queue_notification(payload, actor=principal.user_id, audit_when_empty=True)
+        },
+    )
 
 
 def dispatch_pending(*, limit: int, actor: str) -> dict[str, int]:
