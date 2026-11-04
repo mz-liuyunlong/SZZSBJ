@@ -33,6 +33,7 @@ from app.modules.iam.organization_access import (
     resolve_business_owner_refs,
     resolve_business_account_owner_pairs,
 )
+from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY, resolve_account_store_scope
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.warehouse_wfs.schemas import WfsFeeArchiveRequestWrite
 
@@ -44,12 +45,16 @@ def require_approval_org_scope(
     """Apply reviewed organization owners to every WFS approval read and action."""
     session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
     session.info.pop(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY, None)
+    session.info.pop(STORE_SCOPE_SESSION_KEY, None)
     owner_pairs = resolve_business_account_owner_pairs(session, principal)
     owners = None if owner_pairs else resolve_business_owner_refs(session, principal)
     if owner_pairs:
         session.info[ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY] = owner_pairs
     elif owners is not None:
         session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owners
+    account_stores = resolve_account_store_scope(session, principal)
+    if account_stores is not None:
+        session.info[STORE_SCOPE_SESSION_KEY] = account_stores
 
 
 router = APIRouter(
