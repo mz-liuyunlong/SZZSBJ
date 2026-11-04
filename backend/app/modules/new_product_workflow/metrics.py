@@ -173,10 +173,13 @@ def read_sku_metrics(
             and consistent_currency
             and (sem_ad_spend == 0 or sales["sales_currency"] == "USD")
         )
+        # Daily Sales publishes SP and SEM MART spend in USD. The SP
+        # attribution fact's currency is a separate gate for ACOS/CPC.
         sp_mart_verified = (
             sp_ad_spend is not None
             and int(sales["missing_sp_mart_rows"] or 0) == 0
-            and spend_currency_verified
+            and consistent_currency
+            and (sp_ad_spend == 0 or sales["sales_currency"] == "USD")
         )
         total_spend_verified = sp_mart_verified and sem_currency_verified
         total_ad_spend = (
@@ -252,6 +255,8 @@ def read_sku_metrics(
             issues.append("ad_spend_unavailable")
         if not sp_mart_verified:
             issues.append("ad_spend_currency_unverified")
+        if not spend_currency_verified:
+            issues.append("ad_fact_spend_currency_unverified")
         if not sem_currency_verified:
             issues.append("sem_ad_spend_currency_unverified")
         if clicks["clicks"] is None:

@@ -261,7 +261,7 @@ def test_unknown_attribution_currency_never_produces_an_acos_score() -> None:
     assert data["score"]["status"] == "insufficient_data"
 
 
-def test_ad_spend_ratio_requires_spend_currency_but_not_attribution_currency() -> None:
+def test_daily_sales_spend_stays_visible_when_ad_fact_currency_is_unverified() -> None:
     missing_attribution = read_sku_metrics(
         _Session(attributed_currency=None),
         account="test-account",
@@ -288,10 +288,10 @@ def test_ad_spend_ratio_requires_spend_currency_but_not_attribution_currency() -
             rules=DEFAULT_RULES,
             as_of=date(2026, 11, 1),
         )["periods"]["30"]
-        assert period["ad_spend_ratio"] is None
-        assert period["ad_spend"] is None
+        assert period["ad_spend_ratio"] == 10
+        assert period["ad_spend"] == 100
         assert period["cpc"] is None
-        assert "ad_spend_currency_unverified" in period["data_issues"]
+        assert "ad_fact_spend_currency_unverified" in period["data_issues"]
 
 
 def test_currency_null_rows_block_aggregation_even_if_distinct_currency_is_one() -> None:
