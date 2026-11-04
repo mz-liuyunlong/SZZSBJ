@@ -87,6 +87,39 @@ describe("App", () => {
     expect(localStorage.getItem("szzsbj_auth_token")).toBe("synthetic-session-token");
   });
 
+  it("rechecks the signed-in principal when the tab regains focus", async () => {
+    localStorage.setItem("szzsbj_auth_token", "synthetic-current-session");
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
+      success: true,
+      data: {
+        id: 42,
+        username: "employee",
+        display_name: "Employee",
+        phone: null,
+        email: null,
+        is_active: true,
+        is_super_admin: false,
+        role_keys: [],
+        role_names: [],
+        permissions: ["page:products:listing-management:view"],
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        last_login_at: null,
+      },
+      error: null,
+      meta: null,
+      request_id: "synthetic-refresh",
+    }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderApp();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    window.dispatchEvent(new Event("focus"));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(localStorage.getItem("szzsbj_auth_token")).toBe("synthetic-current-session");
+  });
+
   it("routes a memory-only mock login to the default business page", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
