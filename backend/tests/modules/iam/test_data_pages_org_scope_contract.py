@@ -298,3 +298,49 @@ def test_store_scope_blocks_unreviewed_listing_mutations_even_with_global_org() 
             )
     assert error.value.status_code == 403
     assert STORE_SCOPE_SESSION_KEY not in session.info
+
+
+
+def test_scoped_order_profit_requires_complete_source_identity_and_sales_reconciliation() -> None:
+    """A missing source row must not turn mixed-owner SKU totals into visible profit."""
+    from app.modules.data_pages.repository import OrderProfitRepository
+    from app.modules.iam.organization_access import ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY
+
+    session = MagicMock()
+    session.info = {
+        ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY: frozenset({("A1", "owner-1")})
+    }
+    repo = OrderProfitRepository(session)
+    statement = repo._filtered_statement(
+        account_refs=frozenset({"A1", "A2"}),
+        start_date=None,
+        end_date=None,
+        store_id=None,
+        search_field="sku",
+        keyword="",
+    )
+    sql = _sql(statement)
+    assert "('A1', 'owner-1')" in sql
+    assert "mart_daily_sales_item_day" in sql
+    assert "jsonb_agg" in sql
+    assert "store_ids_json" in sql
+    assert "item_ids_json" in sql
+    assert "sales_amount" in sql
+    assert "EXISTS" in sql
+
+
+def test_unscoped_order_profit_preserves_legacy_aggregation() -> None:
+    from app.modules.data_pages.repository import OrderProfitRepository
+
+    repo = OrderProfitRepository(_session())
+    sql = _sql(repo._filtered_statement(
+        account_refs=frozenset({"A1"}),
+        start_date=None,
+        end_date=None,
+        store_id=None,
+        search_field="sku",
+        keyword="",
+    ))
+    assert "mart_order_profit_sku_day" in sql
+    assert "jsonb_agg" not in sql
+    assert "mart_daily_sales_item_day" not in sql
