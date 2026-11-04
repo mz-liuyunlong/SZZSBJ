@@ -615,3 +615,62 @@ def test_large_listing_page_uses_bounded_sql_queries(clearance_db: Session) -> N
     )
     assert len(statements) == 4, "SQL query count must not grow with Listing count"
     assert duration < 15, f"Two 100-row SQL pages took {duration:.2f}s"
+
+
+def test_refund_uses_completed_effective_date_not_return_application_date(
+    clearance_db: Session,
+) -> None:
+    account = "clearance-ci-refund-effective"
+    store = "ci-refund-store"
+    item = "ci-refund-item"
+    listing_id = _seed_listing(clearance_db, account=account, store=store, item=item)
+    day = datetime.now(ZoneInfo("America/Los_Angeles")).date()
+    examples = [
+        # Applied before the window, completed during the window: include.
+        {"name": "within", "applied": day - timedelta(days=40),
+         "effective": day - timedelta(days=10), "completed": True,
+         "qty": Decimal(2), "loss": Decimal(20)},
+        # Applied during window, completed after: exclude.
+        {"name": "future", "applied": day - timedelta(days=10),
+         "effective": day + timedelta(days=2), "completed": True,
+         "qty": Decimal(3), "loss": Decimal(30)},
+        # Pending refund: exclude even when the application date is in the window.
+        {"name": "pending", "applied": day - timedelta(days=10),
+         "effective": day - timedelta(days=10), "completed": False,
+         "qty": Decimal(4), "loss": Decimal(40)},
+    ]
+    for example in examples:
+        clearance_db.execute(
+            text("""
+                insert into after_sales_refund_items
+                    (id,source_account_ref,platform_code,return_order_id,item_index,
+                     store_id,item_id,source_item_hash,return_order_at,
+                     refund_effective_date,refund_effective,refund_loss_effective,
+                     return_qty,refund_loss_amount)
+                values (:id,:account,'walmart',:rma,0,:store,:item,
+                        :hash,:applied,:effective,:completed,:completed,:qty,:loss)
+            """),
+            {
+                "id": f"ci-refund-{example['name']}",
+                "account": account,
+                "rma": f"ci-return-{example['name']}",
+                "store": store,
+                "item": item,
+                "hash": f"ci-hash-{example['name']}",
+                "applied": example["applied"],
+                "effective": example["effective"],
+                "completed": example["completed"],
+                "qty": example["qty"],
+                "loss": example["loss"],
+            },
+        )
+    clearance_db.commit()
+    service = ClearanceService(clearance_db)
+    listing = service.repo.listing(listing_id, frozenset({account}))
+    result = service.repo.evidence([listing], as_of=day)
+    metrics = result[(account, store, item)]
+    assert metrics["refund_qty"] == Decimal(2)
+    assert metrics["refund_loss"] == Decimal(20)
+    # Event correctness is independent of whether account-wide refund sync
+    # completeness is proven. No refund signal is certified without a watermark.
+    assert metrics["refund_source_complete"] is False
