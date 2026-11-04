@@ -731,13 +731,13 @@ def test_empty_database_round_trip_upgrade_downgrade_upgrade():
         return revision, tables
 
     try:
-        command.upgrade(config, "head")
+        command.upgrade(config, FINANCE_REVISION)
         assert state() == (FINANCE_REVISION, finance_tables)
         with engine.connect() as connection:
             assert connection.scalar(text("select count(*) from std_finance_cashflow_lines")) == 0
         command.downgrade(config, PREVIOUS_REVISION)
         assert state() == (PREVIOUS_REVISION, set())
-        command.upgrade(config, "head")
+        command.upgrade(config, FINANCE_REVISION)
         assert state() == (FINANCE_REVISION, finance_tables)
         with engine.connect() as connection:
             assert connection.scalar(text("select count(*) from dim_finance_cash_categories")) == 26
