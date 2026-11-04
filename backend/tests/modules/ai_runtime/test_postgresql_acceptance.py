@@ -332,7 +332,7 @@ def test_0071_real_historical_migration_preserves_jobs_and_blocks_populated_roll
         with engine.begin() as cx:
             assert (
                 cx.scalar(text("SELECT version_num FROM alembic_version"))
-                == "20261102_0071_skill_lib"
+                == "20261104_0072_clearance_v1"
             )
             assert cx.scalar(text("SELECT count(*) FROM ai_skill_revisions")) == 3
         engine.dispose()
