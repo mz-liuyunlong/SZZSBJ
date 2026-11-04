@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.modules.clearance_center.eligibility import ACTIVE_WFS_LISTING_SQL
 from app.modules.clearance_center.repository import ClearanceReadRepository
 
 LOS_ANGELES = ZoneInfo("America/Los_Angeles")
@@ -125,7 +126,7 @@ class DailyClearanceEvaluation:
                        and i.store_id=l.store_id and i.item_id=l.item_id
                      order by i.snapshot_date_la desc,i.captured_at desc limit 1
                   ) snap on true
-                 where 1=1"""
+                 where """ + ACTIVE_WFS_LISTING_SQL
         params: dict = {"limit": BATCH_SIZE}
         if cursor is not None:
             sql += """ and (l.source_account_ref,l.store_id,l.item_id)
