@@ -207,6 +207,7 @@ def evaluate(
     if (
         sales30 == 0
         and sales_complete
+        and metrics.get("zero_sales_verified", False)
         and listing_days is not None
         and listing_days >= rules["min_listing_days"]
         and metrics.get("positive_stock_days", 0) >= rules["min_stock_positive_days"]
