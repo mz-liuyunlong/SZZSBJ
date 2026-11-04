@@ -287,4 +287,12 @@ class ClearanceReadRepository:
         value["as_of_date"] = metrics["as_of_date"]
         value["sales_30d"] = str(metrics["sales30"]) if metrics.get("sales30") is not None else None
         value["unit_cost_usd"] = str(unit_cost) if unit_cost is not None else None
+        value["profit_30d_amount"] = (
+            str(metrics["profit30"])
+            if metrics.get("cost_complete") and metrics.get("profit30") is not None
+            else None
+        )
+        value["refund_loss_30d"] = (
+            str(metrics["refund_loss"]) if metrics.get("refund_loss") is not None else None
+        )
         return value
