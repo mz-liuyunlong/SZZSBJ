@@ -7,6 +7,7 @@ grants must not silently widen the account scope or be bypassed with a URL filte
 
 from __future__ import annotations
 
+import re
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -44,19 +45,24 @@ _ORG_REVIEWED_GET_PATHS = _STORE_REVIEWED_GET_PATHS | frozenset({
     "/api/approvals",
     "/api/approvals/summary",
 })
-_ORG_REVIEWED_GET_PREFIXES = (
-    *_STORE_REVIEWED_GET_PREFIXES,
-    "/api/product-management/skus/",
-    "/api/warehouse/wfs-fee-cases/",
-    "/api/approvals/",
+_ORG_REVIEWED_GET_PREFIXES = _STORE_REVIEWED_GET_PREFIXES
+_ORG_REVIEWED_GET_PATTERNS = (
+    re.compile(r"/api/product-management/skus/[0-9A-Fa-f-]{36}(/pricing-breakdown)?"),
+    re.compile(r"/api/warehouse/wfs-fee-cases/[0-9A-Fa-f-]{36}"),
+    re.compile(r"/api/approvals/[0-9A-Fa-f-]{36}"),
+    re.compile(r"/api/approvals/wfs-cases/[0-9A-Fa-f-]{36}/detail"),
+    re.compile(r"/api/approvals/legacy/[0-9A-Fa-f-]{36}"),
 )
 _ORG_REVIEWED_WRITE_PATHS = frozenset({
     "/api/product-management/skus/export",
 })
-_ORG_REVIEWED_WRITE_PREFIXES = (
-    "/api/warehouse/wfs-fee-cases/",
-    "/api/warehouse/wfs-fee-alerts/",
-    "/api/approvals/",
+_ORG_REVIEWED_WRITE_PATTERNS = (
+    re.compile(r"/api/warehouse/wfs-fee-cases/[0-9A-Fa-f-]{36}/(follow|archive-request|archive-review|mark-recovered)"),
+    re.compile(r"/api/approvals/wfs-cases/[0-9A-Fa-f-]{36}(/decision)?"),
+    re.compile(r"/api/approvals/[0-9A-Fa-f-]{36}/(decision|supplement)"),
+)
+_ORG_REVIEWED_PUT_PATTERNS = (
+    re.compile(r"/api/warehouse/wfs-fee-alerts/[0-9A-Fa-f-]{36}/case"),
 )
 _NON_BUSINESS_PREFIXES = (
     "/api/settings/",
@@ -131,14 +137,15 @@ def _org_route_reviewed(method: str, path: str) -> bool:
         return (
             path in _ORG_REVIEWED_GET_PATHS
             or any(path.startswith(prefix) for prefix in _ORG_REVIEWED_GET_PREFIXES)
+            or any(pattern.fullmatch(path) for pattern in _ORG_REVIEWED_GET_PATTERNS)
         )
     if method == "POST":
         return (
             path in _ORG_REVIEWED_WRITE_PATHS
-            or any(path.startswith(prefix) for prefix in _ORG_REVIEWED_WRITE_PREFIXES)
+            or any(pattern.fullmatch(path) for pattern in _ORG_REVIEWED_WRITE_PATTERNS)
         )
-    if method in {"PUT", "PATCH"}:
-        return path.startswith("/api/warehouse/wfs-fee-alerts/")
+    if method == "PUT":
+        return any(pattern.fullmatch(path) for pattern in _ORG_REVIEWED_PUT_PATTERNS)
     return False
 
 
