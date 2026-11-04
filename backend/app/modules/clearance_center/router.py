@@ -11,12 +11,8 @@ from sqlalchemy.orm import Session
 from app.core.api import ApiError, ErrorCode, SuccessEnvelope, success_response
 from app.core.auth import Principal
 from app.core.permissions import has_permission, require_permission
-from app.modules.clearance_center.field_access import mask_clearance_financials
-from app.modules.data_pages.field_access import (
-    ORDER_PROFIT_GROSS_PROFIT_PERMISSION,
-    ORDER_PROFIT_MARGIN_PERMISSION,
-)
 from app.db.session import get_db_session
+from app.modules.clearance_center.field_access import mask_clearance_financials
 from app.modules.clearance_center.schemas import (
     ApplicationWrite,
     ListingQuery,
@@ -24,6 +20,10 @@ from app.modules.clearance_center.schemas import (
     RuleWrite,
 )
 from app.modules.clearance_center.service import ClearanceService
+from app.modules.data_pages.field_access import (
+    ORDER_PROFIT_GROSS_PROFIT_PERMISSION,
+    ORDER_PROFIT_MARGIN_PERMISSION,
+)
 from app.modules.integration_sync.dependencies import require_source_account_scope
 
 router = APIRouter(prefix="/api/products/clearance-center", tags=["WFS Clearance"])
