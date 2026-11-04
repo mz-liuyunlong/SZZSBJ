@@ -17,6 +17,7 @@ from app.modules.new_product_workflow.router import (
     ReviewWrite,
     RuleWrite,
     _identity,
+    get_independent_purchase_plan,
     list_independent_purchase_plans,
     list_workflows,
     router,
@@ -127,9 +128,7 @@ def test_list_rejects_account_outside_principal_scope() -> None:
 
 
 def test_purchase_plans_refuse_out_of_scope_account() -> None:
-    request = Request(
-        {"type": "http", "method": "GET", "path": "/api/new-products/purchase-plans"}
-    )
+    request = Request({"type": "http", "method": "GET", "path": "/api/new-products/purchase-plans"})
     with pytest.raises(ApiError) as error:
         list_independent_purchase_plans(
             request=request,
@@ -141,6 +140,24 @@ def test_purchase_plans_refuse_out_of_scope_account() -> None:
             page_size=50,
         )
     assert error.value.status_code == 403
+
+
+def test_independent_plan_detail_is_not_visible_outside_account_scope() -> None:
+    session = MagicMock()
+    session.execute.return_value.mappings.return_value.first.return_value = None
+    request = Request({"type": "http", "method": "GET", "path": "/api/new-products/purchase-plans/test"})
+    with pytest.raises(ApiError) as error:
+        get_independent_purchase_plan(
+            request=request,
+            plan_id=UUID("00000000-0000-0000-0000-000000000301"),
+            session=session,
+            _=Principal(user_id="reader", permissions=frozenset()),
+            accounts=frozenset({"account-a"}),
+        )
+    assert error.value.status_code == 404
+    query, params = session.execute.call_args.args
+    assert "source_account_ref = ANY(:accounts)" in str(query)
+    assert params["accounts"] == ["account-a"]
 
 
 def test_unknown_sku_identity_fails_closed() -> None:
@@ -160,5 +177,6 @@ def test_workflow_router_registered_without_exposing_real_purchase_execution() -
     assert "/api/new-products/workflows" in paths
     assert "/api/new-products/workflows/{sku_id}/purchase-decision" in paths
     assert "/api/new-products/purchase-plans" in paths
+    assert "/api/new-products/purchase-plans/{plan_id}" in paths
     assert "/api/new-products/rules" in paths
     assert "/api/new-products/execute-purchase" not in paths

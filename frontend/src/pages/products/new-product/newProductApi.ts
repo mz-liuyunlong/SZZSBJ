@@ -89,6 +89,21 @@ export interface NewProductPurchasePlan {
   created_at: string;
 }
 
+export interface NewProductPurchasePlanDetail extends NewProductPurchasePlan {
+  snapshot_json: {
+    approved_quantity: number;
+    market_score: number;
+    rule_version: number;
+    approval_workflow_version?: number;
+    workflow_version?: number;
+    purchase_reason: string;
+    approval_note: string;
+    formal_score_verified: boolean;
+    execution_status: "not_executed";
+    creates_pmc_order: false;
+  };
+}
+
 export interface NewProductPurchasePlanList {
   items: NewProductPurchasePlan[];
   page: number;
@@ -118,6 +133,15 @@ export async function getIndependentNewProductPlans(
   const q = new URLSearchParams({ source_account_ref: account, page: String(page) });
   return (await backendRequest<NewProductPurchasePlanList>(
     `/api/new-products/purchase-plans?${q}`,
+  )).data;
+}
+
+export async function getIndependentNewProductPlan(
+  planId: string,
+): Promise<NewProductPurchasePlanDetail> {
+  if (!/^[0-9a-fA-F-]{36}$/.test(planId)) throw new Error("无效的独立新品计划编号");
+  return (await backendRequest<NewProductPurchasePlanDetail>(
+    `/api/new-products/purchase-plans/${planId}`,
   )).data;
 }
 

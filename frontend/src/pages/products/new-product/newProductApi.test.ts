@@ -4,6 +4,7 @@ import {
   decideNewProductPurchase,
   getNewProductWorkflows,
   getIndependentNewProductPlans,
+  getIndependentNewProductPlan,
   getNewProductAccounts,
   verifyNewProductDates,
   requestNewProductPurchase,
@@ -36,6 +37,16 @@ describe("new product server API identity and optimistic lock", () => {
     await getIndependentNewProductPlans("account-a", 3);
     expect(backendRequest).toHaveBeenCalledWith(
       "/api/new-products/purchase-plans?source_account_ref=account-a&page=3",
+    );
+  });
+
+  it("reads an individual approval snapshot only via UUID-bound plan detail API", async () => {
+    await getIndependentNewProductPlan(skuId);
+    expect(backendRequest).toHaveBeenCalledWith(
+      `/api/new-products/purchase-plans/${skuId}`,
+    );
+    await expect(getIndependentNewProductPlan("invalid")).rejects.toThrow(
+      "无效的独立新品计划编号",
     );
   });
 

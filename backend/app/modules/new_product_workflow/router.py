@@ -424,10 +424,7 @@ def list_independent_purchase_plans(
         _block(403, ErrorCode.DATA_SCOPE_DENIED)
     params = {"account": source_account_ref, "size": page_size, "skip": (page - 1) * page_size}
     total = session.execute(
-        text(
-            "SELECT count(*) FROM product_new_purchase_plans "
-            "WHERE source_account_ref = :account"
-        ),
+        text("SELECT count(*) FROM product_new_purchase_plans WHERE source_account_ref = :account"),
         {"account": source_account_ref},
     ).scalar_one()
     rows = (
@@ -457,6 +454,37 @@ def list_independent_purchase_plans(
     return success_response(
         request, data={"items": [dict(row) for row in rows], "page": page, "total": int(total)}
     )
+
+
+@router.get("/purchase-plans/{plan_id}", response_model=SuccessEnvelope[dict[str, Any], None])
+def get_independent_purchase_plan(
+    request: Request,
+    plan_id: UUID,
+    session: db_session,
+    _: view_principal,
+    accounts: account_scope,
+) -> SuccessEnvelope[dict[str, Any], None]:
+    """No cross-account disclosure of saved approval snapshots."""
+    row = (
+        session.execute(
+            text(
+                """
+                SELECT id, plan_number, sku_identity_id, source_account_ref,
+                       quantity, status, execution_status, market_score,
+                       rule_version, approval_workflow_version, approved_by,
+                       approval_note, snapshot_json, created_at
+                FROM product_new_purchase_plans
+                WHERE id = :id AND source_account_ref = ANY(:accounts)
+                """
+            ),
+            {"id": plan_id, "accounts": sorted(accounts)},
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        _block(404, ErrorCode.NOT_FOUND)
+    return success_response(request, data=dict(row))
 
 
 @router.get("/workflows/{sku_id}", response_model=SuccessEnvelope[dict[str, Any], None])

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createNewProductAccountGuard } from "./newProductAccountGuard";
-import { Alert, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Typography, message } from "antd";
+import { Alert, Button, Card, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Select, Space, Typography, message } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import dayjs from "dayjs";
 import NewProductMetricsPanel from "./NewProductMetricsPanel";
@@ -11,6 +11,7 @@ import {
   getNewProductWorkflows,
   getNewProductAccounts,
   getIndependentNewProductPlans,
+  getIndependentNewProductPlan,
   getNewProductMetrics,
   requestNewProductPurchase,
   reviewNewProductLaunch,
@@ -20,6 +21,7 @@ import {
   type NewProductWorkflowRecord,
   type NewProductPurchasePlan,
   type NewProductPurchasePlanList,
+  type NewProductPurchasePlanDetail,
   type NewProductMetrics,
 } from "./newProductApi";
 
@@ -34,6 +36,7 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
   const [accountsError, setAccountsError] = useState<string | null>(null);
   const [data, setData] = useState<NewProductWorkflowList | null>(null);
   const [planData, setPlanData] = useState<NewProductPurchasePlanList | null>(null);
+  const [planDetail, setPlanDetail] = useState<NewProductPurchasePlanDetail | null>(null);
   const [planPage, setPlanPage] = useState(1);
   const planGuard = useRef(createNewProductAccountGuard());
   const [page, setPage] = useState(1);
@@ -102,6 +105,26 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
     } catch (error) {
       if (planGuard.current.isCurrent(ticket)) {
         api.error(error instanceof Error ? error.message : "独立新品计划读取失败");
+      }
+    }
+  }
+
+  async function inspectPlan(row: NewProductPurchasePlan) {
+    if (row.source_account_ref !== account.trim()) {
+      api.error("当前独立计划账户不一致");
+      return;
+    }
+    const ticket = planGuard.current.begin(row.source_account_ref);
+    try {
+      const result = await getIndependentNewProductPlan(row.id);
+      if (!planGuard.current.isCurrent(ticket)) return;
+      if (result.source_account_ref !== ticket.account) {
+        throw new Error("跨账户独立计划详情已拒绝展示");
+      }
+      setPlanDetail(result);
+    } catch (error) {
+      if (planGuard.current.isCurrent(ticket)) {
+        api.error(error instanceof Error ? error.message : "独立计划详情读取失败");
       }
     }
   }
@@ -216,6 +239,8 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
     { title: "创建时间", dataIndex: "created_at", width: 180 },
     { title: "执行状态", key: "execution_status", width: 120,
       render: () => <StatusTagCell label="未执行采购" color="warning" /> },
+    { title: "操作", key: "action", width: 100,
+      render: (_, row) => <Button type="link" onClick={() => void inspectPlan(row)}>详情</Button> },
   ];
 
   return <Card title="正式数据 · 新品工作流" size="small">
@@ -232,6 +257,7 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
           setAccount(value);
           setData(null);
           setPlanData(null);
+          setPlanDetail(null);
           setPlanPage(1);
           setMetricData(null);
           setRecord(null);
@@ -252,6 +278,23 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
           total: planData?.total ?? 0, showSizeChanger: false,
           onChange: next => void loadPlans(next) }} />
     </ReportTableShell>
+    <Modal title="独立新品计划详情（未执行采购）" open={planDetail !== null}
+      onCancel={() => setPlanDetail(null)} footer={null} width={710}>
+      {planDetail && <>
+        <Descriptions column={2} size="small" bordered items={[
+          { key: "number", label: "计划编号", span: 2, children: planDetail.plan_number },
+          { key: "qty", label: "审批数量", children: planDetail.quantity },
+          { key: "account", label: "所属账户", children: planDetail.source_account_ref },
+          { key: "actor", label: "审核人", children: planDetail.approved_by },
+          { key: "version", label: "批准时规则版本", children: planDetail.rule_version },
+          { key: "note", label: "审核意见", span: 2, children: planDetail.approval_note },
+          { key: "reason", label: "采购申请依据", span: 2,
+            children: planDetail.snapshot_json.purchase_reason },
+          { key: "snapshot", label: "评分证据", children: "正式评分尚未认证" },
+          { key: "execution", label: "执行状态", children: "未执行采购（非 PMC 采购单）" },
+        ]} />
+      </>}
+    </Modal>
     <Modal title="真实经营数据及评分依据" open={metricData !== null} footer={null}
       onCancel={() => setMetricData(null)} width={1120}>
       {metricData && <NewProductMetricsPanel metrics={metricData} />}
