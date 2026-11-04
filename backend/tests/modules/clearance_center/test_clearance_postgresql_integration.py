@@ -22,6 +22,7 @@ from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.clearance_center.schemas import ApplicationWrite, DecisionWrite, ProgressWrite
+from app.modules.clearance_center.daily import DailyClearanceEvaluation, daily_window
 from app.modules.clearance_center.service import ClearanceService
 from app.modules.data_pages.models import (
     ListingManagementCurrentMart,
@@ -305,3 +306,88 @@ def test_zero_sales_requires_full_store_source_history(clearance_db: Session) ->
     assert evaluation["risk_level"] == "high"
     assert evaluation["candidate_status"] == "auto"
     assert "VERIFIED_ZERO_SALES_WITH_WFS_STOCK" in evaluation["risk_reasons"]
+
+
+def test_daily_evaluation_is_idempotent_and_sql_paginated(clearance_db: Session) -> None:
+    account = "clearance-ci-daily"
+    records = []
+    now = datetime.now(UTC)
+    for i in range(165):
+        listing_id = uuid4()
+        name = f"ci-daily-item-{i:04d}"
+        records.append(
+            ListingManagementCurrentMart(
+                id=listing_id,source_account_ref=account,platform_code="walmart",
+                store_id="ci-daily-store",item_id=name,local_sku=name,
+                msku=name,title=f"Daily clearance item {i}",
+                fulfillment_type="WFS",wfs_available_quantity=Decimal(7),
+                sales_7d=Decimal(0),sales_14d=Decimal(0),sales_30d=Decimal(0),
+                listing_start_at_utc=now-timedelta(days=120),calculated_at=now,
+            )
+        )
+        records.append(
+            WalmartListingInventoryDailyFact(
+                id=uuid4(),snapshot_date_la=now.astimezone(
+                    ZoneInfo("America/Los_Angeles")
+                ).date(),
+                source_account_ref=account,store_id="ci-daily-store",
+                item_id=name,wfs_available_quantity=Decimal(7),captured_at=now,
+            )
+        )
+    clearance_db.add_all(records)
+    clearance_db.commit()
+
+    # Bind a single physical connection for session-level advisory locks.
+    with clearance_db.get_bind().connect() as connection:
+        with Session(bind=connection) as session:
+            worker = DailyClearanceEvaluation(session)
+            first = worker.evaluate_day(now=now, scheduled=False)
+            assert first["status"] == "succeeded"
+            again = worker.evaluate_day(now=now, scheduled=False)
+            assert again["status"] == "already_recorded"
+    service = ClearanceService(clearance_db)
+    page1 = service.list_listings(
+        frozenset({account}),store_id="ci-daily-store",page=1,page_size=15,
+    )
+    page2 = service.list_listings(
+        frozenset({account}),store_id="ci-daily-store",page=2,page_size=15,
+    )
+    assert page1["total"] == 165
+    assert page2["total"] == 165
+    assert len(page1["items"]) == len(page2["items"]) == 15
+    ids1 = {x["listing"]["id"] for x in page1["items"]}
+    ids2 = {x["listing"]["id"] for x in page2["items"]}
+    assert ids1.isdisjoint(ids2)
+    assert page1["evaluation_status"] == "ready"
+    assert page1["as_of_date_la"] == daily_window(now)[1].isoformat()
+    summary = service.summary(frozenset({account}),store_id="ci-daily-store")
+    assert summary["total"] == 165
+    assert summary["eligible_manual"] == 165
+    audit = service.repo.readiness_report(frozenset({account}),store_id="ci-daily-store")
+    assert audit["evaluated_listings"] == 165
+    assert audit["missing_sales_window"] > 0
+    # Product owners must not inherit the full system run count.
+    other = service.list_listings(frozenset({"not-authorized"}),page=1,page_size=10)
+    assert other["total"] == 0
+
+
+def test_daily_run_does_not_create_approval_or_mutate_listing_stock(
+    clearance_db: Session,
+) -> None:
+    account = "clearance-ci-quiet"
+    listing_id = _seed_listing(
+        clearance_db,account=account,store="ci-quiet-store",item="ci-quiet-item"
+    )
+    from sqlalchemy import text
+    before = clearance_db.execute(
+        text("select count(*) from app_approval_requests where approval_type='clearance_request'")
+    ).scalar_one()
+    # The first daily run in another test already claimed this LA date.
+    result = ClearanceService(clearance_db).listing_detail(
+        listing_id,frozenset({account})
+    )
+    assert result["listing"]["wfs_available_quantity"] == "12.0000"
+    after = clearance_db.execute(
+        text("select count(*) from app_approval_requests where approval_type='clearance_request'")
+    ).scalar_one()
+    assert before == after
