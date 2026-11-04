@@ -28,7 +28,9 @@ from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.iam.organization_access import (
     ORG_OWNER_SCOPE_SESSION_KEY,
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
     resolve_business_owner_refs,
+    resolve_business_account_owner_pairs,
 )
 from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY, resolve_account_store_scope
 from app.modules.integration_sync.dependencies import require_source_account_scope
@@ -68,10 +70,12 @@ def require_pmc_purchase_org_scope(
             details={"required_permission": required_permission},
         )
     session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
+    session.info.pop(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY, None)
     session.info.pop(STORE_SCOPE_SESSION_KEY, None)
-    owners = resolve_business_owner_refs(session, principal)
+    owner_pairs = resolve_business_account_owner_pairs(session, principal)
+    owners = None if owner_pairs else resolve_business_owner_refs(session, principal)
     account_stores = resolve_account_store_scope(session, principal)
-    if owners is None and account_stores is None:
+    if owners is None and not owner_pairs and account_stores is None:
         return
     allowed_get = request.method == "GET" and (
         request.url.path == "/api/pmc/purchase/board"
@@ -81,7 +85,9 @@ def require_pmc_purchase_org_scope(
     )
     if not allowed_get:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
-    if owners is not None:
+    if owner_pairs:
+        session.info[ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY] = owner_pairs
+    elif owners is not None:
         session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owners
     if account_stores is not None:
         session.info[STORE_SCOPE_SESSION_KEY] = account_stores
