@@ -28,6 +28,9 @@ def redact_new_product_metrics(metrics: dict[str, Any], principal: Principal) ->
         period = dict(original)
         if not can_profit:
             period["profit"] = None
+            for key in ("sp_ad_spend", "sem_ad_spend", "ad_spend", "ad_spend_ratio"):
+                if key in period:
+                    period[key] = None
         if not can_margin:
             period["margin"] = None
         periods[key] = period

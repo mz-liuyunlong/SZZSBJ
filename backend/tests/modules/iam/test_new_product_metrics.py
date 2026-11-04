@@ -29,6 +29,8 @@ class _Session:
         missing_ad_currencies: int = 0,
         missing_spend_currencies: int = 0,
         spend_currency: str = "USD",
+        sem_ad_spend: int = 0,
+        missing_sem_mart_rows: int = 0,
         ad_days: int | None = None,
     ) -> None:
         self.queries: list[str] = []
@@ -37,6 +39,8 @@ class _Session:
         self.missing_ad_currencies = missing_ad_currencies
         self.missing_spend_currencies = missing_spend_currencies
         self.spend_currency = spend_currency
+        self.sem_ad_spend = sem_ad_spend
+        self.missing_sem_mart_rows = missing_sem_mart_rows
         self.ad_days = ad_days
 
     def execute(self, statement: Any, params: dict[str, Any]) -> _Result:
@@ -62,7 +66,10 @@ class _Session:
                     "sales_qty": 200,
                     "orders": 180,
                     "sales_amount": 1000,
-                    "ad_spend": 100,
+                    "sp_ad_spend": 100,
+                    "sem_ad_spend": self.sem_ad_spend,
+                    "missing_sp_mart_rows": 0,
+                    "missing_sem_mart_rows": self.missing_sem_mart_rows,
                     "profit": 200,
                     "complete_cost_days": days,
                     "currencies": 1,
@@ -129,6 +136,48 @@ def test_acos_uses_attributed_sales_not_total_sales() -> None:
     assert period["data_issues"] == []
     assert data["score"]["status"] == "provisional"
     assert any("ad.attributed_sales_amount" in sql for sql in session.queries)
+
+
+
+def test_total_ad_spend_includes_sem_without_double_deducting_existing_profit() -> None:
+    session = _Session(sem_ad_spend=25)
+    result = read_sku_metrics(
+        session,
+        account="test-account",
+        sku="TEST-SKU",
+        market_score=8,
+        rule_version=1,
+        rules=DEFAULT_RULES,
+        as_of=date(2026, 11, 1),
+    )
+    for key in ("30", "60", "90"):
+        period = result["periods"][key]
+        assert period["sp_ad_spend"] == 100
+        assert period["sem_ad_spend"] == 25
+        assert period["ad_spend"] == 125
+        assert period["ad_spend_ratio"] == 12.5
+        assert period["profit"] == 200  # already net of both components in Daily Sales
+        assert period["margin"] == 20
+        assert period["acos"] == 25  # SP attribution only, never SEM
+
+
+def test_unknown_sem_currency_never_fabricates_total_spend_or_ratio() -> None:
+    session = _Session(sem_ad_spend=25, missing_sem_mart_rows=1)
+    period = read_sku_metrics(
+        session,
+        account="test-account",
+        sku="TEST-SKU",
+        market_score=8,
+        rule_version=1,
+        rules=DEFAULT_RULES,
+        as_of=date(2026, 11, 1),
+    )["periods"]["30"]
+    assert period["ad_spend"] is None
+    assert period["ad_spend_ratio"] is None
+    assert period["sp_ad_spend"] == 100
+    assert period["sem_ad_spend"] is None
+    assert "sem_ad_spend_currency_unverified" in period["data_issues"]
+    assert period["profit"] == 200
 
 
 def test_launch_uses_verified_first_window_not_latest_rolling_period() -> None:

@@ -24,7 +24,11 @@ const columns: ProColumns<PeriodRow>[] = [
   { title: "金额币种", dataIndex: "currency_code", width: 85,
     render: (_, row) => row.currency_code ?? "币种不一致" },
   { title: "点击量", dataIndex: "clicks", width: 90, render: (_, row) => format(row.clicks) },
-  { title: "广告费", dataIndex: "ad_spend", width: 95, render: (_, row) => format(row.ad_spend) },
+  { title: "SP广告费", dataIndex: "sp_ad_spend", width: 95,
+    render: (_, row) => format(row.sp_ad_spend) },
+  { title: "SEM费用", dataIndex: "sem_ad_spend", width: 95,
+    render: (_, row) => format(row.sem_ad_spend) },
+  { title: "总广告费", dataIndex: "ad_spend", width: 95, render: (_, row) => format(row.ad_spend) },
   { title: "广告归因销售额", dataIndex: "attributed_sales", width: 125,
     render: (_, row) => format(row.attributed_sales) },
   { title: "ACOS", dataIndex: "acos", width: 85, render: (_, row) => percent(row.acos) },
@@ -48,7 +52,8 @@ const columns: ProColumns<PeriodRow>[] = [
       financial_currency_unverified: "财务币种未核实",
       margin_unavailable: "利润率不可计算",
       ad_spend_unavailable: "广告费缺失",
-      ad_spend_currency_unverified: "广告费用币种未核实或与销售币种不一致",
+      ad_spend_currency_unverified: "SP广告费用币种未核实或与销售币种不一致",
+      sem_ad_spend_currency_unverified: "SEM费用币种未核实或与销售币种不一致",
       ad_clicks_unavailable: "广告点击缺失",
       ad_coverage_unverified: "广告业务日覆盖未确认",
       attributed_acos_unavailable: "归因 ACOS 不可计算",
@@ -117,7 +122,9 @@ export default function NewProductMetricsPanel({ metrics }: { metrics: NewProduc
         scroll={{ x: 2200 }} />
     </ReportTableShell>
     <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>
-      ACOS 为广告归因花费 / 广告归因销售额；广告费占比为总广告费 / 总销售额。
+      广告费口径沿用每日销售：总广告费 = SP广告费 + SEM费用，
+      利润已包含两项费用，不再重复扣除。ACOS 为 SP 归因花费 / SP 归因销售额；
+      广告费占比为总广告费 / 总销售额。
       两者不能互相替代。CPC 为广告归因花费/点击，CVR 为广告归因订单/点击；
       未经归因核实和完整覆盖不可用于正式评分。ROI 在投资成本口径未批准前为空；
       空值表示缺少可验证数据，并不代表零。

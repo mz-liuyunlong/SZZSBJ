@@ -8,6 +8,8 @@ export interface NewProductPeriodMetrics {
   orders: number | null;
   revenue: number | null;
   ad_spend: number | null;
+  sp_ad_spend: number | null;
+  sem_ad_spend: number | null;
   clicks: number | null;
   profit: number | null;
   margin: number | null;

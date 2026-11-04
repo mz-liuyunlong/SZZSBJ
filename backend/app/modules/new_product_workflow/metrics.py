@@ -39,8 +39,9 @@ def read_sku_metrics(
 ) -> dict[str, Any]:
     """Last completed LA business day, with exclusive end-boundary and null-safe coverage.
 
-    Profit mart is the sole source for sales/profit/ad spend; ad fact contributes
-    advertiser clicks and attributed sales for ACOS.
+    Daily Sales' SKU mart is authoritative for sales, existing net profit,
+    SP spend and SEM spend; the ad fact contributes SP attribution and clicks
+    for ACOS. Never deduct SP or SEM again from the published profit.
     The account/store/item listing mapping avoids cross-store advertiser attribution.
     """
     end = as_of or la_today()
@@ -55,7 +56,12 @@ def read_sku_metrics(
                        sum(sales_qty) AS sales_qty,
                        sum(order_count) AS orders,
                        sum(sales_amount) AS sales_amount,
-                       sum(ad_spend_amount) AS ad_spend,
+                       sum(ad_spend_amount) AS sp_ad_spend,
+                       sum(sem_ad_spend_amount) AS sem_ad_spend,
+                       count(*) FILTER (WHERE ad_spend_amount IS NULL)
+                           AS missing_sp_mart_rows,
+                       count(*) FILTER (WHERE sem_ad_spend_amount IS NULL)
+                           AS missing_sem_mart_rows,
                        sum(gross_profit_amount) AS profit,
                        count(DISTINCT business_date_la)
                            FILTER (WHERE cost_status = 'complete') AS complete_cost_days,
@@ -122,7 +128,8 @@ def read_sku_metrics(
         )
         profit = _number(sales["profit"])
         sales_amount = _number(sales["sales_amount"])
-        ad_spend = _number(sales["ad_spend"])
+        sp_ad_spend = _number(sales["sp_ad_spend"])
+        sem_ad_spend = _number(sales["sem_ad_spend"])
         cost_days = int(sales["complete_cost_days"] or 0)
         observed = int(sales["observed_days"] or 0)
         consistent_currency = (
@@ -151,6 +158,26 @@ def read_sku_metrics(
             and clicks["spend_currency"] == sales["sales_currency"]
             and consistent_currency
         )
+        # SEM costs are posted as USD by the existing Daily Sales MART builder.
+        # The SKU profit MART does not carry a separate SEM currency column.
+        # A positive SEM amount can only be combined with USD sales/profit.
+        sem_currency_verified = (
+            sem_ad_spend is not None
+            and int(sales["missing_sem_mart_rows"] or 0) == 0
+            and consistent_currency
+            and (sem_ad_spend == 0 or sales["sales_currency"] == "USD")
+        )
+        sp_mart_verified = (
+            sp_ad_spend is not None
+            and int(sales["missing_sp_mart_rows"] or 0) == 0
+            and spend_currency_verified
+        )
+        total_spend_verified = sp_mart_verified and sem_currency_verified
+        total_ad_spend = (
+            sp_ad_spend + sem_ad_spend
+            if total_spend_verified and sp_ad_spend is not None and sem_ad_spend is not None
+            else None
+        )
         ads_same_currency = (
             int(clicks["spend_currencies"] or 0) == 1
             and int(clicks["attributed_currencies"] or 0) == 1
@@ -168,8 +195,8 @@ def read_sku_metrics(
             else None
         )
         ad_spend_ratio = (
-            (ad_spend / sales_amount * 100)
-            if ad_spend is not None and sales_amount is not None and sales_amount > 0
+            total_ad_spend / sales_amount * 100
+            if total_ad_spend is not None and sales_amount is not None and sales_amount > 0
             else None
         )
         roas = (
@@ -201,10 +228,12 @@ def read_sku_metrics(
             issues.append("financial_currency_unverified")
         if margin is None:
             issues.append("margin_unavailable")
-        if ad_spend is None:
+        if sp_ad_spend is None or sem_ad_spend is None:
             issues.append("ad_spend_unavailable")
-        if not spend_currency_verified:
+        if not sp_mart_verified:
             issues.append("ad_spend_currency_unverified")
+        if not sem_currency_verified:
+            issues.append("sem_ad_spend_currency_unverified")
         if clicks["clicks"] is None:
             issues.append("ad_clicks_unavailable")
         # The ad fact might omit valid zero-spend days; without a publication
@@ -220,7 +249,9 @@ def read_sku_metrics(
             "sales": _number(sales["sales_qty"]),
             "orders": _number(sales["orders"]),
             "revenue": sales_amount if consistent_currency else None,
-            "ad_spend": ad_spend if spend_currency_verified else None,
+            "sp_ad_spend": sp_ad_spend if sp_mart_verified else None,
+            "sem_ad_spend": sem_ad_spend if sem_currency_verified else None,
+            "ad_spend": total_ad_spend,
             "clicks": int(clicks["clicks"]) if clicks["clicks"] is not None else None,
             "attributed_orders": ad_orders,
             "impressions": impressions,
@@ -236,7 +267,7 @@ def read_sku_metrics(
             ),
             "margin": margin,
             "acos": acos,
-            "ad_spend_ratio": ad_spend_ratio if spend_currency_verified else None,
+            "ad_spend_ratio": ad_spend_ratio,
             "currency_code": sales["sales_currency"] if consistent_currency else None,
             "attributed_sales": attributed_sales if ads_same_currency else None,
             "observed_days": observed,
@@ -343,8 +374,8 @@ def read_sku_metrics(
         "metric_definitions": {
             "acos": "attributed_spend / attributed_sales * 100; null if currency unknown",
             "ad_spend_ratio": (
-                "profit mart ad_spend / total sales_amount * 100; only if "
-                "advertising spend currency reconciles with sales currency; not ACOS"
+                "(SKU MART SP ad_spend_amount + SEM sem_ad_spend_amount) / "
+                "SKU MART sales_amount * 100, after component currency checks; not ACOS"
             ),
             "roas": "advertising attributed sales / advertising spend; not profit ROI",
             "roi": "requires an approved investment cost denominator",
