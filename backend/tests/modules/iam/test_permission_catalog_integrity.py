@@ -55,3 +55,40 @@ def test_wfs_case_actions_are_assignable() -> None:
         "mark-recovered",
     ):
         assert f"action:warehouse:wfs-fee-alert:{action}" in PERMISSION_KEYS
+
+
+def test_new_page_and_its_action_are_discovered_together_without_grants() -> None:
+    from app.core.auth import Principal
+    from app.core.permissions import has_permission
+    from app.modules.iam.permission_catalog_v2 import (
+        all_permission_definitions,
+        register_runtime_permission_key,
+    )
+
+    action_key = "action:operations:future-task-board:approve"
+    action = register_runtime_permission_key(action_key)
+    assert action is not None
+    assert action.permission_type == "action"
+    pages = {
+        item.permission_key: item
+        for item in all_permission_definitions()
+        if item.page_key == "operations_future_task_board"
+    }
+    assert set(pages) == {
+        "page:operations:future-task-board:view",
+        action_key,
+    }
+    assert all(item.risk_level == "high" for item in pages.values())
+    assert not has_permission(Principal(user_id="20", permissions=frozenset()), action_key)
+
+
+def test_runtime_catalog_ignores_invalid_or_unknown_module_declarations() -> None:
+    from app.modules.iam.permission_catalog_v2 import register_runtime_permission_key
+
+    for key in (
+        "action:unknown-module:future-page:approve",
+        "page:operations:future-page:export",
+        "action:operations:future_page:approve",
+        "field:operations:future-page:private name",
+    ):
+        assert register_runtime_permission_key(key) is None

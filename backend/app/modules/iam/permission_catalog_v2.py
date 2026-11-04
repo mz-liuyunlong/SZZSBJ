@@ -454,31 +454,64 @@ PERMISSION_KEYS: set[str] = {item.permission_key for item in PERMISSION_DEFINITI
 
 
 def register_runtime_permission_key(permission_key: str) -> PermissionDefinition | None:
-    """Discover API/field declarations without granting or writing to the database."""
+    """Register declared permissions for existing modules, without granting access.
+
+    A new page declared by an API is added to the catalog automatically, together
+    with its action/field children. Unreviewed pages and children are high-risk,
+    and role grants still require the standard authorized RBAC transaction.
+    """
     parts = permission_key.split(":")
     if len(parts) != 4 or parts[0] not in {"page", "action", "field"}:
         return None
     permission_type, module_slug, page_slug, leaf_slug = parts
-    module_key = module_slug.replace("-", "_")
-    page_key = f"{module_key}_{page_slug.replace('-', '_')}"
-    if page_key not in PAGE_DEFINITIONS:
+    if (
+        any(not part or not all(char.isalnum() or char == "-" for char in part) for part in parts[1:])
+        or any("_" in part for part in parts[1:])
+        or not all(part.isascii() and part.lower() == part for part in parts[1:])
+        or (permission_type == "page" and leaf_slug != "view")
+    ):
         return None
-    if permission_type == "page":
-        return next(
-            (item for item in PERMISSION_DEFINITIONS if item.permission_key == permission_key),
-            None,
-        )
+    module_key = module_slug.replace("-", "_")
+    if module_key not in MODULE_NAMES:
+        return None
+    page_key = f"{module_key}_{page_slug.replace('-', '_')}"
+    static_page = PAGE_DEFINITIONS.get(page_key)
+
     with _PERMISSION_LOCK:
-        existing = _RUNTIME_PERMISSION_DEFINITIONS.get(permission_key)
-        if existing is not None:
-            return existing
+        if permission_key in _RUNTIME_PERMISSION_DEFINITIONS:
+            return _RUNTIME_PERMISSION_DEFINITIONS[permission_key]
         if permission_key in PERMISSION_KEYS:
             return next(
                 (item for item in PERMISSION_DEFINITIONS if item.permission_key == permission_key),
                 None,
             )
-        page_name = PAGE_DEFINITIONS[page_key][2].name
-        leaf_name = leaf_slug.replace("-", " ").replace("_", " ").title()
+
+        page_name = (
+            static_page[2].name
+            if static_page is not None
+            else page_slug.replace("-", " ").title()
+        )
+        if static_page is None:
+            parent_key = f"page:{module_slug}:{page_slug}:view"
+            if parent_key not in _RUNTIME_PERMISSION_DEFINITIONS:
+                parent = PermissionDefinition(
+                    permission_key=parent_key,
+                    name=page_name,
+                    description=f"自动发现页面：{page_name}（未自动授权）",
+                    permission_type="page",
+                    module_key=module_key,
+                    page_key=page_key,
+                    action_key=None,
+                    field_key=None,
+                    risk_level="high",
+                    sort_order=9999,
+                )
+                _RUNTIME_PERMISSION_DEFINITIONS[parent_key] = parent
+                PERMISSION_KEYS.add(parent_key)
+            if permission_type == "page":
+                return _RUNTIME_PERMISSION_DEFINITIONS[parent_key]
+
+        leaf_name = leaf_slug.replace("-", " ").title()
         definition = PermissionDefinition(
             permission_key=permission_key,
             name=f"{page_name} · {leaf_name}",
