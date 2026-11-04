@@ -375,6 +375,9 @@ def test_daily_evaluation_is_idempotent_and_sql_paginated(clearance_db: Session)
     audit = service.repo.readiness_report(frozenset({account}),store_id="ci-daily-store")
     assert audit["evaluated_listings"] == 165
     assert audit["missing_sales_window"] > 0
+    assert audit["scheduled_run_status"] == "succeeded"
+    assert audit["scheduled_attempt_count"] >= 1
+    assert audit["scheduled_error_code"] is None
     # Daily risk does not authorize application when today's WFS stock sells out.
     from sqlalchemy import text
 
