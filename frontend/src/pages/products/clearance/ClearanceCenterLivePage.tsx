@@ -12,14 +12,14 @@ import type { NavigationPage } from "@/config/navigation";
 import {
   fetchClearanceListings, fetchClearanceRequests, fetchClearanceSummary,
   fetchEligibleListings, fetchClearanceDetail, fetchClearanceRequestDetail,
-  fetchClearanceRules, saveClearanceRules, submitClearance,
+  fetchClearanceRules, fetchClearanceReadiness, saveClearanceRules, submitClearance,
   updateClearanceProgress, pauseClearance, resumeClearance, withdrawClearance,
   type ClearanceRow, type ClearanceRequest, type ClearanceRequestDetail,
-  type ClearanceMethod, type ClearanceRules,
+  type ClearanceMethod, type ClearanceRules, type ClearanceSummary, type ClearanceReadiness,
 } from "./clearanceApi";
 import "../ClearanceCenterPage.css";
 
-const methods: ClearanceMethod[] = ["降价", "促销", "广告清货", "WFS 移除", "弃置"];
+const methods: ClearanceMethod[] = ["降价", "广告清货"];
 const reasons = ["长期滞销", "库存资金占用", "质量或售后问题", "季节性商品过季", "经营策略调整", "其他原因"];
 const riskLabel: Record<string,string> = {high:"高风险",medium:"中风险",low:"低风险",unknown:"待核实"};
 const taskLabel: Record<string,string> = {
@@ -58,7 +58,8 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
   const [taskPage,setTaskPage] = useState(1);
   const [rows,setRows] = useState<ClearanceRow[]>([]);
   const [tasks,setTasks] = useState<ClearanceRequest[]>([]);
-  const [summary,setSummary] = useState<Record<string,number>>({});
+  const [summary,setSummary] = useState<ClearanceSummary | null>(null);
+  const [readiness,setReadiness] = useState<ClearanceReadiness | null>(null);
   const [listTotal,setListTotal] = useState(0);
   const [taskTotal,setTaskTotal] = useState(0);
   const [loading,setLoading] = useState(false);
@@ -84,22 +85,26 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [l,t,s] = await Promise.all([
+      const [l,t,s,q] = await Promise.all([
         fetchClearanceListings({page:listPage,page_size:50,store_id:store,keyword,
           risk_level:risk||undefined}),
         fetchClearanceRequests({page:taskPage,page_size:50,store_id:store}),
         fetchClearanceSummary(store),
+        fetchClearanceReadiness(store),
       ]);
       setRows(l.items);
       setListTotal(l.total);
       setTasks(t.items);
       setTaskTotal(t.total);
       setSummary(s);
+      setReadiness(q);
       setError("");
     } catch {
       setError("清货中心真实数据读取失败，请检查接口权限、数据版本与网络连接。");
       setRows([]);
       setTasks([]);
+      setSummary(null);
+      setReadiness(null);
     } finally {
       setLoading(false);
     }
@@ -310,6 +315,9 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
     <div className="clearance-center">
       <div className="clearance-heading"><div><Typography.Title level={4}>WFS 清货中心</Typography.Title>
         <Typography.Text type="secondary">Listing库存积压分析 · 主动申请 · 统一审批 · 执行记录</Typography.Text>
+        <div style={{fontSize:12,color:"#64748b",marginTop:5}}>
+          美国太平洋时间每天 00:00 自动评估 · 分析截至上一完整销售日
+        </div>
       </div></div>
       <Card size="small" className="clearance-main-card">
         <Tabs activeKey={tab} onChange={setTab} items={[
@@ -318,12 +326,22 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
         ]} tabBarExtraContent={<Button type="text" icon={<SettingOutlined/>}
           onClick={()=>void openRules()}>规则配置</Button>}/>
         {error?<Alert type="error" showIcon message={error} style={{marginBottom:12}}/>:null}
+        {summary?.evaluation_status==="not_ready" && !error?<Alert type="warning"
+          showIcon message="每日清货评估尚未生成"
+          description="清货分析暂不展示未验证的风险结果；主动申请仍使用最新有效 WFS 可售库存。"
+          style={{marginBottom:12}}/>:null}
+        {summary?.evaluation_status==="ready" && !error?<Alert type="info"
+          showIcon message={`最近评估：${summary.run_date_la}（美国太平洋时间）· 经营数据截至 ${summary.as_of_date_la}`}
+          description={readiness?.not_evaluated_listings
+            ? `有 ${readiness.not_evaluated_listings} 条 Listing 尚未纳入本次评估`
+            : undefined}
+          style={{marginBottom:12}}/>:null}
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:12,marginBottom:12}}>
           {[
-            {title:"高风险Listing",value:summary.high||0},
-            {title:"中风险Listing",value:summary.medium||0},
-            {title:"观察中Listing",value:summary.observe||0},
-            {title:"待核实Listing",value:summary.review_required||0},
+            {title:"高风险Listing",value:summary?.evaluation_status==="ready"?summary.high:"—"},
+            {title:"中风险Listing",value:summary?.evaluation_status==="ready"?summary.medium??"—":"—"},
+            {title:"观察中Listing",value:summary?.evaluation_status==="ready"?summary.observe??"—":"—"},
+            {title:"待核实Listing",value:summary?.evaluation_status==="ready"?summary.review_required??"—":"—"},
           ].map(card=><Card key={card.title} size="small" style={{height:100}}>
             <Statistic title={card.title} value={card.value} valueStyle={{fontSize:23}}/>
           </Card>)}
