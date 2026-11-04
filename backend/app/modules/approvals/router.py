@@ -27,6 +27,9 @@ from app.modules.approvals.schemas import (
 )
 from app.modules.approvals.service import ApprovalService
 from app.modules.approvals.workflow import ApprovalWorkflow
+from app.modules.clearance_center.service import ClearanceService
+from app.modules.clearance_center.schemas import DecisionWrite
+from app.core.api import ApiError, ErrorCode
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.warehouse_wfs.schemas import WfsFeeArchiveRequestWrite
 
@@ -56,12 +59,14 @@ def list_approvals(
     accounts: account_scope,
 ):
     approved = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
+    clearance_review = has_permission(principal, "action:products:clearance:review")
     data, total = ApprovalService(session).list_requests(
         query,
         accounts,
         principal.user_id,
         approved,
         is_admin=has_permission(principal, "*"),
+        may_review_clearance=clearance_review,
     )
     return success_response(
         request,
@@ -76,7 +81,9 @@ def summary(
 ):
     may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
     data = ApprovalService(session).summary(
-        accounts, principal.user_id, may_review, is_admin=has_permission(principal, "*")
+        accounts, principal.user_id, may_review,
+        is_admin=has_permission(principal, "*"),
+        may_review_clearance=has_permission(principal, "action:products:clearance:review"),
     )
     return success_response(request, data=data, meta=None)
 
@@ -159,6 +166,7 @@ def get_approval(
         principal.user_id,
         may_review,
         is_admin=has_permission(principal, "*"),
+        may_review_clearance=has_permission(principal, "action:products:clearance:review"),
     )
     return success_response(request, data=data, meta=None)
 
@@ -205,27 +213,34 @@ def decide(
     approval_id: UUID,
     payload: ApprovalDecisionWrite,
     session: db_session,
-    principal: archive_review_principal,
+    principal: view_principal,
     accounts: account_scope,
 ):
-    may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
     record = ApprovalService(session)._record(approval_id, accounts)
-    if record["approval_type"] != "wfs_case_abandon":
-        if not has_permission(principal, "*"):
-            from app.core.api import ApiError, ErrorCode
-
+    kind = record["approval_type"]
+    if kind == "clearance_request":
+        if not has_permission(principal, "action:products:clearance:review"):
             raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
-        GenericApprovalService(session).decide(
+        if payload.decision not in ("approved", "rejected"):
+            raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422)
+        ClearanceService(session).decide(
             approval_id,
-            accounts,
-            principal.user_id,
-            payload.decision,
-            payload.note,
-            payload.expected_version,
+            DecisionWrite(decision=payload.decision, note=payload.note,
+                          expected_version=payload.expected_version),
+            accounts, principal.user_id,
+        )
+    elif kind == "wfs_case_abandon":
+        if not has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review"):
+            raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+        ApprovalService(session).decide(
+            approval_id, payload, accounts, principal.user_id, True
         )
     else:
-        ApprovalService(session).decide(
-            approval_id, payload, accounts, principal.user_id, may_review
+        if not has_permission(principal, "*"):
+            raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+        GenericApprovalService(session).decide(
+            approval_id, accounts, principal.user_id, payload.decision,
+            payload.note, payload.expected_version,
         )
     return success_response(request, data={"updated": True}, meta=None)
 
