@@ -85,6 +85,13 @@ def eligible_listings(
     return success_response(request, data=_safe_listing(data, principal), meta=None)
 
 
+@router.get("/facets", response_model=SuccessEnvelope[dict[str, Any], None])
+def facets(request: Request, session: db_session, _: reader, accounts: scope):
+    return success_response(
+        request, data=ClearanceService(session).repo.facets(accounts), meta=None
+    )
+
+
 @router.get("/summary", response_model=SuccessEnvelope[dict[str, Any], None])
 def summary(
     request: Request, session: db_session, principal: reader,
