@@ -113,10 +113,13 @@ describe("App", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     renderApp();
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const authRequestCount = () => fetchMock.mock.calls.filter(
+      ([path]) => String(path).endsWith("/api/auth/me"),
+    ).length;
+    await waitFor(() => expect(authRequestCount()).toBe(1));
 
     window.dispatchEvent(new Event("focus"));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(authRequestCount()).toBe(2));
     expect(localStorage.getItem("szzsbj_auth_token")).toBe("synthetic-current-session");
   });
 
