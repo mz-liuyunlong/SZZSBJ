@@ -38,7 +38,7 @@ import OverviewPage from "@/pages/pmc/overview/OverviewPage";
 import PurchaseBoardPage from "@/pages/pmc/purchase-board/PurchaseBoardPage";
 import DomesticWarehousePage from "@/pages/pmc/domestic-warehouse/DomesticWarehousePage";
 import WfsFrontendPage from "@/pages/pmc/wfs/WfsFrontendPage";
-import LogisticsPage from "@/pages/pmc/logistics/LogisticsPage";
+import LogisticsPages from "@/pages/pmc/logistics/LogisticsPages";
 import UserManagementPage from "@/pages/settings/UserManagementPage";
 import RoleManagementPage from "@/pages/settings/RoleManagementPage";
 import FeeRulesPage from "@/pages/settings/FeeRulesPage";
@@ -207,8 +207,8 @@ function BusinessRoute({
           <OverviewPage page={page} preferenceScope={activeUser.username} />
         ) : page.key === "pmc_purchase_board" ? (
           <PurchaseBoardPage page={page} preferenceScope={activeUser.username} />
-        ) : page.key === "pmc_logistics" ? (
-          <LogisticsPage page={page} scope={activeUser.username} />
+        ) : page.key === "pmc_logistics" || page.key.startsWith("pmc_logistics_") ? (
+          <LogisticsPages page={page} scope={activeUser.username} />
         ) : page.key.startsWith("pmc_wfs_") ? (
           <WfsFrontendPage page={page} scope={activeUser.username} permissions={activeUser.permissions} />
         ) : ["pmc_domestic_batches", "pmc_packing_approval", "pmc_packing_warehouse"].includes(page.key) ? (

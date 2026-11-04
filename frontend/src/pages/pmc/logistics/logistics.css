@@ -32,3 +32,20 @@
 .logi-exrow {
   padding: 4px 0;
 }
+
+.logi-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.logi-missing {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.logi-rules .ant-card + .ant-card {
+  margin-top: 12px;
+}

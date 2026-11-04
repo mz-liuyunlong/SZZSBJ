@@ -130,6 +130,16 @@ const page = (
   ...extra,
 });
 
+/** Shared by the 物流 sidebar leaves: read-only, live API, WFS page permission (PRP #298). */
+const LOGISTICS_PAGE: Partial<NavigationPage> = {
+  status: 'testing',
+  source: 'new_postgres',
+  migrationMode: 'native',
+  readOnly: true,
+  viewPermissionKey: 'page:pmc:wfs:view',
+  help: { enabled: true, title: '物流使用说明', helpUrl: '/help/pmc-logistics.html', openInNewTab: true },
+};
+
 export const navigation: NavigationGroup[] = [
   {
     key: 'dashboard',
@@ -267,7 +277,7 @@ export const navigation: NavigationGroup[] = [
   },
   {
     // PMC group approved by Rocky 2026-09-24 (PRP pmc-purchase-board §2, option A); owner review in PR.
-    sidebarSections: [{ key: 'pmc-domestic', title: '国内仓' }, { key: 'pmc-wfs', title: 'WFS' }, { key: 'pmc-wfs-settings', title: 'WFS 设置' }],
+    sidebarSections: [{ key: 'pmc-logistics', title: '物流' }, { key: 'pmc-domestic', title: '国内仓' }, { key: 'pmc-wfs', title: 'WFS' }, { key: 'pmc-wfs-settings', title: 'WFS 设置' }],
     key: 'pmc',
     title: 'PMC',
     icon: createElement(DeploymentUnitOutlined, { 'aria-hidden': true }),
@@ -290,11 +300,25 @@ export const navigation: NavigationGroup[] = [
         // Backend permission key (docs/api/pmc-purchase-api.md); the frontend does not enforce it.
         permissionKey: 'pmc:purchase:read',
       }),
-      page('pmc', 'logistics', '物流', '/pmc/logistics', {
-        status: 'testing', source: 'new_postgres', migrationMode: 'native', readOnly: true,
+      // 物流 (PRP #298, approved phase 1 a + b): one sidebar leaf per 8088 tab, Rocky 2026-11-03.
+      // Phase 1 reuses the WFS page permission (PRP #298 D-5).
+      page('pmc', 'logistics', '物流总览', '/pmc/logistics', {
+        sidebarSection: 'pmc-logistics', ...LOGISTICS_PAGE,
         sourceTables: ['ods_lingxing_wfs_shipping_lists', 'ods_carrier_zhongyi_tracks', 'ods_walmart_wfs_receipts'],
-        // Reuses the WFS page permission until PRP #298 approves a logistics key.
-        viewPermissionKey: 'page:pmc:wfs:view',
+      }),
+      page('pmc', 'logistics_forecast', '到货预测', '/pmc/logistics/forecast', {
+        sidebarSection: 'pmc-logistics', ...LOGISTICS_PAGE,
+        sourceTables: ['ods_lingxing_wfs_shipping_lists', 'ods_walmart_wfs_inbound_items', 'ods_walmart_wfs_receipts'],
+      }),
+      page('pmc', 'logistics_alerts', '异常与提醒', '/pmc/logistics/alerts', {
+        sidebarSection: 'pmc-logistics', ...LOGISTICS_PAGE,
+        sourceTables: ['ods_lingxing_wfs_shipping_lists', 'ods_carrier_zhongyi_tracks', 'ods_walmart_wfs_receipts'],
+      }),
+      // 时效与阈值设置 lives in PMC 设置 (Rocky 2026-11-03: PMC has one settings area). The page component
+      // is LogisticsRulesPage, routed by key: PMC 设置 registers it as page('pmc', 'logistics_settings', ...).
+      page('pmc', 'logistics_carriers', '货代看板', '/pmc/logistics/carriers', {
+        sidebarSection: 'pmc-logistics', ...LOGISTICS_PAGE,
+        sourceTables: ['ods_carrier_zhongyi_orders', 'ods_carrier_zhongyi_tracks', 'ods_lingxing_wfs_shipping_lists'],
       }),
       page('pmc', 'domestic_batches', '批次看板', '/pmc/domestic/batches', {
         sidebarSection: 'pmc-domestic', status: 'testing', source: 'new_postgres', migrationMode: 'native',
