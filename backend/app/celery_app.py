@@ -45,6 +45,10 @@ TASK_ROUTES = {
         "queue": INTEGRATION_QUEUE,
         "routing_key": INTEGRATION_QUEUE,
     },
+    "iam.organization_event_tick": {
+        "queue": INTEGRATION_QUEUE,
+        "routing_key": INTEGRATION_QUEUE,
+    },
 }
 
 
@@ -140,6 +144,10 @@ def create_celery_app(
             "feishu-org-sync-scheduler": {
                 "task": "iam.organization_sync_tick",
                 "schedule": crontab(minute=20),
+            },
+            "feishu-org-event-consumer": {
+                "task": "iam.organization_event_tick",
+                "schedule": 60.0,
             },
         },
     )
