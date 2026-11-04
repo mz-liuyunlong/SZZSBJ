@@ -26,7 +26,9 @@ const fixture = {
 };
 
 type Recorded = {method:string;path:string;body:unknown};
-async function prepare(page:Page, writes:Recorded[], dailyReady = true){
+async function prepare(page:Page, writes:Recorded[], dailyReady: boolean | "stale" = true){
+  const ready = dailyReady === true;
+  const status = dailyReady === "stale" ? "stale" : ready ? "ready" : "not_ready";
   await page.addInitScript(()=>localStorage.setItem("szzsbj_auth_token","synthetic-clearance-live"));
   await page.route("**/api/**",async route=>{
     const url = new URL(route.request().url());
@@ -37,34 +39,34 @@ async function prepare(page:Page, writes:Recorded[], dailyReady = true){
     if(auth)data={id:16,username:"clearance-live",display_name:"测试运营",is_super_admin:true,
       role_keys:[],role_names:[],permissions:["*"]};
     else if(path==="/api/products/clearance-center/listings")data={
-      items:dailyReady?[fixture]:[],total:dailyReady?1:0,page:1,page_size:50,
-      evaluation_status:dailyReady?"ready":"not_ready",
-      run_date_la:dailyReady?"2026-11-04":null,
-      as_of_date_la:dailyReady?"2026-11-03":null,
+      items:ready?[fixture]:[],total:ready?1:0,page:1,page_size:50,
+      evaluation_status:status,
+      run_date_la:dailyReady?"2026-11-02":null,
+      as_of_date_la:dailyReady?"2026-11-02":null,
     };
     else if(path==="/api/products/clearance-center/facets")data={
       accounts:["TEST-ACCOUNT"],
       stores:[{source_account_ref:"TEST-ACCOUNT",store_id:"TEST-STORE",store_name:"验收店铺"}],
     };
     else if(path==="/api/products/clearance-center/data-readiness")data={
-      evaluation_status:dailyReady?"ready":"not_ready",
-      run_date_la:dailyReady?"2026-11-04":null,
-      as_of_date_la:dailyReady?"2026-11-03":null,
-      total_listings:1,evaluated_listings:dailyReady?1:0,
-      not_evaluated_listings:dailyReady?0:1,
-      missing_sales_window:dailyReady?0:null,
-      missing_wfs_stock:dailyReady?0:null,missing_profit_cost:dailyReady?0:null,
+      evaluation_status:status,
+      run_date_la:dailyReady?"2026-11-02":null,
+      as_of_date_la:dailyReady?"2026-11-02":null,
+      total_listings:1,evaluated_listings:ready?1:0,
+      not_evaluated_listings:ready?0:1,
+      missing_sales_window:ready?0:null,
+      missing_wfs_stock:ready?0:null,missing_profit_cost:ready?0:null,
       refund_period_data_complete:false,
     };
     else if(path==="/api/products/clearance-center/eligible-listings")data={
       items:[fixture],total:1,page:1,page_size:30,
     };
     else if(path==="/api/products/clearance-center/summary")data={
-      total:dailyReady?1:0,high:0,medium:dailyReady?1:0,
+      total:ready?1:0,high:0,medium:ready?1:0,
       observe:0,review_required:0,eligible_manual:1,
-      evaluation_status:dailyReady?"ready":"not_ready",
-      run_date_la:dailyReady?"2026-11-04":null,
-      as_of_date_la:dailyReady?"2026-11-03":null,
+      evaluation_status:status,
+      run_date_la:dailyReady?"2026-11-02":null,
+      as_of_date_la:dailyReady?"2026-11-02":null,
     };
     else if(path.endsWith("/rules"))data={source_account_ref:"TEST-ACCOUNT",version:0,
       rules:{high_coverage_days:180,medium_coverage_days:90,assisted_coverage_days:60}};
@@ -131,4 +133,14 @@ test("daily risk snapshot displays its previous-complete-day provenance",async({
   await page.goto("/#/products/clearance-center");
   await expect(page.getByText(/最近评估：2026-11-04/)).toBeVisible();
   await expect(page.getByText(/经营数据截至 2026-11-03/)).toBeVisible();
+});
+
+
+test("stale midnight evaluation is blocked but live WFS picker remains available",async({page})=>{
+  await prepare(page,[],"stale");
+  await page.goto("/#/products/clearance-center");
+  await expect(page.getByText("今日美国太平洋时间的清货评估尚未成功")).toBeVisible();
+  await expect(page.getByText("真实接口验收商品")).toHaveCount(0);
+  await page.getByRole("button",{name:"申请 SKU"}).click();
+  await expect(page.getByText("真实接口验收商品")).toBeVisible();
 });
