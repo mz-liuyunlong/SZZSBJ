@@ -14,6 +14,7 @@ from app.core.api import ApiError, ErrorCode, success_response
 from app.core.auth import Principal
 from app.core.permissions import require_super_admin
 from app.db.session import get_db_session
+from app.modules.iam.organization_access import verified_single_account_owner_refs
 
 router = APIRouter(tags=["iam-organization-owners"])
 admin_principal = Annotated[Principal, Depends(require_super_admin)]
@@ -132,6 +133,12 @@ def set_owner_binding(
             code=ErrorCode.VALIDATION_ERROR,
             status_code=422,
             message="负责人 UID 不存在于当前业务数据，不能建立绑定",
+        )
+    if owner_ref not in verified_single_account_owner_refs(session, frozenset({owner_ref})):
+        raise ApiError(
+            code="OWNER_IDENTITY_AMBIGUOUS",
+            status_code=409,
+            message="负责人 UID 存在跨来源账号或来源不明的归属，禁止直接绑定，请核对账号",
         )
     # A mapping never trusts name-matching; both identities are explicitly reviewed.
     current = session.execute(
