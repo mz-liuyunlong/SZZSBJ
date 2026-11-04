@@ -170,7 +170,7 @@ class SkuCycleBrief(StrictSchema):
     value_days: Money | None
     source: Literal["samples", "baseline_mix", "lingxing_default", "no_baseline"] | None
     sample_count: int | None
-    unstable: bool
+    unstable: bool | None
 
 
 class SkuCycleSample(StrictSchema):
@@ -240,11 +240,11 @@ class BoardSummaryData(StrictSchema):
         description="近 90 天到仓采购单 purchase_cycle_days 平均，一单一值"
     )
     median_purchase_cycle_days_90d: Money | None = Field(description="同一批采购单交期的中位数")
-    purchase_cycle_sample_orders_90d: int = Field(description="参与平均/中位数的采购单数")
+    purchase_cycle_sample_orders_90d: int | None = Field(description="参与平均/中位数的采购单数；无安全归属证据时为空")
     month_purchase_amount: list[MoneyByCurrency] = Field(
         description="本月下单 amount_allocated 合计，按币种"
     )
-    unstable_sku_count: int = Field(description="当前筛选下交期不稳定的 SKU 数，按账号 + SKU 去重")
+    unstable_sku_count: int | None = Field(description="当前筛选下交期不稳定的 SKU 数；无安全归属证据时为空")
     itemid_pending_lines: int
     wfs_not_ready_lines: int
     unattributed_store_lines: int
@@ -274,7 +274,7 @@ class OrderDetailData(StrictSchema):
     order_date: date | None
     order_create_date: date | None
     quantity_total: int | None
-    quantity_received: int
+    quantity_received: int | None
     progress_ratio: Money | None
     arrival_date: date | None
     amount_total: Money | None
