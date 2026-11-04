@@ -25,7 +25,7 @@
 | cron / 脚本 / 外部 API | 无 cron。Demo 侧脚本（`fin_ingest_uploads.py` 同步到 Mac 再重建）仅为原型过渡，正式系统不依赖。不调用任何银行 / 平台 API。 |
 | 人工写库入口 | 上传即人工入口；流水行本身不允许人工编辑（分类 / 备注 / 复核属于后续「现金状况」PRP，另行决策）。作废只允许整批作废（软删除 + 审计）。 |
 | 外部平台重新获取可能性 | 可以：中行企业网银「交易明细」xls、深通村镇银座「交易明细查询列表」xlsx、派安盈 Transactions CSV、万里汇导出 xlsx、PingPong 账单明细 xlsx 都能按日期段重新导出；重复导出靠行指纹去重。 |
-| 少量配置数据可行性 | 可行：账户主数据 11 条（见 §3 表 A；`BOC_USD` 四颗洋葱中行外币户独立入库，与 `ZSBJ_BOC_USD` 同为「同一导出内按币种拆户」），由 migration 种子写入，变更走审批后的维护接口（本期不做维护页，改动走 migration / 负责人授权脚本）。 |
+| 少量配置数据可行性 | 可行：账户主数据 11 条（见 §3 表 A；`BOC_USD` A 主体中行外币户独立入库，与 `ZSBJ_BOC_USD` 同为「同一导出内按币种拆户」），由 migration 种子写入，变更走审批后的维护接口（本期不做维护页，改动走 migration / 负责人授权脚本）。 |
 | 短期策略 | 文件导入（本决策）。 |
 | 长期策略 | 仍为文件导入：银行无开放 API；PingPong / 派安盈 / 万里汇 API 接入被 Rocky 明确否决（2026-10-31）。若未来改接 API，另立决策。 |
 
@@ -48,22 +48,22 @@
 
 | account_key | 显示名 | 主体 | 币种 | provider | 识别特征（文件内） |
 |---|---|---|---|---|---|
-| `BOC_CNY` | 四颗洋葱 · 中行人民币户 | 四颗洋葱 | CNY | boc | 中行企业网银「交易明细」导出 xls / xlsx，表头含「查询账号[Inquirer account]」与明细表头「交易类型[Transaction Type]」，查询账号尾号 = 5951，CNY 行 |
-| `BOC_USD` | 四颗洋葱 · 中行外汇户 | 四颗洋葱 | USD | boc | 同上文件内 USD 行（若单独导出则按账号 尾号 5951 + 币种 USD） |
-| `ZSBJ_BOC` | 掌上便捷 · 中行对公 | 四颗洋葱（代管） | CNY | boc | 查询账号尾号 = 6815，CNY 行 |
-| `ZSBJ_BOC_USD` | 掌上便捷 · 中行外币户 | 四颗洋葱（代管） | USD | boc | 查询账号尾号 = 6815 导出中的 USD 行（账号 尾号 1389） |
-| `ZSBJ_YZ` | 掌上便捷 · 银座对公 | 四颗洋葱（代管） | CNY | shenzhen_rural_bank | xlsx「交易明细查询列表」/「对方账户名」，账号 尾号 0015 |
-| `PAYONEER` | 派安盈 · 四颗洋葱 | 四颗洋葱 | USD | payoneer | CSV 首行 `Currency,Payout method,Transaction date…`，描述以 `Payment from Walmart` / `Card charge` / `Maintenance fee` 为主 |
-| `PAYONEER_FH` | 派安盈 · 主账号（FurnitureHaven 归集） | 四颗洋葱 | USD | payoneer | 同格式，描述以 `STRIPE` / `connected account` 为主 |
-| `WORLDFIRST` | 万里汇 | 四颗洋葱 | USD | worldfirst | xlsx 表头含「子账号昵称」「动账类型」 |
-| `PINGPONG_MAIN_USD` / `PINGPONG_MAIN_CNH` | PingPong · 专用户 USD / CNH | 四颗洋葱 | USD / CNH | pingpong | xlsx 表头含「出账/入账」「流水号」，用户编号尾号 = 8366，按「账号Id」+ 币种分子账户 |
-| `PINGPONG_STORE_A` | PingPong · 本公司店铺户 A | 四颗洋葱 | USD | pingpong | 同上文件中本用户编号下的店铺账户行，按「账号Id」区分；店铺户再增加时顺延 `PINGPONG_STORE_B`…（账号 Id 全值只在种子里） |
+| `BOC_CNY` | A 主体 · 中行人民币户 | A 主体 | CNY | boc | 中行企业网银「交易明细」导出 xls / xlsx，表头含「查询账号[Inquirer account]」与明细表头「交易类型[Transaction Type]」，查询账号（部署时登记），CNY 行 |
+| `BOC_USD` | A 主体 · 中行外汇户 | A 主体 | USD | boc | 同上文件内 USD 行（若单独导出则按部署时登记的账号 + 币种 USD） |
+| `ZSBJ_BOC` | B 主体 · 中行对公 | A 主体（代管） | CNY | boc | 查询账号（部署时登记），CNY 行 |
+| `ZSBJ_BOC_USD` | B 主体 · 中行外币户 | A 主体（代管） | USD | boc | 查询账号（部署时登记） 导出中的 USD 行（外币账号部署时登记） |
+| `ZSBJ_YZ` | B 主体 · 银座对公 | A 主体（代管） | CNY | shenzhen_rural_bank | xlsx「交易明细查询列表」/「对方账户名」，账号部署时登记 |
+| `PAYONEER` | 派安盈 · A 主体 | A 主体 | USD | payoneer | CSV 首行 `Currency,Payout method,Transaction date…`，描述以 `Payment from Walmart` / `Card charge` / `Maintenance fee` 为主 |
+| `PAYONEER_FH` | 派安盈 · 主账号（店铺归集） | A 主体 | USD | payoneer | 同格式，描述以 `STRIPE` / `connected account` 为主 |
+| `WORLDFIRST` | 万里汇 | A 主体 | USD | worldfirst | xlsx 表头含「子账号昵称」「动账类型」 |
+| `PINGPONG_MAIN_USD` / `PINGPONG_MAIN_CNH` | PingPong · 专用户 USD / CNH | A 主体 | USD / CNH | pingpong | xlsx 表头含「出账/入账」「流水号」，用户编号（部署时登记），按「账号Id」+ 币种分子账户 |
+| `PINGPONG_STORE_A` | PingPong · 本公司店铺户 A | A 主体 | USD | pingpong | 同上文件中本用户编号下的店铺账户行，按「账号Id」区分；店铺户再增加时顺延 `PINGPONG_STORE_B`…（账号 Id 部署时登记） |
 
 PDF（回单 / 招行流水）一律拒绝并给出中文原因；招商银行账户不在范围（Rocky 2026-10-29）。
 
 派安盈两户按描述特征计数归户：两类特征计数**相等时拒绝该文件**（提示人工指定账户）。xlsx 解压上限：解压后总大小 ≤ 50 MB、条目数 ≤ 200，超限拒绝（防 zip 炸弹）。
 
-本仓库为 Public，文档只写账号 / 用户编号**尾号**；完整识别值放在 `dim_finance_cash_accounts` 的 migration 种子里由负责人在 PR 中审阅（种子值本身属 confidential，实现 PR 需按 `docs/SENSITIVE_DATA_AND_PERMISSION_RULES.md` 处理，必要时改为部署时注入）。
+本仓库为 Public：文档不写公司主体名、账号和用户编号，**尾号也不写**（Rocky 2026-11-04）；完整识别值放在 `dim_finance_cash_accounts` 的 migration 种子里由负责人在 PR 中审阅（种子值本身属 confidential，实现 PR 需按 `docs/SENSITIVE_DATA_AND_PERMISSION_RULES.md` 处理，必要时改为部署时注入）。
 
 ## 4. 标准化流水字段（表 D 契约要点）
 

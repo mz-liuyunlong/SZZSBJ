@@ -17,12 +17,12 @@
 2. xlsx（zip）：共享字符串 / 工作表文本（含 HTML 实体解码）中
    - 含「子账号昵称」且「动账类型」→ 万里汇；
    - 含「出账/入账」且「流水号」→ PingPong（再按用户编号 / 账号Id 拆子账户）；
-   - 含「交易明细查询列表」或「对方账户名」→ 深通村镇银座，须含账号 尾号 0015，否则拒绝「账号没登记」；
-   - 含「查询账号[Inquirer account]」且明细表头含「交易类型[Transaction Type]」→ 中行，按查询账号尾号 6815 / 5951 归户；USD 行单列外币户（`ZSBJ_BOC_USD` / `BOC_USD`）；
+   - 含「交易明细查询列表」或「对方账户名」→ 深通村镇银座，须含已登记的账号（部署时登记），否则拒绝「账号没登记」；
+   - 含「查询账号[Inquirer account]」且明细表头含「交易类型[Transaction Type]」→ 中行，按查询账号归户（两个主体的查询账号部署时登记）；USD 行单列外币户（`ZSBJ_BOC_USD` / `BOC_USD`）；
    - xlsx 解压后总大小 > 50 MB 或条目数 > 200 → 拒绝「文件异常（解压超限）」；
    - 其余 → 拒绝「表头不认识（支持：万里汇 / PingPong / 中行交易明细 / 银座交易明细）」。
 3. xls（OLE，`D0 CF 11 E0`）：按账号字符串（含 UTF-16LE）归中行两户，否则拒绝。
-4. CSV 首行 `Currency,Payout method,Transaction date` → 派安盈；按描述特征计数分四颗洋葱户（Payment from Walmart / Card charge / Maintenance fee）与主账号（STRIPE / connected account）：计数多者归户；两类都为 0 或**两类相等 → 拒绝该文件**「派安盈账户无法判定，请人工指定」。
+4. CSV 首行 `Currency,Payout method,Transaction date` → 派安盈；按描述特征计数分 A 主体户（Payment from Walmart / Card charge / Maintenance fee）与主账号（STRIPE / connected account）：计数多者归户；两类都为 0 或**两类相等 → 拒绝该文件**「派安盈账户无法判定，请人工指定」。
 5. 其他 → 拒绝「不是 xlsx / xls / Payoneer CSV」。
 
 ## 3. 解析口径
