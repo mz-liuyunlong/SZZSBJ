@@ -12,6 +12,10 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
+from app.modules.product_management.daily_sales_costs import (
+    load_daily_sales_costs,
+    normalize_sku_key,
+)
 from app.modules.approvals.schemas import (
     ApprovalDecisionWrite,
     ApprovalDetail,
@@ -314,6 +318,10 @@ class ApprovalService:
             .all()
         )
         lookup = {r["approval_id"]: r for r in rows}
+        costs_by_account = {
+            account: load_daily_sales_costs(self.session, source_account_ref=account)
+            for account in {str(r["source_account_ref"]) for r in rows}
+        }
         result = []
         for item in items:
             r = lookup.get(item.id)
@@ -326,9 +334,29 @@ class ApprovalService:
                 if started is not None and started.tzinfo is not None
                 else None
             )
+            sku = normalize_sku_key(r["local_sku"])
+            unit_cost = None
+            cost = costs_by_account.get(str(r["source_account_ref"]), {}).get(sku) if sku else None
+            if (
+                cost is not None
+                and cost.purchase_cost_unit_cny is not None
+                and cost.first_leg_cost_unit_cny is not None
+                and cost.exchange_rate is not None
+                and cost.exchange_rate > 0
+                and not cost.root_missing_codes
+            ):
+                unit_cost = (
+                    cost.purchase_cost_unit_cny + cost.first_leg_cost_unit_cny
+                ) / cost.exchange_rate
+            stock_capital = (
+                str(unit_cost * r["wfs_available_quantity"])
+                if unit_cost is not None and r["wfs_available_quantity"] is not None
+                else None
+            )
             result.append(
                 item.model_copy(
                     update={
+                        "clearance_stock_capital": stock_capital,
                         "clearance_item_id": r["item_id"],
                         "clearance_product_name": r["title"],
                         "clearance_sku": r["local_sku"],
