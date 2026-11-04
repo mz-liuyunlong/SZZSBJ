@@ -179,6 +179,44 @@ class ClearanceReadRepository:
             "accounts": sorted({row["source_account_ref"] for row in rows}),
         }
 
+    def today_run_health(self) -> dict:
+        """Current LA-day scheduler status without exposing cross-account Listing data."""
+        local_day = datetime.now(LOS_ANGELES).date()
+        row = self.session.execute(
+            text("""
+                select status,attempt_count,started_at,finished_at,
+                       next_retry_at,error_code
+                  from ops_clearance_daily_runs
+                 where run_date_la=:day
+            """),
+            {"day": local_day},
+        ).mappings().first()
+        if row is None:
+            return {
+                "expected_run_date_la": local_day.isoformat(),
+                "scheduled_run_status": "missing",
+                "scheduled_attempt_count": 0,
+                "scheduled_started_at": None,
+                "scheduled_finished_at": None,
+                "scheduled_next_retry_at": None,
+                "scheduled_error_code": None,
+            }
+        return {
+            "expected_run_date_la": local_day.isoformat(),
+            "scheduled_run_status": row["status"],
+            "scheduled_attempt_count": int(row["attempt_count"]),
+            "scheduled_started_at": (
+                row["started_at"].isoformat() if row["started_at"] else None
+            ),
+            "scheduled_finished_at": (
+                row["finished_at"].isoformat() if row["finished_at"] else None
+            ),
+            "scheduled_next_retry_at": (
+                row["next_retry_at"].isoformat() if row["next_retry_at"] else None
+            ),
+            "scheduled_error_code": row["error_code"],
+        }
+
     def latest_completed_run(self) -> dict | None:
         row = self.session.execute(
             text("""select id::text id,run_date_la,as_of_date_la,status,
@@ -398,8 +436,10 @@ class ClearanceReadRepository:
             params,
         ).scalar_one())
         run = self.latest_completed_run()
+        run_health = self.today_run_health()
         if run is None:
             return {
+                **run_health,
                 "evaluation_status": "not_ready", "run_date_la": None,
                 "expected_run_date_la": datetime.now(LOS_ANGELES).date().isoformat(),
                 "as_of_date_la": None, "total_listings": available,
@@ -445,6 +485,7 @@ class ClearanceReadRepository:
         ).mappings().one()
         report = {key: int(value) for key, value in rows.items()}
         report.update({
+            **run_health,
             "evaluation_status": evaluation_run_status(run["run_date_la"]),
             "run_date_la": run["run_date_la"].isoformat(),
             "expected_run_date_la": datetime.now(LOS_ANGELES).date().isoformat(),
