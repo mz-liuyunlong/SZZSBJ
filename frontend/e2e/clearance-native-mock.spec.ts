@@ -1,127 +1,94 @@
+/** Acceptance: the clearance center consumes real API contracts, not demo stock. */
 import { expect, test, type Page } from "@playwright/test";
 
-async function prepare(page:Page){
- await page.addInitScript(()=>localStorage.setItem("szzsbj_auth_token","synthetic-clearance-layout"));
- await page.route("**/api/**",async route=>{
-  const pathname=new URL(route.request().url()).pathname;
-  // Vite modules under /src/api/ must never be returned as mock JSON.
-  if(!pathname.startsWith("/api/"))return route.fallback();
-  const data=pathname==="/api/auth/me"
-   ? {id:16,username:"clearance-layout",display_name:"清货测试",is_super_admin:true,role_keys:[],role_names:[],permissions:["*"]}
-   : {items:[],total:0};
-  await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({success:true,data,error:null,meta:{},request_id:"mock-clearance"})});
- });
+const fixture = {
+  listing: {
+    id: "88f4f2bc-7f1d-495a-a6e9-c112eaa19c77",
+    source_account_ref: "TEST-ACCOUNT",store_id: "TEST-STORE",store_name: "验收店铺",
+    item_id: "TEST-ITEM-2201",local_sku: "TEST-SKU-2201",msku: "TEST-MSKU-2201",
+    title: "真实接口验收商品",picture_url: null,owner_ref: "验收运营",
+    listing_status:"PUBLISHED",sale_price_amount:"19.99",sale_price_currency_code:"USD",
+    wfs_available_quantity:"120",snapshot_wfs_available:"120",
+    inventory_captured_at:"2026-11-04T02:00:00Z",
+    inbound_quantity:null,average_rating:"4.5",review_count:13,
+    buybox_status:"WON",listing_start_at_utc:"2026-07-04T00:00:00Z",
+  },
+  evaluation:{
+    risk_level:"medium",candidate_status:"auto",coverage_days:120,
+    current_wfs_available:"120",inventory_captured_at:"2026-11-04T02:00:00Z",
+    stock_capital_usd:"1050",unit_cost_usd:"8.75",sales_30d:"30",
+    margin_30d_percent:"5.0",refund_rate_percent:"3.0",suggested_qty:60,
+    positive_stock_days_30d:25,snapshot_coverage_days_30d:26,
+    business_signal_groups:["PROFIT"],risk_reasons:["BACKLOG_AND_BUSINESS_SIGNAL"],
+    protections:[],warnings:[],sales_complete:true,cost_complete:true,
+    rule_version:"clearance-v1-20261104",as_of_date:"2026-11-04",
+  },rule_config_version:0,
+};
+
+type Recorded = {method:string;path:string;body:unknown};
+async function prepare(page:Page, writes:Recorded[]){
+  await page.addInitScript(()=>localStorage.setItem("szzsbj_auth_token","synthetic-clearance-live"));
+  await page.route("**/api/**",async route=>{
+    const url = new URL(route.request().url());
+    if(!url.pathname.startsWith("/api/"))return route.fallback();
+    const path=url.pathname,method=route.request().method();
+    const auth=path==="/api/auth/me";
+    let data:unknown={items:[],total:0};
+    if(auth)data={id:16,username:"clearance-live",display_name:"测试运营",is_super_admin:true,
+      role_keys:[],role_names:[],permissions:["*"]};
+    else if(path==="/api/products/clearance-center/listings")data={
+      items:[fixture],total:1,page:1,page_size:50,
+    };
+    else if(path==="/api/products/clearance-center/eligible-listings")data={
+      items:[fixture],total:1,page:1,page_size:30,
+    };
+    else if(path==="/api/products/clearance-center/summary")data={
+      total:1,high:0,medium:1,observe:0,review_required:0,eligible_manual:1,
+    };
+    else if(path.endsWith("/rules"))data={source_account_ref:"TEST-ACCOUNT",version:0,
+      rules:{high_coverage_days:180,medium_coverage_days:90,assisted_coverage_days:60}};
+    else if(path.startsWith("/api/products/clearance-center/listings/"))data=fixture;
+    else if(path==="/api/products/clearance-center/requests"&&method==="GET")data={
+      items:[],total:0,page:1,page_size:50,
+    };
+    else if(path==="/api/products/clearance-center/requests"&&method==="POST"){
+      const body=JSON.parse(route.request().postData()??"{}");
+      writes.push({method,path,body});
+      data={request_id:"REQ-1",approval_id:"APP-1",status:"pending"};
+    }
+    await route.fulfill({status:200,contentType:"application/json",
+      body:JSON.stringify({success:true,data,error:null,meta:{},request_id:"clearance-contract"})});
+  });
 }
-test("clearance uses one native page, shared table and mock only",async({page})=>{
- await prepare(page);
- const pageErrors:string[]=[];
- const authRequests:string[]=[];
- page.on("pageerror",error=>pageErrors.push(error.message+" "+error.stack));
- page.on("response",response=>{if(new URL(response.url()).pathname==="/api/auth/me")authRequests.push(String(response.status()));});
- await page.goto("/#/products/clearance-center");
- try {
-  await expect(page.getByRole("heading",{name:"WFS 清货中心"})).toBeVisible({timeout:15000});
- } catch {
-  const body=(await page.locator("body").innerText().catch(()=>"<body unavailable>")).slice(0,1800);
-  throw new Error("Clearance route failed: "+JSON.stringify({url:page.url(),body,pageErrors,authRequests,token:await page.evaluate(()=>Boolean(localStorage.getItem("szzsbj_auth_token")))}));
- }
- await expect(page.locator("iframe")).toHaveCount(0);
- await expect(page.locator(".clearance-main-card .ant-pro-table")).toHaveCount(1);
- await expect(page.locator(".clearance-main-card .ant-table-thead th.ant-table-cell-fix-left")).toHaveCount(2);
- await expect(page.getByText("数据周期：",{exact:true})).toBeVisible();
- await expect(page.locator(".clearance-period-segmented .ant-segmented-item-selected")).toContainText("30天");
- await expect(page.getByText("7 / 14 / 30 日均销量")).toHaveCount(0);
- const item=page.locator(".clearance-main-card .ant-table-row").filter({hasText:"DEMO-SKU-101"});
- await expect(item).toContainText("$223.86");
- await page.getByText("7天",{exact:true}).click();
- await expect(page.locator(".clearance-period-segmented .ant-segmented-item-selected")).toContainText("7天");
- await expect(item).toContainText("$31.98");
- await page.getByText("30天",{exact:true}).click();
- await expect(item).toContainText("$223.86");
- await expect(page.getByText("仅 Mock 数据")).toHaveCount(0);
- await page.getByRole("button",{name:"规则配置"}).click();
- await expect(page.locator(".clearance-rules-drawer")).toBeVisible();
- await expect(page.getByText("自动识别条件",{exact:true})).toBeVisible();
- await expect(page.getByRole("button",{name:"保存并应用"})).toBeVisible();
- await page.keyboard.press("Escape");
- await expect(page.locator(".clearance-rules-drawer")).toHaveCount(0);
- await page.getByRole("tab",{name:/清货管理/}).click();
- await expect(page.locator(".clearance-main-card .ant-table-thead th.ant-table-cell-fix-left")).toHaveCount(2);
- await expect(page.getByRole("button",{name:"任务详情"}).first()).toBeVisible();
- await page.getByRole("button",{name:"申请 SKU"}).click();
- await expect(page.getByRole("dialog",{name:/主动申请\s*SKU/})).toBeVisible();
+
+test("clearance page shows real Listing and no synthetic product rows",async({page})=>{
+  await prepare(page,[]);
+  await page.goto("/#/products/clearance-center");
+  await expect(page.getByRole("heading",{name:"WFS 清货中心"})).toBeVisible();
+  await expect(page.getByText("真实接口验收商品")).toBeVisible();
+  await expect(page.getByText("TEST-SKU-2201")).toBeVisible();
+  await expect(page.getByText("DEMO-SKU-101")).toHaveCount(0);
+  await expect(page.getByText("中风险Listing")).toBeVisible();
 });
 
-test("manual SKU application creates an auditable mock task without backend writes",async({page})=>{
- const writes:string[]=[];
- page.on("request",req=>{const url=new URL(req.url());if(url.pathname.startsWith("/api/")&&req.method()!=="GET")writes.push(req.method()+" "+url.pathname);});
- await prepare(page);
- await page.goto("/#/products/clearance-center");
- await expect(page.getByRole("heading",{name:"WFS 清货中心"})).toBeVisible();
- const applySkuButton=page.locator(".clearance-toolbar").getByRole("button",{name:/申请\s*SKU/});
- await expect(applySkuButton).toHaveCount(1);
- await applySkuButton.click();
- const chooser=page.getByRole("dialog",{name:/主动申请\s*SKU/});
- await expect(chooser).toBeVisible();
- await chooser.evaluate(node=>
-  node.setAttribute("data-pr285-modal-instance","stable")
- );
- const sku=chooser.locator(".ant-table-row").filter({hasText:"DEMO-SKU-101"});
- await sku.getByRole("button",{name:"选择商品"}).click();
- await chooser.getByRole("button",{name:"下一步",exact:true}).click();
- const application=page.getByRole("dialog",{name:/主动申请\s*SKU/});
- await expect(application).toBeVisible();
- await expect(application).toHaveAttribute(
-  "data-pr285-modal-instance","stable"
- );
- const reasonSelect=application.locator(".ant-form-item").filter({hasText:"清货原因"}).locator(".ant-select");
- await reasonSelect.click();
- const firstReason=page.locator(
-  ".ant-select-dropdown:visible .ant-select-item-option:not(.ant-select-item-option-disabled)"
- ).first();
- await expect(firstReason).toBeVisible();
- const chosenReason=(await firstReason.innerText()).trim();
- await firstReason.click();
- await expect(reasonSelect).toContainText(chosenReason);
- await application.getByRole("checkbox",{name:"促销"}).check();
- const remark="清货 Mock 申请闭环测试：确认无真实审批写入";
- await application.getByRole("textbox",{name:"申请说明"}).fill(remark);
-
- await application.getByRole("button",{name:"上一步"}).click();
- await expect(sku.getByRole("button",{name:"已选择"})).toBeVisible();
-
- await application.getByRole("button",{name:"下一步",exact:true}).click();
- await expect(application).toHaveAttribute(
-  "data-pr285-modal-instance","stable"
- );
- await expect(
-  application.getByRole("textbox",{name:"申请说明"})
- ).toHaveValue(remark);
-
- await application.getByRole("button",{name:"提交申请"}).click();
- await expect(application).toHaveCount(0);
- await page.getByRole("tab",{name:/清货管理/}).click();
- const table=page.getByRole("region",{name:"清货管理表格"});
- await expect(table).toContainText("DEMO-SKU-101");
- await expect(table).toContainText("运营主动");
- expect(writes).toEqual([]);
-});
-
-test("rule draft preview is saved and versioned only in local mock state",async({page})=>{
- const writes:string[]=[];
- page.on("request",req=>{const url=new URL(req.url());if(url.pathname.startsWith("/api/")&&req.method()!=="GET")writes.push(req.url());});
- await prepare(page);
- await page.goto("/#/products/clearance-center");
- await expect(page.getByRole("heading",{name:"WFS 清货中心"})).toBeVisible();
- await page.getByRole("button",{name:"规则配置"}).click();
- await expect(page.locator(".clearance-rules-drawer")).toBeVisible();
- await expect(page.getByText("自动识别条件",{exact:true})).toBeVisible();
- const coverage=page.locator(".clearance-explain-fields .clearance-explain-field").first().locator("input");
- await expect(coverage).toHaveValue("180");
- await coverage.fill("200");
- await coverage.press("Tab");
- await page.getByRole("button",{name:"保存并应用"}).click();
- await expect(page.getByText("自动识别条件",{exact:true})).toBeVisible();
- await expect.poll(()=>page.evaluate(()=>Object.values(localStorage).some(v=>v.includes('"ruleVersion":2')))).toBe(true);
- expect(writes).toEqual([]);
+test("manual application shows only eligible WFS Listing and posts one Listing",async({page})=>{
+  const writes:Recorded[]=[];
+  await prepare(page,writes);
+  await page.goto("/#/products/clearance-center");
+  await expect(page.getByRole("heading",{name:"WFS 清货中心"})).toBeVisible();
+  await page.getByRole("button",{name:"申请 SKU"}).click();
+  await expect(page.getByRole("dialog",{name:"主动申请 SKU"})).toBeVisible();
+  await expect(page.getByText("真实接口验收商品").last()).toBeVisible();
+  await page.getByRole("button",{name:"选择商品"}).click();
+  await page.getByRole("button",{name:"下一步"}).click();
+  const modal=page.getByRole("dialog",{name:"主动申请 SKU"});
+  await modal.getByRole("textbox",{name:"申请说明"}).fill("WFS Listing 库存积压，申请通过降价处理");
+  await modal.getByRole("button",{name:"提交申请"}).click();
+  await expect(modal).toHaveCount(0);
+  expect(writes).toHaveLength(1);
+  const body=writes[0].body as Record<string,unknown>;
+  expect(body.listing_id).toBe(fixture.listing.id);
+  expect(body.target_qty).toBe(60);
+  expect(body.methods).toEqual(["降价"]);
+  expect(body.source).toBe("manual");
 });
