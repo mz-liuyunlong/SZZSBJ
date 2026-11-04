@@ -461,6 +461,10 @@ class ClearanceReadRepository:
             sum(sales_qty) filter(where business_date_la between :day - 29 and :day) sales30,
             sum(gross_sales_qty) filter(where business_date_la between :day - 29 and :day)
               gross_sales30,
+            sum(gross_sales_qty) filter(where business_date_la between :day - 6 and :day)
+              gross_sales7,
+            sum(gross_sales_qty) filter(where business_date_la between :day - 13 and :day - 7)
+              gross_sales_prev7,
             sum(sales_qty) filter(where business_date_la between :day - 6 and :day) sales7,
             sum(sales_qty) filter(where business_date_la between :day - 13 and :day - 7) prev7,
             sum(sales_amount) filter(where business_date_la between :day - 29 and :day) revenue30,
@@ -629,6 +633,20 @@ class ClearanceReadRepository:
             # conservative: incomplete source dates or unresolved allocations
             # invalidate the affected sales window, never manufacture zero.
             gross30 = number(s.get("gross_sales30"))
+            gross7 = number(s.get("gross_sales7"))
+            gross_prev7 = number(s.get("gross_sales_prev7"))
+            source_last7 = number(source.get("last7_source_qty"))
+            source_prev7 = number(source.get("prev7_source_qty"))
+            matching_7 = (
+                (source_last7 is None and gross7 is None)
+                or (source_last7 is not None and gross7 is not None
+                    and source_last7 == gross7)
+            )
+            matching_prev7 = (
+                (source_prev7 is None and gross_prev7 is None)
+                or (source_prev7 is not None and gross_prev7 is not None
+                    and source_prev7 == gross_prev7)
+            )
             mart_matches_source = bool(
                 (source_qty is None and gross30 is None)
                 or (source_qty is not None and gross30 is not None
@@ -642,13 +660,15 @@ class ClearanceReadRepository:
                 and mart_matches_source
             )
             verified_7 = bool(
-                history.get("last7_days", 0) >= 7
+                matching_7
+                and history.get("last7_days", 0) >= 7
                 and not history.get("last7_unresolved")
                 and not source.get("unresolved_rows")
                 and not source.get("missing_qty_rows")
             )
             verified_prev7 = bool(
-                history.get("prev7_days", 0) >= 7
+                matching_prev7
+                and history.get("prev7_days", 0) >= 7
                 and not history.get("prev7_unresolved")
                 and not source.get("unresolved_rows")
                 and not source.get("missing_qty_rows")
@@ -723,6 +743,9 @@ class ClearanceReadRepository:
                 "source_sales_coverage_days_7d": int(history.get("last7_days") or 0),
                 "source_sales_coverage_days_prev7": int(history.get("prev7_days") or 0),
                 "source_mart_qty_match": mart_matches_source,
+                "source_mart_7d_qty_match": matching_7,
+                "source_mart_prev7_qty_match": matching_prev7,
+                "refund_source_complete": False,
                 "cost_complete": complete_costs,
                 "listing_days": listing_days,
                 "unit_cost_usd": unit_cost_usd,
@@ -766,6 +789,7 @@ class ClearanceReadRepository:
         value["source_sales_coverage_days_7d"] = metrics["source_sales_coverage_days_7d"]
         value["source_sales_coverage_days_prev7"] = metrics["source_sales_coverage_days_prev7"]
         value["source_mart_qty_match"] = metrics["source_mart_qty_match"]
+        value["refund_source_complete"] = False
         value["cost_complete"] = metrics["cost_complete"]
         value["calc_versions"] = metrics.get("calc_versions")
         value["as_of_date"] = metrics["as_of_date"]
