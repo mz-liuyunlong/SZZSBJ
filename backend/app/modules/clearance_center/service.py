@@ -69,9 +69,23 @@ class ClearanceService:
         listing = self.repo.listing(listing_id, accounts)
         if not listing:
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
+        run = self.repo.latest_completed_run()
+        if run is not None:
+            persisted = self.repo.snapshot_listing(listing, run=run)
+            if persisted is not None:
+                persisted["listing"] = self._serialize(listing)
+                return persisted
+        # No midnight score exists yet, or this Listing entered the system
+        # after the run. Calculate evidence for context, not auto-selection.
         rules, version = self.repo.rules(listing["source_account_ref"])
-        metrics = self.repo.evidence([listing])[self._key(listing)]
+        from datetime import timedelta
+        from zoneinfo import ZoneInfo
+
+        previous_day = datetime.now(ZoneInfo("America/Los_Angeles")).date() - timedelta(days=1)
+        metrics = self.repo.evidence([listing], as_of=previous_day)[self._key(listing)]
         evaluation = self.repo.evaluated(listing, metrics, rules)
+        evaluation["candidate_status"] = "review_required"
+        evaluation["warnings"] = [*evaluation.get("warnings", []), "DAILY_EVALUATION_PENDING"]
         return {
             "listing": self._serialize(listing),
             "evaluation": evaluation,
