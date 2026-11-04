@@ -27,6 +27,18 @@ def mask_clearance_financials(
         ]
         return result
 
+    if "current" in result and isinstance(result["current"], dict):
+        result["current"] = mask_clearance_financials(
+            result["current"],
+            can_view_profit=can_view_profit,
+            can_view_margin=can_view_margin,
+        )
+    if "current_case" in result and isinstance(result["current_case"], dict):
+        result["current_case"] = mask_clearance_financials(
+            result["current_case"],
+            can_view_profit=can_view_profit,
+            can_view_margin=can_view_margin,
+        )
     evaluation = result.get("evaluation")
     if not isinstance(evaluation, dict):
         return result
