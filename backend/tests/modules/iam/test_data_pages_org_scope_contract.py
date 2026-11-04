@@ -124,7 +124,9 @@ def test_org_owner_scope_disallows_profit_aggregation() -> None:
 )
 def test_scoped_unreviewed_routes_fail_closed(method: str, path: str) -> None:
     request = Request({"type": "http", "method": method, "path": path, "headers": []})
-    principal = Principal(user_id="5", permissions=frozenset({"products:read", "sales:daily-sales:read"}))
+    principal = Principal(
+        user_id="5", permissions=frozenset({"products:read", "sales:daily-sales:read"})
+    )
     session = _session()
     with patch(
         "app.modules.data_pages.router.resolve_business_owner_refs",
@@ -158,9 +160,7 @@ def test_read_permission_cannot_bypass_canonical_export_action() -> None:
             "headers": [],
         }
     )
-    principal = Principal(
-        user_id="5", permissions=frozenset({"sales:daily-sales:read"})
-    )
+    principal = Principal(user_id="5", permissions=frozenset({"sales:daily-sales:read"}))
     session = _session()
     with patch("app.modules.data_pages.router.resolve_business_owner_refs") as resolver:
         with pytest.raises(ApiError) as error:

@@ -113,8 +113,7 @@ def require_product_management_org_scope(
         request.url.path in _ORG_REVIEWED_PRODUCT_READS or detail_path is not None
     )
     reviewed_export = (
-        request.method == "POST"
-        and request.url.path == "/api/product-management/skus/export"
+        request.method == "POST" and request.url.path == "/api/product-management/skus/export"
     )
     if not safe_read and not reviewed_export:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
