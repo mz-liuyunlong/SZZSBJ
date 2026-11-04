@@ -113,17 +113,28 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
         ),
     )
-    for key, label in (
-        ("action:products:clearance:apply", "清货申请"),
-        ("action:products:clearance:review", "清货审批"),
-        ("action:products:clearance:configure", "清货规则配置"),
-        ("action:products:clearance:progress", "清货执行进度"),
+    # RBAC v2 action permissions require page/action shape metadata.
+    for key, label, action_key, page_key in (
+        ("action:products:clearance:apply", "清货申请", "apply", "products_clearance_center"),
+        ("action:products:clearance:review", "清货审批", "review", "data_center_approval_workspace"),
+        ("action:products:clearance:configure", "清货规则配置", "configure", "products_clearance_center"),
+        ("action:products:clearance:progress", "清货执行进度", "progress", "products_clearance_center"),
     ):
         op.execute(
-            sa.text("""insert into app_permissions(permission_key,name,group_key,description)
-          values (:key,:label,'产品','清货中心 V1') on conflict(permission_key) do nothing""").bindparams(
-                key=key, label=label
-            )
+            sa.text(
+                """insert into app_permissions
+                  (permission_key,name,group_key,description,permission_type,
+                   module_key,page_key,action_key,risk_level,sort_order,is_active)
+                   values (:key,:label,'products','清货中心 V1','action',
+                           'products',:page,:action,'high',0,true)
+                   on conflict(permission_key) do update set
+                     name=excluded.name,group_key=excluded.group_key,
+                     description=excluded.description,permission_type='action',
+                     module_key=excluded.module_key,page_key=excluded.page_key,
+                     action_key=excluded.action_key,risk_level='high',
+                     is_active=true,updated_at=now()"""
+            ),
+            {"key": key, "label": label, "page": page_key, "action": action_key},
         )
     op.execute(
         sa.text("""insert into app_role_permissions(role_id,permission_key,created_at)
