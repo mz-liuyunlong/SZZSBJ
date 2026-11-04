@@ -21,6 +21,7 @@ def _request(path: str, method: str = "GET") -> Request:
 def _session(rows: list[dict[str, object]]) -> MagicMock:
     session = MagicMock(spec=Session)
     session.execute.return_value.mappings.return_value = rows
+    session.scalar.return_value = False
     return session
 
 
@@ -124,3 +125,77 @@ def test_preview_and_super_admin_do_not_query_scope_grants() -> None:
         session,
     )
     session.execute.assert_not_called()
+
+
+def test_department_scoped_user_cannot_enter_unreviewed_business_area() -> None:
+    session = _session([
+        {"origin": "role", "scope_type": "org_department", "scope_value": "dept-1"},
+    ])
+    with pytest.raises(ApiError) as denied:
+        require_business_scope_coverage(_request("/api/operations/plans"), _principal(), session)
+    assert denied.value.status_code == 403
+    assert denied.value.details == {"scope_reason": "ORGANIZATION_SCOPE_NOT_ENFORCED"}
+
+
+def test_department_scoped_user_can_use_reviewed_refund_and_wfs_paths() -> None:
+    session = _session([
+        {"origin": "role", "scope_type": "org_department", "scope_value": "dept-1"},
+    ])
+    require_business_scope_coverage(
+        _request("/api/after-sales/refunds/items"), _principal(), session
+    )
+    require_business_scope_coverage(
+        _request("/api/warehouse/wfs-fee-cases"), _principal(), session
+    )
+    require_business_scope_coverage(
+        _request("/api/approvals"), _principal(), session
+    )
+
+
+def test_department_scope_denies_unreviewed_wfs_legacy_compare_and_approval_bulk() -> None:
+    session = _session([
+        {"origin": "role", "scope_type": "org_department", "scope_value": "dept-1"},
+    ])
+    for method, path in [
+        ("GET", "/api/warehouse/wfs-fee-cases/legacy-compare"),
+        ("POST", "/api/warehouse/wfs-fee-cases/sync-legacy-execute"),
+        ("POST", "/api/approvals/workflow/bulk-approve"),
+        ("POST", "/api/approvals/legacy/00000000-0000-0000-0000-000000000001/reattest"),
+    ]:
+        with pytest.raises(ApiError) as denied:
+            require_business_scope_coverage(_request(path, method), _principal(), session)
+        assert denied.value.details == {"scope_reason": "ORGANIZATION_SCOPE_NOT_ENFORCED"}
+
+
+def test_own_linked_owner_identity_enforces_org_boundary_even_without_department_grant() -> None:
+    session = _session([])
+    session.scalar.return_value = True
+    with pytest.raises(ApiError) as denied:
+        require_business_scope_coverage(_request("/api/operations/plans"), _principal(), session)
+    assert denied.value.details == {"scope_reason": "ORGANIZATION_SCOPE_NOT_ENFORCED"}
+    session.scalar.assert_called_once()
+
+
+def test_global_org_grant_does_not_weaken_a_separate_store_scope() -> None:
+    session = _session([
+        {"origin": "role", "scope_type": "org_department", "scope_value": "*"},
+        {"origin": "role", "scope_type": "store", "scope_value": "SHOP1|STORE1"},
+    ])
+    with pytest.raises(ApiError) as denied:
+        require_business_scope_coverage(_request("/api/sales/order-profit"), _principal(), session)
+    assert denied.value.details == {"scope_reason": "STORE_SCOPE_NOT_ENFORCED"}
+
+
+def test_department_scoped_wfs_case_write_contract_allows_only_reviewed_actions() -> None:
+    session = _session([
+        {"origin": "role", "scope_type": "org_department", "scope_value": "dept-1"},
+    ])
+    require_business_scope_coverage(
+        _request("/api/warehouse/wfs-fee-cases/00000000-0000-0000-0000-000000000001/follow", "POST"),
+        _principal(), session,
+    )
+    with pytest.raises(ApiError):
+        require_business_scope_coverage(
+            _request("/api/warehouse/wfs-fee-alerts/detection-preview", "POST"),
+            _principal(), session,
+        )
