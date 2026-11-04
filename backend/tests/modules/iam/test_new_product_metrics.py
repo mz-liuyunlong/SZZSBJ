@@ -27,7 +27,7 @@ class _Session:
         attributed_currency: str | None = "USD",
         missing_financial_currencies: int = 0,
         missing_ad_currencies: int = 0,
-        ad_days: int = 30,
+        ad_days: int | None = None,
     ) -> None:
         self.queries: list[str] = []
         self.attributed_currency = attributed_currency
@@ -67,7 +67,11 @@ class _Session:
                     "spend_currency": "USD",
                     "attributed_currency": self.attributed_currency,
                     "missing_ad_currency_rows": self.missing_ad_currencies,
-                    "ad_days": self.ad_days,
+                    "ad_days": (
+                        self.ad_days
+                        if self.ad_days is not None
+                        else (params["end"] - params["start"]).days
+                    ),
                 }
             )
         if "FROM mart_listing_management_current" in sql:
