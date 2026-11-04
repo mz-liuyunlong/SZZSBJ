@@ -86,8 +86,9 @@ const formatOneDecimal = (value: number | null | undefined) => (
 );
 
 const formatCycleSubtitle = (summary?: PurchaseBoardSummary) => {
-  const samples = summary?.purchaseCycleSampleOrders90d ?? 0;
-  if (!summary || summary.medianPurchaseCycleDays90d === null) return `中位数 — · ${samples} 单`;
+  const samples = summary?.purchaseCycleSampleOrders90d;
+  if (!summary || summary.scopeLimited) return "当前权限不展示跨负责人交期样本";
+  if (summary.medianPurchaseCycleDays90d === null) return `中位数 — · ${samples ?? "—"} 单`;
   return `中位数 ${summary.medianPurchaseCycleDays90d.toFixed(1)} 天 · ${samples} 单`;
 };
 
@@ -98,7 +99,9 @@ function AverageMark() {
 function buildPurchaseBoardCards(
   summary?: PurchaseBoardSummary,
 ): ManagementStatCardItem<PurchaseBoardCardKey>[] {
-  const value = (pick: (data: PurchaseBoardSummary) => number) => (summary ? pick(summary) : "—");
+  const value = (pick: (data: PurchaseBoardSummary) => number | null) => (
+    summary ? pick(summary) ?? "—" : "—"
+  );
   return [
     {
       key: "awaiting_arrival",
@@ -147,7 +150,7 @@ function buildPurchaseBoardCards(
     {
       key: "unstable_sku",
       title: "交期不稳定 SKU",
-      subtitle: "近 5 样本极差超阈值",
+      subtitle: summary?.scopeLimited ? "当前权限不展示跨负责人统计" : "近 5 样本极差超阈值",
       value: value((data) => data.unstableSkuCount),
       tone: "warning",
       icon: <WaveIcon />,
@@ -176,7 +179,10 @@ function PurchaseBoardSummaryCards({
       className="purchase-board__summary"
       cards={buildPurchaseBoardCards(summary)}
       activeKey={activeKey ?? ("" as PurchaseBoardCardKey)}
-      onCardClick={onCardClick}
+      onCardClick={(key) => {
+        if (summary?.scopeLimited && (key === "average_cycle" || key === "unstable_sku")) return;
+        onCardClick(key);
+      }}
     />
   );
 }
