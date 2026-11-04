@@ -22,6 +22,7 @@ def upgrade() -> None:
         sa.Column("event_id", sa.String(128), primary_key=True),
         sa.Column("event_type", sa.String(128), nullable=False),
         sa.Column("open_id", sa.String(128), nullable=True),
+        sa.Column("revoke_session", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("status", sa.String(20), nullable=False, server_default="pending"),
         sa.Column("attempt_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("next_attempt_at", sa.DateTime(timezone=True), nullable=False),
