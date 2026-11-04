@@ -105,6 +105,51 @@ def test_only_ambiguous_owner_uid_denies_access_without_global_fallback() -> Non
     assert error.value.status_code == 403
 
 
+def test_binding_rejects_ambiguous_business_owner_before_any_write() -> None:
+    from unittest.mock import MagicMock, patch
+
+    from starlette.requests import Request
+
+    from app.modules.iam.organization_owner_router import (
+        OwnerBindingWrite,
+        set_owner_binding,
+    )
+
+    session = MagicMock()
+    request = Request(
+        {
+            "type": "http",
+            "method": "PUT",
+            "path": "/api/settings/organization/owner-bindings/uid-reused",
+            "headers": [],
+        }
+    )
+    principal = Principal(user_id="1", permissions=frozenset({"*"}))
+    with (
+        patch(
+            "app.modules.iam.organization_owner_router._business_owner_exists",
+            return_value=True,
+        ),
+        patch(
+            "app.modules.iam.organization_owner_router.verified_single_account_owner_refs",
+            return_value=frozenset(),
+        ),
+    ):
+        with pytest.raises(ApiError) as error:
+            set_owner_binding(
+                request,
+                "uid-reused",
+                OwnerBindingWrite(feishu_open_id="ou-valid"),
+                principal,
+                session,
+            )
+    assert error.value.status_code == 409
+    assert error.value.code == "OWNER_IDENTITY_AMBIGUOUS"
+    session.execute.assert_not_called()
+    session.commit.assert_not_called()
+
+
+
 def test_organization_scope_rejects_unknown_principal() -> None:
     with pytest.raises(ApiError) as error:
         authorized_department_ids(
