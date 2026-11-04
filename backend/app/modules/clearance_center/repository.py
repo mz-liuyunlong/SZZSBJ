@@ -404,22 +404,34 @@ class ClearanceReadRepository:
         return {"rows": page_rows, "total": count, "page": page, "page_size": page_size}
 
     def daily_summary(self, accounts: frozenset[str], *, run: dict, store_id: str = "") -> dict:
-        where = ["run_id=cast(:run as uuid)", "source_account_ref=any(:accounts)"]
+        where = ["e.run_id=cast(:run as uuid)", "e.source_account_ref=any(:accounts)"]
         params: dict = {"run": run["id"], "accounts": list(accounts)}
         if store_id:
-            where.append("store_id=:store")
+            where.append("e.store_id=:store")
             params["store"] = store_id
+        base = """
+            from ops_clearance_daily_evaluations e
+            join mart_listing_management_current l
+              on l.id=e.listing_id and l.source_account_ref=e.source_account_ref
+             and l.store_id=e.store_id and l.item_id=e.item_id
+            left join lateral (
+              select i.wfs_available_quantity,i.captured_at
+                from fact_walmart_listing_inventory_daily i
+               where i.source_account_ref=l.source_account_ref
+                 and i.store_id=l.store_id and i.item_id=l.item_id
+               order by i.snapshot_date_la desc,i.captured_at desc limit 1
+            ) snap on true
+            where """ + " and ".join(where) + " and " + ACTIVE_WFS_LISTING_SQL
         row = self.session.execute(
             text("""select count(*) total,
-                     count(*) filter(where risk_level='high' and candidate_status='auto') high,
-                     count(*) filter(where risk_level='medium' and candidate_status='auto') medium,
-                     count(*) filter(where candidate_status='observe') observe,
-                     count(*) filter(where candidate_status='review_required') review_required
-                    from ops_clearance_daily_evaluations where """ + " and ".join(where)),
+                    count(*) filter(where e.risk_level='high' and e.candidate_status='auto') high,
+                    count(*) filter(where e.risk_level='medium' and e.candidate_status='auto') medium,
+                    count(*) filter(where e.candidate_status='observe') observe,
+                    count(*) filter(where e.candidate_status='review_required') review_required
+            """ + base),
             params,
         ).mappings().one()
         result = {key: int(value) for key, value in row.items()}
-        # Fresh manual eligibility is intentionally independent of yesterday's score.
         eligible = self.manual_eligible_page(
             accounts, store_id=store_id, page=1, page_size=1
         )
@@ -437,10 +449,22 @@ class ClearanceReadRepository:
         store_filter = " and store_id=:store" if store_id else ""
         if store_id:
             params["store"] = store_id
+        eligible_filter = """
+            from mart_listing_management_current l
+            left join lateral (
+              select i.wfs_available_quantity,i.captured_at
+                from fact_walmart_listing_inventory_daily i
+               where i.source_account_ref=l.source_account_ref
+                 and i.store_id=l.store_id and i.item_id=l.item_id
+               order by i.snapshot_date_la desc,i.captured_at desc limit 1
+            ) snap on true
+            where l.source_account_ref=any(:accounts)
+        """
+        if store_id:
+            eligible_filter += " and l.store_id=:store"
+        eligible_filter += " and " + ACTIVE_WFS_LISTING_SQL
         available = int(self.session.execute(
-            text("""select count(*) from mart_listing_management_current
-                     where source_account_ref=any(:accounts)""" + store_filter),
-            params,
+            text("select count(*) " + eligible_filter), params
         ).scalar_one())
         run = self.latest_completed_run()
         run_health = self.today_run_health()
@@ -485,9 +509,22 @@ class ClearanceReadRepository:
                       count(*) filter(where
                          evaluation_json->>'calc_versions' is null)
                            missing_calc_version
-                   from ops_clearance_daily_evaluations
-                   where run_id=cast(:run as uuid)
-                     and source_account_ref=any(:accounts)""" + store_filter),
+                   from ops_clearance_daily_evaluations e
+                   join mart_listing_management_current l
+                     on l.id=e.listing_id
+                    and l.source_account_ref=e.source_account_ref
+                    and l.store_id=e.store_id and l.item_id=e.item_id
+                   left join lateral (
+                     select i.wfs_available_quantity,i.captured_at
+                       from fact_walmart_listing_inventory_daily i
+                      where i.source_account_ref=l.source_account_ref
+                        and i.store_id=l.store_id and i.item_id=l.item_id
+                      order by i.snapshot_date_la desc,i.captured_at desc limit 1
+                   ) snap on true
+                   where e.run_id=cast(:run as uuid)
+                     and e.source_account_ref=any(:accounts)"""
+                 + (" and e.store_id=:store" if store_id else "")
+                 + " and " + ACTIVE_WFS_LISTING_SQL),
             params,
         ).mappings().one()
         report = {key: int(value) for key, value in rows.items()}
