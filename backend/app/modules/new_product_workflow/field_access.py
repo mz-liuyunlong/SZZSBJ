@@ -45,6 +45,7 @@ def redact_new_product_metrics(metrics: dict[str, Any], principal: Principal) ->
     score.pop("components", None)
     # The pass/fail result also depends on the protected margin.
     launch = {**metrics["launch"], "status": "restricted", "result": None}
+    launch.pop("provisional_result", None)
     return {
         **metrics,
         "periods": periods,

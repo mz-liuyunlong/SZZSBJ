@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createNewProductAccountGuard } from "./newProductAccountGuard";
 import { Alert, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Typography, message } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import dayjs from "dayjs";
@@ -31,6 +32,8 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
   const [data, setData] = useState<NewProductWorkflowList | null>(null);
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const requestGuard = useRef(createNewProductAccountGuard());
   const [metricData, setMetricData] = useState<NewProductMetrics | null>(null);
   const [record, setRecord] = useState<NewProductWorkflowRecord | null>(null);
   const [action, setAction] = useState<Action>("market");
@@ -43,35 +46,60 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
       .then(items => {
         if (cancelled) return;
         setAccounts(items);
-        if (items.length === 1) setAccount(items[0]);
+        if (items.length === 1) {
+          requestGuard.current.selectAccount(items[0]);
+          setAccount(items[0]);
+        }
       })
       .catch(error => {
         if (!cancelled) setAccountsError(error instanceof Error ? error.message : "账户列表读取失败");
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      requestGuard.current.invalidate();
+    };
   }, []);
 
   async function load(next = page) {
+    const ticket = requestGuard.current.begin(account.trim());
     setBusy(true);
     try {
-      const result = await getNewProductWorkflows(account.trim(), next);
+      const result = await getNewProductWorkflows(ticket.account, next);
+      if (!requestGuard.current.isCurrent(ticket)) return;
+      if (result.items.some(row => row.source_account_ref !== ticket.account)) {
+        throw new Error("后端返回跨账户记录，已拒绝展示");
+      }
       setData(result);
       setPage(next);
     } catch (error) {
-      api.error(error instanceof Error ? error.message : "读取真实数据失败");
+      if (requestGuard.current.isCurrent(ticket)) {
+        api.error(error instanceof Error ? error.message : "读取真实数据失败");
+      }
     } finally {
-      setBusy(false);
+      if (requestGuard.current.isCurrent(ticket)) setBusy(false);
     }
   }
 
   async function inspectMetrics(row: NewProductWorkflowRecord) {
+    if (row.source_account_ref !== account.trim()) {
+      api.error("当前数据账户不一致，已拒绝读取");
+      return;
+    }
+    const ticket = requestGuard.current.begin(row.source_account_ref);
     setBusy(true);
     try {
-      setMetricData(await getNewProductMetrics(row.sku_identity_id));
+      const result = await getNewProductMetrics(row.sku_identity_id);
+      if (!requestGuard.current.isCurrent(ticket)) return;
+      if (result.account !== ticket.account) {
+        throw new Error("经营指标账户与当前选择不一致，已拒绝展示");
+      }
+      setMetricData(result);
     } catch (error) {
-      api.error(error instanceof Error ? error.message : "经营数据读取失败");
+      if (requestGuard.current.isCurrent(ticket)) {
+        api.error(error instanceof Error ? error.message : "经营数据读取失败");
+      }
     } finally {
-      setBusy(false);
+      if (requestGuard.current.isCurrent(ticket)) setBusy(false);
     }
   }
 
@@ -90,6 +118,7 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
     const version = record.row_version ?? 0;
     const id = record.sku_identity_id;
     setBusy(true);
+    setSubmitting(true);
     try {
       if (action === "market") {
         if (!canScore || draft.score == null) throw new Error("没有评分权限或评分为空");
@@ -116,6 +145,7 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
       api.error(error instanceof Error ? error.message : "提交失败");
     } finally {
       setBusy(false);
+      setSubmitting(false);
     }
   }
 
@@ -152,9 +182,18 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
     <Typography.Paragraph type="secondary">此入口读取数据库中的 SKU 身份及新品业务记录。没有选定账户时不会查询；采购审批只生成草稿决定，不会创建 PMC 采购单。</Typography.Paragraph>
     {accountsError && <Alert type="error" showIcon message={accountsError} />}
     <Space wrap style={{ marginBottom: 16 }}>
-      <Select style={{ width: 250 }} placeholder="选择有权限的数据账户" value={account || undefined}
+      <Select style={{ width: 250 }} placeholder="选择有权限的数据账户"
+        disabled={submitting} value={account || undefined}
         showSearch optionFilterProp="label" options={accounts.map(value => ({ label: value, value }))}
-        onChange={value => { setAccount(value); setData(null); setPage(1); }} />
+        onChange={value => {
+          requestGuard.current.selectAccount(value);
+          setAccount(value);
+          setData(null);
+          setMetricData(null);
+          setRecord(null);
+          setPage(1);
+          setBusy(false);
+        }} />
       <Button type="primary" loading={busy} disabled={!account.trim()} onClick={() => void load(1)}>加载真实数据</Button>
     </Space>
     <ReportTableShell label="真实新品工作流列表">

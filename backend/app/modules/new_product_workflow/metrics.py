@@ -255,14 +255,20 @@ def read_sku_metrics(
             # The first complete launch window is immutable; never substitute
             # the latest rolling window for a historical launch result.
             launch_window = read_window(start_date, launch_end, launch_days)
-    result["launch"] = (
-        compute_launch_result(
+    if rule_version > 0:
+        candidate = compute_launch_result(
             metrics=launch_window,
             rules=rules,
             start_date=start_date,
             as_of=end,
         )
-        if rule_version > 0
-        else {"status": "awaiting_approved_rules", "result": None}
-    )
+        # A saved draft rule version does not establish business approval.
+        # Never publish a definitive success/failure from candidate thresholds.
+        result["launch"] = (
+            {"status": "awaiting_approved_rules", "result": None}
+            if candidate["status"] == "evaluated"
+            else candidate
+        )
+    else:
+        result["launch"] = {"status": "awaiting_approved_rules", "result": None}
     return result

@@ -22,3 +22,9 @@
 服务端按既有 `field:sales:order-profit:gross-profit` 和 `field:sales:order-profit:profit-margin` 控制 `profit`、`margin` 及可推导的评分/打品结论；前端隐藏不是权限校验。
 
 **显式未实现：** 正式独立采购计划及幂等创建、完整评分修正审核、四页正式数据统一、广告上游币种补录与真实多店数据对账。Mock 仅作样式验收。
+
+## 草稿规则并非最终判定授权
+- `product_new_rule_versions` 中存在一个版本号只说明已保存配置，不代表五维评分/打品成功标准已完成业务批准。
+- 满足历史观察窗口时，正式 API 必须返回 `launch.status=awaiting_approved_rules`、`launch.result=null`，不能仅因通过草稿阈值返回正式成功/失败。
+- 所有动作的 `reason`、`note`、`evidence` 必须至少有 5 个非空白字符。
+- 同账户请求以最后一次为准；切换账户必须丢弃旧查询结果；跨账户 API 响应应按异常处理而不是混合显示。

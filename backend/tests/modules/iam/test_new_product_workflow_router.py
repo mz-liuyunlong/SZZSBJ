@@ -12,6 +12,8 @@ from app.modules.new_product_workflow.router import (
     APPROVE,
     LaunchDateWrite,
     MarketWrite,
+    PurchaseWrite,
+    DecisionWrite,
     ReviewWrite,
     RuleWrite,
     _identity,
@@ -25,6 +27,44 @@ def test_business_payloads_reject_invalid_scores_and_unplanned_optimization() ->
         MarketWrite(expected_version=0, score=11, reason="市场竞争严重失衡")
     with pytest.raises(ValidationError):
         ReviewWrite(expected_version=1, result="optimize", reason="需要调整广告词")
+
+
+@pytest.mark.parametrize(
+    "payload, values",
+    [
+        (MarketWrite, {"expected_version": 0, "score": 6, "reason": "      "}),
+        (PurchaseWrite, {"expected_version": 1, "quantity": 10, "reason": "      "}),
+        (DecisionWrite, {"expected_version": 1, "decision": "rejected", "note": "      "}),
+        (
+            ReviewWrite,
+            {"expected_version": 1, "result": "observe", "reason": "      "},
+        ),
+        (
+            LaunchDateWrite,
+            {
+                "expected_version": 1,
+                "arrival_date": "2026-08-10",
+                "sellable_date": "2026-08-12",
+                "evidence": "      ",
+            },
+        ),
+        (
+            RuleWrite,
+            {
+                "expected_version": 0,
+                "reason": "      ",
+                "weights": {"market": 15, "order": 30, "ads": 20, "profit": 25, "trust": 10},
+                "success_days": 60,
+                "min_sales": 200,
+                "min_margin": 0,
+                "max_acos": 35,
+            },
+        ),
+    ],
+)
+def test_audit_evidence_cannot_contain_only_whitespace(payload, values) -> None:
+    with pytest.raises(ValidationError):
+        payload(**values)
 
 
 def test_future_dates_cannot_be_falsely_confirmed_as_actual() -> None:

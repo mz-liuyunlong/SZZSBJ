@@ -42,6 +42,15 @@ view_principal = Annotated[Principal, Depends(require_any_permission(VIEW, TRACK
 class StrictPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    @model_validator(mode="after")
+    def reject_blank_evidence(self) -> StrictPayload:
+        # Field min_length counts whitespace; audit evidence must be substantive.
+        for field in ("reason", "note", "evidence"):
+            value = getattr(self, field, None)
+            if isinstance(value, str) and len(value.strip()) < 5:
+                raise ValueError(f"{field} requires at least five non-whitespace characters")
+        return self
+
 
 class VersionedPayload(StrictPayload):
     expected_version: int = Field(ge=0)

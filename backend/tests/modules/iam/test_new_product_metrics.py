@@ -105,8 +105,23 @@ def test_launch_uses_verified_first_window_not_latest_rolling_period() -> None:
         start_date=date(2026, 8, 1),
     )
     assert data["verified_start_date"] == "2026-08-01"
-    assert data["launch"] == {"status": "evaluated", "result": "success"}
+    assert data["launch"] == {"status": "awaiting_approved_rules", "result": None}
     assert len(session.queries) == 9  # 3 rolling windows, 1 launch window and inventory
+
+
+def test_candidate_failure_does_not_become_a_formal_launch_failure() -> None:
+    session = _Session()
+    data = read_sku_metrics(
+        session,
+        account="test-account",
+        sku="TEST-SKU",
+        market_score=8,
+        rule_version=1,
+        rules={**DEFAULT_RULES, "min_sales": 1000},
+        as_of=date(2026, 11, 1),
+        start_date=date(2026, 8, 1),
+    )
+    assert data["launch"] == {"status": "awaiting_approved_rules", "result": None}
 
 
 def test_unknown_attribution_currency_never_produces_an_acos_score() -> None:

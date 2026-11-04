@@ -36,6 +36,16 @@ const columns: ProColumns<PeriodRow>[] = [
   { title: "完整成本天数", dataIndex: "complete_cost_days", width: 115 },
   { title: "缺失日数", dataIndex: "missing_days", width: 90,
     render: (_, row) => row.missing_days ?? "—" },
+  { title: "数据问题", dataIndex: "data_issues", width: 240,
+    render: (_, row) => (row.data_issues ?? []).map(code => ({
+      missing_business_day_coverage: "业务日覆盖不足",
+      incomplete_cost_coverage: "成本数据不完整",
+      financial_currency_unverified: "财务币种未核实",
+      margin_unavailable: "利润率不可计算",
+      ad_spend_unavailable: "广告费缺失",
+      ad_clicks_unavailable: "广告点击缺失",
+      attributed_acos_unavailable: "归因 ACOS 不可计算",
+    } as Record<string, string>)[code] ?? code).join("、") || "—" },
   { title: "数据状态", key: "complete", width: 95,
     render: (_, row) => <Tag color={row.complete ? "success" : "warning"}>
       {row.complete ? "完整" : "数据不足"}
@@ -54,7 +64,9 @@ export default function NewProductMetricsPanel({ metrics }: { metrics: NewProduc
       { key: "date", label: "数据截止（不含）", children: metrics.as_of_exclusive },
       { key: "version", label: "规则版本", children: `V${metrics.rule_version}` },
       { key: "visibility", label: "财务字段权限",
-        children: metrics.financial_visibility === "restricted" ? "受限（服务端脱敏）" : "已授权" },
+        children: metrics.financial_visibility === "restricted"
+          ? "受限（服务端脱敏）"
+          : metrics.financial_visibility === "authorized" ? "已授权" : "权限状态未确认" },
       { key: "start", label: "已确认观察起点", children: metrics.verified_start_date ?? "待确认" },
       { key: "available", label: "可售库存", children: format(metrics.inventory.available) },
       { key: "wfs", label: "WFS 可售", children: format(metrics.inventory.wfs_available) },
@@ -65,9 +77,11 @@ export default function NewProductMetricsPanel({ metrics }: { metrics: NewProduc
             ? "公式待批准（仅预览分，不生成正式评级）"
             : "数据不足，暂不出正式评分") },
       { key: "launch", label: "打品结论",
-        children: metrics.launch.status === "evaluated"
-          ? (metrics.launch.result === "success" ? "达标" : "未达标")
-          : "观察未完成或数据不足" },
+        children: metrics.launch.status === "awaiting_approved_rules"
+          ? "正式规则待批准（不判定成功或失败）"
+          : metrics.launch.status === "evaluated"
+            ? (metrics.launch.result === "success" ? "达标" : "未达标")
+            : "观察未完成或数据不足" },
     ]} />
     {(metrics.score.status !== "evaluated" || metrics.launch.status !== "evaluated") &&
       <Alert type="warning" showIcon
@@ -78,7 +92,7 @@ export default function NewProductMetricsPanel({ metrics }: { metrics: NewProduc
     <ReportTableShell label="真实30、60、90天经营指标">
       <ProTable<PeriodRow> rowKey="key" dataSource={rows} columns={columns}
         options={false} search={false} pagination={false} size="small" bordered
-        scroll={{ x: 1500 }} />
+        scroll={{ x: 1750 }} />
     </ReportTableShell>
     <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>
       ACOS 为广告归因花费 / 广告归因销售额；广告费占比为总广告费 / 总销售额。

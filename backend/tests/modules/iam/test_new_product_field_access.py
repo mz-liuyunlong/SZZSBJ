@@ -20,7 +20,11 @@ def _sample() -> dict:
             "provisional_grade": "A",
             "components": {"profit": 8, "market": 9},
         },
-        "launch": {"status": "evaluated", "result": "success"},
+        "launch": {
+            "status": "provisional",
+            "result": None,
+            "provisional_result": "success",
+        },
         "inventory": {"available": 100},
     }
 
@@ -67,7 +71,7 @@ def test_existing_profit_and_margin_grants_preserve_all_values() -> None:
     result = redact_new_product_metrics(_sample(), user)
     assert result["periods"]["30"]["margin"] == 18
     assert result["score"]["provisional_grade"] == "A"
-    assert result["launch"]["result"] == "success"
+    assert result["launch"]["provisional_result"] == "success"
 
 
 def test_super_admin_preserves_existing_values() -> None:
