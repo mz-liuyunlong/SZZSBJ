@@ -220,7 +220,7 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
     try{
       const result=await saveClearanceRules(ruleConfig);
       setRuleConfig({...ruleConfig,version:result.version,rules:result.rules});
-      void messageApi.success("规则版本已保存");
+      void messageApi.success("规则版本已保存，将在下次美国太平洋时间 00:00 评估时生效");
       setRulesOpen(false);
       void reload();
     }catch{void messageApi.error("规则保存失败，请检查参数或配置版本是否已更新");}
@@ -487,7 +487,7 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
       footer={<div style={{textAlign:"center"}}>
         <Space><Button onClick={()=>setRulesOpen(false)}>关闭</Button>
           <Button type="primary" disabled={!ruleConfig} loading={ruleSaving}
-            onClick={()=>void saveRules()}>保存并应用</Button></Space>
+            onClick={()=>void saveRules()}>保存（下次零点生效）</Button></Space>
       </div>}>
       <Select style={{width:"100%",marginBottom:18}} placeholder="选择账号" value={ruleAccount||undefined}
         options={accountOptions} onChange={v=>void selectRuleAccount(v)}/>
