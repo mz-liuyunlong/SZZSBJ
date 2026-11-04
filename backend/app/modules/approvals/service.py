@@ -12,7 +12,6 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
-from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
 from app.modules.approvals.schemas import (
     ApprovalDecisionWrite,
     ApprovalDetail,
@@ -24,6 +23,7 @@ from app.modules.approvals.schemas import (
     ApprovalSummary,
     ApprovalSupplementWrite,
 )
+from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
 
 
 def blocked(status: int = 409) -> None:
