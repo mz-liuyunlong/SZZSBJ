@@ -65,6 +65,33 @@ export interface ClearancePage<T> {
   total: number;
   page: number;
   page_size: number;
+  evaluation_status?: "ready" | "not_ready" | "live_wfs";
+  run_date_la?: string | null;
+  as_of_date_la?: string | null;
+}
+export interface ClearanceSummary {
+  total: number;
+  high: number;
+  medium: number | null;
+  observe: number | null;
+  review_required: number | null;
+  eligible_manual: number;
+  evaluation_status: "ready" | "not_ready";
+  run_date_la: string | null;
+  as_of_date_la: string | null;
+}
+export interface ClearanceReadiness {
+  evaluation_status: "ready" | "not_ready";
+  run_date_la: string | null;
+  as_of_date_la: string | null;
+  total_listings: number;
+  evaluated_listings: number;
+  not_evaluated_listings: number;
+  missing_sales_window: number | null;
+  missing_wfs_stock: number | null;
+  missing_profit_cost: number | null;
+  sales_source_30day_covered?: number;
+  refund_period_data_complete: boolean;
 }
 export type ClearanceStatus =
   | "pending" | "approved" | "rejected" | "withdrawn"
@@ -130,7 +157,9 @@ export const fetchClearanceListings = (query: Record<string, string | number | u
 export const fetchEligibleListings = (query: Record<string, string | number | undefined> = {}) =>
   get<ClearancePage<ClearanceRow>>("/eligible-listings" + params(query));
 export const fetchClearanceSummary = (store_id?: string) =>
-  get<Record<string, number>>("/summary" + params({store_id}));
+  get<ClearanceSummary>("/summary" + params({store_id}));
+export const fetchClearanceReadiness = (store_id?: string) =>
+  get<ClearanceReadiness>("/data-readiness" + params({store_id}));
 export const fetchClearanceDetail = (listingId: string) =>
   get<ClearanceRow>("/listings/" + encodeURIComponent(listingId));
 export const fetchClearanceRules = (sourceAccountRef: string) =>
