@@ -8,3 +8,13 @@
 /* 日记账搜索：搜索类型下拉加宽，四个字的选项（摘要备注 / 审批单号）能看全 */
 .fin-cash-flow__search.report-table-connected-search { width: 460px; max-width: 460px; flex: 0 0 460px; }
 .fin-cash-flow__search.report-table-connected-search > .ant-select { width: 116px; flex: 0 0 116px; }
+
+/* 日记账：8 张统计卡（含「异常」）；异常段落与「找不到对应流水」提示条 */
+.finance-board__summary.fin-cash-flow__summary--8 { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+@media (max-width: 1500px) { .finance-board__summary.fin-cash-flow__summary--8 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.fin-cash-flow__alerts { display: flex; flex-direction: column; gap: var(--ant-margin-sm, 12px); }
+.fin-cash-flow__alert .fin-cash-flow__alert-msg { margin: var(--ant-margin-xxs, 4px) 0; }
+.fin-cash-flow__orphans { margin-bottom: var(--ant-margin-sm, 12px); }
+.fin-cash-flow__orphans ul { margin: 0; padding-left: var(--ant-padding-lg, 24px); }
+.fin-cash-flow__import-table { margin-top: var(--ant-margin-xs, 8px); }
+.fin-cash-flow__import-desc .ant-descriptions-item-label { width: 120px; white-space: nowrap; }

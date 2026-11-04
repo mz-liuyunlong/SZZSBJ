@@ -244,13 +244,11 @@ export const navigation: NavigationGroup[] = [
       page('finance', 'cash_accounts', '账户总览（按月）', '/finance/cash/accounts', {
         sidebarSection: 'finance-cash', status: 'building', readOnly: true, viewPermissionKey: 'page:finance:cash-flow:view',
       }),
-      page('finance', 'cash_journal', '日记账（初审·终审）', '/finance/cash/journal', {
+      // 2026-11-04 Rocky：「日记账（初审·终审）」改名「日记账」；资金异常并入日记账显示，去掉「异常」页。
+      page('finance', 'cash_journal', '日记账', '/finance/cash/journal', {
         sidebarSection: 'finance-cash', status: 'building', readOnly: true, viewPermissionKey: 'page:finance:cash-flow:view',
       }),
       page('finance', 'cash_stock', '备货资金', '/finance/cash/stock', {
-        sidebarSection: 'finance-cash', status: 'building', readOnly: true, viewPermissionKey: 'page:finance:cash-flow:view',
-      }),
-      page('finance', 'cash_anomalies', '异常', '/finance/cash/anomalies', {
         sidebarSection: 'finance-cash', status: 'building', readOnly: true, viewPermissionKey: 'page:finance:cash-flow:view',
       }),
       page('finance', 'cost_exception', '成本异常处理', '/finance/cost-exception'),

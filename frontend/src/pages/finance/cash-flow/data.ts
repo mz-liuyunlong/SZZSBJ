@@ -4,6 +4,7 @@
  * 正式接口上线后（阶段 B），把这里的读取换成 PMC 只读接口，页面组件不变。
  */
 import { useQuery } from "@tanstack/react-query";
+import type { CashAnomaly } from "@/pages/finance/localFinData";
 
 const DIR = "cash-flow";
 
@@ -62,3 +63,39 @@ export interface ApprovalsFile { meta: { src: string; ticket: string; built: str
 
 export const useApprovals = () => useTabFile<ApprovalsFile>("approvals.json");
 export const fsFileUrl = (name: string) => `${import.meta.env.BASE_URL}local-fin-data/${DIR}/fs-files/${encodeURIComponent(name)}`;
+
+/* ---------------------------------------------------------------- 资金异常（并入日记账显示；Rocky 2026-11-04：异常不分等级，全部都要处理）
+ * 每条带稳定编号（流水号 / 审批单号），以后作为「设置 → 业务配置中心 → 通知规则」的对象编号（object_key）去重、确认。
+ * 数据提示类只是说明：灰色标签，不算异常、不发提醒。 */
+export const CASH_HINT_TYPES = new Set(["期初切换", "对方账户不在日记账", "审批单在另一个飞书（不拉）"]);
+export interface CashAlert extends CashAnomaly { id: string; ref: string; line?: string; serial?: string; hint: boolean }
+type RawAnomaly = CashAnomaly & { line?: string; serial?: string };
+
+/** 稳定编号：有流水号用流水号，审批单用审批单号；剔除用「日期 + 第几条」，其余用「账户 + 日期 + 金额」。 */
+function alertRef(item: RawAnomaly): string {
+  if (item.line) return item.line;
+  if (item.serial) return item.serial;
+  const n = /第 (\d+) 条/.exec(item.msg)?.[1];
+  if (item.type === "剔除未命中" && n) return `剔除:${item.date}:${n}`;
+  return `${item.acct || "-"}:${item.date}:${item.amt ?? ""}`;
+}
+
+export function toCashAlerts(list: CashAnomaly[]): CashAlert[] {
+  return list.map((raw) => {
+    const item = raw as RawAnomaly;
+    const ref = alertRef(item);
+    return { ...item, ref, id: `${item.type}|${ref}`, hint: CASH_HINT_TYPES.has(item.type) };
+  });
+}
+
+/** 显示用的短类型名 + 处理指引（流水详情的「异常」段落用）。 */
+export const ALERT_GUIDE: Record<string, { short: string; guide: string }> = {
+  "内部转账未配对": { short: "未配对", guide: "在其他账户里找到对应的那笔内部调拨，配成一对；确实是外部款项就改类别。" },
+  "明细合计≠流水": { short: "明细不符", guide: "核对这笔流水的明细金额，补齐或改正明细，合计要等于流水金额。" },
+  "余额不连续": { short: "余额不连续", guide: "这笔之前可能漏了流水，回银行或平台后台补导出漏掉的那几行。" },
+  "剔除未命中": { short: "剔除未命中", guide: "剔除清单里这一条没找到对应流水或金额不够扣，核对剔除清单的单号和金额。" },
+  "审批单未付": { short: "审批单未付", guide: "审批已通过但还没对上付款流水：已付款的去关联流水，未付款的跟进付款。" },
+  "审批单部分已付": { short: "审批单部分已付", guide: "已付金额小于申请金额：补关联剩余的付款流水，或跟进剩余付款。" },
+  "审批单金额不符": { short: "审批单金额不符", guide: "已付金额大于申请金额：核对是否关联错流水，或审批单金额有误。" },
+};
+export const alertShort = (type: string) => ALERT_GUIDE[type]?.short ?? type;
