@@ -291,3 +291,46 @@ def test_pmc_scoped_aggregate_drilldowns_are_denied_before_read_service() -> Non
         list_board(request, query, session, principal, frozenset({"ACCOUNT1"}))
     assert error.value.status_code == 403
     session.execute.assert_not_called()
+
+
+def test_pmc_plan_details_reuse_account_qualified_store_grants() -> None:
+    from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+
+    session = MagicMock()
+    session.info = {STORE_SCOPE_SESSION_KEY: frozenset({("ACCOUNT1", "S-01")})}
+    repository = PmcPurchaseReadRepository(session)
+    repository.plans_by_sn(["PLAN-1"], frozenset({"ACCOUNT1", "ACCOUNT2"}))
+    statement = session.scalars.call_args.args[0]
+    sql = str(
+        statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+    assert "('ACCOUNT1', 'S-01')" in sql
+    assert "dwd_purchase_plan.source_account_ref" in sql
+    assert "dwd_purchase_plan.store_id" in sql
+
+
+def test_pmc_store_label_uses_account_store_composite_identity() -> None:
+    from types import SimpleNamespace
+
+    from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+
+    session = MagicMock()
+    session.info = {
+        STORE_SCOPE_SESSION_KEY: frozenset({("ACCOUNT1", "same-store")}),
+    }
+    session.scalars.return_value = [
+        SimpleNamespace(
+            source_account_ref="ACCOUNT1",
+            store_id="same-store",
+            store_name="Store in Account One",
+        ),
+    ]
+    repository = PmcPurchaseReadRepository(session)
+    names = repository.store_names(frozenset({"ACCOUNT1", "ACCOUNT2"}))
+    assert names == {("ACCOUNT1", "same-store"): "Store in Account One"}
+    statement = session.scalars.call_args.args[0]
+    sql = str(
+        statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+    assert "('ACCOUNT1', 'same-store')" in sql
+    assert "dim_lingxing_stores" in sql
