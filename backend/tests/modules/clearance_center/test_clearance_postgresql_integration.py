@@ -374,6 +374,34 @@ def test_daily_evaluation_is_idempotent_and_sql_paginated(clearance_db: Session)
     audit = service.repo.readiness_report(frozenset({account}),store_id="ci-daily-store")
     assert audit["evaluated_listings"] == 165
     assert audit["missing_sales_window"] > 0
+    # Daily risk does not authorize application when today's WFS stock sells out.
+    from sqlalchemy import text
+
+    clearance_db.execute(
+        text("""update mart_listing_management_current
+                   set wfs_available_quantity=0
+                 where source_account_ref=:account and store_id=:store
+                   and item_id=:item"""),
+        {
+            "account": account,"store": "ci-daily-store",
+            "item": "ci-daily-item-0000",
+        },
+    )
+    clearance_db.commit()
+    from sqlalchemy import select
+
+    listing_id = str(clearance_db.scalar(
+        select(ListingManagementCurrentMart.id).where(
+            ListingManagementCurrentMart.source_account_ref == account,
+            ListingManagementCurrentMart.store_id == "ci-daily-store",
+            ListingManagementCurrentMart.item_id == "ci-daily-item-0000",
+        )
+    ))
+    detail = service.listing_detail(listing_id,frozenset({account}))
+    assert detail["evaluation"]["current_wfs_available"] == "0.0000"
+    assert detail["evaluation"]["current_inventory_not_eligible"] is True
+    with pytest.raises(ApiError):
+        service.submit(_payload(listing_id,1),frozenset({account}),"operator-1")
     # Product owners must not inherit the full system run count.
     other = service.list_listings(frozenset({"not-authorized"}),page=1,page_size=10)
     assert other["total"] == 0
