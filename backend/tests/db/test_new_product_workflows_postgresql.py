@@ -242,28 +242,42 @@ def test_new_product_plan_correction_and_dashboard_postgresql() -> None:
         decision_barrier = Barrier(2)
         with ThreadPoolExecutor(max_workers=2) as executor:
             first = executor.submit(
-                _decide_correction, engine, correction_id, decision_barrier, "approver-a",
+                _decide_correction,
+                engine,
+                correction_id,
+                decision_barrier,
+                "approver-a",
             )
             second = executor.submit(
-                _decide_correction, engine, correction_id, decision_barrier, "approver-b",
+                _decide_correction,
+                engine,
+                correction_id,
+                decision_barrier,
+                "approver-b",
             )
             outcomes = sorted([first.result(timeout=40), second.result(timeout=40)])
         assert outcomes == [200, 409]
         with engine.connect() as connection:
-            assert connection.scalar(
-                text(
-                    "SELECT count(*) FROM product_new_score_corrections "
-                    "WHERE id = :id AND status = 'approved'"
-                ),
-                {"id": correction_id},
-            ) == 1
-            assert connection.scalar(
-                text(
-                    "SELECT count(*) FROM product_new_workflow_events "
-                    "WHERE workflow_id = :workflow AND action = 'correction_decided'"
-                ),
-                {"workflow": workflow_id},
-            ) == 1
+            assert (
+                connection.scalar(
+                    text(
+                        "SELECT count(*) FROM product_new_score_corrections "
+                        "WHERE id = :id AND status = 'approved'"
+                    ),
+                    {"id": correction_id},
+                )
+                == 1
+            )
+            assert (
+                connection.scalar(
+                    text(
+                        "SELECT count(*) FROM product_new_workflow_events "
+                        "WHERE workflow_id = :workflow AND action = 'correction_decided'"
+                    ),
+                    {"workflow": workflow_id},
+                )
+                == 1
+            )
 
         blocked = _alembic(url, database, PREVIOUS, command="downgrade")
         assert blocked.returncode != 0

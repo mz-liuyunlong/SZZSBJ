@@ -159,7 +159,9 @@ def test_workflow_sku_search_rejects_oversize_before_database() -> None:
     session = MagicMock()
     with pytest.raises(ApiError) as error:
         list_workflows(
-            request=Request({"type": "http", "method": "GET", "path": "/api/new-products/workflows"}),
+            request=Request(
+                {"type": "http", "method": "GET", "path": "/api/new-products/workflows"}
+            ),
             session=session,
             _=Principal(user_id="reader", permissions=frozenset()),
             accounts=frozenset({"account-a"}),

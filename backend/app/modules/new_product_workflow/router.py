@@ -767,9 +767,7 @@ def list_workflows(
             "SELECT count(*) FROM dwd_lingxing_sku_identity_index AS identity "
             "LEFT JOIN product_new_workflows AS workflow "
             "ON workflow.sku_identity_id = identity.id "
-            "AND workflow.source_account_ref = identity.source_account_ref "
-            + where
-            + filters
+            "AND workflow.source_account_ref = identity.source_account_ref " + where + filters
         ),
         params,
     ).scalar_one()
