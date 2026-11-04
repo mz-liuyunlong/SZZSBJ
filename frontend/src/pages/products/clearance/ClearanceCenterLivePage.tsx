@@ -189,6 +189,7 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
     if (pageNumber === 1) {
       eligibleRowsRef.current = [];
       eligibleNextPage.current = 2;
+      setEligibleKeyword(search);
       setEligible([]);
       setEligibleTotal(0);
     }
