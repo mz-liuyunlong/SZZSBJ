@@ -119,6 +119,28 @@ class ClearanceReadRepository:
         )
         return [dict(x) for x in self.session.execute(text(sql), params).mappings().all()]
 
+    def facets(self, accounts: frozenset[str]) -> dict:
+        """Scope-filtered store and account choices; no N+1 or page bias."""
+        rows = self.session.execute(
+            text("""select source_account_ref,store_id,max(store_name) store_name
+                      from mart_listing_management_current
+                     where source_account_ref=any(:accounts)
+                     group by source_account_ref,store_id
+                     order by source_account_ref,store_id"""),
+            {"accounts": list(accounts)},
+        ).mappings().all()
+        return {
+            "stores": [
+                {
+                    "source_account_ref": row["source_account_ref"],
+                    "store_id": row["store_id"],
+                    "store_name": row["store_name"],
+                }
+                for row in rows
+            ],
+            "accounts": sorted({row["source_account_ref"] for row in rows}),
+        }
+
     def latest_completed_run(self) -> dict | None:
         row = self.session.execute(
             text("""select id::text id,run_date_la,as_of_date_la,status,
