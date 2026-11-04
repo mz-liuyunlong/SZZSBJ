@@ -86,10 +86,16 @@ def eligible_listings(
 
 
 @router.get("/summary", response_model=SuccessEnvelope[dict[str, Any], None])
-def summary(request: Request, session: db_session, _: reader, accounts: scope, store_id: str = ""):
-    return success_response(
-        request, data=ClearanceService(session).summary(accounts, store_id), meta=None
-    )
+def summary(
+    request: Request, session: db_session, principal: reader,
+    accounts: scope, store_id: str = "",
+):
+    result = ClearanceService(session).summary(accounts, store_id)
+    if not has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION):
+        # Aggregate medium/observe/review counts may disclose hidden margin signals.
+        for name in ("medium", "observe", "review_required"):
+            result[name] = None
+    return success_response(request, data=result, meta=None)
 
 
 @router.get("/rules", response_model=SuccessEnvelope[dict[str, Any], None])
