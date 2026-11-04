@@ -326,6 +326,10 @@ def test_scoped_order_profit_requires_complete_source_identity_and_sales_reconci
     assert "store_ids_json" in sql
     assert "item_ids_json" in sql
     assert "sales_amount" in sql
+    assert "sales_qty" in sql
+    assert "order_count" in sql
+    assert "gross_profit_amount" in sql
+    assert "IS NOT DISTINCT FROM" in sql
     assert "EXISTS" in sql
 
 
