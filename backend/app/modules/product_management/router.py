@@ -21,7 +21,9 @@ from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.iam.organization_access import (
     ORG_OWNER_SCOPE_SESSION_KEY,
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
     resolve_business_owner_refs,
+    resolve_business_account_owner_pairs,
 )
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.product_management.field_access import (
@@ -70,6 +72,7 @@ def require_product_management_org_scope(
 ) -> None:
     """Check endpoint permission before applying reviewed organization scopes."""
     session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
+    session.info.pop(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY, None)
     if request.url.path == "/api/user-table-views/product-management":
         legacy_permission = (
             "products:table_views:update" if request.method == "PUT" else "products:read"
@@ -102,8 +105,9 @@ def require_product_management_org_scope(
     # imposing a product-owner SQL filter, while retaining their own permission.
     if request.url.path == "/api/user-table-views/product-management":
         return
-    owners = resolve_business_owner_refs(session, principal)
-    if owners is None:
+    owner_pairs = resolve_business_account_owner_pairs(session, principal)
+    owners = None if owner_pairs else resolve_business_owner_refs(session, principal)
+    if owners is None and not owner_pairs:
         return
     detail_path = re.fullmatch(
         r"/api/product-management/skus/[0-9A-Fa-f-]{36}(/pricing-breakdown)?",
@@ -117,7 +121,10 @@ def require_product_management_org_scope(
     )
     if not safe_read and not reviewed_export:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
-    session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owners
+    if owner_pairs:
+        session.info[ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY] = owner_pairs
+    elif owners is not None:
+        session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owners
 
 
 router = APIRouter(
