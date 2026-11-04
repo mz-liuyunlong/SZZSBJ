@@ -1,11 +1,13 @@
 """LA calendar scheduling: DST, prior completed day, and retry invariants."""
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from app.celery_app import INTEGRATION_QUEUE, create_celery_app
 from app.modules.clearance_center.daily import daily_window, is_midnight_window
 from app.modules.clearance_center.repository import evaluation_run_status
+from app.modules.clearance_center.service import ClearanceService
 
 
 def test_midnight_trigger_switches_utc_offset_on_spring_dst() -> None:
@@ -95,3 +97,37 @@ def test_scheduler_retries_missed_midnight_without_requiring_the_first_hour(
     assert result["status"] == "checked"
     assert result["scheduled"] is False
     assert result["now"] == datetime(2026, 11, 4, 17, 0, tzinfo=UTC)
+
+
+def test_stale_daily_run_never_exposes_old_auto_candidates() -> None:
+    today = datetime.now(ZoneInfo("America/Los_Angeles")).date()
+    previous = today - timedelta(days=1)
+
+    class SnapshotRepository:
+        def latest_completed_run(self):
+            return {
+                "id": "not-read",
+                "run_date_la": previous,
+                "as_of_date_la": previous - timedelta(days=1),
+            }
+
+        def manual_eligible_page(self, _accounts, *, store_id, page, page_size):
+            return {"total": 2}
+
+        def snapshot_page(self, *_args, **_kwargs):
+            raise AssertionError("Stale risk snapshots must never be served as current")
+
+        def daily_summary(self, *_args, **_kwargs):
+            raise AssertionError("Stale risk counts must never be displayed as current")
+
+    service = ClearanceService.__new__(ClearanceService)
+    service.repo = SnapshotRepository()
+    allowed = frozenset({"allowed-account"})
+    listing_page = service.list_listings(allowed)
+    assert listing_page["evaluation_status"] == "stale"
+    assert listing_page["total"] == 0
+    assert listing_page["items"] == []
+    summary = service.summary(allowed)
+    assert summary["evaluation_status"] == "stale"
+    assert summary["high"] == summary["medium"] == 0
+    assert summary["eligible_manual"] == 2
