@@ -935,6 +935,24 @@ class OrderProfitRepository:
                 .correlate(OrderProfitSkuDayMart)
                 .scalar_subquery()
             )
+            source_sales_qty = (
+                select(func.coalesce(func.sum(source.sales_qty), 0))
+                .where(same_group)
+                .correlate(OrderProfitSkuDayMart)
+                .scalar_subquery()
+            )
+            source_order_count = (
+                select(func.coalesce(func.sum(source.order_count), 0))
+                .where(same_group)
+                .correlate(OrderProfitSkuDayMart)
+                .scalar_subquery()
+            )
+            source_gross_profit = (
+                select(func.sum(source.gross_profit_amount))
+                .where(same_group)
+                .correlate(OrderProfitSkuDayMart)
+                .scalar_subquery()
+            )
             statement = statement.where(
                 exists(
                     select(1).select_from(source).where(same_group, authorized)
@@ -947,6 +965,13 @@ class OrderProfitRepository:
                 source_items.op("@>")(OrderProfitSkuDayMart.item_ids_json),
                 OrderProfitSkuDayMart.item_ids_json.op("@>")(source_items),
                 OrderProfitSkuDayMart.sales_amount == source_sales,
+                OrderProfitSkuDayMart.sales_qty == source_sales_qty,
+                OrderProfitSkuDayMart.order_count == source_order_count,
+                # IS NOT DISTINCT FROM preserves the difference between
+                # an unavailable profit and a truly zero-dollar profit.
+                OrderProfitSkuDayMart.gross_profit_amount.is_not_distinct_from(
+                    source_gross_profit
+                ),
             )
         if start_date is not None:
             statement = statement.where(OrderProfitSkuDayMart.business_date_la >= start_date)
