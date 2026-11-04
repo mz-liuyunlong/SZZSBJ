@@ -5,7 +5,7 @@
 - 起草：PMC 总览代码 AI · 2026-11-03 · 需求方 Rocky
 - 决策文件路径：`docs/data-sources/decisions/pmc-overview-decision.md`
 - 后续接口 PRP：`PRPs/pmc-overview.md`
-- 总体状态：`BLOCKED_BY_OWNER_DECISION`（总看板只复用上游结果，上游自动补货、WFS 两组的数据源决策尚未批准；见 §5）。总看板自有部分（规则判断层、读模型、页面）`READY_FOR_PRP`。
+- 总体状态：`APPROVED`（2026-11-03 Rocky 批准 PRP #301；上游自动补货 #299、WFS #298 同日批准，接入顺序见 §5）。
 
 ## 1. 旧系统与来源调查
 
@@ -64,13 +64,13 @@
 
 ## 5. 最终建议
 
-- 总体：`BLOCKED_BY_OWNER_DECISION`，阻塞项是上游两组的决策，不是总看板自己。
+- 总体：`APPROVED`（2026-11-03）；正式数据按上游表就绪顺序接入，5173 先用 20261102 快照过渡。
 - 总看板规则判断层（PRP PR-A：纯函数 + 8088 20261102 金样对数）不依赖上游表，可在 PRP 批准后先做。
 - 其余按上游就绪顺序接入；未接入的数据集在页面写「待接入」，不造示例（R-6）。
 
 ## 负责人决定
 
-（待 mz-liuyunlong / Rocky 填写 PRP §0 D1–D7）
+2026-11-03 Rocky（PRP 负责人，mz-liuyunlong 授权）批准 PRP #301：D1 同意；D2–D7 全选 a；D3 = a 草稿 87 张（以自动补货为准）；D6 = a 不显示 Walmart 列。5173 用 8088 20261102 快照并标「过渡」；8443 不得设置 `PMC_OVERVIEW_SNAPSHOT_FILE`；接正式数据时按 `source_account` 过滤。
 
 ## 附录：8088 规则出处
 

@@ -1,6 +1,8 @@
 # PRP：PMC 总看板（总览）一期只读上线
 
-状态：`Draft`（待项目负责人 mz-liuyunlong 确认；PRP 不等于批准开发）
+状态：`Approved`（Rocky 2026-11-03 批准，mz-liuyunlong 授权 Rocky 为 PRP 负责人；本地代码对齐 main，不合入 main）
+
+负责人决定（2026-11-03 Rocky）：D1 同意；D2 = a；D3 = a（草稿以自动补货为准，20261102 为 87 张）；D4 = a；D5 = a（一期只读）；D6 = a（不显示 Walmart 列组）；D7 = a（先只读核实再复用）。5173 过渡：读 8088 20261102 快照并标「过渡」；8443 不得设置 `PMC_OVERVIEW_SNAPSHOT_FILE`（代码只在 APP_ENV = local / dev / test 读快照），接正式数据时按 `source_account` 过滤。共享文件补丁通过。
 
 - 起草：PMC 总览代码 AI · 2026-11-03 · 需求方 Rocky（2026-11-03「WFS 物流、自动补货、总览这些板块都要上线」「按照 8088 的业务逻辑上线，按照 GitHub 的规定写代码」）
 - 流程：本地 DEMO 工作区 `AGENTS.md` §1.1（8088 业务逻辑为准 → PRP 经刘云龙确认 → 5173 开发 → PR + CI → 审核 AI → Rocky 5173 验收合并 → 刘云龙发布 8443）；本仓库 `AGENTS.md` §11 / §11.1 / §11.2
