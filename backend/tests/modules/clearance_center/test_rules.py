@@ -30,6 +30,7 @@ def metrics(sales: int = 30, **overrides):
         "positive_stock_days": 25,
         "inventory_fresh": True,
         "sales_complete": True,
+        "zero_sales_verified": True,
         "cost_complete": True,
         "listing_days": 100,
     }
@@ -178,3 +179,9 @@ def test_refund_loss_does_not_get_subtracted_twice_from_daily_profit() -> None:
     )
     assert value["margin_30d_percent"] == "-10"
     assert "AFTER_SALES" in value["business_signal_groups"]
+
+
+def test_zero_sales_does_not_auto_enter_without_verified_source_history() -> None:
+    result = check(40, 0, zero_sales_verified=False, positive_stock_days=25)
+    assert result["risk_level"] != "high"
+    assert result["candidate_status"] != "auto"
