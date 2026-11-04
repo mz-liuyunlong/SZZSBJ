@@ -119,6 +119,177 @@ class ClearanceReadRepository:
         )
         return [dict(x) for x in self.session.execute(text(sql), params).mappings().all()]
 
+    def latest_completed_run(self) -> dict | None:
+        row = self.session.execute(
+            text("""select id::text id,run_date_la,as_of_date_la,status,
+                           started_at,finished_at,listing_count,quality_json
+                    from ops_clearance_daily_runs
+                    where status='succeeded' and finished_at is not null
+                    order by run_date_la desc limit 1""")
+        ).mappings().first()
+        return dict(row) if row else None
+
+    def snapshot_page(
+        self, accounts: frozenset[str], *, run: dict, store_id: str = "",
+        keyword: str = "", risk_level: str | None = None,
+        candidate_status: str | None = None, page: int = 1,
+        page_size: int = 50, financial_sort: bool = True,
+    ) -> dict:
+        """SQL-filtered count and LIMIT/OFFSET against persisted daily results."""
+        where = ["e.run_id=cast(:run as uuid)", "e.source_account_ref=any(:accounts)"]
+        params: dict = {
+            "run": run["id"], "accounts": list(accounts), "limit": page_size,
+            "offset": (page - 1) * page_size,
+        }
+        if store_id:
+            where.append("e.store_id=:store")
+            params["store"] = store_id
+        if keyword:
+            where.append("""(e.item_id ilike :q or coalesce(l.local_sku,'') ilike :q
+                              or coalesce(l.msku,'') ilike :q or
+                              coalesce(l.title,'') ilike :q)""")
+            params["q"] = f"%{keyword.strip()}%"
+        if risk_level:
+            where.append("e.risk_level=:risk")
+            params["risk"] = risk_level
+        if candidate_status:
+            where.append("e.candidate_status=:candidate")
+            params["candidate"] = candidate_status
+        conditions = " and ".join(where)
+        base = """ from ops_clearance_daily_evaluations e
+                  join mart_listing_management_current l
+                    on l.id=e.listing_id and l.source_account_ref=e.source_account_ref
+                   and l.store_id=e.store_id and l.item_id=e.item_id
+                where """ + conditions
+        total = int(
+            self.session.execute(text("select count(*)" + base), params).scalar_one()
+        )
+        sort_capital = "e.stock_capital_usd desc nulls last," if financial_sort else ""
+        sort_profit = (
+            "e.profit_30d_amount asc nulls last, "
+            "e.refund_loss_30d desc nulls last,"
+            if financial_sort else ""
+        )
+        sql = """select l.id::text id,l.source_account_ref,l.store_id,l.store_name,
+                       l.item_id,l.local_sku,l.msku,l.title,l.picture_url,l.owner_ref,
+                       l.listing_status,l.fulfillment_type,l.sale_price_amount,
+                       l.sale_price_currency_code,l.wfs_available_quantity,
+                       l.inbound_quantity,l.average_rating,l.review_count,
+                       l.buybox_status,l.listing_start_at_utc,l.calculated_at,
+                       snap.wfs_available_quantity snapshot_wfs_available,
+                       snap.captured_at inventory_captured_at,
+                       e.evaluation_json,e.rule_config_version,e.quality_status
+                  from ops_clearance_daily_evaluations e
+                  join mart_listing_management_current l
+                    on l.id=e.listing_id and l.source_account_ref=e.source_account_ref
+                   and l.store_id=e.store_id and l.item_id=e.item_id
+                  left join lateral (
+                    select i.wfs_available_quantity,i.captured_at
+                      from fact_walmart_listing_inventory_daily i
+                     where i.source_account_ref=e.source_account_ref
+                       and i.store_id=e.store_id and i.item_id=e.item_id
+                     order by i.snapshot_date_la desc,i.captured_at desc limit 1
+                  ) snap on true
+                 where """ + conditions + """
+                 order by case e.risk_level when 'high' then 0
+                                            when 'medium' then 1
+                                            when 'unknown' then 2 else 3 end,
+                          """ + sort_capital + """
+                          e.coverage_days desc nulls last,
+                          """ + sort_profit + """
+                          e.source_account_ref,e.store_id,e.item_id
+                 limit :limit offset :offset"""
+        records = self.session.execute(text(sql), params).mappings().all()
+        items = []
+        for row in records:
+            item = dict(row)
+            evaluation = item.pop("evaluation_json")
+            version = item.pop("rule_config_version")
+            quality = item.pop("quality_status")
+            evaluation["quality_status"] = quality
+            items.append({
+                "listing": item, "evaluation": evaluation,
+                "rule_config_version": version,
+            })
+        return {
+            "items": items, "total": total, "page": page, "page_size": page_size,
+            "evaluation_status": "ready", "run_date_la": run["run_date_la"].isoformat(),
+            "as_of_date_la": run["as_of_date_la"].isoformat(),
+        }
+
+    def manual_eligible_page(
+        self, accounts: frozenset[str], *, store_id: str = "", keyword: str = "",
+        page: int = 1, page_size: int = 50,
+    ) -> dict:
+        """Live WFS-only picker with eligibility-before-pagination and no risk gate."""
+        where = [
+            "l.source_account_ref=any(:accounts)",
+            "l.wfs_available_quantity>0",
+            "snap.wfs_available_quantity>0",
+            "snap.captured_at>=now()-interval '72 hours'",
+        ]
+        params: dict = {
+            "accounts": list(accounts), "limit": page_size,
+            "offset": (page - 1) * page_size,
+        }
+        if store_id:
+            where.append("l.store_id=:store")
+            params["store"] = store_id
+        if keyword:
+            where.append("""(l.item_id ilike :q or coalesce(l.msku,'') ilike :q
+                              or coalesce(l.local_sku,'') ilike :q
+                              or coalesce(l.title,'') ilike :q)""")
+            params["q"] = f"%{keyword.strip()}%"
+        identity = """
+            from mart_listing_management_current l
+            left join lateral (
+                select i.wfs_available_quantity,i.captured_at
+                from fact_walmart_listing_inventory_daily i
+                where i.source_account_ref=l.source_account_ref
+                  and i.store_id=l.store_id and i.item_id=l.item_id
+                order by i.snapshot_date_la desc,i.captured_at desc limit 1
+            ) snap on true
+            where """ + " and ".join(where)
+        count = int(self.session.execute(text("select count(*) " + identity), params).scalar_one())
+        sql = """select l.id::text id,l.source_account_ref,l.store_id,l.store_name,
+                        l.item_id,l.local_sku,l.msku,l.title,l.picture_url,l.owner_ref,
+                        l.listing_status,l.fulfillment_type,l.sale_price_amount,
+                        l.sale_price_currency_code,l.wfs_available_quantity,
+                        l.inbound_quantity,l.average_rating,l.review_count,
+                        l.buybox_status,l.listing_start_at_utc,l.calculated_at,
+                        snap.wfs_available_quantity snapshot_wfs_available,
+                        snap.captured_at inventory_captured_at """ + identity + """
+                order by l.source_account_ref,l.store_id,l.item_id
+                limit :limit offset :offset"""
+        page_rows = [dict(x) for x in self.session.execute(text(sql), params).mappings()]
+        return {"rows": page_rows, "total": count, "page": page, "page_size": page_size}
+
+    def daily_summary(self, accounts: frozenset[str], *, run: dict, store_id: str = "") -> dict:
+        where = ["run_id=cast(:run as uuid)", "source_account_ref=any(:accounts)"]
+        params: dict = {"run": run["id"], "accounts": list(accounts)}
+        if store_id:
+            where.append("store_id=:store")
+            params["store"] = store_id
+        row = self.session.execute(
+            text("""select count(*) total,
+                     count(*) filter(where risk_level='high' and candidate_status='auto') high,
+                     count(*) filter(where risk_level='medium' and candidate_status='auto') medium,
+                     count(*) filter(where candidate_status='observe') observe,
+                     count(*) filter(where candidate_status='review_required') review_required
+                    from ops_clearance_daily_evaluations where """ + " and ".join(where)),
+            params,
+        ).mappings().one()
+        result = {key: int(value) for key, value in row.items()}
+        # Fresh manual eligibility is intentionally independent of yesterday's score.
+        eligible = self.manual_eligible_page(
+            accounts, store_id=store_id, page=1, page_size=1
+        )
+        result["eligible_manual"] = eligible["total"]
+        result["run_date_la"] = run["run_date_la"].isoformat()
+        result["as_of_date_la"] = run["as_of_date_la"].isoformat()
+        result["evaluation_status"] = "ready"
+        return result
+
     def evidence(
         self, listings: list[dict], *, as_of: date | None = None
     ) -> dict[tuple[str, str, str], dict]:
