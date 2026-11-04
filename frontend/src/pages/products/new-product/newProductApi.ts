@@ -1,5 +1,43 @@
 import { backendRequest } from "@/api/backendApi";
 
+export interface NewProductPeriodMetrics {
+  days: number;
+  from: string;
+  to_exclusive: string;
+  sales: number | null;
+  orders: number | null;
+  revenue: number | null;
+  ad_spend: number | null;
+  clicks: number | null;
+  profit: number | null;
+  margin: number | null;
+  acos: number | null;
+  ad_spend_ratio: number | null;
+  attributed_sales: number | null;
+  ad_days: number;
+  observed_days: number;
+  complete_cost_days: number;
+  complete: boolean;
+}
+
+export interface NewProductMetrics {
+  account: string;
+  sku: string;
+  business_timezone: string;
+  as_of_exclusive: string;
+  source_tables: string[];
+  periods: Record<"30" | "60" | "90", NewProductPeriodMetrics>;
+  inventory: {
+    available: number | null;
+    wfs_available: number | null;
+    listing_count: number;
+    refreshed_at: string | null;
+  };
+  rule_version: number;
+  score: { status: string; grade?: string | null; score?: number | null };
+  launch: { status: string; result: string | null };
+}
+
 export interface NewProductWorkflowRecord {
   sku_identity_id: string;
   source_account_ref: string;
@@ -62,6 +100,6 @@ export async function getNewProductRules() {
   return (await backendRequest<Record<string, unknown>>("/api/new-products/rules")).data;
 }
 
-export async function getNewProductMetrics(skuId: string): Promise<Record<string, unknown>> {
-  return (await backendRequest<Record<string, unknown>>(apiPath(skuId, "/metrics"))).data;
+export async function getNewProductMetrics(skuId: string): Promise<NewProductMetrics> {
+  return (await backendRequest<NewProductMetrics>(apiPath(skuId, "/metrics"))).data;
 }

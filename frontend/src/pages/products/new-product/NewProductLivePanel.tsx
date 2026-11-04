@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Typography, message } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import dayjs from "dayjs";
+import NewProductMetricsPanel from "./NewProductMetricsPanel";
 import ReportTableShell from "@/components/report-table/ReportTableShell";
 import { StatusTagCell } from "@/components/report-table/cells";
 import {
@@ -14,6 +15,7 @@ import {
   saveMarketScore,
   type NewProductWorkflowList,
   type NewProductWorkflowRecord,
+  type NewProductMetrics,
 } from "./newProductApi";
 
 type Action = "market" | "request" | "decision" | "review";
@@ -28,7 +30,7 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
   const [data, setData] = useState<NewProductWorkflowList | null>(null);
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
-  const [metricData, setMetricData] = useState<Record<string, unknown> | null>(null);
+  const [metricData, setMetricData] = useState<NewProductMetrics | null>(null);
   const [record, setRecord] = useState<NewProductWorkflowRecord | null>(null);
   const [action, setAction] = useState<Action>("market");
   const [draft, setDraft] = useState<Draft>({ reason: "" });
@@ -152,11 +154,8 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
           onChange: next => void load(next), showSizeChanger: false }} />
     </ReportTableShell>
     <Modal title="真实经营数据及评分依据" open={metricData !== null} footer={null}
-      onCancel={() => setMetricData(null)} width={760}>
-      <Typography.Paragraph type="secondary">基于当前系统已发布业务表；数据不足不会自动判为失败，且不关联 PMC。</Typography.Paragraph>
-      <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 460, overflow: "auto" }}>
-        {JSON.stringify(metricData, null, 2)}
-      </pre>
+      onCancel={() => setMetricData(null)} width={1120}>
+      {metricData && <NewProductMetricsPanel metrics={metricData} />}
     </Modal>
     <Modal title={action === "market" ? "市场评分" : action === "request" ? "申请采购" :
       action === "decision" ? "审批采购草稿" : "打品复盘"} open={!!record} confirmLoading={busy}
