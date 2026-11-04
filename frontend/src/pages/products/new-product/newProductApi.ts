@@ -160,6 +160,53 @@ export interface NewProductRulesHistory {
   total: number;
 }
 
+export interface NewProductListingCandidate {
+  id: string;
+  source_account_ref: string;
+  store_id: string;
+  store_name: string | null;
+  item_id: string;
+  local_sku: string | null;
+  msku: string | null;
+  local_name: string | null;
+  title: string | null;
+  picture_url: string | null;
+  category: string | null;
+  listing_status: string | null;
+  lifecycle_status: string | null;
+  fulfillment_type_name: string | null;
+  listing_start_at_utc: string | null;
+  available_quantity: number | null;
+  wfs_available_quantity: number | null;
+  sales_7d: number | null;
+  sales_14d: number | null;
+  sales_30d: number | null;
+  tags_json: Record<string, unknown>[] | null;
+  calculated_at: string;
+}
+
+export interface NewProductListingCandidates {
+  source_account_ref: string;
+  source_table: "mart_listing_management_current";
+  selection_mode: "all_listings_pending_new_product_tag";
+  read_only: true;
+  items: NewProductListingCandidate[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export async function getNewProductListingCandidates(
+  account: string, page = 1, options: { sku?: string } = {},
+): Promise<NewProductListingCandidates> {
+  if (!account.trim()) throw new Error("需要先选择真实数据账户");
+  const q = new URLSearchParams({ source_account_ref: account, page: String(page) });
+  if (options.sku?.trim()) q.set("sku_query", options.sku.trim());
+  return (await backendRequest<NewProductListingCandidates>(
+    `/api/new-products/listing-candidates?${q}`,
+  )).data;
+}
+
 export interface NewProductWorkflowRecord {
   sku_identity_id: string;
   source_account_ref: string;
