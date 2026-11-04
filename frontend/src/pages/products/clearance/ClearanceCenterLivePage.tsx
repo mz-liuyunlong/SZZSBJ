@@ -104,7 +104,7 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
       setLoading(false);
     }
   }, [listPage,taskPage,store,keyword,risk]);
-  useEffect(()=>{ void reload(); },[reload]);
+  useEffect(()=>{ const fetchOnMount = async () => { await reload(); }; void fetchOnMount(); },[reload]);
 
   const stores = useMemo(()=>Array.from(new Map([...rows,...eligible].map(x=>[
     x.listing.store_id, {value:x.listing.store_id,label:x.listing.store_name||x.listing.store_id},
