@@ -12,7 +12,7 @@ from app.core.auth import Principal
 from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
 from app.modules.pmc_purchase.repository import PmcPurchaseReadRepository
 from app.modules.pmc_purchase.router import require_pmc_purchase_org_scope
-from app.modules.pmc_purchase.schemas import BoardListQuery
+from app.modules.pmc_purchase.schemas import BoardListQuery, PendingPlanQuery
 
 
 def test_legacy_pmc_read_grant_resolves_to_canonical_page_permission() -> None:
@@ -70,3 +70,39 @@ def test_restricted_org_cannot_use_unreviewed_purchase_routes(
                 require_pmc_purchase_org_scope(request, principal, session)
             assert error.value.status_code == 403
             assert ORG_OWNER_SCOPE_SESSION_KEY not in session.info
+
+
+
+def test_pending_plan_conversion_is_scoped_to_same_source_account() -> None:
+    """A plan number from a different account cannot suppress a pending plan."""
+    session = MagicMock()
+    session.info = {}
+    repository = PmcPurchaseReadRepository(session)
+    statement = repository._pending_plan_select(
+        PendingPlanQuery(), frozenset({"ACCOUNT1", "ACCOUNT2"})
+    )
+    sql = str(
+        statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+    assert "dws_purchase_board.source_account_ref = dwd_purchase_plan.source_account_ref" in sql
+    assert "dws_purchase_board.plan_sn = dwd_purchase_plan.plan_sn" in sql
+    assert "NOT (EXISTS" in sql
+    assert " NOT IN " not in sql
+
+
+def test_pending_plan_owner_proof_requires_same_store_and_sku() -> None:
+    """Historical owner evidence in another store must not authorize a plan."""
+    session = MagicMock()
+    session.info = {ORG_OWNER_SCOPE_SESSION_KEY: frozenset({"owner-approved"})}
+    repository = PmcPurchaseReadRepository(session)
+    statement = repository._pending_plan_select(
+        PendingPlanQuery(), frozenset({"ACCOUNT1"})
+    )
+    sql = str(
+        statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+    assert "dws_purchase_board.source_account_ref = dwd_purchase_plan.source_account_ref" in sql
+    assert "dws_purchase_board.store_id = dwd_purchase_plan.store_id" in sql
+    assert "dws_purchase_board.sku = dwd_purchase_plan.sku" in sql
+    assert "dws_purchase_board.owner_uid IN ('owner-approved')" in sql
+    assert "dwd_purchase_plan.store_id IS NOT NULL" in sql

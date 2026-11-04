@@ -244,29 +244,36 @@ class PmcPurchaseReadRepository:
     def _pending_plan_select(
         self, query: PendingPlanQuery, accounts: frozenset[str]
     ) -> Select[tuple[DwdPurchasePlan]]:
-        converted = (
-            select(DwsPurchaseBoard.plan_sn)
-            .where(
-                DwsPurchaseBoard.source_account_ref.in_(sorted(accounts)),
-                DwsPurchaseBoard.plan_sn.is_not(None),
-            )
-            .distinct()
-        )
         p = DwdPurchasePlan
+        # Plan numbers are unique only within an account. A converted plan in
+        # another account must not hide this account's pending purchase plan.
+        converted = exists(
+            select(1).where(
+                DwsPurchaseBoard.source_account_ref == p.source_account_ref,
+                DwsPurchaseBoard.plan_sn == p.plan_sn,
+            )
+        )
         clauses: list[Any] = [
             p.source_account_ref.in_(sorted(accounts)),
             p.status == PLAN_STATUS_PENDING_PURCHASE,
-            p.plan_sn.not_in(converted),
+            p.plan_sn.is_not(None),
+            ~converted,
         ]
         if self.org_owner_refs is not None:
-            clauses.append(
-                exists(
-                    select(1).where(
-                        DwsPurchaseBoard.source_account_ref == p.source_account_ref,
-                        DwsPurchaseBoard.sku == p.sku,
-                        DwsPurchaseBoard.owner_uid.in_(self.org_owner_refs),
-                    )
-                )
+            # A matching SKU in a different store does not establish ownership.
+            # Unattributed plans fail closed until a reviewed owner mapping exists.
+            clauses.extend(
+                [
+                    p.store_id.is_not(None),
+                    exists(
+                        select(1).where(
+                            DwsPurchaseBoard.source_account_ref == p.source_account_ref,
+                            DwsPurchaseBoard.store_id == p.store_id,
+                            DwsPurchaseBoard.sku == p.sku,
+                            DwsPurchaseBoard.owner_uid.in_(self.org_owner_refs),
+                        )
+                    ),
+                ]
             )
         if query.store_id:
             clauses.append(p.store_id.in_(query.store_id))
