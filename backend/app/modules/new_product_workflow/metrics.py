@@ -166,8 +166,10 @@ def read_sku_metrics(
         )
         roas = (
             attributed_sales / attributed_spend
-            if ads_same_currency and attributed_sales is not None
-            and attributed_spend is not None and attributed_spend > 0
+            if ads_same_currency
+            and attributed_sales is not None
+            and attributed_spend is not None
+            and attributed_spend > 0
             else None
         )
         clicks_count = _number(clicks["clicks"])
@@ -226,7 +228,8 @@ def read_sku_metrics(
             "acos": acos,
             "ad_spend_ratio": (
                 ad_spend_ratio
-                if consistent_currency and ads_same_currency
+                if consistent_currency
+                and ads_same_currency
                 and clicks["spend_currency"] == sales["sales_currency"]
                 else None
             ),

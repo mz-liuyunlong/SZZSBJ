@@ -952,10 +952,9 @@ def get_workflow_reconciliation(
     if not sku:
         _block(422)
     end = la_today()
-    show_finance = (
-        has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION)
-        and has_permission(principal, ORDER_PROFIT_MARGIN_PERMISSION)
-    )
+    show_finance = has_permission(
+        principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION
+    ) and has_permission(principal, ORDER_PROFIT_MARGIN_PERMISSION)
     report = reconcile_new_product_source(
         session,
         account=identity["source_account_ref"],
@@ -1149,9 +1148,7 @@ def write_rules(
     if version != payload.expected_version:
         _block(409)
     new_version = version + 1
-    rules = payload.model_dump(
-        exclude={"reason", "expected_version"}, exclude_none=True
-    )
+    rules = payload.model_dump(exclude={"reason", "expected_version"}, exclude_none=True)
     rules["purchase_bands"] = {
         grade: list(bounds) for grade, bounds in normalized_purchase_bands(rules).items()
     }

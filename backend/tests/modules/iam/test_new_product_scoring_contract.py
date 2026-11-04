@@ -62,6 +62,4 @@ def test_listing_age_30_day_market_review_gate() -> None:
     assert market_review_readiness(date(2026, 10, 6), today_la=today)["status"] == (
         "observation_not_yet_30_days"
     )
-    assert market_review_readiness(None, today_la=today)["status"] == (
-        "listing_date_unverified"
-    )
+    assert market_review_readiness(None, today_la=today)["status"] == ("listing_date_unverified")
