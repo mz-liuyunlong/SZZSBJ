@@ -85,7 +85,8 @@ class ClearanceReadRepository:
             params["store"] = store_id
         if keyword:
             where.append("""(l.item_id ilike :q or coalesce(l.msku,'') ilike :q
-                             or coalesce(l.local_sku,'') ilike :q or coalesce(l.title,'') ilike :q)""")
+                             or coalesce(l.local_sku,'') ilike :q or coalesce(l.title,'')
+                               ilike :q)""")
             params["q"] = f"%{keyword.strip()}%"
         if eligible_only:
             where.extend(
@@ -137,20 +138,27 @@ class ClearanceReadRepository:
             sum(sales_qty) filter(where business_date_la between :day - 13 and :day - 7) prev7,
             sum(sales_amount) filter(where business_date_la between :day - 29 and :day) revenue30,
             sum(sales_amount) filter(where business_date_la between :day - 6 and :day) revenue7,
-            sum(sales_amount) filter(where business_date_la between :day - 13 and :day - 7) revenue_prev7,
-            sum(gross_profit_amount) filter(where business_date_la between :day - 29 and :day) profit30,
-            sum(gross_profit_amount) filter(where business_date_la between :day - 6 and :day) profit7,
-            sum(gross_profit_amount) filter(where business_date_la between :day - 13 and :day - 7) profit_prev7,
+            sum(sales_amount) filter(where business_date_la between :day - 13 and :day - 7)
+              revenue_prev7,
+            sum(gross_profit_amount) filter(where business_date_la between :day - 29 and :day)
+              profit30,
+            sum(gross_profit_amount) filter(where business_date_la between :day - 6 and :day)
+              profit7,
+            sum(gross_profit_amount) filter(where business_date_la between :day - 13 and :day
+              - 7) profit_prev7,
             sum(coalesce(ad_spend_amount,0)+coalesce(sem_ad_spend_amount,0))
                 filter(where business_date_la between :day - 6 and :day) ad7,
             sum(coalesce(ad_spend_amount,0)+coalesce(sem_ad_spend_amount,0))
                 filter(where business_date_la between :day - 13 and :day - 7) ad_prev7,
-            count(*) filter(where business_date_la between :day - 29 and :day and cost_status <> 'complete') incomplete_cost_rows,
+            count(*) filter(where business_date_la between :day - 29 and :day and cost_status
+              <> 'complete') incomplete_cost_rows,
             count(*) filter(where business_date_la between :day - 29 and :day) sales_rows,
-            count(*) filter(where business_date_la between :day - 29 and :day and gross_profit_amount is null) missing_profit_rows,
+            count(*) filter(where business_date_la between :day - 29 and :day and
+              gross_profit_amount is null) missing_profit_rows,
             count(*) filter(where business_date_la between :day - 29 and :day and
               calculation_warnings_json ? 'sales_history_30d_incomplete') incomplete_history_rows,
-            count(distinct business_date_la) filter(where business_date_la between :day - 29 and :day) recorded_days,
+            count(distinct business_date_la) filter(where business_date_la between :day - 29
+              and :day) recorded_days,
             string_agg(distinct calc_version,',') calc_versions
           from mart_daily_sales_item_day
           where source_account_ref=any(:accounts) and item_id=any(:items)
@@ -166,8 +174,10 @@ class ClearanceReadRepository:
             self.session.execute(
                 text("""
           select source_account_ref,store_id,item_id,
-            count(distinct snapshot_date_la) filter(where wfs_available_quantity is not null) snapshot_days,
-            count(distinct snapshot_date_la) filter(where wfs_available_quantity>0) positive_stock_days
+            count(distinct snapshot_date_la) filter(where wfs_available_quantity is not null)
+              snapshot_days,
+            count(distinct snapshot_date_la) filter(where wfs_available_quantity>0)
+              positive_stock_days
           from fact_walmart_listing_inventory_daily
           where source_account_ref=any(:accounts) and item_id=any(:items)
             and snapshot_date_la between :day - 29 and :day
@@ -183,7 +193,8 @@ class ClearanceReadRepository:
                 text("""
           select source_account_ref,store_id,item_id,
             sum(coalesce(return_qty,0)) refund_qty,
-            sum(coalesce(refund_loss_amount,0)) filter(where refund_loss_effective=true) refund_loss,
+            sum(coalesce(refund_loss_amount,0)) filter(where refund_loss_effective=true)
+              refund_loss,
             count(distinct return_order_id) refund_orders
           from after_sales_refund_items
           where source_account_ref=any(:accounts) and item_id=any(:items)
@@ -200,11 +211,12 @@ class ClearanceReadRepository:
         costs: dict[str, dict] = {}
         for account in accounts:
             costs[account] = load_daily_sales_costs(self.session, source_account_ref=account)
-        key = lambda row: (
-            str(row["source_account_ref"]),
-            str(row["store_id"]),
-            str(row["item_id"]),
-        )
+        def key(row: dict) -> tuple[str, str, str]:
+            return (
+                str(row["source_account_ref"]),
+                str(row["store_id"]),
+                str(row["item_id"]),
+            )
         s_map = {key(r): dict(r) for r in sales}
         i_map = {key(r): dict(r) for r in snapshots}
         r_map = {key(r): dict(r) for r in refunds}
