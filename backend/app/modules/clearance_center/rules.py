@@ -140,6 +140,8 @@ def evaluate(
         warnings.append("SALES_WINDOW_UNVERIFIED")
     if not cost_complete:
         warnings.append("PROFIT_COST_INCOMPLETE")
+    if not metrics.get("refund_source_complete", False):
+        warnings.append("REFUND_SYNC_UNVERIFIED")
     if listing_days is None:
         warnings.append("LISTING_START_UNKNOWN")
 
@@ -187,6 +189,7 @@ def evaluate(
             signal("ADS", "AD_SHARE_INCREASE_AND_LOSS")
     if (
         rules["enable_refund_signal"]
+        and metrics.get("refund_source_complete", False)
         and refund_qty is not None
         and sales30 is not None
         and sales_complete
