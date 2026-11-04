@@ -6,6 +6,11 @@ on:
   push:
     branches: [dev, main, develop]
 
+# Prevent stale runs for the same PR from occupying the CI queue.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rule-pack-check:
     runs-on: ubuntu-latest
