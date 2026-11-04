@@ -401,11 +401,41 @@ def upgrade() -> None:
     )
 
 
+# 回退前要检查的业务数据：只要有一行，就拒绝删表。迁移自带的类别和 source='seed' 规则不算。
+BUSINESS_DATA_CHECKS = (
+    ("dim_finance_cash_accounts", "select 1 from dim_finance_cash_accounts limit 1"),
+    ("landing_finance_cashflow_imports", "select 1 from landing_finance_cashflow_imports limit 1"),
+    ("raw_finance_cashflow_files", "select 1 from raw_finance_cashflow_files limit 1"),
+    ("std_finance_cashflow_lines", "select 1 from std_finance_cashflow_lines limit 1"),
+    (
+        "std_finance_cashflow_line_occurrences",
+        "select 1 from std_finance_cashflow_line_occurrences limit 1",
+    ),
+    ("dq_run_finance_cashflow_import", "select 1 from dq_run_finance_cashflow_import limit 1"),
+    ("evt_finance_cash_line_reviews", "select 1 from evt_finance_cash_line_reviews limit 1"),
+    ("manual_finance_cash_line_state", "select 1 from manual_finance_cash_line_state limit 1"),
+    ("manual_finance_cash_exclusions", "select 1 from manual_finance_cash_exclusions limit 1"),
+    (
+        "cfg_finance_cash_classify_rules",
+        "select 1 from cfg_finance_cash_classify_rules where source <> 'seed' limit 1",
+    ),
+    (
+        "dim_finance_cash_categories",
+        "select 1 from dim_finance_cash_categories where not (code = any(:seed_codes)) limit 1",
+    ),
+)
+
+
 def downgrade() -> None:
     bind = op.get_bind()
-    has_lines = bind.execute(sa.text("select 1 from std_finance_cashflow_lines limit 1")).first()
-    if has_lines is not None:
-        raise RuntimeError("std_finance_cashflow_lines has data; refusing to drop finance tables")
+    seed_codes = [code for code, _big, _name in CATEGORIES]
+    found = [
+        table
+        for table, query in BUSINESS_DATA_CHECKS
+        if bind.execute(sa.text(query), {"seed_codes": seed_codes}).first() is not None
+    ]
+    if found:
+        raise RuntimeError(", ".join(found) + " has data; refusing to drop finance tables")
     for table in (
         "manual_finance_cash_exclusions",
         "manual_finance_cash_line_state",

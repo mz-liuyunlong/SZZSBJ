@@ -28,6 +28,7 @@ from app.modules.finance_cashflow.models import (
     FinanceCashAccount,
     FinanceCashCategory,
     FinanceCashClassifyRule,
+    FinanceCashExclusion,
     FinanceCashImport,
     FinanceCashLine,
     FinanceCashLineEvent,
@@ -339,10 +340,81 @@ def _load_migration():
     return module
 
 
+def _downgrade(session: Session) -> None:
+    context = MigrationContext.configure(session.connection())
+    with Operations.context(context):
+        _load_migration().downgrade()
+
+
+def test_downgrade_allowed_with_only_migration_seeds(session: Session):
+    """只有迁移自带的类别和 seed 规则：可以回退（夹具最后回滚，测试库不受影响）。"""
+    assert session.scalar(select(func.count()).select_from(FinanceCashAccount)) == 0
+    _downgrade(session)
+    tables = set(inspect(session.connection()).get_table_names())
+    assert not tables & {"dim_finance_cash_accounts", "cfg_finance_cash_classify_rules"}
+
+
+def _add_account(session: Session) -> None:
+    account = next(iter(S.seed().accounts.values()))
+    session.add(
+        FinanceCashAccount(
+            account_key=account.account_key,
+            display_name=account.display_name,
+            entity=account.entity,
+            currency_code=account.currency_code,
+            kind=account.kind,
+            provider=account.provider,
+            account_no_last4=account.account_no_last4,
+            identity_hint=account.match,
+        )
+    )
+
+
+def _add_deploy_rule(session: Session) -> None:
+    session.add(
+        FinanceCashClassifyRule(
+            rule_type="text", pattern="合成对方", category_code="G01", sort_order=1, source="deploy"
+        )
+    )
+
+
+def _add_exclusion(session: Session) -> None:
+    session.add(
+        FinanceCashExclusion(
+            entry_key="E1", amount_cny=Decimal("5"), reason="合成", registered_by="admin"
+        )
+    )
+
+
+def _add_category(session: Session) -> None:
+    session.add(FinanceCashCategory(code="Z99", big="合成", name="合成类别", sort_order=99))
+
+
+@pytest.mark.parametrize(
+    ("add", "table"),
+    [
+        (_add_account, "dim_finance_cash_accounts"),
+        (_add_deploy_rule, "cfg_finance_cash_classify_rules"),
+        (_add_exclusion, "manual_finance_cash_exclusions"),
+        (_add_category, "dim_finance_cash_categories"),
+    ],
+)
+def test_downgrade_refuses_business_data_without_lines(session: Session, add, table):
+    add(session)
+    session.flush()
+    with pytest.raises(RuntimeError, match=f"{table}.*has data"):
+        _downgrade(session)
+    assert session.scalar(select(func.count()).select_from(FinanceCashLine)) == 0
+    assert session.scalar(select(func.count()).select_from(FinanceCashCategory)) >= 26
+
+
 def test_downgrade_refuses_when_lines_exist(service, session):
     upload(service, S.boc(S.BOC_A, boc_rows()))
     context = MigrationContext.configure(session.connection())
-    with Operations.context(context), pytest.raises(RuntimeError, match="has data"):
+    with (
+        Operations.context(context),
+        pytest.raises(RuntimeError, match="std_finance_cashflow_lines.*has data"),
+    ):
         _load_migration().downgrade()
     assert session.scalar(select(func.count()).select_from(FinanceCashLine)) == 3
 
