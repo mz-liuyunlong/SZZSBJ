@@ -33,6 +33,7 @@ def metrics(sales: int = 30, **overrides):
         "sales_7d_complete": True,
         "sales_prev_7d_complete": True,
         "zero_sales_verified": True,
+        "refund_source_complete": True,
         "cost_complete": True,
         "listing_days": 100,
     }
@@ -186,4 +187,14 @@ def test_refund_loss_does_not_get_subtracted_twice_from_daily_profit() -> None:
 def test_zero_sales_does_not_auto_enter_without_verified_source_history() -> None:
     result = check(40, 0, zero_sales_verified=False, positive_stock_days=25)
     assert result["risk_level"] != "high"
+    assert result["candidate_status"] != "auto"
+
+
+def test_unknown_refund_sync_must_not_create_false_positive() -> None:
+    result = check(
+        120,30,refund_qty=10,refund_source_complete=False,
+        profit30=40,revenue30=300,
+    )
+    assert "AFTER_SALES" not in result["business_signal_groups"]
+    assert "REFUND_SYNC_UNVERIFIED" in result["warnings"]
     assert result["candidate_status"] != "auto"
