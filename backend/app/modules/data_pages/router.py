@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode, ErrorEnvelope, SuccessEnvelope, success_response
-from app.core.auth import Principal
+from app.core.auth import Principal, require_principal
+from app.core.permission_policy_v2 import permission_for_request
 from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.data_pages.daily_sales_export import (
@@ -58,9 +59,97 @@ from app.modules.data_pages.service import (
     ListingManagementService,
     OrderProfitService,
 )
+from app.modules.iam.organization_access import (
+    ORG_OWNER_SCOPE_SESSION_KEY,
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
+    resolve_business_owner_refs,
+    resolve_business_account_owner_pairs,
+)
+from app.modules.iam.explicit_item_scope import (
+    SKU_SCOPE_SESSION_KEY,
+    PRODUCT_SCOPE_SESSION_KEY,
+    resolve_explicit_identity_scope,
+)
+from app.modules.iam.explicit_owner_scope import OWNER_SCOPE_SESSION_KEY, resolve_explicit_owner_scope
+from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY, resolve_account_store_scope
 from app.modules.integration_sync.dependencies import require_source_account_scope
 
-router = APIRouter(tags=["DATA-PAGES"])
+_ORG_SCOPED_READS = frozenset(
+    {
+        "/api/data-pages/filter-options",
+        "/api/sales/daily-sales",
+        "/api/sales/daily-sales/export",
+        "/api/sales/order-profit",
+        "/api/sales/order-profit/export",
+        "/api/sales/order-profit/trend",
+        "/api/sales/order-profit/filter-options",
+        "/api/listings/walmart",
+        "/api/listings/walmart/summary",
+        "/api/listings/walmart/filter-options",
+        "/api/listings/walmart/export",
+    }
+)
+
+
+def require_data_page_org_scope(
+    request: Request,
+    principal: Annotated[Principal, Depends(require_principal)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    """Check endpoint permission before organization scope and SQL filtering."""
+    session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
+    session.info.pop(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY, None)
+    session.info.pop(STORE_SCOPE_SESSION_KEY, None)
+    session.info.pop(OWNER_SCOPE_SESSION_KEY, None)
+    session.info.pop(SKU_SCOPE_SESSION_KEY, None)
+    session.info.pop(PRODUCT_SCOPE_SESSION_KEY, None)
+    if request.url.path.startswith("/api/sales/order-profit"):
+        declared = _ORDER_PROFIT_REGISTRY.permission
+    elif request.url.path.startswith("/api/listings/"):
+        declared = _LISTING_REGISTRY.permission
+    else:
+        declared = _DAILY_SALES_REGISTRY.permission
+    required_permission = permission_for_request(request.method, request.url.path, declared)
+    # A legacy page-read grant must never satisfy an export/action permission.
+    allowed = has_permission(principal, required_permission)
+    if required_permission.startswith("page:"):
+        allowed = allowed or has_permission(principal, declared)
+    if not allowed:
+        raise ApiError(
+            code=ErrorCode.FORBIDDEN,
+            status_code=403,
+            details={"required_permission": required_permission},
+        )
+    owner_pairs = resolve_business_account_owner_pairs(session, principal)
+    owner_refs = (
+        None if owner_pairs else resolve_business_owner_refs(session, principal)
+    )
+    account_stores = resolve_account_store_scope(session, principal)
+    explicit_owners = resolve_explicit_owner_scope(session, principal)
+    scoped_skus = resolve_explicit_identity_scope(session, principal, scope_type="sku")
+    scoped_items = resolve_explicit_identity_scope(session, principal, scope_type="product")
+    if all(value is None for value in (
+        owner_refs, owner_pairs or None, account_stores,
+        explicit_owners, scoped_skus, scoped_items,
+    )):
+        return
+    if request.method != "GET" or request.url.path not in _ORG_SCOPED_READS:
+        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
+    if owner_pairs:
+        session.info[ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY] = owner_pairs
+    elif owner_refs is not None:
+        session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owner_refs
+    if account_stores is not None:
+        session.info[STORE_SCOPE_SESSION_KEY] = account_stores
+    if explicit_owners is not None:
+        session.info[OWNER_SCOPE_SESSION_KEY] = explicit_owners
+    if scoped_skus is not None:
+        session.info[SKU_SCOPE_SESSION_KEY] = scoped_skus
+    if scoped_items is not None:
+        session.info[PRODUCT_SCOPE_SESSION_KEY] = scoped_items
+
+
+router = APIRouter(tags=["DATA-PAGES"], dependencies=[Depends(require_data_page_org_scope)])
 db_session = Annotated[Session, Depends(get_db_session)]
 source_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
 _DAILY_SALES_REGISTRY = DATA_PAGE_API_REGISTRY["daily_sales"]

@@ -23,6 +23,11 @@ from app.modules.approvals.schemas import (
     ApprovalSummary,
     ApprovalSupplementWrite,
 )
+from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+from app.modules.iam.organization_access import (
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
+    ORG_OWNER_SCOPE_SESSION_KEY,
+)
 
 
 def blocked(status: int = 409) -> None:
@@ -85,6 +90,75 @@ def signature(snapshot: dict) -> str:
 class ApprovalService:
     def __init__(self, session: Session):
         self.session = session
+        scope = getattr(session, "info", None)
+        self.org_owner_refs = (
+            scope.get(ORG_OWNER_SCOPE_SESSION_KEY) if isinstance(scope, dict) else None
+        )
+        self.account_owner_pairs = (
+            scope.get(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY) if isinstance(scope, dict) else None
+        )
+        self.account_stores = (
+            scope.get(STORE_SCOPE_SESSION_KEY) if isinstance(scope, dict) else None
+        )
+
+    @property
+    def _scoped(self) -> bool:
+        return (
+            self.org_owner_refs is not None
+            or self.account_owner_pairs is not None
+            or self.account_stores is not None
+        )
+
+    def _account_owner_condition(self, alias: str) -> str:
+        return (
+            "exists (select 1 from jsonb_to_recordset(cast(:org_account_owners as jsonb)) "
+            "as granted(account_ref text, owner_uid text) "
+            f"where granted.account_ref={alias}.source_account_ref "
+            f"and granted.owner_uid={alias}.owner_ref)"
+        )
+
+    def _account_store_condition(self, alias: str) -> str:
+        return (
+            "exists (select 1 from jsonb_to_recordset(cast(:org_account_stores as jsonb)) "
+            "as stores(account_ref text, store_key text) "
+            f"where stores.account_ref={alias}.source_account_ref "
+            f"and stores.store_key={alias}.store_id)"
+        )
+
+    def _owner_params(self) -> dict[str, object]:
+        params: dict[str, object] = {}
+        if self.org_owner_refs is not None:
+            params["org_owner_refs"] = sorted(self.org_owner_refs)
+        if self.account_owner_pairs is not None:
+            params["org_account_owners"] = json.dumps([
+                {"account_ref": account, "owner_uid": owner}
+                for account, owner in sorted(self.account_owner_pairs)
+            ])
+        if self.account_stores is not None:
+            params["org_account_stores"] = json.dumps([
+                {"account_ref": account, "store_key": store}
+                for account, store in sorted(self.account_stores)
+            ])
+        return params
+
+    def _approval_scope_condition(self, alias: str) -> str:
+        """Only the reviewed WFS approval type may be seen by scoped users."""
+        clauses = [
+            f"wc.id::text={alias}.business_ref",
+            f"wc.source_account_ref={alias}.source_account_ref",
+            "wc.is_deleted=false",
+        ]
+        if self.org_owner_refs is not None:
+            clauses.append("wc.owner_ref=any(:org_owner_refs)")
+        if self.account_owner_pairs is not None:
+            clauses.append(self._account_owner_condition("wc"))
+        if self.account_stores is not None:
+            clauses.append(self._account_store_condition("wc"))
+        return (
+            f"({alias}.approval_type='wfs_case_abandon' and exists ("
+            "select 1 from ops_wfs_fee_anomaly_cases wc where "
+            + " and ".join(clauses) + "))"
+        )
 
     def _case(self, case_id: str, account_refs: frozenset[str], lock: bool = False) -> dict:
         row = (
@@ -94,9 +168,26 @@ class ApprovalService:
             select * from ops_wfs_fee_anomaly_cases
              where id = :id and source_account_ref = any(:accounts) and is_deleted = false
         """
+                    + (
+                        " and owner_ref=any(:org_owner_refs)"
+                        if self.org_owner_refs is not None
+                        else ""
+                    )
+                    + (
+                        " and " + self._account_owner_condition("ops_wfs_fee_anomaly_cases")
+                        if self.account_owner_pairs is not None else ""
+                    )
+                    + (
+                        " and " + self._account_store_condition("ops_wfs_fee_anomaly_cases")
+                        if self.account_stores is not None else ""
+                    )
                     + (" for update" if lock else "")
                 ),
-                {"id": case_id, "accounts": list(account_refs)},
+                {
+                    "id": case_id,
+                    "accounts": list(account_refs),
+                    **self._owner_params(),
+                },
             )
             .mappings()
             .first()
@@ -235,14 +326,20 @@ class ApprovalService:
             self.session.execute(
                 text(
                     """
-            select * from app_approval_requests where id=:id
+            select * from app_approval_requests a where id=:id
               and source_account_ref=any(:accounts)
         """
+                    + (
+                        " and " + self._approval_scope_condition("a")
+                        if self._scoped
+                        else ""
+                    )
                     + (" for update" if lock else "")
                 ),
                 {
                     "id": str(approval_id),
                     "accounts": list(account_refs),
+                    **self._owner_params(),
                 },
             )
             .mappings()
@@ -294,6 +391,13 @@ class ApprovalService:
             "not exists (select 1 from app_approval_requests a where "
             "a.approval_type='wfs_case_abandon' and a.business_ref=c.id::text)",
         ]
+        if self.org_owner_refs is not None:
+            where.append("c.owner_ref=any(:org_owner_refs)")
+        if self.account_owner_pairs is not None:
+            where.append(self._account_owner_condition("c"))
+        if self.account_stores is not None:
+            where.append(self._account_store_condition("c"))
+        params.update(self._owner_params())
         if query.approval_type and query.approval_type != "wfs_case_abandon":
             return ApprovalListData(items=[]), 0
         if query.keyword:
@@ -593,6 +697,15 @@ class ApprovalService:
             "not exists (select 1 from app_approval_requests a where "
             "a.approval_type='wfs_case_abandon' and a.business_ref=c.id::text)",
         ]
+        if self._scoped:
+            params.update(self._owner_params())
+            formal_where.append(self._approval_scope_condition("a"))
+            if self.org_owner_refs is not None:
+                legacy_where.append("c.owner_ref=any(:org_owner_refs)")
+            if self.account_owner_pairs is not None:
+                legacy_where.append(self._account_owner_condition("c"))
+            if self.account_stores is not None:
+                legacy_where.append(self._account_store_condition("c"))
         if query.view == "mine":
             formal_where.append("a.applicant_id<>:actor")
             if query.tab == "pending":
@@ -735,6 +848,9 @@ class ApprovalService:
             "limit": query.page_size,
             "offset": (query.page - 1) * query.page_size,
         }
+        if self._scoped:
+            params.update(self._owner_params())
+            where.append(self._approval_scope_condition("a"))
         if not may_review:
             where.append("a.applicant_id=:actor")
         elif query.view == "created":
@@ -785,23 +901,34 @@ class ApprovalService:
         may_review: bool,
         is_admin: bool = False,
     ) -> ApprovalSummary:
+        formal_scope_sql = (
+            " and " + self._approval_scope_condition("a") if self._scoped else ""
+        )
+        legacy_scope_sql = (
+            (" and c.owner_ref=any(:org_owner_refs)" if self.org_owner_refs is not None else "")
+            + (" and " + self._account_owner_condition("c") if self.account_owner_pairs is not None else "")
+            + (" and " + self._account_store_condition("c") if self.account_stores is not None else "")
+        )
+        org_params = self._owner_params()
         row = (
             self.session.execute(
-                text("""
+                text(f"""
             select
               count(*) filter (where status='submitted') pending,
               count(*) filter (where status='submitted' and risk_level='high') high_risk,
               count(*) filter (where status='info_required') info_required,
               count(*) filter (where status='approved') approved
-            from app_approval_requests where source_account_ref=any(:accounts)
+            from app_approval_requests a where source_account_ref=any(:accounts)
               and (:may_review or applicant_id=:actor)
               and (approval_type='wfs_case_abandon' or applicant_id=:actor or :is_admin)
+              {formal_scope_sql}
         """),
                 {
                     "accounts": list(account_refs),
                     "actor": actor,
                     "may_review": may_review,
                     "is_admin": is_admin,
+                    **org_params,
                 },
             )
             .mappings()
@@ -815,7 +942,7 @@ class ApprovalService:
         if may_review:
             legacy_stats = (
                 self.session.execute(
-                    text("""
+                    text(f"""
                     select
                       count(*) filter (where c.archive_review_status='pending') as total,
                       count(*) filter (where c.archive_review_status='pending'
@@ -837,8 +964,9 @@ class ApprovalService:
                           and c.archive_review_note like '[当前审批]%'))
                       and not exists (select 1 from app_approval_requests a
                        where a.approval_type='wfs_case_abandon' and a.business_ref=c.id::text)
+                      {legacy_scope_sql}
                 """),
-                    {"accounts": list(account_refs)},
+                    {"accounts": list(account_refs), **org_params},
                 )
                 .mappings()
                 .one()

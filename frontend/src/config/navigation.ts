@@ -377,6 +377,7 @@ export const navigation: NavigationGroup[] = [
       page('settings', 'user_management', '用户管理', '/settings/user-management', {
         tabs: [{ key: 'users', title: '用户列表' }, { key: 'roles', title: '分配角色' }, { key: 'org', title: '组织架构' }, { key: 'data-scope', title: '用户数据范围' }],
       }),
+      page('settings', 'organization', '组织架构', '/settings/organization'),
       page('settings', 'fee_rules', '费用规则', '/settings/fee-rules'),
       page('settings', 'role_management', '角色管理', '/settings/role-management', {
         tabs: [{ key: 'roles', title: '角色列表' }, { key: 'pages', title: '页面权限' }, { key: 'actions', title: '动作权限' }, { key: 'data-scope', title: '数据权限' }, { key: 'high-risk', title: '高危动作' }, { key: 'changes', title: '权限变更记录' }],

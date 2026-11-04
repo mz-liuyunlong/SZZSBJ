@@ -16,6 +16,7 @@ from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.pmc_purchase.registry import PMC_PURCHASE_API_REGISTRY
+from app.modules.pmc_purchase.router import require_pmc_purchase_org_scope
 from app.modules.pmc_purchase.schemas import (
     BoardListData,
     BoardRowRead,
@@ -38,6 +39,8 @@ ROUTES = [entry.route_path for entry in PMC_PURCHASE_API_REGISTRY.values()]
 
 def _app(*permissions: str, scoped: bool = True) -> FastAPI:
     application = create_app()
+    # Synthetic permission/source-account fixtures do not include a Feishu snapshot.
+    application.dependency_overrides[require_pmc_purchase_org_scope] = lambda: None
     application.dependency_overrides[get_optional_principal] = lambda: Principal(
         user_id="synthetic-user", permissions=frozenset(permissions)
     )
@@ -256,3 +259,23 @@ def test_order_detail_not_found_is_an_envelope(monkeypatch: Any) -> None:
     monkeypatch.setattr(PmcPurchaseReadService, "order_detail", missing)
     body = _envelope(TestClient(_app(READ)).get("/api/pmc/purchase/orders/NOPE"), 404)
     assert body["error"]["code"] == "NOT_FOUND"
+
+
+def test_org_scope_filters_purchase_order_detail() -> None:
+    from unittest.mock import MagicMock
+
+    from sqlalchemy.dialects import postgresql
+
+    from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
+    from app.modules.pmc_purchase.repository import PmcPurchaseReadRepository
+
+    session = MagicMock()
+    session.info = {ORG_OWNER_SCOPE_SESSION_KEY: frozenset({"owner-approved"})}
+    repository = PmcPurchaseReadRepository(session)
+    repository.board_rows_for_order("PO-1", frozenset({"A1"}))
+    order_sql = str(
+        session.scalars.call_args.args[0].compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert "owner_uid IN ('owner-approved')" in order_sql

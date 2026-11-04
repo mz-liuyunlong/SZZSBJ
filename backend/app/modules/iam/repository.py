@@ -249,6 +249,31 @@ class IamRepository:
                   and s.revoked_at is null
                   and s.expires_at > now()
                   and u.is_active = 1
+                  and NOT EXISTS (
+                    SELECT 1 FROM iam_feishu_org_events denied
+                    WHERE denied.open_id = u.feishu_open_id
+                      AND denied.revoke_session IS TRUE
+                      AND denied.received_at > COALESCE(
+                          (SELECT applied_at FROM iam_feishu_org_sync_runs
+                           ORDER BY applied_at DESC, id DESC LIMIT 1),
+                          '-infinity'::timestamptz
+                      )
+                  )
+                  and (
+                    u.feishu_open_id is null
+                    or exists (
+                        select 1
+                        from iam_feishu_employees e
+                        where e.open_id = u.feishu_open_id
+                          and e.last_seen_run_id = (
+                              select id from iam_feishu_org_sync_runs
+                              order by applied_at desc, id desc limit 1
+                          )
+                          and e.is_active is true
+                          and e.is_resigned is not true
+                          and e.is_frozen is not true
+                    )
+                  )
                 group by u.id, u.is_super_admin
                 """
                 ),
@@ -256,6 +281,30 @@ class IamRepository:
             )
             .mappings()
             .one_or_none()
+        )
+
+    def has_pending_feishu_revocation(self, user_id: int) -> bool:
+        """A signed offboarding event must block re-login before the next snapshot."""
+        return bool(
+            self.session.scalar(
+                text(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM app_users u
+                        JOIN iam_feishu_org_events e ON e.open_id = u.feishu_open_id
+                        WHERE u.id = :user_id
+                          AND e.revoke_session IS TRUE
+                          AND e.received_at > COALESCE(
+                              (SELECT applied_at FROM iam_feishu_org_sync_runs
+                               ORDER BY applied_at DESC, id DESC LIMIT 1),
+                              '-infinity'::timestamptz
+                          )
+                    )
+                    """
+                ),
+                {"user_id": user_id},
+            )
         )
 
     def revoke_user_sessions(self, user_id: int) -> None:

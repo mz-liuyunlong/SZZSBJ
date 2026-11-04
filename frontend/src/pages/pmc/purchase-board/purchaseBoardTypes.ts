@@ -147,7 +147,7 @@ export interface SkuCycleBrief {
   valueDays: number | null;
   source: SkuCycleSource | null;
   sampleCount: number | null;
-  unstable: boolean;
+  unstable: boolean | null;
 }
 
 export interface SkuCycleSample {
@@ -228,15 +228,16 @@ export interface MoneyByCurrency {
 }
 
 export interface PurchaseBoardSummary {
+  scopeLimited?: boolean;
   awaitingArrivalOrders: number;
   arrivalOverdueOrders: number;
   purchaseOverdueOrders: number;
   purchaseOverduePlans: number;
   averagePurchaseCycleDays90d: number | null;
   medianPurchaseCycleDays90d: number | null;
-  purchaseCycleSampleOrders90d: number;
+  purchaseCycleSampleOrders90d: number | null;
   monthPurchaseAmount: MoneyByCurrency[];
-  unstableSkuCount: number;
+  unstableSkuCount: number | null;
   itemidPendingLines: number;
   wfsNotReadyLines: number;
   unattributedStoreLines: number;
@@ -259,12 +260,13 @@ export interface PurchaseOrderPlanRef {
 }
 
 export interface PurchaseOrderDetail {
+  scopeLimited?: boolean;
   purchaseOrderSn: string;
   orderStatus: number | null;
   orderDate: string | null;
   orderCreateDate: string | null;
   quantityTotal: number | null;
-  quantityReceived: number;
+  quantityReceived: number | null;
   progressRatio: number | null;
   arrivalDate: string | null;
   amountTotal: number | null;

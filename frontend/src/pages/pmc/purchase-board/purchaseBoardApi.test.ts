@@ -207,6 +207,59 @@ describe("purchaseBoardApi mapping", () => {
     expect(summary.asOf).toBe("2026-09-24");
   });
 
+  it("maps restricted PMC summary as unavailable rather than zero", async () => {
+    fetchMock.mockResolvedValue(envelope({
+      scope_limited: true,
+      awaiting_arrival_orders: 1,
+      arrival_overdue_orders: 0,
+      purchase_overdue_orders: 0,
+      purchase_overdue_plans: 1,
+      average_purchase_cycle_days_90d: null,
+      median_purchase_cycle_days_90d: null,
+      purchase_cycle_sample_orders_90d: null,
+      month_purchase_amount: [],
+      unstable_sku_count: null,
+      itemid_pending_lines: 0,
+      wfs_not_ready_lines: 0,
+      unattributed_store_lines: 0,
+      as_of: "2026-11-04",
+    }));
+    const summary = await getPurchaseBoardSummary(createInitialPurchaseBoardFilters());
+    expect(summary.scopeLimited).toBe(true);
+    expect(summary.purchaseCycleSampleOrders90d).toBeNull();
+    expect(summary.unstableSkuCount).toBeNull();
+    expect(summary.averagePurchaseCycleDays90d).toBeNull();
+  });
+
+  it("maps restricted PMC order detail without fabricating order totals", async () => {
+    fetchMock.mockResolvedValue(envelope({
+      scope_limited: true,
+      purchase_order_sn: "PO1",
+      order_status: 2,
+      order_date: "2026-09-01",
+      order_create_date: "2026-08-31",
+      quantity_total: null,
+      quantity_received: null,
+      progress_ratio: null,
+      arrival_date: null,
+      amount_total: null,
+      currency_code: "CNY",
+      stage: backendRow.stage,
+      lines: [{ ...backendRow, quantity_total: null, amount_total: null,
+        sku_cycle: { value_days: null, source: null, sample_count: null, unstable: null },
+      }],
+      receipts: [],
+      plans: [],
+      sku_cycles: [],
+    }));
+    const detail = await getPurchaseOrderDetail("PO1");
+    expect(detail.scopeLimited).toBe(true);
+    expect(detail.quantityReceived).toBeNull();
+    expect(detail.amountTotal).toBeNull();
+    expect(detail.lines[0].skuCycle.unstable).toBeNull();
+    expect(detail.receipts).toEqual([]);
+  });
+
   it("maps the order detail and encodes the order number in the path", async () => {
     fetchMock.mockResolvedValue(envelope({
       purchase_order_sn: "PO 1",

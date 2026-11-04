@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
@@ -10,6 +11,11 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
 from app.core.config import AppEnvironment, get_settings
+from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+from app.modules.iam.organization_access import (
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
+    ORG_OWNER_SCOPE_SESSION_KEY,
+)
 from app.modules.product_management.daily_sales_costs import (
     load_daily_sales_costs,
     normalize_sku_key,
@@ -101,6 +107,50 @@ class WfsFeeAlertService:
 
     def __init__(self, session: Session) -> None:
         self.session = session
+        scope = getattr(session, "info", None)
+        self.org_owner_refs = (
+            scope.get(ORG_OWNER_SCOPE_SESSION_KEY) if isinstance(scope, dict) else None
+        )
+        self.account_owner_pairs = (
+            scope.get(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY) if isinstance(scope, dict) else None
+        )
+        self.account_stores = (
+            scope.get(STORE_SCOPE_SESSION_KEY) if isinstance(scope, dict) else None
+        )
+
+    def _account_store_clause(self) -> str:
+        if self.account_stores is None:
+            return ""
+        return (
+            " and exists (select 1 from jsonb_to_recordset(cast(:org_account_stores as jsonb)) "
+            "as stores(account_ref text, store_key text) "
+            "where stores.account_ref=source_account_ref and stores.store_key=store_id)"
+        )
+
+    def _account_store_params(self) -> dict[str, object]:
+        if self.account_stores is None:
+            return {}
+        return {"org_account_stores": json.dumps([
+            {"account_ref": account, "store_key": store}
+            for account, store in sorted(self.account_stores)
+        ])}
+
+    def _account_owner_clause(self) -> str:
+        if self.account_owner_pairs is None:
+            return ""
+        return (
+            " and exists (select 1 from jsonb_to_recordset(cast(:org_account_owners as jsonb)) "
+            "as allowed(account_ref text, owner_uid text) "
+            "where allowed.account_ref=source_account_ref and allowed.owner_uid=owner_ref)"
+        )
+
+    def _account_owner_params(self) -> dict[str, object]:
+        if self.account_owner_pairs is None:
+            return {}
+        return {"org_account_owners": json.dumps([
+            {"account_ref": account, "owner_uid": owner}
+            for account, owner in sorted(self.account_owner_pairs)
+        ])}
 
     def list_cases(
         self,
@@ -140,9 +190,26 @@ class WfsFeeAlertService:
                     + (
                         " where id=:case_id and source_account_ref=any(:accounts)"
                         " and is_deleted=false"
+                        + (
+                            " and owner_ref=any(:org_owner_refs)"
+                            if self.org_owner_refs is not None
+                            else ""
+                        )
+                        + self._account_owner_clause()
+                        + self._account_store_clause()
                     )
                 ),
-                {"case_id": str(case_id), "accounts": list(account_refs)},
+                {
+                    "case_id": str(case_id),
+                    "accounts": list(account_refs),
+                    **(
+                        {"org_owner_refs": sorted(self.org_owner_refs)}
+                        if self.org_owner_refs is not None
+                        else {}
+                    ),
+                    **self._account_owner_params(),
+                    **self._account_store_params(),
+                },
             )
             .mappings()
             .first()
@@ -618,6 +685,15 @@ class WfsFeeAlertService:
     ) -> tuple[list[dict], int]:
         where = ["source_account_ref = any(:accounts)", "is_deleted = false"]
         params: dict[str, object] = {"accounts": list(account_refs)}
+        if self.org_owner_refs is not None:
+            where.append("owner_ref = any(:org_owner_refs)")
+            params["org_owner_refs"] = sorted(self.org_owner_refs)
+        if self.account_owner_pairs is not None:
+            where.append(self._account_owner_clause().removeprefix(" and "))
+            params.update(self._account_owner_params())
+        if self.account_stores is not None:
+            where.append(self._account_store_clause().removeprefix(" and "))
+            params.update(self._account_store_params())
         if query.start_date is not None:
             where.append("coalesce(first_alert_at, created_at)::date >= :start_date")
             params["start_date"] = query.start_date
@@ -854,7 +930,22 @@ class WfsFeeAlertService:
             latest_follow=row["latest_follow_note"] or row["follow_log"],
         )
 
+    def ensure_case_visible(self, case_id: UUID, account_refs: frozenset[str]) -> None:
+        """Apply the same source-account and owner guards before approval writes."""
+        self._assert_case_visible(case_id, account_refs)
+
     def _assert_case_visible(self, case_id: UUID, account_refs: frozenset[str]) -> None:
+        scoped_sql = (
+            " and owner_ref=any(:org_owner_refs)" if self.org_owner_refs is not None else ""
+        ) + self._account_owner_clause() + self._account_store_clause()
+        params: dict[str, object] = {
+            "case_id": str(case_id),
+            "accounts": list(account_refs),
+        }
+        if self.org_owner_refs is not None:
+            params["org_owner_refs"] = sorted(self.org_owner_refs)
+        params.update(self._account_owner_params())
+        params.update(self._account_store_params())
         exists = self.session.execute(
             text(
                 """
@@ -862,8 +953,10 @@ class WfsFeeAlertService:
                 from ops_wfs_fee_anomaly_cases
                 where id=:case_id and source_account_ref=any(:accounts) and is_deleted=false
                 """
+                + scoped_sql
+                + " FOR UPDATE"
             ),
-            {"case_id": str(case_id), "accounts": list(account_refs)},
+            params,
         ).first()
         if exists is None:
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)

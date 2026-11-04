@@ -23,6 +23,11 @@ from app.modules.decodo.router import (
 from app.modules.decodo.router import (
     settings_router as decodo_settings_router,
 )
+from app.modules.iam.business_scope_guard import require_business_scope_coverage
+from app.modules.iam.organization_account_owner_router import router as organization_account_owner_router
+from app.modules.iam.organization_event_router import router as organization_event_router
+from app.modules.iam.organization_owner_router import router as organization_owner_router
+from app.modules.iam.organization_sync_router import router as organization_sync_router
 from app.modules.iam.password_reset_router import router as password_reset_router
 from app.modules.iam.rbac_router import router as rbac_router
 from app.modules.iam.router import router as iam_router
@@ -67,7 +72,10 @@ async def app_lifespan(_: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     application = FastAPI(
         title="YC System API",
-        dependencies=[Depends(enforce_protected_by_default)],
+        dependencies=[
+            Depends(enforce_protected_by_default),
+            Depends(require_business_scope_coverage),
+        ],
         docs_url=None,
         lifespan=app_lifespan,
         redoc_url=None,
@@ -88,6 +96,10 @@ def create_app() -> FastAPI:
     application.include_router(data_pages_router)
     application.include_router(iam_router)
     application.include_router(rbac_router)
+    application.include_router(organization_sync_router)
+    application.include_router(organization_owner_router)
+    application.include_router(organization_account_owner_router)
+    application.include_router(organization_event_router)
     application.include_router(integration_sync_router)
     application.include_router(keyword_planning_router)
     application.include_router(password_reset_router)

@@ -1,6 +1,6 @@
 export type PermissionTabKey = "pages" | "actions" | "fields" | "dataScopes" | "audit";
 
-export type RoleDataScopeType = "source_account" | "store" | "owner" | "sku" | "product";
+export type RoleDataScopeType = "source_account" | "store" | "owner" | "sku" | "product" | "org_department";
 
 export interface RoleDataScopeEntry {
   scopeType: RoleDataScopeType;

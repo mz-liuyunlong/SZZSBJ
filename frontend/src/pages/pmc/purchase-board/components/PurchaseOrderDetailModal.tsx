@@ -126,6 +126,15 @@ function PurchaseOrderDetailModal({
       )}
       {detail && (
         <div className="purchase-board__detail">
+          {detail.scopeLimited && (
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 12 }}
+              message="当前仅展示已授权采购明细"
+              description="整单金额、总数量、跨负责人收货记录及 SKU 历史交期样本缺少可验证的分摊口径，因此不予展示。"
+            />
+          )}
           <Descriptions size="small" column={4} bordered>
             <Descriptions.Item label="状态" span={2}><StageCell stage={detail.stage} showOverdue /></Descriptions.Item>
             <Descriptions.Item label="下单日期">{detail.orderDate ?? EMPTY}</Descriptions.Item>
@@ -156,7 +165,7 @@ function PurchaseOrderDetailModal({
             />
           </section>
 
-          <section aria-label="收货记录">
+          {!detail.scopeLimited && <section aria-label="收货记录">
             <Typography.Title level={5}>收货记录</Typography.Title>
             {detail.receipts.length === 0
               ? <Typography.Text type="secondary">暂无收货单</Typography.Text>
@@ -172,7 +181,7 @@ function PurchaseOrderDetailModal({
             <Typography.Paragraph type="secondary" className="purchase-board__hint">
               仅显示收货单号；到仓 = 累计收货首次达到采购量 × 到仓比例的那一单。
             </Typography.Paragraph>
-          </section>
+          </section>}
 
           <section aria-label="计划链">
             <Typography.Title level={5}>计划链</Typography.Title>
@@ -186,7 +195,7 @@ function PurchaseOrderDetailModal({
             />
           </section>
 
-          <section aria-label="交期样本">
+          {!detail.scopeLimited && <section aria-label="交期样本">
             <Typography.Title level={5}>SKU 实际采购交期</Typography.Title>
             <Table<SkuCycle>
               rowKey="sku"
@@ -196,7 +205,7 @@ function PurchaseOrderDetailModal({
               dataSource={detail.skuCycles}
               locale={{ emptyText: "暂无交期数据" }}
             />
-          </section>
+          </section>}
         </div>
       )}
     </Modal>

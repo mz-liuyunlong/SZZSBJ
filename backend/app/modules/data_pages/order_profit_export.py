@@ -11,6 +11,13 @@ from sqlalchemy import or_, select, tuple_
 
 from app.modules.data_pages.models import DailySalesItemDayMart, ListingManagementCurrentMart
 from app.modules.data_pages.service import OrderProfitService
+from app.modules.iam.organization_access import (
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
+    ORG_OWNER_SCOPE_SESSION_KEY,
+)
+from app.modules.iam.explicit_item_scope import SKU_SCOPE_SESSION_KEY, PRODUCT_SCOPE_SESSION_KEY
+from app.modules.iam.explicit_owner_scope import OWNER_SCOPE_SESSION_KEY
+from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
 
 ZERO = Decimal("0")
 RATIO_SCALE = Decimal("0.000001")
@@ -326,6 +333,7 @@ def _row_value_map(
     period_value: str,
     rows: Sequence[DailySalesItemDayMart],
     current_inventory: dict[tuple[str, str], Decimal],
+    scope_limited: bool = False,
 ) -> dict[str, object]:
     sales_qty = _sum(rows, "sales_qty")
     order_count = _sum(rows, "order_count")
@@ -404,7 +412,9 @@ def _row_value_map(
             value_attr="storage_fee_unit_amount",
             weight_attr="cost_quantity",
         ),
-        "wfs_inventory": _wfs_inventory_total(rows, current_inventory),
+        # Realtime listing inventory is not the same owner-attributed source as
+        # historical daily-sales rows. Never inherit other stores' inventory.
+        "wfs_inventory": None if scope_limited else _wfs_inventory_total(rows, current_inventory),
         "total_cost": total_cost,
         "order_profit": gross_profit_amount,
         "avg_profit_per_order": (
@@ -446,7 +456,19 @@ def export_order_profit_csv(
     columns: str | None,
 ) -> tuple[str, str]:
     rows = _filtered_daily_sales_rows(service, query=query, account_refs=account_refs)
-    current_inventory = _current_wfs_inventory_by_item(service, rows, query.store_id)
+    info = getattr(service.daily_sales_repository.session, "info", {})
+    scope_limited = any(info.get(key) is not None for key in (
+        ORG_OWNER_SCOPE_SESSION_KEY,
+        ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
+        STORE_SCOPE_SESSION_KEY,
+        OWNER_SCOPE_SESSION_KEY,
+        SKU_SCOPE_SESSION_KEY,
+        PRODUCT_SCOPE_SESSION_KEY,
+    ))
+    current_inventory = (
+        {} if scope_limited
+        else _current_wfs_inventory_by_item(service, rows, query.store_id)
+    )
     selected_columns = _selected_columns(columns)
 
     output = StringIO()
@@ -458,7 +480,10 @@ def export_order_profit_csv(
     )
 
     for period_value, group_rows in _group_rows(rows, period=period, dimension=dimension):
-        value_map = _row_value_map(period_value, group_rows, current_inventory)
+        value_map = _row_value_map(
+            period_value, group_rows, current_inventory,
+            scope_limited=scope_limited,
+        )
         writer.writerow(
             [
                 period_value,

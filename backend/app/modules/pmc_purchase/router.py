@@ -14,10 +14,25 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.api import ErrorEnvelope, SuccessEnvelope, get_request_id, success_response
-from app.core.auth import Principal
-from app.core.permissions import require_permission
+from app.core.api import (
+    ApiError,
+    ErrorCode,
+    ErrorEnvelope,
+    SuccessEnvelope,
+    get_request_id,
+    success_response,
+)
+from app.core.auth import Principal, require_principal
+from app.core.permission_policy_v2 import permission_for_request
+from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
+from app.modules.iam.organization_access import (
+    ORG_OWNER_SCOPE_SESSION_KEY,
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
+    resolve_business_owner_refs,
+    resolve_business_account_owner_pairs,
+)
+from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY, resolve_account_store_scope
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.pmc_purchase.overrides import PmcPurchaseOverrideService
 from app.modules.pmc_purchase.schemas import (
@@ -40,7 +55,49 @@ from app.modules.pmc_purchase.service import PmcPurchaseReadService
 PERMISSION_READ = "pmc:purchase:read"
 PERMISSION_OVERRIDE = "pmc:purchase:override"
 
-router = APIRouter(prefix="/api/pmc/purchase", tags=["PMC Purchase Board"])
+
+def require_pmc_purchase_org_scope(
+    request: Request,
+    principal: Annotated[Principal, Depends(require_principal)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    """Check endpoint permission before evaluating organization data scope."""
+    required_permission = permission_for_request(request.method, request.url.path, PERMISSION_READ)
+    if not has_permission(principal, required_permission):
+        raise ApiError(
+            code=ErrorCode.FORBIDDEN,
+            status_code=403,
+            details={"required_permission": required_permission},
+        )
+    session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
+    session.info.pop(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY, None)
+    session.info.pop(STORE_SCOPE_SESSION_KEY, None)
+    owner_pairs = resolve_business_account_owner_pairs(session, principal)
+    owners = None if owner_pairs else resolve_business_owner_refs(session, principal)
+    account_stores = resolve_account_store_scope(session, principal)
+    if owners is None and not owner_pairs and account_stores is None:
+        return
+    allowed_get = request.method == "GET" and (
+        request.url.path == "/api/pmc/purchase/board"
+        or request.url.path == "/api/pmc/purchase/board/summary"
+        or request.url.path.startswith("/api/pmc/purchase/orders/")
+        or request.url.path == "/api/pmc/purchase/plans/pending"
+    )
+    if not allowed_get:
+        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
+    if owner_pairs:
+        session.info[ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY] = owner_pairs
+    elif owners is not None:
+        session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owners
+    if account_stores is not None:
+        session.info[STORE_SCOPE_SESSION_KEY] = account_stores
+
+
+router = APIRouter(
+    prefix="/api/pmc/purchase",
+    tags=["PMC Purchase Board"],
+    dependencies=[Depends(require_pmc_purchase_org_scope)],
+)
 
 db_session = Annotated[Session, Depends(get_db_session)]
 source_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
@@ -94,6 +151,15 @@ def list_board(
     _: read_principal,
     accounts: source_scope,
 ) -> SuccessEnvelope[BoardListData, PurchaseReadMeta]:
+    if (
+        query.summary_filter in {"average_cycle", "unstable_sku"}
+        and (
+            session.info.get(ORG_OWNER_SCOPE_SESSION_KEY) is not None
+            or session.info.get(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY) is not None
+            or session.info.get(STORE_SCOPE_SESSION_KEY) is not None
+        )
+    ):
+        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
     data, total, freshness, rule = PmcPurchaseReadService(session).list_board(query, accounts)
     return success_response(
         request,

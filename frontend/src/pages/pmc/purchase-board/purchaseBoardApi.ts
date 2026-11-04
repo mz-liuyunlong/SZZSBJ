@@ -75,7 +75,7 @@ interface BackendSkuCycleBrief {
   value_days: string | null;
   source: SkuCycleSource | null;
   sample_count: number | null;
-  unstable: boolean;
+  unstable: boolean | null;
 }
 
 interface BackendSkuCycleSample {
@@ -146,15 +146,16 @@ interface BackendMoneyByCurrency {
 }
 
 interface BackendBoardSummaryData {
+  scope_limited?: boolean;
   awaiting_arrival_orders: number;
   arrival_overdue_orders: number;
   purchase_overdue_orders: number;
   purchase_overdue_plans: number;
   average_purchase_cycle_days_90d: string | null;
   median_purchase_cycle_days_90d: string | null;
-  purchase_cycle_sample_orders_90d: number;
+  purchase_cycle_sample_orders_90d: number | null;
   month_purchase_amount: BackendMoneyByCurrency[];
-  unstable_sku_count: number;
+  unstable_sku_count: number | null;
   itemid_pending_lines: number;
   wfs_not_ready_lines: number;
   unattributed_store_lines: number;
@@ -176,12 +177,13 @@ interface BackendOrderPlanRef {
 }
 
 interface BackendOrderDetailData {
+  scope_limited?: boolean;
   purchase_order_sn: string;
   order_status: number | null;
   order_date: string | null;
   order_create_date: string | null;
   quantity_total: number | null;
-  quantity_received: number;
+  quantity_received: number | null;
   progress_ratio: string | null;
   arrival_date: string | null;
   amount_total: string | null;
@@ -461,6 +463,7 @@ export async function getPurchaseBoardSummary(
   );
   const data = response.data;
   return {
+    scopeLimited: Boolean(data.scope_limited),
     awaitingArrivalOrders: data.awaiting_arrival_orders,
     arrivalOverdueOrders: data.arrival_overdue_orders,
     purchaseOverdueOrders: data.purchase_overdue_orders,
@@ -488,6 +491,7 @@ export async function getPurchaseOrderDetail(
   );
   const data = response.data;
   return {
+    scopeLimited: Boolean(data.scope_limited),
     purchaseOrderSn: data.purchase_order_sn,
     orderStatus: data.order_status,
     orderDate: data.order_date,

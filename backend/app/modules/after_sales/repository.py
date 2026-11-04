@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+import json
 from decimal import Decimal
 from typing import Any
 
@@ -8,6 +9,11 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.modules.after_sales.schemas import RefundBaseQuery, RefundItemQuery
+from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+from app.modules.iam.organization_access import (
+    ORG_OWNER_SCOPE_SESSION_KEY,
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
+)
 
 _OWNER_CTE = """
 owner_map as (
@@ -137,6 +143,16 @@ class AfterSalesRefundRepository:
 
     def __init__(self, session: Session) -> None:
         self.session = session
+        scope = getattr(session, "info", None)
+        self.org_owner_refs = (
+            scope.get(ORG_OWNER_SCOPE_SESSION_KEY) if isinstance(scope, dict) else None
+        )
+        self.account_owner_pairs = (
+            scope.get(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY) if isinstance(scope, dict) else None
+        )
+        self.account_stores = (
+            scope.get(STORE_SCOPE_SESSION_KEY) if isinstance(scope, dict) else None
+        )
 
     def refund_stats(
         self,
@@ -920,6 +936,31 @@ class AfterSalesRefundRepository:
             "start_date": start,
             "end_date": end,
         }
+        if self.account_owner_pairs is not None:
+            where.append(
+                "exists (select 1 from jsonb_to_recordset(cast(:account_owner_pairs as jsonb)) "
+                "as granted(source_account_ref text, owner_ref text) "
+                "where granted.source_account_ref = r.source_account_ref "
+                "and granted.owner_ref = om.owner_ref)"
+            )
+            params["account_owner_pairs"] = json.dumps([
+                {"source_account_ref": account, "owner_ref": owner}
+                for account, owner in sorted(self.account_owner_pairs)
+            ])
+        if self.account_stores is not None:
+            where.append(
+                "exists (select 1 from jsonb_to_recordset(cast(:account_store_pairs as jsonb)) "
+                "as stores(account_ref text, store_key text) "
+                "where stores.account_ref = r.source_account_ref "
+                "and stores.store_key = r.store_id)"
+            )
+            params["account_store_pairs"] = json.dumps([
+                {"account_ref": account, "store_key": store}
+                for account, store in sorted(self.account_stores)
+            ])
+        if self.org_owner_refs is not None:
+            where.append("om.owner_ref = any(:org_owner_refs)")
+            params["org_owner_refs"] = sorted(self.org_owner_refs)
         if include_facets:
             stores = split_csv(query.store_id)
             if stores:
@@ -964,6 +1005,31 @@ class AfterSalesRefundRepository:
             "start_date": start,
             "end_date": end,
         }
+        if self.account_owner_pairs is not None:
+            where.append(
+                "exists (select 1 from jsonb_to_recordset(cast(:account_owner_pairs as jsonb)) "
+                "as granted(source_account_ref text, owner_ref text) "
+                "where granted.source_account_ref = m.source_account_ref "
+                "and granted.owner_ref = m.owner_ref)"
+            )
+            params["account_owner_pairs"] = json.dumps([
+                {"source_account_ref": account, "owner_ref": owner}
+                for account, owner in sorted(self.account_owner_pairs)
+            ])
+        if self.account_stores is not None:
+            where.append(
+                "exists (select 1 from jsonb_to_recordset(cast(:account_store_pairs as jsonb)) "
+                "as stores(account_ref text, store_key text) "
+                "where stores.account_ref = m.source_account_ref "
+                "and stores.store_key = m.store_id)"
+            )
+            params["account_store_pairs"] = json.dumps([
+                {"account_ref": account, "store_key": store}
+                for account, store in sorted(self.account_stores)
+            ])
+        if self.org_owner_refs is not None:
+            where.append("m.owner_ref = any(:org_owner_refs)")
+            params["org_owner_refs"] = sorted(self.org_owner_refs)
         stores = split_csv(query.store_id)
         if stores:
             where.append("m.store_id = any(:store_ids)")
@@ -1011,6 +1077,9 @@ class AfterSalesRefundRepository:
             "end_date",
             "store_ids",
             "owner_refs",
+            "org_owner_refs",
+            "account_owner_pairs",
+            "account_store_pairs",
             "responsibilities",
             "keyword",
             "batch_values",

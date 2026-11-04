@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.modules.iam.permission_catalog_v2 import register_runtime_permission_key as _register
+
 
 @dataclass(frozen=True, slots=True)
 class RequestPermissionRule:
@@ -220,9 +222,19 @@ _RULES: tuple[RequestPermissionRule, ...] = (
         "action:data-center:task-center:execute",
     ),
     RequestPermissionRule(
+        "POST",
+        "/api/integrations/walmart-remote/",
+        "action:data-center:walmart-remote:execute",
+    ),
+    RequestPermissionRule(
+        "GET",
+        "/api/integrations/walmart-remote/",
+        "page:data-center:walmart-remote:view",
+    ),
+    RequestPermissionRule(
         "GET",
         "/api/integrations/walmart-monitor/targets",
-        "integrations:walmart-monitor:read",
+        "page:data-center:walmart-monitoring:view",
         True,
     ),
     RequestPermissionRule(None, "/api/integrations/", "page:data-center:task-center:view"),
@@ -253,7 +265,7 @@ _RULES: tuple[RequestPermissionRule, ...] = (
 )
 
 
-def permission_for_request(method: str, path: str, declared_permission: str) -> str:
+def _permission_for_request(method: str, path: str, declared_permission: str) -> str:
     normalized_method = method.upper()
     if normalized_method == "GET" and path.startswith("/api/products/skus/"):
         suffix_permissions = {
@@ -321,3 +333,15 @@ def permission_for_request(method: str, path: str, declared_permission: str) -> 
                 return "action:products:listing-management:restore"
             return rule.permission_key
     return declared_permission
+
+
+def permission_for_request(method: str, path: str, declared_permission: str) -> str:
+    permission_key = _permission_for_request(method, path, declared_permission)
+    _register(permission_key)
+    return permission_key
+
+
+# Import-time route policy declarations are discoverable before the role catalog
+# is first opened. They remain ungranted until an administrator explicitly assigns them.
+for _rule in _RULES:
+    _register(_rule.permission_key)

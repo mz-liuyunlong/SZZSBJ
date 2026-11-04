@@ -2,7 +2,6 @@
 import { Tag, Typography } from "antd";
 import type {
   PurchaseBoardItemIdSource,
-  PurchaseBoardRow,
   PurchaseStageCode,
   SkuCycleSample,
   SkuCycleSource,
@@ -65,7 +64,12 @@ export function purchaseCycleText(days: number | null) {
   return <span>{days} 天</span>;
 }
 
-export function progressText(row: Pick<PurchaseBoardRow, "quantityReceived" | "quantityAllocated" | "progressRatio">) {
+export function progressText(row: {
+  quantityReceived: number | null;
+  quantityAllocated: number | null;
+  progressRatio: number | null;
+}) {
+  if (row.quantityReceived === null || row.quantityAllocated === null) return EMPTY;
   const ratio = row.progressRatio === null ? "" : ` (${(row.progressRatio * 100).toFixed(0)}%)`;
   return `${row.quantityReceived} / ${row.quantityAllocated}${ratio}`;
 }

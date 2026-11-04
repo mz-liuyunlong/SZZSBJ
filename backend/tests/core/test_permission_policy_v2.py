@@ -166,3 +166,27 @@ def test_require_permission_uses_request_specific_permission() -> None:
         _request("GET", "/api/listings/walmart"),
     )
     assert resolved is principal
+
+
+def test_walmart_monitor_uses_canonical_page_permission() -> None:
+    assert (
+        permission_for_request(
+            "GET",
+            "/api/integrations/walmart-monitor/targets",
+            "integrations:read",
+        )
+        == "page:data-center:walmart-monitoring:view"
+    )
+
+
+def test_walmart_remote_page_and_execute_have_distinct_permissions() -> None:
+    assert (
+        permission_for_request("GET", "/api/integrations/walmart-remote/jobs", "integrations:read")
+        == "page:data-center:walmart-remote:view"
+    )
+    assert (
+        permission_for_request(
+            "POST", "/api/integrations/walmart-remote/jobs", "integrations:execute"
+        )
+        == "action:data-center:walmart-remote:execute"
+    )

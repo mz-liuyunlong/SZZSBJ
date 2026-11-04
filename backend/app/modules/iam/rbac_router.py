@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.core.api import SuccessEnvelope, get_request_id, success_response
 from app.core.auth import Principal
-from app.core.permissions import require_any_permission, require_permission
+from app.core.config import get_settings
+from app.core.permissions import require_any_permission, require_permission, require_super_admin
 from app.db.session import get_db_session
+from app.modules.iam.feishu_directory_service import FeishuDirectoryService
 from app.modules.iam.field_access import filter_user_read
 from app.modules.iam.rbac_schemas import (
     AuditEventRead,
@@ -300,4 +302,106 @@ def list_rbac_audit_events(
         request,
         data=RbacService(session).audit_events(limit=limit),
         meta=None,
+    )
+
+
+@router.get("/api/settings/organization/preview")
+def preview_feishu_organization(
+    request: Request,
+    _: Annotated[Principal, Depends(require_super_admin)],
+) -> dict:
+    """Real-time Feishu read-only preview. Never writes a database or changes RBAC."""
+    service = FeishuDirectoryService.from_settings(get_settings())
+    departments = service.list_visible_departments()
+    users = service.list_visible_users()
+    return success_response(
+        request,
+        data={
+            "departments": list(departments),
+            "users": [
+                {
+                    "name": user.name,
+                    "open_id": user.open_id,
+                    "department_ids": list(user.department_ids),
+                    "is_active": user.is_active,
+                    "is_resigned": user.is_resigned,
+                    "is_frozen": user.is_frozen,
+                }
+                for user in users
+            ],
+            "read_only": True,
+        },
+        meta=None,
+    )
+
+
+@router.get("/api/settings/rbac/diagnostics")
+def read_permission_diagnostics(
+    request: Request,
+    _: Annotated[Principal, Depends(require_super_admin)],
+    session: db_session,
+) -> dict:
+    """Read-only catalog drift diagnostics. No registration, grants, or commits."""
+    from sqlalchemy import text
+
+    from app.modules.iam.permission_catalog_v2 import all_permission_definitions
+
+    declared = {item.permission_key for item in all_permission_definitions()}
+    rows = session.execute(text("SELECT permission_key, is_active FROM app_permissions")).all()
+    stored = {str(key) for key, _active in rows}
+    disabled = {str(key) for key, active in rows if not active}
+    orphan_rows = session.execute(
+        text(
+            """
+            SELECT DISTINCT rp.permission_key
+            FROM app_role_permissions rp
+            LEFT JOIN app_permissions p ON p.permission_key = rp.permission_key
+            WHERE p.permission_key IS NULL OR p.is_active = false
+            """
+        )
+    ).scalars()
+    return success_response(
+        request,
+        data={
+            "declared_not_stored": sorted(declared - stored),
+            "stored_not_declared": sorted(stored - declared),
+            "disabled_declared": sorted(disabled & declared),
+            "orphan_or_disabled_grants": sorted(str(key) for key in orphan_rows),
+            "read_only": True,
+        },
+        meta=None,
+    )
+
+
+@router.get("/api/settings/rbac/access-denials")
+def read_access_denial_diagnostics(
+    request: Request,
+    _: Annotated[Principal, Depends(require_super_admin)],
+    session: db_session,
+    request_id: Annotated[str | None, Query(max_length=128)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> dict:
+    """Super-admin only; status, canonical route and safe reason without payloads."""
+    from sqlalchemy import text
+
+    from app.core.api import ApiError, ErrorCode
+    from app.modules.iam.access_denial_audit import _SAFE_VALUE
+
+    if request_id is not None and not _SAFE_VALUE.fullmatch(request_id):
+        raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422)
+    rows = session.execute(
+        text("""
+            SELECT request_id, principal_id, method, route_template,
+                   denial_stage, error_code, required_permissions,
+                   scope_reason, created_at
+            FROM iam_access_denial_events
+            WHERE created_at >= now() - interval '30 days'
+              AND (:request_id IS NULL OR request_id = :request_id)
+            ORDER BY created_at DESC, id DESC
+            LIMIT :limit
+        """),
+        {"request_id": request_id, "limit": limit},
+    ).mappings()
+    return success_response(
+        request, data={"items": [dict(row) for row in rows], "retention_days": 30}, meta=None
     )

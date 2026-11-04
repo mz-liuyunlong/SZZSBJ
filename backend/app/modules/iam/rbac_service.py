@@ -7,7 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
 from app.core.auth import Principal
-from app.modules.iam.permission_catalog_v2 import MODULE_NAMES
+from app.modules.iam.permission_catalog_v2 import (
+    MODULE_NAMES,
+    all_permission_definitions,
+)
 from app.modules.iam.rbac_repository import RbacRepository
 from app.modules.iam.rbac_schemas import (
     AuditEventRead,
@@ -61,6 +64,29 @@ class RbacService:
 
     def permission_catalog(self) -> PermissionCatalogRead:
         rows = self.repository.list_permission_catalog_rows()
+        declared = {str(row["permission_key"]) for row in rows}
+        disabled = self.repository.disabled_declared_permission_keys()
+        # Surface declared but not yet persisted permissions without writing on GET.
+        # Persist them only if an authorized role editor explicitly selects them.
+        rows = [
+            *rows,
+            *[
+                {
+                    "permission_key": item.permission_key,
+                    "name": item.name,
+                    "description": item.description,
+                    "permission_type": item.permission_type,
+                    "module_key": item.module_key,
+                    "page_key": item.page_key,
+                    "action_key": item.action_key,
+                    "field_key": item.field_key,
+                    "risk_level": item.risk_level,
+                    "sort_order": item.sort_order,
+                }
+                for item in all_permission_definitions()
+                if item.permission_key not in declared and item.permission_key not in disabled
+            ],
+        ]
         page_rows = {str(row["page_key"]): row for row in rows if row["permission_type"] == "page"}
         child_rows: dict[str, dict[str, list[dict[str, Any]]]] = {}
         for row in rows:
@@ -116,6 +142,7 @@ class RbacService:
     ) -> RbacRoleRead:
         permission_keys = self._validated_permission_keys(payload.permission_keys)
         self._assert_actor_can_grant(actor, permission_keys)
+        self._register_missing_permissions(permission_keys)
         self.iam_repository.create_role(
             role_key=payload.role_key,
             name=payload.name.strip(),
@@ -158,6 +185,7 @@ class RbacService:
 
         permission_keys = self._validated_permission_keys(payload.permission_keys)
         self._assert_actor_can_grant(actor, permission_keys)
+        self._register_missing_permissions(permission_keys)
         updated = self.repository.set_role_permissions(
             role_key=role_key,
             permission_keys=permission_keys,
@@ -530,7 +558,9 @@ class RbacService:
     def _validated_permission_keys(self, permission_keys: list[str]) -> tuple[str, ...]:
         normalized = tuple(dict.fromkeys(item.strip() for item in permission_keys if item.strip()))
         existing = self.repository.existing_permission_keys(normalized)
-        invalid = sorted(set(normalized) - existing)
+        disabled = self.repository.disabled_declared_permission_keys()
+        declared = {item.permission_key for item in all_permission_definitions()}
+        invalid = sorted(set(normalized) - (existing | (declared - disabled)))
         if invalid:
             raise ApiError(
                 code=ErrorCode.VALIDATION_ERROR,
@@ -539,6 +569,23 @@ class RbacService:
                 details={"invalid_permission_keys": invalid},
             )
         return normalized
+
+    def _register_missing_permissions(self, keys: tuple[str, ...]) -> None:
+        """Insert reviewed definitions only after grant authorization, in the role transaction."""
+        existing = self.repository.existing_permission_keys(keys)
+        missing = set(keys) - existing
+        if not missing:
+            return
+        self.repository.register_declared_permissions(missing)
+        # Do not turn a disabled key into a grant even if another writer changed it.
+        remaining = missing - self.repository.existing_permission_keys(keys)
+        if remaining:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=422,
+                message="权限已停用或登记失败，请刷新权限目录",
+                details={"invalid_permission_keys": sorted(remaining)},
+            )
 
     def _validated_role_keys(self, role_keys: list[str]) -> tuple[str, ...]:
         normalized = tuple(dict.fromkeys(item.strip() for item in role_keys if item.strip()))
@@ -572,7 +619,15 @@ class RbacService:
             return
         actor_permissions = self._actor_permissions(actor)
         missing = sorted(set(permission_keys) - actor_permissions)
-        high_risk = sorted(self.repository.high_risk_permission_keys(permission_keys))
+        requested = set(permission_keys)
+        high_risk = sorted(
+            self.repository.high_risk_permission_keys(permission_keys)
+            | {
+                item.permission_key
+                for item in all_permission_definitions()
+                if item.risk_level == "high" and item.permission_key in requested
+            }
+        )
         if missing or high_risk:
             raise ApiError(
                 code=ErrorCode.FORBIDDEN,
@@ -640,6 +695,20 @@ class RbacService:
         actor: Principal,
         scopes: tuple[tuple[str, str], ...],
     ) -> None:
+        # Persisting a scope that no business endpoint enforces creates a false
+        # authorization promise. Keep legacy rows readable, but reject new grants
+        # until the server-side queries support these dimensions end-to-end.
+        implemented_types = {"source_account", "org_department"}
+        unimplemented = sorted(
+            {scope_type for scope_type, _scope_value in scopes} - implemented_types
+        )
+        if unimplemented:
+            raise ApiError(
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=422,
+                message="数据权限维度尚未完成服务端强制隔离，不能配置",
+                details={"unsupported_scope_types": unimplemented},
+            )
         requested_source_accounts = {
             scope_value
             for scope_type, scope_value in scopes
@@ -654,6 +723,21 @@ class RbacService:
                     status_code=422,
                     message="包含未在同步治理配置中登记的数据源账号",
                     details={"invalid_source_account_refs": invalid_source_accounts},
+                )
+        requested_departments = {
+            scope_value
+            for scope_type, scope_value in scopes
+            if scope_type == "org_department" and scope_value != "*"
+        }
+        if requested_departments:
+            valid_departments = self.repository.list_active_feishu_department_ids()
+            invalid = sorted(requested_departments - valid_departments)
+            if invalid:
+                raise ApiError(
+                    code=ErrorCode.VALIDATION_ERROR,
+                    status_code=422,
+                    message="组织部门不存在于最新飞书快照中",
+                    details={"invalid_department_ids": invalid},
                 )
         if self._is_super_admin(actor):
             return

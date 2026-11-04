@@ -21,6 +21,7 @@ PUBLIC_AUTH_ENDPOINT_PATHS: Final[frozenset[str]] = frozenset(
 PUBLIC_GET_ENDPOINT_PREFIXES: Final[frozenset[str]] = frozenset({"/api/media/image-assets/"})
 PREVIEW_AUTH_HEADER: Final = "X-Product-Management-Preview-Token"
 PREVIEW_PRINCIPAL_ID: Final = "frontend-preview"
+FEISHU_ORGANIZATION_EVENT_PATH: Final = "/api/integrations/feishu/organization-events"
 WALMART_MONITOR_INGEST_PATH: Final = "/api/integrations/walmart-monitor/raw-events"
 WALMART_MONITOR_PRINCIPAL_ID: Final = "walmart-monitor-service"
 WALMART_MONITOR_WRITE_PERMISSION: Final = "integrations:walmart-monitor:write"
@@ -253,7 +254,11 @@ def enforce_protected_by_default(
     principal: Annotated[Principal | None, Depends(get_optional_principal)],
 ) -> None:
     path = request.scope.get("path")
+    if principal is not None:
+        request.state.authenticated_principal_id = principal.user_id
     if path in PUBLIC_ENDPOINT_PATHS or path in PUBLIC_AUTH_ENDPOINT_PATHS:
+        return
+    if request.method == "POST" and path == FEISHU_ORGANIZATION_EVENT_PATH:
         return
     if (
         request.method == "GET"

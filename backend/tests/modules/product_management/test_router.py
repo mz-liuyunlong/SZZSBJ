@@ -15,6 +15,7 @@ from app.main import create_app
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.product_management.models import ProductPricingRecalculationRun
 from app.modules.product_management.repository import ProductManagementRepository
+from app.modules.product_management.router import require_product_management_org_scope
 from app.modules.product_management.schemas import (
     CostComponentRead,
     ExportRequest,
@@ -51,6 +52,10 @@ ALL_PERMISSIONS = frozenset(
 
 def _app(*permissions: str) -> FastAPI:
     application = create_app()
+    # Synthetic route tests do not provision Feishu organization snapshots.
+    # These tests exercise legacy permission/source-account contracts; separate
+    # org-scope tests exercise the actual dependency and fail-closed behavior.
+    application.dependency_overrides[require_product_management_org_scope] = lambda: None
     application.dependency_overrides[get_optional_principal] = lambda: Principal(
         user_id="synthetic-user",
         permissions=frozenset(permissions) if permissions else ALL_PERMISSIONS,
@@ -98,6 +103,10 @@ def test_routes_fail_closed_for_auth_permission_and_source_scope() -> None:
     assert denied.json()["error"]["code"] == "FORBIDDEN"
 
     application = create_app()
+    # Synthetic route tests do not provision Feishu organization snapshots.
+    # These tests exercise legacy permission/source-account contracts; separate
+    # org-scope tests exercise the actual dependency and fail-closed behavior.
+    application.dependency_overrides[require_product_management_org_scope] = lambda: None
     application.dependency_overrides[get_optional_principal] = lambda: Principal(
         user_id="synthetic-user", permissions=ALL_PERMISSIONS
     )

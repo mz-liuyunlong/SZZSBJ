@@ -145,6 +145,9 @@ async def request_id_middleware(
 async def api_error_handler(request: Request, exc: Exception) -> JSONResponse:
     if not isinstance(exc, ApiError):
         return _internal_error_response(request, exc)
+    _log_access_denial(
+        request, code=exc.code, status_code=exc.status_code, details=exc.details
+    )
     return error_response(
         request,
         code=exc.code,
@@ -158,6 +161,7 @@ async def http_exception_handler(request: Request, exc: Exception) -> JSONRespon
     if not isinstance(exc, StarletteHTTPException):
         return _internal_error_response(request, exc)
     code = _http_error_code(exc.status_code)
+    _log_access_denial(request, code=code, status_code=exc.status_code)
     return error_response(
         request,
         code=code,
@@ -229,6 +233,76 @@ def _http_error_code(status_code: int) -> ErrorCode:
         status_code,
         ErrorCode.INVALID_REQUEST if 400 <= status_code < 500 else ErrorCode.INTERNAL_ERROR,
     )
+
+
+def _log_access_denial(
+    request: Request,
+    *,
+    code: str,
+    status_code: int,
+    details: Mapping[str, object] | None = None,
+) -> None:
+    """Audit rejected access without request values, tokens, or object identities."""
+    if status_code not in {401, 403}:
+        return
+
+    principal = getattr(request.state, "authenticated_principal_id", None)
+    safe_principal = (
+        principal
+        if isinstance(principal, str) and _REQUEST_ID_PATTERN.fullmatch(principal)
+        else "anonymous"
+    )
+    permission_keys = getattr(request.state, "denied_permission_keys", ())
+    keys = (
+        tuple(key for key in permission_keys if isinstance(key, str))
+        if isinstance(permission_keys, tuple)
+        else ()
+    )
+    if details is not None:
+        required = details.get("required_permission")
+        if isinstance(required, str):
+            keys = (*keys, required)
+    safe_keys = sorted({
+        key for key in keys
+        if key == "*" or _REQUEST_ID_PATTERN.fullmatch(key)
+    })
+    stage = (
+        "authentication"
+        if status_code == 401
+        else "data_scope"
+        if code == ErrorCode.DATA_SCOPE_DENIED
+        else "permission"
+        if safe_keys
+        else "unspecified_forbidden"
+    )
+    _LOGGER.warning(
+        "access_denied request_id=%s method=%s route=%s status=%d stage=%s "
+        "error_code=%s principal=%s required_permissions=%s",
+        get_request_id(request),
+        request.method,
+        _route_template(request),
+        status_code,
+        stage,
+        code,
+        safe_principal,
+        ",".join(safe_keys) if safe_keys else "none",
+    )
+    if status_code == 403:
+        # IAM observability is best effort. Denial remains 403 even when the
+        # audit table or database is unavailable.
+        from app.modules.iam.access_denial_audit import record_access_denial
+
+        reason = details.get("scope_reason") if details else None
+        record_access_denial(
+            request_id=get_request_id(request),
+            principal_id=safe_principal,
+            method=request.method,
+            route_template=_route_template(request),
+            error_code=code,
+            stage=stage,
+            permission_keys=tuple(safe_keys),
+            scope_reason=reason if isinstance(reason, str) else None,
+        )
 
 
 def _safe_http_headers(headers: Mapping[str, str] | None) -> dict[str, str]:

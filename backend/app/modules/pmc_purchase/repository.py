@@ -10,10 +10,15 @@ from collections.abc import Sequence
 from datetime import date, timedelta
 from typing import Any
 
-from sqlalchemy import Select, Text, and_, cast, func, or_, select
+from sqlalchemy import Select, Text, and_, cast, exists, func, or_, select, tuple_
 from sqlalchemy.orm import Session
 
 from app.modules.data_pages.models import LingxingStoreDimension
+from app.modules.iam.organization_access import (
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
+    ORG_OWNER_SCOPE_SESSION_KEY,
+)
+from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
 from app.modules.pmc_purchase.calculations import AVERAGE_CYCLE_WINDOW_DAYS
 from app.modules.pmc_purchase.gate3_models import (
     DwdPurchasePlan,
@@ -58,6 +63,13 @@ _SORTS: dict[str, tuple[Any, ...]] = {
 class PmcPurchaseReadRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
+        self.org_owner_refs: frozenset[str] | None = session.info.get(ORG_OWNER_SCOPE_SESSION_KEY)
+        self.account_owner_pairs: frozenset[tuple[str, str]] | None = session.info.get(
+            ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY
+        )
+        self.account_stores: frozenset[tuple[str, str]] | None = session.info.get(
+            STORE_SCOPE_SESSION_KEY
+        )
 
     # -- rules --
 
@@ -86,6 +98,12 @@ class PmcPurchaseReadRepository:
     ) -> list[Any]:
         b = DwsPurchaseBoard
         clauses: list[Any] = [b.source_account_ref.in_(sorted(accounts))]
+        if self.account_stores is not None:
+            clauses.append(tuple_(b.source_account_ref, b.store_id).in_(sorted(self.account_stores)))
+        if self.account_owner_pairs is not None:
+            clauses.append(tuple_(b.source_account_ref, b.owner_uid).in_(sorted(self.account_owner_pairs)))
+        if self.org_owner_refs is not None:
+            clauses.append(b.owner_uid.in_(self.org_owner_refs))
         if query.owner_uid:
             clauses.append(b.owner_uid.in_(query.owner_uid))
         if query.store_id:
@@ -189,14 +207,27 @@ class PmcPurchaseReadRepository:
     def board_rows_for_order(
         self, order_sn: str, accounts: frozenset[str]
     ) -> list[DwsPurchaseBoard]:
+        statement = select(DwsPurchaseBoard).where(
+            DwsPurchaseBoard.source_account_ref.in_(sorted(accounts)),
+            DwsPurchaseBoard.order_sn == order_sn,
+        )
+        if self.account_stores is not None:
+            statement = statement.where(
+                tuple_(DwsPurchaseBoard.source_account_ref, DwsPurchaseBoard.store_id).in_(
+                    sorted(self.account_stores)
+                )
+            )
+        if self.account_owner_pairs is not None:
+            statement = statement.where(
+                tuple_(DwsPurchaseBoard.source_account_ref, DwsPurchaseBoard.owner_uid).in_(
+                    sorted(self.account_owner_pairs)
+                )
+            )
+        if self.org_owner_refs is not None:
+            statement = statement.where(DwsPurchaseBoard.owner_uid.in_(self.org_owner_refs))
         return list(
             self.session.scalars(
-                select(DwsPurchaseBoard)
-                .where(
-                    DwsPurchaseBoard.source_account_ref.in_(sorted(accounts)),
-                    DwsPurchaseBoard.order_sn == order_sn,
-                )
-                .order_by(DwsPurchaseBoard.order_item_id, DwsPurchaseBoard.plan_key)
+                statement.order_by(DwsPurchaseBoard.order_item_id, DwsPurchaseBoard.plan_key)
             )
         )
 
@@ -205,16 +236,39 @@ class PmcPurchaseReadRepository:
     ) -> list[DwdPurchasePlan]:
         if not plan_sns:
             return []
-        return list(
-            self.session.scalars(
-                select(DwdPurchasePlan)
-                .where(
-                    DwdPurchasePlan.source_account_ref.in_(sorted(accounts)),
-                    DwdPurchasePlan.plan_sn.in_(list(plan_sns)),
-                )
-                .order_by(DwdPurchasePlan.plan_sn)
-            )
+        statement = select(DwdPurchasePlan).where(
+            DwdPurchasePlan.source_account_ref.in_(sorted(accounts)),
+            DwdPurchasePlan.plan_sn.in_(list(plan_sns)),
         )
+        if self.account_stores is not None:
+            statement = statement.where(
+                tuple_(DwdPurchasePlan.source_account_ref, DwdPurchasePlan.store_id).in_(
+                    sorted(self.account_stores)
+                )
+            )
+        if self.account_owner_pairs is not None:
+            statement = statement.where(
+                DwdPurchasePlan.sku.in_(
+                    select(DwsPurchaseBoard.sku).where(
+                        DwsPurchaseBoard.source_account_ref == DwdPurchasePlan.source_account_ref,
+                        DwsPurchaseBoard.plan_sn == DwdPurchasePlan.plan_sn,
+                        tuple_(DwsPurchaseBoard.source_account_ref, DwsPurchaseBoard.owner_uid).in_(
+                            sorted(self.account_owner_pairs)
+                        ),
+                    )
+                )
+            )
+        if self.org_owner_refs is not None:
+            statement = statement.where(
+                DwdPurchasePlan.sku.in_(
+                    select(DwsPurchaseBoard.sku).where(
+                        DwsPurchaseBoard.source_account_ref == DwdPurchasePlan.source_account_ref,
+                        DwsPurchaseBoard.plan_sn == DwdPurchasePlan.plan_sn,
+                        DwsPurchaseBoard.owner_uid.in_(self.org_owner_refs),
+                    )
+                )
+            )
+        return list(self.session.scalars(statement.order_by(DwdPurchasePlan.plan_sn)))
 
     # -- SKU cycles --
 
@@ -223,36 +277,62 @@ class PmcPurchaseReadRepository:
     ) -> list[DwsPurchaseSkuCycle]:
         if not skus:
             return []
-        return list(
-            self.session.scalars(
-                select(DwsPurchaseSkuCycle)
-                .where(
-                    DwsPurchaseSkuCycle.source_account_ref.in_(sorted(accounts)),
-                    DwsPurchaseSkuCycle.sku.in_(list(skus)),
-                )
-                .order_by(DwsPurchaseSkuCycle.sku)
-            )
+        statement = select(DwsPurchaseSkuCycle).where(
+            DwsPurchaseSkuCycle.source_account_ref.in_(sorted(accounts)),
+            DwsPurchaseSkuCycle.sku.in_(list(skus)),
         )
+        return list(self.session.scalars(statement.order_by(DwsPurchaseSkuCycle.sku)))
 
     # -- pending plans (status = 2, not yet on any purchase-order line) --
 
     def _pending_plan_select(
         self, query: PendingPlanQuery, accounts: frozenset[str]
     ) -> Select[tuple[DwdPurchasePlan]]:
-        converted = (
-            select(DwsPurchaseBoard.plan_sn)
-            .where(
-                DwsPurchaseBoard.source_account_ref.in_(sorted(accounts)),
-                DwsPurchaseBoard.plan_sn.is_not(None),
-            )
-            .distinct()
-        )
         p = DwdPurchasePlan
+        # Plan numbers are unique only within an account. A converted plan in
+        # another account must not hide this account's pending purchase plan.
+        converted = exists(
+            select(1).where(
+                DwsPurchaseBoard.source_account_ref == p.source_account_ref,
+                DwsPurchaseBoard.plan_sn == p.plan_sn,
+            )
+        )
         clauses: list[Any] = [
             p.source_account_ref.in_(sorted(accounts)),
             p.status == PLAN_STATUS_PENDING_PURCHASE,
-            p.plan_sn.not_in(converted),
+            p.plan_sn.is_not(None),
+            ~converted,
         ]
+        if self.account_stores is not None:
+            clauses.append(tuple_(p.source_account_ref, p.store_id).in_(sorted(self.account_stores)))
+        if self.account_owner_pairs is not None:
+            clauses.extend([
+                p.store_id.is_not(None),
+                exists(select(1).where(
+                    DwsPurchaseBoard.source_account_ref == p.source_account_ref,
+                    DwsPurchaseBoard.store_id == p.store_id,
+                    DwsPurchaseBoard.sku == p.sku,
+                    tuple_(DwsPurchaseBoard.source_account_ref, DwsPurchaseBoard.owner_uid).in_(
+                        sorted(self.account_owner_pairs)
+                    ),
+                )),
+            ])
+        if self.org_owner_refs is not None:
+            # A matching SKU in a different store does not establish ownership.
+            # Unattributed plans fail closed until a reviewed owner mapping exists.
+            clauses.extend(
+                [
+                    p.store_id.is_not(None),
+                    exists(
+                        select(1).where(
+                            DwsPurchaseBoard.source_account_ref == p.source_account_ref,
+                            DwsPurchaseBoard.store_id == p.store_id,
+                            DwsPurchaseBoard.sku == p.sku,
+                            DwsPurchaseBoard.owner_uid.in_(self.org_owner_refs),
+                        )
+                    ),
+                ]
+            )
         if query.store_id:
             clauses.append(p.store_id.in_(query.store_id))
         values = [v for raw in query.search_values for v in raw.replace(",", " ").split() if v]
@@ -276,12 +356,40 @@ class PmcPurchaseReadRepository:
 
     # -- dimensions --
 
-    def store_names(self, accounts: frozenset[str]) -> dict[str, str | None]:
-        return {
-            row.store_id: row.store_name
-            for row in self.session.scalars(
-                select(LingxingStoreDimension).where(
-                    LingxingStoreDimension.source_account_ref.in_(sorted(accounts))
+    def store_names(self, accounts: frozenset[str]) -> dict[tuple[str, str], str | None]:
+        statement = select(LingxingStoreDimension).where(
+            LingxingStoreDimension.source_account_ref.in_(sorted(accounts))
+        )
+        if self.account_stores is not None:
+            statement = statement.where(
+                tuple_(LingxingStoreDimension.source_account_ref, LingxingStoreDimension.store_id).in_(
+                    sorted(self.account_stores)
                 )
             )
+        if self.account_owner_pairs is not None:
+            statement = statement.where(
+                LingxingStoreDimension.store_id.in_(
+                    select(DwsPurchaseBoard.store_id).where(
+                        DwsPurchaseBoard.source_account_ref == LingxingStoreDimension.source_account_ref,
+                        tuple_(DwsPurchaseBoard.source_account_ref, DwsPurchaseBoard.owner_uid).in_(
+                            sorted(self.account_owner_pairs)
+                        ),
+                        DwsPurchaseBoard.store_id.is_not(None),
+                    )
+                )
+            )
+        if self.org_owner_refs is not None:
+            statement = statement.where(
+                LingxingStoreDimension.store_id.in_(
+                    select(DwsPurchaseBoard.store_id).where(
+                        DwsPurchaseBoard.source_account_ref
+                        == LingxingStoreDimension.source_account_ref,
+                        DwsPurchaseBoard.owner_uid.in_(self.org_owner_refs),
+                        DwsPurchaseBoard.store_id.is_not(None),
+                    )
+                )
+            )
+        return {
+            (row.source_account_ref, row.store_id): row.store_name
+            for row in self.session.scalars(statement)
         }

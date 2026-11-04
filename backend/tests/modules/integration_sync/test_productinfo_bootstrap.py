@@ -36,6 +36,7 @@ from app.modules.product_management.models import (
     ProductManagementPricingCurrent,
     ProductPricingRuleVersion,
 )
+from app.modules.product_management.router import require_product_management_org_scope
 from app.modules.product_management.schemas import ProductManagementListQuery
 from app.modules.product_management.service import ProductManagementService
 from app.modules.products.bootstrap import (
@@ -367,6 +368,10 @@ def test_bootstrap_product_is_visible_through_real_product_management_route(
 ) -> None:
     identity, source_account_ref = _bootstrap_product_in_database(product_management_db_session)
     application = create_app()
+    # Synthetic route tests do not provision Feishu organization snapshots.
+    # These tests exercise legacy permission/source-account contracts; separate
+    # org-scope tests exercise the actual dependency and fail-closed behavior.
+    application.dependency_overrides[require_product_management_org_scope] = lambda: None
     application.dependency_overrides[get_optional_principal] = lambda: Principal(
         user_id="synthetic-user",
         permissions=frozenset({"page:products:product-management:view"}),
@@ -395,6 +400,10 @@ def test_synced_identity_is_visible_without_product_bootstrap(
 ) -> None:
     identity, source_account_ref = _add_unbootstrapped_identity(product_management_db_session)
     application = create_app()
+    # Synthetic route tests do not provision Feishu organization snapshots.
+    # These tests exercise legacy permission/source-account contracts; separate
+    # org-scope tests exercise the actual dependency and fail-closed behavior.
+    application.dependency_overrides[require_product_management_org_scope] = lambda: None
     application.dependency_overrides[get_optional_principal] = lambda: Principal(
         user_id="synthetic-user",
         permissions=frozenset({"page:products:product-management:view"}),
@@ -467,6 +476,10 @@ def test_product_management_detail_returns_current_picture_list_images_in_order(
     )
     product_management_db_session.commit()
     application = create_app()
+    # Synthetic route tests do not provision Feishu organization snapshots.
+    # These tests exercise legacy permission/source-account contracts; separate
+    # org-scope tests exercise the actual dependency and fail-closed behavior.
+    application.dependency_overrides[require_product_management_org_scope] = lambda: None
     application.dependency_overrides[get_optional_principal] = lambda: Principal(
         user_id="synthetic-user",
         permissions=frozenset({"page:products:product-management:view"}),
@@ -518,6 +531,10 @@ def test_summary_counts_pricing_with_complete_inputs_even_without_images(
     current.package_height_cm = Decimal("30.48")
     product_management_db_session.commit()
     application = create_app()
+    # Synthetic route tests do not provision Feishu organization snapshots.
+    # These tests exercise legacy permission/source-account contracts; separate
+    # org-scope tests exercise the actual dependency and fail-closed behavior.
+    application.dependency_overrides[require_product_management_org_scope] = lambda: None
     application.dependency_overrides[get_optional_principal] = lambda: Principal(
         user_id="synthetic-user",
         permissions=frozenset({"page:products:product-management:view"}),

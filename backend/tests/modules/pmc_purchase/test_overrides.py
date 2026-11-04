@@ -237,7 +237,7 @@ def test_idempotent_replay_and_validation_errors(seeded: Session) -> None:
 def _app(*permissions: str) -> Any:
     application = create_app()
     application.dependency_overrides[get_optional_principal] = lambda: Principal(
-        user_id="synthetic-user", permissions=frozenset(permissions)
+        user_id="8", permissions=frozenset(permissions)
     )
     application.dependency_overrides[require_source_account_scope] = lambda: frozenset(
         {"synthetic-account"}
@@ -247,6 +247,12 @@ def _app(*permissions: str) -> Any:
 
 
 def test_override_routes_openapi_and_permissions(monkeypatch: Any) -> None:
+    # Keep the real endpoint permission dependency; isolate this route test from
+    # the PostgreSQL-backed Feishu owner-scope resolver.
+    monkeypatch.setattr(
+        "app.modules.pmc_purchase.router.resolve_business_owner_refs",
+        lambda *_args: None,
+    )
     schema = create_app().openapi()
     path = schema["paths"]["/api/pmc/purchase/sku-cycles/{sku}/overrides"]
     assert path["post"]["operationId"] == "createPmcPurchaseSkuCycleOverride"
@@ -304,10 +310,7 @@ def test_override_routes_openapi_and_permissions(monkeypatch: Any) -> None:
     )
     assert response.status_code == 201
     payload = response.json()
-    assert (
-        payload["success"] is True
-        and payload["data"]["override"]["operator_ref"] == "synthetic-user"
-    )
+    assert payload["success"] is True and payload["data"]["override"]["operator_ref"] == "8"
     assert captured["request_id"] == "req-123" and captured["sku"] == "SKU-A"
     assert payload["meta"]["source_objects"] == [
         "manual_purchase_cycle_override",

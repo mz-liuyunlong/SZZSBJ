@@ -27,10 +27,41 @@ from app.modules.approvals.schemas import (
 )
 from app.modules.approvals.service import ApprovalService
 from app.modules.approvals.workflow import ApprovalWorkflow
+from app.modules.iam.organization_access import (
+    ORG_OWNER_SCOPE_SESSION_KEY,
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
+    resolve_business_owner_refs,
+    resolve_business_account_owner_pairs,
+)
+from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY, resolve_account_store_scope
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.warehouse_wfs.schemas import WfsFeeArchiveRequestWrite
 
-router = APIRouter(prefix="/api/approvals", tags=["Approval Workbench"])
+
+def require_approval_org_scope(
+    principal: Annotated[Principal, Depends(require_principal)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    """Apply reviewed organization owners to every WFS approval read and action."""
+    session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
+    session.info.pop(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY, None)
+    session.info.pop(STORE_SCOPE_SESSION_KEY, None)
+    owner_pairs = resolve_business_account_owner_pairs(session, principal)
+    owners = None if owner_pairs else resolve_business_owner_refs(session, principal)
+    if owner_pairs:
+        session.info[ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY] = owner_pairs
+    elif owners is not None:
+        session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owners
+    account_stores = resolve_account_store_scope(session, principal)
+    if account_stores is not None:
+        session.info[STORE_SCOPE_SESSION_KEY] = account_stores
+
+
+router = APIRouter(
+    prefix="/api/approvals",
+    tags=["Approval Workbench"],
+    dependencies=[Depends(require_approval_org_scope)],
+)
 db_session = Annotated[Session, Depends(get_db_session)]
 account_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
 view_principal = Annotated[
@@ -110,6 +141,9 @@ def reattest_legacy(
     principal: archive_request_principal,
     accounts: account_scope,
 ):
+    # Re-attestation runs through a separate workflow: enforce owner visibility
+    # before entering that workflow, not just on regular approval decisions.
+    ApprovalService(session)._case(str(case_id), accounts, lock=True)
     approval_id = ApprovalWorkflow(session).reattest_wfs(
         case_id,
         accounts,

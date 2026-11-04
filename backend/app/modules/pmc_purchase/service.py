@@ -21,6 +21,7 @@ from app.modules.pmc_purchase.gate3_models import (
     DwsPurchaseBoard,
     DwsPurchaseSkuCycle,
 )
+from app.modules.iam.organization_access import ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY
 from app.modules.pmc_purchase.repository import PmcPurchaseReadRepository
 from app.modules.pmc_purchase.schemas import (
     BoardFilterQuery,
@@ -55,13 +56,21 @@ class PmcPurchaseReadService:
         self.repository = PmcPurchaseReadRepository(session)
         self.today = today or date.today()
 
+    @property
+    def _row_scoped(self) -> bool:
+        return (
+            self.repository.org_owner_refs is not None
+            or self.repository.account_owner_pairs is not None
+            or self.repository.account_stores is not None
+        )
+
     # -- 7.1 board list --
 
     def list_board(
         self, query: BoardListQuery, accounts: frozenset[str]
     ) -> tuple[BoardListData, int, datetime | None, int | None]:
         rows, total = self.repository.list_board(query, accounts, self.today)
-        items = [_board_row(r) for r in rows]
+        items = [_board_row(r, scoped=self._row_scoped) for r in rows]
         return BoardListData(items=items, total=total), total, _freshness(rows), _rule_of(rows)
 
     # -- 7.2 summary --
@@ -106,19 +115,24 @@ class PmcPurchaseReadService:
         )
 
         data = BoardSummaryData(
+            scope_limited=self._row_scoped,
             awaiting_arrival_orders=len(awaiting),
             arrival_overdue_orders=len(arrival_overdue),
             purchase_overdue_orders=len(purchase_overdue),
             purchase_overdue_plans=len(pending_plans[0]),
-            average_purchase_cycle_days_90d=average,
-            median_purchase_cycle_days_90d=median,
-            purchase_cycle_sample_orders_90d=len(cycle_values),
+            average_purchase_cycle_days_90d=None if self._row_scoped else average,
+            median_purchase_cycle_days_90d=None if self._row_scoped else median,
+            purchase_cycle_sample_orders_90d=None if self._row_scoped else len(cycle_values),
             month_purchase_amount=[
                 MoneyByCurrency(currency_code=code, amount=amount)
                 for code, amount in sorted(by_currency.items(), key=lambda kv: kv[0] or "")
             ],
-            unstable_sku_count=len(
-                {(r.source_account_ref, r.sku) for r in rows if r.sku_cycle_unstable and r.sku}
+            unstable_sku_count=(
+                None if self._row_scoped
+                else len({
+                    (r.source_account_ref, r.sku)
+                    for r in rows if r.sku_cycle_unstable and r.sku
+                })
             ),
             itemid_pending_lines=sum(
                 1
@@ -144,6 +158,8 @@ class PmcPurchaseReadService:
         head = rows[0]
         receipt_sns: list[str] = []
         for r in rows:
+            if self._row_scoped:
+                break
             listed = r.source_lineage_json.get("receipt_order_sns")
             if not isinstance(listed, list):
                 continue
@@ -153,20 +169,32 @@ class PmcPurchaseReadService:
         plan_sns = sorted({r.plan_sn for r in rows if r.plan_sn})
         plans = self.repository.plans_by_sn(plan_sns, accounts)
         skus = sorted({r.sku for r in rows if r.sku})
-        cycles = self.repository.sku_cycles(skus, accounts)
+        # SKU cycle samples are aggregated across owners. Until a per-owner
+        # cycle mart exists, do not expose this aggregate to org-scoped users.
+        from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
+        from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+
+        cycles = (
+            []
+            if self.repository.session.info.get(ORG_OWNER_SCOPE_SESSION_KEY) is not None
+            or self.repository.session.info.get(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY) is not None
+            or self.repository.session.info.get(STORE_SCOPE_SESSION_KEY) is not None
+            else self.repository.sku_cycles(skus, accounts)
+        )
         data = OrderDetailData(
+            scope_limited=self._row_scoped,
             purchase_order_sn=head.order_sn,
             order_status=head.order_status,
             order_date=head.order_date,
             order_create_date=head.order_create_date,
-            quantity_total=head.quantity_total,
-            quantity_received=head.quantity_received,
-            progress_ratio=head.progress_ratio,
-            arrival_date=head.arrival_date,
-            amount_total=head.amount_total,
+            quantity_total=None if self._row_scoped else head.quantity_total,
+            quantity_received=None if self._row_scoped else head.quantity_received,
+            progress_ratio=None if self._row_scoped else head.progress_ratio,
+            arrival_date=None if self._row_scoped else head.arrival_date,
+            amount_total=None if self._row_scoped else head.amount_total,
             currency_code=head.currency_code,
             stage=_stage(head),
-            lines=[_board_row(r) for r in rows],
+            lines=[_board_row(r, scoped=self._row_scoped) for r in rows],
             receipts=[
                 OrderReceiptRef(
                     receipt_order_sn=sn, is_arrival_receipt=sn == head.arrival_receipt_order_sn
@@ -255,13 +283,15 @@ def _stage(row: DwsPurchaseBoard) -> StageRef:
     )
 
 
-def _board_row(row: DwsPurchaseBoard) -> BoardRowRead:
+def _board_row(row: DwsPurchaseBoard, *, scoped: bool = False) -> BoardRowRead:
     return BoardRowRead(
         purchase_order_sn=row.order_sn,
         draft_no=row.draft_no,
         order_item_id=row.order_item_id,
         plan_sn=row.plan_sn,
-        plan_sns=list(row.plan_sns_json or []),
+        plan_sns=[row.plan_sn] if scoped and row.plan_sn else (
+            [] if scoped else list(row.plan_sns_json or [])
+        ),
         order_status=row.order_status,
         stage=_stage(row),
         store=StoreRef(id=row.store_id, name=row.store_name, attributed=row.store_attributed),
@@ -280,7 +310,7 @@ def _board_row(row: DwsPurchaseBoard) -> BoardRowRead:
             wfs_not_ready=row.wfs_not_ready,
         ),
         owner=OwnerRef(uid=row.owner_uid, name=row.owner_name),
-        quantity_total=row.quantity_total,
+        quantity_total=None if scoped else row.quantity_total,
         quantity_allocated=row.quantity_allocated,
         quantity_received=row.quantity_received,
         progress_ratio=row.progress_ratio,
@@ -288,19 +318,19 @@ def _board_row(row: DwsPurchaseBoard) -> BoardRowRead:
         order_date=row.order_date,
         order_create_date=row.order_create_date,
         plan_create_date=row.plan_create_date,
-        arrival_date=row.arrival_date,
-        arrival_receipt_order_sn=row.arrival_receipt_order_sn,
-        purchase_cycle_days=row.purchase_cycle_days,
-        approval_cycle_days=row.approval_cycle_days,
+        arrival_date=None if scoped else row.arrival_date,
+        arrival_receipt_order_sn=None if scoped else row.arrival_receipt_order_sn,
+        purchase_cycle_days=None if scoped else row.purchase_cycle_days,
+        approval_cycle_days=None if scoped else row.approval_cycle_days,
         sku_cycle=SkuCycleBrief(
-            value_days=row.sku_cycle_days,
-            source=row.sku_cycle_source,  # type: ignore[arg-type]
-            sample_count=row.sku_cycle_sample_count,
-            unstable=row.sku_cycle_unstable,
+            value_days=None if scoped else row.sku_cycle_days,
+            source=None if scoped else row.sku_cycle_source,  # type: ignore[arg-type]
+            sample_count=None if scoped else row.sku_cycle_sample_count,
+            unstable=None if scoped else row.sku_cycle_unstable,
         ),
         unit_price=row.unit_price,
         amount_allocated=row.amount_allocated,
-        amount_total=row.amount_total,
+        amount_total=None if scoped else row.amount_total,
         currency_code=row.currency_code,
         calculated_at=row.calculated_at,
     )
@@ -335,7 +365,10 @@ def _plan_ref(plan: DwdPurchasePlan) -> OrderPlanRef:
 
 
 def _pending_plan(
-    plan: DwdPurchasePlan, stores: dict[str, str | None], threshold: int, today: date
+    plan: DwdPurchasePlan,
+    stores: dict[tuple[str, str], str | None],
+    threshold: int,
+    today: date
 ) -> PendingPlanRead:
     since = plan.first_seen_pending_date or plan.create_date
     pending_days = (today - since).days if since else None
@@ -352,7 +385,10 @@ def _pending_plan(
         overdue_days=overdue,
         store=StoreRef(
             id=plan.store_id,
-            name=stores.get(plan.store_id) if plan.store_id else None,
+            name=(
+                stores.get((plan.source_account_ref, plan.store_id))
+                if plan.store_id else None
+            ),
             attributed=plan.store_attributed,
         ),
         sku=plan.sku,

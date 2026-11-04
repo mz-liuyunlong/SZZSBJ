@@ -8,6 +8,7 @@ import {
 } from "@/components/report-table/pagination";
 import type { NavigationPage } from "@/config/navigation";
 import { fetchCurrentUser } from "@/pages/auth/authApi";
+import { notifyPermissionsChanged } from "@/pages/auth/authSession";
 import type { AuthUser } from "@/pages/auth/authTypes";
 import UserFormModal from "@/pages/settings/components/UserFormModal";
 import UserDataScopeModal, {
@@ -290,6 +291,7 @@ function UserManagementPage({ page }: UserManagementPageProps) {
         if (canAssignRole && !editingUser.isSuperAdmin) {
           await updateUserRoles(editingUser.id, values.roles, roleOptions);
         }
+        notifyPermissionsChanged();
         void messageApi.success("用户已保存");
       } else {
         if (!canCreate || !canAssignRole) return;
@@ -322,6 +324,7 @@ function UserManagementPage({ page }: UserManagementPageProps) {
       await updateUserRoles(userId, roles, roleOptions);
       setRoleUser(undefined);
       await refreshUsers();
+      notifyPermissionsChanged();
       void messageApi.success("角色已更新");
     } catch {
       void messageApi.error("角色更新失败");
@@ -352,6 +355,7 @@ function UserManagementPage({ page }: UserManagementPageProps) {
       setDataScopeItems(state.items);
       setEffectiveDataScopeItems(state.effectiveItems);
       setDataScopeUser(undefined);
+      notifyPermissionsChanged();
       void messageApi.success("用户数据范围已更新");
     } catch {
       void messageApi.error("保存失败；不能授予超出当前账号的数据范围");

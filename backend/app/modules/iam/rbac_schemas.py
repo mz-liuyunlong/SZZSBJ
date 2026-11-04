@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 PermissionType = Literal["page", "action", "field"]
 RiskLevel = Literal["normal", "high"]
-ScopeType = Literal["source_account", "store", "owner", "sku", "product"]
+ScopeType = Literal["source_account", "store", "owner", "sku", "product", "org_department"]
 
 
 class PermissionItemRead(BaseModel):

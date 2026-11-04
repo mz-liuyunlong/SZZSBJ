@@ -6,11 +6,19 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode, ErrorEnvelope, SuccessEnvelope, success_response
-from app.core.auth import Principal
+from app.core.auth import Principal, require_principal
 from app.core.config import get_settings
-from app.core.permissions import require_permission, require_super_admin
+from app.core.permission_policy_v2 import permission_for_request
+from app.core.permissions import has_permission, require_permission, require_super_admin
 from app.db.session import get_db_session
 from app.modules.approvals.service import ApprovalService
+from app.modules.iam.organization_access import (
+    ORG_OWNER_SCOPE_SESSION_KEY,
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
+    resolve_business_owner_refs,
+    resolve_business_account_owner_pairs,
+)
+from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY, resolve_account_store_scope
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.warehouse_wfs.automation_service import preview_persisted_wfs_detection
 from app.modules.warehouse_wfs.schemas import (
@@ -33,7 +41,37 @@ from app.modules.warehouse_wfs.schemas import (
 )
 from app.modules.warehouse_wfs.service import WfsFeeAlertService
 
-router = APIRouter(tags=["WFS-FEE-CASE"])
+
+def require_wfs_org_scope(
+    request: Request,
+    principal: Annotated[Principal, Depends(require_principal)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    """Check the operation grant first; owner restrictions are mandatory per request."""
+    session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
+    session.info.pop(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY, None)
+    session.info.pop(STORE_SCOPE_SESSION_KEY, None)
+    required_permission = permission_for_request(
+        request.method, request.url.path, "page:warehouse:wfs-fee-alert:view"
+    )
+    if not has_permission(principal, required_permission):
+        raise ApiError(
+            code=ErrorCode.FORBIDDEN,
+            status_code=403,
+            details={"required_permission": required_permission},
+        )
+    owner_pairs = resolve_business_account_owner_pairs(session, principal)
+    owners = None if owner_pairs else resolve_business_owner_refs(session, principal)
+    if owner_pairs:
+        session.info[ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY] = owner_pairs
+    elif owners is not None:
+        session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owners
+    account_stores = resolve_account_store_scope(session, principal)
+    if account_stores is not None:
+        session.info[STORE_SCOPE_SESSION_KEY] = account_stores
+
+
+router = APIRouter(tags=["WFS-FEE-CASE"], dependencies=[Depends(require_wfs_org_scope)])
 db_session = Annotated[Session, Depends(get_db_session)]
 source_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
 read_principal = Annotated[
@@ -56,10 +94,7 @@ recover_principal = Annotated[
     Principal,
     Depends(require_permission("action:warehouse:wfs-fee-alert:mark-recovered")),
 ]
-sync_principal = Annotated[
-    Principal,
-    Depends(require_super_admin),
-]
+sync_principal = Annotated[Principal, Depends(require_super_admin)]
 ERRORS: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorEnvelope},
     403: {"model": ErrorEnvelope},
@@ -245,6 +280,7 @@ def request_wfs_fee_case_archive(
     principal: archive_request_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[dict[str, bool], None]:
+    WfsFeeAlertService(session).ensure_case_visible(case_id, account_refs)
     ApprovalService(session).submit_wfs(
         case_id,
         reason_type=payload.archive_reason_type,

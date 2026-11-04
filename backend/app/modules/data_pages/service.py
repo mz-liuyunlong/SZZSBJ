@@ -688,10 +688,15 @@ class ListingManagementService:
         rows = self.repository.listing_filter_options(account_refs=account_refs)
 
         tag_rows = {value: (value, label, count) for value, label, count in rows["tags"]}
-        db_tag_rows = {
-            tag.name: (tag.name, tag.name, usage)
-            for tag, usage in self.tag_repository.list_tags(account_refs=account_refs)
-        }
+        # Global tag usage counts include owners outside the granted org scope.
+        db_tag_rows = (
+            {
+                tag.name: (tag.name, tag.name, usage)
+                for tag, usage in self.tag_repository.list_tags(account_refs=account_refs)
+            }
+            if self.repository.org_owner_refs is None
+            else {}
+        )
         tag_rows.update(db_tag_rows)
 
         return ListingManagementFilterOptionsData(

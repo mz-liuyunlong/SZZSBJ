@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from threading import RLock
 from typing import Literal
 
 PermissionType = Literal["page", "action", "field"]
@@ -193,6 +194,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
         100,
         (
             _page("pmc", "purchase_board", "采购看板", 10),
+            _page("pmc", "logistics", "物流", 15),
             _page("pmc", "domestic_warehouse_board", "国内仓看板", 20),
         ),
     ),
@@ -222,6 +224,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
             _page("data_center", "data_import", "数据导入", 40),
             _page("data_center", "data_export", "数据导出", 50),
             _page("data_center", "task_center", "任务中心", 60),
+            _page("data_center", "walmart_remote", "沃尔玛采集", 65),
             _page("data_center", "api_docs", "API文档", 70),
         ),
     ),
@@ -246,6 +249,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
         140,
         (
             _page("settings", "user_management", "用户管理", 10),
+            _page("settings", "organization", "组织架构", 15),
             _page("settings", "fee_rules", "费用规则", 20),
             _page("settings", "role_management", "角色管理", 30),
             _page("settings", "business_config", "业务配置", 40),
@@ -289,13 +293,34 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ),
     ActionDefinition("sales_daily_sales", "export", "导出每日销售", 10),
     ActionDefinition("sales_order_profit", "export", "导出订单利润", 10),
+    ActionDefinition("warehouse_wfs_fee_alert", "follow", "跟进WFS Case", 10),
+    ActionDefinition("warehouse_wfs_fee_alert", "archive-request", "申请归档WFS Case", 20, "high"),
+    ActionDefinition("warehouse_wfs_fee_alert", "archive-review", "审核归档WFS Case", 25, "high"),
     ActionDefinition("warehouse_wfs_fee_alert", "mark-recovered", "确认WFS费用已追回", 30, "high"),
+    ActionDefinition(
+        "pmc_domestic_warehouse_board", "packing-manual-create", "手工提交打包审批", 30, "high"
+    ),
+    ActionDefinition("pmc_domestic_warehouse_board", "packing-boxes-save", "保存仓库装箱", 40),
+    ActionDefinition("pmc_domestic_warehouse_board", "packing-done", "确认打包完成", 41),
+    ActionDefinition("pmc_domestic_warehouse_board", "packing-customs", "修改打包报关", 42),
+    ActionDefinition("pmc_domestic_warehouse_board", "packing-note", "填写打包延迟备注", 43),
+    ActionDefinition(
+        "pmc_domestic_warehouse_board", "packing-unpacked-dispose", "处置未装数量", 44, "high"
+    ),
+    ActionDefinition("pmc_domestic_warehouse_board", "packing-rebox", "修改已完成装箱", 45, "high"),
+    ActionDefinition(
+        "pmc_domestic_warehouse_board", "packing-supplement-ib", "登记超发补入库单", 46, "high"
+    ),
+    ActionDefinition(
+        "pmc_domestic_warehouse_board", "packing-supplement-sync", "校验超发补入库数据", 47, "high"
+    ),
     ActionDefinition("operations_plan", "create", "新增运营计划", 10),
     ActionDefinition("operations_plan", "edit", "编辑运营计划", 20),
     ActionDefinition("operations_plan", "import", "导入运营计划", 30),
     ActionDefinition("pmc_purchase_board", "override", "维护采购周期覆盖", 10, "high"),
     ActionDefinition("data_center_task_center", "configure", "维护同步配置", 10),
     ActionDefinition("data_center_task_center", "execute", "执行同步任务", 20, "high"),
+    ActionDefinition("data_center_walmart_remote", "execute", "执行沃尔玛采集", 10, "high"),
     ActionDefinition("settings_fee_rules", "edit", "维护费用规则", 10),
     ActionDefinition("settings_fee_rules", "recalculate", "执行规则重算", 20, "high"),
     ActionDefinition("settings_user_management", "create", "新增用户", 10),
@@ -423,7 +448,92 @@ def _build_permission_definitions() -> tuple[PermissionDefinition, ...]:
 
 
 PERMISSION_DEFINITIONS = _build_permission_definitions()
-PERMISSION_KEYS = frozenset(item.permission_key for item in PERMISSION_DEFINITIONS)
+_PERMISSION_LOCK = RLock()
+_RUNTIME_PERMISSION_DEFINITIONS: dict[str, PermissionDefinition] = {}
+PERMISSION_KEYS: set[str] = {item.permission_key for item in PERMISSION_DEFINITIONS}
+
+
+def register_runtime_permission_key(permission_key: str) -> PermissionDefinition | None:
+    """Register declared permissions for existing modules, without granting access.
+
+    A new page declared by an API is added to the catalog automatically, together
+    with its action/field children. Unreviewed pages and children are high-risk,
+    and role grants still require the standard authorized RBAC transaction.
+    """
+    parts = permission_key.split(":")
+    if len(parts) != 4 or parts[0] not in {"page", "action", "field"}:
+        return None
+    permission_type, module_slug, page_slug, leaf_slug = parts
+    if (
+        any(
+            not part or not all(char.isalnum() or char == "-" for char in part)
+            for part in parts[1:]
+        )
+        or any("_" in part for part in parts[1:])
+        or not all(part.isascii() and part.lower() == part for part in parts[1:])
+        or (permission_type == "page" and leaf_slug != "view")
+    ):
+        return None
+    module_key = module_slug.replace("-", "_")
+    if module_key not in MODULE_NAMES:
+        return None
+    page_key = f"{module_key}_{page_slug.replace('-', '_')}"
+    static_page = PAGE_DEFINITIONS.get(page_key)
+
+    with _PERMISSION_LOCK:
+        if permission_key in _RUNTIME_PERMISSION_DEFINITIONS:
+            return _RUNTIME_PERMISSION_DEFINITIONS[permission_key]
+        if permission_key in PERMISSION_KEYS:
+            return next(
+                (item for item in PERMISSION_DEFINITIONS if item.permission_key == permission_key),
+                None,
+            )
+
+        page_name = (
+            static_page[2].name if static_page is not None else page_slug.replace("-", " ").title()
+        )
+        if static_page is None:
+            parent_key = f"page:{module_slug}:{page_slug}:view"
+            if parent_key not in _RUNTIME_PERMISSION_DEFINITIONS:
+                parent = PermissionDefinition(
+                    permission_key=parent_key,
+                    name=page_name,
+                    description=f"自动发现页面：{page_name}（未自动授权）",
+                    permission_type="page",
+                    module_key=module_key,
+                    page_key=page_key,
+                    action_key=None,
+                    field_key=None,
+                    risk_level="high",
+                    sort_order=9999,
+                )
+                _RUNTIME_PERMISSION_DEFINITIONS[parent_key] = parent
+                PERMISSION_KEYS.add(parent_key)
+            if permission_type == "page":
+                return _RUNTIME_PERMISSION_DEFINITIONS[parent_key]
+
+        leaf_name = leaf_slug.replace("-", " ").title()
+        definition = PermissionDefinition(
+            permission_key=permission_key,
+            name=f"{page_name} · {leaf_name}",
+            description=f"{page_name}：{leaf_name}（代码自动发现，未自动授权）",
+            permission_type=permission_type,
+            module_key=module_key,
+            page_key=page_key,
+            action_key=leaf_slug if permission_type == "action" else None,
+            field_key=leaf_slug if permission_type == "field" else None,
+            risk_level="high",
+            sort_order=9999,
+        )
+        _RUNTIME_PERMISSION_DEFINITIONS[permission_key] = definition
+        PERMISSION_KEYS.add(permission_key)
+        return definition
+
+
+def all_permission_definitions() -> tuple[PermissionDefinition, ...]:
+    with _PERMISSION_LOCK:
+        return (*PERMISSION_DEFINITIONS, *_RUNTIME_PERMISSION_DEFINITIONS.values())
+
 
 LEGACY_PERMISSION_MAPPINGS: dict[str, tuple[str, ...]] = {
     "products:read": (page_permission_key("products_product_management"),),

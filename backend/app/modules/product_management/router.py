@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
@@ -6,10 +7,24 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
 
-from app.core.api import ErrorEnvelope, SuccessEnvelope, get_request_id, success_response
-from app.core.auth import Principal
+from app.core.api import (
+    ApiError,
+    ErrorCode,
+    ErrorEnvelope,
+    SuccessEnvelope,
+    get_request_id,
+    success_response,
+)
+from app.core.auth import Principal, require_principal
+from app.core.permission_policy_v2 import permission_for_request
 from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
+from app.modules.iam.organization_access import (
+    ORG_OWNER_SCOPE_SESSION_KEY,
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
+    resolve_business_owner_refs,
+    resolve_business_account_owner_pairs,
+)
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.product_management.field_access import (
     LOGISTICS_COST_PERMISSION,
@@ -40,7 +55,82 @@ from app.modules.product_management.schemas import (
 from app.modules.product_management.service import ProductManagementService
 from app.modules.products.dependencies import require_product_scope
 
-router = APIRouter(tags=["Product Management BFF"])
+_ORG_REVIEWED_PRODUCT_READS = frozenset(
+    {
+        "/api/product-management/skus",
+        "/api/product-management/skus/summary",
+        "/api/product-management/options",
+        "/api/product-management/skus/export",
+    }
+)
+
+
+def require_product_management_org_scope(
+    request: Request,
+    principal: Annotated[Principal, Depends(require_principal)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    """Check endpoint permission before applying reviewed organization scopes."""
+    session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
+    session.info.pop(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY, None)
+    if request.url.path == "/api/user-table-views/product-management":
+        legacy_permission = (
+            "products:table_views:update" if request.method == "PUT" else "products:read"
+        )
+    elif request.url.path == "/api/product-management/pricing-rules":
+        legacy_permission = (
+            "products:pricing_rules:update"
+            if request.method == "PUT"
+            else "products:pricing_rules:read"
+        )
+    elif request.url.path == "/api/product-management/skus/recalculate-pricing":
+        legacy_permission = "products:pricing:recalculate"
+    elif request.url.path == "/api/product-management/skus/export":
+        legacy_permission = "products:export"
+    else:
+        legacy_permission = "products:read"
+    required_permission = permission_for_request(
+        request.method, request.url.path, "page:products:product-management:view"
+    )
+    if not (
+        has_permission(principal, required_permission)
+        or has_permission(principal, legacy_permission)
+    ):
+        raise ApiError(
+            code=ErrorCode.FORBIDDEN,
+            status_code=403,
+            details={"required_permission": required_permission},
+        )
+    # Personal table views contain no business rows; keep them usable without
+    # imposing a product-owner SQL filter, while retaining their own permission.
+    if request.url.path == "/api/user-table-views/product-management":
+        return
+    owner_pairs = resolve_business_account_owner_pairs(session, principal)
+    owners = None if owner_pairs else resolve_business_owner_refs(session, principal)
+    if owners is None and not owner_pairs:
+        return
+    detail_path = re.fullmatch(
+        r"/api/product-management/skus/[0-9A-Fa-f-]{36}(/pricing-breakdown)?",
+        request.url.path,
+    )
+    safe_read = request.method == "GET" and (
+        request.url.path in _ORG_REVIEWED_PRODUCT_READS or detail_path is not None
+    )
+    reviewed_export = (
+        request.method == "POST" and request.url.path == "/api/product-management/skus/export"
+    )
+    if not safe_read and not reviewed_export:
+        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
+    if owner_pairs:
+        session.info[ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY] = owner_pairs
+    elif owners is not None:
+        session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owners
+
+
+router = APIRouter(
+    tags=["Product Management BFF"],
+    dependencies=[Depends(require_product_management_org_scope)],
+)
 db_session = Annotated[Session, Depends(get_db_session)]
 source_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
 read_principal = Annotated[Principal, Depends(require_permission("products:read"))]

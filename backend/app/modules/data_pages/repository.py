@@ -24,7 +24,7 @@ from sqlalchemy import (
     tuple_,
 )
 from sqlalchemy.exc import ProgrammingError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.modules.data_pages.models import (
@@ -39,6 +39,16 @@ from app.modules.data_pages.models import (
     WalmartListingDimension,
     WalmartListingInventoryDailyFact,
 )
+from app.modules.iam.organization_access import (
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
+    ORG_OWNER_SCOPE_SESSION_KEY,
+)
+from app.modules.iam.explicit_item_scope import (
+    SKU_SCOPE_SESSION_KEY,
+    PRODUCT_SCOPE_SESSION_KEY,
+)
+from app.modules.iam.explicit_owner_scope import OWNER_SCOPE_SESSION_KEY
+from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
 from app.modules.walmart_monitor.models import WalmartMonitorListingCurrent
 
 DAILY_SALES_SEARCH_COLUMNS: dict[str, ColumnElement[str | None]] = {
@@ -171,6 +181,25 @@ class DailySalesRepository:
 
     def __init__(self, session: Session) -> None:
         self.session = session
+        info = getattr(session, "info", None)
+        self.org_owner_refs: frozenset[str] | None = (
+            info.get(ORG_OWNER_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.account_stores: frozenset[tuple[str, str]] | None = (
+            info.get(STORE_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.account_owner_pairs: frozenset[tuple[str, str]] | None = (
+            info.get(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.explicit_owner_pairs: frozenset[tuple[str, str]] | None = (
+            info.get(OWNER_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.explicit_sku_pairs: frozenset[tuple[str, str]] | None = (
+            info.get(SKU_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.explicit_item_pairs: frozenset[tuple[str, str]] | None = (
+            info.get(PRODUCT_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
 
     def _inventory_snapshot_table_ready(self) -> bool:
         """Return whether the inventory snapshot migration is already applied.
@@ -663,6 +692,39 @@ class DailySalesRepository:
         statement = select(DailySalesItemDayMart).where(
             DailySalesItemDayMart.source_account_ref.in_(account_refs)
         )
+        if self.account_stores is not None:
+            statement = statement.where(
+                tuple_(
+                    DailySalesItemDayMart.source_account_ref,
+                    DailySalesItemDayMart.store_id,
+                ).in_(sorted(self.account_stores))
+            )
+        if self.account_owner_pairs is not None:
+            statement = statement.where(
+                tuple_(
+                    DailySalesItemDayMart.source_account_ref,
+                    DailySalesItemDayMart.owner_ref,
+                ).in_(sorted(self.account_owner_pairs))
+            )
+        if self.explicit_owner_pairs is not None:
+            statement = statement.where(
+                tuple_(
+                    DailySalesItemDayMart.source_account_ref,
+                    DailySalesItemDayMart.owner_ref,
+                ).in_(sorted(self.explicit_owner_pairs))
+            )
+        if self.explicit_sku_pairs is not None:
+            statement = statement.where(
+                tuple_(DailySalesItemDayMart.source_account_ref, DailySalesItemDayMart.local_sku)
+                .in_(sorted(self.explicit_sku_pairs))
+            )
+        if self.explicit_item_pairs is not None:
+            statement = statement.where(
+                tuple_(DailySalesItemDayMart.source_account_ref, DailySalesItemDayMart.item_id)
+                .in_(sorted(self.explicit_item_pairs))
+            )
+        if self.org_owner_refs is not None:
+            statement = statement.where(DailySalesItemDayMart.owner_ref.in_(self.org_owner_refs))
         if start_date is not None:
             statement = statement.where(DailySalesItemDayMart.business_date_la >= start_date)
         if end_date is not None:
@@ -717,6 +779,25 @@ class OrderProfitRepository:
 
     def __init__(self, session: Session) -> None:
         self.session = session
+        info = getattr(session, "info", None)
+        self.org_owner_refs: frozenset[str] | None = (
+            info.get(ORG_OWNER_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.account_stores: frozenset[tuple[str, str]] | None = (
+            info.get(STORE_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.account_owner_pairs: frozenset[tuple[str, str]] | None = (
+            info.get(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.explicit_owner_pairs: frozenset[tuple[str, str]] | None = (
+            info.get(OWNER_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.explicit_sku_pairs: frozenset[tuple[str, str]] | None = (
+            info.get(SKU_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.explicit_item_pairs: frozenset[tuple[str, str]] | None = (
+            info.get(PRODUCT_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
 
     def list_order_profit(
         self,
@@ -839,6 +920,112 @@ class OrderProfitRepository:
         statement = select(OrderProfitSkuDayMart).where(
             OrderProfitSkuDayMart.source_account_ref.in_(account_refs)
         )
+        # Profit MART rows are aggregated by (day, account, SKU), not by owner.
+        # Only expose a *complete* SKU aggregate when every component in the
+        # corresponding daily-sales MART is inside the caller's grants. A
+        # mixed-owner or mixed-store SKU is omitted; no guessed allocation.
+        if (
+            self.account_owner_pairs is not None
+            or self.explicit_owner_pairs is not None
+            or self.explicit_sku_pairs is not None
+            or self.org_owner_refs is not None
+            or self.account_stores is not None
+        ):
+            source = aliased(DailySalesItemDayMart)
+            same_group = and_(
+                source.business_date_la == OrderProfitSkuDayMart.business_date_la,
+                source.source_account_ref == OrderProfitSkuDayMart.source_account_ref,
+                source.local_sku == OrderProfitSkuDayMart.local_sku,
+            )
+            permitted_parts: list[ColumnElement[bool]] = []
+            if self.account_owner_pairs is not None:
+                permitted_parts.append(
+                    tuple_(source.source_account_ref, source.owner_ref).in_(
+                        sorted(self.account_owner_pairs)
+                    )
+                )
+            if self.explicit_owner_pairs is not None:
+                permitted_parts.append(
+                    tuple_(source.source_account_ref, source.owner_ref).in_(
+                        sorted(self.explicit_owner_pairs)
+                    )
+                )
+            if self.explicit_sku_pairs is not None:
+                permitted_parts.append(
+                    tuple_(source.source_account_ref, source.local_sku)
+                    .in_(sorted(self.explicit_sku_pairs))
+                )
+            if self.org_owner_refs is not None:
+                permitted_parts.append(source.owner_ref.in_(self.org_owner_refs))
+            if self.account_stores is not None:
+                permitted_parts.append(
+                    tuple_(source.source_account_ref, source.store_id).in_(
+                        sorted(self.account_stores)
+                    )
+                )
+            if store_id is not None:
+                permitted_parts.append(source.store_id == store_id)
+            authorized = and_(*permitted_parts)
+            # A scoped user may only see a complete original SKU aggregate.
+            # Merely finding no *unauthorized* Daily Sales rows is insufficient:
+            # stale/partial source rows must never release an aggregated MART
+            # record that contains other stores or items.
+            source_stores = (
+                select(func.jsonb_agg(func.distinct(source.store_id)))
+                .where(same_group)
+                .correlate(OrderProfitSkuDayMart)
+                .scalar_subquery()
+            )
+            source_items = (
+                select(func.jsonb_agg(func.distinct(source.item_id)))
+                .where(same_group)
+                .correlate(OrderProfitSkuDayMart)
+                .scalar_subquery()
+            )
+            source_sales = (
+                select(func.coalesce(func.sum(source.sales_amount), 0))
+                .where(same_group)
+                .correlate(OrderProfitSkuDayMart)
+                .scalar_subquery()
+            )
+            source_sales_qty = (
+                select(func.coalesce(func.sum(source.sales_qty), 0))
+                .where(same_group)
+                .correlate(OrderProfitSkuDayMart)
+                .scalar_subquery()
+            )
+            source_order_count = (
+                select(func.coalesce(func.sum(source.order_count), 0))
+                .where(same_group)
+                .correlate(OrderProfitSkuDayMart)
+                .scalar_subquery()
+            )
+            source_gross_profit = (
+                select(func.sum(source.gross_profit_amount))
+                .where(same_group)
+                .correlate(OrderProfitSkuDayMart)
+                .scalar_subquery()
+            )
+            statement = statement.where(
+                exists(
+                    select(1).select_from(source).where(same_group, authorized)
+                ).correlate(OrderProfitSkuDayMart),
+                ~exists(
+                    select(1).select_from(source).where(same_group, ~authorized)
+                ).correlate(OrderProfitSkuDayMart),
+                source_stores.op("@>")(OrderProfitSkuDayMart.store_ids_json),
+                OrderProfitSkuDayMart.store_ids_json.op("@>")(source_stores),
+                source_items.op("@>")(OrderProfitSkuDayMart.item_ids_json),
+                OrderProfitSkuDayMart.item_ids_json.op("@>")(source_items),
+                OrderProfitSkuDayMart.sales_amount == source_sales,
+                OrderProfitSkuDayMart.sales_qty == source_sales_qty,
+                OrderProfitSkuDayMart.order_count == source_order_count,
+                # IS NOT DISTINCT FROM preserves the difference between
+                # an unavailable profit and a truly zero-dollar profit.
+                OrderProfitSkuDayMart.gross_profit_amount.is_not_distinct_from(
+                    source_gross_profit
+                ),
+            )
         if start_date is not None:
             statement = statement.where(OrderProfitSkuDayMart.business_date_la >= start_date)
         if end_date is not None:
@@ -857,6 +1044,25 @@ class ListingManagementRepository:
 
     def __init__(self, session: Session) -> None:
         self.session = session
+        info = getattr(session, "info", None)
+        self.org_owner_refs: frozenset[str] | None = (
+            info.get(ORG_OWNER_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.account_stores: frozenset[tuple[str, str]] | None = (
+            info.get(STORE_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.account_owner_pairs: frozenset[tuple[str, str]] | None = (
+            info.get(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.explicit_owner_pairs: frozenset[tuple[str, str]] | None = (
+            info.get(OWNER_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.explicit_sku_pairs: frozenset[tuple[str, str]] | None = (
+            info.get(SKU_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.explicit_item_pairs: frozenset[tuple[str, str]] | None = (
+            info.get(PRODUCT_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
 
     def list_listings(
         self,
@@ -1251,6 +1457,69 @@ class ListingManagementRepository:
             )
             .where(ListingManagementCurrentMart.source_account_ref.in_(account_refs))
         )
+        if self.account_stores is not None:
+            statement = statement.where(
+                tuple_(
+                    ListingManagementCurrentMart.source_account_ref,
+                    ListingManagementCurrentMart.store_id,
+                ).in_(sorted(self.account_stores))
+            )
+        if self.explicit_sku_pairs is not None:
+            statement = statement.where(
+                tuple_(
+                    ListingManagementCurrentMart.source_account_ref,
+                    ListingManagementCurrentMart.local_sku,
+                ).in_(sorted(self.explicit_sku_pairs))
+            )
+        if self.explicit_item_pairs is not None:
+            statement = statement.where(
+                tuple_(
+                    ListingManagementCurrentMart.source_account_ref,
+                    ListingManagementCurrentMart.item_id,
+                ).in_(sorted(self.explicit_item_pairs))
+            )
+        if self.account_owner_pairs is not None:
+            statement = statement.where(
+                or_(
+                    tuple_(
+                        ListingManagementCurrentMart.source_account_ref,
+                        owner_lookup.c.owner_uid,
+                    ).in_(sorted(self.account_owner_pairs)),
+                    and_(
+                        owner_lookup.c.owner_uid.is_(None),
+                        tuple_(
+                            ListingManagementCurrentMart.source_account_ref,
+                            ListingManagementCurrentMart.owner_ref,
+                        ).in_(sorted(self.account_owner_pairs)),
+                    ),
+                )
+            )
+        if self.explicit_owner_pairs is not None:
+            statement = statement.where(
+                or_(
+                    tuple_(
+                        ListingManagementCurrentMart.source_account_ref,
+                        owner_lookup.c.owner_uid,
+                    ).in_(sorted(self.explicit_owner_pairs)),
+                    and_(
+                        owner_lookup.c.owner_uid.is_(None),
+                        tuple_(
+                            ListingManagementCurrentMart.source_account_ref,
+                            ListingManagementCurrentMart.owner_ref,
+                        ).in_(sorted(self.explicit_owner_pairs)),
+                    ),
+                )
+            )
+        if self.org_owner_refs is not None:
+            statement = statement.where(
+                or_(
+                    owner_lookup.c.owner_uid.in_(self.org_owner_refs),
+                    and_(
+                        owner_lookup.c.owner_uid.is_(None),
+                        ListingManagementCurrentMart.owner_ref.in_(self.org_owner_refs),
+                    ),
+                )
+            )
 
         archive_status_values = _csv_values(archive_status)
         if archive_status_values:
@@ -1477,54 +1746,85 @@ class ListingManagementRepository:
         self,
         account_refs: frozenset[str],
     ) -> list[dict[str, object]]:
-        table_name = ListingManagementCurrentMart.__tablename__
-        refs = sorted(account_refs)
-        params: dict[str, object] = {}
-        account_filter_sql = ""
-
-        if refs:
-            placeholders: list[str] = []
-            for index, account_ref in enumerate(refs):
-                key = f"account_ref_{index}"
-                placeholders.append(f":{key}")
-                params[key] = account_ref
-            account_filter_sql = f"where m.source_account_ref in ({', '.join(placeholders)})"
-
-        row = (
-            self.session.execute(
-                text(
-                    f"""
-                select
-                    coalesce(
-                        sum(
-                            case
-                                when coalesce(s.is_archived, false) = false
-                                then 1
-                                else 0
-                            end
-                        ),
-                        0
-                    ) as active_count,
-                    coalesce(
-                        sum(
-                            case
-                                when coalesce(s.is_archived, false) = true
-                                then 1
-                                else 0
-                            end
-                        ),
-                        0
-                    ) as archived_count
-                from {table_name} m
-                left join listing_archive_states s on s.listing_id = m.id
-                {account_filter_sql}
-                """
+        owner_lookup = self._owner_lookup()
+        archive_flag = func.coalesce(ListingArchiveState.is_archived, False)
+        statement = (
+            select(
+                func.coalesce(func.sum(case((archive_flag.is_(False), 1), else_=0)), 0).label(
+                    "active_count"
                 ),
-                params,
+                func.coalesce(func.sum(case((archive_flag.is_(True), 1), else_=0)), 0).label(
+                    "archived_count"
+                ),
             )
-            .mappings()
-            .one()
+            .select_from(ListingManagementCurrentMart)
+            .outerjoin(
+                ListingArchiveState,
+                ListingArchiveState.listing_id == ListingManagementCurrentMart.id,
+            )
+            .outerjoin(
+                owner_lookup,
+                and_(
+                    owner_lookup.c.source_account_ref
+                    == ListingManagementCurrentMart.source_account_ref,
+                    owner_lookup.c.lingxing_sku_code == ListingManagementCurrentMart.local_sku,
+                ),
+            )
+            .where(ListingManagementCurrentMart.source_account_ref.in_(sorted(account_refs)))
         )
+        if self.explicit_sku_pairs is not None:
+            statement = statement.where(
+                tuple_(ListingManagementCurrentMart.source_account_ref, ListingManagementCurrentMart.local_sku)
+                .in_(sorted(self.explicit_sku_pairs))
+            )
+        if self.explicit_item_pairs is not None:
+            statement = statement.where(
+                tuple_(ListingManagementCurrentMart.source_account_ref, ListingManagementCurrentMart.item_id)
+                .in_(sorted(self.explicit_item_pairs))
+            )
+        if self.account_owner_pairs is not None:
+            statement = statement.where(
+                or_(
+                    tuple_(
+                        ListingManagementCurrentMart.source_account_ref,
+                        owner_lookup.c.owner_uid,
+                    ).in_(sorted(self.account_owner_pairs)),
+                    and_(
+                        owner_lookup.c.owner_uid.is_(None),
+                        tuple_(
+                            ListingManagementCurrentMart.source_account_ref,
+                            ListingManagementCurrentMart.owner_ref,
+                        ).in_(sorted(self.account_owner_pairs)),
+                    ),
+                )
+            )
+        if self.explicit_owner_pairs is not None:
+            statement = statement.where(
+                or_(
+                    tuple_(
+                        ListingManagementCurrentMart.source_account_ref,
+                        owner_lookup.c.owner_uid,
+                    ).in_(sorted(self.explicit_owner_pairs)),
+                    and_(
+                        owner_lookup.c.owner_uid.is_(None),
+                        tuple_(
+                            ListingManagementCurrentMart.source_account_ref,
+                            ListingManagementCurrentMart.owner_ref,
+                        ).in_(sorted(self.explicit_owner_pairs)),
+                    ),
+                )
+            )
+        if self.org_owner_refs is not None:
+            statement = statement.where(
+                or_(
+                    owner_lookup.c.owner_uid.in_(self.org_owner_refs),
+                    and_(
+                        owner_lookup.c.owner_uid.is_(None),
+                        ListingManagementCurrentMart.owner_ref.in_(self.org_owner_refs),
+                    ),
+                )
+            )
+        row = self.session.execute(statement).mappings().one()
 
         return [
             {

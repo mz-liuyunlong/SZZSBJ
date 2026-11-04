@@ -2,6 +2,16 @@
 
 Registry Status: `draft; approved only after owner review and merge`
 
+## PR #287 飞书组织事件接收与回放（代码实现，待验收）
+
+| 接口／数据集 | 来源与粒度 | 变更、权限与安全边界 | 状态／文档 |
+|---|---|---|---|
+| `POST /api/integrations/feishu/organization-events` | 飞书 Contact v2 encrypted event；以 `event_id` 唯一去重 | 只接收经过时间戳、签名、AES 密文、验证 Token 和 App ID 校验的组织事件；事件只能撤销已验证失效员工的会话或触发完整目录重新核对；不直接授予数据/角色权限；默认关闭 | `code_implemented_unverified`；[接口合同](../api/iam-feishu-organization-events.md) |
+| `iam_feishu_org_events` / `iam.organization_event_tick` | 审计事件记录／一次已验证联系人事件；按批对账 | 事件 ID、类型、可能的员工 Open ID、状态、重试次数、核对运行 ID；不保存原始回调或 Secret；未启用工作流不会访问真实飞书。失败有限次数重试、异常需人工复核 | `code_implemented_unverified`；迁移 `20261104_0073_feishu_org_events` |
+| `GET /api/settings/organization/event-inbox`、`POST /api/settings/organization/event-inbox/retry` | 只读管理员事件列表／显式重新排队 | 超级管理员专属；只允许待复核事件重新排队；二次确认；不能跳过完整快照的安全校验 | `code_implemented_unverified` |
+
+以上条目仅反映 PR #287 中的候选实现；未运行真实飞书事件、生产迁移、CI 或完整接口验收，不得标为 `implemented`。
+
 ## 2026-10-28 打包审批增量登记（验收暂停）
 
 字段纠错（负责人已批准）：arrival_received ← 同版本采购明细 ODS payload_json.quantity_entry（到货入库量）；arrival_pending ← quantity_receive（待到货量）。分别汇总原明细，不累加计划拆行或采集快照；缺字段不按差值推算。未新增物理字段，未运行修复后测试；前序测试结果不能代替此次验收。

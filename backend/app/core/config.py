@@ -281,6 +281,15 @@ class Settings(BaseSettings):
         default="http://localhost:5173/#/password/setup",
         validation_alias="FEISHU_PASSWORD_SETUP_BASE_URL",
     )
+    feishu_org_events_enabled: bool = Field(
+        default=False, validation_alias="SZZSBJ_FEISHU_ORG_EVENTS_ENABLED"
+    )
+    feishu_org_event_encrypt_key: SecretStr | None = Field(
+        default=None, validation_alias="FEISHU_ORG_EVENT_ENCRYPT_KEY"
+    )
+    feishu_org_event_verification_token: SecretStr | None = Field(
+        default=None, validation_alias="FEISHU_ORG_EVENT_VERIFICATION_TOKEN"
+    )
     feishu_offboarding_notice_open_id: str | None = Field(
         default=None, validation_alias="FEISHU_OFFBOARDING_NOTICE_OPEN_ID"
     )
