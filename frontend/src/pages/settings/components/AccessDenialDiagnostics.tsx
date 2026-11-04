@@ -29,6 +29,9 @@ const reasonLabels: Record<string, string> = {
   UNENFORCED_DIMENSION: "存在尚未启用的授权维度",
   STORE_SCOPE_NOT_ENFORCED: "该模块尚未实现店铺范围",
   ORGANIZATION_SCOPE_NOT_ENFORCED: "该模块尚未实现组织范围",
+  OWNER_SCOPE_NOT_ENFORCED: "该模块尚未实现负责人范围",
+  SKU_SCOPE_NOT_ENFORCED: "该模块尚未实现 SKU 范围",
+  PRODUCT_SCOPE_NOT_ENFORCED: "该模块尚未实现商品 ID 范围",
 };
 
 export default function AccessDenialDiagnostics() {
