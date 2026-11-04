@@ -3,6 +3,7 @@
 Runs only against a disposable CI database created by the dedicated workflow.
 No production connection, no external Walmart calls and no mock clearance rows.
 """
+
 from __future__ import annotations
 
 import os
@@ -41,8 +42,15 @@ def clearance_db():
         engine.dispose()
 
 
-def _seed_listing(session: Session, *, account: str, store: str, item: str,
-                  available: int = 12, captured_at: datetime | None = None) -> str:
+def _seed_listing(
+    session: Session,
+    *,
+    account: str,
+    store: str,
+    item: str,
+    available: int = 12,
+    captured_at: datetime | None = None,
+) -> str:
     now = datetime.now(UTC)
     listing = ListingManagementCurrentMart(
         id=uuid4(),
@@ -91,9 +99,7 @@ def _payload(listing_id: str, qty: int) -> ApplicationWrite:
 def test_real_clearance_listing_application_approval_and_progress(clearance_db: Session) -> None:
     account = "clearance-ci-account"
     allowed = frozenset({account})
-    listing_id = _seed_listing(
-        clearance_db, account=account, store="ci-store", item="ci-item"
-    )
+    listing_id = _seed_listing(clearance_db, account=account, store="ci-store", item="ci-item")
     service = ClearanceService(clearance_db)
 
     candidates = service.list_listings(allowed, eligible_only=True)
@@ -119,18 +125,24 @@ def test_real_clearance_listing_application_approval_and_progress(clearance_db: 
 
     with pytest.raises(ApiError):
         service.decide(
-            approval_id, DecisionWrite(decision="approved", expected_version=1),
-            allowed, "operator-1"
+            approval_id,
+            DecisionWrite(decision="approved", expected_version=1),
+            allowed,
+            "operator-1"
         )
     decision = service.decide(
-        approval_id, DecisionWrite(decision="approved", expected_version=1),
-        allowed, "reviewer-2",
+        approval_id,
+        DecisionWrite(decision="approved", expected_version=1),
+        allowed,
+        "reviewer-2",
     )
     assert decision["status"] == "approved"
     with pytest.raises(ApiError):
         service.decide(
-            approval_id, DecisionWrite(decision="approved", expected_version=1),
-            allowed, "reviewer-3",
+            approval_id,
+            DecisionWrite(decision="approved", expected_version=1),
+            allowed,
+            "reviewer-3",
         )
 
     finished = service.progress(
