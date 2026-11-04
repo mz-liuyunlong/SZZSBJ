@@ -36,7 +36,10 @@ import EmptyState from "@/shared/states/EmptyState";
 import { readUserPreference, writeUserPreference } from "@/shared/preferences/userPreferenceCache";
 
 export type CashFlowView = "accounts" | "journal" | "stock";
-type ReviewCard = "all" | "todo" | "ok1" | "ok2" | "uncat" | "alert" | "excluded" | "fs_open";
+/* 日记账统计卡（Rocky 11-04）：已终审、待分类、审批单未付三张卡已删；待分类改用「类别」筛选里的「待分类」。 */
+const REVIEW_CARDS = ["all", "todo", "ok1", "alert", "excluded"] as const;
+type ReviewCard = (typeof REVIEW_CARDS)[number];
+interface JournalHandoff { account?: string; card?: ReviewCard; cats?: string[] }
 
 const HANDOFF_KEY = "finance:cash-journal:handoff";
 const OPEN_STATES = ["未付", "部分已付", "金额不符", "金额缺失"];
@@ -235,14 +238,15 @@ function BoardTable<T extends object>({ label, rowKey, rows, columns, emptyTitle
   );
 }
 
-function writeHandoff(value: { account?: string; card?: ReviewCard }) {
+function writeHandoff(value: JournalHandoff) {
   try { sessionStorage.setItem(HANDOFF_KEY, JSON.stringify(value)); } catch { /* 便利功能，失败忽略 */ }
 }
-function readHandoff(): { account?: string; card?: ReviewCard } {
+function readHandoff(): JournalHandoff {
   try {
     const raw = sessionStorage.getItem(HANDOFF_KEY);
     sessionStorage.removeItem(HANDOFF_KEY);
-    return raw ? JSON.parse(raw) : {};
+    const value: JournalHandoff = raw ? JSON.parse(raw) : {};
+    return { ...value, card: REVIEW_CARDS.includes(value.card as ReviewCard) ? value.card : undefined };
   } catch {
     return {};
   }
@@ -395,12 +399,12 @@ function AccountsBoard({ data }: { data: CashSnapshot }) {
   const outExt = rows.reduce((total, row) => total + toCny(row, row.out_ext), 0);
   const unpaid = data.feishu.filter((item) => isOpenApproval(item, data)).length;
   const uncat = data.lines.filter((line) => line.m === month && !line.cat).length;
-  const openJournal = (handoff: { account?: string; card?: ReviewCard }) => { writeHandoff(handoff); navigate("/finance/cash/journal"); };
+  const openJournal = (handoff: JournalHandoff) => { writeHandoff(handoff); navigate("/finance/cash/journal"); };
   const cards: ManagementStatCardItem<string>[] = [
     { key: "in", title: `${month} 外部流入`, subtitle: "折人民币 · 不含内部调拨 / 结汇 / 归集", value: fmtMoney(inExt), tone: "success", icon: icon("入") },
     { key: "out", title: `${month} 外部流出`, subtitle: `折人民币 · 汇率 ${fx}`, value: fmtMoney(outExt), tone: "danger", icon: icon("出") },
     { key: "uncat", title: "待分类流水", subtitle: "点击到日记账处理", value: uncat, tone: uncat ? "warning" : "normal", icon: icon("?") },
-    { key: "fs_open", title: "审批单未付", subtitle: "点击看未付审批单", value: unpaid, tone: unpaid ? "warning" : "normal", icon: icon("单") },
+    { key: "fs_open", title: "审批单未付", subtitle: "已批、未对上付款", value: unpaid, tone: unpaid ? "warning" : "normal", icon: icon("单") },
     { key: "pairs", title: "内部配对", subtitle: `未配对 ${data.meta.summary.unpaired ?? 0}`, value: `${data.meta.summary.pairs ?? 0} 对`, tone: "normal", icon: icon("⇄") },
   ];
   const columns: ProColumns<Row>[] = [
@@ -425,7 +429,7 @@ function AccountsBoard({ data }: { data: CashSnapshot }) {
         <ReportFacetSelect ariaLabel="月份" placeholder="月份" value={month} allowClear={false} showSearch={false} options={months.map((value) => ({ value, label: value }))} onChange={(value) => setMonth(String(value ?? months[months.length - 1]))} />
         <span className="finance-board__toolbar-actions"><Tooltip title={LOCKED_TIP}><Button disabled>导出 Excel</Button></Tooltip></span>
       </>}
-      summary={<ManagementStatCards<string> ariaLabel="账户总览统计" className="finance-board__summary finance-board__summary--5" cards={cards} activeKey="" onCardClick={(key) => { if (key === "uncat") openJournal({ card: "uncat" }); if (key === "fs_open") openJournal({ card: "fs_open" }); }} />}
+      summary={<ManagementStatCards<string> ariaLabel="账户总览统计" className="finance-board__summary finance-board__summary--5" cards={cards} activeKey="" onCardClick={(key) => { if (key === "uncat") openJournal({ cats: ["NONE"] }); }} />}
     >
       <BoardTable<Row> label="账户总览表格" rowKey="id" rows={rows} columns={columns} emptyTitle="暂无账户" emptyText="还没有导入任何现金流账户报表" pageSize={50} />
     </FinanceBoardFrame>
@@ -437,7 +441,7 @@ function JournalBoard({ data }: { data: CashSnapshot }) {
   const handoff = useMemo(() => readHandoff(), []);
   const [accounts, setAccounts] = useState<string[]>(handoff.account ? [handoff.account] : []);
   const [month, setMonth] = useState<string>("");
-  const [cats, setCats] = useState<string[]>([]);
+  const [cats, setCats] = useState<string[]>(handoff.cats ?? []);
   const [flow, setFlow] = useState<"" | "in" | "out">("");
   const [stages, setStages] = useState<ReviewStage[]>([]);
   const [alertTypes, setAlertTypes] = useState<string[]>([]);
@@ -486,7 +490,7 @@ function JournalBoard({ data }: { data: CashSnapshot }) {
     writeUserPreference("anonymous", JOURNAL_COLUMN_PREF_KEY, JOURNAL_COLUMN_PREF_VERSION, keys);
     setColumnConfigOpen(false);
   };
-  /* 飞书只读测试拉到、但不在本期审批单快照里的单（多是流水截止日之后的单）：已同意的并进「审批单未付」，点开能看凭证。 */
+  /* 飞书只读测试拉到、但不在本期审批单快照里的单（多是流水截止日之后的单）：已同意的并进审批单清单（关联审批单下拉、按单号搜索提示用）。 */
   const feishuAll = useMemo(() => {
     const known = new Set(data.feishu.map((item) => item.serial));
     const extra: FeishuApproval[] = Object.values(details).filter((d) => !known.has(d.serial) && d.status === "已同意" && d.amount != null)
@@ -497,17 +501,27 @@ function JournalBoard({ data }: { data: CashSnapshot }) {
   const approvalsOf = (line: CashLine) => line.refs.map((ref) => viewOf(ref, approvals.get(ref), details[ref]));
   const accountMap = useMemo(() => new Map(data.accounts.map((item) => [item.id, item])), [data]);
   /* 异常落到流水上：有流水号的直接挂；审批单类挂到关联了该单的流水；余额不连续按 账户 + 日期 + 余额 找断点那条流水。
-     落不到流水上的（剔除未命中、账户级提示）放表格上方提示条；没关联流水的审批单类在「审批单未付」卡片里。 */
+     落不到流水上的放表格上方提示条：要剔除的款没找到（数据里类型仍叫「剔除未命中」）、账户级提示；以及「审批单无付款流水」（Rocky 11-04：飞书已同意、没关联任何流水的单，
+     只会是流水没导全）和没关联流水的「审批单金额不符」。没关联流水的审批单未付 / 部分已付由「审批单无付款流水」统一代替，不重复列。 */
   const alertIndex = useMemo(() => {
     const byLine = new Map<string, CashAlert[]>();
     const orphans: CashAlert[] = [];
+    const linked = new Set(data.lines.flatMap((line) => line.refs));
+    const noFlow = feishuAll.filter((item) => item.status === "已同意" && (item.start || "") >= `${data.meta.start}-01` && !linked.has(item.serial))
+      .sort((a, b) => a.serial.localeCompare(b.serial));
+    for (const item of noFlow) {
+      const type = "审批单无付款流水";
+      const agreed = item.end || item.start || "";
+      orphans.push({ type, sev: "", acct: "", date: agreed, amt: item.amount, serial: item.serial, ref: item.serial, id: `${type}|${item.serial}`, hint: false,
+        msg: `审批单 ${item.serial}（${item.kind}）${item.masked ? "" : ` ${fmtMoney(item.amount, item.cur)}`}${item.payee ? ` · 收款人 ${item.payee}` : ""} · 飞书 ${agreed || EMPTY} 同意` });
+    }
     const push = (id: string, item: CashAlert) => byLine.set(id, [...(byLine.get(id) ?? []), item]);
     for (const item of toCashAlerts(data.anomalies)) {
       if (item.line) { push(item.line, item); continue; }
       if (item.serial) {
         const hits = data.lines.filter((line) => line.refs.includes(item.serial as string));
         hits.forEach((line) => push(line.id, item));
-        if (!hits.length && !item.type.startsWith("审批单")) orphans.push(item);
+        if (!hits.length && (!item.type.startsWith("审批单") || item.type === "审批单金额不符")) orphans.push(item);
         continue;
       }
       const hit = item.type === "余额不连续" ? data.lines.find((line) => line.acct === item.acct && line.date === item.date && line.bal != null && line.amt != null
@@ -516,11 +530,14 @@ function JournalBoard({ data }: { data: CashSnapshot }) {
       else orphans.push(item);
     }
     return { byLine, orphans };
-  }, [data]);
+  }, [data, feishuAll]);
   const alertsOf = (line: CashLine) => alertIndex.byLine.get(line.id) ?? [];
   const realAlertsOf = (line: CashLine) => alertsOf(line).filter((item) => !item.hint);
-  const alertTypeOptions = Array.from(new Set(data.lines.flatMap((line) => realAlertsOf(line).map((item) => item.type))))
-    .map((value) => ({ value, label: alertShort(value), count: data.lines.filter((line) => realAlertsOf(line).some((item) => item.type === value)).length }));
+  const realOrphans = alertIndex.orphans.filter((item) => !item.hint);
+  const alertTypeOptions = Array.from(new Set([...data.lines.flatMap((line) => realAlertsOf(line).map((item) => item.type)), ...realOrphans.map((item) => item.type)]))
+    .map((value) => ({ value, label: alertShort(value), count: data.lines.filter((line) => realAlertsOf(line).some((item) => item.type === value)).length + realOrphans.filter((item) => item.type === value).length }));
+  /* 找不到流水的异常（Rocky 11-04）：平时不展示，只算进「异常」卡数字；在「异常」筛选里选中这些类型时，才在表格上方列出来。 */
+  const shownOrphans = realOrphans.filter((item) => alertTypes.includes(item.type));
   const base = data.lines.filter((line) => (accounts.length === 0 || accounts.includes(line.acct)) && (!month || line.m === month)
     && (cats.length === 0 || cats.includes(line.cat || "NONE"))
     && (!flow || (flow === "in" ? (line.amt ?? 0) > 0 : (line.amt ?? 0) < 0))
@@ -535,23 +552,17 @@ function JournalBoard({ data }: { data: CashSnapshot }) {
     all: base.length,
     todo: base.filter((line) => isFirstPending(reviewOf(line).stage)).length,
     ok1: base.filter((line) => reviewOf(line).stage === "ok1").length,
-    ok2: base.filter((line) => reviewOf(line).stage === "ok2").length,
-    uncat: base.filter((line) => !line.cat && !line.parts).length,
     alert: base.filter((line) => realAlertsOf(line).length > 0).length,
     excluded: base.filter(isExcluded).length,
-    fs_open: feishuAll.filter((item) => isOpenApproval(item, data)).length,
   };
-  const rows = base.filter((line) => card === "all" || card === "fs_open" || (card === "todo" ? isFirstPending(reviewOf(line).stage) : card === "ok1" ? reviewOf(line).stage === "ok1" : card === "ok2" ? reviewOf(line).stage === "ok2" : card === "alert" ? realAlertsOf(line).length > 0 : card === "uncat" ? !line.cat && !line.parts : isExcluded(line)))
+  const rows = base.filter((line) => card === "all" || (card === "todo" ? isFirstPending(reviewOf(line).stage) : card === "ok1" ? reviewOf(line).stage === "ok1" : card === "alert" ? realAlertsOf(line).length > 0 : isExcluded(line)))
     .sort((a, b) => b.date.localeCompare(a.date) || (b.time ?? "").localeCompare(a.time ?? "") || (b.ord ?? 0) - (a.ord ?? 0));
   const cards: ManagementStatCardItem<ReviewCard>[] = [
     { key: "all", title: "全部流水", subtitle: "当前筛选", value: counts.all, tone: "normal", icon: icon("全") },
     { key: "todo", title: "待初审", subtitle: "含初审不通过 / 终审驳回", value: counts.todo, tone: counts.todo ? "warning" : "normal", icon: icon("初") },
     { key: "ok1", title: "待终审", subtitle: "初审已通过，等财务主管", value: counts.ok1, tone: "normal", icon: icon("终") },
-    { key: "ok2", title: "已终审", subtitle: "可结账", value: counts.ok2, tone: "success", icon: icon("✓") },
-    { key: "uncat", title: "待分类", subtitle: "规则没命中，需选类别", value: counts.uncat, tone: counts.uncat ? "danger" : "normal", icon: icon("?") },
-    { key: "alert", title: "异常", subtitle: "未配对 / 明细不符 / 余额不连续等，都要处理", value: counts.alert, tone: counts.alert ? "danger" : "normal", icon: icon("!") },
+    { key: "alert", title: "异常", subtitle: "有异常的流水 + 找不到流水的异常，都要处理", value: counts.alert + realOrphans.length, tone: counts.alert + realOrphans.length ? "danger" : "normal", icon: icon("!") },
     { key: "excluded", title: "已剔除", subtitle: "X01 非本公司", value: counts.excluded, tone: "normal", icon: icon("剔") },
-    { key: "fs_open", title: "审批单未付", subtitle: `${data.meta.start} 起已批、未对上付款`, value: counts.fs_open, tone: counts.fs_open ? "warning" : "normal", icon: icon("单") },
   ];
   const catOptions = useMemo(() => data.cats.map((cat) => ({ value: cat.code, label: `${cat.code} ${cat.big}·${cat.name}` })), [data]);
   const openApprovalOptions = useMemo(() => feishuAll.filter((item) => isOpenApproval(item, data)).sort((a, b) => b.serial.localeCompare(a.serial))
@@ -598,24 +609,15 @@ function JournalBoard({ data }: { data: CashSnapshot }) {
     ...columnDefs.review,
     { key: "actions", title: "操作", width: 72, fixed: "right", render: (_, row) => <Space size={0}><Button type="link" size="small" onClick={() => setLineOpen(row)}>详情</Button></Space> },
   ];
-  const approvalColumns: ProColumns<FeishuApproval>[] = [
-    { title: "申请编号", dataIndex: "serial", width: 150, fixed: "left", render: (_, row) => <span className="finance-board__stack"><Button type="link" size="small" style={{ padding: 0 }} onClick={() => setApprovalOpen(row)}>{row.serial}</Button><span className="finance-board__sub">{row.kind}</span></span> },
-    { title: "状态", dataIndex: "state", width: 100, render: (_, row) => <Tag bordered={false} color={STATE_COLOR[row.state]}>{row.state}</Tag> },
-    { title: "发起 / 完成", width: 140, render: (_, row) => <span className="finance-board__stack">{row.start}<span className="finance-board__sub">{row.end || EMPTY}{row.days != null ? ` · ${row.days} 天` : ""}</span></span> },
-    { title: "收款人", width: 200, render: (_, row) => <span className="finance-board__stack">{row.payee || EMPTY}<span className="finance-board__sub">{row.bank}{row.last4 ? ` …${row.last4}` : ""}</span></span> },
-    { title: "事由", dataIndex: "reason", width: 320, ellipsis: true, render: (_, row) => (row.masked ? "****" : row.reason) },
-    { title: "金额", dataIndex: "amount", width: 140, align: "right", render: (_, row) => <FinMoney value={row.amount} cur={row.cur} masked={row.masked} /> },
-    { title: "已付（¥）", dataIndex: "paid_sum", width: 140, align: "right", render: (_, row) => <FinMoney value={row.paid_sum} masked={row.masked} /> },
-  ];
   const months = data.meta.months;
-  /* 按审批单号搜不到流水时，说明这张单在哪：还没关联流水的已批单在「审批单未付」里。 */
+  /* 按审批单号搜不到流水时，说明这张单的状态（「审批单未付」卡已删，没关联流水的单只在这里提示）。 */
   const refHint = (() => {
     const keyword = search.keyword.trim();
     if (!keyword || rows.length || !/^\d{6,}$/.test(keyword)) return "";
     const hits = feishuAll.filter((item) => item.serial.includes(keyword));
     if (!hits.length) return `没有流水，本地也没找到审批单 ${keyword}（可能还没从飞书同步过来）`;
     const item = hits[0];
-    const where = isOpenApproval(item, data) ? "在上方「审批单未付」卡片里，点开能看审批单和凭证" : `飞书状态：${item.status || "—"}，付款状态：${item.state}`;
+    const where = item.status === "已同意" && (item.start || "") >= `${data.meta.start}-01` ? "飞书已同意，已列在上方「找不到对应流水」的异常里" : `飞书状态：${item.status || "—"}，付款状态：${item.state}`;
     return `审批单 ${item.serial}（${item.kind} ${item.masked ? "" : fmtMoney(item.amount, item.cur)} ${item.payee}）还没有关联任何流水，${where}${hits.length > 1 ? `；另有 ${hits.length - 1} 张单号相近` : ""}`;
   })();
   return (
@@ -626,23 +628,25 @@ function JournalBoard({ data }: { data: CashSnapshot }) {
         <ReportFacetSelect mode="multiple" ariaLabel="账户" placeholder="账户" unit="个" value={accounts} options={data.accounts.map((item) => ({ value: item.id, label: accountLabel(item), count: data.lines.filter((line) => line.acct === item.id).length }))} onChange={(value) => setAccounts((value as string[] | undefined) ?? [])} />
         <ReportFacetSelect ariaLabel="月份" placeholder="全部月份" value={month || undefined} options={months.map((value) => ({ value, label: value }))} onChange={(value) => setMonth(value ? String(value) : "")} />
         <ReportFacetSelect ariaLabel="收入 / 支出" placeholder="收入 / 支出" triggerWidth={150} value={flow || undefined} options={[{ value: "in", label: "收入", count: data.lines.filter((line) => (line.amt ?? 0) > 0).length }, { value: "out", label: "支出", count: data.lines.filter((line) => (line.amt ?? 0) < 0).length }]} onChange={(value) => setFlow(value === "in" || value === "out" ? value : "")} />
-        <ReportFacetSelect mode="multiple" ariaLabel="类别" placeholder="类别" unit="类" popupWidth={420} value={cats} options={[{ value: "NONE", label: "待分类" }, ...data.cats.map((cat) => ({ value: cat.code, label: `${cat.code} ${cat.big}·${cat.name}`, count: data.lines.filter((line) => line.cat === cat.code).length }))]} onChange={(value) => setCats((value as string[] | undefined) ?? [])} />
+        <ReportFacetSelect mode="multiple" ariaLabel="类别" placeholder="类别" unit="类" popupWidth={420} value={cats} options={[{ value: "NONE", label: "待分类", count: data.lines.filter((line) => !line.cat).length }, ...data.cats.map((cat) => ({ value: cat.code, label: `${cat.code} ${cat.big}·${cat.name}`, count: data.lines.filter((line) => line.cat === cat.code).length }))]} onChange={(value) => setCats((value as string[] | undefined) ?? [])} />
         <ReportFacetSelect mode="multiple" ariaLabel="审核状态" placeholder="审核状态" unit="项" value={stages} options={REVIEW_STAGE_OPTIONS.map((option) => ({ ...option, count: data.lines.filter((line) => reviewOf(line).stage === option.value).length }))} onChange={(value) => setStages((value as ReviewStage[] | undefined) ?? [])} />
         <ReportFacetSelect mode="multiple" ariaLabel="异常" placeholder="异常" unit="类" triggerWidth={150} value={alertTypes} options={alertTypeOptions} onChange={(value) => setAlertTypes((value as string[] | undefined) ?? [])} />
         <CommittedSearch className="finance-board__search fin-cash-flow__search" typeAriaLabel="搜索类型" typeOptions={[{ value: "text", label: "摘要备注" }, { value: "party", label: "收款人" }, { value: "ref", label: "审批单号" }]} typeValue={search.field} inputAriaLabel="搜索流水" inputPlaceholder="输入后回车" inputValue={search.keyword} onCommit={({ searchField, keyword }) => setSearch({ field: searchField, keyword })} />
         <ResetButton onClick={() => { setAccounts([]); setMonth(""); setFlow(""); setCats([]); setStages([]); setAlertTypes([]); setSearch({ field: "text", keyword: "" }); setCard("all"); }} />
         <Space className="finance-board__toolbar-actions" size={8}><Button type="primary" onClick={() => setImportOpen(true)}>流水导入</Button><Tooltip title={LOCKED_TIP}><Space><Button disabled>批量操作</Button><Button disabled>导出 Excel</Button></Space></Tooltip><Button aria-label="列配置" icon={<SettingOutlined aria-hidden="true" />} onClick={() => setColumnConfigOpen(true)} /></Space>
       </>}
-      summary={<ManagementStatCards<ReviewCard> ariaLabel="日记账统计" className="finance-board__summary fin-cash-flow__summary--8" cards={cards} activeKey={card} onCardClick={(key) => setCard(card === key ? "all" : key)} />}
+      summary={<ManagementStatCards<ReviewCard> ariaLabel="日记账统计" className="finance-board__summary finance-board__summary--5" cards={cards} activeKey={card} onCardClick={(key) => setCard(card === key ? "all" : key)} />}
     >
-      {alertIndex.orphans.length > 0 && (
+      {shownOrphans.length > 0 && (
         <Alert className="fin-cash-flow__orphans" type="warning" showIcon
-          message={`${alertIndex.orphans.filter((item) => !item.hint).length} 条异常找不到对应流水${alertIndex.orphans.some((item) => item.hint) ? `，另有 ${alertIndex.orphans.filter((item) => item.hint).length} 条数据提示` : ""}`}
-          description={<ul>{alertIndex.orphans.map((item) => <li key={item.id}><Tag bordered={false} color={item.hint ? undefined : "red"}>{item.hint ? item.type : alertShort(item.type)}</Tag>{item.date} · {accountMap.get(item.acct)?.name ?? (item.acct || EMPTY)} · {item.msg}{!item.hint && ALERT_GUIDE[item.type] ? <Typography.Text type="secondary">（处理：{ALERT_GUIDE[item.type].guide}）</Typography.Text> : null}</li>)}</ul>} />
+          message={`${shownOrphans.filter((item) => !item.hint).length} 条异常找不到对应流水${shownOrphans.some((item) => item.hint) ? `，另有 ${shownOrphans.filter((item) => item.hint).length} 条数据提示` : ""}`}
+          description={<ul>{shownOrphans.map((item) => { const approval = item.serial ? approvals.get(item.serial) : undefined; return (
+            <li key={item.id}><Tag bordered={false} color={item.hint ? undefined : "red"}>{item.hint ? item.type : alertShort(item.type)}</Tag>
+              {item.acct ? `${item.date} · ${accountMap.get(item.acct)?.name ?? item.acct} · ` : item.serial ? "" : `${item.date} · ${EMPTY} · `}{item.msg}
+              {approval ? <Button type="link" size="small" onClick={() => setApprovalOpen(approval)}>看审批单</Button> : null}
+              {!item.hint && ALERT_GUIDE[item.type] ? <Typography.Text type="secondary">（处理：{ALERT_GUIDE[item.type].guide}）</Typography.Text> : null}</li>); })}</ul>} />
       )}
-      {card === "fs_open"
-        ? <BoardTable<FeishuApproval> label="审批单未付表格" rowKey="serial" rows={feishuAll.filter((item) => isOpenApproval(item, data)).sort((a, b) => b.serial.localeCompare(a.serial))} columns={approvalColumns} emptyTitle="没有未付审批单" emptyText="飞书已批的单都已对上付款流水" pageSize={30} />
-        : <BoardTable<CashLine> label="日记账表格" rowKey="id" rows={rows} columns={lineColumns} emptyTitle={refHint ? "没有对应的流水" : "暂无流水"} emptyText={refHint || "当前筛选下没有流水"} />}
+      <BoardTable<CashLine> label="日记账表格" rowKey="id" rows={rows} columns={lineColumns} emptyTitle={refHint ? "没有对应的流水" : "暂无流水"} emptyText={refHint || (alertTypes.length && shownOrphans.length ? "选中的异常没有对应流水，见上方提示条" : "当前筛选下没有流水")} />
       {messageHolder}
       <RuntimeColumnConfigDrawer open={columnConfigOpen} groups={JOURNAL_COLUMN_GROUPS} fixedKeys={JOURNAL_FIXED_KEYS} defaultKeys={JOURNAL_DEFAULT_KEYS} appliedKeys={columnKeys} onApply={applyColumns} onClose={() => setColumnConfigOpen(false)} onSaveTemplate={() => void messageApi.info("列模板暂未开放；当前列配置仅保存在本浏览器")} />
       <Modal open={Boolean(rejecting)} title={rejecting?.level === 2 ? "终审不通过 · 驳回到待初审" : "初审不通过"} okText="确定不通过" okButtonProps={{ danger: true, disabled: !rejectReason.trim() }} cancelText="取消" onOk={confirmReject} onCancel={() => { setRejecting(undefined); setRejectReason(""); }} destroyOnHidden>
