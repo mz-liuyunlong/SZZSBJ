@@ -735,6 +735,84 @@ def list_source_accounts(
     return success_response(request, data={"items": sorted(accounts)})
 
 
+@router.get("/listing-candidates", response_model=SuccessEnvelope[dict[str, Any], None])
+def list_listing_candidates(
+    request: Request,
+    session: db_session,
+    _: view_principal,
+    accounts: account_scope,
+    source_account_ref: str = Query(min_length=1, max_length=128),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
+    sku_query: str | None = None,
+) -> SuccessEnvelope[dict[str, Any], None]:
+    """Read scoped Listing MART rows, temporarily without a new-product tag filter.
+
+    A future approved tag field will narrow this query, not delete source rows.
+    Listing candidates do not themselves establish workflow/approval identities.
+    """
+    if source_account_ref not in accounts:
+        _block(403, ErrorCode.DATA_SCOPE_DENIED)
+    if sku_query is not None and len(sku_query) > 128:
+        _block(422)
+
+    params: dict[str, Any] = {
+        "account": source_account_ref,
+        "size": page_size,
+        "skip": (page - 1) * page_size,
+    }
+    search = ""
+    if sku_query and sku_query.strip():
+        params["sku_query"] = sku_query.strip()
+        search = (
+            " AND (POSITION(LOWER(:sku_query) IN LOWER(COALESCE(listing.local_sku, ''))) > 0"
+            " OR POSITION(LOWER(:sku_query) IN LOWER(COALESCE(listing.msku, ''))) > 0"
+            " OR POSITION(LOWER(:sku_query) IN LOWER(listing.item_id)) > 0"
+            " OR POSITION(LOWER(:sku_query) IN LOWER(COALESCE(listing.title, ''))) > 0)"
+        )
+    where = " WHERE listing.source_account_ref = :account" + search
+    total = session.execute(
+        text("SELECT count(*) FROM mart_listing_management_current AS listing" + where),
+        params,
+    ).scalar_one()
+    rows = (
+        session.execute(
+            text(
+                """
+                SELECT listing.id, listing.source_account_ref,
+                       listing.store_id, listing.store_name, listing.item_id,
+                       listing.local_sku, listing.msku, listing.local_name,
+                       listing.title, listing.picture_url, listing.category,
+                       listing.listing_status, listing.lifecycle_status,
+                       listing.fulfillment_type_name, listing.listing_start_at_utc,
+                       listing.available_quantity, listing.wfs_available_quantity,
+                       listing.sales_7d, listing.sales_14d, listing.sales_30d,
+                       listing.tags_json, listing.calculated_at
+                FROM mart_listing_management_current AS listing
+                """
+                + where
+                + " ORDER BY listing.store_id, listing.item_id LIMIT :size OFFSET :skip"
+            ),
+            params,
+        )
+        .mappings()
+        .all()
+    )
+    return success_response(
+        request,
+        data={
+            "source_account_ref": source_account_ref,
+            "source_table": "mart_listing_management_current",
+            "selection_mode": "all_listings_pending_new_product_tag",
+            "read_only": True,
+            "items": [dict(row) for row in rows],
+            "page": page,
+            "page_size": page_size,
+            "total": int(total),
+        },
+    )
+
+
 @router.get("/workflows", response_model=SuccessEnvelope[dict[str, Any], None])
 def list_workflows(
     request: Request,
