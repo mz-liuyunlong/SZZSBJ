@@ -167,12 +167,12 @@ class ClearanceService:
                 result["observe"] += 1
             elif e["candidate_status"] == "review_required":
                 result["review_required"] += 1
-            l = x["listing"]
+            listing_row = x["listing"]
             if (
-                l.get("snapshot_wfs_available") is not None
-                and Decimal(str(l["snapshot_wfs_available"])) > 0
-                and l.get("wfs_available_quantity") is not None
-                and Decimal(str(l["wfs_available_quantity"])) > 0
+                listing_row.get("snapshot_wfs_available") is not None
+                and Decimal(str(listing_row["snapshot_wfs_available"])) > 0
+                and listing_row.get("wfs_available_quantity") is not None
+                and Decimal(str(listing_row["wfs_available_quantity"])) > 0
                 and e.get("current_wfs_available")
                 and "WFS_STOCK_UNAVAILABLE_OR_STALE" not in e["warnings"]
             ):
@@ -502,7 +502,7 @@ class ClearanceService:
         values = (payload.sold_qty, payload.removed_qty, payload.disposed_qty)
         if (
             row["version"] != payload.expected_version
-            or any(a < b for a, b in zip(values, before))
+            or any(a < b for a, b in zip(values, before, strict=True))
             or sum(values) > row["target_qty"]
         ):
             fail()
