@@ -432,6 +432,7 @@ def get_workflow_metrics(
         data=redact_new_product_metrics(metrics, principal),
     )
 
+
 @router.post(
     "/workflows/{sku_id}/market",
     response_model=SuccessEnvelope[dict[str, Any], None],

@@ -3,7 +3,7 @@
 ## 已核实基线
 - 源码分支：`feat/new-product-performance-launch-tracking-demo-20261030`
 - 本次整包开发基线：`4e97257f58e839a8907dd43afe16c98400dc6854`
-- 历史 CI：`https://github.com/mz-liuyunlong/SZZSBJ/actions/runs/41796151246`，15/15 PASS（仅对上述基线有效）
+- 历史 CI：`GitHub Actions Run 41796151246`，15/15 PASS（仅对上述基线有效）
 - 本次新提交的 GitHub CI/人工验收必须单独核实，不复用历史结果。
 
 ## 本批限范围修复

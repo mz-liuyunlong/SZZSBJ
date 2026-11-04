@@ -12,9 +12,7 @@ from app.modules.data_pages.field_access import (
 )
 
 
-def redact_new_product_metrics(
-    metrics: dict[str, Any], principal: Principal
-) -> dict[str, Any]:
+def redact_new_product_metrics(metrics: dict[str, Any], principal: Principal) -> dict[str, Any]:
     """Apply the established order-profit grants to the same MART-derived fields.
 
     Do not mutate the source dict: callers may re-use it for authorized reads.
