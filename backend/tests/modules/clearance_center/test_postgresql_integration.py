@@ -12,12 +12,17 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError
+from app.core.auth import Principal, get_optional_principal
+from app.db.session import get_db_session
+from app.main import create_app
 from app.modules.clearance_center.schemas import ApplicationWrite, DecisionWrite, ProgressWrite
 from app.modules.clearance_center.service import ClearanceService
+from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.data_pages.models import (
     ListingManagementCurrentMart,
     WalmartListingInventoryDailyFact,
@@ -196,3 +201,62 @@ def test_stale_or_out_of_scope_listing_cannot_be_applied(clearance_db: Session) 
     with pytest.raises(ApiError) as outside:
         service.submit(_payload(fresh_id, 1), frozenset({"outside"}), "operator-2")
     assert outside.value.status_code == 404
+
+
+def test_clearance_http_contract_and_unified_approval_routes(clearance_db: Session) -> None:
+    account = "clearance-ci-account"
+    listing_id = _seed_listing(
+        clearance_db, account=account, store="ci-api-store", item="ci-api-item"
+    )
+    app = create_app()
+    identity = {"user_id": "operator-31"}
+
+    def db_provider():
+        with Session(clearance_db.get_bind()) as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = db_provider
+    app.dependency_overrides[get_optional_principal] = lambda: Principal(
+        user_id=identity["user_id"], permissions=frozenset({"*"})
+    )
+    app.dependency_overrides[require_source_account_scope] = lambda: frozenset({account})
+    with TestClient(app) as client:
+        eligible = client.get(
+            "/api/products/clearance-center/eligible-listings",
+            params={"store_id": "ci-api-store"},
+        )
+        assert eligible.status_code == 200
+        data = eligible.json()["data"]
+        assert data["total"] == 1
+        assert data["items"][0]["listing"]["id"] == listing_id
+
+        application = client.post(
+            "/api/products/clearance-center/requests",
+            json={
+                "listing_id": listing_id,
+                "target_qty": 3,
+                "methods": ["降价", "广告清货"],
+                "reason": "库存积压",
+                "remark": "CI only, no external platform calls",
+                "source": "manual",
+            },
+        )
+        assert application.status_code == 200, application.text
+        approval_id = application.json()["data"]["approval_id"]
+        identity["user_id"] = "reviewer-32"
+        detail = client.get(f"/api/approvals/{approval_id}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["data"]["approval_type"] == "clearance_request"
+        assert detail.json()["data"]["current_case"]["request"]["target_qty"] == 3
+
+        approved = client.post(
+            f"/api/approvals/{approval_id}/decision",
+            json={"decision": "approved", "note": "", "expected_version": 1},
+        )
+        assert approved.status_code == 200, approved.text
+        task = client.get(
+            "/api/products/clearance-center/requests",
+            params={"status": "approved", "store_id": "ci-api-store"},
+        )
+        assert task.status_code == 200, task.text
+        assert task.json()["data"]["total"] == 1
