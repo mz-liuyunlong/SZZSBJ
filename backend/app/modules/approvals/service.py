@@ -252,7 +252,9 @@ class ApprovalService:
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
         return dict(row)
 
-    def _as_item(self, r: dict, actor: str, may_review: bool, may_review_clearance: bool = False) -> ApprovalItem:
+    def _as_item(
+        self, r: dict, actor: str, may_review: bool, may_review_clearance: bool = False
+    ) -> ApprovalItem:
         snapshot = r["snapshot"] if isinstance(r["snapshot"], dict) else {}
         return ApprovalItem(
             id=str(r["id"]),
@@ -273,8 +275,14 @@ class ApprovalService:
             reviewed_by=r["reviewed_by"],
             reason=r["reason"],
             follow_log=r.get("follow_log"),
-            can_review=(r["status"] == "submitted" and r["applicant_id"] != actor and
-                        (may_review or (may_review_clearance and r["approval_type"] == "clearance_request"))),
+            can_review=(
+                r["status"] == "submitted"
+                and r["applicant_id"] != actor
+                and (
+                    may_review
+                    or (may_review_clearance and r["approval_type"] == "clearance_request")
+                )
+            ),
         )
 
     def _with_clearance_fields(
@@ -286,8 +294,9 @@ class ApprovalService:
         ids = [x.id for x in items if x.approval_type == "clearance_request"]
         if not ids:
             return items
-        rows = self.session.execute(
-            text("""
+        rows = (
+            self.session.execute(
+                text("""
                 select c.approval_id::text as approval_id,c.item_id,
                        c.target_qty,c.methods,c.source_account_ref,c.store_id,
                        l.local_sku,l.msku,l.title,l.store_name,l.owner_ref,
@@ -298,8 +307,12 @@ class ApprovalService:
                   and l.store_id=c.store_id and l.item_id=c.item_id
                 where c.approval_id::text=any(:ids)
                   and c.source_account_ref=any(:accounts)
-            """), {"ids": ids, "accounts": list(account_refs)},
-        ).mappings().all()
+            """),
+                {"ids": ids, "accounts": list(account_refs)},
+            )
+            .mappings()
+            .all()
+        )
         lookup = {r["approval_id"]: r for r in rows}
         result = []
         for item in items:
@@ -310,23 +323,29 @@ class ApprovalService:
             started = r["listing_start_at_utc"]
             listing_days = (
                 max(0, (datetime.now(UTC).date() - started.astimezone(UTC).date()).days)
-                if started is not None and started.tzinfo is not None else None
+                if started is not None and started.tzinfo is not None
+                else None
             )
-            result.append(item.model_copy(update={
-                "clearance_item_id": r["item_id"],
-                "clearance_product_name": r["title"],
-                "clearance_sku": r["local_sku"],
-                "clearance_msku": r["msku"],
-                "clearance_store": r["store_name"] or r["store_id"],
-                "clearance_owner": r["owner_ref"],
-                "clearance_methods": r["methods"],
-                "clearance_target_qty": r["target_qty"],
-                "clearance_wfs_available": (
-                    str(r["wfs_available_quantity"])
-                    if r["wfs_available_quantity"] is not None else None
-                ),
-                "clearance_listing_days": listing_days,
-            }))
+            result.append(
+                item.model_copy(
+                    update={
+                        "clearance_item_id": r["item_id"],
+                        "clearance_product_name": r["title"],
+                        "clearance_sku": r["local_sku"],
+                        "clearance_msku": r["msku"],
+                        "clearance_store": r["store_name"] or r["store_id"],
+                        "clearance_owner": r["owner_ref"],
+                        "clearance_methods": r["methods"],
+                        "clearance_target_qty": r["target_qty"],
+                        "clearance_wfs_available": (
+                            str(r["wfs_available_quantity"])
+                            if r["wfs_available_quantity"] is not None
+                            else None
+                        ),
+                        "clearance_listing_days": listing_days,
+                    }
+                )
+            )
         return result
 
     def legacy_unverified(
@@ -762,9 +781,11 @@ class ApprovalService:
             .mappings()
             .all()
         )
-        return ApprovalListData(items=self._with_clearance_fields(
-            [ApprovalItem(**dict(row)) for row in rows], account_refs
-        )), total
+        return ApprovalListData(
+            items=self._with_clearance_fields(
+                [ApprovalItem(**dict(row)) for row in rows], account_refs
+            )
+        ), total
 
     def list_requests(
         self,
@@ -941,9 +962,10 @@ class ApprovalService:
     ) -> ApprovalDetail:
         record = self._record(approval_id, account_refs)
         permitted = (
-            record["applicant_id"] == actor or is_admin or
-            (record["approval_type"] == "wfs_case_abandon" and may_review) or
-            (record["approval_type"] == "clearance_request" and may_review_clearance)
+            record["applicant_id"] == actor
+            or is_admin
+            or (record["approval_type"] == "wfs_case_abandon" and may_review)
+            or (record["approval_type"] == "clearance_request" and may_review_clearance)
         )
         if not permitted:
             raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
@@ -970,6 +992,7 @@ class ApprovalService:
             current_clearance = None
             if record["approval_type"] == "clearance_request":
                 from app.modules.clearance_center.service import ClearanceService
+
                 current_clearance = ClearanceService(self.session).request_detail(
                     UUID(record["business_ref"]), account_refs
                 )
