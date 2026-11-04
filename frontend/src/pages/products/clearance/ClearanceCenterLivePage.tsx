@@ -12,10 +12,10 @@ import type { NavigationPage } from "@/config/navigation";
 import {
   fetchClearanceListings, fetchClearanceRequests, fetchClearanceSummary,
   fetchEligibleListings, fetchClearanceDetail, fetchClearanceRequestDetail,
-  fetchClearanceRules, fetchClearanceReadiness, saveClearanceRules, submitClearance,
+  fetchClearanceRules, fetchClearanceReadiness, fetchClearanceFacets, saveClearanceRules, submitClearance,
   updateClearanceProgress, pauseClearance, resumeClearance, withdrawClearance,
   type ClearanceRow, type ClearanceRequest, type ClearanceRequestDetail,
-  type ClearanceMethod, type ClearanceRules, type ClearanceSummary, type ClearanceReadiness,
+  type ClearanceMethod, type ClearanceRules, type ClearanceSummary, type ClearanceReadiness, type ClearanceFacets,
 } from "./clearanceApi";
 import "../ClearanceCenterPage.css";
 
@@ -51,6 +51,8 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
   const [messageApi, holder] = message.useMessage();
   const [tab,setTab] = useState("analysis");
   const [store,setStore] = useState("");
+  const [sourceAccount,setSourceAccount] = useState("");
+  const [facets,setFacets] = useState<ClearanceFacets>({stores:[],accounts:[]});
   const [keyword,setKeyword] = useState("");
   const [searchDraft,setSearchDraft] = useState("");
   const [risk,setRisk] = useState("");
@@ -85,12 +87,15 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [l,t,s,q] = await Promise.all([
-        fetchClearanceListings({page:listPage,page_size:50,store_id:store,keyword,
+      const [l,t,s,q,options] = await Promise.all([
+        fetchClearanceListings({page:listPage,page_size:50,store_id:store,
+          source_account_ref:sourceAccount,keyword,
           risk_level:risk||undefined}),
-        fetchClearanceRequests({page:taskPage,page_size:50,store_id:store}),
-        fetchClearanceSummary(store),
-        fetchClearanceReadiness(store),
+        fetchClearanceRequests({page:taskPage,page_size:50,store_id:store,
+          source_account_ref:sourceAccount}),
+        fetchClearanceSummary(store,sourceAccount),
+        fetchClearanceReadiness(store,sourceAccount),
+        fetchClearanceFacets(),
       ]);
       setRows(l.items);
       setListTotal(l.total);
@@ -98,6 +103,7 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
       setTaskTotal(t.total);
       setSummary(s);
       setReadiness(q);
+      setFacets(options);
       setError("");
     } catch {
       setError("清货中心真实数据读取失败，请检查接口权限、数据版本与网络连接。");
@@ -108,23 +114,25 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
     } finally {
       setLoading(false);
     }
-  }, [listPage,taskPage,store,keyword,risk]);
+  }, [listPage,taskPage,store,sourceAccount,keyword,risk]);
   useEffect(()=>{ void Promise.resolve().then(() => reload()); },[reload]);
 
-  const stores = useMemo(()=>Array.from(new Map([...rows,...eligible].map(x=>[
-    x.listing.store_id, {value:x.listing.store_id,label:x.listing.store_name||x.listing.store_id},
-  ])).values()),[rows,eligible]);
-  const accountOptions = useMemo(()=>Array.from(new Set(rows.map(r=>r.listing.source_account_ref)))
-    .map(x=>({value:x,label:x})),[rows]);
+  const stores = useMemo(()=>Array.from(new Map(facets.stores
+    .filter(x=>!sourceAccount||x.source_account_ref===sourceAccount).map(x=>[
+      x.store_id,{value:x.store_id,label:`${x.store_name||x.store_id} · ${x.source_account_ref}`},
+    ])).values()),[facets,sourceAccount]);
+  const accountOptions = useMemo(()=>facets.accounts.map(x=>({value:x,label:x})),
+    [facets]);
 
   const loadEligible = useCallback(async (pageNumber:number, search:string) => {
     try {
-      const result=await fetchEligibleListings({page:pageNumber,page_size:30,keyword:search,store_id:store});
+      const result=await fetchEligibleListings({page:pageNumber,page_size:30,keyword:search,
+        store_id:store,source_account_ref:sourceAccount});
       setEligible(result.items);
       setEligibleTotal(result.total);
       setEligiblePage(pageNumber);
     } catch { setEligible([]);setEligibleTotal(0);void messageApi.error("无法读取符合WFS库存条件的商品"); }
-  },[store,messageApi]);
+  },[store,sourceAccount,messageApi]);
 
   const openApply = (selected:ClearanceRow|null=null, source:"manual"|"auto"="manual") => {
     setChosen(selected);
@@ -195,7 +203,7 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
     } catch{void messageApi.error("当前任务状态或权限不允许此操作");}
   };
   const openRules = async () => {
-    const account=ruleAccount||rows[0]?.listing.source_account_ref||"";
+    const account=ruleAccount||sourceAccount||facets.accounts[0]||"";
     if(!account){void messageApi.warning("请先选择有数据的账号");return;}
     setRulesOpen(true);setRuleAccount(account);
     try{setRuleConfig(await fetchClearanceRules(account));}
@@ -347,6 +355,9 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
           </Card>)}
         </div>
         <div className="clearance-toolbar" style={{display:"flex",gap:10,alignItems:"center",marginBottom:12}}>
+          <Select value={sourceAccount} style={{width:150}}
+            options={[{value:"",label:"全部账号"},...accountOptions]}
+            onChange={v=>{setSourceAccount(v);setStore("");setListPage(1);setTaskPage(1);}}/>
           <Select value={store} style={{width:170}} options={[{value:"",label:"全部店铺"},...stores]}
             onChange={v=>{setStore(v);setListPage(1);setTaskPage(1);}}/>
           {tab==="analysis"?<Select value={risk} style={{width:132}} options={[
