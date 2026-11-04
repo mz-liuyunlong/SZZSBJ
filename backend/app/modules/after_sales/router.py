@@ -25,6 +25,7 @@ from app.modules.iam.organization_access import (
     resolve_business_owner_refs,
     resolve_business_account_owner_pairs,
 )
+from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY, resolve_account_store_scope
 from app.modules.integration_sync.dependencies import require_source_account_scope
 
 db_session = Annotated[Session, Depends(get_db_session)]
@@ -45,6 +46,7 @@ def require_refund_org_scope(
     """A refund belongs to the reviewed product owner, not every store user."""
     session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
     session.info.pop(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY, None)
+    session.info.pop(STORE_SCOPE_SESSION_KEY, None)
     permission = permission_for_request(
         request.method, request.url.path, "aftersales:refund-management:read"
     )
@@ -55,7 +57,8 @@ def require_refund_org_scope(
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     owner_pairs = resolve_business_account_owner_pairs(session, principal)
     owners = None if owner_pairs else resolve_business_owner_refs(session, principal)
-    if owners is None and not owner_pairs:
+    account_stores = resolve_account_store_scope(session, principal)
+    if owners is None and not owner_pairs and account_stores is None:
         return
     if request.method != "GET" or request.url.path not in _ORG_SCOPED_REFUND_READS:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
@@ -63,6 +66,8 @@ def require_refund_org_scope(
         session.info[ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY] = owner_pairs
     elif owners is not None:
         session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owners
+    if account_stores is not None:
+        session.info[STORE_SCOPE_SESSION_KEY] = account_stores
 
 
 router = APIRouter(
