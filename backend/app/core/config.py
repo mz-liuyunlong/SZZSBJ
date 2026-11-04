@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     listing_evaluation_publish_enabled: bool = Field(
         default=False, validation_alias="LISTING_EVALUATION_PUBLISH_ENABLED"
     )
+    listing_lifecycle_auto_enabled: bool = Field(
+        default=False, validation_alias="LISTING_LIFECYCLE_AUTO_ENABLED"
+    )
+    listing_lifecycle_production_approved: bool = Field(
+        default=False, validation_alias="LISTING_LIFECYCLE_PRODUCTION_APPROVED"
+    )
     product_management_preview_auth_enabled: bool = Field(
         default=False,
         validation_alias="PRODUCT_MANAGEMENT_PREVIEW_AUTH_ENABLED",

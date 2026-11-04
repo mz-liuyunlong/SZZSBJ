@@ -282,6 +282,9 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ActionDefinition("products_listing_management", "restore", "恢复Listing", 40),
     ActionDefinition("products_listing_management", "edit_analysis_link", "编辑分析链接", 50),
     ActionDefinition(
+        "products_listing_management", "edit_lifecycle", "人工修改Listing生命周期", 55, "high"
+    ),
+    ActionDefinition(
         "products_listing_management", "configure_rules", "配置Listing评级规则", 60, "high"
     ),
     ActionDefinition(

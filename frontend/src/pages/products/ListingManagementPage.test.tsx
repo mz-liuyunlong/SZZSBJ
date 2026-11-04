@@ -97,7 +97,7 @@ describe("ListingManagementPage acceptance contract", () => {
       "图片", "商品ID/品名", "SKU/MSKU", "店铺", "负责人", "标题", "产品类型",
       "划线价", "在售价", "产品状态", "生命周期", "发货方式", "GPT分析", "上架时间", "类目", "WFS可售库存",
       "在途库存", "近90天销量", "近30天广告费", "停用原因", "Listing状态", "购物车状态",
-      "Walmart卖家", "是否被跟卖", "检查时间", "评分", "评论数", "品牌", "标签", "GTIN",
+      "Walmart卖家", "是否被跟卖", "检查时间", "评分", "评论数", "品牌", "标签", "产品标签", "GTIN",
       "产品等级",
       "归档原因",
     ]);
@@ -112,10 +112,10 @@ describe("ListingManagementPage acceptance contract", () => {
           total: listingManagementMockData.length,
           online: listingManagementMockData.filter((row) => row.listingStatus === "在线").length,
           buyboxException: listingManagementMockData.filter((row) => row.buyBoxStatus === "未拥有").length,
-          ratingWarning: listingManagementMockData.filter((row) => row.rating < 4).length,
+          ratingWarning: listingManagementMockData.filter((row) => row.rating != null && row.rating < 4).length,
           resoldWarning: listingManagementMockData.filter((row) => row.resold === "是").length,
           strikePriceException: listingManagementMockData.filter((row) => (
-            row.listPrice > 0 && row.listPrice <= row.salePrice
+            row.listPrice != null && row.salePrice != null && row.listPrice > 0 && row.listPrice <= row.salePrice
           )).length,
         }}
         onCardClick={onCardClick}

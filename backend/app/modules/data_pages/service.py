@@ -13,6 +13,7 @@ from app.modules.data_pages.models import (
     ListingManagementCurrentMart,
     OrderProfitSkuDayMart,
 )
+from app.modules.data_pages.monitor_raw_fields import parse_monitor_raw_fields
 from app.modules.data_pages.repository import (
     DailySalesRepository,
     ListingManagementRepository,
@@ -756,6 +757,7 @@ class ListingManagementService:
             ("developer", "开发人", lambda item: item.product_developer_name),
             ("product_grade", "商品等级", lambda item: item.product_grade),
             ("tags", "自定义标签", lambda item: item.tags),
+            ("product_tags", "产品标签", lambda item: [t.label for t in item.product_tags]),
             ("strike_price", "划线价", lambda item: item.strike_price_amount),
             ("sale_price", "售价", lambda item: item.sale_price_amount),
             ("listing_status", "Listing状态", lambda item: item.listing_status),
@@ -767,6 +769,35 @@ class ListingManagementService:
             ),
             ("buybox_status", "购物车状态", lambda item: item.buybox_status),
             ("walmart_seller", "Walmart卖家", lambda item: item.walmart_seller),
+            ("monitor_seller_names", "卖家列表", lambda item: item.monitor_seller_names),
+            (
+                "monitor_seller_offer_count",
+                "卖家数量",
+                lambda item: item.monitor_seller_offer_count,
+            ),
+            (
+                "monitor_other_sellers_present",
+                "其他卖家存在",
+                lambda item: item.monitor_other_sellers_present,
+            ),
+            (
+                "monitor_has_strikethrough",
+                "有无划线价",
+                lambda item: item.monitor_has_strikethrough,
+            ),
+            (
+                "monitor_strikethrough_source",
+                "划线价来源",
+                lambda item: item.monitor_strikethrough_source,
+            ),
+            ("monitor_image_urls", "图片URL", lambda item: item.monitor_image_urls),
+            ("monitor_image_count", "图片数量", lambda item: item.monitor_image_count),
+            ("monitor_key_features", "五点描述", lambda item: item.monitor_key_features),
+            (
+                "monitor_review_fetch_status",
+                "评论获取状态",
+                lambda item: item.monitor_review_fetch_status,
+            ),
             ("is_hijacked", "是否跟卖", lambda item: "是" if item.is_hijacked else "否"),
             ("average_rating", "评分", lambda item: item.average_rating),
             ("review_count", "评论数", lambda item: item.review_count),
@@ -787,7 +818,7 @@ class ListingManagementService:
                 "上架时间",
                 lambda item: self._listing_start_csv_value(item.first_wfs_available_date_la),
             ),
-            ("checked_at", "检查时间", lambda item: item.calculated_at),
+            ("checked_at", "检查时间", lambda item: item.monitor_checked_at),
             (
                 "archive_status",
                 "归档状态",
@@ -1108,6 +1139,19 @@ class ListingManagementService:
         brand = (
             row.effective_brand if isinstance(row, ListingManagementRowProjection) else row.brand
         )
+        monitor_raw = (
+            row.monitor_raw_parsed if isinstance(row, ListingManagementRowProjection) else None
+        )
+        monitor = parse_monitor_raw_fields(monitor_raw)
+        if monitor.has_strikethrough is False:
+            strike_price_amount = None
+            strike_price_currency_code = None
+        image_url = listing.picture_url
+        if monitor.image_urls_observed:
+            image_url = monitor.image_urls[0] if monitor.image_urls else None
+        image_urls = list(monitor.image_urls)
+        if not monitor.image_urls_observed and image_url:
+            image_urls = [image_url]
         return ListingManagementItemRead(
             id=str(listing.id),
             source_account_ref=listing.source_account_ref,
@@ -1119,7 +1163,7 @@ class ListingManagementService:
             local_sku=listing.local_sku,
             local_name=listing.local_name,
             title=title,
-            picture_url=listing.picture_url,
+            picture_url=image_url,
             item_url=listing.item_url,
             owner_ref=listing.owner_ref,
             owner_uid=getattr(row, "owner_uid", None),
@@ -1128,12 +1172,22 @@ class ListingManagementService:
             product_developer_name=getattr(row, "product_developer_name", None),
             product_grade=listing.product_grade,
             tags=custom_tags if custom_tags is not None else _tag_list(listing.tags_json),
+            product_tags=[
+                value
+                for value in (listing.product_tags_json or [])
+                if isinstance(value, dict) and str(value.get("label") or "").strip()
+            ],
+            product_tags_match_status=(listing.product_tags_match_status or "pending"),
             strike_price_amount=strike_price_amount,
             strike_price_currency_code=strike_price_currency_code,
             sale_price_amount=sale_price_amount,
             sale_price_currency_code=sale_price_currency_code,
             listing_status=listing.listing_status,
-            lifecycle_status=listing.lifecycle_status,
+            lifecycle_status=(
+                row.effective_lifecycle_status
+                if isinstance(row, ListingManagementRowProjection)
+                else listing.lifecycle_status
+            ),
             fulfillment_type=listing.fulfillment_type,
             fulfillment_type_name=listing.fulfillment_type_name,
             listing_start_at_utc=listing.listing_start_at_utc,
@@ -1141,6 +1195,17 @@ class ListingManagementService:
             launch_date_cn=getattr(row, "launch_date_cn", None),
             first_wfs_seen_at_utc=getattr(row, "first_wfs_seen_at_utc", None),
             first_wfs_available_date_la=getattr(row, "first_wfs_available_date_la", None),
+            monitor_checked_at=getattr(row, "monitor_checked_at", None),
+            monitor_source=getattr(row, "monitor_source", None),
+            monitor_has_strikethrough=monitor.has_strikethrough,
+            monitor_strikethrough_source=monitor.strikethrough_source,
+            monitor_seller_names=list(monitor.seller_names),
+            monitor_seller_offer_count=monitor.seller_offer_count,
+            monitor_other_sellers_present=monitor.other_sellers_present,
+            monitor_image_urls=image_urls,
+            monitor_image_count=monitor.image_count,
+            monitor_key_features=list(monitor.key_features),
+            monitor_review_fetch_status=monitor.review_fetch_status,
             category=category,
             wfs_available_quantity=listing.wfs_available_quantity,
             available_quantity=listing.available_quantity,

@@ -25,6 +25,8 @@ LISTING_ID = UUID("00000000-0000-0000-0000-000000000101")
 
 
 class _ScalarResult:
+    rowcount = 0
+
     def scalar_one(self) -> int:
         return 1
 

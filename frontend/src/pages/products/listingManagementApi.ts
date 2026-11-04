@@ -21,6 +21,8 @@ interface BackendListingItem {
   product_developer_name: string | null;
   product_grade: string | null;
   tags: string[];
+  product_tags?: Array<{ id: string | null; label: string; color: string | null }>;
+  product_tags_match_status?: string;
   strike_price_amount: string | null;
   sale_price_amount: string | null;
   listing_status: string | null;
@@ -31,6 +33,17 @@ interface BackendListingItem {
   listing_start_source_raw?: string | null;
   launch_date_cn?: string | null;
   first_wfs_available_date_la?: string | null;
+  monitor_checked_at?: string | null;
+  monitor_source?: string | null;
+  monitor_has_strikethrough?: boolean | null;
+  monitor_strikethrough_source?: string | null;
+  monitor_seller_names?: string[];
+  monitor_seller_offer_count?: number | null;
+  monitor_other_sellers_present?: boolean | null;
+  monitor_image_urls?: string[];
+  monitor_image_count?: number | null;
+  monitor_key_features?: string[];
+  monitor_review_fetch_status?: string | null;
   category: string | null;
   wfs_available_quantity: string | null;
   inbound_quantity: string | null;
@@ -198,27 +211,80 @@ export const toListingStartText = (firstWfsDateLa: string | null): string => {
   return toDateText(firstWfsDateLa);
 };
 
-const toCheckedText = (value: string): string => value.replace("T", " ").slice(0, 16);
-
-const normalizeListingStatus = (value: string | null) => {
-  const raw = value?.trim();
-  if (!raw) return "待确认";
-  const normalized = raw.toLocaleLowerCase();
-  if (["online", "published", "publish", "在售", "在线"].includes(normalized)) return "在线";
-  if (["offline", "unpublished", "离线"].includes(normalized)) return "离线";
-  return raw;
+const toCheckedText = (value?: string | null): string => {
+  if (!value) return "未检测";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "未检测";
+  // Business operations display China local time, not UTC ISO text.
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).format(date);
 };
 
-const normalizeBuyBoxStatus = (value: string | null) => {
-  const raw = value?.trim();
-  if (!raw) return "待确认";
-  const normalized = raw.toLocaleLowerCase();
-  if (["primary", "won", "winning", "owned", "拥有"].includes(normalized)) return "拥有";
-  if (["lost", "not_owned", "secondary", "other", "未拥有"].includes(normalized)) return "未拥有";
-  return raw;
+const normalizeListingStatus = (
+  value: string | null,
+  cartValue: string | null,
+): string => {
+  const cart = normalizeBuyBoxStatus(cartValue);
+  if ([
+    "购物车丢失",
+    "未拥有购物车",
+    "未找到购物车",
+    "缺货",
+    "不可购买",
+  ].includes(cart)) {
+    return "异常";
+  }
+
+  const status = value?.trim().toUpperCase() ?? "";
+  if ([
+    "OFFLINE", "UNPUBLISHED", "INACTIVE",
+    "DELISTED", "离线", "下架", "已下架", "异常",
+  ].includes(status)) {
+    return "异常";
+  }
+
+  if ([
+    "ONLINE", "PUBLISHED", "PUBLISH",
+    "在售", "在线", "正常",
+  ].includes(status)) {
+    return "正常";
+  }
+
+  if (cart === "正常" || cart === "拥有") {
+    return "正常";
+  }
+  return "待确认";
 };
 
-const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
+const normalizeBuyBoxStatus = (value: string | null): string => {
+  const key = value?.trim().toUpperCase() ?? "";
+  const names: Record<string, string> = {
+    NORMAL: "正常",
+    "正常": "正常",
+    PRIMARY: "拥有",
+    WON: "拥有",
+    WINNING: "拥有",
+    OWNED: "拥有",
+    "拥有": "拥有",
+    LOST: "购物车丢失",
+    NOT_OWNED: "未拥有购物车",
+    SECONDARY: "未拥有购物车",
+    OTHER: "未拥有购物车",
+    "未拥有": "未拥有购物车",
+    NOT_FOUND: "未找到购物车",
+    CART_NOT_FOUND: "未找到购物车",
+    OUT_OF_STOCK: "缺货",
+    UNAVAILABLE: "不可购买",
+    FETCH_ERROR: "检测失败",
+    ERROR: "检测失败",
+    TIMEOUT: "检测失败",
+  };
+  return names[key] ?? "待确认";
+};
+
+export const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   id: item.id,
   sourceAccountRef: item.source_account_ref,
   image: item.picture_url ?? "▤",
@@ -230,10 +296,10 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   productName: item.local_name ?? item.title ?? "-",
   title: item.title ?? item.local_name ?? "-",
   productType: item.category ?? "待分类",
-  listPrice: numberValue(item.strike_price_amount),
-  salePrice: numberValue(item.sale_price_amount),
+  listPrice: item.strike_price_amount == null ? null : numberValue(item.strike_price_amount),
+  salePrice: item.sale_price_amount == null ? null : numberValue(item.sale_price_amount),
   productStatus: item.disabled_reason ? "停用" : "启用",
-  lifecycle: item.lifecycle_status ?? "待计算",
+  lifecycle: item.lifecycle_status ?? "待判定",
   fulfillmentMethod: item.fulfillment_type_name?.trim() || item.fulfillment_type?.trim() || "待确认",
   listedAt: toListingStartText(item.first_wfs_available_date_la ?? null),
   category: item.category ?? "-",
@@ -242,15 +308,27 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   sales90Days: numberValue(item.sales_30d),
   adSpend30Days: numberValue(item.ad_spend_30d_amount),
   disabledReason: item.disabled_reason ?? "",
-  listingStatus: normalizeListingStatus(item.listing_status),
+  listingStatus: normalizeListingStatus(item.listing_status, item.buybox_status),
   buyBoxStatus: normalizeBuyBoxStatus(item.buybox_status),
   walmartSeller: item.walmart_seller ?? "待确认",
-  resold: item.is_hijacked ? "是" : "否",
-  checkedAt: toCheckedText(item.calculated_at),
-  rating: numberValue(item.average_rating),
-  reviewCount: item.review_count ?? 0,
+  resold: item.is_hijacked == null ? "待检测" : item.is_hijacked ? "是" : "否",
+  checkedAt: toCheckedText(item.monitor_checked_at),
+  rating: item.average_rating == null ? null : numberValue(item.average_rating),
+  reviewCount: item.review_count,
+  hasStrikethrough: item.monitor_has_strikethrough ?? null,
+  strikethroughSource: item.monitor_strikethrough_source ?? "",
+  sellerNames: item.monitor_seller_names ?? [],
+  sellerOfferCount: item.monitor_seller_offer_count ?? null,
+  otherSellersPresent: item.monitor_other_sellers_present ?? null,
+  imageUrls: item.monitor_image_urls ?? [],
+  imageCount: item.monitor_image_count ?? null,
+  keyFeatures: item.monitor_key_features ?? [],
+  reviewFetchStatus: item.monitor_review_fetch_status ?? "",
+  monitorSource: item.monitor_source ?? "",
   brand: item.brand ?? "-",
   tags: item.tags,
+  productTags: (item.product_tags ?? []).filter((tag) => Boolean(tag.label?.trim())),
+  productTagMatchStatus: item.product_tags_match_status ?? "pending",
   gtin: item.gtin ?? "-",
   productGrade: item.product_grade ?? "未分级",
   archiveReason: item.archive_reason ?? null,
@@ -478,6 +556,21 @@ export async function batchSetListingTags({
       mode,
     }),
   });
+}
+
+// Persisted manual lifecycle. The request never changes Listing creation dates or grades.
+export async function setListingLifecycleBatch(
+  listingIds: string[], stage: string, reason = "运营人工调整",
+): Promise<{ updated_listings: number; unchanged_listings: number; stage: string }> {
+  const response = await backendRequest<{
+    updated_listings: number;
+    unchanged_listings: number;
+    stage: string;
+  }>("/api/listings/walmart/lifecycle/batch-set", {
+    method: "POST",
+    body: JSON.stringify({ listing_ids: listingIds, stage, reason }),
+  });
+  return response.data;
 }
 
 const cacheKey = (...parts: unknown[]) => "listing-management:" + stableCacheKey(parts);

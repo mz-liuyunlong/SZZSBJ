@@ -1,4 +1,25 @@
 /** Listing-management No-API acceptance data; replace it when a real API is approved. */
+export interface LifecyclePreviewDiagnostic {
+  reasonCode: string;
+  reasons: Array<{ code: string; title: string; detail: string; advice: string }>;
+  evidence: Array<{ label: string; value: string }>;
+  cutoffLa: string;
+  ruleVersion: number;
+}
+
+// SZZSBJ_GRADE_LOCAL_PREVIEW_V1: only a non-published diagnostic, never a stored grade.
+export interface ListingGradePreviewDiagnostic {
+  reason: string;
+  cutoffLa: string;
+  candidate?: string;
+  valid7?: number;
+  valid14?: number;
+  margin7?: string | null;
+  margin14?: string | null;
+  weightedMargin?: string | null;
+  sourceVerified: boolean;
+}
+
 export interface ListingManagementRow {
   id: string;
   sourceAccountRef?: string;
@@ -11,10 +32,14 @@ export interface ListingManagementRow {
   productName: string;
   title: string;
   productType: string;
-  listPrice: number;
-  salePrice: number;
+  listPrice: number | null;
+  salePrice: number | null;
   productStatus: string;
   lifecycle: string;
+  /** True only for a local read-only preview; never persisted in the backend. */
+  lifecyclePreview?: boolean;
+  lifecyclePreviewReason?: string;
+  lifecycleDiagnostic?: LifecyclePreviewDiagnostic;
   fulfillmentMethod: string;
   listedAt: string;
   category: string;
@@ -28,49 +53,78 @@ export interface ListingManagementRow {
   walmartSeller: string;
   resold: string;
   checkedAt: string;
-  rating: number;
-  reviewCount: number;
+  rating: number | null;
+  reviewCount: number | null;
+  hasStrikethrough?: boolean | null;
+  strikethroughSource?: string;
+  sellerNames?: string[];
+  sellerOfferCount?: number | null;
+  otherSellersPresent?: boolean | null;
+  imageUrls?: string[];
+  imageCount?: number | null;
+  keyFeatures?: string[];
+  reviewFetchStatus?: string;
+  monitorSource?: string;
   brand: string;
   tags: string[];
+  productTags?: Array<{ id: string | null; label: string; color: string | null }>;
+  productTagMatchStatus?: string;
   gtin: string;
   productGrade: string;
+  gradePreviewCandidate?: boolean;
+  gradeDiagnostic?: ListingGradePreviewDiagnostic;
   archiveReason?: string | null;
   isArchived: boolean;
 }
 
+// LISTING_LAYOUT_20261104_V2: business-approved table order; hidden fields remain in API.
+export const listingLifecycleOptions = [
+  { label: "测品期", value: "测品期" },
+  { label: "打品期", value: "打品期" },
+  { label: "启动期", value: "启动期" },
+  { label: "上升期", value: "上升期" },
+  { label: "稳定期", value: "稳定期" },
+  { label: "下滑期", value: "下滑期" },
+  { label: "断货期", value: "断货期" },
+  { label: "修复期", value: "修复期" },
+] as const;
+
 export const listingColumnFields = [
-  { key: "image", title: "图片" },
-  { key: "productIdName", title: "商品ID/品名" },
+  { key: "image", title: "\u56fe\u7247" },
+  { key: "productIdName", title: "\u5546\u54c1ID/\u54c1\u540d" },
   { key: "skuMsku", title: "SKU/MSKU" },
-  { key: "store", title: "店铺" },
-  { key: "owner", title: "负责人" },
-  { key: "title", title: "标题" },
-  { key: "productType", title: "产品类型" },
-  { key: "listPrice", title: "划线价" },
-  { key: "salePrice", title: "在售价" },
-  { key: "productStatus", title: "产品状态" },
-  { key: "lifecycle", title: "生命周期" },
-  { key: "fulfillmentMethod", title: "发货方式" },
-  { key: "gptAnalysis", title: "GPT分析" },
-  { key: "listedAt", title: "上架时间" },
-  { key: "category", title: "类目" },
-  { key: "wfsAvailableInventory", title: "WFS可售库存" },
-  { key: "inboundInventory", title: "在途库存" },
-  { key: "sales90Days", title: "近90天销量" },
-  { key: "adSpend30Days", title: "近30天广告费" },
-  { key: "disabledReason", title: "停用原因" },
-  { key: "listingStatus", title: "Listing状态" },
-  { key: "buyBoxStatus", title: "购物车状态" },
-  { key: "walmartSeller", title: "Walmart卖家" },
-  { key: "resold", title: "是否被跟卖" },
-  { key: "checkedAt", title: "检查时间" },
-  { key: "rating", title: "评分" },
-  { key: "reviewCount", title: "评论数" },
-  { key: "brand", title: "品牌" },
-  { key: "tags", title: "标签" },
+  { key: "storeOwner", title: "\u5e97\u94fa/\u8d1f\u8d23\u4eba" },
+  { key: "title", title: "\u6807\u9898" },
+  { key: "imageCount", title: "\u56fe\u7247\u6570\u91cf" },
+  { key: "listPrice", title: "\u5212\u7ebf\u4ef7" },
+  { key: "hasStrikethrough", title: "\u6709\u65e0\u5212\u7ebf\u4ef7" },
+  { key: "salePrice", title: "\u5728\u552e\u4ef7" },
+  { key: "category", title: "\u7c7b\u76ee" },
+  { key: "wfsAvailableInventory", title: "WFS\u53ef\u552e\u5e93\u5b58" },
+  { key: "inboundInventory", title: "\u5728\u9014\u5e93\u5b58" },
+  { key: "listedAt", title: "\u4e0a\u67b6\u65f6\u95f4" },
+  { key: "sales90Days", title: "\u8fd130\u5929\u9500\u91cf" },
+  { key: "adSpend30Days", title: "\u8fd130\u5929\u5e7f\u544a\u8d39" },
+  { key: "lifecycle", title: "\u751f\u547d\u5468\u671f" },
+  { key: "productGrade", title: "listing\u7b49\u7ea7" },
+  { key: "disabledReason", title: "\u505c\u7528\u539f\u56e0" },
+  { key: "listingStatus", title: "Listing\u72b6\u6001" },
+  { key: "buyBoxStatus", title: "\u8d2d\u7269\u8f66\u72b6\u6001" },
+  { key: "brand", title: "\u54c1\u724c" },
+  { key: "walmartSeller", title: "Walmart\u5356\u5bb6" },
+  { key: "sellerOfferCount", title: "\u5356\u5bb6\u6570\u91cf" },
+  { key: "sellerNames", title: "\u5356\u5bb6\u5217\u8868" },
+  { key: "resold", title: "\u662f\u5426\u88ab\u8ddf\u5356" },
+  { key: "checkedAt", title: "\u76d1\u63a7\u65e5\u671f" },
+  { key: "rating", title: "\u8bc4\u5206" },
+  { key: "reviewCount", title: "\u8bc4\u8bba\u6570" },
+  { key: "keyFeatures", title: "\u4e94\u70b9\u63cf\u8ff0" },
+  { key: "tags", title: "\u6807\u7b7e" },
+  { key: "productTags", title: "产品标签" },
+  { key: "fulfillmentMethod", title: "\u53d1\u8d27\u65b9\u5f0f" },
   { key: "gtin", title: "GTIN" },
-  { key: "productGrade", title: "产品等级" },
-  { key: "archiveReason", title: "归档原因" },
+  { key: "gptAnalysis", title: "GPT\u5206\u6790" },
+  { key: "archiveReason", title: "\u5f52\u6863\u539f\u56e0" },
 ] as const;
 
 export const fixedListingColumnKeys = ["image", "productIdName", "skuMsku"];

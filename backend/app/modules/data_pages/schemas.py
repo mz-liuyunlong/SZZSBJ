@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import (
     BaseModel,
@@ -351,6 +352,38 @@ class ListingManagementQuery(StrictSchema):
     page_size: int = Field(default=50, ge=1, le=1000)
 
 
+class ListingProductTagRead(StrictSchema):
+    id: str | None = None
+    label: str
+    color: str | None = None
+
+
+class ListingManagementBatchSearchRequest(StrictSchema):
+    """Read-only Listing batch search in a JSON request body (1..1000 IDs).
+
+    The existing GET query retains its 32768-character limit. After validating
+    every list item, internal conversion reuses the exact existing service and
+    SQL filtering without exposing the long values in an HTTP request URL.
+    """
+
+    query: ListingManagementQuery = Field(default_factory=ListingManagementQuery)
+    batch_values: list[Nonblank128] = Field(min_length=1, max_length=1000)
+    columns: list[Nonblank128] = Field(default_factory=list, max_length=100)
+
+    @field_validator("batch_values")
+    @classmethod
+    def normalize_batch_values(cls, values: list[str]) -> list[str]:
+        if any("," in value or "\r" in value or "\n" in value for value in values):
+            raise ValueError("batch SKU/MSKU/Item ID cannot contain commas or line breaks")
+        return list(dict.fromkeys(values))
+
+    def as_query(self) -> ListingManagementQuery:
+        # Each entry and the maximum batch size have already been validated.
+        # model_copy intentionally avoids the legacy GET-only 32768-char cap.
+        # No user-supplied unvalidated query fields enter this update.
+        return self.query.model_copy(update={"batch_values": ",".join(self.batch_values)})
+
+
 class ListingManagementItemRead(StrictSchema):
     id: str
     source_account_ref: str
@@ -371,6 +404,8 @@ class ListingManagementItemRead(StrictSchema):
     product_developer_name: str | None = None
     product_grade: str | None
     tags: list[str]
+    product_tags: list[ListingProductTagRead] = Field(default_factory=list)
+    product_tags_match_status: str = "pending"
     strike_price_amount: Money | None
     strike_price_currency_code: str | None
     sale_price_amount: Money | None
@@ -384,6 +419,17 @@ class ListingManagementItemRead(StrictSchema):
     launch_date_cn: date | None = None
     first_wfs_seen_at_utc: datetime | None = None
     first_wfs_available_date_la: date | None = None
+    monitor_checked_at: datetime | None = None
+    monitor_source: str | None = None
+    monitor_has_strikethrough: bool | None = None
+    monitor_strikethrough_source: str | None = None
+    monitor_seller_names: list[str] = Field(default_factory=list)
+    monitor_seller_offer_count: int | None = None
+    monitor_other_sellers_present: bool | None = None
+    monitor_image_urls: list[str] = Field(default_factory=list)
+    monitor_image_count: int | None = None
+    monitor_key_features: list[str] = Field(default_factory=list)
+    monitor_review_fetch_status: str | None = None
     category: str | None
     wfs_available_quantity: Money | None
     available_quantity: Money | None
@@ -503,6 +549,33 @@ class ListingGptAnalysisLinkUpdateRequest(StrictSchema):
         str,
         StringConstraints(strip_whitespace=True, max_length=2048),
     ] = ""
+
+
+# Only operational stages are manually editable. Workflow stages require their own approvals.
+ManualLifecycleStage = Literal[
+    "测品期",
+    "打品期",
+    "启动期",
+    "上升期",
+    "稳定期",
+    "下滑期",
+    "断货期",
+    "修复期",
+]
+
+
+class ListingLifecycleBatchSetRequest(StrictSchema):
+    listing_ids: list[UUID] = Field(min_length=1, max_length=200)
+    stage: ManualLifecycleStage
+    reason: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=2, max_length=200)
+    ] = "人工调整"
+
+
+class ListingLifecycleBatchSetData(StrictSchema):
+    updated_listings: int
+    unchanged_listings: int
+    stage: ManualLifecycleStage
 
 
 class ListingArchiveActionData(StrictSchema):

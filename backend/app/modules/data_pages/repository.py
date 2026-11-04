@@ -4,16 +4,17 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import Any
 from typing import cast as type_cast
 from uuid import UUID
 
 from sqlalchemy import (
+    Date,
     Select,
     String,
     and_,
     case,
     cast,
-    column,
     delete,
     exists,
     func,
@@ -22,6 +23,9 @@ from sqlalchemy import (
     table,
     text,
     tuple_,
+)
+from sqlalchemy import (
+    column as sql_column,
 )
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
@@ -39,7 +43,10 @@ from app.modules.data_pages.models import (
     WalmartListingDimension,
     WalmartListingInventoryDailyFact,
 )
-from app.modules.walmart_monitor.models import WalmartMonitorListingCurrent
+from app.modules.walmart_monitor.models import (
+    RawWalmartMonitorEvent,
+    WalmartMonitorListingCurrent,
+)
 
 DAILY_SALES_SEARCH_COLUMNS: dict[str, ColumnElement[str | None]] = {
     "sku": DailySalesItemDayMart.local_sku,
@@ -64,12 +71,21 @@ LISTING_SEARCH_COLUMNS: dict[str, ColumnElement[str | None]] = {
 
 PRODUCT_INFO_CURRENT = table(
     "dwd_lingxing_sku_product_info_current",
-    column("source_account_ref", String()),
-    column("lingxing_sku_code", String()),
-    column("owner_uid", String()),
-    column("owner_name", String()),
-    column("product_developer_uid", String()),
-    column("product_developer_name", String()),
+    sql_column("source_account_ref", String()),
+    sql_column("lingxing_sku_code", String()),
+    sql_column("owner_uid", String()),
+    sql_column("owner_name", String()),
+    sql_column("product_developer_uid", String()),
+    sql_column("product_developer_name", String()),
+)
+
+
+LISTING_WFS_LA_LOCKED = table(
+    "listing_wfs_first_stock_la_locked",
+    sql_column("source_account_ref", String()),
+    sql_column("store_id", String()),
+    sql_column("item_id", String()),
+    sql_column("first_wfs_available_date_la", Date()),
 )
 
 
@@ -98,6 +114,10 @@ class ListingManagementRowProjection:
     effective_average_rating: Decimal | None = None
     effective_review_count: int | None = None
     effective_brand: str | None = None
+    effective_lifecycle_status: str | None = None
+    monitor_raw_parsed: dict[str, Any] | None = None
+    monitor_checked_at: datetime | None = None
+    monitor_source: str | None = None
 
     def __getattr__(self, name: str) -> object:
         effective = f"effective_{name}"
@@ -144,6 +164,10 @@ def _listing_projection(row: Sequence[object]) -> ListingManagementRowProjection
         effective_review_count=row[18],  # type: ignore[arg-type]
         effective_brand=row[19],  # type: ignore[arg-type]
         first_wfs_available_date_la=row[20],  # type: ignore[arg-type]
+        effective_lifecycle_status=row[-1],  # last selected computed column
+        monitor_raw_parsed=row[21],  # type: ignore[arg-type]
+        monitor_checked_at=row[22],  # type: ignore[arg-type]
+        monitor_source=row[23],  # type: ignore[arg-type]
     )
 
 
@@ -1144,13 +1168,27 @@ class ListingManagementRepository:
         batch_values: str,
     ):
         owner_lookup = self._owner_lookup()
+        # The current monitor row only contains a successfully published
+        # observation. Read its ORIGINAL parsed fields from immutable RAW.
+        monitor_raw_parsed = RawWalmartMonitorEvent.payload_json["final_observation"][
+            "parsed_result"
+        ]
+        raw_strike_flag = func.jsonb_extract_path_text(monitor_raw_parsed, "hasStrikethrough")
+        raw_hijack = func.coalesce(
+            func.jsonb_extract_path_text(monitor_raw_parsed, "isHijacked"),
+            func.jsonb_extract_path_text(monitor_raw_parsed, "is_hijacked"),
+            func.jsonb_extract_path_text(monitor_raw_parsed, "otherSellersPresent"),
+        )
         effective_title = func.coalesce(
             WalmartMonitorListingCurrent.title,
             ListingManagementCurrentMart.title,
         )
-        effective_strike_price = func.coalesce(
-            WalmartMonitorListingCurrent.strike_price_amount,
-            ListingManagementCurrentMart.strike_price_amount,
+        effective_strike_price = case(
+            (raw_strike_flag == "false", None),
+            else_=func.coalesce(
+                WalmartMonitorListingCurrent.strike_price_amount,
+                ListingManagementCurrentMart.strike_price_amount,
+            ),
         )
         effective_strike_currency = func.coalesce(
             WalmartMonitorListingCurrent.strike_price_currency_code,
@@ -1176,9 +1214,13 @@ class ListingManagementRepository:
             WalmartMonitorListingCurrent.walmart_seller,
             ListingManagementCurrentMart.walmart_seller,
         )
-        effective_hijacked = func.coalesce(
-            WalmartMonitorListingCurrent.is_hijacked,
-            ListingManagementCurrentMart.is_hijacked,
+        effective_hijacked = case(
+            (raw_hijack == "true", True),
+            (raw_hijack == "false", False),
+            else_=func.coalesce(
+                WalmartMonitorListingCurrent.is_hijacked,
+                ListingManagementCurrentMart.is_hijacked,
+            ),
         )
         effective_rating = func.coalesce(
             WalmartMonitorListingCurrent.average_rating,
@@ -1192,25 +1234,67 @@ class ListingManagementRepository:
             WalmartMonitorListingCurrent.brand,
             ListingManagementCurrentMart.brand,
         )
-        # The first observed positive WFS *Los Angeles business date* belongs
-        # to the stable account/store/Item ID, not the mutable MSKU.
-        # Do not fall back to the provider Listing creation date or a CN date.
-        # This query is read-only: persisted first-date locking is a separate
-        # migration/deployment step and is not claimed here.
-        first_wfs_available_date_la = (
-            select(func.min(WalmartListingInventoryDailyFact.snapshot_date_la))
-            .where(
-                WalmartListingInventoryDailyFact.source_account_ref
-                == ListingManagementCurrentMart.source_account_ref,
-                WalmartListingInventoryDailyFact.store_id
-                == ListingManagementCurrentMart.store_id,
-                WalmartListingInventoryDailyFact.item_id
-                == ListingManagementCurrentMart.item_id,
-                WalmartListingInventoryDailyFact.wfs_available_quantity >= 1,
+        # The locked table has priority when migration 0072 is installed.
+        # Until then, the 5173 QA connection can continue showing a read-only
+        # historical preview without attempting writes against production data.
+        locked_table_name = self.session.execute(
+            text("SELECT to_regclass('public.listing_wfs_first_stock_la_locked')::text")
+        ).scalar()
+        if isinstance(locked_table_name, str) and locked_table_name:
+            first_wfs_available_date_la = (
+                select(LISTING_WFS_LA_LOCKED.c.first_wfs_available_date_la)
+                .where(
+                    LISTING_WFS_LA_LOCKED.c.source_account_ref
+                    == ListingManagementCurrentMart.source_account_ref,
+                    LISTING_WFS_LA_LOCKED.c.store_id == ListingManagementCurrentMart.store_id,
+                    LISTING_WFS_LA_LOCKED.c.item_id == ListingManagementCurrentMart.item_id,
+                )
+                .correlate(ListingManagementCurrentMart)
+                .scalar_subquery()
             )
-            .correlate(ListingManagementCurrentMart)
-            .scalar_subquery()
+        else:
+            first_wfs_available_date_la = (
+                select(func.min(WalmartListingInventoryDailyFact.snapshot_date_la))
+                .where(
+                    WalmartListingInventoryDailyFact.source_account_ref
+                    == ListingManagementCurrentMart.source_account_ref,
+                    WalmartListingInventoryDailyFact.store_id
+                    == ListingManagementCurrentMart.store_id,
+                    WalmartListingInventoryDailyFact.item_id
+                    == ListingManagementCurrentMart.item_id,
+                    WalmartListingInventoryDailyFact.wfs_available_quantity >= 1,
+                )
+                .correlate(ListingManagementCurrentMart)
+                .scalar_subquery()
+            )
+        # Manual stage is authoritative after a full refresh, but do not require a
+        # migration on environments still using the old read-only database.
+        manual_ready = self.session.scalar(
+            text("SELECT to_regclass('public.biz_listing_lifecycle_manual_states')")
         )
+        if manual_ready:
+            manual = table(
+                "biz_listing_lifecycle_manual_states",
+                sql_column("source_account_ref", String()),
+                sql_column("store_id", String()),
+                sql_column("item_id", String()),
+                sql_column("stage", String()),
+            )
+            manual_stage = (
+                select(manual.c.stage)
+                .where(
+                    manual.c.source_account_ref == ListingManagementCurrentMart.source_account_ref,
+                    manual.c.store_id == ListingManagementCurrentMart.store_id,
+                    manual.c.item_id == ListingManagementCurrentMart.item_id,
+                )
+                .correlate(ListingManagementCurrentMart)
+                .scalar_subquery()
+            )
+            effective_lifecycle = func.coalesce(
+                manual_stage, ListingManagementCurrentMart.lifecycle_status
+            )
+        else:
+            effective_lifecycle = ListingManagementCurrentMart.lifecycle_status
         statement = (
             select(
                 ListingManagementCurrentMart,
@@ -1234,6 +1318,10 @@ class ListingManagementRepository:
                 effective_review_count.label("effective_review_count"),
                 effective_brand.label("effective_brand"),
                 first_wfs_available_date_la.label("first_wfs_available_date_la"),
+                monitor_raw_parsed.label("monitor_raw_parsed"),
+                WalmartMonitorListingCurrent.observed_at.label("monitor_checked_at"),
+                WalmartMonitorListingCurrent.monitor_source.label("monitor_source"),
+                effective_lifecycle.label("effective_lifecycle_status"),
             )
             .outerjoin(
                 WalmartListingDimension,
@@ -1270,6 +1358,10 @@ class ListingManagementRepository:
                     WalmartMonitorListingCurrent.store_id == ListingManagementCurrentMart.store_id,
                     WalmartMonitorListingCurrent.item_id == ListingManagementCurrentMart.item_id,
                 ),
+            )
+            .outerjoin(
+                RawWalmartMonitorEvent,
+                RawWalmartMonitorEvent.id == WalmartMonitorListingCurrent.source_raw_event_id,
             )
             .where(ListingManagementCurrentMart.source_account_ref.in_(account_refs))
         )
