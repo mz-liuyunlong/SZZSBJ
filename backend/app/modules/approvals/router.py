@@ -72,6 +72,15 @@ def list_approvals(
         is_admin=has_permission(principal, "*"),
         may_review_clearance=clearance_review,
     )
+    if not has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION):
+        data = data.model_copy(
+            update={
+                "items": [
+                    item.model_copy(update={"clearance_stock_capital": None})
+                    for item in data.items
+                ]
+            }
+        )
     return success_response(
         request,
         data=data,
