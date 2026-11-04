@@ -363,7 +363,6 @@ def _edit(
     return after
 
 
-
 def _approved_corrections(session: Session, sku_id: UUID) -> dict[str, float]:
     rows = (
         session.execute(
@@ -426,10 +425,7 @@ def list_score_corrections(
         "skip": (page - 1) * page_size,
         "size": page_size,
     }
-    where = (
-        "WHERE source_account_ref = :account "
-        "AND (:allow_profit OR dimension <> 'profit')"
-    )
+    where = "WHERE source_account_ref = :account AND (:allow_profit OR dimension <> 'profit')"
     count = session.execute(
         text("SELECT count(*) FROM product_new_score_corrections " + where),
         params,
@@ -688,9 +684,7 @@ def list_rule_history(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
 ) -> SuccessEnvelope[dict[str, Any], None]:
-    total = session.execute(
-        text("SELECT count(*) FROM product_new_rule_versions")
-    ).scalar_one()
+    total = session.execute(text("SELECT count(*) FROM product_new_rule_versions")).scalar_one()
     rows = (
         session.execute(
             text(

@@ -31,9 +31,10 @@ def test_score_correction_requires_evidence_and_bounded_numeric_value() -> None:
             target_score=5,
             reason="      ",
         )
-    assert ScoreCorrectionDecision(
-        decision="rejected", note="没有符合条件的原始记录"
-    ).decision == "rejected"
+    assert (
+        ScoreCorrectionDecision(decision="rejected", note="没有符合条件的原始记录").decision
+        == "rejected"
+    )
 
 
 def test_profit_adjustment_requires_existing_field_permissions() -> None:

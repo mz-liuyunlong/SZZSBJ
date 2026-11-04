@@ -78,9 +78,7 @@ def read_new_product_dashboard(session: Session, *, account: str) -> dict[str, A
         kind = row["group_type"]
         if kind not in groups:
             continue
-        groups[kind].append(
-            {"name": row["group_name"], "count": int(row["product_count"])}
-        )
+        groups[kind].append({"name": row["group_name"], "count": int(row["product_count"])})
     for entries in groups.values():
         entries.sort(key=lambda item: (-item["count"], item["name"]))
     total = sum(entry["count"] for entry in groups["purchase_status"])

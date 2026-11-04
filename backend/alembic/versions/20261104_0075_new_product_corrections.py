@@ -81,15 +81,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
-    count = bind.execute(
-        text("SELECT count(*) FROM product_new_score_corrections")
-    ).scalar_one()
+    count = bind.execute(text("SELECT count(*) FROM product_new_score_corrections")).scalar_one()
     if count:
         raise RuntimeError("NP_SCORE_CORRECTION_DOWNGRADE_BLOCKED_EXISTING_HISTORY")
-    op.drop_index(
-        "uq_np_correction_pending", table_name="product_new_score_corrections"
-    )
-    op.drop_index(
-        "ix_np_correction_account", table_name="product_new_score_corrections"
-    )
+    op.drop_index("uq_np_correction_pending", table_name="product_new_score_corrections")
+    op.drop_index("ix_np_correction_account", table_name="product_new_score_corrections")
     op.drop_table("product_new_score_corrections")

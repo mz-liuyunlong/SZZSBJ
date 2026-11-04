@@ -283,9 +283,7 @@ def read_sku_metrics(
             milestones["status"] = "observed_not_formally_scored"
             first = pace["first_order_date"]
             milestones["first_order_date"] = first.isoformat() if first else None
-            milestones["days_to_first_order"] = (
-                (first - start_date).days if first else None
-            )
+            milestones["days_to_first_order"] = (first - start_date).days if first else None
             for window in (7, 10, 20):
                 if int(pace[f"coverage_{window}d"] or 0) == window:
                     milestones[f"sales_{window}d"] = _number(pace[f"sales_{window}d"])
