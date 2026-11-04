@@ -45,6 +45,8 @@ def mask_clearance_financials(
 
     if not can_view_profit:
         evaluation["stock_capital_usd"] = None
+        evaluation["profit_30d_amount"] = None
+        evaluation["refund_loss_30d"] = None
         evaluation["unit_cost_usd"] = None
         evaluation["business_signals"] = {}
         evaluation["business_signal_groups"] = []
