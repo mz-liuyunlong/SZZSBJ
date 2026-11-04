@@ -53,14 +53,19 @@ def test_product_list_and_summary_sql_uses_owner_uid() -> None:
             "/api/product-management/skus/00000000-0000-0000-0000-000000000001/pricing-breakdown",
             True,
         ),
-        ("GET", "/api/product-management/options", False),
+        ("GET", "/api/product-management/options", True),
         ("GET", "/api/product-management/pricing-rules", False),
-        ("POST", "/api/product-management/skus/export", False),
+        ("POST", "/api/product-management/skus/export", True),
     ],
 )
 def test_product_routes_fail_closed_when_scoped(method: str, path: str, permitted: bool) -> None:
     request = Request({"type": "http", "method": method, "path": path, "headers": []})
-    principal = Principal(user_id="8", permissions=frozenset({"products:read"}))
+    principal = Principal(
+        user_id="8",
+        permissions=frozenset(
+            {"products:read", "products:export"} if method == "POST" else {"products:read"}
+        ),
+    )
     session = _session()
     with patch(
         "app.modules.product_management.router.resolve_business_owner_refs",

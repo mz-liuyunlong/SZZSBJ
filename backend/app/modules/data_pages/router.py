@@ -92,7 +92,11 @@ def require_data_page_org_scope(
     else:
         declared = _DAILY_SALES_REGISTRY.permission
     required_permission = permission_for_request(request.method, request.url.path, declared)
-    if not (has_permission(principal, required_permission) or has_permission(principal, declared)):
+    # A legacy page-read grant must never satisfy an export/action permission.
+    allowed = has_permission(principal, required_permission)
+    if required_permission.startswith("page:"):
+        allowed = allowed or has_permission(principal, declared)
+    if not allowed:
         raise ApiError(
             code=ErrorCode.FORBIDDEN,
             status_code=403,

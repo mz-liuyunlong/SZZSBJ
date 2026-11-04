@@ -109,9 +109,14 @@ def require_product_management_org_scope(
         r"/api/product-management/skus/[0-9A-Fa-f-]{36}(/pricing-breakdown)?",
         request.url.path,
     )
-    if request.method not in {"GET", "POST"} or (
-        request.url.path not in _ORG_REVIEWED_PRODUCT_READS and detail_path is None
-    ):
+    safe_read = request.method == "GET" and (
+        request.url.path in _ORG_REVIEWED_PRODUCT_READS or detail_path is not None
+    )
+    reviewed_export = (
+        request.method == "POST"
+        and request.url.path == "/api/product-management/skus/export"
+    )
+    if not safe_read and not reviewed_export:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
     session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owners
 

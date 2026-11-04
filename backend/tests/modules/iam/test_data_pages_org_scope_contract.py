@@ -101,7 +101,7 @@ def test_org_scope_permission_is_checked_before_scope_resolution() -> None:
 
 def test_org_owner_scope_disallows_profit_aggregation() -> None:
     repository = OrderProfitRepository(_session({"uid-reviewed"}))
-    with pytest.raises(PermissionError, match="not yet audited"):
+    with pytest.raises(ApiError) as error:
         repository._filtered_statement(
             account_refs=frozenset({"A1"}),
             start_date=None,
@@ -110,6 +110,7 @@ def test_org_owner_scope_disallows_profit_aggregation() -> None:
             search_field="sku",
             keyword="",
         )
+    assert error.value.status_code == 403
 
 
 @pytest.mark.parametrize(
@@ -123,7 +124,7 @@ def test_org_owner_scope_disallows_profit_aggregation() -> None:
 )
 def test_scoped_unreviewed_routes_fail_closed(method: str, path: str) -> None:
     request = Request({"type": "http", "method": method, "path": path, "headers": []})
-    principal = Principal(user_id="5", permissions=frozenset({"products:read"}))
+    principal = Principal(user_id="5", permissions=frozenset({"products:read", "sales:daily-sales:read"}))
     session = _session()
     with patch(
         "app.modules.data_pages.router.resolve_business_owner_refs",
@@ -146,6 +147,26 @@ def test_scoped_reviewed_routes_install_owner_filter(path: str) -> None:
     ):
         require_data_page_org_scope(request, principal, session)
     assert session.info[ORG_OWNER_SCOPE_SESSION_KEY] == frozenset({"uid-reviewed"})
+
+
+def test_read_permission_cannot_bypass_canonical_export_action() -> None:
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/sales/daily-sales/export",
+            "headers": [],
+        }
+    )
+    principal = Principal(
+        user_id="5", permissions=frozenset({"sales:daily-sales:read"})
+    )
+    session = _session()
+    with patch("app.modules.data_pages.router.resolve_business_owner_refs") as resolver:
+        with pytest.raises(ApiError) as error:
+            require_data_page_org_scope(request, principal, session)
+    assert error.value.status_code == 403
+    resolver.assert_not_called()
 
 
 def test_unscoped_request_clears_stale_scope() -> None:
