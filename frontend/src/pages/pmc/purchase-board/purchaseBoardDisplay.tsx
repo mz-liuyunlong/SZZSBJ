@@ -2,7 +2,6 @@
 import { Tag, Typography } from "antd";
 import type {
   PurchaseBoardItemIdSource,
-  PurchaseBoardRow,
   PurchaseStageCode,
   SkuCycleSample,
   SkuCycleSource,
