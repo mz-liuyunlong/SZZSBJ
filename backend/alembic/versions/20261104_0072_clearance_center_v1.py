@@ -118,13 +118,14 @@ def upgrade() -> None:
         ),
     )
     # RBAC v2 action permissions require page/action shape metadata.
+    bind = op.get_bind()
     for key, label, action_key, page_key in (
         ("action:products:clearance:apply", "清货申请", "apply", "products_clearance_center"),
         ("action:products:clearance:review", "清货审批", "review", "data_center_approval_workspace"),
         ("action:products:clearance:configure", "清货规则配置", "configure", "products_clearance_center"),
         ("action:products:clearance:progress", "清货执行进度", "progress", "products_clearance_center"),
     ):
-        op.execute(
+        bind.execute(
             sa.text(
                 """insert into app_permissions
                   (permission_key,name,group_key,description,permission_type,
