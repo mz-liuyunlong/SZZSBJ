@@ -7,6 +7,7 @@ import type { NavigationPage } from "@/config/navigation";
 import { fetchCurrentUser } from "@/pages/auth/authApi";
 import { notifyPermissionsChanged } from "@/pages/auth/authSession";
 import type { AuthUser } from "@/pages/auth/authTypes";
+import AccessDenialDiagnostics from "@/pages/settings/components/AccessDenialDiagnostics";
 import RoleCreateModal from "@/pages/settings/components/RoleCreateModal";
 import RoleListPanel from "@/pages/settings/components/RoleListPanel";
 import RolePermissionEditor from "@/pages/settings/components/RolePermissionEditor";
@@ -411,6 +412,7 @@ function RoleManagementPage({ page }: RoleManagementPageProps) {
             </div>
           )}
         </section>
+        {currentUser?.isSuperAdmin && <AccessDenialDiagnostics />}
       </div>
       <RoleCreateModal
         open={createOpen && canCreateRole}
