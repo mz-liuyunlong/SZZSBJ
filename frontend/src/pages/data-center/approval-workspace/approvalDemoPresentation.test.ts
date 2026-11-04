@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { demoColumnsForBusiness, demoProfiles } from "./approvalDemoPresentation";
+import { demoColumnsForBusiness, demoProfiles, primaryClearanceSku } from "./approvalDemoPresentation";
 import { demoSeeds } from "./approvalDemoData";
 
 const keys = (business: "purchase" | "clearance" | "listing" | "price") =>
@@ -8,7 +8,7 @@ const keys = (business: "purchase" | "clearance" | "listing" | "price") =>
 describe("V3 dedicated demo list columns and detail profiles", () => {
   it("uses different V3 columns for each business", () => {
     expect(keys("purchase")).toEqual(["title", "supplier", "qty", "due", "amount", "risk", "applicant", "status", "action"]);
-    expect(keys("clearance")).toEqual(["title", "store", "qty", "methods", "amount", "risk", "applicant", "submitted", "status", "action"]);
+    expect(keys("clearance")).toEqual(["title", "sku", "storeOwner", "risk", "submitted", "reason", "methods", "targetQty", "stockListing", "inventoryCost", "status", "action"]);
     expect(keys("listing")).toEqual(["title", "item", "sku", "store", "listingStatus", "risk", "applicant", "submitted", "status", "action"]);
     expect(keys("price")).toEqual(["title", "sku", "oldPrice", "newPrice", "priceDelta", "priceMargin", "risk", "applicant", "status", "action"]);
   });
@@ -28,7 +28,8 @@ describe("V3 dedicated demo list columns and detail profiles", () => {
     }
     expect(demoProfiles["DEMO-CLR-001"].clearanceSkus).toHaveLength(2);
     expect(demoProfiles["DEMO-CLR-001"].clearanceSkus?.[0].sales).toHaveLength(3);
+    expect(primaryClearanceSku({ id: "DEMO-CLR-001" })?.sku).toBe("DEMO-SKU-201");
+    expect(primaryClearanceSku({ id: "DEMO-CLR-001" })?.target).toBe(70);
     expect(demoProfiles["DEMO-PRC-003"].newMargin).toBeLessThan(0);
   });
 });
-
