@@ -262,6 +262,18 @@ def test_rule_rows_server_paging_filter_sort(db):
     by_days = _ok(client.get(path, params={"sort_by": "days", "sort_order": "desc"}))["items"]
     assert [r["days"] for r in by_days] == sorted((r["days"] for r in by_days), reverse=True)
     assert client.get(path, params={"sort_by": "remark"}).status_code == 422
+    assert first["total_rows"] == 11
+    assert first["category_counts"] == {
+        "shipping": 2,
+        "transit": 4,
+        "receiving": 4,
+        "dispute": 1,
+        "other": 0,
+    }
+    transit = _ok(client.get(path, params={"category": "transit"}))
+    assert transit["total"] == 4 and {r["category"] for r in transit["items"]} == {"transit"}
+    assert _ok(client.get(path, params={"category": "other"}))["total"] == 0
+    assert client.get(path, params={"category": "nope"}).status_code == 422
 
 
 def test_fc_regions_default_by_state_then_saved(db):

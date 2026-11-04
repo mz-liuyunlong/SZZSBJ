@@ -35,6 +35,7 @@ from app.modules.pmc_wfs.settings_schemas import (
     FcRegionUpdate,
     LogisticsChannelOut,
     RuleRow,
+    RuleRowItem,
     RuleRowPage,
     RuleRowQuery,
     RuleSetOut,
@@ -42,7 +43,12 @@ from app.modules.pmc_wfs.settings_schemas import (
     RuleVersionOut,
     SettingsChangeOut,
 )
-from app.modules.pmc_wfs.settings_seed import CREATION_DEFAULTS
+from app.modules.pmc_wfs.settings_seed import (
+    CREATION_DEFAULTS,
+    RULE_CATEGORIES,
+    RULE_CATEGORY_OTHER,
+    rule_category,
+)
 from app.modules.pmc_wfs.source_models import LingxingLogisticsChannelOds, PmcWfsSourceFile
 
 
@@ -165,6 +171,13 @@ class WfsSettingsService:
             stmt = stmt.where(rule.region == query.region)
         if query.decided is not None:
             stmt = stmt.where(rule.decided.is_(query.decided))
+        if query.category is not None:
+            known = [k for _c, _l, keys in RULE_CATEGORIES for k in keys]
+            if query.category == RULE_CATEGORY_OTHER:
+                stmt = stmt.where(or_(rule.rule_key.is_(None), rule.rule_key.not_in(known)))
+            else:
+                keys = next(keys for c, _l, keys in RULE_CATEGORIES if c == query.category)
+                stmt = stmt.where(rule.rule_key.in_(keys))
         total = self.session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
         column = getattr(rule, query.sort_by)
         order = column.desc() if query.sort_order == "desc" else column.asc()
@@ -183,12 +196,20 @@ class WfsSettingsService:
             )
             if v
         )
+        counts = {c: 0 for c, _l, _k in RULE_CATEGORIES} | {RULE_CATEGORY_OTHER: 0}
+        for key in self.session.scalars(select(rule.rule_key).where(rule.version_id == version.id)):
+            counts[rule_category(key)] += 1
         return RuleRowPage(
             version=_version_out(version),
-            items=[_row_out(r) for r in rows],
+            items=[
+                RuleRowItem(**_row_out(r).model_dump(), category=rule_category(r.rule_key))
+                for r in rows
+            ],
             total=total,
+            total_rows=sum(counts.values()),
             sample_rows=sample or 0,
             regions=regions,
+            category_counts=counts,
         )
 
     def list_versions(self) -> list[RuleVersionOut]:

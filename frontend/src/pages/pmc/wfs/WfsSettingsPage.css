@@ -137,3 +137,7 @@
 .pmc-settings__drawer-stack {
   width: 100%;
 }
+
+/* WFS 异常与提醒: BusinessConfigPage frame (Rocky 2026-11-04); only layout glue here, no colours. */
+.pmc-alert-center__search { width: min(420px, 100%); }
+.pmc-alert-center__footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }

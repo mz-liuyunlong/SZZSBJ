@@ -20,8 +20,8 @@ const pmcPages = navigation.find((g) => g.key === "pmc")!.children;
 const pageOf = (key: string) => pmcPages.find((p) => p.key === key)!;
 const rulesPage = pageOf("pmc_wfs_settings");
 const version = { version_no: 1, effective_date: "2026-10-10", reason: "8088 初始", created_by: "system:8088-seed", created_at: "2026-10-10T00:00:00Z" };
-const row = (node: string, decided: boolean): api.RuleRow => ({
-  rule_key: node, node, region: "全部", carrier: "全部", channel: "全部", days: 7, remind_days: 2,
+const row = (node: string, decided: boolean): api.RuleRowItem => ({
+  category: decided ? "transit" : "receiving", rule_key: node, node, region: "全部", carrier: "全部", channel: "全部", days: 7, remind_days: 2,
   row_effective_date: "2026-10-10", notify: "PMC", remark: "", decided,
 });
 const renderPage = (page = rulesPage, permissions: string[] = []) =>
@@ -39,7 +39,8 @@ beforeEach(() => {
     value: vi.fn(() => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} })),
   });
   vi.mocked(api.listRuleRows).mockResolvedValue({
-    version, items: [row("货代已签收未收货", true), row("超过预计到仓", false)], total: 2, sample_rows: 1, regions: ["全部", "美西"],
+    version, items: [row("货代已签收未收货", true), row("超过预计到仓", false)], total: 2, total_rows: 11, sample_rows: 5, regions: ["全部", "美西"],
+    category_counts: { shipping: 2, transit: 4, receiving: 4, dispute: 1, other: 0 },
   });
   vi.mocked(api.getRules).mockResolvedValue({ version, rows: [row("货代已签收未收货", true)], sample_rows: 0 });
   vi.mocked(api.listRuleVersions).mockResolvedValue([]);
@@ -60,18 +61,22 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("PMC 设置 · WFS pages", () => {
-  it("rules page: title, source, filters, server query, status tags and pagination", async () => {
+  it("rules page follows the 业务配置中心 frame: header, tabs, stat cards, categories and a server-paged list", async () => {
     renderPage();
     expect(await screen.findByText("超过预计到仓")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "WFS 异常与提醒规则" })).toBeInTheDocument();
-    expect(screen.getByText(/版本 v1 · 生效 2026-10-10/)).toBeInTheDocument();
-    expect(screen.getByText(/有 1 条规则按示例阈值执行/)).toBeInTheDocument();
-    expect(screen.getByText("示例 · 待定")).toBeInTheDocument();
-    expect(screen.getByText("已确认")).toBeInTheDocument();
-    expect(screen.getByRole("search", { name: "WFS 异常与提醒规则筛选" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "WFS 异常与提醒" })).toBeInTheDocument();
+    expect(screen.getByText("PMC SETTINGS")).toBeInTheDocument();
+    for (const tab of ["提醒规则", "通知与口径说明", "版本与修改记录"]) expect(screen.getByRole("tab", { name: new RegExp(tab) })).toBeInTheDocument();
+    expect(screen.getByText("规则总数")).toBeInTheDocument();
+    expect(screen.getByText("已确认阈值")).toBeInTheDocument();
+    expect(screen.getByText("v1")).toBeInTheDocument();
+    expect(screen.getByText(/有 5 条规则按示例阈值执行/)).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "规则分类" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /物流在途\s*4/ })).toBeInTheDocument();
+    expect(screen.getAllByText("示例 · 待定").length).toBeGreaterThan(0);
+    expect(screen.getByRole("search", { name: "异常与提醒规则筛选" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "阈值状态" })).toBeInTheDocument();
     expect(screen.getByText("共 2 条")).toBeInTheDocument();
-    expect(screen.queryByText("数据来自新系统数据库", { selector: ".ant-alert-message" })).not.toBeInTheDocument();
     expect(api.listRuleRows).toHaveBeenCalledWith(
       expect.objectContaining({ page: 1, page_size: 50, sort_by: "row_no", sort_order: "asc", search_field: "all" }),
       expect.anything(),
@@ -79,14 +84,28 @@ describe("PMC 设置 · WFS pages", () => {
     expect(api.getRules).not.toHaveBeenCalled();
   });
 
-  it("rules page sends the committed keyword to the server and resets to page 1", async () => {
+  it("category buttons and the committed keyword go to the server and reset to page 1", async () => {
     renderPage();
     await screen.findByText("超过预计到仓");
-    fireEvent.change(screen.getByLabelText("搜索WFS 异常与提醒规则关键字"), { target: { value: "Dispute" } });
-    fireEvent.click(screen.getByRole("button", { name: "搜索WFS 异常与提醒规则" }));
+    fireEvent.click(screen.getByRole("button", { name: /收货与上架/ }));
     await waitFor(() => expect(api.listRuleRows).toHaveBeenLastCalledWith(
-      expect.objectContaining({ keyword: "Dispute", page: 1 }), expect.anything(),
+      expect.objectContaining({ category: "receiving", page: 1 }), expect.anything(),
     ));
+    fireEvent.change(screen.getByLabelText("搜索规则关键字"), { target: { value: "Dispute" } });
+    fireEvent.click(screen.getByRole("button", { name: "搜索规则" }));
+    await waitFor(() => expect(api.listRuleRows).toHaveBeenLastCalledWith(
+      expect.objectContaining({ keyword: "Dispute", category: "receiving", page: 1 }), expect.anything(),
+    ));
+  });
+
+  it("notes page opens the same center on the 通知与口径说明 tab", async () => {
+    renderPage(pageOf("pmc_wfs_settings_notes"));
+    expect(screen.getByRole("heading", { name: "WFS 异常与提醒" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /通知与口径说明/, selected: true })).toBeInTheDocument();
+    expect(screen.getByText(/通知未接入/)).toBeInTheDocument();
+    expect(screen.getByText(/上架缓冲天数（10 天）引用「自动补货」/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: /版本与修改记录/ }));
+    await waitFor(() => expect(api.listRuleVersions).toHaveBeenCalled());
   });
 
   it("FC page has zip and full address, no name column, and queries the server", async () => {
@@ -124,10 +143,6 @@ describe("PMC 设置 · WFS pages", () => {
     cleanup();
     renderPage(pageOf("pmc_wfs_settings_stores"));
     expect(screen.getByText(/店铺设置等店铺来源/)).toBeInTheDocument();
-    cleanup();
-    renderPage(pageOf("pmc_wfs_settings_notes"));
-    expect(screen.getByText(/通知未接入/)).toBeInTheDocument();
-    expect(screen.getByText(/上架缓冲天数（10 天）引用「自动补货」/)).toBeInTheDocument();
   });
 
   it("greys out writes while the page is read-only, even with the manage permission", async () => {
