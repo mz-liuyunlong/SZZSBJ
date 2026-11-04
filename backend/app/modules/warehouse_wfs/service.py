@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
 from app.core.config import AppEnvironment, get_settings
+from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
 from app.modules.product_management.daily_sales_costs import (
     load_daily_sales_costs,
     normalize_sku_key,
@@ -101,6 +102,10 @@ class WfsFeeAlertService:
 
     def __init__(self, session: Session) -> None:
         self.session = session
+        scope = getattr(session, "info", None)
+        self.org_owner_refs = (
+            scope.get(ORG_OWNER_SCOPE_SESSION_KEY) if isinstance(scope, dict) else None
+        )
 
     def list_cases(
         self,
@@ -140,9 +145,18 @@ class WfsFeeAlertService:
                     + (
                         " where id=:case_id and source_account_ref=any(:accounts)"
                         " and is_deleted=false"
+                        + (" and owner_ref=any(:org_owner_refs)" if self.org_owner_refs is not None else "")
                     )
                 ),
-                {"case_id": str(case_id), "accounts": list(account_refs)},
+                {
+                    "case_id": str(case_id),
+                    "accounts": list(account_refs),
+                    **(
+                        {"org_owner_refs": sorted(self.org_owner_refs)}
+                        if self.org_owner_refs is not None
+                        else {}
+                    ),
+                },
             )
             .mappings()
             .first()
@@ -618,6 +632,9 @@ class WfsFeeAlertService:
     ) -> tuple[list[dict], int]:
         where = ["source_account_ref = any(:accounts)", "is_deleted = false"]
         params: dict[str, object] = {"accounts": list(account_refs)}
+        if self.org_owner_refs is not None:
+            where.append("owner_ref = any(:org_owner_refs)")
+            params["org_owner_refs"] = sorted(self.org_owner_refs)
         if query.start_date is not None:
             where.append("coalesce(first_alert_at, created_at)::date >= :start_date")
             params["start_date"] = query.start_date
@@ -854,7 +871,20 @@ class WfsFeeAlertService:
             latest_follow=row["latest_follow_note"] or row["follow_log"],
         )
 
+    def ensure_case_visible(self, case_id: UUID, account_refs: frozenset[str]) -> None:
+        """Apply the same source-account and owner guards before approval writes."""
+        self._assert_case_visible(case_id, account_refs)
+
     def _assert_case_visible(self, case_id: UUID, account_refs: frozenset[str]) -> None:
+        scoped_sql = (
+            " and owner_ref=any(:org_owner_refs)" if self.org_owner_refs is not None else ""
+        )
+        params: dict[str, object] = {
+            "case_id": str(case_id),
+            "accounts": list(account_refs),
+        }
+        if self.org_owner_refs is not None:
+            params["org_owner_refs"] = sorted(self.org_owner_refs)
         exists = self.session.execute(
             text(
                 """
@@ -862,8 +892,10 @@ class WfsFeeAlertService:
                 from ops_wfs_fee_anomaly_cases
                 where id=:case_id and source_account_ref=any(:accounts) and is_deleted=false
                 """
+                + scoped_sql
+                + " FOR UPDATE"
             ),
-            {"case_id": str(case_id), "accounts": list(account_refs)},
+            params,
         ).first()
         if exists is None:
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
