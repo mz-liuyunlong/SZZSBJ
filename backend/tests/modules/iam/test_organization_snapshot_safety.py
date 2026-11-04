@@ -45,6 +45,37 @@ def test_identical_snapshot_returns_previous_run_without_writes() -> None:
     assert session.execute.call_count == 2
 
 
+def test_applied_snapshot_revokes_only_ineligible_feishu_linked_sessions() -> None:
+    departments, users = _source()
+    digest, _, _ = canonical_snapshot(departments, users)
+    session = MagicMock()
+    session.execute.return_value.mappings.return_value.first.return_value = None
+
+    run_id = apply_snapshot(
+        session,
+        expected_hash=digest,
+        departments=departments,
+        users=users,
+        requested_by="admin",
+    )
+
+    calls = session.execute.call_args_list
+    statements = [str(call.args[0]) for call in calls]
+    assert "INSERT INTO iam_feishu_employees" in statements[-2]
+    assert "UPDATE app_sessions AS s" in statements[-1]
+    assert "s.revoked_at IS NULL" in statements[-1]
+    assert "u.feishu_open_id IS NOT NULL" in statements[-1]
+    assert "e.last_seen_run_id = :run_id" in statements[-1]
+    for eligibility in (
+        "e.is_active IS TRUE",
+        "e.is_resigned IS NOT TRUE",
+        "e.is_frozen IS NOT TRUE",
+    ):
+        assert eligibility in statements[-1]
+    assert str(calls[-1].args[1]["run_id"]) == run_id
+    session.commit.assert_not_called()
+
+
 def test_identity_replacement_requires_explicit_confirmation() -> None:
     departments, users = _source()
     digest, _, _ = canonical_snapshot(departments, users)
