@@ -362,21 +362,35 @@ class ClearanceService:
         return {"request_id": rid, "approval_id": aid, "status": "pending"}
 
     def withdraw(self, rid: UUID, accounts: frozenset[str], actor: str) -> dict:
+        # Lock order matches review: approval first, clearance request second.
+        preliminary = self._request(rid, accounts)
+        approval = self.approvals._record(preliminary["approval_id"], accounts, lock=True)
         row = self._request(rid, accounts, lock=True)
-        if row["status"] != "pending" or row["requester_id"] != actor:
+        if (
+            approval["status"] != "submitted"
+            or approval["approval_type"] != "clearance_request"
+            or row["status"] != "pending"
+            or row["requester_id"] != actor
+            or approval["applicant_id"] != actor
+            or row["approval_id"] != approval["id"]
+        ):
             fail()
-        self.session.execute(
+        changed = self.session.execute(
             text("""update ops_clearance_requests
             set status='withdrawn',version=version+1,updated_at=now()
             where id=:id and status='pending'"""),
             {"id": str(rid)},
         )
-        self.session.execute(
+        if changed.rowcount != 1:
+            fail()
+        changed_approval = self.session.execute(
             text("""update app_approval_requests
             set status='withdrawn',version=version+1,updated_at=now()
             where id=:id and status='submitted'"""),
             {"id": str(row["approval_id"])},
         )
+        if changed_approval.rowcount != 1:
+            fail()
         self.approvals._event(
             str(row["approval_id"]), "withdrawn", actor, "申请撤回", {"executed": False}
         )
@@ -443,13 +457,15 @@ class ClearanceService:
         )
         if updated.rowcount != 1:
             fail()
-        self.session.execute(
+        changed_request = self.session.execute(
             text("""
           update ops_clearance_requests set status=:status,version=version+1,updated_at=now()
           where id=:id and status='pending'
         """),
             {"status": payload.decision, "id": str(row["id"])},
         )
+        if changed_request.rowcount != 1:
+            fail()
         self.approvals._event(
             str(aid),
             payload.decision,
@@ -479,7 +495,7 @@ class ClearanceService:
             if sum(values) == row["target_qty"]
             else ("paused" if row["status"] == "paused" else "running")
         )
-        self.session.execute(
+        changed_progress = self.session.execute(
             text("""
            update ops_clearance_requests set sold_qty=:sold,removed_qty=:removed,
              disposed_qty=:disposed,status=:status,version=version+1,updated_at=now()
@@ -494,6 +510,8 @@ class ClearanceService:
                 "version": payload.expected_version,
             },
         )
+        if changed_progress.rowcount != 1:
+            fail()
         self.approvals._event(
             str(row["approval_id"]),
             "progress_updated",
@@ -511,11 +529,14 @@ class ClearanceService:
         ):
             fail()
         status = "paused" if paused else "running"
-        self.session.execute(
+        changed_status = self.session.execute(
             text("""update ops_clearance_requests
-            set status=:status,version=version+1,updated_at=now() where id=:id"""),
-            {"status": status, "id": str(rid)},
+            set status=:status,version=version+1,updated_at=now()
+            where id=:id and version=:version"""),
+            {"status": status, "id": str(rid), "version": row["version"]},
         )
+        if changed_status.rowcount != 1:
+            fail()
         self.approvals._event(str(row["approval_id"]), status, actor, "", {"executed": False})
         self.session.commit()
         return {"status": status}
@@ -541,21 +562,25 @@ class ClearanceService:
         if version != payload.expected_version:
             fail()
         next_version = version + 1
-        self.session.execute(
+        saved = self.session.execute(
             text("""
           insert into ops_clearance_rule_sets(source_account_ref,version,rules_json,updated_by)
           values(:account,:version,cast(:rules as jsonb),:actor)
           on conflict(source_account_ref) do update set
             version=excluded.version,rules_json=excluded.rules_json,
             updated_by=excluded.updated_by,updated_at=now()
+          where ops_clearance_rule_sets.version=:expected_version
         """),
             {
                 "account": payload.source_account_ref,
                 "version": next_version,
                 "rules": json.dumps(merged, ensure_ascii=False),
                 "actor": actor,
+                "expected_version": payload.expected_version,
             },
         )
+        if saved.rowcount != 1:
+            fail()
         self.session.execute(
             text("""
           insert into ops_clearance_rule_events(id,source_account_ref,version,rules_json,actor_id)
