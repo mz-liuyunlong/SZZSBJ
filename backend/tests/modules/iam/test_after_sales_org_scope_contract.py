@@ -80,3 +80,64 @@ def test_refund_scope_fails_closed_for_unprivileged_principal() -> None:
             require_refund_org_scope(request, principal, session)
     assert error.value.status_code == 403
     resolver.assert_not_called()
+
+
+def test_account_qualified_refunds_and_sales_share_exact_owner_pairs() -> None:
+    import json
+
+    from app.modules.iam.organization_access import ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY
+
+    session = MagicMock()
+    session.info = {
+        ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY: frozenset({
+            ("ACCOUNT-1", "SHARED-UID"),
+        })
+    }
+    repository = AfterSalesRefundRepository(session)
+    refund_where, refund_params = repository._refund_where(
+        _query(), frozenset({"ACCOUNT-1", "ACCOUNT-2"})
+    )
+    sales_where, sales_params = repository._sales_where(
+        _query(), frozenset({"ACCOUNT-1", "ACCOUNT-2"})
+    )
+    assert any(
+        "granted.source_account_ref = r.source_account_ref" in value
+        and "granted.owner_ref = om.owner_ref" in value
+        for value in refund_where
+    )
+    assert any(
+        "granted.source_account_ref = m.source_account_ref" in value
+        and "granted.owner_ref = m.owner_ref" in value
+        for value in sales_where
+    )
+    expected = [{"source_account_ref": "ACCOUNT-1", "owner_ref": "SHARED-UID"}]
+    assert json.loads(refund_params["account_owner_pairs"]) == expected
+    assert json.loads(sales_params["account_owner_pairs"]) == expected
+
+
+def test_account_qualified_refund_scope_is_applied_to_reviewed_reads() -> None:
+    from app.modules.iam.organization_access import ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY
+
+    request = Request({
+        "type": "http",
+        "method": "GET",
+        "path": "/api/after-sales/refunds/items",
+        "headers": [],
+    })
+    session = MagicMock()
+    session.info = {}
+    principal = Principal(
+        user_id="8", permissions=frozenset({"aftersales:refund-management:read"})
+    )
+    with (
+        patch(
+            "app.modules.after_sales.router.resolve_business_account_owner_pairs",
+            return_value=frozenset({("ACCOUNT-1", "SHARED-UID")}),
+        ),
+        patch("app.modules.after_sales.router.resolve_business_owner_refs") as legacy,
+    ):
+        require_refund_org_scope(request, principal, session)
+    legacy.assert_not_called()
+    assert session.info[ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY] == frozenset({
+        ("ACCOUNT-1", "SHARED-UID")
+    })
