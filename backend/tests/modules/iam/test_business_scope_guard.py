@@ -41,6 +41,7 @@ def test_scope_sources_use_user_override_per_dimension() -> None:
     assert scopes["sku"] == frozenset({"SKU-01"})
     assert scopes["owner"] == frozenset({"OWNER-42"})
     assert scopes["product"] == frozenset()
+    assert set(scopes) == {"store", "owner", "sku", "product", "org_department"}
 
 
 @pytest.mark.parametrize(("dimension", "allowed", "denied"), [
