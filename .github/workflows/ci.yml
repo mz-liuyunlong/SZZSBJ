@@ -306,7 +306,7 @@ jobs:
         working-directory: backend
         run: |
           uv sync --frozen
-          uv run pytest -q -s tests/db/test_domestic_chain_postgresql.py tests/db/test_packing_pending_edit_postgresql.py tests/db/test_packing_passcode_redis.py tests/db/test_domestic_database_safety.py tests/modules/pmc_domestic/test_domestic_ods_adopt.py tests/db/test_alembic_scaffold.py --junitxml=domestic-chain-results.xml
+          uv run pytest -q -s tests/db/test_domestic_chain_postgresql.py tests/db/test_packing_pending_edit_postgresql.py tests/db/test_packing_passcode_redis.py tests/db/test_domestic_database_safety.py tests/modules/pmc_domestic/test_domestic_ods_adopt.py tests/db/test_alembic_scaffold.py tests/db/test_new_product_workflows_postgresql.py --junitxml=domestic-chain-results.xml
           uv run python -c "import xml.etree.ElementTree as E; r=E.parse('domestic-chain-results.xml'); assert r.findall('.//testcase') and not r.findall('.//skipped'), 'Domestic PostgreSQL acceptance must execute without skipped cases'"
 
   walmart-order-identity-postgresql:

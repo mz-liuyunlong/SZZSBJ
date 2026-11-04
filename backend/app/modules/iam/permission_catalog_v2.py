@@ -88,7 +88,8 @@ MODULES: tuple[ModuleDefinition, ...] = (
             _page("products", "product_management", "产品管理", 10),
             _page("products", "listing_management", "Listing管理", 20),
             _page("products", "claim_center", "认领中心", 30),
-            _page("products", "new_product_analysis", "新品分析", 40),
+            _page("products", "new_product_analysis", "新品表现", 40),
+            _page("products", "launch_tracking", "打品跟踪", 45),
             _page("products", "lifecycle", "产品生命周期", 50),
             _page("products", "grade", "产品等级", 60),
         ),
@@ -276,6 +277,11 @@ ACTIONS: tuple[ActionDefinition, ...] = (
         50,
         "high",
     ),
+    ActionDefinition("products_new_product_analysis", "score", "确认新品市场评分", 10),
+    ActionDefinition("products_new_product_analysis", "request-purchase", "提交新品采购申请", 20),
+    ActionDefinition("products_new_product_analysis", "approve", "审核新品评分与采购", 30, "high"),
+    ActionDefinition("products_new_product_analysis", "configure", "配置新品评分规则", 40, "high"),
+    ActionDefinition("products_launch_tracking", "review", "填写打品复盘与结论", 10),
     ActionDefinition("products_listing_management", "export", "导出Listing", 10),
     ActionDefinition("products_listing_management", "manage_tags", "管理标签", 20),
     ActionDefinition("products_listing_management", "archive", "归档Listing", 30, "high"),
@@ -331,6 +337,9 @@ ACTIONS: tuple[ActionDefinition, ...] = (
 )
 
 FIELDS: tuple[FieldDefinition, ...] = (
+    FieldDefinition(
+        "products_new_product_analysis", "unit-cost", "查看新品采购单价和预计采购金额", 10, "high"
+    ),
     FieldDefinition("products_product_management", "purchase_cost", "采购成本", 10, "high"),
     FieldDefinition("products_product_management", "logistics_cost", "物流费用", 20, "high"),
     FieldDefinition("sales_order_profit", "gross_profit", "毛利润", 10, "high"),
