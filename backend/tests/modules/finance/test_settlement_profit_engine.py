@@ -87,7 +87,7 @@ def test_reconcile_failure_blocks_close() -> None:
     assert r.reconcile.status == "ok"  # every settlement dollar is accounted for
     # an amount override makes the order level differ from the settlement
     adj = Adjustment(
-        "a1", key("SYN-O9"), "amount", {"column": "sales_amount_usd", "value_usd": "9"}, T0
+        "a1", key("SYN-O9"), "amount", {"column": "sales_amount_usd", "delta_usd": "4"}, T0
     )
     inp.adjustments.append(adj)
     r = calculate_store_month(inp)
@@ -206,6 +206,22 @@ def test_review_after_change_goes_back_to_first_review() -> None:
     inp.adjustments.append(Adjustment("a4", k, "note", {"text": "x"}, later))
     r = calculate_store_month(inp)
     assert next(o for o in r.order_lines if o.line_key == k).review_status == "adjusted"
+
+
+def test_revoked_adjustment_does_not_revive_an_older_review() -> None:
+    """§8.9: 撤销已终审订单调整回到待初审 — the old final pass no longer counts."""
+    inp = base_input()
+    k = key("SYN-O1")
+    inp.review_actions.append(ReviewAction(k, "final", "pass", T0))
+    revoked_at = datetime(2030, 2, 3, tzinfo=UTC)
+    inp.adjustment_changed_at[k] = revoked_at  # adjustment made, then revoked
+    r = calculate_store_month(inp)
+    line = next(o for o in r.order_lines if o.line_key == k)
+    assert line.reasons == [] and line.review_status == "pending"
+    # a review after the revoke counts again
+    inp.review_actions.append(ReviewAction(k, "first", "pass", datetime(2030, 2, 4, tzinfo=UTC)))
+    r = calculate_store_month(inp)
+    assert next(o for o in r.order_lines if o.line_key == k).review_status == "first_passed"
 
 
 # ------------------------------------------------------------------ inventory

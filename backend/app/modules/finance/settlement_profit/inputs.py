@@ -185,3 +185,5 @@ class StoreMonthInput:
     movements: list[FlowMovement] = field(default_factory=list)  # store's + manually assigned
     adjustments: list[Adjustment] = field(default_factory=list)
     review_actions: list[ReviewAction] = field(default_factory=list)
+    # line_key → latest acted_at / revoked_at of any adjustment, revoked ones included (§8.9)
+    adjustment_changed_at: dict[str, datetime] = field(default_factory=dict)

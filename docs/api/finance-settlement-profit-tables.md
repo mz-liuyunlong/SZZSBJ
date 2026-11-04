@@ -468,6 +468,28 @@ PR-3 迁移 `backend/alembic/versions/20261104_0074_fin_settle_calc.py` 只在�
 | `created_at` | `DATETIME` | 否 |
 | `updated_at` | `DATETIME` | 否 |
 
+### `manual_settlement_write_log`（PR-4，迁移 0075）
+
+结算利润每一次写请求一行，只追加、不改不删。用途两个：同一人同一接口同一 `Idempotency-Key` 24 小时内重复请求，直接返回 `response`；结账、反结账、纯利设置这类原地更新的写操作，前后值以这里为审计记录。不在上面 16 张表里，由 0075 单独建。
+
+| 列 | 类型 | 可空 |
+|---|---|---|
+| `id` | `CHAR(32)` | 否 |
+| `idempotency_key` | `VARCHAR(200)` | 否 |
+| `actor_id` | `VARCHAR(255)` | 否 |
+| `actor_role` | `VARCHAR(64)` | 否 |
+| `endpoint` | `VARCHAR(128)` | 否 |
+| `request_hash` | `VARCHAR(64)` | 否 |
+| `request_id` | `VARCHAR(128)` | 否 |
+| `acted_at` | `DATETIME` | 否 |
+| `reason` | `TEXT` | 是 |
+| `before` | `JSONB` | 是 |
+| `after` | `JSONB` | 是 |
+| `response` | `JSONB` | 否 |
+| `status_code` | `INTEGER` | 否 |
+
+唯一键：`uq_manual_settlement_write_log_idem (actor_id, endpoint, idempotency_key)`；CHECK `idempotency_key <> ''`；索引 `ix_manual_settlement_write_log_acted_at (acted_at)`。
+
 ### `cfg_net_profit_allocation`
 
 | 列 | 类型 | 可空 |
@@ -484,5 +506,7 @@ PR-3 迁移 `backend/alembic/versions/20261104_0074_fin_settle_calc.py` 只在�
 | `updated_at` | `DATETIME` | 否 |
 
 ## 回滚
+
+0075 回滚：写入日志有记录，或者还有角色绑定了结算利润的权限，就直接拒绝；否则把 9 个权限行置为停用（不删除），再删日志表。
 
 `alembic downgrade 20261102_0071_skill_lib` 删除以上 16 张表。上线后如 manual_ 表已有数据，回滚前先导出备份（PRP §13）。

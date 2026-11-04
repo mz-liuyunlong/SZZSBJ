@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from .inputs import (
@@ -187,13 +187,35 @@ def _latest(rows: Iterable[Adjustment | ReviewAction]) -> dict[str, Adjustment |
     return out
 
 
+def current_review_actions(
+    actions: Iterable[ReviewAction], last_change_at: Mapping[str, datetime]
+) -> list[ReviewAction]:
+    """Drop reviews made before the line's last adjustment change (§8.9).
+
+    ``last_change_at``: per line_key the latest ``acted_at`` / ``revoked_at`` of any of its
+    adjustments, revoked ones included, so revoking an adjustment on a final-passed line
+    sends it back to first review instead of reviving the old review.
+    """
+    return [
+        a
+        for a in actions
+        if a.line_key not in last_change_at or a.acted_at > last_change_at[a.line_key]
+    ]
+
+
 def review_status(
     line_key: str,
     reasons: list[str],
     adjustments: Mapping[str, Adjustment],
     reviews: Mapping[str, ReviewAction],
+    *,
+    revised: bool = False,
 ) -> str:
-    """§8.9: a change after a review sends the line back to first review."""
+    """§8.9: a change after a review sends the line back to first review.
+
+    ``revised``: the line had an adjustment that was revoked; with no active adjustment and
+    no later review it waits for first review (pending) instead of passing automatically.
+    """
     adj = adjustments.get(line_key)
     rev = reviews.get(line_key)
     if rev is not None and (adj is None or adj.acted_at <= rev.acted_at):
@@ -202,7 +224,7 @@ def review_status(
         return "final_passed" if rev.stage == "final" else "first_passed"
     if adj is not None:
         return "adjusted"
-    return "pending" if reasons else "auto"
+    return "pending" if reasons or revised else "auto"
 
 
 def _to_decimal(value: object) -> Decimal | None:
@@ -226,9 +248,8 @@ def calculate_store_month(
     for a in inp.adjustments:
         adjustments_by_key[a.line_key].append(a)
     latest_adj = {k: v for k, v in _latest(inp.adjustments).items() if isinstance(v, Adjustment)}
-    latest_rev = {
-        k: v for k, v in _latest(inp.review_actions).items() if isinstance(v, ReviewAction)
-    }
+    reviews = current_review_actions(inp.review_actions, inp.adjustment_changed_at)
+    latest_rev = {k: v for k, v in _latest(reviews).items() if isinstance(v, ReviewAction)}
     unassigned: dict[str, UnassignedResult] = {}
 
     def to_unassigned(
@@ -481,10 +502,10 @@ def calculate_store_month(
                 if "head_cny" in adj.payload:
                     row.head_cost_cny = _to_decimal(adj.payload["head_cny"])
             elif adj.kind == "amount":
+                # PRP §7: amount adjustments carry a USD delta on one order-level column
                 column = str(adj.payload.get("column"))
-                value = _to_decimal(adj.payload.get("value_usd"))
-                if column in ORDER_COLUMN.values() and value is not None:
-                    delta = value - row.amounts.get(column)
+                delta = _to_decimal(adj.payload.get("delta_usd"))
+                if column in ORDER_COLUMN.values() and delta is not None:
                     row.amounts.add(column, delta)
                     item(row.item_id).amounts.add(column, delta)
         reasons = []
@@ -545,7 +566,13 @@ def calculate_store_month(
 
     # ---- review status for order rows
     for row in orders.values():
-        row.review_status = review_status(row.line_key, row.reasons, latest_adj, latest_rev)
+        row.review_status = review_status(
+            row.line_key,
+            row.reasons,
+            latest_adj,
+            latest_rev,
+            revised=row.line_key in inp.adjustment_changed_at,
+        )
 
     # ---- reconcile (§8.8)
     pending = [u for u in unassigned.values() if u.status == "pending"]
