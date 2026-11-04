@@ -61,6 +61,7 @@ def listings(
         candidate_status=query.candidate_status,
         page=query.page,
         page_size=query.page_size,
+        financial_sort=has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION),
     )
     return success_response(request, data=_safe_listing(data, principal), meta=None)
 
@@ -231,25 +232,39 @@ def listing_detail(
 
 @router.get("/data-readiness", response_model=SuccessEnvelope[dict[str, Any], None])
 def data_readiness(
-    request: Request, session: db_session, _: reader, accounts: scope, store_id: str = ""
+    request: Request,
+    session: db_session,
+    _: reader,
+    accounts: scope,
+    store_id: str = "",
 ):
-    rows = ClearanceService(session).list_listings(
-        accounts, store_id=store_id, page=1, page_size=100000000
+    # One bounded PostgreSQL aggregate, not full Listing enumeration.
+    report = ClearanceService(session).repo.readiness_report(accounts, store_id=store_id)
+    return success_response(request, data=report, meta=None)
+
+
+@router.get("/daily-evaluation", response_model=SuccessEnvelope[dict[str, Any], None])
+def daily_evaluation(
+    request: Request,
+    session: db_session,
+    _: reader,
+    accounts: scope,
+    store_id: str = "",
+):
+    # Only counts from authorized accounts, never global run statistics.
+    report = ClearanceService(session).repo.readiness_report(accounts, store_id=store_id)
+    return success_response(
+        request,
+        data={
+            "timezone": "America/Los_Angeles",
+            "scheduled_local_time": "00:00",
+            "as_of_policy": "previous_completed_LA_day",
+            "runs_automatically": True,
+            "evaluation_status": report["evaluation_status"],
+            "run_date_la": report["run_date_la"],
+            "as_of_date_la": report["as_of_date_la"],
+            "evaluated_listings": report["evaluated_listings"],
+            "not_evaluated_listings": report["not_evaluated_listings"],
+        },
+        meta=None,
     )
-    result = {
-        "total": rows["total"],
-        "missing_sales_window": 0,
-        "missing_wfs_stock": 0,
-        "missing_profit_cost": 0,
-        "missing_listing_start": 0,
-        "history_21day_eligible": 0,
-    }
-    for item in rows["items"]:
-        eval_ = item["evaluation"]
-        warnings = eval_["warnings"]
-        result["missing_sales_window"] += int("SALES_WINDOW_UNVERIFIED" in warnings)
-        result["missing_wfs_stock"] += int("WFS_STOCK_UNAVAILABLE_OR_STALE" in warnings)
-        result["missing_profit_cost"] += int("PROFIT_COST_INCOMPLETE" in warnings)
-        result["missing_listing_start"] += int("LISTING_START_UNKNOWN" in warnings)
-        result["history_21day_eligible"] += int(eval_["positive_stock_days_30d"] >= 21)
-    return success_response(request, data=result, meta=None)
