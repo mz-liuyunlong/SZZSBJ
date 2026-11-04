@@ -143,3 +143,25 @@ def test_rules_reject_invalid_threshold_order():
         validate_rules({"medium_coverage_days": 190})
     with pytest.raises(ValueError):
         validate_rules({"unknown_field": 1})
+
+
+def test_fractional_business_thresholds_are_configurable() -> None:
+    rules = validate_rules({"margin_below_percent": 7.5, "rating_below": 4})
+    assert rules["margin_below_percent"] == 7.5
+    assert rules["rating_below"] == 4
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"zero_sales_days": 60},
+        {"inventory_max_age_hours": 24},
+        {"holding_days": 30.5},
+        {"margin_below_percent": True},
+        {"high_coverage_days": -1},
+        {"margin_below_percent": float("nan")},
+    ],
+)
+def test_rules_reject_silent_or_invalid_overrides(change: dict) -> None:
+    with pytest.raises(ValueError):
+        validate_rules(change)
