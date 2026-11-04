@@ -35,8 +35,10 @@ production.
 6. Only an allowlist of contact user/department/scope events enters the inbox.
 7. Verified user deletion/freeze/resignation/deactivation events immediately
    revoke active `app_sessions` for matching `app_users.feishu_open_id`,
-   transactionally with inbox insertion. This **does not delete the account**
-   and does not assign or modify a role.
+   transactionally with inbox insertion. An event-level `revoke_session` marker
+   also blocks new logins and existing sessions until a later accepted directory
+   snapshot supersedes it. This **does not delete the account** and does not
+   assign or modify a role.
 8. Successful non-offboarding callbacks never alter data authorization directly.
    They trigger a fresh directory reconciliation through the worker.
 
