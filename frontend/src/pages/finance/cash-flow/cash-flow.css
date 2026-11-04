@@ -9,7 +9,7 @@
 .fin-cash-flow__search.report-table-connected-search { width: 460px; max-width: 460px; flex: 0 0 460px; }
 .fin-cash-flow__search.report-table-connected-search > .ant-select { width: 116px; flex: 0 0 116px; }
 
-/* 日记账：8 张统计卡（含「异常」）；异常段落与「找不到对应流水」提示条 */
+/* 日记账：5 张统计卡；异常段落与找不到对应流水的提示条 */
 .fin-cash-flow__alerts { display: flex; flex-direction: column; gap: var(--ant-margin-sm, 12px); }
 .fin-cash-flow__alert .fin-cash-flow__alert-msg { margin: var(--ant-margin-xxs, 4px) 0; }
 .fin-cash-flow__orphans { margin-bottom: var(--ant-margin-sm, 12px); }
