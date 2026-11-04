@@ -7,10 +7,13 @@ No historical clearance mock tasks are migrated. Existing approval tables stay i
 """
 
 from __future__ import annotations
+
 from collections.abc import Sequence
-from alembic import op
+
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision: str = "20261104_0072_clearance_v1"
 down_revision: str | Sequence[str] | None = "20261102_0071_skill_lib"
@@ -65,7 +68,8 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
         ),
         sa.CheckConstraint(
-            "target_qty > 0 and sold_qty >= 0 and removed_qty >= 0 and disposed_qty >= 0 and sold_qty + removed_qty + disposed_qty <= target_qty",
+            "target_qty > 0 and sold_qty >= 0 and removed_qty >= 0 and disposed_qty >= 0 "
+            "and sold_qty + removed_qty + disposed_qty <= target_qty",
             name="ck_clearance_qty",
         ),
         sa.CheckConstraint("version > 0", name="ck_clearance_version"),
@@ -145,7 +149,9 @@ def upgrade() -> None:
       on conflict do nothing""")
     )
     op.execute(
-        sa.text("""insert into app_approval_rules(id,approval_type,title,required_steps,min_reason_length,due_hours,allows_bulk,is_active)
+        sa.text("""insert into app_approval_rules(
+          id,approval_type,title,required_steps,min_reason_length,
+          due_hours,allows_bulk,is_active)
       values (gen_random_uuid(),'clearance_request','清货审批',1,5,48,false,true)
       on conflict(approval_type) do nothing""")
     )
