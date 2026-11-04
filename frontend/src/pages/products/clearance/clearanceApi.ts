@@ -50,6 +50,7 @@ export interface ClearanceEvaluation {
   protections: string[];
   warnings: string[];
   sales_complete: boolean;
+  source_sales_coverage_days_30d?: number;
   cost_complete: boolean;
   rule_version: string;
   as_of_date: string;
