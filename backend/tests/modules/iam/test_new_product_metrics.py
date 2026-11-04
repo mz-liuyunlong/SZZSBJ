@@ -38,6 +38,18 @@ class _Session:
     def execute(self, statement: Any, params: dict[str, Any]) -> _Result:
         sql = str(statement)
         self.queries.append(sql)
+        if "AS first_order_date" in sql:
+            return _Result(
+                {
+                    "first_order_date": date(2026, 8, 3),
+                    "sales_7d": 21,
+                    "sales_10d": 30,
+                    "sales_20d": 60,
+                    "coverage_7d": 7,
+                    "coverage_10d": 10,
+                    "coverage_20d": 20,
+                }
+            )
         if "FROM mart_order_profit_sku_day" in sql:
             days = (params["end"] - params["start"]).days
             return _Result(
@@ -74,18 +86,6 @@ class _Session:
                         if self.ad_days is not None
                         else (params["end"] - params["start"]).days
                     ),
-                }
-            )
-        if "AS first_order_date" in sql:
-            return _Result(
-                {
-                    "first_order_date": date(2026, 8, 3),
-                    "sales_7d": 21,
-                    "sales_10d": 30,
-                    "sales_20d": 60,
-                    "coverage_7d": 7,
-                    "coverage_10d": 10,
-                    "coverage_20d": 20,
                 }
             )
         if "FROM mart_listing_management_current" in sql:
