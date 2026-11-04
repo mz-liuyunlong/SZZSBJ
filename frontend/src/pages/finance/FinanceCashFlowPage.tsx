@@ -2,7 +2,7 @@
  * 财务 · 资金流水（本地预览阶段 A，只读）。左侧菜单「资金流水」：账户总览（按月）/ 日记账（备货资金暂从菜单隐藏，代码保留）。
  * 2026-11-04 Rocky：去掉「异常」页，资金异常全部并入日记账显示，不分等级（所有异常都要处理）。
  * 视觉与 PMC 采购看板一致：page card → 标题行 → 筛选卡（ReportFacetSelect / CommittedSearch / 重置）→ 统计卡（ManagementStatCards，点击即筛选）→ ProTable。
- * 数据来自 localFinData（Demo 快照）；正式接口（PR-E）上线后替换；所有写操作置灰。
+ * 日记账：开发环境读 localFinData（Demo 快照，写操作置灰）；正式构建读 /api/finance/cashflow（见 cash-flow/journalApi.ts）。账户总览、备货资金仍是 Demo。
  */
 import { CheckOutlined, CloseOutlined, SettingOutlined } from "@ant-design/icons";
 import { Alert, AutoComplete, Button, Descriptions, Divider, Drawer, Image, Input, Modal, Select, Space, Table, Tag, Tooltip, Typography, message } from "antd";
@@ -19,6 +19,7 @@ import type { NavigationPage } from "@/config/navigation";
 import FinanceBoardFrame, { FinMoney, LOCKED_TIP } from "@/pages/finance/FinanceBoardFrame";
 import CashStockBoard, { CashStockHelp } from "@/pages/finance/cash-flow/CashStockBoard";
 import ImportDrawer from "@/pages/finance/cash-flow/ImportDrawer";
+import { asLive, cashErrorText, isCashLive, postLineEvent, useLiveJournal, useRefreshJournal, type LineEventKind, type LiveCashLine } from "@/pages/finance/cash-flow/journalApi";
 import { ALERT_GUIDE, alertShort, fsFileUrl, toCashAlerts, useApprovals, useStock, type CashAlert, type FsDetail, type FsRecord } from "@/pages/finance/cash-flow/data";
 import "@/pages/finance/cash-flow/cash-flow.css";
 import {
@@ -85,7 +86,11 @@ const REVIEW_TAG: Record<ReviewStage, { color: string; text: string }> = {
   rej2: { color: "volcano", text: "终审驳回 · 待初审" },
   ok2: { color: "green", text: "已终审" },
 };
-const baseReview = (line: CashLine): ReviewMark => ({ stage: line.ok2 ? "ok2" : line.ok ? "ok1" : "todo" });
+const baseReview = (line: CashLine): ReviewMark => {
+  const live = asLive(line);
+  if (live) return { stage: live.stage as ReviewStage, reason: live.stageReason, note: live.reviewNote };
+  return { stage: line.ok2 ? "ok2" : line.ok ? "ok1" : "todo" };
+};
 const isFirstPending = (stage: ReviewStage) => stage === "todo" || stage === "rej1" || stage === "rej2";
 const REVIEW_STAGE_OPTIONS = (Object.keys(REVIEW_TAG) as ReviewStage[]).map((stage) => ({ value: stage, label: REVIEW_TAG[stage].text }));
 const PREVIEW_ACTION_TIP = "本地预览：审核只记在本页，刷新即还原，不写库";
@@ -349,9 +354,9 @@ function AlertSection({ alerts }: { alerts: CashAlert[] }) {
 
 /* ======================================================= 流水详情抽屉
  * 顺序（Rocky 11-03）：流水字段 → 关联审批单（比对 + 字段 + 凭证）→ 底部终审按钮。终审一笔一笔点；终审不通过必填原因，驳回到待初审。 */
-function LineDrawer({ line, review, data, details, approvalsOf, alerts, onClose, onOpenApproval, onPass, onReject }: {
+function LineDrawer({ line, review, data, details, approvalsOf, alerts, live, onClose, onOpenApproval, onPass, onReject, onExclude, onUnexclude }: {
   line?: CashLine; review?: ReviewMark; data: CashSnapshot; alerts: CashAlert[]; details: Record<string, FsDetail>; approvalsOf: (line: CashLine) => ApprovalView[];
-  onClose: () => void; onOpenApproval: (item: FeishuApproval) => void; onPass: (line: CashLine) => void; onReject: (line: CashLine) => void;
+  live?: boolean; onClose: () => void; onOpenApproval: (item: FeishuApproval) => void; onPass: (line: CashLine) => void; onReject: (line: CashLine) => void; onExclude?: (line: LiveCashLine) => void; onUnexclude?: (line: LiveCashLine) => void;
 }) {
   if (!line) return null;
   const account = data.accounts.find((item) => item.id === line.acct);
@@ -361,11 +366,12 @@ function LineDrawer({ line, review, data, details, approvalsOf, alerts, onClose,
   const views = approvalsOf(line);
   const finalTurn = mark.stage === "ok1";
   const turnTip = finalTurn ? "" : mark.stage === "ok2" ? "已终审" : "还没初审通过，轮不到终审";
+  const liveLine = live ? asLive(line) : undefined;
   return (
     <Drawer open width={720} rootClassName="fin-cash-flow__drawer" onClose={onClose} title={`流水 ${line.date} · ${accountLabel(account) || line.acct}`}
-      extra={<Tooltip title={LOCKED_TIP}><Space><Button disabled>拆分</Button><Button danger disabled>剔除</Button></Space></Tooltip>}
+      extra={<Space><Tooltip title={live ? "拆分这次不做" : LOCKED_TIP}><Button disabled>拆分</Button></Tooltip>{liveLine ? (liveLine.excludeReason ? <Button danger onClick={() => onUnexclude?.(liveLine)}>撤销剔除</Button> : <Button danger onClick={() => onExclude?.(liveLine)}>剔除</Button>) : <Tooltip title={LOCKED_TIP}><Button danger disabled>剔除</Button></Tooltip>}</Space>}
       footer={<div className="fin-cash-flow__footer">
-        <Tooltip title={turnTip || PREVIEW_ACTION_TIP}><Button type="primary" icon={<CheckOutlined aria-hidden="true" />} disabled={!finalTurn} onClick={() => onPass(line)}>终审通过</Button></Tooltip>
+        <Tooltip title={turnTip || (live ? "" : PREVIEW_ACTION_TIP)}><Button type="primary" icon={<CheckOutlined aria-hidden="true" />} disabled={!finalTurn} onClick={() => onPass(line)}>终审通过</Button></Tooltip>
         <Tooltip title={turnTip || "必填原因，驳回到待初审"}><Button danger icon={<CloseOutlined aria-hidden="true" />} disabled={!finalTurn} onClick={() => onReject(line)}>终审不通过</Button></Tooltip>
       </div>}>
       <Descriptions size="small" column={1} bordered>
@@ -380,6 +386,7 @@ function LineDrawer({ line, review, data, details, approvalsOf, alerts, onClose,
         <Descriptions.Item label="类别">{line.cat ? `${line.cat} ${cat?.big ?? ""}·${cat?.name ?? ""}` : <Tag color="red" bordered={false}>待分类</Tag>}<Typography.Text type="secondary">（来源：{line.cat_src || "—"}）</Typography.Text></Descriptions.Item>
         <Descriptions.Item label="配对">{line.pair || EMPTY}</Descriptions.Item>
         <Descriptions.Item label="标记">{line.flags.length ? line.flags.map((flag) => <Tag key={flag} bordered={false}>{flag}</Tag>) : EMPTY}</Descriptions.Item>
+        {liveLine?.excludeReason && <Descriptions.Item label="剔除原因">{liveLine.excludeReason}</Descriptions.Item>}
         <Descriptions.Item label="审核"><Tag bordered={false} color={REVIEW_TAG[mark.stage].color}>{REVIEW_TAG[mark.stage].text}</Tag>{mark.reason && <Typography.Text type="danger">原因：{mark.reason}</Typography.Text>}</Descriptions.Item>
       </Descriptions>
       <AlertSection alerts={alerts} />
@@ -396,7 +403,7 @@ function LineDrawer({ line, review, data, details, approvalsOf, alerts, onClose,
           {views.map((view) => <ApprovalPanel key={view.serial} view={view} onOpen={approvals.get(view.serial) ? () => onOpenApproval(approvals.get(view.serial) as FeishuApproval) : undefined} />)}
         </div>
       </>}
-      <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>类别、关联审批单在表格行上直接改；初审在表格右侧 ✓ ✗，终审可以在这里点。审核后再改类别 / 关联审批单 / 拆分 / 剔除会自动退回待初审。{Object.keys(details).length ? "" : "（审批单凭证数据没读到：先在 Mac 上运行 local_export/cash-flow.py）"}</Typography.Paragraph>
+      <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>类别、关联审批单在表格行上直接改；初审在表格右侧 ✓ ✗，终审可以在这里点。审核后再改类别 / 关联审批单 / {live ? "" : "拆分 / "}剔除会自动退回待初审。{live ? "审批单内容和凭证要等飞书同步上线后才有。" : Object.keys(details).length ? "" : "（审批单凭证数据没读到：先在 Mac 上运行 local_export/cash-flow.py）"}</Typography.Paragraph>
     </Drawer>
   );
 }
@@ -467,7 +474,8 @@ function AccountsBoard({ data }: { data: CashSnapshot }) {
 }
 
 /* ======================================================= 日记账 */
-function JournalBoard({ data }: { data: CashSnapshot }) {
+function JournalBoard({ data, live = false }: { data: CashSnapshot; live?: boolean }) {
+  const refresh = useRefreshJournal();
   const handoff = useMemo(() => readHandoff(), []);
   const [accounts, setAccounts] = useState<string[]>(handoff.account ? [handoff.account] : []);
   const [month, setMonth] = useState<string>(handoff.month ?? "");
@@ -500,19 +508,41 @@ function JournalBoard({ data }: { data: CashSnapshot }) {
   const [rejectReason, setRejectReason] = useState("");
   const [noting, setNoting] = useState<CashLine>();
   const [noteText, setNoteText] = useState("");
-  const approvalsFile = useApprovals();
+  const [excluding, setExcluding] = useState<LiveCashLine>();
+  const [excludeAmount, setExcludeAmount] = useState("");
+  const [excludeReason, setExcludeReason] = useState("");
+  const approvalsFile = useApprovals(!live);
   const details = useMemo(() => approvalsFile.data?.items ?? {}, [approvalsFile.data]);
   const [columnKeys, setColumnKeys] = useState<string[]>(readJournalColumns);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [messageApi, messageHolder] = message.useMessage();
   const reviewOf = (line: CashLine) => reviews[line.id] ?? baseReview(line);
+  /* 接口模式重读后，详情要用最新的那一行，否则带着旧版本号去写会被拒。 */
+  const freshLine = lineOpen ? data.lines.find((line) => line.id === lineOpen.id) ?? lineOpen : undefined;
+  /* 接口模式：写一条事件，成功或失败都重读（失败多半是别人刚改过）。 */
+  const send = async (line: CashLine, kind: LineEventKind, fields: { payload?: Record<string, unknown>; reason?: string } = {}, done?: string) => {
+    const target = asLive(line);
+    if (!target) return;
+    try {
+      const result = await postLineEvent(target, kind, fields);
+      if (done) void messageApi.success(done);
+      if (result.auto_reset) void messageApi.info("这笔已审过，改动后自动退回待初审");
+    } catch (error) {
+      void messageApi.error(cashErrorText(error));
+    }
+    void refresh();
+  };
   /* 初审：审批金额和流水金额有差额 → 必须先写差额说明（不限差额大小）；终审直接通过。 */
   const pass = (line: CashLine, level: 1 | 2, note?: string) => {
     const diff = amountDiff(line, approvalsOf(line));
     if (level === 1 && diff != null && diff !== 0 && note === undefined) {
       setNoteText(reviews[line.id]?.note ?? "");
       setNoting(line);
+      return;
+    }
+    if (live) {
+      void send(line, level === 1 ? "review1_pass" : "review2_pass", { payload: note ? { note } : {} }, `${level === 1 ? "初审" : "终审"}通过`);
       return;
     }
     setReviews((current) => ({ ...current, [line.id]: { stage: level === 1 ? "ok1" : "ok2", note: note ?? current[line.id]?.note } }));
@@ -526,10 +556,23 @@ function JournalBoard({ data }: { data: CashSnapshot }) {
   };
   const confirmReject = () => {
     if (!rejecting || !rejectReason.trim()) return;
+    if (live) {
+      void send(rejecting.line, rejecting.level === 1 ? "review1_reject" : "review2_reject", { reason: rejectReason.trim() }, rejecting.level === 1 ? "初审不通过，已记原因" : "终审不通过，已驳回到待初审");
+      setRejecting(undefined);
+      setRejectReason("");
+      return;
+    }
     setReviews((current) => ({ ...current, [rejecting.line.id]: { stage: rejecting.level === 1 ? "rej1" : "rej2", reason: rejectReason.trim(), note: current[rejecting.line.id]?.note } }));
     void messageApi.warning(rejecting.level === 1 ? "初审不通过，已记原因" : "终审不通过，已驳回到待初审");
     setRejecting(undefined);
     setRejectReason("");
+  };
+  const confirmExclude = () => {
+    if (!excluding || !excludeReason.trim()) return;
+    void send(excluding, "exclude", { reason: excludeReason.trim(), payload: excludeAmount.trim() ? { amount: excludeAmount.trim() } : {} }, "已剔除");
+    setExcluding(undefined);
+    setExcludeAmount("");
+    setExcludeReason("");
   };
   const applyColumns = (keys: string[]) => {
     setColumnKeys(keys);
@@ -598,7 +641,7 @@ function JournalBoard({ data }: { data: CashSnapshot }) {
     { key: "alert", title: "异常", subtitle: "有异常的流水 + 找不到流水的异常，都要处理", value: counts.alert + cardOrphans, tone: counts.alert + cardOrphans ? "danger" : "normal", icon: icon("!") },
     { key: "excluded", title: "已剔除", subtitle: "X01 非本公司", value: counts.excluded, tone: "normal", icon: icon("剔") },
   ];
-  const catOptions = useMemo(() => data.cats.map((cat) => ({ value: cat.code, label: `${cat.code} ${cat.big}·${cat.name}` })), [data]);
+  const catOptions = useMemo(() => data.cats.filter((cat) => !live || cat.code !== "X01").map((cat) => ({ value: cat.code, label: `${cat.code} ${cat.big}·${cat.name}` })), [data, live]);
   const openApprovalOptions = useMemo(() => feishuAll.filter((item) => isOpenApproval(item, data)).sort((a, b) => b.serial.localeCompare(a.serial))
     .map((item) => ({ value: item.serial, label: `${item.serial} ${item.masked ? "****" : fmtMoney(item.amount, item.cur)} ${(item.payee || "").slice(0, 10)} ${(item.masked ? "" : item.reason || "").slice(0, 16)}` })), [data, feishuAll]);
   const columnDefs: Record<string, ProColumns<CashLine>[]> = {
@@ -612,13 +655,13 @@ function JournalBoard({ data }: { data: CashSnapshot }) {
     bal: [{ key: "bal", title: "余额", dataIndex: "bal", width: 140, align: "right", render: (_, row) => <FinMoney value={row.bal ?? null} cur={row.cur} masked={row.masked} /> }],
     cat: [{ key: "cat", title: "类别", dataIndex: "cat", width: 230, tooltip: "直接在行上选类别；人工改过的优先于审批单与规则", render: (_, row) => (row.parts ? <Tag color="geekblue" bordered={false}>拆分 {row.parts.length} 行</Tag> : (
       <span className="finance-board__stack">
-        <Tooltip title={LOCKED_TIP}><Select size="small" disabled style={{ width: 200 }} value={row.cat || undefined} placeholder={<Typography.Text type="danger">待分类</Typography.Text>} options={catOptions} /></Tooltip>
+        <Tooltip title={live ? (row.cat === "X01" ? "已整笔剔除，要改类别先撤销剔除" : "") : LOCKED_TIP}><Select size="small" disabled={!live || row.cat === "X01"} style={{ width: 200 }} value={row.cat || undefined} placeholder={<Typography.Text type="danger">待分类</Typography.Text>} options={live && row.cat === "X01" ? data.cats.map((cat) => ({ value: cat.code, label: `${cat.code} ${cat.big}·${cat.name}` })) : catOptions} allowClear={live} onChange={(value?: string) => void send(row, "set_category", { payload: { category_code: value ?? null } })} /></Tooltip>
         <span className="finance-board__sub">来源：{row.cat_src || "—"}</span>
       </span>)) }],
     refs: [{ key: "refs", title: "审批单", dataIndex: "refs", width: 230, tooltip: "这笔付款对应哪张飞书审批单。自动：备注里有单号直接关联；金额 + 收款人 + 45 天内唯一候选自动关联。对不上的在这里输入或选未付审批单", render: (_, row) => (
       <span className="finance-board__stack">
-        {row.refs.length > 0 && <Space size={4} wrap>{row.refs.map((ref) => { const item = approvals.get(ref); return <Tooltip key={ref} title={item ? `${item.kind} · ${item.state} · 点击看审批单` : "飞书里没找到"}><Tag bordered={false} className="finance-board__ref" color={item ? STATE_COLOR[item.state] ?? "blue" : "red"} onClick={() => item && setApprovalOpen(item)}>{ref}</Tag></Tooltip>; })}</Space>}
-        <Tooltip title={LOCKED_TIP}><AutoComplete size="small" disabled style={{ width: 200 }} placeholder="关联审批单（输入或选未付单）" options={openApprovalOptions} /></Tooltip>
+        {row.refs.length > 0 && <Space size={4} wrap>{row.refs.map((ref) => { const item = approvals.get(ref); return <Tooltip key={ref} title={item ? `${item.kind} · ${item.state} · 点击看审批单` : "飞书里没找到"}><Tag bordered={false} className="finance-board__ref" color={item ? STATE_COLOR[item.state] ?? "blue" : "red"} closable={live} onClose={(event) => { event.preventDefault(); void send(row, "detach_ref", { payload: { ref } }); }} onClick={() => item && setApprovalOpen(item)}>{ref}</Tag></Tooltip>; })}</Space>}
+        {live ? <Input size="small" style={{ width: 200 }} placeholder="输入 12 位审批单号，回车" onPressEnter={(event) => { const input = event.currentTarget; const ref = input.value.trim(); if (!/^\d{12}$/.test(ref)) { void messageApi.warning("审批单号是 12 位数字"); return; } input.value = ""; void send(row, "attach_ref", { payload: { ref } }); }} /> : <Tooltip title={LOCKED_TIP}><AutoComplete size="small" disabled style={{ width: 200 }} placeholder="关联审批单（输入或选未付单）" options={openApprovalOptions} /></Tooltip>}
       </span>) }],
     alert: [{ key: "alert", title: "异常", width: 150, tooltip: "这笔流水上待处理的异常（灰色是数据提示，不算异常）；点详情看说明和处理方法", render: (_, row) => {
       const list = alertsOf(row);
@@ -657,6 +700,7 @@ function JournalBoard({ data }: { data: CashSnapshot }) {
   return (
     <FinanceBoardFrame
       title="日记账"
+      preview={!live}
       subtitle="按银行明细顺序；流水 id 后 6 位是内容指纹，重复导入自动去重；类别来源：人工 > 审批单 > 规则"
       toolbar={<>
         <ReportFacetSelect mode="multiple" ariaLabel="账户" placeholder="账户" unit="个" value={accounts} options={data.accounts.map((item) => ({ value: item.id, label: accountLabel(item), count: data.lines.filter((line) => line.acct === item.id).length }))} onChange={(value) => setAccounts((value as string[] | undefined) ?? [])} />
@@ -691,10 +735,17 @@ function JournalBoard({ data }: { data: CashSnapshot }) {
         {noting && <Typography.Paragraph>审批单金额和这笔流水对不上：<Typography.Text type="danger">差额 {fmtMoney(amountDiff(noting, approvalsOf(noting)), noting.cur)}</Typography.Text>（审批单合计 − 流水金额）。写清楚原因，终审会看到。</Typography.Paragraph>}
         <Input.TextArea autoFocus rows={3} placeholder="必填：为什么有差额（例如：手续费由我方承担、分两笔付、汇率差……）" value={noteText} onChange={(event) => setNoteText(event.target.value)} />
       </Modal>
-      <LineDrawer line={lineOpen} review={lineOpen ? reviewOf(lineOpen) : undefined} data={data} details={details} approvalsOf={approvalsOf} alerts={lineOpen ? alertsOf(lineOpen) : []} onClose={() => setLineOpen(undefined)} onOpenApproval={setApprovalOpen}
-        onPass={(line) => pass(line, 2)} onReject={(line) => setRejecting({ line, level: 2 })} />
+      <Modal open={Boolean(excluding)} title="剔除这笔流水" okText="确定剔除" okButtonProps={{ danger: true, disabled: !excludeReason.trim() }} cancelText="取消" onOk={confirmExclude} onCancel={() => { setExcluding(undefined); setExcludeAmount(""); setExcludeReason(""); }} destroyOnHidden>
+        {excluding && <Typography.Paragraph type="secondary">{excluding.date} · {accountMap.get(excluding.acct)?.name ?? excluding.acct} · {fmtMoney(excluding.amt, excluding.cur)}。剔除只是不算本公司收支，不改银行余额。</Typography.Paragraph>}
+        <Space direction="vertical" size={8} style={{ width: "100%" }}>
+          <Input aria-label="剔除金额" placeholder="剔除金额（原币）；不填就是整笔" value={excludeAmount} onChange={(event) => setExcludeAmount(event.target.value)} />
+          <Input.TextArea rows={3} maxLength={200} showCount placeholder="必填：为什么剔除" value={excludeReason} onChange={(event) => setExcludeReason(event.target.value)} />
+        </Space>
+      </Modal>
+      <LineDrawer line={freshLine} review={freshLine ? reviewOf(freshLine) : undefined} data={data} details={details} approvalsOf={approvalsOf} alerts={freshLine ? alertsOf(freshLine) : []} live={live} onClose={() => setLineOpen(undefined)} onOpenApproval={setApprovalOpen}
+        onPass={(line) => pass(line, 2)} onReject={(line) => setRejecting({ line, level: 2 })} onExclude={setExcluding} onUnexclude={(line) => void send(line, "unexclude", {}, "已撤销剔除")} />
       <ApprovalDrawer item={approvalOpen} data={data} details={details} onClose={() => setApprovalOpen(undefined)} />
-      <ImportDrawer open={importOpen} onClose={() => setImportOpen(false)} />
+      <ImportDrawer open={importOpen} live={live} onClose={() => setImportOpen(false)} />
     </FinanceBoardFrame>
   );
 }
@@ -702,20 +753,24 @@ function JournalBoard({ data }: { data: CashSnapshot }) {
 /** 资金流水下的左侧菜单页（2026-11-02 Rocky：做成资金流水的下一级菜单，UI 与正式系统一致；11-04 去掉「异常」页）。 */
 function FinanceCashFlowPage({ page, view }: { page: NavigationPage; view: CashFlowView }) {
   const snapshot = useCashSnapshot();
-  const data = snapshot.data;
+  const liveJournal = view === "journal" && isCashLive;
+  const liveQuery = useLiveJournal(liveJournal);
+  const data = liveJournal ? liveQuery.data?.snapshot : snapshot.data;
+  const pending = liveJournal ? liveQuery.isPending : snapshot.isPending;
+  const failure = liveJournal ? liveQuery.error : snapshot.error;
   const fallbackTitle = { accounts: "账户总览（按月）", journal: "日记账", stock: "备货资金" }[view];
   const stock = useStock(view === "stock");
   return (
     <PageShell page={page} headerActions={view === "stock" ? <CashStockHelp data={stock.data} /> : undefined}>
       {view === "stock" ? <CashStockBoard /> : !data ? (
-        <FinanceBoardFrame title={fallbackTitle} loading={snapshot.isPending}>
+        <FinanceBoardFrame title={fallbackTitle} loading={pending} preview={!liveJournal}>
           <EmptyState
-            title={snapshot.error ? "本地预览数据未就绪" : "加载中"}
-            description={snapshot.error ? (snapshot.error as Error).message : "正在读取本地预览数据"}
+            title={failure ? (liveJournal ? "日记账读取失败" : "本地预览数据未就绪") : "加载中"}
+            description={failure ? (liveJournal ? cashErrorText(failure) : (failure as Error).message) : liveJournal ? "正在读取日记账" : "正在读取本地预览数据"}
           />
         </FinanceBoardFrame>
       ) : view === "accounts" ? <AccountsBoard data={data} />
-        : <JournalBoard data={data} />}
+        : <JournalBoard data={data} live={liveJournal} />}
     </PageShell>
   );
 }

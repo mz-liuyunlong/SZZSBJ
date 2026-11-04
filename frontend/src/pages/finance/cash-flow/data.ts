@@ -61,7 +61,7 @@ export interface FsDetail {
 export interface FsRecord { node: string; act: string; who: string; time: string; note: string; files: number }
 export interface ApprovalsFile { meta: { src: string; ticket: string; built: string; n: number; files: number }; items: Record<string, FsDetail> }
 
-export const useApprovals = () => useTabFile<ApprovalsFile>("approvals.json");
+export const useApprovals = (enabled = true) => useTabFile<ApprovalsFile>("approvals.json", enabled);
 export const fsFileUrl = (name: string) => `${import.meta.env.BASE_URL}local-fin-data/${DIR}/fs-files/${encodeURIComponent(name)}`;
 
 /* ---------------------------------------------------------------- 资金异常（并入日记账显示；Rocky 2026-11-04：异常不分等级，全部都要处理）

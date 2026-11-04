@@ -13,6 +13,8 @@ interface FinanceBoardFrameProps {
   toolbar?: ReactNode;
   summary?: ReactNode;
   children?: ReactNode;
+  /** 读 Demo 快照时显示「本地预览」标记；读正式接口时传 false。 */
+  preview?: boolean;
 }
 
 export function PreviewTag() {
@@ -34,7 +36,7 @@ export function FinMoney({ value, cur = "CNY", masked }: { value: number | null 
   return <span className={`report-table-metric${value < 0 ? " finance-board__metric--neg" : ""}`}>{cur} {value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
 }
 
-function FinanceBoardFrame({ title, subtitle, loading, toolbar, summary, children }: FinanceBoardFrameProps) {
+function FinanceBoardFrame({ title, subtitle, loading, toolbar, summary, children, preview = true }: FinanceBoardFrameProps) {
   return (
     <div className="finance-board">
       <Card size="small" className="finance-board__page-card">
@@ -44,7 +46,7 @@ function FinanceBoardFrame({ title, subtitle, loading, toolbar, summary, childre
             <h1>{title}</h1>
             {subtitle && <p>{subtitle}</p>}
           </div>
-          <PreviewTag />
+          {preview && <PreviewTag />}
         </div>
         {toolbar && <Card size="small" className="finance-board__toolbar-card"><div className="finance-board__toolbar">{toolbar}</div></Card>}
         {summary}
