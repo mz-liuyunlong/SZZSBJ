@@ -18,7 +18,17 @@ from app.core.api import ApiError, ErrorCode
 from app.core.auth import PREVIEW_PRINCIPAL_ID, Principal, get_optional_principal
 from app.db.session import get_db_session
 
-_UNENFORCED_DIMENSIONS = frozenset({"sku", "product"})
+_UNENFORCED_DIMENSIONS = frozenset()
+_SKU_REVIEWED_READS = _OWNER_REVIEWED_READS
+_PRODUCT_REVIEWED_READS = frozenset({
+    "/api/data-pages/filter-options",
+    "/api/sales/daily-sales",
+    "/api/sales/daily-sales/export",
+    "/api/listings/walmart",
+    "/api/listings/walmart/summary",
+    "/api/listings/walmart/filter-options",
+    "/api/listings/walmart/export",
+})
 _OWNER_REVIEWED_READS = frozenset({
     "/api/data-pages/filter-options",
     "/api/sales/daily-sales",
@@ -232,6 +242,19 @@ def require_business_scope_coverage(
             status_code=403,
             details={"scope_reason": "UNENFORCED_DIMENSION"},
         )
+
+    for kind, allowed_paths in (
+        ("sku", _SKU_REVIEWED_READS),
+        ("product", _PRODUCT_REVIEWED_READS),
+    ):
+        if scoped[kind] and (
+            request.method != "GET" or path not in allowed_paths
+        ):
+            raise ApiError(
+                code=ErrorCode.DATA_SCOPE_DENIED,
+                status_code=403,
+                details={"scope_reason": "SKU_SCOPE_NOT_ENFORCED" if kind == "sku" else "PRODUCT_SCOPE_NOT_ENFORCED"},
+            )
 
     owners = scoped["owner"]
     if owners and (
