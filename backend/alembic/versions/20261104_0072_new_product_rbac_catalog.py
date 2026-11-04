@@ -75,7 +75,9 @@ def downgrade() -> None:
             FROM app_role_permissions AS grant_record
             JOIN app_permissions AS permission
               ON permission.permission_key = grant_record.permission_key
-            WHERE permission.page_key IN ('products_new_product_analysis', 'products_launch_tracking')
+            WHERE permission.page_key IN (
+              'products_new_product_analysis', 'products_launch_tracking'
+            )
               AND permission.permission_key <> :existing_page_permission
             """
         ),
