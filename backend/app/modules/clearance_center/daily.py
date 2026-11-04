@@ -195,12 +195,15 @@ class DailyClearanceEvaluation:
             counts = {"total": 0, "high": 0, "medium": 0, "review": 0,
                       "missing_sales": 0, "missing_cost": 0, "missing_stock": 0}
             rules_cache: dict[str, tuple[dict, int]] = {}
+            cost_cache: dict[str, dict] = {}
             cursor: tuple[str, str, str] | None = None
             while True:
                 page = self._next_page(cursor)
                 if not page:
                     break
-                evidence = self.repository.evidence(page, as_of=as_of)
+                evidence = self.repository.evidence(
+                    page, as_of=as_of, cost_cache=cost_cache
+                )
                 for listing in page:
                     account = listing["source_account_ref"]
                     if account not in rules_cache:
