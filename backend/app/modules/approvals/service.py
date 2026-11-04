@@ -23,7 +23,10 @@ from app.modules.approvals.schemas import (
     ApprovalSummary,
     ApprovalSupplementWrite,
 )
-from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
+from app.modules.iam.organization_access import (
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
+    ORG_OWNER_SCOPE_SESSION_KEY,
+)
 
 
 def blocked(status: int = 409) -> None:
@@ -90,14 +93,48 @@ class ApprovalService:
         self.org_owner_refs = (
             scope.get(ORG_OWNER_SCOPE_SESSION_KEY) if isinstance(scope, dict) else None
         )
+        self.account_owner_pairs = (
+            scope.get(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY) if isinstance(scope, dict) else None
+        )
+
+    @property
+    def _scoped(self) -> bool:
+        return self.org_owner_refs is not None or self.account_owner_pairs is not None
+
+    def _account_owner_condition(self, alias: str) -> str:
+        return (
+            "exists (select 1 from jsonb_to_recordset(cast(:org_account_owners as jsonb)) "
+            "as granted(account_ref text, owner_uid text) "
+            f"where granted.account_ref={alias}.source_account_ref "
+            f"and granted.owner_uid={alias}.owner_ref)"
+        )
+
+    def _owner_params(self) -> dict[str, object]:
+        params: dict[str, object] = {}
+        if self.org_owner_refs is not None:
+            params["org_owner_refs"] = sorted(self.org_owner_refs)
+        if self.account_owner_pairs is not None:
+            params["org_account_owners"] = json.dumps([
+                {"account_ref": account, "owner_uid": owner}
+                for account, owner in sorted(self.account_owner_pairs)
+            ])
+        return params
 
     def _approval_scope_condition(self, alias: str) -> str:
+        """Only the reviewed WFS approval type may be seen by scoped users."""
+        clauses = [
+            f"wc.id::text={alias}.business_ref",
+            f"wc.source_account_ref={alias}.source_account_ref",
+            "wc.is_deleted=false",
+        ]
+        if self.org_owner_refs is not None:
+            clauses.append("wc.owner_ref=any(:org_owner_refs)")
+        if self.account_owner_pairs is not None:
+            clauses.append(self._account_owner_condition("wc"))
         return (
-            f"({alias}.approval_type <> 'wfs_case_abandon' or exists ("
-            "select 1 from ops_wfs_fee_anomaly_cases wc "
-            f"where wc.id::text={alias}.business_ref "
-            f"and wc.source_account_ref={alias}.source_account_ref "
-            "and wc.is_deleted=false and wc.owner_ref=any(:org_owner_refs)))"
+            f"({alias}.approval_type='wfs_case_abandon' and exists ("
+            "select 1 from ops_wfs_fee_anomaly_cases wc where "
+            + " and ".join(clauses) + "))"
         )
 
     def _case(self, case_id: str, account_refs: frozenset[str], lock: bool = False) -> dict:
@@ -113,16 +150,16 @@ class ApprovalService:
                         if self.org_owner_refs is not None
                         else ""
                     )
+                    + (
+                        " and " + self._account_owner_condition("ops_wfs_fee_anomaly_cases")
+                        if self.account_owner_pairs is not None else ""
+                    )
                     + (" for update" if lock else "")
                 ),
                 {
                     "id": case_id,
                     "accounts": list(account_refs),
-                    **(
-                        {"org_owner_refs": sorted(self.org_owner_refs)}
-                        if self.org_owner_refs is not None
-                        else {}
-                    ),
+                    **self._owner_params(),
                 },
             )
             .mappings()
@@ -267,7 +304,7 @@ class ApprovalService:
         """
                     + (
                         " and " + self._approval_scope_condition("a")
-                        if self.org_owner_refs is not None
+                        if self._scoped
                         else ""
                     )
                     + (" for update" if lock else "")
@@ -275,11 +312,7 @@ class ApprovalService:
                 {
                     "id": str(approval_id),
                     "accounts": list(account_refs),
-                    **(
-                        {"org_owner_refs": sorted(self.org_owner_refs)}
-                        if self.org_owner_refs is not None
-                        else {}
-                    ),
+                    **self._owner_params(),
                 },
             )
             .mappings()
@@ -333,7 +366,9 @@ class ApprovalService:
         ]
         if self.org_owner_refs is not None:
             where.append("c.owner_ref=any(:org_owner_refs)")
-            params["org_owner_refs"] = sorted(self.org_owner_refs)
+        if self.account_owner_pairs is not None:
+            where.append(self._account_owner_condition("c"))
+        params.update(self._owner_params())
         if query.approval_type and query.approval_type != "wfs_case_abandon":
             return ApprovalListData(items=[]), 0
         if query.keyword:
@@ -633,10 +668,13 @@ class ApprovalService:
             "not exists (select 1 from app_approval_requests a where "
             "a.approval_type='wfs_case_abandon' and a.business_ref=c.id::text)",
         ]
-        if self.org_owner_refs is not None:
-            params["org_owner_refs"] = sorted(self.org_owner_refs)
+        if self._scoped:
+            params.update(self._owner_params())
             formal_where.append(self._approval_scope_condition("a"))
-            legacy_where.append("c.owner_ref=any(:org_owner_refs)")
+            if self.org_owner_refs is not None:
+                legacy_where.append("c.owner_ref=any(:org_owner_refs)")
+            if self.account_owner_pairs is not None:
+                legacy_where.append(self._account_owner_condition("c"))
         if query.view == "mine":
             formal_where.append("a.applicant_id<>:actor")
             if query.tab == "pending":
@@ -779,8 +817,8 @@ class ApprovalService:
             "limit": query.page_size,
             "offset": (query.page - 1) * query.page_size,
         }
-        if self.org_owner_refs is not None:
-            params["org_owner_refs"] = sorted(self.org_owner_refs)
+        if self._scoped:
+            params.update(self._owner_params())
             where.append(self._approval_scope_condition("a"))
         if not may_review:
             where.append("a.applicant_id=:actor")
@@ -833,16 +871,13 @@ class ApprovalService:
         is_admin: bool = False,
     ) -> ApprovalSummary:
         formal_scope_sql = (
-            " and " + self._approval_scope_condition("a") if self.org_owner_refs is not None else ""
+            " and " + self._approval_scope_condition("a") if self._scoped else ""
         )
         legacy_scope_sql = (
-            " and c.owner_ref=any(:org_owner_refs)" if self.org_owner_refs is not None else ""
+            (" and c.owner_ref=any(:org_owner_refs)" if self.org_owner_refs is not None else "")
+            + (" and " + self._account_owner_condition("c") if self.account_owner_pairs is not None else "")
         )
-        org_params = (
-            {"org_owner_refs": sorted(self.org_owner_refs)}
-            if self.org_owner_refs is not None
-            else {}
-        )
+        org_params = self._owner_params()
         row = (
             self.session.execute(
                 text(f"""
