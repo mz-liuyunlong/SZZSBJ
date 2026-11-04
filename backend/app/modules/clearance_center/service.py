@@ -504,6 +504,8 @@ class ClearanceService:
             row["version"] != payload.expected_version
             or any(a < b for a, b in zip(values, before, strict=True))
             or sum(values) > row["target_qty"]
+            or (values[1] > before[1] and "WFS 移除" not in row["methods"])
+            or (values[2] > before[2] and "弃置" not in row["methods"])
         ):
             fail()
         status = (
