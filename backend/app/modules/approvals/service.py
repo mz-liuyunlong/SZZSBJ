@@ -277,6 +277,58 @@ class ApprovalService:
                         (may_review or (may_review_clearance and r["approval_type"] == "clearance_request"))),
         )
 
+    def _with_clearance_fields(
+        self,
+        items: list[ApprovalItem],
+        account_refs: frozenset[str],
+    ) -> list[ApprovalItem]:
+        """Fill review table fields from persisted clearance requests."""
+        ids = [x.id for x in items if x.approval_type == "clearance_request"]
+        if not ids:
+            return items
+        rows = self.session.execute(
+            text("""
+                select c.approval_id::text as approval_id,c.item_id,
+                       c.target_qty,c.methods,c.source_account_ref,c.store_id,
+                       l.local_sku,l.msku,l.title,l.store_name,l.owner_ref,
+                       l.wfs_available_quantity,l.listing_start_at_utc
+                from ops_clearance_requests c
+                join mart_listing_management_current l on l.id=c.listing_id
+                  and l.source_account_ref=c.source_account_ref
+                  and l.store_id=c.store_id and l.item_id=c.item_id
+                where c.approval_id::text=any(:ids)
+                  and c.source_account_ref=any(:accounts)
+            """), {"ids": ids, "accounts": list(account_refs)},
+        ).mappings().all()
+        lookup = {r["approval_id"]: r for r in rows}
+        result = []
+        for item in items:
+            r = lookup.get(item.id)
+            if r is None:
+                result.append(item)
+                continue
+            started = r["listing_start_at_utc"]
+            listing_days = (
+                max(0, (datetime.now(UTC).date() - started.astimezone(UTC).date()).days)
+                if started is not None and started.tzinfo is not None else None
+            )
+            result.append(item.model_copy(update={
+                "clearance_item_id": r["item_id"],
+                "clearance_product_name": r["title"],
+                "clearance_sku": r["local_sku"],
+                "clearance_msku": r["msku"],
+                "clearance_store": r["store_name"] or r["store_id"],
+                "clearance_owner": r["owner_ref"],
+                "clearance_methods": r["methods"],
+                "clearance_target_qty": r["target_qty"],
+                "clearance_wfs_available": (
+                    str(r["wfs_available_quantity"])
+                    if r["wfs_available_quantity"] is not None else None
+                ),
+                "clearance_listing_days": listing_days,
+            }))
+        return result
+
     def legacy_unverified(
         self, query: ApprovalQuery, account_refs: frozenset[str]
     ) -> tuple[ApprovalListData, int]:
@@ -710,7 +762,9 @@ class ApprovalService:
             .mappings()
             .all()
         )
-        return ApprovalListData(items=[ApprovalItem(**dict(row)) for row in rows]), total
+        return ApprovalListData(items=self._with_clearance_fields(
+            [ApprovalItem(**dict(row)) for row in rows], account_refs
+        )), total
 
     def list_requests(
         self,
@@ -790,7 +844,10 @@ class ApprovalService:
             .all()
         )
         return ApprovalListData(
-            items=[self._as_item(dict(r), actor, may_review, may_review_clearance) for r in rows]
+            items=self._with_clearance_fields(
+                [self._as_item(dict(r), actor, may_review, may_review_clearance) for r in rows],
+                account_refs,
+            )
         ), int(total)
 
     def summary(
