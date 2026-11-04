@@ -13,6 +13,7 @@ const PLAN: Record<string, { demo: string; what: string; next: string }> = {
   finance_balance_sheet: { demo: "⑥ 资产负债表", what: "资金盘点口径：账户月末余额 − 剔除净额 + 平台应收 + 库存。", next: "资金流水之后" },
   finance_cost_exception: { demo: "⑧ 成本异常处理", what: "期初库存 / 无发货单货件 / 固定值订单的成本修正清单，结账锁月。", next: "随成本引擎" },
   finance_settings: { demo: "⑨ 口径与设置", what: "类别字典、自动分类规则（财务专员维护，版本化）、汇率、页签说明。", next: "随 PR-E 资金流水" },
+  finance_data_import: { demo: "⑩ 数据导入", what: "银行 / 平台流水、账单等文件的导入任务、模板、历史与失败记录。", next: "随 #289 流水导入；正式版由财务专员上传" },
 };
 
 function FinancePlaceholderPage({ page }: { page: NavigationPage }) {

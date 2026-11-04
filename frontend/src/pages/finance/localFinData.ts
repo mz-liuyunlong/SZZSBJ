@@ -2,7 +2,7 @@
  * 财务板块 · 本地预览数据（阶段 A，2026-11-02）。
  *
  * 只在本地开发时读取 `public/local-fin-data/*.json`（由 features/finance/drafts/export_local_fin.py
- * 从 Demo 构建结果导出；该目录写在 .git/info/exclude，绝不提交）。正式接口上线后，本文件的
+ * 从 Demo 构建结果导出；该目录已写入 frontend/.gitignore，绝不提交）。正式接口上线后，本文件的
  * 读取函数逐个替换为 `/api/finance/*` 查询（阶段 B），页面组件不变。
  */
 import { useQuery } from "@tanstack/react-query";
