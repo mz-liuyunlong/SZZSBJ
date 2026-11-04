@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WFS 货件使用说明</title>
+</head>
+<body>
+  <main>
+    <h1>WFS 货件使用说明</h1>
+    <p>当前七个页面是前端预览。侧栏分别进入，页面内不再用页签切换。表格里的行是示例，不请求接口，不写入 Walmart，也不读取领星。</p>
+    <h2>流转</h2>
+    <ol>
+      <li>国内仓打包单完成审批、装箱和打包。</li>
+      <li>待发货打包单只列出已打包完成的单据，并生成货件草稿。</li>
+      <li>系统货件记录书面批准，再执行建货件和取箱唛。撤销只包括取消计划和改数量。</li>
+      <li>WFS 货件看板查看状态。测试货件标「测试」，不计入供货、在途和异常。</li>
+    </ol>
+    <p>装箱只认本系统。探测货件列表和货件创建看板是演示流程。</p>
+    <h2>页面状态</h2>
+    <p>这些页面标记为建设中，还没有正式 SOP，也不能当作已上线功能。批准将来按权限校验，不写死具体人员。</p>
+  </main>
+</body>
+</html>

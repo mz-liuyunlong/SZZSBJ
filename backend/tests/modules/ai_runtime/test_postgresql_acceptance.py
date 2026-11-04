@@ -330,10 +330,10 @@ def test_0071_real_historical_migration_preserves_jobs_and_blocks_populated_roll
         )
         assert result.returncode != 0
         with engine.begin() as cx:
-            assert (
-                cx.scalar(text("SELECT version_num FROM alembic_version"))
-                == "20261102_0071_skill_lib"
-            )
+            # The refused downgrade rolls back as one transaction: still at the script head
+            # (0071_skill_lib on main; the WFS merge revision on top once that lands).
+            head = ScriptDirectory.from_config(Config(str(root / "alembic.ini"))).get_current_head()
+            assert cx.scalar(text("SELECT version_num FROM alembic_version")) == head
             assert cx.scalar(text("SELECT count(*) FROM ai_skill_revisions")) == 3
         engine.dispose()
     finally:

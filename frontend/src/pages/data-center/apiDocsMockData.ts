@@ -1,6 +1,7 @@
 import type { ApiDocItem, ApiDocModule } from "@/pages/data-center/apiDocsTypes";
 import { domesticWarehouseApiDocs } from "./pmcDomesticApiDocs";
 import { keywordPlanningApiDocs } from "./keywordPlanningApiDocs";
+import { wfsExceptionCenterApiDocs, wfsPendingApiDocs, wfsShipmentBoardApiDocs } from "./pmcWfsApiDocs";
 
 const makeApi = ({
   id,
@@ -267,4 +268,7 @@ export const apiDocModules: ApiDocModule[] = [
     ],
   },
   domesticWarehouseApiDocs,
+  wfsPendingApiDocs,
+  wfsShipmentBoardApiDocs,
+  wfsExceptionCenterApiDocs,
 ];
