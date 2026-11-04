@@ -58,7 +58,11 @@ def read_sku_metrics(
                        sum(CASE WHEN cost_status = 'complete' THEN 1 ELSE 0 END)
                            AS complete_cost_days,
                        count(DISTINCT gross_profit_currency_code)
-                           FILTER (WHERE gross_profit_currency_code IS NOT NULL) AS currencies
+                           FILTER (WHERE gross_profit_currency_code IS NOT NULL) AS currencies,
+                       count(DISTINCT sales_currency_code)
+                           FILTER (WHERE sales_currency_code IS NOT NULL) AS sales_currencies,
+                       min(sales_currency_code) AS sales_currency,
+                       min(gross_profit_currency_code) AS profit_currency
                 FROM mart_order_profit_sku_day
                 WHERE source_account_ref = :account AND local_sku = :sku
                   AND business_date_la >= :start AND business_date_la < :end
@@ -107,6 +111,11 @@ def read_sku_metrics(
         ad_spend = _number(sales["ad_spend"])
         cost_days = int(sales["complete_cost_days"] or 0)
         observed = int(sales["observed_days"] or 0)
+        consistent_currency = (
+            int(sales["currencies"] or 0) == 1
+            and int(sales["sales_currencies"] or 0) == 1
+            and sales["sales_currency"] == sales["profit_currency"]
+        )
         margin = (
             (profit / sales_amount * 100)
             if (
@@ -115,7 +124,7 @@ def read_sku_metrics(
                 and sales_amount is not None
                 and sales_amount > 0
                 and profit is not None
-                and int(sales["currencies"] or 0) == 1
+                and consistent_currency
             )
             else None
         )
@@ -148,14 +157,17 @@ def read_sku_metrics(
             "to_exclusive": window_end.isoformat(),
             "sales": _number(sales["sales_qty"]),
             "orders": _number(sales["orders"]),
-            "revenue": sales_amount,
+            "revenue": sales_amount if consistent_currency else None,
             "ad_spend": ad_spend,
             "clicks": int(clicks["clicks"]) if clicks["clicks"] is not None else None,
             "ad_days": int(clicks["ad_days"] or 0),
-            "profit": profit if cost_days == observed and observed > 0 else None,
+            "profit": (
+                profit if cost_days == observed and observed > 0 and consistent_currency else None
+            ),
             "margin": margin,
             "acos": acos,
-            "ad_spend_ratio": ad_spend_ratio,
+            "ad_spend_ratio": ad_spend_ratio if consistent_currency else None,
+            "currency_code": sales["sales_currency"] if consistent_currency else None,
             "attributed_sales": attributed_sales if ads_same_currency else None,
             "observed_days": observed,
             "complete_cost_days": cost_days,
