@@ -145,7 +145,13 @@ def evaluate(
 
     if sales30 is not None and sales30 > 0 and avail is not None and avail > 0 and sales_complete:
         coverage = _ceil(avail * Decimal(30) / sales30)
-    if sales7 is not None and prev7 is not None and prev7 >= rules["sales_previous_min_units"]:
+    if (
+        metrics.get("sales_7d_complete")
+        and metrics.get("sales_prev_7d_complete")
+        and sales7 is not None
+        and prev7 is not None
+        and prev7 >= rules["sales_previous_min_units"]
+    ):
         drop = prev7 - sales7
         if (
             drop >= rules["sales_absolute_drop_min_units"]
@@ -164,7 +170,9 @@ def evaluate(
         if profit7 is not None and profit_prev7 is not None and profit7 < 0 and profit_prev7 < 0:
             signal("PROFIT", "CONSECUTIVE_WEEK_LOSS")
     if (
-        ad7 is not None
+        metrics.get("sales_7d_complete")
+        and metrics.get("sales_prev_7d_complete")
+        and ad7 is not None
         and ad_prev7 is not None
         and revenue7 is not None
         and revenue_prev7 is not None
@@ -238,6 +246,8 @@ def evaluate(
             protected.append("NEW_LISTING_PROTECTION")
         if (
             rules["enable_recovery_protection"]
+            and metrics.get("sales_7d_complete")
+            and metrics.get("sales_prev_7d_complete")
             and sales7 is not None
             and prev7 is not None
             and prev7 >= rules["recovery_min_units_each_week"]
@@ -245,6 +255,8 @@ def evaluate(
             and sales7 * 100 >= prev7 * (100 + rules["sales_recovery_percent"])
         ):
             protected.append("SALES_RECOVERY_PROTECTION")
+    if risk == "medium" and listing_days is None:
+        protected.append("LISTING_START_UNVERIFIED")
     candidate = risk in ("high", "medium") and not protected
     suggested: int | None = None
     if (
