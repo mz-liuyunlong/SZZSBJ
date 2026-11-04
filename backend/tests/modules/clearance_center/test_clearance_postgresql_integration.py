@@ -7,9 +7,9 @@ No production connection, no external Walmart calls and no mock clearance rows.
 from __future__ import annotations
 
 import os
-from time import perf_counter
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from time import perf_counter
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
@@ -22,8 +22,8 @@ from app.core.api import ApiError
 from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
-from app.modules.clearance_center.schemas import ApplicationWrite, DecisionWrite, ProgressWrite
 from app.modules.clearance_center.daily import DailyClearanceEvaluation, daily_window
+from app.modules.clearance_center.schemas import ApplicationWrite, DecisionWrite, ProgressWrite
 from app.modules.clearance_center.service import ClearanceService
 from app.modules.data_pages.models import (
     ListingManagementCurrentMart,
@@ -270,7 +270,9 @@ def test_zero_sales_requires_full_store_source_history(clearance_db: Session) ->
     account = "clearance-ci-account"
     store = "ci-zero-store"
     item = "ci-zero-item"
-    listing_id = _seed_listing(clearance_db, account=account, store=store, item=item, available=40)
+    listing_id = _seed_listing(
+        clearance_db, account=account, store=store, item=item, available=40
+    )
     now = datetime.now(UTC)
     business_day = now.astimezone(ZoneInfo("America/Los_Angeles")).date()
     for days_ago in range(1, 22):
