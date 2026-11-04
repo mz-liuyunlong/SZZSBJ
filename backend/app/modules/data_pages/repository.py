@@ -913,6 +913,28 @@ class OrderProfitRepository:
             if store_id is not None:
                 permitted_parts.append(source.store_id == store_id)
             authorized = and_(*permitted_parts)
+            # A scoped user may only see a complete original SKU aggregate.
+            # Merely finding no *unauthorized* Daily Sales rows is insufficient:
+            # stale/partial source rows must never release an aggregated MART
+            # record that contains other stores or items.
+            source_stores = (
+                select(func.jsonb_agg(func.distinct(source.store_id)))
+                .where(same_group)
+                .correlate(OrderProfitSkuDayMart)
+                .scalar_subquery()
+            )
+            source_items = (
+                select(func.jsonb_agg(func.distinct(source.item_id)))
+                .where(same_group)
+                .correlate(OrderProfitSkuDayMart)
+                .scalar_subquery()
+            )
+            source_sales = (
+                select(func.coalesce(func.sum(source.sales_amount), 0))
+                .where(same_group)
+                .correlate(OrderProfitSkuDayMart)
+                .scalar_subquery()
+            )
             statement = statement.where(
                 exists(
                     select(1).select_from(source).where(same_group, authorized)
@@ -920,6 +942,11 @@ class OrderProfitRepository:
                 ~exists(
                     select(1).select_from(source).where(same_group, ~authorized)
                 ).correlate(OrderProfitSkuDayMart),
+                source_stores.op("@>")(OrderProfitSkuDayMart.store_ids_json),
+                OrderProfitSkuDayMart.store_ids_json.op("@>")(source_stores),
+                source_items.op("@>")(OrderProfitSkuDayMart.item_ids_json),
+                OrderProfitSkuDayMart.item_ids_json.op("@>")(source_items),
+                OrderProfitSkuDayMart.sales_amount == source_sales,
             )
         if start_date is not None:
             statement = statement.where(OrderProfitSkuDayMart.business_date_la >= start_date)
