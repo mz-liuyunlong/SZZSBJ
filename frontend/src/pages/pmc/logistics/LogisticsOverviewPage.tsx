@@ -1,5 +1,6 @@
-/** 物流总览（8088 pmc-logistics TabOverview）：一行一张 SP 发货单，筛选 / 分页在服务端。 */
-import { Select, Tag, Typography } from "antd";
+/** 物流总览（8088 pmc-logistics TabOverview）：一行一张 SP 发货单，筛选 / 分页在服务端。
+ * Rocky 2026-11-04：发货单号、运单号分两列；多个运单号只显示第 1 个 + 省略号，鼠标移上去显示全部；最后一列「详情」。 */
+import { Select, Tag, Tooltip, Typography } from "antd";
 import type { ProColumns } from "@ant-design/pro-components";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -46,14 +47,27 @@ export default function LogisticsOverviewPage({ page, scope }: { page: Navigatio
 
   const columns: ProColumns<OverviewRow & { id: string }>[] = [
     {
-      title: "发货单号 · 运单号", width: 230, fixed: "left",
+      title: "发货单号", width: 200, fixed: "left",
       render: (_, s) => (
         <span>
           <a>{s.code}</a><br />
-          {s.tracking.length ? <Text type="secondary">{s.tracking.join(" / ")}</Text> : <Tag color="warning" bordered={false}>运单号缺失</Tag>}<br />
           <Text type="secondary">{s.status} · {s.created} · {s.creator}</Text>
         </span>
       ),
+    },
+    {
+      title: "运单号", width: 210,
+      render: (_, s) => (s.tracking.length === 0
+        ? <Tag color="warning" bordered={false}>运单号缺失</Tag>
+        : s.tracking.length === 1
+          ? <span>{s.tracking[0]}</span>
+          : (
+            <Tooltip title={<div>{s.tracking.map((t) => <div key={t}>{t}</div>)}</div>} placement="right">
+              <span className="logi-tracking-more" aria-label={`运单号 ${s.tracking.length} 个`}>
+                {s.tracking[0]}<Text type="secondary"> … 共 {s.tracking.length} 个</Text>
+              </span>
+            </Tooltip>
+          )),
     },
     { title: "当前阶段", width: 120, render: (_, s) => <StageTag stage={s.stage} /> },
     { title: "物流商 · 渠道", width: 210, render: (_, s) => <span>{s.provider || `ID ${s.provider_id}`}<br /><Text type="secondary">{s.channel || `ID ${s.channel_id}`}{s.method ? ` · ${s.method}` : ""}</Text></span> },
@@ -112,6 +126,10 @@ export default function LogisticsOverviewPage({ page, scope }: { page: Navigatio
         ? <span>{s.ex.slice(0, 3).map((e, i) => <Tag key={i} bordered={false} color={e.sev === "high" ? "error" : e.sev === "mid" ? "warning" : "default"}>{e.type}</Tag>)}{s.ex.length > 3 && <Text type="secondary">+{s.ex.length - 3}</Text>}</span>
         : "—"),
     },
+    {
+      title: "操作", width: 80, fixed: "right",
+      render: (_, s) => <a onClick={(e) => { e.stopPropagation(); setOpen(s.code); }}>详情</a>,
+    },
   ];
 
   const header = (
@@ -162,7 +180,7 @@ export default function LogisticsOverviewPage({ page, scope }: { page: Navigatio
         loading={q.isFetching}
         loadingLabel="正在加载物流总览，请稍候"
         columns={columns}
-        scrollX={3100}
+        scrollX={3260}
         rows={(data?.items ?? []).map((s) => ({ ...s, id: s.code }))}
         total={data?.total ?? 0}
         current={pg.page}

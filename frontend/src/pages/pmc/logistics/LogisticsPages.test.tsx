@@ -75,13 +75,25 @@ describe("物流 pages", () => {
   it("物流总览 pages on the server and sends the card filter", async () => {
     const cards = { all: 2, transit: 2, soon: 0, over: 1, signed: 0, miss: 0, month: 0 };
     vi.mocked(api.getOverview).mockImplementation(async (params) => list(
-      params.card === "over" ? [row("SP-OVER")] : [row("SP-OVER"), row("SP-OK", { overdue: false, ex: [] })],
+      params.card === "over" ? [row("SP-OVER")] : [row("SP-OVER"), row("SP-OK", { overdue: false, ex: [], tracking: ["T1", "T2", "T3"] })],
       { cards, shipped: 2, penalty_total: 15, month_start: "2026-11-01", all: 2, qty: 20, boxes: 4 },
     ) as never);
     renderPage("pmc_logistics");
     await waitFor(() => expect(screen.getByText("SP-OK")).toBeInTheDocument());
     expect(screen.getByText(/数据日 2026-11-02/)).toBeInTheDocument();
     expect(vi.mocked(api.getOverview).mock.calls[0][0]).toMatchObject({ page: 1, page_size: 50, card: "all" });
+    // 发货单号 / 运单号分两列；多个运单号显示第 1 个 + 省略号，悬停看全部；最后一列「详情」
+    expect(screen.getAllByRole("columnheader", { name: "发货单号" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("columnheader", { name: "运单号" }).length).toBeGreaterThan(0);
+    expect(screen.getByText("ZY1")).toBeInTheDocument();
+    const more = screen.getByLabelText("运单号 3 个");
+    expect(more).toHaveTextContent("T1");
+    expect(more).not.toHaveTextContent("T2");
+    fireEvent.mouseEnter(more);
+    await waitFor(() => expect(screen.getByText("T3")).toBeInTheDocument());
+    vi.mocked(api.getShippingList).mockReturnValue(new Promise(() => {}) as never);
+    fireEvent.click(screen.getAllByText("详情")[0]);
+    await waitFor(() => expect(document.querySelector(".ant-drawer-open")).not.toBeNull());
     fireEvent.click(screen.getByRole("button", { name: /^已超合同时效：/ }));
     await waitFor(() => expect(screen.queryByText("SP-OK")).not.toBeInTheDocument());
     expect(vi.mocked(api.getOverview).mock.lastCall?.[0]).toMatchObject({ card: "over", page: 1 });
@@ -91,10 +103,27 @@ describe("物流 pages", () => {
     vi.mocked(api.getAlerts).mockResolvedValue(list([{
       id: "SP-OVER#已超合同时效#0", type: "已超合同时效", sev: "high", desc: "合同时效 30 天，已超 1 天", since: "2026-11-01",
       code: "SP-OVER", stage: "已开船", provider: "众壹物流", provider_id: "6995", channel: "美东直航", fc: "ATL1", region: "美东", stores: ["店铺一"],
-    }], { types: { 已超合同时效: 1 }, all: 1 }) as never);
+    }], { types: { 已超合同时效: 1 }, sevs: { high: 1, mid: 0, low: 0 }, sps: 1, all: 1 }) as never);
+    vi.mocked(api.getRules).mockResolvedValue(ok({
+      today: "2026-11-02", thresholds: [{ key: "remind_before", value: 3, unit: "天", label: "即将超时提醒" }],
+      region_total: {}, counts: { cycles: 0, contracts: 0, fcs: 0 }, editable: false, edit_hint: "一期只读",
+    }) as never);
     renderPage("pmc_logistics_alerts");
+    // 业务配置中心版式：头部卡片 + 子页签 + 统计卡 + 异常类型分类 + 列表卡片
     await waitFor(() => expect(screen.getByText("合同时效 30 天，已超 1 天")).toBeInTheDocument());
-    expect(screen.getByText("异常与提醒（1 / 1 条）")).toBeInTheDocument();
+    expect(screen.getByText("PMC SETTINGS")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "物流 异常与提醒" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /异常清单/ })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "异常类型" })).toBeInTheDocument();
+    expect(screen.getByText(/共 1 条 \/ 全部 1 条/)).toBeInTheDocument();
+    expect(vi.mocked(api.getAlerts).mock.calls[0][0]).toMatchObject({ page: 1, page_size: 50 });
+    // 点异常类型按钮 → 服务端按类型筛选
+    fireEvent.click(screen.getByRole("button", { name: /^已超合同时效\s*1$/ }));
+    await waitFor(() => expect(vi.mocked(api.getAlerts).mock.lastCall?.[0]).toMatchObject({ type: "已超合同时效", page: 1 }));
+    // 提醒规则页签：只读阈值 + 类型口径
+    fireEvent.click(screen.getByRole("tab", { name: /提醒规则/ }));
+    await waitFor(() => expect(screen.getByText("即将超时提醒")).toBeInTheDocument());
+    expect(screen.getByText("无合同时效")).toBeInTheDocument();
   });
 
   it("到货预测 shows buckets and opens the cargo × SKU lines", async () => {
@@ -125,6 +154,14 @@ describe("物流 pages", () => {
     await waitFor(() => expect(screen.getByText("13 天")).toBeInTheDocument());
     expect(screen.getAllByText("C1").length).toBeGreaterThan(1);
     expect(screen.getByText("众壹物流")).toBeInTheDocument();
+    // 点明细里的发货单号：就地展开 / 收起，不再弹第二层抽屉
+    vi.mocked(api.getShippingList).mockReturnValue(new Promise(() => {}) as never);
+    fireEvent.click(screen.getAllByText("SP-1").at(-1)!);
+    await waitFor(() => expect(screen.getByLabelText("发货单 SP-1 详情")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "收起" })).toBeInTheDocument();
+    expect(document.querySelectorAll(".ant-drawer-open").length).toBe(1);
+    fireEvent.click(screen.getByRole("button", { name: "收起" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "展开" })).toBeInTheDocument());
   });
 
   it("货代看板 lists carrier orders and the orders that could not be found", async () => {

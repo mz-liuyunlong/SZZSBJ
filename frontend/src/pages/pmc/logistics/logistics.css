@@ -60,3 +60,26 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.logi-inline-detail {
+  padding: 8px 4px 4px;
+}
+
+.logi-inline-detail__head {
+  margin-bottom: 8px;
+}
+
+.logi-alerts .business-config__category-buttons {
+  flex-wrap: wrap;
+}
+
+.logi-notes {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 26px;
+}
+
+.logi-tracking-more {
+  cursor: help;
+  white-space: nowrap;
+}

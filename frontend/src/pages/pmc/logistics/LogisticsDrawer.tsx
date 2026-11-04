@@ -157,3 +157,33 @@ export default function LogisticsDrawer({ code, scope, buffer, deliveredNotSigne
     </Drawer>
   );
 }
+
+/** 发货单详情就地展开（不再弹出第二层抽屉）：到货预测明细里点「展开」时用（Rocky 2026-11-04）。 */
+export function LogisticsInlineDetail({ code, scope, buffer, deliveredNotSigned }: {
+  code: string;
+  scope: string;
+  buffer: number;
+  deliveredNotSigned: number;
+}) {
+  const q = useQuery({
+    queryKey: ["pmc-logistics", scope, "detail", code],
+    queryFn: ({ signal }) => getShippingList(code, signal),
+    retry: false,
+  });
+  const d = q.data?.data;
+  return (
+    <div className="logi-inline-detail" aria-label={`发货单 ${code} 详情`}>
+      {q.isLoading && <Spin />}
+      {q.error && <Alert type="error" showIcon message={q.error instanceof BackendRequestError && q.error.status === 404 ? "发货单不存在或不在当前数据范围" : "发货单详情加载失败，请重试"} />}
+      {d && (
+        <>
+          <div className="logi-inline-detail__head">
+            <b>发货单 {code}</b> <StageTag stage={d.row.stage} />{" "}
+            <Text type="secondary">{d.row.provider} · {d.row.channel}{d.row.method ? ` · ${d.row.method}` : ""} · {d.row.fc} {d.row.region}</Text>
+          </div>
+          <Body d={d} buffer={buffer} deliveredNotSigned={deliveredNotSigned} />
+        </>
+      )}
+    </div>
+  );
+}

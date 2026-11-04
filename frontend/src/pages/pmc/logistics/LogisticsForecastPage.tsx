@@ -1,14 +1,14 @@
 /** 到货预测（8088 pmc-logistics TabForecast）：已发货、货件未关闭的 店铺 × MSKU，按预计可售日分段。
  * 每行关联物流信息：发货单号 / 货件单号 / 运单号，可按这三种单号分别搜索（Rocky 2026-11-04）。
  * 计算在服务端（app/modules/pmc_logistics/forecast.py），筛选 / 分页在服务端。 */
-import { Drawer, Select, Table, Tag, Typography } from "antd";
+import { Button, Drawer, Select, Table, Tag, Typography } from "antd";
 import type { ProColumns } from "@ant-design/pro-components";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Fragment, useState } from "react";
 import ManagementStatCards from "@/components/report-table/ManagementStatCards";
 import type { NavigationPage } from "@/config/navigation";
 import WfsQueryPage from "../wfs/WfsQueryPage";
-import LogisticsDrawer from "./LogisticsDrawer";
+import { LogisticsInlineDetail } from "./LogisticsDrawer";
 import { getForecast, type BucketKey, type ForecastLine, type ForecastRow } from "./logisticsApi";
 import { ARR_SRC, fmt } from "./logisticsFormat";
 import { PAGE_SIZE, logisticsKey, useLogisticsOptions } from "./logisticsQueries";
@@ -72,7 +72,14 @@ export default function LogisticsForecastPage({ page, scope }: { page: Navigatio
   const [filters, setFilters] = useState(initial);
   const [pg, setPg] = useState({ page: 1, size: PAGE_SIZE });
   const [detail, setDetail] = useState<ForecastRow>();
-  const [open, setOpen] = useState<string>();
+  // 明细里展开的行（发货单号-货件）：点发货单号就地展开 / 收起，不再弹第二层（Rocky 2026-11-04）
+  const [expanded, setExpanded] = useState<string[]>([]);
+  const lineKey = (x: ForecastLine) => `${x.code}-${x.cargo}`;
+  const toggle = (key: string) => setExpanded((ks) => (ks.includes(key) ? ks.filter((k) => k !== key) : [...ks, key]));
+  const openDetail = (r: ForecastRow, code?: string) => {
+    setDetail(r);
+    setExpanded(code ? r.lines.filter((x) => x.code === code).map(lineKey) : []);
+  };
   const opts = useLogisticsOptions(scope);
   const options = opts.data?.data;
   const params = { ...filters, page: pg.page, page_size: pg.size };
@@ -105,7 +112,7 @@ export default function LogisticsForecastPage({ page, scope }: { page: Navigatio
       title: "关联物流（发货单 / 货件 / 运单）", width: 300,
       render: (_, r) => (
         <div className="logi-numbers">
-          <Numbers label="发货单" values={r.codes} onClick={setOpen} />
+          <Numbers label="发货单" values={r.codes} onClick={(code) => openDetail(r, code)} />
           <Numbers label="货件" values={r.cargos} />
           <Numbers label="运单" values={r.trackings} />
         </div>
@@ -134,7 +141,11 @@ export default function LogisticsForecastPage({ page, scope }: { page: Navigatio
 
   const t = (k: keyof NonNullable<typeof sum>) => fmt((sum?.[k] as number | undefined) ?? 0);
   const lineColumns = [
-    { title: "发货单号", render: (_: unknown, x: ForecastLine) => <a onClick={() => setOpen(x.code)}>{x.code}</a> },
+    {
+      title: "发货单号", render: (_: unknown, x: ForecastLine) => (
+        <a onClick={() => toggle(lineKey(x))} aria-expanded={expanded.includes(lineKey(x))}>{x.code}</a>
+      ),
+    },
     { title: "货件单号", render: (_: unknown, x: ForecastLine) => x.cargo || "—" },
     {
       title: "运单号", render: (_: unknown, x: ForecastLine) => (x.tracking.length
@@ -218,25 +229,41 @@ export default function LogisticsForecastPage({ page, scope }: { page: Navigatio
         current={pg.page}
         pageSize={pg.size}
         onPageChange={(p, size) => setPg({ page: p, size })}
-        onRowClick={(r) => setDetail(r)}
+        onRowClick={(r) => openDetail(r)}
       />
       <Drawer
         open={!!detail}
         width={1200}
-        onClose={() => setDetail(undefined)}
+        onClose={() => { setDetail(undefined); setExpanded([]); }}
         title={detail && <span>{detail.store} · <b>{detail.sku}</b> <Text type="secondary">{detail.msku}</Text></span>}
       >
-        {detail && <Table size="small" pagination={false} rowKey={(x) => `${x.code}-${x.cargo}`} dataSource={detail.lines} columns={lineColumns} />}
+        {detail && (
+          <Table<ForecastLine>
+            size="small"
+            pagination={false}
+            rowKey={lineKey}
+            dataSource={detail.lines}
+            columns={lineColumns}
+            expandable={{
+              expandedRowKeys: expanded,
+              onExpand: (_, x) => toggle(lineKey(x)),
+              columnTitle: "发货单详情",
+              columnWidth: 96,
+              expandIcon: ({ expanded: isOpen, record, onExpand }) => (
+                <Button size="small" type="link" onClick={(e) => onExpand(record, e)}>{isOpen ? "收起" : "展开"}</Button>
+              ),
+              expandedRowRender: (x) => (
+                <LogisticsInlineDetail
+                  code={x.code}
+                  scope={scope}
+                  buffer={options?.rules.wm_receive_buffer ?? 10}
+                  deliveredNotSigned={options?.rules.delivered_not_signed ?? 2}
+                />
+              ),
+            }}
+          />
+        )}
       </Drawer>
-      {open && (
-        <LogisticsDrawer
-          code={open}
-          scope={scope}
-          buffer={options?.rules.wm_receive_buffer ?? 10}
-          deliveredNotSigned={options?.rules.delivered_not_signed ?? 2}
-          onClose={() => setOpen(undefined)}
-        />
-      )}
     </>
   );
 }

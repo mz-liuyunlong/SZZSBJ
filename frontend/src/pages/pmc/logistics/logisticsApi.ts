@@ -173,6 +173,10 @@ export interface AlertRow extends LogisticsAlert {
 }
 export interface AlertSummary {
   types: Record<string, number>;
+  /** 按严重度计数（不受筛选影响） */
+  sevs?: Record<Sev, number>;
+  /** 涉及发货单张数 */
+  sps?: number;
   all: number;
 }
 

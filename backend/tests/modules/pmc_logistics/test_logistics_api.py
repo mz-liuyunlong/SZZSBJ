@@ -105,6 +105,11 @@ def test_options_alerts_forecast_rules():
     assert sev == sorted(sev, key={"high": 0, "mid": 1, "low": 2}.get)
     high = client.get(f"{API}/alerts", params={"sev": "high"}).json()["data"]
     assert {a["sev"] for a in high["items"]} == {"high"}
+    # 统计卡（业务配置中心版式）：按严重度和涉及发货单计数，不受筛选影响
+    assert high["summary"]["sevs"] == alerts["summary"]["sevs"]
+    assert sum(alerts["summary"]["sevs"].values()) == alerts["summary"]["all"]
+    assert high["total"] == alerts["summary"]["sevs"]["high"]
+    assert alerts["summary"]["sps"] == len({a["code"] for a in alerts["items"]})
 
     fc = client.get(f"{API}/forecast").json()["data"]
     assert fc["summary"]["buffer"] == 10

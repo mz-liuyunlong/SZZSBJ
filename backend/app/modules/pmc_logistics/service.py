@@ -541,7 +541,12 @@ class LogisticsService:
             for e in flat(self._sp_filter(rows, q))
             if (not q.type or e["type"] == q.type) and (not q.sev or e["sev"] == q.sev)
         ]
-        summary = {"types": dict(Counter(e["type"] for e in every)), "all": len(every)}
+        summary = {
+            "types": dict(Counter(e["type"] for e in every)),
+            "sevs": {k: sum(1 for e in every if e["sev"] == k) for k in ("high", "mid", "low")},
+            "sps": len({e["code"] for e in every}),
+            "all": len(every),
+        }
         return self._page(hits, q, summary)
 
     # 到货预测 ------------------------------------------------------------------------

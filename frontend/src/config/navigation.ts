@@ -310,12 +310,8 @@ export const navigation: NavigationGroup[] = [
         sidebarSection: 'pmc-logistics', ...LOGISTICS_PAGE,
         sourceTables: ['ods_lingxing_wfs_shipping_lists', 'ods_walmart_wfs_inbound_items', 'ods_walmart_wfs_receipts'],
       }),
-      page('pmc', 'logistics_alerts', '异常与提醒', '/pmc/logistics/alerts', {
-        sidebarSection: 'pmc-logistics', ...LOGISTICS_PAGE,
-        sourceTables: ['ods_lingxing_wfs_shipping_lists', 'ods_carrier_zhongyi_tracks', 'ods_walmart_wfs_receipts'],
-      }),
-      // 时效与阈值设置 lives in PMC 设置 (Rocky 2026-11-03: PMC has one settings area). The page component
-      // is LogisticsRulesPage, routed by key; it is registered below in the PMC 设置 section.
+      // 时效与阈值设置 and 异常与提醒 live in PMC 设置 (Rocky 2026-11-03 / 2026-11-04: PMC has one settings
+      // area and its alert pages follow the 业务配置中心 layout). Both are routed by key; see the PMC 设置 section.
       page('pmc', 'logistics_carriers', '货代看板', '/pmc/logistics/carriers', {
         sidebarSection: 'pmc-logistics', ...LOGISTICS_PAGE,
         sourceTables: ['ods_carrier_zhongyi_orders', 'ods_carrier_zhongyi_tracks', 'ods_lingxing_wfs_shipping_lists'],
@@ -369,6 +365,11 @@ export const navigation: NavigationGroup[] = [
         sidebarSection: 'pmc-settings', status: 'building', readOnly: true,
         viewPermissionKey: 'page:pmc:wfs:view',
         help: { enabled: true, title: 'PMC 设置使用说明', helpUrl: '/help/pmc-settings.html', openInNewTab: true },
+      }),
+      // 物流 异常与提醒 (Rocky 2026-11-04): moved from the 物流 group into PMC 设置, 业务配置中心 layout.
+      page('pmc', 'logistics_alerts', '物流 异常与提醒', '/pmc/settings/logistics/alerts', {
+        sidebarSection: 'pmc-settings', ...LOGISTICS_PAGE,
+        sourceTables: ['ods_lingxing_wfs_shipping_lists', 'ods_carrier_zhongyi_tracks', 'ods_walmart_wfs_receipts'],
       }),
       // 物流 时效与阈值设置 (PRP #298; Rocky 2026-11-03: PMC has one settings area). Rendered by
       // LogisticsPages -> LogisticsRulesPage via the pmc_logistics_* route branch.
@@ -490,4 +491,6 @@ export const navigationRedirects: Readonly<Record<string, string>> = {
   '/pmc/wfs/settings/logistics-channels': '/pmc/settings/logistics-channels',
   '/pmc/wfs/settings/stores': '/pmc/settings/wfs/stores',
   '/pmc/wfs/settings/notes': '/pmc/settings/wfs/notes',
+  // 物流 异常与提醒 moved under PMC 设置 (Rocky 2026-11-04).
+  '/pmc/logistics/alerts': '/pmc/settings/logistics/alerts',
 };
