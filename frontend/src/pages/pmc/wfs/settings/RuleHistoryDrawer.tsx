@@ -7,9 +7,10 @@ import { formatTime } from "./settingsShared";
 
 const entityLabel: Record<string, string> = { rules: "规则", fc_region: "仓库地区", creation_defaults: "创建默认值" };
 
-export default function RuleHistoryDrawer({ open, scope, onClose }: { open: boolean; scope: string; onClose: () => void }) {
-  const versions = useQuery({ queryKey: ["pmc-settings", scope, "versions"], queryFn: ({ signal }) => listRuleVersions(signal), retry: false, enabled: open });
-  const changes = useQuery({ queryKey: ["pmc-settings", scope, "changes"], queryFn: ({ signal }) => listSettingsChanges(signal), retry: false, enabled: open });
+/** Versions + change log tables; used inline by the 版本与修改记录 tab and inside the drawer. */
+export function RuleHistoryTables({ scope, enabled = true }: { scope: string; enabled?: boolean }) {
+  const versions = useQuery({ queryKey: ["pmc-settings", scope, "versions"], queryFn: ({ signal }) => listRuleVersions(signal), retry: false, enabled });
+  const changes = useQuery({ queryKey: ["pmc-settings", scope, "changes"], queryFn: ({ signal }) => listSettingsChanges(signal), retry: false, enabled });
   const versionColumns: ProColumns<RuleVersion>[] = [
     { title: "版本", key: "version_no", width: 70, render: (_, r) => `v${r.version_no}` },
     { title: "生效日", key: "effective_date", width: 110, render: (_, r) => r.effective_date },
@@ -38,7 +39,6 @@ export default function RuleHistoryDrawer({ open, scope, onClose }: { open: bool
     />
   );
   return (
-    <Drawer open={open} onClose={onClose} title="版本与修改记录" width={760}>
       <Space direction="vertical" size={16} className="pmc-settings__drawer-stack">
         <Typography.Title level={5}>规则版本</Typography.Title>
         {versions.error && <Alert type="error" showIcon message={settingsError(versions.error)} action={<Button onClick={() => void versions.refetch()}>重试</Button>} />}
@@ -47,6 +47,13 @@ export default function RuleHistoryDrawer({ open, scope, onClose }: { open: bool
         {changes.error && <Alert type="error" showIcon message={settingsError(changes.error)} action={<Button onClick={() => void changes.refetch()}>重试</Button>} />}
         {table(changes.data?.items ?? [], changeColumns, (r) => `${r.entity}-${r.entity_key}-${r.created_at}`, "还没有修改记录", changes.isFetching)}
       </Space>
+  );
+}
+
+export default function RuleHistoryDrawer({ open, scope, onClose }: { open: boolean; scope: string; onClose: () => void }) {
+  return (
+    <Drawer open={open} onClose={onClose} title="版本与修改记录" width={760}>
+      <RuleHistoryTables scope={scope} enabled={open} />
     </Drawer>
   );
 }
