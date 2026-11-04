@@ -434,6 +434,7 @@ class ProductManagementRepository:
             .where(
                 LingxingSkuIdentity.source_account_ref.in_(account_refs),
                 LingxingSkuIdentity.is_active.is_(True),
+                *self._owner_identity_filters(),
                 LingxingSkuProductInfoCurrent.owner_uid.is_not(None),
                 LingxingSkuProductInfoCurrent.owner_name.is_not(None),
             )
@@ -458,6 +459,7 @@ class ProductManagementRepository:
             .where(
                 LingxingSkuIdentity.source_account_ref.in_(account_refs),
                 LingxingSkuIdentity.is_active.is_(True),
+                *self._owner_identity_filters(),
                 LingxingSkuProductInfoCurrent.product_developer_uid.is_not(None),
                 LingxingSkuProductInfoCurrent.product_developer_name.is_not(None),
             )
@@ -494,6 +496,7 @@ class ProductManagementRepository:
             .where(
                 LingxingSkuIdentity.source_account_ref.in_(account_refs),
                 LingxingSkuIdentity.is_active.is_(True),
+                *self._owner_identity_filters(),
                 LingxingSkuGlobalTag.tag_name.is_not(None),
             )
             .group_by(tag_value, LingxingSkuGlobalTag.tag_name)
