@@ -130,7 +130,8 @@ def test_authentication_denial_logs_safe_stage(caplog: pytest.LogCaptureFixture)
     with caplog.at_level(logging.WARNING, logger="app.core.api"):
         response = TestClient(create_app()).get(
             "/api/auth/me",
-            headers={"X-Request-ID": "pr287-auth-denied", "Authorization": "Bearer private-token"},
+            params={"access_token": "private-token"},
+            headers={"X-Request-ID": "pr287-auth-denied"},
         )
     assert response.status_code == 401
     assert "stage=authentication" in caplog.text
