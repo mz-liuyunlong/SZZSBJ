@@ -32,6 +32,9 @@ class _Session:
         sem_ad_spend: int = 0,
         missing_sem_mart_rows: int = 0,
         ad_days: int | None = None,
+        investment_cost_missing: int = 0,
+        sales_currency: str = "USD",
+        purchase_cost_total: int = 150,
     ) -> None:
         self.queries: list[str] = []
         self.attributed_currency = attributed_currency
@@ -42,6 +45,9 @@ class _Session:
         self.sem_ad_spend = sem_ad_spend
         self.missing_sem_mart_rows = missing_sem_mart_rows
         self.ad_days = ad_days
+        self.investment_cost_missing = investment_cost_missing
+        self.sales_currency = sales_currency
+        self.purchase_cost_total = purchase_cost_total
 
     def execute(self, statement: Any, params: dict[str, Any]) -> _Result:
         sql = str(statement)
@@ -71,14 +77,14 @@ class _Session:
                     "missing_sp_mart_rows": 0,
                     "missing_sem_mart_rows": self.missing_sem_mart_rows,
                     "profit": 200,
-                    "purchase_cost_total": 150,
+                    "purchase_cost_total": self.purchase_cost_total,
                     "first_leg_cost_total": 50,
-                    "missing_investment_cost_rows": 0,
+                    "missing_investment_cost_rows": self.investment_cost_missing,
                     "complete_cost_days": days,
                     "currencies": 1,
                     "sales_currencies": 1,
-                    "sales_currency": "USD",
-                    "profit_currency": "USD",
+                    "sales_currency": self.sales_currency,
+                    "profit_currency": self.sales_currency,
                     "missing_currency_rows": self.missing_financial_currencies,
                 }
             )
@@ -181,6 +187,25 @@ def test_unknown_sem_currency_never_fabricates_total_spend_or_ratio() -> None:
     assert period["sem_ad_spend"] is None
     assert "sem_ad_spend_currency_unverified" in period["data_issues"]
     assert period["profit"] == 200
+
+
+def test_operating_roi_requires_verified_cost_and_usd_currency() -> None:
+    for session in (
+        _Session(investment_cost_missing=1),
+        _Session(sales_currency="EUR", spend_currency="EUR"),
+        _Session(purchase_cost_total=-50),
+    ):
+        period = read_sku_metrics(
+            session,
+            account="test-account",
+            sku="TEST-SKU",
+            market_score=8,
+            rule_version=1,
+            rules=DEFAULT_RULES,
+            as_of=date(2026, 11, 1),
+        )["periods"]["30"]
+        assert period["roi"] is None
+        assert period["roi_status"] == "daily_sales_cost_or_coverage_unverified"
 
 
 def test_launch_uses_verified_first_window_not_latest_rolling_period() -> None:
