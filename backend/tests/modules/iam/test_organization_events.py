@@ -306,3 +306,32 @@ def test_manual_retry_never_enqueues_non_reviewed_event() -> None:
     assert denied.value.status_code == 422
     session.rollback.assert_called_once()
     session.commit.assert_not_called()
+
+
+def test_login_rejects_recent_verified_offboarding_before_issuing_token(monkeypatch) -> None:
+    from app.modules.iam.service import IamService
+
+    monkeypatch.setattr("app.modules.iam.service.verify_password", lambda *_: True)
+    service = IamService(MagicMock())
+    service.repository = MagicMock()
+    service.repository.get_user_by_username.return_value = {
+        "id": 42, "username": "synthetic-employee",
+        "password_hash": "no-secret", "is_active": 1,
+    }
+    service.repository.has_pending_feishu_revocation.return_value = True
+    with pytest.raises(ApiError) as denied:
+        service.login("synthetic-employee", "test-password")
+    assert denied.value.status_code == 403
+    service.repository.create_session.assert_not_called()
+
+
+def test_session_query_checks_unreconciled_offboarding_even_with_existing_token() -> None:
+    from app.modules.iam.repository import IamRepository
+
+    session = MagicMock()
+    IamRepository(session).get_session_principal("synthetic-hash")
+    query = str(session.execute.call_args.args[0])
+    assert "iam_feishu_org_events denied" in query
+    assert "denied.revoke_session IS TRUE" in query
+    assert "denied.received_at > COALESCE(" in query
+    assert "s.revoked_at is null" in query
