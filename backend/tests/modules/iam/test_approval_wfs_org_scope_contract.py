@@ -168,3 +168,52 @@ def test_account_scoped_approval_route_prefers_reviewed_pairs() -> None:
     assert session.info[ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY] == frozenset({
         ("ACCOUNT-1", "SHARED-UID"),
     })
+
+
+def test_store_scoped_wfs_approval_detail_and_case_lock_require_account_store() -> None:
+    import json
+
+    from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+
+    session = MagicMock()
+    session.info = {
+        STORE_SCOPE_SESSION_KEY: frozenset({("ACCOUNT-1", "STORE-1")}),
+    }
+    session.execute.return_value.mappings.return_value.first.return_value = None
+    service = ApprovalService(session)
+    with pytest.raises(ApiError):
+        service._record(UUID(int=1), frozenset({"ACCOUNT-1", "ACCOUNT-2"}), lock=True)
+    statement, params = session.execute.call_args.args
+    assert "a.approval_type='wfs_case_abandon'" in str(statement)
+    assert "stores.account_ref=wc.source_account_ref" in str(statement)
+    assert "stores.store_key=wc.store_id" in str(statement)
+    assert json.loads(params["org_account_stores"]) == [
+        {"account_ref": "ACCOUNT-1", "store_key": "STORE-1"}
+    ]
+    session.execute.reset_mock()
+    with pytest.raises(ApiError):
+        service._case("synthetic-case", frozenset({"ACCOUNT-1", "ACCOUNT-2"}), lock=True)
+    statement, params = session.execute.call_args.args
+    assert "stores.account_ref=ops_wfs_fee_anomaly_cases.source_account_ref" in str(statement)
+    assert "stores.store_key=ops_wfs_fee_anomaly_cases.store_id" in str(statement)
+    assert json.loads(params["org_account_stores"])[0]["store_key"] == "STORE-1"
+
+
+def test_store_scope_is_set_for_approval_requests_even_with_global_org() -> None:
+    from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+
+    session = MagicMock()
+    session.info = {}
+    principal = Principal(user_id="8", permissions=frozenset({
+        "page:data-center:approval-workspace:view",
+    }))
+    with (
+        patch("app.modules.approvals.router.resolve_business_account_owner_pairs", return_value=None),
+        patch("app.modules.approvals.router.resolve_business_owner_refs", return_value=None),
+        patch(
+            "app.modules.approvals.router.resolve_account_store_scope",
+            return_value=frozenset({("ACCOUNT-1", "STORE-1")}),
+        ),
+    ):
+        require_approval_org_scope(principal, session)
+    assert session.info[STORE_SCOPE_SESSION_KEY] == frozenset({("ACCOUNT-1", "STORE-1")})
