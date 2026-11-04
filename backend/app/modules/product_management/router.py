@@ -82,7 +82,7 @@ def require_product_management_org_scope(
         )
     elif request.url.path == "/api/product-management/skus/recalculate-pricing":
         legacy_permission = "products:pricing:recalculate"
-    elif request.method == "POST" and request.url.path == "/api/product-management/skus/export":
+    elif request.url.path == "/api/product-management/skus/export":
         legacy_permission = "products:export"
     else:
         legacy_permission = "products:read"

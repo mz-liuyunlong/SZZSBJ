@@ -63,7 +63,9 @@ def test_product_routes_fail_closed_when_scoped(method: str, path: str, permitte
     principal = Principal(
         user_id="8",
         permissions=frozenset(
-            {"products:read", "products:export"} if method == "POST" else {"products:read"}
+            {"products:read", "products:export"}
+            if path == "/api/product-management/skus/export"
+            else {"products:read"}
         ),
     )
     session = _session()
@@ -79,3 +81,21 @@ def test_product_routes_fail_closed_when_scoped(method: str, path: str, permitte
                 require_product_management_org_scope(request, principal, session)
             assert error.value.status_code == 403
             assert ORG_OWNER_SCOPE_SESSION_KEY not in session.info
+
+
+def test_read_grant_does_not_allow_product_export() -> None:
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/product-management/skus/export",
+            "headers": [],
+        }
+    )
+    principal = Principal(user_id="8", permissions=frozenset({"products:read"}))
+    session = _session()
+    with patch("app.modules.product_management.router.resolve_business_owner_refs") as resolver:
+        with pytest.raises(ApiError) as error:
+            require_product_management_org_scope(request, principal, session)
+    assert error.value.status_code == 403
+    resolver.assert_not_called()
