@@ -141,7 +141,12 @@ def test_scoped_unreviewed_routes_fail_closed(method: str, path: str) -> None:
 @pytest.mark.parametrize("path", sorted(_ORG_SCOPED_READS))
 def test_scoped_reviewed_routes_install_owner_filter(path: str) -> None:
     request = Request({"type": "http", "method": "GET", "path": path, "headers": []})
-    principal = Principal(user_id="5", permissions=frozenset({"products:read"}))
+    permissions = {"products:read", "sales:daily-sales:read"}
+    if path == "/api/sales/daily-sales/export":
+        permissions.add("action:sales:daily-sales:export")
+    if path == "/api/listings/walmart/export":
+        permissions.add("action:products:listing-management:export")
+    principal = Principal(user_id="5", permissions=frozenset(permissions))
     session = _session({"stale"})
     with patch(
         "app.modules.data_pages.router.resolve_business_owner_refs",
@@ -178,7 +183,7 @@ def test_unscoped_request_clears_stale_scope() -> None:
             "headers": [],
         }
     )
-    principal = Principal(user_id="5", permissions=frozenset({"products:read"}))
+    principal = Principal(user_id="5", permissions=frozenset({"sales:daily-sales:read"}))
     session = _session({"stale"})
     with patch("app.modules.data_pages.router.resolve_business_owner_refs", return_value=None):
         require_data_page_org_scope(request, principal, session)
