@@ -218,7 +218,13 @@ class ClearanceService:
 
     def request_detail(self, rid: UUID, accounts: frozenset[str]) -> dict:
         row = self._request(rid, accounts)
-        listing = self.listing_detail(str(row["listing_id"]), accounts)
+        try:
+            listing = self.listing_detail(str(row["listing_id"]), accounts)
+        except ApiError as exc:
+            # Keep application history after Listing source records disappear.
+            if exc.status_code != 404:
+                raise
+            listing = None
         events = (
             self.session.execute(
                 text("""select event_type,actor_id,note,created_at
