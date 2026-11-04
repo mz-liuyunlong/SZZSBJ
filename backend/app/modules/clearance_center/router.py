@@ -10,7 +10,12 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode, SuccessEnvelope, success_response
 from app.core.auth import Principal
-from app.core.permissions import require_permission
+from app.core.permissions import has_permission, require_permission
+from app.modules.clearance_center.field_access import mask_clearance_financials
+from app.modules.data_pages.field_access import (
+    ORDER_PROFIT_GROSS_PROFIT_PERMISSION,
+    ORDER_PROFIT_MARGIN_PERMISSION,
+)
 from app.db.session import get_db_session
 from app.modules.clearance_center.schemas import (
     ApplicationWrite,
@@ -32,12 +37,20 @@ configurer = Annotated[
 ]
 
 
+def _safe_listing(data: dict[str, Any], principal: Principal) -> dict[str, Any]:
+    return mask_clearance_financials(
+        data,
+        can_view_profit=has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION),
+        can_view_margin=has_permission(principal, ORDER_PROFIT_MARGIN_PERMISSION),
+    )
+
+
 @router.get("/listings", response_model=SuccessEnvelope[dict[str, Any], None])
 def listings(
     request: Request,
     query: Annotated[ListingQuery, Query()],
     session: db_session,
-    _: reader,
+    principal: reader,
     accounts: scope,
 ):
     data = ClearanceService(session).list_listings(
@@ -49,7 +62,7 @@ def listings(
         page=query.page,
         page_size=query.page_size,
     )
-    return success_response(request, data=data, meta=None)
+    return success_response(request, data=_safe_listing(data, principal), meta=None)
 
 
 @router.get("/eligible-listings", response_model=SuccessEnvelope[dict[str, Any], None])
@@ -57,7 +70,7 @@ def eligible_listings(
     request: Request,
     query: Annotated[ListingQuery, Query()],
     session: db_session,
-    _: applicant,
+    principal: applicant,
     accounts: scope,
 ):
     data = ClearanceService(session).list_listings(
@@ -68,7 +81,7 @@ def eligible_listings(
         page=query.page,
         page_size=query.page_size,
     )
-    return success_response(request, data=data, meta=None)
+    return success_response(request, data=_safe_listing(data, principal), meta=None)
 
 
 @router.get("/summary", response_model=SuccessEnvelope[dict[str, Any], None])
@@ -141,10 +154,10 @@ def apply(
 
 @router.get("/requests/{request_id}", response_model=SuccessEnvelope[dict[str, Any], None])
 def request_detail(
-    request: Request, request_id: UUID, session: db_session, _: reader, accounts: scope
+    request: Request, request_id: UUID, session: db_session, principal: reader, accounts: scope
 ):
     return success_response(
-        request, data=ClearanceService(session).request_detail(request_id, accounts), meta=None
+        request, data=_safe_listing(ClearanceService(session).request_detail(request_id, accounts), principal), meta=None
     )
 
 
@@ -201,10 +214,10 @@ def resume(
 
 @router.get("/listings/{listing_id}", response_model=SuccessEnvelope[dict[str, Any], None])
 def listing_detail(
-    request: Request, listing_id: UUID, session: db_session, _: reader, accounts: scope
+    request: Request, listing_id: UUID, session: db_session, principal: reader, accounts: scope
 ):
     return success_response(
-        request, data=ClearanceService(session).listing_detail(str(listing_id), accounts), meta=None
+        request, data=_safe_listing(ClearanceService(session).listing_detail(str(listing_id), accounts), principal), meta=None
     )
 
 
