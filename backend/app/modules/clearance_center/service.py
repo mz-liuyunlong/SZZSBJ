@@ -138,6 +138,17 @@ class ClearanceService:
                 "evaluation_status": "not_ready", "run_date_la": None,
                 "as_of_date_la": None,
             }
+        from app.modules.clearance_center.repository import evaluation_run_status
+
+        if evaluation_run_status(run["run_date_la"]) != "ready":
+            # Do not expose yesterday's candidates as today's fresh recommendations.
+            # Manual selection continues to use live WFS inventory above.
+            return {
+                "items": [], "total": 0, "page": page, "page_size": page_size,
+                "evaluation_status": "stale",
+                "run_date_la": run["run_date_la"].isoformat(),
+                "as_of_date_la": run["as_of_date_la"].isoformat(),
+            }
         result = self.repo.snapshot_page(
             accounts, run=run, store_id=store_id, keyword=keyword,
             risk_level=risk_level, candidate_status=candidate_status,
@@ -162,6 +173,19 @@ class ClearanceService:
                 "eligible_manual": eligible["total"],
                 "evaluation_status": "not_ready", "run_date_la": None,
                 "as_of_date_la": None,
+            }
+        from app.modules.clearance_center.repository import evaluation_run_status
+
+        if evaluation_run_status(run["run_date_la"]) != "ready":
+            eligible = self.repo.manual_eligible_page(
+                accounts, store_id=store_id, page=1, page_size=1
+            )
+            return {
+                "total": 0, "high": 0, "medium": 0, "observe": 0,
+                "review_required": 0, "eligible_manual": eligible["total"],
+                "evaluation_status": "stale",
+                "run_date_la": run["run_date_la"].isoformat(),
+                "as_of_date_la": run["as_of_date_la"].isoformat(),
             }
         return self.repo.daily_summary(accounts, run=run, store_id=store_id)
 
