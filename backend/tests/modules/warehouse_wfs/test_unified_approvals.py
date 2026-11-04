@@ -12,6 +12,7 @@ from app.core.api import ApiError
 from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
+from app.modules.approvals.router import require_approval_org_scope
 from app.modules.approvals.schemas import (
     ApprovalDecisionWrite,
     ApprovalQuery,
@@ -83,6 +84,9 @@ def _approval_client(monkeypatch: pytest.MonkeyPatch, permissions: set[str]) -> 
     )
     app.dependency_overrides[require_source_account_scope] = lambda: frozenset({"account-1"})
     app.dependency_overrides[get_db_session] = lambda: MagicMock(spec=Session)
+    # These existing API tests cover functional permission grants. Organization
+    # filtering is independently tested with WFS owner-scope contracts.
+    app.dependency_overrides[require_approval_org_scope] = lambda: None
     monkeypatch.setattr(
         ApprovalService,
         "summary",
