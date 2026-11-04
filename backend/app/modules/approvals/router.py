@@ -132,7 +132,7 @@ def reattest_legacy(
 ):
     # Re-attestation runs through a separate workflow: enforce owner visibility
     # before entering that workflow, not just on regular approval decisions.
-    ApprovalService(session)._case(str(case_id), accounts)
+    ApprovalService(session)._case(str(case_id), accounts, lock=True)
     approval_id = ApprovalWorkflow(session).reattest_wfs(
         case_id,
         accounts,
