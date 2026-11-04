@@ -113,6 +113,7 @@ class PmcPurchaseReadService:
         )
 
         data = BoardSummaryData(
+            scope_limited=self._row_scoped,
             awaiting_arrival_orders=len(awaiting),
             arrival_overdue_orders=len(arrival_overdue),
             purchase_overdue_orders=len(purchase_overdue),
@@ -178,6 +179,7 @@ class PmcPurchaseReadService:
             else self.repository.sku_cycles(skus, accounts)
         )
         data = OrderDetailData(
+            scope_limited=self._row_scoped,
             purchase_order_sn=head.order_sn,
             order_status=head.order_status,
             order_date=head.order_date,
@@ -313,7 +315,7 @@ def _board_row(row: DwsPurchaseBoard, *, scoped: bool = False) -> BoardRowRead:
         order_date=row.order_date,
         order_create_date=row.order_create_date,
         plan_create_date=row.plan_create_date,
-        arrival_date=row.arrival_date,
+        arrival_date=None if scoped else row.arrival_date,
         arrival_receipt_order_sn=None if scoped else row.arrival_receipt_order_sn,
         purchase_cycle_days=None if scoped else row.purchase_cycle_days,
         approval_cycle_days=None if scoped else row.approval_cycle_days,
