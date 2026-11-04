@@ -391,3 +391,75 @@ def test_daily_run_does_not_create_approval_or_mutate_listing_stock(
         text("select count(*) from app_approval_requests where approval_type='clearance_request'")
     ).scalar_one()
     assert before == after
+
+
+def test_clearance_review_permission_is_not_wfs_review_permission(
+    clearance_db: Session,
+) -> None:
+    account = "clearance-ci-review-scope"
+    listing_id = _seed_listing(
+        clearance_db,account=account,store="ci-review-store",item="ci-review-item",
+    )
+    app = create_app()
+    identity = {
+        "user_id": "operator-31",
+        "permissions": frozenset({"*"}),
+    }
+
+    def db_provider():
+        with Session(clearance_db.get_bind()) as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = db_provider
+    app.dependency_overrides[get_optional_principal] = lambda: Principal(
+        user_id=identity["user_id"],permissions=identity["permissions"]
+    )
+    app.dependency_overrides[require_source_account_scope] = lambda: frozenset({account})
+    with TestClient(app) as client:
+        submitted = client.post(
+            "/api/products/clearance-center/requests",
+            json={
+                "listing_id": listing_id,"target_qty": 2,
+                "methods": ["降价"],"reason": "库存积压",
+                "remark": "No Walmart mutation",
+                "source": "manual",
+            },
+        )
+        assert submitted.status_code == 200, submitted.text
+        aid = submitted.json()["data"]["approval_id"]
+        identity["user_id"] = "reviewer-32"
+        identity["permissions"] = frozenset({
+            "page:data-center:approval-workspace:view",
+            "action:warehouse:wfs-fee-alert:archive-review",
+            "products:read",
+        })
+        denied = client.post(
+            f"/api/approvals/{aid}/decision",
+            json={"decision": "approved","note": "","expected_version": 1},
+        )
+        assert denied.status_code == 403
+
+        # No account filter supplied by the browser can expand IAM scope.
+        invalid = client.get(
+            "/api/products/clearance-center/listings",
+            params={"source_account_ref": "outside-authorized-account"},
+        )
+        assert invalid.status_code == 403
+
+        identity["permissions"] = frozenset({
+            "page:data-center:approval-workspace:view",
+            "action:products:clearance:review",
+            "products:read",
+        })
+        accepted = client.post(
+            f"/api/approvals/{aid}/decision",
+            json={"decision": "approved","note": "","expected_version": 1},
+        )
+        assert accepted.status_code == 200, accepted.text
+        detail = client.get(
+            f"/api/products/clearance-center/listings/{listing_id}"
+        )
+        assert detail.status_code == 200, detail.text
+        evaluation = detail.json()["data"]["evaluation"]
+        assert evaluation["stock_capital_usd"] is None
+        assert evaluation["margin_30d_percent"] is None
