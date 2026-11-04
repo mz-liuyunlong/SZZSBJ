@@ -232,6 +232,7 @@ class MoneyByCurrency(StrictSchema):
 
 
 class BoardSummaryData(StrictSchema):
+    scope_limited: bool = False
     awaiting_arrival_orders: int = Field(description="S3+S4 采购单数（去重单号）")
     arrival_overdue_orders: int = Field(description="S3/S4 且 overdue_days>0 采购单数")
     purchase_overdue_orders: int = Field(description="采购单待下单（S2）逾期数")
@@ -269,6 +270,7 @@ class OrderPlanRef(StrictSchema):
 
 
 class OrderDetailData(StrictSchema):
+    scope_limited: bool = False
     purchase_order_sn: str
     order_status: int | None
     order_date: date | None
