@@ -282,9 +282,7 @@ class ClearanceReadRepository:
         inbound = number(listing.get("inbound_quantity"))
         if inbound is not None and inbound > 0:
             alerts.append("INBOUND_STOCK_PRESENT")
-        if listing.get("buybox_status") in (
-            "未拥有", "LOST", "NOT_OWNED", "secondary", "other"
-        ):
+        if listing.get("buybox_status") in ("未拥有", "LOST", "NOT_OWNED", "secondary", "other"):
             alerts.append("BUYBOX_ISSUE")
         value["conflict_alerts"] = alerts
         value["current_wfs_available"] = str(qty) if qty is not None else None
