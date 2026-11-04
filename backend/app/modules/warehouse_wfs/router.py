@@ -38,6 +38,7 @@ from app.modules.warehouse_wfs.schemas import (
 )
 from app.modules.warehouse_wfs.service import WfsFeeAlertService
 
+
 def require_wfs_org_scope(
     request: Request,
     principal: Annotated[Principal, Depends(require_principal)],
@@ -59,9 +60,7 @@ def require_wfs_org_scope(
         session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owners
 
 
-router = APIRouter(
-    tags=["WFS-FEE-CASE"], dependencies=[Depends(require_wfs_org_scope)]
-)
+router = APIRouter(tags=["WFS-FEE-CASE"], dependencies=[Depends(require_wfs_org_scope)])
 db_session = Annotated[Session, Depends(get_db_session)]
 source_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
 read_principal = Annotated[

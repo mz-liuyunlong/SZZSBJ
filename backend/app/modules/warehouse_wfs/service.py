@@ -145,7 +145,11 @@ class WfsFeeAlertService:
                     + (
                         " where id=:case_id and source_account_ref=any(:accounts)"
                         " and is_deleted=false"
-                        + (" and owner_ref=any(:org_owner_refs)" if self.org_owner_refs is not None else "")
+                        + (
+                            " and owner_ref=any(:org_owner_refs)"
+                            if self.org_owner_refs is not None
+                            else ""
+                        )
                     )
                 ),
                 {

@@ -24,9 +24,7 @@ def test_wfs_cases_count_and_list_share_owner_filter() -> None:
     session = _session()
     session.execute.return_value.scalar_one.return_value = 0
     session.execute.return_value.mappings.return_value.all.return_value = []
-    WfsFeeAlertService(session).list_cases(
-        WfsFeeCaseQuery(), frozenset({"source-a"})
-    )
+    WfsFeeAlertService(session).list_cases(WfsFeeCaseQuery(), frozenset({"source-a"}))
     assert session.execute.call_count == 2
     for call in session.execute.call_args_list:
         statement, params = call.args
@@ -75,9 +73,7 @@ def test_wfs_scoped_user_is_limited_to_verified_owners() -> None:
     request = Request(
         {"type": "http", "method": "GET", "path": "/api/warehouse/wfs-fee-cases", "headers": []}
     )
-    principal = Principal(
-        user_id="8", permissions=frozenset({"page:warehouse:wfs-fee-alert:view"})
-    )
+    principal = Principal(user_id="8", permissions=frozenset({"page:warehouse:wfs-fee-alert:view"}))
     session = _session()
     with patch(
         "app.modules.warehouse_wfs.router.resolve_business_owner_refs",
