@@ -155,6 +155,7 @@ def list_board(
         query.summary_filter in {"average_cycle", "unstable_sku"}
         and (
             session.info.get(ORG_OWNER_SCOPE_SESSION_KEY) is not None
+            or session.info.get(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY) is not None
             or session.info.get(STORE_SCOPE_SESSION_KEY) is not None
         )
     ):
