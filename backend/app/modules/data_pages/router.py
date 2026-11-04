@@ -61,7 +61,9 @@ from app.modules.data_pages.service import (
 )
 from app.modules.iam.organization_access import (
     ORG_OWNER_SCOPE_SESSION_KEY,
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
     resolve_business_owner_refs,
+    resolve_business_account_owner_pairs,
 )
 from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY, resolve_account_store_scope
 from app.modules.integration_sync.dependencies import require_source_account_scope
@@ -86,6 +88,7 @@ def require_data_page_org_scope(
 ) -> None:
     """Check endpoint permission before organization scope and SQL filtering."""
     session.info.pop(ORG_OWNER_SCOPE_SESSION_KEY, None)
+    session.info.pop(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY, None)
     session.info.pop(STORE_SCOPE_SESSION_KEY, None)
     if request.url.path.startswith("/api/sales/order-profit"):
         declared = _ORDER_PROFIT_REGISTRY.permission
@@ -104,13 +107,18 @@ def require_data_page_org_scope(
             status_code=403,
             details={"required_permission": required_permission},
         )
-    owner_refs = resolve_business_owner_refs(session, principal)
+    owner_pairs = resolve_business_account_owner_pairs(session, principal)
+    owner_refs = (
+        None if owner_pairs else resolve_business_owner_refs(session, principal)
+    )
     account_stores = resolve_account_store_scope(session, principal)
-    if owner_refs is None and account_stores is None:
+    if owner_refs is None and not owner_pairs and account_stores is None:
         return
     if request.method != "GET" or request.url.path not in _ORG_SCOPED_READS:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
-    if owner_refs is not None:
+    if owner_pairs:
+        session.info[ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY] = owner_pairs
+    elif owner_refs is not None:
         session.info[ORG_OWNER_SCOPE_SESSION_KEY] = owner_refs
     if account_stores is not None:
         session.info[STORE_SCOPE_SESSION_KEY] = account_stores
