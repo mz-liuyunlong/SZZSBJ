@@ -80,6 +80,10 @@ export interface ClearanceSummary {
   run_date_la: string | null;
   as_of_date_la: string | null;
 }
+export interface ClearanceFacets {
+  stores: {source_account_ref: string; store_id: string; store_name: string | null}[];
+  accounts: string[];
+}
 export interface ClearanceReadiness {
   evaluation_status: "ready" | "not_ready";
   run_date_la: string | null;
@@ -156,6 +160,7 @@ export const fetchClearanceListings = (query: Record<string, string | number | u
   get<ClearancePage<ClearanceRow>>("/listings" + params(query));
 export const fetchEligibleListings = (query: Record<string, string | number | undefined> = {}) =>
   get<ClearancePage<ClearanceRow>>("/eligible-listings" + params(query));
+export const fetchClearanceFacets = () => get<ClearanceFacets>("/facets");
 export const fetchClearanceSummary = (store_id?: string) =>
   get<ClearanceSummary>("/summary" + params({store_id}));
 export const fetchClearanceReadiness = (store_id?: string) =>
