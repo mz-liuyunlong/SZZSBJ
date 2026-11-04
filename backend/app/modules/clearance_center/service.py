@@ -89,95 +89,67 @@ class ClearanceService:
         candidate_status: str | None = None,
         page: int = 1,
         page_size: int = 50,
+        financial_sort: bool = True,
     ) -> dict:
-        listings = self.repo.listings(
-            accounts, store_id=store_id, keyword=keyword, eligible_only=eligible_only
-        )
-        evidence = self.repo.evidence(listings)
-        rule_cache: dict[str, tuple[dict, int]] = {}
-        rows: list[dict] = []
-        for listing in listings:
-            account = listing["source_account_ref"]
-            if account not in rule_cache:
-                rule_cache[account] = self.repo.rules(account)
-            rules, version = rule_cache[account]
-            ev = self.repo.evaluated(listing, evidence[self._key(listing)], rules)
-            if risk_level and ev["risk_level"] != risk_level:
-                continue
-            if candidate_status and ev["candidate_status"] != candidate_status:
-                continue
-            rows.append(
-                {
+        if eligible_only:
+            # Picker is always current inventory; no day-old risk snapshot may
+            # authorize a clearance application or bypass account scope.
+            found = self.repo.manual_eligible_page(
+                accounts, store_id=store_id, keyword=keyword,
+                page=page, page_size=page_size,
+            )
+            rows = found.pop("rows")
+            metrics = self.repo.evidence(rows)
+            rule_cache: dict[str, tuple[dict, int]] = {}
+            items: list[dict] = []
+            for listing in rows:
+                account = listing["source_account_ref"]
+                if account not in rule_cache:
+                    rule_cache[account] = self.repo.rules(account)
+                rules, version = rule_cache[account]
+                evaluation = self.repo.evaluated(
+                    listing, metrics[self._key(listing)], rules
+                )
+                items.append({
                     "listing": self._serialize(listing),
-                    "evaluation": ev,
+                    "evaluation": evaluation,
                     "rule_config_version": version,
-                }
-            )
-        risk_rank = {"high": 0, "medium": 1, "unknown": 2, "low": 3}
-        rows.sort(
-            key=lambda x: (
-                risk_rank.get(x["evaluation"]["risk_level"], 4),
-                -(
-                    Decimal(x["evaluation"]["stock_capital_usd"])
-                    if x["evaluation"]["stock_capital_usd"] is not None
-                    else Decimal("-1")
-                ),
-                -(x["evaluation"]["coverage_days"] or -1),
-                (
-                    Decimal(x["evaluation"]["profit_30d_amount"])
-                    if x["evaluation"]["profit_30d_amount"] is not None
-                    else Decimal("999999999999")
-                ),
-                -(
-                    Decimal(x["evaluation"]["refund_loss_30d"])
-                    if x["evaluation"]["refund_loss_30d"] is not None
-                    else Decimal("-1")
-                ),
-                x["listing"]["source_account_ref"],
-                x["listing"]["store_id"],
-                x["listing"]["item_id"],
-            )
+                })
+            return {**found, "items": items, "evaluation_status": "live_wfs"}
+
+        run = self.repo.latest_completed_run()
+        if run is None:
+            return {
+                "items": [], "total": 0, "page": page, "page_size": page_size,
+                "evaluation_status": "not_ready", "run_date_la": None,
+                "as_of_date_la": None,
+            }
+        result = self.repo.snapshot_page(
+            accounts, run=run, store_id=store_id, keyword=keyword,
+            risk_level=risk_level, candidate_status=candidate_status,
+            page=page, page_size=page_size,
+            financial_sort=financial_sort,
         )
-        start = (page - 1) * page_size
-        return {
-            "items": rows[start : start + page_size],
-            "total": len(rows),
-            "page": page,
-            "page_size": page_size,
-        }
+        result["items"] = [
+            {**item, "listing": self._serialize(item["listing"])}
+            for item in result["items"]
+        ]
+        return result
 
     def summary(self, accounts: frozenset[str], store_id: str = "") -> dict:
-        listing = self.list_listings(accounts, store_id=store_id, page=1, page_size=100000000)
-        result = {
-            "total": listing["total"],
-            "high": 0,
-            "medium": 0,
-            "observe": 0,
-            "review_required": 0,
-            "eligible_manual": 0,
-        }
-        for x in listing["items"]:
-            e = x["evaluation"]
-            if e["candidate_status"] == "auto":
-                if e["risk_level"] == "high":
-                    result["high"] += 1
-                elif e["risk_level"] == "medium":
-                    result["medium"] += 1
-            elif e["candidate_status"] == "observe":
-                result["observe"] += 1
-            elif e["candidate_status"] == "review_required":
-                result["review_required"] += 1
-            listing_row = x["listing"]
-            if (
-                listing_row.get("snapshot_wfs_available") is not None
-                and Decimal(str(listing_row["snapshot_wfs_available"])) > 0
-                and listing_row.get("wfs_available_quantity") is not None
-                and Decimal(str(listing_row["wfs_available_quantity"])) > 0
-                and e.get("current_wfs_available")
-                and "WFS_STOCK_UNAVAILABLE_OR_STALE" not in e["warnings"]
-            ):
-                result["eligible_manual"] += 1
-        return result
+        run = self.repo.latest_completed_run()
+        if run is None:
+            eligible = self.repo.manual_eligible_page(
+                accounts, store_id=store_id, page=1, page_size=1
+            )
+            return {
+                "total": 0, "high": 0, "medium": 0,
+                "observe": 0, "review_required": 0,
+                "eligible_manual": eligible["total"],
+                "evaluation_status": "not_ready", "run_date_la": None,
+                "as_of_date_la": None,
+            }
+        return self.repo.daily_summary(accounts, run=run, store_id=store_id)
 
     def list_requests(
         self,
