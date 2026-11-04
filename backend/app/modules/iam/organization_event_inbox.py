@@ -22,9 +22,9 @@ def enqueue_contact_event(session: Session, event: FeishuEvent) -> bool:
         text(
             """
             INSERT INTO iam_feishu_org_events
-                (event_id, event_type, open_id, status, next_attempt_at)
+                (event_id, event_type, open_id, revoke_session, status, next_attempt_at)
             VALUES
-                (:event_id, :event_type, :open_id, 'pending', now())
+                (:event_id, :event_type, :open_id, :revoke_session, 'pending', now())
             ON CONFLICT (event_id) DO NOTHING
             RETURNING event_id
             """
@@ -33,6 +33,7 @@ def enqueue_contact_event(session: Session, event: FeishuEvent) -> bool:
             "event_id": event.event_id,
             "event_type": event.event_type,
             "open_id": event.open_id,
+            "revoke_session": event.revoke_session,
         },
     ).scalar()
     return inserted is not None
