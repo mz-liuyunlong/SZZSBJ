@@ -23,6 +23,7 @@ from app.modules.approvals.schemas import (
     ApprovalSummary,
     ApprovalSupplementWrite,
 )
+from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
 from app.modules.iam.organization_access import (
     ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
     ORG_OWNER_SCOPE_SESSION_KEY,
@@ -96,10 +97,17 @@ class ApprovalService:
         self.account_owner_pairs = (
             scope.get(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY) if isinstance(scope, dict) else None
         )
+        self.account_stores = (
+            scope.get(STORE_SCOPE_SESSION_KEY) if isinstance(scope, dict) else None
+        )
 
     @property
     def _scoped(self) -> bool:
-        return self.org_owner_refs is not None or self.account_owner_pairs is not None
+        return (
+            self.org_owner_refs is not None
+            or self.account_owner_pairs is not None
+            or self.account_stores is not None
+        )
 
     def _account_owner_condition(self, alias: str) -> str:
         return (
@@ -107,6 +115,14 @@ class ApprovalService:
             "as granted(account_ref text, owner_uid text) "
             f"where granted.account_ref={alias}.source_account_ref "
             f"and granted.owner_uid={alias}.owner_ref)"
+        )
+
+    def _account_store_condition(self, alias: str) -> str:
+        return (
+            "exists (select 1 from jsonb_to_recordset(cast(:org_account_stores as jsonb)) "
+            "as stores(account_ref text, store_key text) "
+            f"where stores.account_ref={alias}.source_account_ref "
+            f"and stores.store_key={alias}.store_id)"
         )
 
     def _owner_params(self) -> dict[str, object]:
@@ -117,6 +133,11 @@ class ApprovalService:
             params["org_account_owners"] = json.dumps([
                 {"account_ref": account, "owner_uid": owner}
                 for account, owner in sorted(self.account_owner_pairs)
+            ])
+        if self.account_stores is not None:
+            params["org_account_stores"] = json.dumps([
+                {"account_ref": account, "store_key": store}
+                for account, store in sorted(self.account_stores)
             ])
         return params
 
@@ -131,6 +152,8 @@ class ApprovalService:
             clauses.append("wc.owner_ref=any(:org_owner_refs)")
         if self.account_owner_pairs is not None:
             clauses.append(self._account_owner_condition("wc"))
+        if self.account_stores is not None:
+            clauses.append(self._account_store_condition("wc"))
         return (
             f"({alias}.approval_type='wfs_case_abandon' and exists ("
             "select 1 from ops_wfs_fee_anomaly_cases wc where "
@@ -153,6 +176,10 @@ class ApprovalService:
                     + (
                         " and " + self._account_owner_condition("ops_wfs_fee_anomaly_cases")
                         if self.account_owner_pairs is not None else ""
+                    )
+                    + (
+                        " and " + self._account_store_condition("ops_wfs_fee_anomaly_cases")
+                        if self.account_stores is not None else ""
                     )
                     + (" for update" if lock else "")
                 ),
@@ -368,6 +395,8 @@ class ApprovalService:
             where.append("c.owner_ref=any(:org_owner_refs)")
         if self.account_owner_pairs is not None:
             where.append(self._account_owner_condition("c"))
+        if self.account_stores is not None:
+            where.append(self._account_store_condition("c"))
         params.update(self._owner_params())
         if query.approval_type and query.approval_type != "wfs_case_abandon":
             return ApprovalListData(items=[]), 0
@@ -675,6 +704,8 @@ class ApprovalService:
                 legacy_where.append("c.owner_ref=any(:org_owner_refs)")
             if self.account_owner_pairs is not None:
                 legacy_where.append(self._account_owner_condition("c"))
+            if self.account_stores is not None:
+                legacy_where.append(self._account_store_condition("c"))
         if query.view == "mine":
             formal_where.append("a.applicant_id<>:actor")
             if query.tab == "pending":
@@ -876,6 +907,7 @@ class ApprovalService:
         legacy_scope_sql = (
             (" and c.owner_ref=any(:org_owner_refs)" if self.org_owner_refs is not None else "")
             + (" and " + self._account_owner_condition("c") if self.account_owner_pairs is not None else "")
+            + (" and " + self._account_store_condition("c") if self.account_stores is not None else "")
         )
         org_params = self._owner_params()
         row = (
