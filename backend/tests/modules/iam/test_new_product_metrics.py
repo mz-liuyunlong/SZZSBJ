@@ -64,8 +64,12 @@ class _Session:
 def test_acos_uses_attributed_sales_not_total_sales() -> None:
     session = _Session()
     data = read_sku_metrics(
-        session, account="test-account", sku="TEST-SKU",
-        market_score=8, rule_version=1, rules=DEFAULT_RULES,
+        session,
+        account="test-account",
+        sku="TEST-SKU",
+        market_score=8,
+        rule_version=1,
+        rules=DEFAULT_RULES,
         as_of=date(2026, 11, 1),
     )
     period = data["periods"]["30"]
@@ -80,8 +84,12 @@ def test_acos_uses_attributed_sales_not_total_sales() -> None:
 def test_unknown_attribution_currency_never_produces_an_acos_score() -> None:
     session = _Session(attributed_currency=None)
     data = read_sku_metrics(
-        session, account="test-account", sku="TEST-SKU",
-        market_score=8, rule_version=1, rules=DEFAULT_RULES,
+        session,
+        account="test-account",
+        sku="TEST-SKU",
+        market_score=8,
+        rule_version=1,
+        rules=DEFAULT_RULES,
         as_of=date(2026, 11, 1),
     )
     period = data["periods"]["30"]
