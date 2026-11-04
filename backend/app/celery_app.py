@@ -20,6 +20,7 @@ AI_QUEUE = "ai-keyword"
 TASK_IMPORTS = (
     "app.modules.media_assets.tasks",
     "app.modules.integration_sync.tasks",
+    "app.modules.iam.organization_tasks",
     "app.modules.walmart_scf.tasks",
     "app.modules.walmart_remote.tasks",
     "app.modules.operation_logs.tasks",
@@ -37,6 +38,10 @@ TASK_ROUTES = {
     "walmart_scf.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "walmart_remote.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "integration_sync.*": {
+        "queue": INTEGRATION_QUEUE,
+        "routing_key": INTEGRATION_QUEUE,
+    },
+    "iam.organization_sync_tick": {
         "queue": INTEGRATION_QUEUE,
         "routing_key": INTEGRATION_QUEUE,
     },
@@ -131,6 +136,10 @@ def create_celery_app(
             "integration-sync-scheduler": {
                 "task": "integration_sync.scheduler_tick",
                 "schedule": 60.0,
+            },
+            "feishu-org-sync-scheduler": {
+                "task": "iam.organization_sync_tick",
+                "schedule": crontab(minute=20),
             },
         },
     )
