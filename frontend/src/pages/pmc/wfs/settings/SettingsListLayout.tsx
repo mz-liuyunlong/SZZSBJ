@@ -4,9 +4,8 @@
  * CommittedSearch, ResetButton) → alerts → summary row (count + actions) → ReportTableShell
  * (ProTable, fixed header, internal scroll) + fixed pagination.
  */
-import { QuestionCircleOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
-import { Button, Card, Empty, Pagination, Typography, theme } from "antd";
+import { Card, Empty, Pagination, Typography, theme } from "antd";
 import type { CSSProperties, ReactNode } from "react";
 import PageShell from "@/components/page/PageShell";
 import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
@@ -15,7 +14,6 @@ import ReportTableShell from "@/components/report-table/ReportTableShell";
 import ResetButton from "@/components/report-table/ResetButton";
 import { REPORT_TABLE_PAGE_SIZE_OPTIONS } from "@/components/report-table/pagination";
 import type { NavigationPage } from "@/config/navigation";
-import { SETTINGS_HELP_URL } from "./settingsShared";
 import "../WfsSettingsPage.css";
 
 export interface SettingsSearch {
@@ -57,10 +55,7 @@ export default function SettingsListLayout<Row extends Record<string, unknown>>(
     "--ant-color-fill-quaternary": token.colorFillQuaternary,
   } as CSSProperties;
   return (
-    <PageShell
-      page={p.page}
-      headerActions={<Button href={SETTINGS_HELP_URL} target="_blank" rel="noopener noreferrer" icon={<QuestionCircleOutlined />}>帮助</Button>}
-    >
+    <PageShell page={p.page}>
       <div className="pmc-settings" style={vars}>
         <Card size="small" className="pmc-settings__page-card">
           <RequestLoadingOverlay spinning={p.loading} label={`正在加载${p.page.title}，请稍候`} />
