@@ -39,7 +39,10 @@ from app.modules.data_pages.models import (
     WalmartListingDimension,
     WalmartListingInventoryDailyFact,
 )
-from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
+from app.modules.iam.organization_access import (
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
+    ORG_OWNER_SCOPE_SESSION_KEY,
+)
 from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
 from app.modules.walmart_monitor.models import WalmartMonitorListingCurrent
 
@@ -179,6 +182,9 @@ class DailySalesRepository:
         )
         self.account_stores: frozenset[tuple[str, str]] | None = (
             info.get(STORE_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.account_owner_pairs: frozenset[tuple[str, str]] | None = (
+            info.get(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
         )
 
     def _inventory_snapshot_table_ready(self) -> bool:
@@ -679,6 +685,13 @@ class DailySalesRepository:
                     DailySalesItemDayMart.store_id,
                 ).in_(sorted(self.account_stores))
             )
+        if self.account_owner_pairs is not None:
+            statement = statement.where(
+                tuple_(
+                    DailySalesItemDayMart.source_account_ref,
+                    DailySalesItemDayMart.owner_ref,
+                ).in_(sorted(self.account_owner_pairs))
+            )
         if self.org_owner_refs is not None:
             statement = statement.where(DailySalesItemDayMart.owner_ref.in_(self.org_owner_refs))
         if start_date is not None:
@@ -741,6 +754,9 @@ class OrderProfitRepository:
         )
         self.account_stores: frozenset[tuple[str, str]] | None = (
             info.get(STORE_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.account_owner_pairs: frozenset[tuple[str, str]] | None = (
+            info.get(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
         )
 
     def list_order_profit(
@@ -864,7 +880,7 @@ class OrderProfitRepository:
         statement = select(OrderProfitSkuDayMart).where(
             OrderProfitSkuDayMart.source_account_ref.in_(account_refs)
         )
-        if self.org_owner_refs is not None:
+        if self.account_owner_pairs is not None or self.org_owner_refs is not None:
             # Profit MART rows can aggregate multiple owners. Do not expose them
             # until a reviewed owner-safe allocation exists.
             from app.core.api import ApiError, ErrorCode
@@ -898,6 +914,9 @@ class ListingManagementRepository:
         )
         self.account_stores: frozenset[tuple[str, str]] | None = (
             info.get(STORE_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+        self.account_owner_pairs: frozenset[tuple[str, str]] | None = (
+            info.get(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
         )
 
     def list_listings(
@@ -1300,6 +1319,22 @@ class ListingManagementRepository:
                     ListingManagementCurrentMart.store_id,
                 ).in_(sorted(self.account_stores))
             )
+        if self.account_owner_pairs is not None:
+            statement = statement.where(
+                or_(
+                    tuple_(
+                        ListingManagementCurrentMart.source_account_ref,
+                        owner_lookup.c.owner_uid,
+                    ).in_(sorted(self.account_owner_pairs)),
+                    and_(
+                        owner_lookup.c.owner_uid.is_(None),
+                        tuple_(
+                            ListingManagementCurrentMart.source_account_ref,
+                            ListingManagementCurrentMart.owner_ref,
+                        ).in_(sorted(self.account_owner_pairs)),
+                    ),
+                )
+            )
         if self.org_owner_refs is not None:
             statement = statement.where(
                 or_(
@@ -1562,6 +1597,22 @@ class ListingManagementRepository:
             )
             .where(ListingManagementCurrentMart.source_account_ref.in_(sorted(account_refs)))
         )
+        if self.account_owner_pairs is not None:
+            statement = statement.where(
+                or_(
+                    tuple_(
+                        ListingManagementCurrentMart.source_account_ref,
+                        owner_lookup.c.owner_uid,
+                    ).in_(sorted(self.account_owner_pairs)),
+                    and_(
+                        owner_lookup.c.owner_uid.is_(None),
+                        tuple_(
+                            ListingManagementCurrentMart.source_account_ref,
+                            ListingManagementCurrentMart.owner_ref,
+                        ).in_(sorted(self.account_owner_pairs)),
+                    ),
+                )
+            )
         if self.org_owner_refs is not None:
             statement = statement.where(
                 or_(
