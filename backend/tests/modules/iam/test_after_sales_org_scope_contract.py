@@ -52,9 +52,7 @@ def test_refund_scope_is_installed_per_request() -> None:
             "headers": [],
         }
     )
-    principal = Principal(
-        user_id="8", permissions=frozenset({"aftersales:refund-management:read"})
-    )
+    principal = Principal(user_id="8", permissions=frozenset({"aftersales:refund-management:read"}))
     session = MagicMock()
     session.info = {ORG_OWNER_SCOPE_SESSION_KEY: frozenset({"stale"})}
     with patch(
