@@ -100,6 +100,13 @@ def test_real_clearance_listing_application_approval_and_progress(clearance_db: 
     account = "clearance-ci-account"
     allowed = frozenset({account})
     listing_id = _seed_listing(clearance_db, account=account, store="ci-store", item="ci-item")
+    _seed_listing(
+        clearance_db,
+        account=account,
+        store="ci-store-other",
+        item="ci-item",
+        available=0,
+    )
     service = ClearanceService(clearance_db)
 
     candidates = service.list_listings(allowed, eligible_only=True)
