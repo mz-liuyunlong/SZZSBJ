@@ -474,6 +474,13 @@ def test_clearance_review_permission_is_not_wfs_review_permission(
             json={"decision": "approved","note": "","expected_version": 1},
         )
         assert denied.status_code == 403
+        # A forbidden profitability-based filter must not disclose private
+        # classification through row count or membership.
+        risk_probe = client.get(
+            "/api/products/clearance-center/listings",
+            params={"risk_level": "medium"},
+        )
+        assert risk_probe.status_code == 403
 
         # No account filter supplied by the browser can expand IAM scope.
         invalid = client.get(
