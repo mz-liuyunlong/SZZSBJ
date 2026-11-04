@@ -252,7 +252,7 @@ class ApprovalService:
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
         return dict(row)
 
-    def _as_item(self, r: dict, actor: str, may_review: bool) -> ApprovalItem:
+    def _as_item(self, r: dict, actor: str, may_review: bool, may_review_clearance: bool = False) -> ApprovalItem:
         snapshot = r["snapshot"] if isinstance(r["snapshot"], dict) else {}
         return ApprovalItem(
             id=str(r["id"]),
@@ -273,7 +273,8 @@ class ApprovalService:
             reviewed_by=r["reviewed_by"],
             reason=r["reason"],
             follow_log=r.get("follow_log"),
-            can_review=(may_review and r["status"] == "submitted" and r["applicant_id"] != actor),
+            can_review=(r["status"] == "submitted" and r["applicant_id"] != actor and
+                        (may_review or (may_review_clearance and r["approval_type"] == "clearance_request"))),
         )
 
     def legacy_unverified(
@@ -554,12 +555,14 @@ class ApprovalService:
         account_refs: frozenset[str],
         actor: str,
         is_admin: bool,
+        may_review_clearance: bool = False,
     ) -> tuple[ApprovalListData, int]:
         """Page formal approvals and current WFS Case decisions without duplicates."""
         params: dict = {
             "accounts": list(account_refs),
             "actor": actor,
             "is_admin": is_admin,
+            "clearance_reviewer": may_review_clearance,
             "limit": query.page_size,
             "offset": (query.page - 1) * query.page_size,
         }
@@ -573,7 +576,8 @@ class ApprovalService:
         formal_where = [
             "a.source_account_ref=any(:accounts)",
             formal_status,
-            "(a.approval_type='wfs_case_abandon' or a.applicant_id=:actor or :is_admin)",
+            "(a.approval_type='wfs_case_abandon' or a.applicant_id=:actor or :is_admin "
+            "or (a.approval_type='clearance_request' and :clearance_reviewer))",
         ]
         case_status = (
             ["c.status='archive_pending'", "c.archive_review_status='pending'"]
@@ -631,7 +635,9 @@ class ApprovalService:
                    a.snapshot->>'pending_recover_amount' as amount,
                    a.snapshot->>'currency_code' as currency_code,
                    a.submitted_at, a.reviewed_at, a.reviewed_by, a.reason,
-                   (a.status='submitted' and a.applicant_id<>:actor) as can_review,
+                   (a.status='submitted' and a.applicant_id<>:actor and
+                    (a.approval_type='wfs_case_abandon' or :is_admin or
+                     (a.approval_type='clearance_request' and :clearance_reviewer))) as can_review,
                    false as requires_verification, false as case_review,
                    a.submitted_at as sort_time,
                    (select wc.follow_log from ops_wfs_fee_anomaly_cases wc
@@ -713,9 +719,12 @@ class ApprovalService:
         actor: str,
         may_review: bool,
         is_admin: bool = False,
+        may_review_clearance: bool = False,
     ) -> tuple[ApprovalListData, int]:
         if may_review and query.view != "created":
-            return self._list_pending_with_legacy(query, account_refs, actor, is_admin)
+            return self._list_pending_with_legacy(
+                query, account_refs, actor, is_admin, may_review_clearance
+            )
         status_clause = (
             "a.status in ('submitted','info_required')"
             if query.tab == "pending"
@@ -726,21 +735,27 @@ class ApprovalService:
         where = [
             "a.source_account_ref=any(:accounts)",
             status_clause,
-            "(a.approval_type='wfs_case_abandon' or a.applicant_id=:actor or :is_admin)",
+            "(a.applicant_id=:actor or :is_admin "
+            "or (a.approval_type='clearance_request' and :clearance_reviewer) "
+            "or (a.approval_type='wfs_case_abandon' and :may_review_wfs))",
         ]
         params: dict = {
             "accounts": list(account_refs),
             "actor": actor,
             "is_admin": is_admin,
+            "clearance_reviewer": may_review_clearance,
+            "may_review_wfs": may_review,
             "limit": query.page_size,
             "offset": (query.page - 1) * query.page_size,
         }
-        if not may_review:
-            where.append("a.applicant_id=:actor")
-        elif query.view == "created":
+        if query.view == "created":
             where.append("a.applicant_id=:actor")
         elif query.view == "mine":
             where.append("a.applicant_id<>:actor")
+            if not may_review and not is_admin:
+                where.append("a.approval_type='clearance_request' and :clearance_reviewer")
+        elif not may_review and not may_review_clearance and not is_admin:
+            where.append("a.applicant_id=:actor")
         if query.approval_type:
             where.append("a.approval_type=:kind")
             params["kind"] = query.approval_type
@@ -775,7 +790,7 @@ class ApprovalService:
             .all()
         )
         return ApprovalListData(
-            items=[self._as_item(dict(r), actor, may_review) for r in rows]
+            items=[self._as_item(dict(r), actor, may_review, may_review_clearance) for r in rows]
         ), int(total)
 
     def summary(
@@ -784,6 +799,7 @@ class ApprovalService:
         actor: str,
         may_review: bool,
         is_admin: bool = False,
+        may_review_clearance: bool = False,
     ) -> ApprovalSummary:
         row = (
             self.session.execute(
@@ -794,14 +810,16 @@ class ApprovalService:
               count(*) filter (where status='info_required') info_required,
               count(*) filter (where status='approved') approved
             from app_approval_requests where source_account_ref=any(:accounts)
-              and (:may_review or applicant_id=:actor)
-              and (approval_type='wfs_case_abandon' or applicant_id=:actor or :is_admin)
+              and (applicant_id=:actor or :is_admin
+                   or (:may_review and approval_type='wfs_case_abandon')
+                   or (:clearance_reviewer and approval_type='clearance_request'))
         """),
                 {
                     "accounts": list(account_refs),
                     "actor": actor,
                     "may_review": may_review,
                     "is_admin": is_admin,
+                    "clearance_reviewer": may_review_clearance,
                 },
             )
             .mappings()
@@ -862,15 +880,17 @@ class ApprovalService:
         actor: str,
         may_review: bool,
         is_admin: bool = False,
+        may_review_clearance: bool = False,
     ) -> ApprovalDetail:
         record = self._record(approval_id, account_refs)
-        if (not may_review and record["applicant_id"] != actor) or (
-            record["approval_type"] != "wfs_case_abandon"
-            and not is_admin
-            and record["applicant_id"] != actor
-        ):
+        permitted = (
+            record["applicant_id"] == actor or is_admin or
+            (record["approval_type"] == "wfs_case_abandon" and may_review) or
+            (record["approval_type"] == "clearance_request" and may_review_clearance)
+        )
+        if not permitted:
             raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
-        item = self._as_item(record, actor, may_review)
+        item = self._as_item(record, actor, may_review, may_review_clearance)
         events = (
             self.session.execute(
                 text("""
@@ -888,12 +908,19 @@ class ApprovalService:
             "finance_exception",
             "access_change",
             "operations_plan_ack",
+            "clearance_request",
         ):
+            current_clearance = None
+            if record["approval_type"] == "clearance_request":
+                from app.modules.clearance_center.service import ClearanceService
+                current_clearance = ClearanceService(self.session).request_detail(
+                    UUID(record["business_ref"]), account_refs
+                )
             return ApprovalDetail(
                 **item.model_dump(),
                 snapshot=record["snapshot"],
                 evidence=record["evidence"],
-                current_case=None,
+                current_case=current_clearance,
                 data_changed=False,
                 can_supplement=(
                     record["status"] == "info_required" and record["applicant_id"] == actor
