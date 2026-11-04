@@ -9,7 +9,7 @@ const grants = ["page:pmc:domestic-warehouse-board:view"];
 describe("PMC navigation contract", () => {
   it("preserves existing domestic grants while splitting page routes", () => {
     const pages = pmc.children.filter((p) => p.sidebarSection === "pmc-domestic" && p.status !== "disabled");
-    expect(pages.map((p) => p.title)).toEqual(["批次看板", "打包单审批", "打包单（仓库）"]);
+    expect(pages.map((p) => p.title)).toEqual(["批次看板", "打包单审批", "仓库打包"]);
     for (const page of pages) {
       expect(getPagePermissionKey(page)).toBe(grants[0]);
       expect(isMockPageAccessibleForRole("user", page, grants)).toBe(true);
@@ -19,7 +19,7 @@ describe("PMC navigation contract", () => {
   it("opens each WFS leaf from the sidebar with one shared page permission", () => {
     const pages = pmc.children.filter((p) => p.sidebarSection === "pmc-wfs");
     expect(pages.map((p) => p.title)).toEqual([
-      "待发货打包单", "WFS 货件看板", "异常中心",
+      "待创建货件", "WFS 货件看板", "异常中心",
     ]);
     expect(pmc.children.filter((p) => p.status === "disabled")).toHaveLength(0);
     for (const page of pages) {

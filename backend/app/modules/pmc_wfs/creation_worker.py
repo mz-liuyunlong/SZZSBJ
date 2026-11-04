@@ -7,12 +7,13 @@ Per planned shipment (ticket), Rocky 2026-11-04:
 * No trustworthy answer (timeout, 5xx, accepted without ids) -> stays RUNNING ("提交中") and
   is read back by our order id (= ticket id) every 3 minutes, at most 10 times; still not
   found after the 10th read -> FAILED ("查询超时"), boxes freed.
+* Nothing here schedules itself: the 数据中心 · 任务中心 task 「WFS 创建结果拉取」
+  (``creation_task``) runs every 3 minutes and calls ``run_operation`` for what is due.
 * Retry (FAILED only) first reads back by the same order id; only if Walmart has nothing is
   the same order sent again, so one batch of boxes can never become two shipments.
 """
 
 import base64
-from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -30,7 +31,6 @@ from app.modules.pmc_wfs.walmart_gateway import DefinitiveRejection, NotSent, Re
 
 __all__ = ["DefinitiveRejection", "run_operation", "shipments_of"]
 
-Schedule = Callable[[str, str, int], None]
 TIMEOUT_REASON = (
     f"已每 {POLL_INTERVAL_SECONDS // 60} 分钟查询一次、共 {POLL_MAX_ATTEMPTS} 次，"
     "仍未在 Walmart 查到这票货件，按失败处理"
@@ -121,7 +121,7 @@ def _succeed(session, ident, ticket, records):
     _event(session, ident, "succeeded", ticket_id=str(ticket.id), shipments=sorted(shipments))
 
 
-def _start_polling(session, ident, ticket, code, schedule):
+def _start_polling(session, ident, ticket, code):
     now = datetime.now(UTC)
     ticket.state, ticket.error_code = "RUNNING", code[:64] if code else None
     ticket.result = {
@@ -137,20 +137,21 @@ def _start_polling(session, ident, ticket, code, schedule):
     return True
 
 
-def run_operation(factory, gateway, ident, action="execute", schedule: Schedule | None = None):
-    """Callable by Celery or an isolated test; factory, adapter and scheduler are explicit."""
+def run_operation(factory, gateway, ident, action="execute") -> bool:
+    """Run one action for one operation; returns True while a ticket still waits for a
+    read-back. Called by the task-center task (``creation_task``) or an isolated test."""
     ident = UUID(str(ident))
     with factory() as session:
         guard_write(session)
         op = session.get(WfsCreation, ident)
         if op is None:
-            return
+            return False
         if not manually_approved(op):
             # Red line: no Walmart call (create, read-back or label) without a written
             # human approval for this operation. Record the refusal, touch nothing else.
             _event(session, ident, "refused_unapproved", action=action, state=op.state)
             session.commit()
-            return
+            return False
         if action in ("execute", "retry"):
             gateway.validate(op.snapshot)
         ticket_ids = list(
@@ -183,8 +184,18 @@ def run_operation(factory, gateway, ident, action="execute", schedule: Schedule 
         else:
             op.state = "FAILED"
         session.commit()
-    if poll_again and schedule is not None:
-        schedule(str(ident), "poll", POLL_INTERVAL_SECONDS)
+    return poll_again
+
+
+POLL_GRACE = timedelta(seconds=30)
+
+
+def poll_due(polling, now=None) -> bool:
+    """A 3-minute task run may start a few seconds before ``next_at``; allow 30 s."""
+    next_at = polling.get("next_at")
+    if not next_at:
+        return True
+    return datetime.fromisoformat(next_at) <= (now or datetime.now(UTC)) + POLL_GRACE
 
 
 def _claim(factory, ident, ticket_id, action):
@@ -201,6 +212,8 @@ def _claim(factory, ident, ticket_id, action):
         if ticket.state == "QUEUED" and action in ("execute", "retry", "reconcile"):
             mode = "create"
         elif ticket.state == "RUNNING" and polling and action == "poll":
+            if not poll_due(polling):
+                return None  # read back every 3 minutes, not on every task run
             mode = "poll"
         elif ticket.state in ("RUNNING", "UNKNOWN") and action == "reconcile":
             started = ticket.result.get("started_at")
@@ -287,7 +300,7 @@ def execute_ticket(factory, gateway, ident, ticket_id, action) -> bool:
         elif outcome in ("rejected", "not_sent"):
             _fail(session, ident, ticket, *payload)
         elif outcome == "unknown":
-            poll_again = _start_polling(session, ident, ticket, payload, None)
+            poll_again = _start_polling(session, ident, ticket, payload)
         elif outcome == "missing" and mode == "poll":
             polling = dict(ticket.result["polling"])
             polling["count"] += 1
@@ -307,9 +320,7 @@ def execute_ticket(factory, gateway, ident, ticket_id, action) -> bool:
                 poll_again = True
         elif outcome == "missing" and mode == "check" and ticket.state == "UNKNOWN":
             # A pre-polling UNKNOWN ticket joins the regular 3-minute schedule.
-            poll_again = _start_polling(
-                session, ident, ticket, payload or "WFS_RESULT_UNKNOWN", None
-            )
+            poll_again = _start_polling(session, ident, ticket, payload or "WFS_RESULT_UNKNOWN")
         session.commit()
         succeeded = ticket.state == "SUCCEEDED"
     if succeeded:

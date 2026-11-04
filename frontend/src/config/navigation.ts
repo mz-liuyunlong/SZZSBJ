@@ -326,14 +326,14 @@ export const navigation: NavigationGroup[] = [
         sidebarSection: 'pmc-domestic', status: 'testing', source: 'new_postgres', migrationMode: 'native',
         viewPermissionKey: 'page:pmc:domestic-warehouse-board:view',
       }),
-      page('pmc', 'packing_warehouse', '打包单（仓库）', '/pmc/domestic/packing-warehouse', {
+      page('pmc', 'packing_warehouse', '仓库打包', '/pmc/domestic/packing-warehouse', {
         sidebarSection: 'pmc-domestic', status: 'testing', source: 'new_postgres', migrationMode: 'native',
         viewPermissionKey: 'page:pmc:domestic-warehouse-board:view',
       }),
-      page('pmc', 'wfs_pending_packing', '待发货打包单', '/pmc/wfs/pending-packing', {
+      page('pmc', 'wfs_pending_packing', '待创建货件', '/pmc/wfs/pending-packing', {
         sidebarSection: 'pmc-wfs', status: 'testing', readOnly: false, source: 'new_postgres', migrationMode: 'native',
         viewPermissionKey: 'page:pmc:wfs:view',
-        help: { enabled: true, title: '待发货打包单使用说明', helpUrl: '/help/pmc-wfs-pending-packing.html', openInNewTab: true },
+        help: { enabled: true, title: '待创建货件使用说明', helpUrl: '/help/pmc-wfs-pending-packing.html', openInNewTab: true },
       }),
       page('pmc', 'wfs_board', 'WFS 货件看板', '/pmc/wfs/board', {
         sidebarSection: 'pmc-wfs', status: 'building', readOnly: true,

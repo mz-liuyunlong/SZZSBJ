@@ -185,3 +185,155 @@
   box-shadow: none !important;
   font-weight: 500;
 }
+
+/*
+ * 待创建货件（报表样板，同 PMC 总看板）：页卡 → 页签 → 筛选卡 → 统计卡 → ReportTableShell
+ * 内部滚动、分页固定。颜色、圆角只用 --admin-* 令牌。
+ */
+.wfs-create {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.wfs-create__page-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+  border-color: var(--admin-border-soft);
+  border-radius: var(--admin-radius);
+}
+
+.wfs-create__page-card > .ant-card-body {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  padding: 16px 18px;
+}
+
+.wfs-create__title-row {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.wfs-create__title-row > :first-child {
+  min-width: 0;
+  flex: 1 1 480px;
+}
+
+.wfs-create__title-row h1 {
+  margin: 0 0 4px;
+  color: var(--admin-text);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.wfs-create__tabs {
+  flex: 0 0 auto;
+}
+
+.wfs-create__tabs > .ant-tabs-nav {
+  margin-bottom: 12px;
+}
+
+.wfs-create__toolbar-card {
+  flex: 0 0 auto;
+  margin-bottom: 12px;
+  border-color: var(--admin-border-soft);
+  background: var(--admin-surface-soft);
+}
+
+.wfs-create__toolbar {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.wfs-create__toolbar-actions {
+  margin-left: auto;
+}
+
+.wfs-create__store {
+  width: 240px;
+}
+
+.wfs-create__select {
+  min-width: 160px;
+}
+
+.wfs-create__toolbar .report-table-connected-search.wfs-create__search {
+  width: min(420px, 100%);
+}
+
+.wfs-create .management-stat-cards {
+  flex: 0 0 auto;
+  margin-bottom: 12px;
+}
+
+.wfs-create__error {
+  flex: 0 0 auto;
+  margin-bottom: 12px;
+}
+
+.wfs-create__table-wrap {
+  display: flex;
+  min-width: 0;
+  min-height: 280px;
+  flex: 1 1 0;
+  flex-direction: column;
+}
+
+.wfs-create__sub {
+  display: block;
+  color: var(--admin-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.wfs-create__strong {
+  font-weight: 600;
+}
+
+.wfs-create__ref {
+  display: block;
+  color: var(--admin-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.wfs-create__reason {
+  display: block;
+  margin-top: 4px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.wfs-create__shipment {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wfs-create__defaults-note {
+  margin-top: 8px;
+}

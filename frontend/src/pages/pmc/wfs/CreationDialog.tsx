@@ -1,8 +1,8 @@
 /** Count selection stays independent from editing warehouse packing facts. */
 import { Alert, Button, Checkbox, Form, Input, InputNumber, Modal, Space, Table, Typography } from "antd";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { allocationPreview, createShipments, getCreationCapabilities, optionalPreview, type AllocationInput, type AllocationPreview, type CreationInput, type CreationOperation } from "./creationApi";
+import { allocationPreview, createShipments, getCreationCapabilities, getCreationDefaults, optionalPreview, type AllocationInput, type AllocationPreview, type CreationInput, type CreationOperation } from "./creationApi";
 import { pendingError } from "./pendingPackingApi";
 import type { PendingRow, ReturnAddress } from "./pendingPackingTypes";
 
@@ -22,6 +22,21 @@ export default function CreationDialog({ rows, scope, canProbe, onCancel, onCrea
   const [error, setError] = useState<string>();
   const key = useRef<{ signature: string; key: string } | undefined>(undefined);
   const capabilities = useQuery({ queryKey: ["wfs-creation-capabilities", scope], queryFn: ({ signal }) => getCreationCapabilities(signal) });
+  // 创建默认值按店铺自动带出；这里改的值只用于这一次，不回写默认值。
+  const defaults = useQuery({ queryKey: ["wfs-creation-defaults", scope, row.order.source_account_ref, row.order.store_id], queryFn: ({ signal }) => getCreationDefaults(row.order.source_account_ref, row.order.store_id, signal), retry: false });
+  const filled = useRef(false);
+  useEffect(() => {
+    const d = defaults.data?.data;
+    if (!d || filled.current) return;
+    filled.current = true;
+    const untouched = (name: keyof Values) => !form.isFieldTouched(name);
+    const next: Partial<Values> = {};
+    if (untouched("delivery_date")) next.delivery_date = d.expected_delivery_date;
+    if (untouched("its")) next.its = d.its;
+    if (d.return_address) for (const [k, v] of Object.entries(d.return_address)) if (untouched(k as keyof Values)) Object.assign(next, { [k]: v });
+    form.setFieldsValue(next);
+  }, [defaults.data, form]);
+  const levelText = { store: "本店铺的创建默认值", account: "账号的创建默认值", default: "系统默认值" } as const;
   const valid = Number.isInteger(boxes) && boxes > 0 && boxes <= Math.min(availableBoxes, 9999) && counts.every((n) => Number.isInteger(n) && n > 0) && counts.reduce((a, b) => a + b, 0) === boxes;
   const invalidate = () => { setPreview(undefined); setProbe(undefined); };
   const input = (): AllocationInput => ({ order_id: row.order.id, expected_version: row.order.version, expected_box_version: row.order.box_set!.version, additional_selections: rows.slice(1).map((r) => ({ order_id: r.order.id, expected_version: r.order.version, expected_box_version: r.order.box_set!.version })), shipping_boxes: boxes, shipment_count: counts.length, shipment_boxes: counts });
@@ -44,6 +59,7 @@ export default function CreationDialog({ rows, scope, canProbe, onCancel, onCrea
   </Space>}>
     <Typography.Paragraph>选择本次发货箱数和分票方式，核对每票实际箱子后确认创建。无需 OWS。确认创建后程序先做自动检查并占用箱子，状态为“待人工批准”；有书面批准的人在创建记录里点“批准执行”后才会调用 Walmart。探测可选。</Typography.Paragraph>
     {capabilities.data?.data.reason && <Alert type="info" showIcon message={capabilities.data.data.reason} />}
+    {defaults.data?.data && <Alert className="wfs-create__defaults-note" type="success" showIcon message={`已按${levelText[defaults.data.data.level]}带出退货地址、预计到仓日期（今天 + ${defaults.data.data.ship_date_offset} 天）和 ITS；这里改只影响这一次，不改默认值。`} />}
     {(error || capabilities.error) && <Alert type="error" showIcon message={error ?? pendingError(capabilities.error)} />}
     <Space wrap style={{ marginBlock: 16 }}>
       <label>本次发货箱数 <InputNumber aria-label="本次发货箱数" min={1} max={Math.min(availableBoxes, 9999)} precision={0} value={boxes} disabled={busy} onChange={(v) => { setBoxes(v ?? 0); invalidate(); }} /></label>

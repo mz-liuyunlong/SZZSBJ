@@ -46,21 +46,30 @@ def guard_write(session):
         raise ApiError(code="WFS_LOCAL_ONLY", status_code=403)
 
 
-def creation_defaults(session, account):
-    """WFS 设置 · 创建默认值 for one account (8088 defaults when never saved)."""
-    from app.modules.pmc_wfs.settings_models import WfsCreationDefaults
+def creation_defaults(session, account, store_id=None):
+    """WFS 创建默认值：店铺行 → 账号行（WFS 设置）→ 8088 默认值。"""
+    from app.modules.pmc_wfs.settings_models import WfsCreationDefaults, WfsStoreCreationDefaults
     from app.modules.pmc_wfs.settings_seed import CREATION_DEFAULTS
 
+    keys = ("transport", "ship_date_offset", "pallet_boxes", "mixed_boxes", "carrier_opt")
+    if store_id:
+        row = session.get(WfsStoreCreationDefaults, (account, store_id))
+        if row is not None:
+            return {
+                **{k: getattr(row, k) for k in keys},
+                "its": row.its,
+                "return_address": row.return_address,
+                "saved": True,
+                "level": "store",
+            }
     row = session.get(WfsCreationDefaults, account)
-    if row is None:
-        return {**CREATION_DEFAULTS, "saved": False}
+    values = {k: getattr(row, k) for k in keys} if row is not None else dict(CREATION_DEFAULTS)
     return {
-        "transport": row.transport,
-        "ship_date_offset": row.ship_date_offset,
-        "pallet_boxes": row.pallet_boxes,
-        "mixed_boxes": row.mixed_boxes,
-        "carrier_opt": row.carrier_opt,
-        "saved": True,
+        **values,
+        "its": False,
+        "return_address": None,
+        "saved": row is not None,
+        "level": "account" if row is not None else "default",
     }
 
 
@@ -242,7 +251,7 @@ class CreationService:
                 ],
             }
             # WFS 设置 · 创建默认值: recorded with the operation; fills the delivery date.
-            defaults = creation_defaults(self.s, cmd.source_account_ref)
+            defaults = creation_defaults(self.s, cmd.source_account_ref, order.store_id)
             snapshot["creation_defaults"] = defaults
             if not snapshot.get("expected_delivery_at"):
                 snapshot["expected_delivery_at"] = default_delivery_at(defaults).isoformat()
@@ -504,7 +513,9 @@ class CreationService:
         }
         if snapshot["order"]["source_account_ref"] != cmd.source_account_ref:
             missing()
-        defaults = creation_defaults(self.s, cmd.source_account_ref)
+        defaults = creation_defaults(
+            self.s, cmd.source_account_ref, snapshot["order"].get("store_id")
+        )
         snapshot["creation_defaults"] = defaults
         if not snapshot.get("expected_delivery_at"):
             snapshot["expected_delivery_at"] = default_delivery_at(defaults).isoformat()
@@ -512,12 +523,15 @@ class CreationService:
             self.gateway.validate(snapshot)
         return {"preview_hash": allocation.preview_hash, "result": self.gateway.preview(snapshot)}
 
-    def defaults(self, account):
+    def defaults(self, account, store_id=None):
         if account not in self.base.accounts:
             raise ApiError(code="DATA_SCOPE_DENIED", status_code=403)
-        values = creation_defaults(self.s, account)
+        if store_id and self.base.stores is not None and store_id not in self.base.stores:
+            raise ApiError(code="DATA_SCOPE_DENIED", status_code=403)
+        values = creation_defaults(self.s, account, store_id)
         return CreationDefaultsRead(
             source_account_ref=account,
+            store_id=store_id,
             expected_delivery_date=default_delivery_at(values).date().isoformat(),
             **values,
         )

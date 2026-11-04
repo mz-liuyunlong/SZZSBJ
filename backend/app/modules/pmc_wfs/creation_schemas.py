@@ -137,15 +137,19 @@ class Capabilities(Strict):
 
 
 class CreationDefaultsRead(Strict):
-    """WFS 设置 · 创建默认值 as used by the creation dialog."""
+    """创建默认值（按店铺 → 账号 → 8088 默认），创建弹窗自动带出。"""
 
     source_account_ref: str
+    store_id: str | None = None
     transport: str
     ship_date_offset: int
     pallet_boxes: int
     mixed_boxes: int
     carrier_opt: str
+    its: bool = False
+    return_address: ReturnAddress | None = None
     saved: bool
+    level: Literal["store", "account", "default"] = "default"
     expected_delivery_date: str  # today + ship_date_offset (Asia/Shanghai)
 
 

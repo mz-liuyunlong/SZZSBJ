@@ -47,7 +47,7 @@ export default function PackingWarehousePanel({ preferenceScope }: { preferenceS
   };
   const error = api.list.error ?? api.summary.error;
   const stats = api.summary.data?.data;
-  return <section className="domestic-packing" aria-label="打包单（仓库）内容">{context}
+  return <section className="domestic-packing" aria-label="仓库打包内容">{context}
     <Card size="small" className="domestic-board__toolbar-card"><PackingWarehouseToolbar filters={filters} onChange={commitFilters} onReset={() => commitFilters(initialPackingWarehouseFilters())} storeOptions={api.options.data?.data.stores ?? []} optionsLoading={api.options.isFetching} /></Card>
     {error && <Alert type="error" showIcon message={warehouseError(error)} action={<Button onClick={() => void api.refresh()}>重试</Button>} />}
     {api.options.error && <Alert type="warning" message="店铺选项加载失败" action={<Button onClick={() => void api.options.refetch()}>重试店铺选项</Button>} />}

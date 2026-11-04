@@ -9,7 +9,7 @@ export interface PendingRow {
 }
 export interface PendingFilters {
   store_id?: string; keyword: string; only_test: boolean;
-  arrangement?: "all" | "ready" | "partial" | "done";
+  arrangement?: "all" | "open" | "ready" | "partial" | "done";
   creation_result?:
     | "all"
     | "none"

@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import create_engine, text
+from sqlalchemy import MetaData, UniqueConstraint, create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.schema import CreateTable
 
@@ -82,6 +82,16 @@ V2_MIGRATIONS = (
 )
 
 
+TASK_CENTER_TABLES = (
+    "gov_integration_interfaces",
+    "gov_integration_sync_configs",
+    "gov_integration_sync_runs",
+    "gov_integration_sync_run_events",
+    "gov_integration_sync_locks",
+    "gov_integration_sync_run_work_items",
+)
+
+
 def install_v2_schema(conn):
     """Synthetic source tables (no source FKs) + the real V2 migrations, in order."""
     register_productlist_sync_models()
@@ -105,11 +115,27 @@ def install_v2_schema(conn):
                 "ops_pmc_wfs_",
                 "evt_pmc_wfs_",
                 "ref_wfs_",
+                "dim_lingxing_stores",
+                "evt_wfs_settings_changes",
             )
         ):
             continue
         if table.name not in existing:
             conn.execute(CreateTable(table, include_foreign_key_constraints=[]))
+    # 任务中心 tables for 「WFS 创建结果拉取」: the ORM's column_0 unique names collide when
+    # created outside migrations, so test copies get one name per column set.
+    task_center = MetaData()
+    for name in TASK_CENTER_TABLES:
+        if name in existing:
+            continue
+        copy = Base.metadata.tables[name].to_metadata(task_center)
+        for constraint in copy.constraints:
+            if isinstance(constraint, UniqueConstraint):
+                columns = "_".join(c.name for c in constraint.columns)
+                constraint.name = f"t_uq_{name}_{columns}"[:63]
+        conn.execute(CreateTable(copy, include_foreign_key_constraints=[]))
+        for index in copy.indexes:
+            index.create(conn)
     versions = Path(__file__).parents[3] / "alembic" / "versions"
     for index, name in enumerate(V2_MIGRATIONS):
         migration = module_from(versions / name, f"v2_test_migration_{index}")
@@ -187,10 +213,10 @@ def app_for(engine, account, gateway):
     from app.core.api import install_api_foundation
     from app.core.auth import Principal, get_optional_principal
     from app.modules.pmc_wfs.creation_router import router as creation_router
+    from app.modules.pmc_wfs.creation_task import get_creation_dispatcher
     from app.modules.pmc_wfs.gateway import get_creation_gateway
     from app.modules.pmc_wfs.router import router, service
     from app.modules.pmc_wfs.service import WfsService
-    from app.modules.pmc_wfs.tasks import get_creation_dispatcher
 
     app = FastAPI()
     install_api_foundation(app)

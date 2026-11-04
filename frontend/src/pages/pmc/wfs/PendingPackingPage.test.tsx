@@ -8,7 +8,7 @@ import { navigation } from "@/config/navigation";
 import PendingPackingPage from "./PendingPackingPage";
 import * as api from "./pendingPackingApi";
 import * as creation from "./creationApi";
-vi.mock("./creationApi", async (original) => ({ ...await original<typeof creation>(), getCreationCapabilities: vi.fn(), createShipments: vi.fn() }));
+vi.mock("./creationApi", async (original) => ({ ...await original<typeof creation>(), getCreationCapabilities: vi.fn(), createShipments: vi.fn(), getCreationDefaults: vi.fn(), getTicketCounts: vi.fn(), listCreationTickets: vi.fn(), retryCreation: vi.fn(), listStoreDefaults: vi.fn(), saveStoreDefaults: vi.fn() }));
 import type { PendingRow } from "./pendingPackingTypes";
 
 vi.mock("./pendingPackingApi", async (original) => ({ ...await original<typeof api>(), listPending: vi.fn(), pendingOptions: vi.fn(), pendingSummary: vi.fn(), submitDrafts: vi.fn() }));
@@ -22,6 +22,18 @@ const row = {
       lines: [{ id: "00000000-0000-4000-8000-000000000002", line_no: 1, boxes: 2, units_per_box: 5 }] } },
   total_boxes: 2, occupied_boxes: 0, available_boxes: 2, available_units: 10, business_test: true, occupied_line_ids: [], available_line_ids: ["00000000-0000-4000-8000-000000000002"], blocked_reasons: [], can_edit: true,
 } as unknown as PendingRow;
+const ticket = (tab: creation.TicketTab): creation.TicketRow => ({
+  operation_id: "op-1", order_id: row.order.id, ticket_id: `t-${tab}`, number: 1, tab,
+  state: tab === "failed" ? "FAILED" : tab === "created" ? "SUCCEEDED" : "RUNNING",
+  status_label: { submitting: "提交中 · 已查询 2/10 次", failed: "Walmart 拒绝", created: "已创建未发货" }[tab],
+  pks: ["PK-FIXTURE"], skus: ["TEST-SKU"], store_id: "fixture-store", store_name: "测试店", source_account_ref: "fixture",
+  boxes: 2, units: 10, error_code: tab === "failed" ? "WFS_PLATFORM_REJECTED" : null,
+  error_message: tab === "failed" ? "Invalid returnAddress.postalCode" : null, submissions: 1,
+  polls: tab === "submitting" ? 2 : null, max_polls: tab === "submitting" ? 10 : null, next_poll_at: null,
+  shipments: tab === "created" ? [{ shipment_id: "SHIP-1", label_state: "READY", fc: "ATL1" }] : [],
+  expected_delivery_at: "2026-11-13T00:00:00+08:00", created_at: "2026-11-04T01:00:00Z", created_by: "16",
+  approved_at: "2026-11-04T01:05:00Z", approved_by: "rocky", approval_ref: "rocky-written:1", awaiting_approval: false,
+});
 function mount(permissions = ["*"]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return render(<QueryClientProvider client={client}><PendingPackingPage page={page} scope="fixture" permissions={permissions} /></QueryClientProvider>);
@@ -31,6 +43,12 @@ beforeEach(() => {
   vi.mocked(creation.getCreationCapabilities).mockResolvedValue(envelope({ creation_enabled: true, preview_enabled: true, reason: null }));
   window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
   Object.defineProperty(window, "matchMedia", { configurable: true, value: vi.fn(() => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} })) });
+  vi.mocked(creation.getCreationDefaults).mockResolvedValue(envelope({ source_account_ref: "fixture", store_id: "fixture-store", transport: "LTL", ship_date_offset: 9, pallet_boxes: 16, mixed_boxes: 0, carrier_opt: "own", its: true, return_address: { address_line1: "1 Store St", city: "Katy", state_code: "TX", postal_code: "77449", country_code: "US" }, saved: true, level: "store", expected_delivery_date: "2026-11-13" }));
+  vi.mocked(creation.getTicketCounts).mockResolvedValue(envelope({ submitting: 1, failed: 1, created: 1 }));
+  vi.mocked(creation.listCreationTickets).mockImplementation((tab) => Promise.resolve(envelope({ items: [ticket(tab)], total: 1 })));
+  vi.mocked(creation.retryCreation).mockResolvedValue(envelope({} as creation.CreationOperation));
+  vi.mocked(creation.listStoreDefaults).mockResolvedValue(envelope({ items: [{ store_id: "fixture-store", store_name: "测试店", source_account_ref: "fixture", transport: "LTL", ship_date_offset: 15, pallet_boxes: 16, mixed_boxes: 0, carrier_opt: "own", its: false, return_address: null, level: "default", updated_by: null, updated_at: null }] }));
+  vi.mocked(creation.saveStoreDefaults).mockResolvedValue(envelope({} as creation.StoreDefaultsRow));
   vi.mocked(api.listPending).mockResolvedValue(envelope({ items: [row], total: 1 }));
   vi.mocked(api.pendingOptions).mockResolvedValue(envelope({ stores: [{ value: "fixture-store", label: "测试店" }] }));
   vi.mocked(api.pendingSummary).mockResolvedValue(envelope({ completed: 1, ready: 1, test: 1, waiting: 0, no_box: 0, filled_not_done: 0, available_boxes: 2, available_units: 10 }));
@@ -41,9 +59,9 @@ it("covers the page with the shared loading overlay while the list is fetching",
   let release: (value: ReturnType<typeof envelope<{ items: PendingRow[]; total: number }>>) => void = () => undefined;
   vi.mocked(api.listPending).mockImplementation(() => new Promise((resolve) => { release = resolve; }));
   mount();
-  expect(await screen.findByText("正在加载待发货打包单，请稍候")).toBeInTheDocument();
+  expect(await screen.findByText("正在加载待创建货件，请稍候")).toBeInTheDocument();
   release(envelope({ items: [], total: 0 }));
-  await waitFor(() => expect(screen.queryByText("正在加载待发货打包单，请稍候")).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByText("正在加载待创建货件，请稍候")).not.toBeInTheDocument());
   expect(screen.getByText("当前条件下暂无已打包完成单据")).toBeInTheDocument();
 });
 
@@ -71,5 +89,56 @@ it("filters on test flag and hides mutations without action permission", async (
   await screen.findByText("PK-FIXTURE");
   expect(screen.queryByRole("button", { name: "创建 WFS 货件" })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("checkbox", { name: "只看测试单" }));
-  await waitFor(() => expect(api.listPending).toHaveBeenLastCalledWith(expect.objectContaining({ only_test: true }), 1, 20, expect.any(AbortSignal)));
+  await waitFor(() => expect(api.listPending).toHaveBeenLastCalledWith(expect.objectContaining({ only_test: true }), 1, 50, expect.any(AbortSignal)));
+});
+
+it("defaults to 待创建 (boxes not yet on a shipment) and has no help button", async () => {
+  mount();
+  await screen.findByText("PK-FIXTURE");
+  expect(api.listPending).toHaveBeenCalledWith(expect.objectContaining({ arrangement: "open" }), 1, 50, expect.any(AbortSignal));
+  expect(await screen.findByRole("tab", { name: "提交中 1" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "已创建未发货 1" })).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: /帮助/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /帮助/ })).not.toBeInTheDocument();
+});
+
+it("shows Walmart's reason on 创建失败 and retries the operation", async () => {
+  mount();
+  fireEvent.click(await screen.findByRole("tab", { name: "创建失败 1" }));
+  expect(await screen.findByText("Invalid returnAddress.postalCode")).toBeInTheDocument();
+  expect(creation.listCreationTickets).toHaveBeenLastCalledWith("failed", { keyword: "" }, 1, 50, expect.any(AbortSignal));
+  fireEvent.click(screen.getByRole("button", { name: "重试" }));
+  fireEvent.click(await screen.findByRole("button", { name: "确认重试" }));
+  await waitFor(() => expect(creation.retryCreation).toHaveBeenCalledWith("op-1"));
+});
+
+it("lists shipment id and destination FC on 已创建未发货; 提交中 is view-only", async () => {
+  mount();
+  fireEvent.click(await screen.findByRole("tab", { name: "已创建未发货 1" }));
+  expect(await screen.findByText("SHIP-1")).toBeInTheDocument();
+  expect(screen.getByText("ATL1")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: "提交中 1" }));
+  expect(await screen.findByText("已查询 2/10 次")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "重试" })).not.toBeInTheDocument();
+});
+
+it("prefills the creation dialog from the store's defaults without saving them", async () => {
+  mount();
+  fireEvent.click(await screen.findByRole("checkbox", { name: "选择PK-FIXTURE" }));
+  fireEvent.click(screen.getByRole("button", { name: "创建 WFS 货件" }));
+  expect(await screen.findByDisplayValue("1 Store St")).toBeInTheDocument();
+  expect(screen.getByDisplayValue("2026-11-13")).toBeInTheDocument();
+  expect(screen.getByText(/本店铺的创建默认值/)).toBeInTheDocument();
+  expect(creation.getCreationDefaults).toHaveBeenCalledWith("fixture", "fixture-store", expect.any(AbortSignal));
+  expect(creation.saveStoreDefaults).not.toHaveBeenCalled();
+});
+
+it("opens 创建默认值 in a side drawer, per store", async () => {
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: /创建默认值/ }));
+  expect(await screen.findByText("创建默认值（按店铺）")).toBeInTheDocument();
+  expect(await screen.findByText("系统默认")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+  fireEvent.click(await screen.findByRole("button", { name: /保\s*存/ }));
+  await waitFor(() => expect(creation.saveStoreDefaults).toHaveBeenCalledWith("fixture-store", expect.objectContaining({ transport: "LTL", ship_date_offset: 15, return_address: null })));
 });

@@ -1,7 +1,7 @@
 /** Actual WFS preparation endpoints; examples are empty and never invoke external systems. */
 import type { ApiDocItem, ApiDocModule, ApiMethod } from "./apiDocsTypes";
 const endpoints: [ApiMethod, string, string][] = [
-  ["GET", "/orders", "待发货打包单列表"], ["GET", "/summary", "待发货打包单统计"],
+  ["GET", "/orders", "待创建货件列表"], ["GET", "/summary", "待创建货件统计"],
   ["GET", "/filter-options", "待发货店铺选项（dim_lingxing_stores）"], ["GET", "/orders/{id}", "待发货单据详情"],
   ["GET", "/orders/{id}/identity-options", "同 SKU 目标商品身份"],
   ["POST", "/orders/{id}/identity", "换店铺或链接并生成新 PK"],
@@ -14,15 +14,21 @@ const endpoints: [ApiMethod, string, string][] = [
   ["POST", "/creation-operations/{ident}/reconcile", "核实结果"],
   ["POST", "/creation-operations/{ident}/labels/retry", "补取箱唛"],
   ["GET", "/creation-operations/{ident}/labels/{shipment_id}", "下载箱唛PDF"],
+  ["POST", "/creation-operations/{ident}/retry", "创建失败重试：先查同一单号，查不到才重新提交"],
+  ["GET", "/creation-tickets", "提交中 / 创建失败 / 已创建未发货（一行一票）"],
+  ["GET", "/creation-ticket-counts", "三个页签的票数"],
+  ["GET", "/creation-defaults", "创建默认值（按店铺 → 账号 → 系统默认）"],
+  ["GET", "/store-creation-defaults", "按店铺的创建默认值列表"],
+  ["PUT", "/store-creation-defaults/{store_id}", "保存某店铺的创建默认值"],
   ["POST", "/optional-previews", "按需探测"],
   ["POST", "/drafts", "生成待审批货件草稿"], ["GET", "/drafts/{id}", "读取草稿回执"],
 ];
 const apis: ApiDocItem[] = endpoints.map(([method, suffix, title]) => ({
   id: `pmc-wfs-pending-${method}-${suffix}`, moduleKey: "pmc-wfs", moduleName: "PMC WFS",
-  levelName: "待发货打包单", levelDesc: "本系统装箱、按箱数创建及结果；真实平台适配器尚未启用", method, title,
+  levelName: "待创建货件", levelDesc: "本系统装箱、按箱数创建及结果；真实平台适配器尚未启用", method, title,
   path: `/api/pmc/wfs/pending-packing${suffix}`, purpose: title,
   requestMode: method === "GET" ? "Query / 无 Body" : "JSON Body；详细类型与示例见 OpenAPI 和 WFS API 文档",
-  successReturn: "{success,data,error,meta,request_id}", scenario: "待发货打包单页面真实接口",
+  successReturn: "{success,data,error,meta,request_id}", scenario: "待创建货件页面真实接口",
   authScope: "page:pmc:wfs:view；独立动作 permissionKey；来源账号及店铺数据范围",
   queryParams: suffix === "/orders" || suffix === "/summary" ? [
     { name: "store_id", type: "string", required: false, description: "目标店铺ID" },
@@ -38,7 +44,7 @@ const apis: ApiDocItem[] = endpoints.map(([method, suffix, title]) => ({
   requestExample: { method, url: `/api/pmc/wfs/pending-packing${suffix}` },
   responseExample: { success: true, data: suffix === "/orders" ? { items: [], total: 0 } : {}, error: null, meta: { source: "new_system_postgresql", execution_enabled: false }, request_id: "example" },
 }));
-export const wfsPendingApiDocs: ApiDocModule = { key: "pmc-wfs", name: "PMC WFS", icon: "📦", desc: "待发货打包单真实接口", levels: [{ name: "待发货打包单", desc: "本系统装箱、分票，人工书面批准后创建", apis }] };
+export const wfsPendingApiDocs: ApiDocModule = { key: "pmc-wfs", name: "PMC WFS", icon: "📦", desc: "待创建货件真实接口", levels: [{ name: "待创建货件", desc: "本系统装箱、分票，人工书面批准后创建", apis }] };
 
 const boardEndpoints: [ApiMethod, string, string][] = [
   ["GET", "/shipments", "货件看板列表"],

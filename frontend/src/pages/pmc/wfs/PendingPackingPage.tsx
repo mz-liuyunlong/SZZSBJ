@@ -1,20 +1,32 @@
-/** Real domestic packing facts and local draft submission; no external execution. */
+/**
+ * 待创建货件（Rocky 2026-11-04）：报表样板 PageShell + ReportTableShell，4 个页签。
+ * 待创建 = 打包完成且还有箱子没建货件；提交中 / 创建失败 / 已创建未发货 一行一票。
+ * 「已发货」来自 SP 发货单，服务器接入前已创建的货件都留在「已创建未发货」。页面不放帮助按钮。
+ */
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
-import { Alert, Button, Checkbox, DatePicker, Empty, Select, Space, Table, Tag, Typography, message } from "antd";
+import { SettingOutlined } from "@ant-design/icons";
+import { useQuery } from "@tanstack/react-query";
+import { Alert, Button, Card, Checkbox, DatePicker, Select, Space, Table, Tabs, Tag, Typography, message } from "antd";
 import type { Dayjs } from "dayjs";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import CommittedSearch from "@/components/report-table/CommittedSearch";
 import ManagementStatCards from "@/components/report-table/ManagementStatCards";
+import ReportTableShell from "@/components/report-table/ReportTableShell";
 import ResetButton from "@/components/report-table/ResetButton";
+import { REPORT_TABLE_PAGE_SIZE_OPTIONS } from "@/components/report-table/pagination";
 import { WalmartItemLink } from "@/components/report-table/cells";
 import PageShell from "@/components/page/PageShell";
 import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
 import type { NavigationPage } from "@/config/navigation";
+import EmptyState from "@/shared/states/EmptyState";
 import PackingWarehouseActionDialog from "../domestic-warehouse/packing/PackingWarehouseActionDialog";
 import { writeWarehouseOrder } from "../domestic-warehouse/packing/packingWarehouseApi";
 import type { PackingWarehouseRow, WarehouseAction, WarehouseFields } from "../domestic-warehouse/packing/packingWarehouseTypes";
 import CreationDialog from "./CreationDialog";
 import CreationRecords from "./CreationRecords";
+import CreationTicketTable from "./CreationTicketTable";
+import StoreDefaultsDrawer from "./StoreDefaultsDrawer";
+import { getTicketCounts, listCreationTickets, type TicketFilters, type TicketTab } from "./creationApi";
 import PendingCustomsDialog from "./PendingCustomsDialog";
 import PendingIdentityDialog from "./PendingIdentityDialog";
 import { pendingError, switchIdentity } from "./pendingPackingApi";
@@ -22,23 +34,30 @@ import { usePendingPacking } from "./pendingPackingQueries";
 import type { IdentityFields, PendingFilters, PendingRow } from "./pendingPackingTypes";
 import "./PendingPackingPage.css";
 
-const initialFilters = (): PendingFilters => ({ keyword: "", only_test: false, arrangement: "all" });
+type Tab = "pending" | TicketTab;
+const initialFilters = (): PendingFilters => ({ keyword: "", only_test: false, arrangement: "open" });
+const initialTicketFilters = (): TicketFilters => ({ keyword: "" });
 const time = (v?: string | null) => v ? new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Taipei", dateStyle: "short", timeStyle: "short" }).format(new Date(v)) : "—";
 const labels: Record<string, string> = { PACKING_NOT_COMPLETED: "尚未打包完成", IDENTITY_MISSING: "商品身份不完整", GTIN_INVALID: "缺少有效GTIN", BOXES_REQUIRED: "缺少本系统装箱" };
 
 export default function PendingPackingPage({ page, scope = "anonymous", permissions = [] }: { page: NavigationPage; scope?: string; permissions?: string[] }) {
   const [filters, setFilters] = useState(initialFilters);
-  const [pagination, setPagination] = useState({ page: 1, size: 20 });
+  const [pagination, setPagination] = useState({ page: 1, size: 50 });
   const [selected, setSelected] = useState<string[]>([]);
   const [dialog, setDialog] = useState<{ kind: "draft" | "identity" | "rebox" | "customs"; id?: string }>();
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string>();
   const [records, setRecords] = useState<string>();
+  const [tab, setTab] = useState<Tab>("pending");
+  const [ticketFilters, setTicketFilters] = useState(initialTicketFilters);
+  const [ticketPage, setTicketPage] = useState({ page: 1, size: 50 });
+  const [defaultsOpen, setDefaultsOpen] = useState(false);
   const retry = useRef<{ signature: string; key: string } | undefined>(undefined);
   const [messages, context] = message.useMessage();
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const [scrollY, setScrollY] = useState(360);
   const api = usePendingPacking(filters, pagination.page, pagination.size, scope);
+  const ticketTab = tab === "pending" ? undefined : tab;
+  const tickets = useQuery({ queryKey: ["wfs-pending-packing", scope, "tickets", ticketTab, ticketFilters, ticketPage], queryFn: ({ signal }) => listCreationTickets(ticketTab!, ticketFilters, ticketPage.page, ticketPage.size, signal), enabled: !!ticketTab, retry: false, refetchInterval: ticketTab === "submitting" ? 30000 : false });
+  const counts = useQuery({ queryKey: ["wfs-pending-packing", scope, "ticket-counts", ticketFilters], queryFn: ({ signal }) => getTicketCounts(ticketFilters, signal), retry: false });
   const rows = api.list.data?.data.items ?? [];
   const summary = api.summary.data?.data;
   const can = (key: string) => permissions.includes("*") || permissions.includes(key);
@@ -50,13 +69,6 @@ export default function PendingPackingPage({ page, scope = "anonymous", permissi
     if (retry.current?.signature !== signature) retry.current = { signature, key: crypto.randomUUID() };
     return retry.current.key;
   };
-  useEffect(() => {
-    const node = bodyRef.current;
-    if (!node) return;
-    const measure = () => setScrollY(Math.max(220, node.clientHeight - 96));
-    measure(); const observer = new ResizeObserver(measure); observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
   const open = (kind: "identity" | "rebox" | "customs", row: PendingRow) => { setActionError(undefined); retry.current = undefined; setDialog({ kind, id: row.order.id }); };
   const perform = async (operation: () => Promise<void>) => {
     setBusy(true); setActionError(undefined);
@@ -97,60 +109,97 @@ export default function PendingPackingPage({ page, scope = "anonymous", permissi
   ];
   const loadError = api.list.error ?? api.summary.error ?? api.options.error;
   const pageLoading = api.list.isFetching || api.summary.isFetching;
+  const count = (key: TicketTab) => counts.data?.data[key];
+  const tabLabel = (text: string, n?: number) => n === undefined ? text : `${text} ${n}`;
+  const commitTickets = (next: TicketFilters) => { setTicketFilters(next); setTicketPage((p) => ({ ...p, page: 1 })); };
+  const storeSelect = (value: string | undefined, onChange: (v?: string) => void) => <Select allowClear showSearch aria-label="店铺" placeholder="全部店铺" className="wfs-create__store" value={value} options={api.options.data?.data.stores} loading={api.options.isFetching} optionFilterProp="label" onChange={onChange} />;
+  const ticketError = tickets.error ? pendingError(tickets.error) : undefined;
   return <PageShell page={page}>
-    {context}<div className="wfs-pending">
-      <RequestLoadingOverlay spinning={pageLoading} label="正在加载待发货打包单，请稍候" />
-      <Typography.Paragraph className="wfs-pending__flow">国内仓打包完成 → 选择发货箱数及分票 → 确认提交（程序自动检查）→ 人工书面批准 → 程序创建 → 查看结果和箱唛。OWS 非必填，探测按需使用。</Typography.Paragraph>
-      {loadError && <Alert type="error" showIcon message={pendingError(loadError)} action={<Button onClick={() => void refresh()}>重试</Button>} />}
-      <ManagementStatCards ariaLabel="待发货打包单统计" cards={[
-        { key: "ready", title: "已打包完成 · 可建货件", value: summary?.ready ?? "—", unit: "张", tone: "normal", icon: <span>单</span>, subtitle: `已完成 ${summary?.completed ?? "—"} 张 · 测试 ${summary?.test ?? "—"} · 可用 ${summary?.available_boxes ?? "—"} 箱` },
-        { key: "overdue", title: `打包完成满 ${summary?.overdue_days ?? 3} 天未建货件`, value: summary?.overdue ?? "—", unit: "张", tone: "danger", icon: <span>超</span>, subtitle: "仍有箱子未安排到货件；点此只看这些单" },
-        { key: "waiting", title: "已审批、还没打包完成", value: summary?.waiting ?? "—", unit: "张", tone: "warning", icon: <span>待</span>, subtitle: `没填装箱 ${summary?.no_box ?? "—"} · 已填未完成 ${summary?.filled_not_done ?? "—"}（不进下表）` },
-      ]} activeKey={filters.only_overdue ? "overdue" : ""} onCardClick={(key) => commitFilters({ ...filters, only_overdue: key === "overdue" ? !filters.only_overdue : false })} />
-      <div className="wfs-pending__toolbar" role="search" aria-label="待发货打包单筛选">
-        <Select allowClear showSearch aria-label="店铺" placeholder="全部店铺" style={{ width: 280 }} value={filters.store_id} options={api.options.data?.data.stores} loading={api.options.isFetching} optionFilterProp="label" onChange={(v) => commitFilters({ ...filters, store_id: v })} />
-        <Select aria-label="发货安排" className="report-filter-select" style={{ width: 160 }} value={filters.arrangement ?? "all"} options={[
-          { value: "all", label: "全部安排" },
-          { value: "ready", label: "可安排" },
-          { value: "partial", label: "部分已安排" },
-          { value: "done", label: "已安排完成" },
-        ]} onChange={(v) => commitFilters({ ...filters, arrangement: v })} />
-        <Select aria-label="创建结果" className="report-filter-select" style={{ width: 160 }} value={filters.creation_result ?? "all"} options={[
-          { value: "all", label: "全部创建结果" },
-          { value: "none", label: "未创建" },
-          { value: "in_progress", label: "创建中" },
-          { value: "succeeded", label: "创建成功" },
-          { value: "failed", label: "创建失败" },
-          { value: "partial", label: "部分成功" },
-          { value: "unknown", label: "结果待核实" },
-        ]} onChange={(v) => commitFilters({ ...filters, creation_result: v })} />
-        <DatePicker.RangePicker aria-label="打包完成日期" allowEmpty={[true, true]} onChange={(values: [Dayjs | null, Dayjs | null] | null) => {
-          const [from, to] = values ?? [null, null];
-          commitFilters({
-            ...filters,
-            completed_from: from?.format("YYYY-MM-DD"),
-            completed_to: to?.format("YYYY-MM-DD"),
-          });
-        }} />
-        <CommittedSearch key={filters.keyword} className="wfs-pending__search" typeAriaLabel="待发货打包单搜索类型" typeValue="all" typeOptions={[{ value: "all", label: "PK / SKU" }]} inputAriaLabel="搜索待发货打包单" inputValue={filters.keyword} inputPlaceholder="PK / SKU / ItemID / GTIN" searchAriaLabel="搜索待发货打包单" onCommit={({ keyword }) => commitFilters({ ...filters, keyword })} />
-        <ResetButton aria-label="重置待发货打包单筛选" onClick={() => commitFilters(initialFilters())} />
-      </div>
-      <section className="wfs-pending__table" aria-label="待发货打包单表格"><div className="wfs-pending__head"><b>待发货打包单（来源：本系统已打包完成）</b><Space wrap>
-        <Checkbox checked={filters.only_test} onChange={(e) => commitFilters({ ...filters, only_test: e.target.checked })}>只看测试单</Checkbox>
-        <Button size="small" disabled={busy || pageLoading} onClick={() => void refresh()}>刷新</Button>
-        {can("action:pmc:wfs-pending-packing:create") && <Button size="small" type="primary" disabled={!selected.length || busy || !!loadError || api.list.isFetching} onClick={openDraft}>创建 WFS 货件</Button>}
-      </Space></div><div className="wfs-pending__body" ref={bodyRef}>
-        <ProTable<PendingRow> rowKey={(r) => r.order.id} search={false} options={false} toolBarRender={false} tableAlertRender={false} size="small" bordered columns={columns} dataSource={rows} loading={false} scroll={{ x: 1760, y: scrollY }}
-          expandable={{ expandedRowRender: (r) => <Table size="small" rowKey="id" pagination={false} dataSource={r.order.box_set?.lines} columns={[
-
-            { title: "行号", dataIndex: "line_no" }, { title: "箱数", dataIndex: "boxes" }, { title: "每箱件数", dataIndex: "units_per_box" },
-          ]} /> }} pagination={{ current: pagination.page, pageSize: pagination.size, total: api.list.data?.data.total ?? 0, showSizeChanger: true, showTotal: (n) => `共 ${n} 张`, onChange: (page, size) => { setPagination({ page, size }); setSelected([]); } }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={loadError ? "数据加载失败，请重试" : "当前条件下暂无已打包完成单据"} /> }} />
-      </div><div className="wfs-pending__foot">展开装箱供核对；分箱不改变仓库装箱。已有有效占用的 PK 禁止改装箱。创建结果在本页追踪；贴标和实际发货由领星执行。</div></section>
+    {context}<div className="wfs-create">
+      <Card size="small" className="wfs-create__page-card">
+        <RequestLoadingOverlay spinning={tab === "pending" && pageLoading} label="正在加载待创建货件，请稍候" />
+        <div className="wfs-create__title-row">
+          <div>
+            <h1>待创建货件</h1>
+            <Typography.Text type="secondary">国内仓打包完成 → 选择发货箱数及分票 → 确认提交（程序自动检查）→ 人工书面批准 → 提交 Walmart，每 3 分钟查一次结果（任务中心「WFS 创建结果拉取」）→ 已创建未发货。</Typography.Text>
+          </div>
+          <Space size={8} wrap>
+            <Button disabled={busy || pageLoading} onClick={() => void refresh()}>刷新</Button>
+            <Button icon={<SettingOutlined />} onClick={() => setDefaultsOpen(true)}>创建默认值</Button>
+          </Space>
+        </div>
+        <Tabs className="wfs-create__tabs" activeKey={tab} onChange={(key) => { setTab(key as Tab); setTicketPage((p) => ({ ...p, page: 1 })); }} items={[
+          { key: "pending", label: tabLabel("待创建", summary?.ready) },
+          { key: "submitting", label: tabLabel("提交中", count("submitting")) },
+          { key: "failed", label: tabLabel("创建失败", count("failed")) },
+          { key: "created", label: tabLabel("已创建未发货", count("created")) },
+        ]} />
+        {tab === "pending" && <>
+          <Card size="small" className="wfs-create__toolbar-card">
+            <div className="wfs-create__toolbar" role="search" aria-label="待创建货件筛选">
+              {storeSelect(filters.store_id, (v) => commitFilters({ ...filters, store_id: v }))}
+              <Select aria-label="发货安排" className="wfs-create__select" value={filters.arrangement ?? "open"} options={[
+                { value: "open", label: "全部待创建" },
+                { value: "ready", label: "还没安排" },
+                { value: "partial", label: "部分已安排" },
+              ]} onChange={(v) => commitFilters({ ...filters, arrangement: v })} />
+              <DatePicker.RangePicker aria-label="打包完成日期" allowEmpty={[true, true]} onChange={(values: [Dayjs | null, Dayjs | null] | null) => {
+                const [from, to] = values ?? [null, null];
+                commitFilters({ ...filters, completed_from: from?.format("YYYY-MM-DD"), completed_to: to?.format("YYYY-MM-DD") });
+              }} />
+              <CommittedSearch key={filters.keyword} className="wfs-create__search" typeAriaLabel="待创建货件搜索类型" typeValue="all" typeOptions={[{ value: "all", label: "PK / SKU" }]} inputAriaLabel="搜索待创建货件" inputValue={filters.keyword} inputPlaceholder="PK / SKU / ItemID / GTIN" searchAriaLabel="搜索待创建货件" onCommit={({ keyword }) => commitFilters({ ...filters, keyword })} />
+              <Checkbox checked={filters.only_test} onChange={(e) => commitFilters({ ...filters, only_test: e.target.checked })}>只看测试单</Checkbox>
+              <ResetButton aria-label="重置待创建货件筛选" onClick={() => commitFilters(initialFilters())} />
+              <span className="wfs-create__toolbar-actions">
+                {can("action:pmc:wfs-pending-packing:create") && <Button type="primary" disabled={!selected.length || busy || !!loadError || api.list.isFetching} onClick={openDraft}>创建 WFS 货件</Button>}
+              </span>
+            </div>
+          </Card>
+          <ManagementStatCards ariaLabel="待创建货件统计" cards={[
+            { key: "ready", title: "已打包完成 · 待创建", value: summary?.ready ?? "—", unit: "张", tone: "normal", icon: <span>单</span>, subtitle: `已完成 ${summary?.completed ?? "—"} 张 · 测试 ${summary?.test ?? "—"} · 可用 ${summary?.available_boxes ?? "—"} 箱` },
+            { key: "overdue", title: `打包完成满 ${summary?.overdue_days ?? 3} 天未建货件`, value: summary?.overdue ?? "—", unit: "张", tone: "danger", icon: <span>超</span>, subtitle: "仍有箱子未安排到货件；点此只看这些单" },
+            { key: "waiting", title: "已审批、还没打包完成", value: summary?.waiting ?? "—", unit: "张", tone: "warning", icon: <span>待</span>, subtitle: `没填装箱 ${summary?.no_box ?? "—"} · 已填未完成 ${summary?.filled_not_done ?? "—"}（不进下表）` },
+          ]} activeKey={filters.only_overdue ? "overdue" : ""} onCardClick={(key) => commitFilters({ ...filters, only_overdue: key === "overdue" ? !filters.only_overdue : false })} />
+          {loadError && <Alert className="wfs-create__error" type="error" showIcon message={pendingError(loadError)} action={<Button size="small" onClick={() => void refresh()}>重试</Button>} />}
+          <div className="wfs-create__table-wrap">
+            <ReportTableShell label="待创建货件表格" className="wfs-create__table-shell">
+              <ProTable<PendingRow> rowKey={(r) => r.order.id} search={false} options={false} toolBarRender={false} tableAlertRender={false} size="small" bordered columns={columns} dataSource={rows} loading={false} scroll={{ x: 1760, y: "100%" }}
+                expandable={{ expandedRowRender: (r) => <Table size="small" rowKey="id" pagination={false} dataSource={r.order.box_set?.lines} columns={[
+                  { title: "行号", dataIndex: "line_no" }, { title: "箱数", dataIndex: "boxes" }, { title: "每箱件数", dataIndex: "units_per_box" },
+                ]} /> }}
+                pagination={{ current: pagination.page, pageSize: pagination.size, total: api.list.data?.data.total ?? 0, showSizeChanger: true, pageSizeOptions: REPORT_TABLE_PAGE_SIZE_OPTIONS, showTotal: (n) => `共 ${n} 张`, onChange: (next, size) => { setPagination({ page: size !== pagination.size ? 1 : next, size }); setSelected([]); } }}
+                locale={{ emptyText: <EmptyState title={loadError ? "数据未加载" : "暂无数据"} description={loadError ? "数据加载失败，请重试" : "当前条件下暂无已打包完成单据"} compact /> }} />
+            </ReportTableShell>
+          </div>
+        </>}
+        {ticketTab && <>
+          <Card size="small" className="wfs-create__toolbar-card">
+            <div className="wfs-create__toolbar" role="search" aria-label="创建结果筛选">
+              {storeSelect(ticketFilters.store_id, (v) => commitTickets({ ...ticketFilters, store_id: v }))}
+              <CommittedSearch key={ticketFilters.keyword} className="wfs-create__search" typeAriaLabel="创建结果搜索类型" typeValue="all" typeOptions={[{ value: "all", label: "PK / SKU / 货件号" }]} inputAriaLabel="搜索创建结果" inputValue={ticketFilters.keyword} inputPlaceholder="PK / SKU / 货件号" searchAriaLabel="搜索创建结果" onCommit={({ keyword }) => commitTickets({ ...ticketFilters, keyword })} />
+              <ResetButton aria-label="重置创建结果筛选" onClick={() => commitTickets(initialTicketFilters())} />
+              <Typography.Text type="secondary" className="wfs-create__toolbar-actions">{{
+                submitting: "只看不改：待人工批准的在「创建记录」里批准；提交中的每 3 分钟自动查一次，最多 10 次。",
+                failed: "Walmart 给的原因原样显示；重试先查同一单号，查不到才重新提交。",
+                created: "SP 发货单变成「已发货」后移出本页签（SP 发货单接入服务器后生效）。",
+              }[ticketTab]}</Typography.Text>
+            </div>
+          </Card>
+          {ticketError && <Alert className="wfs-create__error" type="error" showIcon message={ticketError} action={<Button size="small" onClick={() => void tickets.refetch()}>重试</Button>} />}
+          <div className="wfs-create__table-wrap">
+            <CreationTicketTable tab={ticketTab} rows={tickets.data?.data.items ?? []} total={tickets.data?.data.total ?? 0} loading={tickets.isFetching}
+              page={ticketPage.page} size={ticketPage.size} error={ticketError} canRetry={can("action:pmc:wfs-pending-packing:approve")}
+              onPageChange={(next, size) => setTicketPage({ page: next, size })} onOpenRecords={setRecords}
+              onChanged={refresh} onError={(text) => void messages.error(text)} />
+          </div>
+        </>}
+      </Card>
     </div>
     {dialog?.kind === "draft" && selectedRows[0] && <CreationDialog rows={selectedRows} scope={scope} canProbe={can("action:pmc:wfs-pending-packing:preview")} onCancel={() => setDialog(undefined)} onCreated={(op) => { setDialog(undefined); setRecords(op.order_id); void refresh(); }} />}
     {dialog?.kind === "identity" && dialog.id && <PendingIdentityDialog id={dialog.id} scope={scope} busy={busy} error={actionError} onCancel={() => setDialog(undefined)} onSubmit={submitIdentity} />}
     {dialog?.kind === "rebox" && dialog.id && <PackingWarehouseActionDialog id={dialog.id} kind="rebox" scope={scope} busy={busy} onCancel={() => setDialog(undefined)} onSubmit={submitWarehouse} />}
     {dialog?.kind === "customs" && dialog.id && <PendingCustomsDialog id={dialog.id} scope={scope} busy={busy} onCancel={() => setDialog(undefined)} onSubmit={(row, fields) => submitWarehouse(row, "customs", fields)} />}
     {records && <CreationRecords orderId={records} scope={scope} permissions={permissions} onClose={() => setRecords(undefined)} onRefresh={refresh} />}
+    <StoreDefaultsDrawer open={defaultsOpen} scope={scope} canManage={can("action:pmc:wfs-settings:manage")} onClose={() => setDefaultsOpen(false)} />
   </PageShell>;
 }

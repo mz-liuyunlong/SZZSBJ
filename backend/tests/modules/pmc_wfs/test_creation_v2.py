@@ -137,22 +137,35 @@ def test_unknown_then_poll_does_not_recreate(case, engine):
     gateway.unknown = True
     op = approved(svc, svc.submit(command(svc, account, order), "fixture"))
     factory = factory_for(engine)
-    scheduled = []
-    schedule = lambda ident, action, delay: scheduled.append((action, delay))  # noqa: E731
-    run_operation(factory, gateway, op.id, schedule=schedule)
+    assert run_operation(factory, gateway, op.id) is True  # waits for a read-back
     session.expire_all()
     current = svc.read(op.id)
     assert current.state == "RUNNING"
     assert all(t.state == "RUNNING" and t.polls == 0 and t.max_polls == 10 for t in current.tickets)
-    assert scheduled == [("poll", 180)]
     assert len(gateway.creates) == 2
     run_operation(factory, gateway, op.id)  # a duplicate execute does nothing
     assert len(gateway.creates) == 2
-    run_operation(factory, gateway, op.id, "poll", schedule=schedule)
+    run_operation(factory, gateway, op.id, "poll")  # not due yet: 3 minutes apart
+    assert gateway.reads == []
+    make_due(factory, op.id)
+    assert run_operation(factory, gateway, op.id, "poll") is False  # nothing left to poll
     session.expire_all()
     assert svc.read(op.id).state == "SUCCEEDED"
     assert len(gateway.creates) == 2 and len(gateway.reads) == 2
-    assert scheduled == [("poll", 180)]  # nothing left to poll
+
+
+def make_due(factory, ident):
+    """Move every polling ticket's next read-back into the past (instead of waiting 3 min)."""
+    from app.modules.pmc_wfs.creation_models import WfsCreationTicket
+
+    with factory() as s:
+        for t in s.scalars(
+            select(WfsCreationTicket).where(WfsCreationTicket.operation_id == ident)
+        ):
+            if t.result.get("polling"):
+                past = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
+                t.result = {**t.result, "polling": {**t.result["polling"], "next_at": past}}
+        s.commit()
 
 
 def test_poll_ten_times_then_failed_and_boxes_released(case, engine):
@@ -161,21 +174,21 @@ def test_poll_ten_times_then_failed_and_boxes_released(case, engine):
     op = approved(svc, svc.submit(command(svc, account, order), "fixture"))
     assert svc.base.detail(order.id).available_boxes == 10
     factory = factory_for(engine)
-    scheduled = []
-    schedule = lambda ident, action, delay: scheduled.append(action)  # noqa: E731
-    run_operation(factory, gateway, op.id, schedule=schedule)
+    waits = [run_operation(factory, gateway, op.id)]
     for _ in range(9):
-        run_operation(factory, gateway, op.id, "poll", schedule=schedule)
+        make_due(factory, op.id)
+        waits.append(run_operation(factory, gateway, op.id, "poll"))
     session.expire_all()
     current = svc.read(op.id)
     assert current.state == "RUNNING" and current.tickets[0].polls == 9
-    run_operation(factory, gateway, op.id, "poll", schedule=schedule)
+    make_due(factory, op.id)
+    waits.append(run_operation(factory, gateway, op.id, "poll"))
     session.expire_all()
     current = svc.read(op.id)
     assert current.state == "FAILED"
     assert {t.error_code for t in current.tickets} == {"WFS_RESULT_TIMEOUT"}
     assert "共 10 次" in current.tickets[0].error_message
-    assert len(scheduled) == 10 and len(gateway.creates) == 2
+    assert waits == [True] * 10 + [False] and len(gateway.creates) == 2
     assert len(gateway.reads) == 20
     assert svc.base.detail(order.id).available_boxes == 30  # boxes back on the order
 
@@ -215,6 +228,7 @@ def test_retry_finds_late_shipment_without_resending(case, engine):
     factory = factory_for(engine)
     run_operation(factory, gateway, op.id)
     for _ in range(10):
+        make_due(factory, op.id)
         run_operation(factory, gateway, op.id, "poll")
     session.expire_all()
     assert svc.read(op.id).state == "FAILED"
@@ -632,3 +646,301 @@ def test_http_defaults_capabilities_and_retry(case, engine):
         assert retried.json()["data"]["state"] == "SUCCEEDED"
         again = client.post(prefix + f"/creation-operations/{created['id']}/retry")
         assert again.status_code == 409
+
+
+# ----- 待创建货件页签（Rocky 2026-11-04） ---------------------------------------------------
+
+
+def _store(session, account, store_id="fixture-store", name="测试店铺"):
+    from app.modules.data_pages.models import LingxingStoreDimension
+
+    session.add(
+        LingxingStoreDimension(
+            source_account_ref=account,
+            platform_code_raw="walmart",
+            platform_code="walmart",
+            store_id=store_id,
+            store_name=name,
+            synced_at=datetime.now(UTC),
+        )
+    )
+    session.commit()
+
+
+def test_board_tabs_follow_ticket_state(case, engine, monkeypatch):
+    from app.modules.pmc_wfs import creation_board
+    from app.modules.pmc_wfs.creation_board import CreationBoard
+
+    session, svc, gateway, account, order, *_ = case
+    board = CreationBoard(session, {account}, None)
+    waiting = svc.submit(command(svc, account, order, (10,)), "fixture")
+    rows = board.list("submitting", None, "", 1, 20).items
+    assert [r.status_label for r in rows] == ["待人工批准"] and rows[0].awaiting_approval
+    assert rows[0].boxes == 10 and rows[0].pks
+    gateway.reject = True
+    approved(svc, waiting)
+    run_operation(factory_for(engine), gateway, waiting.id)
+    session.expire_all()
+    failed = board.list("failed", None, "", 1, 20).items
+    assert failed[0].status_label == "Walmart 拒绝"
+    assert failed[0].error_message == "Invalid returnAddress.postalCode"
+    gateway.reject = False
+    gateway.fc = "ATL1-TEST"
+    ok = approved(svc, svc.submit(command(svc, account, order, (12, 8)), "fixture"))
+    run_operation(factory_for(engine), gateway, ok.id)
+    session.expire_all()
+    created = board.list("created", None, "", 1, 20)
+    assert created.total == 2
+    assert all(r.shipments and r.shipments[0].fc == "ATL1-TEST" for r in created.items)
+    assert board.counts(None, "").model_dump() == {"submitting": 0, "failed": 1, "created": 2}
+    sid = created.items[0].shipments[0].shipment_id
+    assert board.list("created", None, sid, 1, 20).total == 1
+    assert board.counts("other-store", "").created == 0
+    # SP 发货单已发货的货件移出「已创建未发货」（接入位置）
+    monkeypatch.setattr(creation_board, "shipped_shipment_ids", lambda s, ids: {sid})
+    assert board.list("created", None, "", 1, 20).total == 1
+    assert CreationBoard(session, {"other"}, None).counts(None, "").failed == 0
+
+
+def test_store_defaults_override_account_and_dialog_change_is_one_off(case):
+    from app.modules.pmc_wfs.creation_board import StoreDefaults, StoreDefaultsUpdate
+    from app.modules.pmc_wfs.creation_models import WfsCreation
+    from app.modules.pmc_wfs.settings_models import WfsSettingsChange
+
+    session, svc, gateway, account, order, *_ = case
+    _store(session, account)
+    stores = StoreDefaults(session, {account}, None)
+    row = next(r for r in stores.list().items if r.store_id == order.store_id)
+    assert row.level == "default" and row.ship_date_offset == 15 and row.store_name == "测试店铺"
+    saved = stores.update(
+        order.store_id,
+        StoreDefaultsUpdate(
+            transport="SMALL_PARCEL",
+            ship_date_offset=9,
+            pallet_boxes=10,
+            mixed_boxes=1,
+            carrier_opt="wm",
+            its=True,
+            return_address=dict(
+                address_line1="Store st", city="Katy", state_code="TX", postal_code="77449"
+            ),
+        ),
+        "rocky",
+    )
+    assert saved.level == "store" and saved.updated_by == "rocky" and saved.its
+    defaults = svc.defaults(account, order.store_id)
+    assert defaults.level == "store" and defaults.ship_date_offset == 9
+    assert defaults.return_address.address_line1 == "Store st"
+    assert svc.defaults(account).level == "default"
+    # 弹窗里改了这一次的值，不回写默认值
+    cmd = command(svc, account, order, (10,)).model_copy(update={"expected_delivery_at": None})
+    op = svc.submit(cmd, "fixture")
+    snapshot = session.get(WfsCreation, op.id).snapshot
+    assert snapshot["creation_defaults"]["ship_date_offset"] == 9
+    assert snapshot["return_address"]["address_line1"] == "Test street"
+    assert svc.defaults(account, order.store_id).return_address.address_line1 == "Store st"
+    changes = session.scalars(
+        select(WfsSettingsChange).where(WfsSettingsChange.entity == "creation_defaults")
+    ).all()
+    assert any(c.entity_key == f"{account}:{order.store_id}" for c in changes)
+    with pytest.raises(ApiError) as err:
+        StoreDefaults(session, {"other"}, None).update(order.store_id, cmd_defaults(), "x")
+    assert err.value.code == "DATA_SCOPE_DENIED"
+
+
+def cmd_defaults():
+    from app.modules.pmc_wfs.creation_board import StoreDefaultsUpdate
+
+    return StoreDefaultsUpdate(
+        transport="LTL", ship_date_offset=15, pallet_boxes=16, mixed_boxes=0, carrier_opt="own"
+    )
+
+
+def test_http_board_and_store_defaults(case, engine):
+    session, svc, gateway, account, order, *_ = case
+    _store(session, account)
+    app = app_for(engine, account, gateway)
+    prefix = "/api/pmc/wfs/pending-packing"
+    with TestClient(app) as client:
+        body = command(svc, account, order, (10,)).model_dump(mode="json")
+        assert client.post(prefix + "/creation-operations", json=body).status_code == 200
+        listed = client.get(prefix + "/creation-tickets", params={"tab": "submitting"})
+        assert listed.status_code == 200, listed.text
+        assert listed.json()["data"]["total"] == 1
+        counts = client.get(prefix + "/creation-ticket-counts").json()["data"]
+        assert counts == {"submitting": 1, "failed": 0, "created": 0}
+        assert client.get(prefix + "/creation-tickets", params={"tab": "x"}).status_code == 422
+        stores = client.get(prefix + "/store-creation-defaults").json()["data"]["items"]
+        assert any(s["store_id"] == order.store_id for s in stores)
+        put = client.put(
+            prefix + f"/store-creation-defaults/{order.store_id}",
+            json=cmd_defaults().model_dump(mode="json") | {"ship_date_offset": 7},
+        )
+        assert put.status_code == 200, put.text
+        assert put.json()["data"]["level"] == "store"
+        got = client.get(
+            prefix + "/creation-defaults",
+            params={"source_account_ref": account, "store_id": order.store_id},
+        ).json()["data"]
+        assert got["ship_date_offset"] == 7 and got["level"] == "store"
+        bad = client.put(prefix + "/store-creation-defaults/nope", json=cmd_defaults().model_dump())
+        assert bad.status_code == 403
+        open_rows = client.get(
+            "/api/pmc/wfs/pending-packing/orders", params={"arrangement": "open"}
+        )
+        assert open_rows.status_code == 200, open_rows.text
+
+
+# ----- 任务中心「WFS 创建结果拉取」 ---------------------------------------------------------
+
+
+@pytest.fixture
+def task_center(case, engine, monkeypatch):
+    """Registered task + captured dispatches; runs are executed explicitly by the test."""
+    from app.modules.integration_sync import tasks as sync_tasks
+    from app.modules.pmc_wfs import creation_task
+
+    session, svc, gateway, account, *_ = case
+    assert creation_task.bootstrap(session, account)[1] == "created"  # interface: shared schema
+    assert creation_task.bootstrap(session, account) == ("existing", "existing")
+    queued = []
+    monkeypatch.setattr(sync_tasks, "dispatch_sync_run", queued.append)
+    factory = factory_for(engine)
+    svc.dispatch = lambda ident, action: creation_task.dispatch_creation(ident, action, factory)
+
+    def run_next():
+        from app.modules.integration_sync.models import IntegrationInterface, IntegrationSyncRun
+
+        run = session.get(IntegrationSyncRun, queued.pop(0))
+        interface = session.get(IntegrationInterface, run.interface_id)
+        handler = creation_task.WfsCreationResultPollHandler(
+            session, gateway=gateway, factory=factory
+        )
+        handler.execute(run, interface)
+        session.refresh(run)
+        return run
+
+    def queue(reason="tick"):
+        run_id = creation_task.request_run(session, account, "fixture", reason)
+        queued.append(run_id) if run_id and run_id not in queued else None
+        return run_id
+
+    return creation_task, queued, run_next, queue, factory
+
+
+def test_task_center_registration_is_off_until_switched_on(case, task_center):
+    from app.modules.integration_sync.models import IntegrationSyncConfig
+
+    session, svc, gateway, account, *_ = case
+    config = session.scalars(
+        select(IntegrationSyncConfig).where(IntegrationSyncConfig.source_account_ref == account)
+    ).one()
+    assert config.is_enabled and not config.schedule_enabled
+    assert config.schedule_cron == "*/3 * * * *" and config.schedule_timezone == "UTC"
+
+
+def test_task_center_submits_polls_ten_times_then_fails(case, engine, task_center):
+    from app.modules.integration_sync.models import IntegrationSyncRunWorkItem
+
+    session, svc, gateway, account, order, *_ = case
+    creation_task, queued, run_next, queue, factory = task_center
+    gateway.unknown, gateway.applied = True, False
+    op = approved(svc, svc.submit(command(svc, account, order), "fixture"))
+    assert len(queued) == 1  # approval runs the task now, no 3-minute wait
+    run = run_next()
+    assert run.status == "succeeded" and run.work_items_total == 1
+    work = session.scalars(
+        select(IntegrationSyncRunWorkItem).where(IntegrationSyncRunWorkItem.run_id == run.id)
+    ).one()
+    assert work.request_safe_params == {"operation_id": str(op.id), "actions": ["execute"]}
+    assert work.status == "succeeded" and work.response_count == 2
+    session.expire_all()
+    assert svc.read(op.id).state == "RUNNING" and len(gateway.creates) == 2
+    queue()
+    assert run_next().work_items_total == 0  # not due: nothing done this tick
+    for count in range(1, 11):
+        make_due(factory, op.id)
+        queue()
+        assert run_next().status == "succeeded"
+        session.expire_all()
+        current = svc.read(op.id)
+        if count < 10:
+            assert current.state == "RUNNING" and current.tickets[0].polls == count
+    assert current.state == "FAILED"
+    assert {t.error_code for t in current.tickets} == {"WFS_RESULT_TIMEOUT"}
+    assert len(gateway.creates) == 2 and len(gateway.reads) == 20
+    assert svc.base.detail(order.id).available_boxes == 30
+
+
+def test_task_center_retry_reconcile_and_labels(case, engine, task_center):
+    session, svc, gateway, account, order, *_ = case
+    creation_task, queued, run_next, queue, factory = task_center
+    gateway.reject = True
+    op = approved(svc, svc.submit(command(svc, account, order, (20,)), "fixture"))
+    run_next()
+    session.expire_all()
+    assert svc.read(op.id).state == "FAILED"
+    gateway.reject, gateway.fail_label = False, True
+    svc.recover(op.id, "approver-1", "retry")
+    assert run_next().status == "succeeded"
+    session.expire_all()
+    current = svc.read(op.id)
+    assert current.state == "SUCCEEDED" and len(gateway.reads) == 1
+    assert current.tickets[0].shipments[0].label_state == "FAILED"
+    gateway.fail_label = False
+    svc.recover(op.id, "approver-1", "labels")
+    run = run_next()
+    assert run.work_items_total == 1
+    session.expire_all()
+    assert svc.read(op.id).tickets[0].shipments[0].label_state == "READY"
+    queue()
+    assert run_next().work_items_total == 0  # a label request is handled once
+
+
+def test_task_center_disabled_switch_and_creation_mode(case, engine, task_center):
+    from app.modules.integration_sync.models import IntegrationSyncConfig
+    from app.modules.pmc_wfs.creation_models import WfsCreationEvent
+
+    session, svc, gateway, account, order, *_ = case
+    creation_task, queued, run_next, queue, factory = task_center
+    queue()
+    assert run_next().status == "succeeded"  # nothing pending: an empty successful run
+    gateway.unknown = True
+    op = approved(svc, svc.submit(command(svc, account, order, (10,)), "fixture"))
+    gateway.enabled = False
+    gateway.reason = "Walmart 创建尚未启用"
+    run = run_next()
+    assert run.status == "failed" and run.error_code == "WFS_CREATION_DISABLED"
+    assert run.error_message == "Walmart 创建尚未启用"
+    gateway.enabled = True
+    config = session.scalars(
+        select(IntegrationSyncConfig).where(IntegrationSyncConfig.source_account_ref == account)
+    ).one()
+    config.is_enabled = False
+    session.commit()
+    assert queue() is None
+    svc.recover(op.id, "approver-1", "reconcile")
+    kinds = session.scalars(
+        select(WfsCreationEvent.kind).where(WfsCreationEvent.operation_id == op.id)
+    ).all()
+    assert "waiting_task_center" in kinds
+
+
+def test_execution_routes_the_task_to_the_wfs_handler(case, task_center, monkeypatch):
+    from app.modules.integration_sync.execution import SyncRunExecutionService
+    from app.modules.pmc_wfs import creation_task as module
+
+    session, *_ = case
+    creation_task, queued, run_next, queue, factory = task_center
+    seen = []
+
+    class Fake:
+        def __init__(self, s):
+            pass
+
+        def execute(self, run, interface):
+            seen.append((run.interface_key, interface.handler_key))
+
+    monkeypatch.setattr(module, "WfsCreationResultPollHandler", Fake)
+    SyncRunExecutionService(session).execute(queue())
+    assert seen == [(module.INTERFACE_KEY, module.HANDLER_KEY)]

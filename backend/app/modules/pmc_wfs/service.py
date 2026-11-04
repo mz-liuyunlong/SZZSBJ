@@ -146,6 +146,8 @@ class WfsService:
 
     @staticmethod
     def _arrangement(row: PendingRow, kind: str) -> bool:
+        if kind == "open":
+            return row.available_boxes > 0
         if kind == "ready":
             return row.available_boxes > 0 and row.occupied_boxes == 0
         if kind == "partial":

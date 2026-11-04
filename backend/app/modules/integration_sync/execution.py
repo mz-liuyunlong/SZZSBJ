@@ -114,6 +114,17 @@ class SyncRunExecutionService:
             domestic_handler(self.session).execute(run, interface)
             return
 
+        # 「WFS 创建结果拉取」(PMC WFS 创建货件；Rocky 2026-11-04 统一走任务中心)
+        from app.modules.pmc_wfs import creation_task
+
+        if (
+            run.provider == creation_task.PROVIDER
+            and run.interface_key == creation_task.INTERFACE_KEY
+            and interface.handler_key == creation_task.HANDLER_KEY
+        ):
+            creation_task.WfsCreationResultPollHandler(self.session).execute(run, interface)
+            return
+
         wfs_board_handler = PMC_WFS_HANDLERS.get(run.interface_key)
         if (
             run.provider == "lingxing"

@@ -14,7 +14,8 @@ class PendingFilter(Strict):
     store_id: str | None = Field(default=None, max_length=64)
     keyword: str = Field(default="", max_length=200)
     only_test: bool = False
-    arrangement: Literal["all", "ready", "partial", "done"] = "all"
+    # open = 还有箱子没建货件（待创建页签默认）
+    arrangement: Literal["all", "open", "ready", "partial", "done"] = "all"
     creation_result: Literal[
         "all",
         "none",

@@ -1,6 +1,5 @@
 /** Shared chrome for the WFS preview pages. */
-import { QuestionCircleOutlined } from "@ant-design/icons";
-import { Alert, Button, Space, Tag, Typography } from "antd";
+import { Alert, Space, Tag, Typography } from "antd";
 import type { ReactNode } from "react";
 import PageShell from "@/components/page/PageShell";
 import type { NavigationPage } from "@/config/navigation";
@@ -15,19 +14,7 @@ export default function WfsFrame({
   children: ReactNode;
 }) {
   return (
-    <PageShell
-      page={page}
-      headerActions={(
-        <Button
-          href="/help/pmc-wfs.html"
-          target="_blank"
-          rel="noreferrer"
-          icon={<QuestionCircleOutlined />}
-        >
-          帮助
-        </Button>
-      )}
-    >
+    <PageShell page={page}>
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <Alert
           showIcon

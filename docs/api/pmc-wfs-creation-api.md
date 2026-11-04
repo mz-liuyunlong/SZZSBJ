@@ -27,6 +27,21 @@
 | POST | `/creation-operations/{id}/retry` | approve | 仅失败的票：重新占箱 → 先查 Walmart → 没有才按同一单号重发 |
 | POST | `/creation-operations/{id}/labels/retry` | label-retry | 补取箱唛 |
 | GET | `/creation-operations?order_id=` / `/{id}` | 登录 | 记录；每票含 `error_message`、`submissions`、`polls` / `max_polls` / `next_poll_at`、货件 `fc` |
+| GET | `/creation-tickets?tab=submitting\|failed\|created&store_id=&keyword=&page=&page_size=` | 登录 | 待创建货件的 提交中 / 创建失败 / 已创建未发货 页签，一行一票 |
+| GET | `/creation-ticket-counts?store_id=&keyword=` | 登录 | 三个页签的票数 |
+| GET | `/store-creation-defaults` | 登录 | 创建默认值（按店铺）：每店一行，`level` = store / account / default |
+| PUT | `/store-creation-defaults/{store_id}` | settings manage | 保存某店铺的创建默认值（运输方式、发货日偏移、托盘 / 混装箱数、承运人、ITS、退货地址），记入设置变更 |
+
+`/creation-defaults` 另收 `store_id`：店铺行 → 账号行 → 8088 默认值；创建弹窗据此带出，弹窗里改的值只用于那一次。
+`/orders?arrangement=open` = 打包完成且还有箱子没建货件（待创建页签默认）。
+
+## 任务中心「WFS 创建结果拉取」
+
+提交 Walmart、每 3 分钟查结果、重试都由 数据中心 → 任务中心 的「WFS 创建结果拉取」执行（provider `walmart`，interface_key `wfsCreationResultPoll`，cron `*/3 * * * *`），WFS 没有自己的定时器或 Celery 任务。
+
+- 每次运行处理该账号下：已批准待执行的票 → 提交；提交中且到了查询时间的票 → 用单号查一次；结果待核实的票 → 查一次；页面点了核实结果 / 补取箱唛的票 → 处理一次。每个操作一条运行明细。
+- 批准、重试、核实结果、补取箱唛会立即建一次手动运行；任务没注册或被关掉时记一条 `waiting_task_center` 事件，等下一次定时运行。
+- 注册：`PMC_WFS_CREATION_TASK_BOOTSTRAP_AUTHORIZED=true PMC_WFS_SOURCE_ACCOUNT_REF=<账号> python scripts/bootstrap_pmc_wfs_creation_task.py`（自动同步默认关，由管理员在任务中心打开）。
 
 ## 状态（每个计划货件 = 一票 = 一个 Walmart inbound order，单号 = 票 id）
 
@@ -50,4 +65,4 @@
 - `WFS_CREATION_MODE`（新增）。
 - 复用统一 Walmart 网关现有变量：店铺映射 `…_WALMART_SCF_STORE_ID_MAP`、`…_CVM_ROLE`、`…_TARGET_ROLE_ARN`、`…_PROTOCOL`；协议 1 时还需 `…_APPROVED_WRITE_KEYS` 含 `wfs_inbound_shipment_create, wfs_shipment_label, wfs_inbound_preview`，`…_APPROVED_READ_KEYS` 含 `inbound_shipments`；审计 outbox 目录 `…_WALMART_AUDIT_OUTBOX_DIR`。
 - 每店云函数须以读写模式部署（`owner-approved-read-write`）。
-- Celery worker 需加载 `app.modules.pmc_wfs.tasks`，消费 `integration` 队列。
+- Celery worker 照常消费 `integration` 队列（任务中心的 `integration_sync.execute_sync_run` 执行本任务）。

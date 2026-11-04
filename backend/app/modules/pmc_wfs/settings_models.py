@@ -147,3 +147,36 @@ class WfsSettingsChange(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
+
+
+class WfsStoreCreationDefaults(Base):
+    """创建默认值按店铺（Rocky 2026-11-04）：店铺行优先，其次账号行，最后 8088 默认值。
+
+    退货地址和 ITS 也在这里，创建弹窗自动带出；弹窗里改了只影响这一次。
+    """
+
+    __tablename__ = "ref_wfs_store_creation_defaults"
+    __table_args__ = (
+        CheckConstraint(
+            "transport IN ('LTL','SMALL_PARCEL','FTL')", name="wfs_store_default_transport"
+        ),
+        CheckConstraint("carrier_opt IN ('own','wm')", name="wfs_store_default_carrier"),
+        CheckConstraint(
+            "ship_date_offset >= 0 AND pallet_boxes >= 1 AND mixed_boxes >= 0",
+            name="wfs_store_default_numbers",
+        ),
+    )
+
+    source_account_ref: Mapped[str] = mapped_column(String(128), primary_key=True)
+    store_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    transport: Mapped[str] = mapped_column(String(16), nullable=False)
+    ship_date_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    pallet_boxes: Mapped[int] = mapped_column(Integer, nullable=False)
+    mixed_boxes: Mapped[int] = mapped_column(Integer, nullable=False)
+    carrier_opt: Mapped[str] = mapped_column(String(8), nullable=False)
+    its: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    return_address: Mapped[dict | None] = mapped_column(JSON_TYPE)
+    updated_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )

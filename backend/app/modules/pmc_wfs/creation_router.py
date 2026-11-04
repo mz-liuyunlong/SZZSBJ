@@ -8,6 +8,16 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from app.core.api import SuccessEnvelope
 from app.core.auth import Principal
 from app.core.permissions import require_permission
+from app.modules.pmc_wfs.creation_board import (
+    CreationBoard,
+    StoreDefaults,
+    StoreDefaultsList,
+    StoreDefaultsRow,
+    StoreDefaultsUpdate,
+    Tab,
+    TicketCounts,
+    TicketList,
+)
 from app.modules.pmc_wfs.creation_config import creation_mode
 from app.modules.pmc_wfs.creation_schemas import (
     AllocationCommand,
@@ -21,10 +31,10 @@ from app.modules.pmc_wfs.creation_schemas import (
     ProbeResult,
 )
 from app.modules.pmc_wfs.creation_service import CreationService
+from app.modules.pmc_wfs.creation_task import get_creation_dispatcher
 from app.modules.pmc_wfs.gateway import get_creation_gateway
 from app.modules.pmc_wfs.router import ERRORS, Service
 from app.modules.pmc_wfs.router import response as preparation_response
-from app.modules.pmc_wfs.tasks import get_creation_dispatcher
 
 router = APIRouter(tags=["PMC WFS Pending Packing V2"])
 Create = Annotated[Principal, Depends(require_permission("action:pmc:wfs-pending-packing:create"))]
@@ -37,6 +47,7 @@ Reconcile = Annotated[
 Approve = Annotated[
     Principal, Depends(require_permission("action:pmc:wfs-pending-packing:approve"))
 ]
+Manage = Annotated[Principal, Depends(require_permission("action:pmc:wfs-settings:manage"))]
 Label = Annotated[
     Principal, Depends(require_permission("action:pmc:wfs-pending-packing:label-retry"))
 ]
@@ -76,8 +87,58 @@ def capabilities(request: Request, svc: Creation):
 
 
 @router.get("/creation-defaults", response_model=SuccessEnvelope[CreationDefaultsRead, dict])
-def defaults(request: Request, svc: Creation, actor: Create, source_account_ref: str):
-    return response(request, svc.defaults(source_account_ref))
+def defaults(
+    request: Request,
+    svc: Creation,
+    actor: Create,
+    source_account_ref: str,
+    store_id: Annotated[str | None, Query(max_length=64)] = None,
+):
+    return response(request, svc.defaults(source_account_ref, store_id))
+
+
+@router.get("/creation-tickets", response_model=SuccessEnvelope[TicketList, dict])
+def tickets(
+    request: Request,
+    base: Service,
+    tab: Tab,
+    store_id: Annotated[str | None, Query(max_length=64)] = None,
+    keyword: Annotated[str, Query(max_length=200)] = "",
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=200)] = 20,
+):
+    """待创建货件的 提交中 / 创建失败 / 已创建未发货 页签（一行一票）。"""
+    board = CreationBoard(base.session, base.accounts, base.stores)
+    return response(request, board.list(tab, store_id, keyword, page, page_size))
+
+
+@router.get("/creation-ticket-counts", response_model=SuccessEnvelope[TicketCounts, dict])
+def ticket_counts(
+    request: Request,
+    base: Service,
+    store_id: Annotated[str | None, Query(max_length=64)] = None,
+    keyword: Annotated[str, Query(max_length=200)] = "",
+):
+    board = CreationBoard(base.session, base.accounts, base.stores)
+    return response(request, board.counts(store_id, keyword))
+
+
+@router.get("/store-creation-defaults", response_model=SuccessEnvelope[StoreDefaultsList, dict])
+def store_defaults(request: Request, base: Service):
+    return response(request, StoreDefaults(base.session, base.accounts, base.stores).list())
+
+
+@router.put(
+    "/store-creation-defaults/{store_id}",
+    response_model=SuccessEnvelope[StoreDefaultsRow, dict],
+    responses=V2_ERRORS,
+)
+def save_store_defaults(
+    request: Request, store_id: str, body: StoreDefaultsUpdate, base: Service, actor: Manage
+):
+    """创建默认值按店铺保存；创建弹窗里改的值只用于那一次，不回写这里。"""
+    service = StoreDefaults(base.session, base.accounts, base.stores)
+    return response(request, service.update(store_id, body, actor.user_id))
 
 
 @router.post("/creation-probe", response_model=SuccessEnvelope[ProbeResult, dict])

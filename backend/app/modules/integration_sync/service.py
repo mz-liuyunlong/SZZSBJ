@@ -589,8 +589,13 @@ class IntegrationSyncService:
             and interface.request_kind == "offset_page"
             and interface.handler_key == purchase_spec.handler_key
         )
+        is_wfs_creation = (
+            interface.provider == "walmart"
+            and interface.interface_key == "wfsCreationResultPoll"
+            and interface.handler_key == "walmart.pmc_wfs.creation_result_poll.v1"
+        )
         if productlist_only and not (
-            is_productlist or is_productinfo or is_pmc_purchase or is_data_pages
+            is_productlist or is_productinfo or is_pmc_purchase or is_data_pages or is_wfs_creation
         ):
             raise ApiError(code=SYNC_PRODUCTLIST_ONLY, status_code=409)
         if is_pmc_purchase and (trigger is not TriggerType.MANUAL or config.schedule_enabled):
