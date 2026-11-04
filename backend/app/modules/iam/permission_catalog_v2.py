@@ -465,7 +465,10 @@ def register_runtime_permission_key(permission_key: str) -> PermissionDefinition
         return None
     permission_type, module_slug, page_slug, leaf_slug = parts
     if (
-        any(not part or not all(char.isalnum() or char == "-" for char in part) for part in parts[1:])
+        any(
+            not part or not all(char.isalnum() or char == "-" for char in part)
+            for part in parts[1:]
+        )
         or any("_" in part for part in parts[1:])
         or not all(part.isascii() and part.lower() == part for part in parts[1:])
         or (permission_type == "page" and leaf_slug != "view")
@@ -487,9 +490,7 @@ def register_runtime_permission_key(permission_key: str) -> PermissionDefinition
             )
 
         page_name = (
-            static_page[2].name
-            if static_page is not None
-            else page_slug.replace("-", " ").title()
+            static_page[2].name if static_page is not None else page_slug.replace("-", " ").title()
         )
         if static_page is None:
             parent_key = f"page:{module_slug}:{page_slug}:view"
