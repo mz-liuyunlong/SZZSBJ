@@ -833,14 +833,10 @@ class ApprovalService:
         is_admin: bool = False,
     ) -> ApprovalSummary:
         formal_scope_sql = (
-            " and " + self._approval_scope_condition("a")
-            if self.org_owner_refs is not None
-            else ""
+            " and " + self._approval_scope_condition("a") if self.org_owner_refs is not None else ""
         )
         legacy_scope_sql = (
-            " and c.owner_ref=any(:org_owner_refs)"
-            if self.org_owner_refs is not None
-            else ""
+            " and c.owner_ref=any(:org_owner_refs)" if self.org_owner_refs is not None else ""
         )
         org_params = (
             {"org_owner_refs": sorted(self.org_owner_refs)}

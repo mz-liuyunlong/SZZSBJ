@@ -34,6 +34,7 @@ from app.modules.iam.organization_access import (
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.warehouse_wfs.schemas import WfsFeeArchiveRequestWrite
 
+
 def require_approval_org_scope(
     principal: Annotated[Principal, Depends(require_principal)],
     session: Annotated[Session, Depends(get_db_session)],
