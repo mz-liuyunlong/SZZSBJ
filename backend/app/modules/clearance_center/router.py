@@ -37,6 +37,16 @@ configurer = Annotated[
 ]
 
 
+def _requested_accounts(
+    accounts: frozenset[str], source_account_ref: str = "",
+) -> frozenset[str]:
+    if not source_account_ref:
+        return accounts
+    if source_account_ref not in accounts:
+        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
+    return frozenset({source_account_ref})
+
+
 def _safe_listing(data: dict[str, Any], principal: Principal) -> dict[str, Any]:
     return mask_clearance_financials(
         data,
@@ -54,7 +64,7 @@ def listings(
     accounts: scope,
 ):
     data = ClearanceService(session).list_listings(
-        accounts,
+        _requested_accounts(accounts, query.source_account_ref),
         store_id=query.store_id,
         keyword=query.keyword,
         risk_level=query.risk_level,
@@ -95,9 +105,11 @@ def facets(request: Request, session: db_session, _: reader, accounts: scope):
 @router.get("/summary", response_model=SuccessEnvelope[dict[str, Any], None])
 def summary(
     request: Request, session: db_session, principal: reader,
-    accounts: scope, store_id: str = "",
+    accounts: scope, store_id: str = "", source_account_ref: str = "",
 ):
-    result = ClearanceService(session).summary(accounts, store_id)
+    result = ClearanceService(session).summary(
+        _requested_accounts(accounts, source_account_ref), store_id
+    )
     if not has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION):
         # Aggregate medium/observe/review counts may disclose hidden margin signals.
         for name in ("medium", "observe", "review_required"):
@@ -142,11 +154,13 @@ def requests(
     accounts: scope,
     status: str | None = None,
     store_id: str = "",
+    source_account_ref: str = "",
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
 ):
     data = ClearanceService(session).list_requests(
-        accounts, status=status, store_id=store_id, page=page, page_size=page_size
+        _requested_accounts(accounts, source_account_ref),
+        status=status, store_id=store_id, page=page, page_size=page_size
     )
     return success_response(request, data=data, meta=None)
 
@@ -250,9 +264,11 @@ def data_readiness(
     _: reader,
     accounts: scope,
     store_id: str = "",
+    source_account_ref: str = "",
 ):
-    # One bounded PostgreSQL aggregate, not full Listing enumeration.
-    report = ClearanceService(session).repo.readiness_report(accounts, store_id=store_id)
+    report = ClearanceService(session).repo.readiness_report(
+        _requested_accounts(accounts, source_account_ref), store_id=store_id
+    )
     return success_response(request, data=report, meta=None)
 
 
@@ -263,9 +279,12 @@ def daily_evaluation(
     _: reader,
     accounts: scope,
     store_id: str = "",
+    source_account_ref: str = "",
 ):
     # Only counts from authorized accounts, never global run statistics.
-    report = ClearanceService(session).repo.readiness_report(accounts, store_id=store_id)
+    report = ClearanceService(session).repo.readiness_report(
+        _requested_accounts(accounts, source_account_ref), store_id=store_id
+    )
     return success_response(
         request,
         data={
