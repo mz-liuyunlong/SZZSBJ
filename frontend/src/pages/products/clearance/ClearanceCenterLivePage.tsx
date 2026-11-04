@@ -1,5 +1,5 @@
 /** Database-backed WFS Clearance Center. Never falls back to local demo data. */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert, AutoComplete, Button, Card, DatePicker, Descriptions, Drawer, Form,
   Input, InputNumber, Modal, Select, Space, Statistic, Switch, Table, Tabs, Tag,
@@ -56,7 +56,13 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
   const [keyword,setKeyword] = useState("");
   const [searchDraft,setSearchDraft] = useState("");
   const [risk,setRisk] = useState("");
-  const [listPage,setListPage] = useState(1);
+  // Visible rows grow as the table scrolls; SQL still fetches 50 rows at a time.
+  const nextListingPage = useRef(2);
+  const listingEpoch = useRef(0);
+  const listingFetching = useRef(false);
+  const listingRowsRef = useRef<ClearanceRow[]>([]);
+  const listingTotalRef = useRef(0);
+  const [loadingMore,setLoadingMore] = useState(false);
   const [taskPage,setTaskPage] = useState(1);
   const [rows,setRows] = useState<ClearanceRow[]>([]);
   const [tasks,setTasks] = useState<ClearanceRequest[]>([]);
@@ -85,10 +91,17 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
   const [form] = Form.useForm<ApplyData>();
 
   const reload = useCallback(async () => {
+    const epoch = ++listingEpoch.current;
+    listingFetching.current = true;
+    nextListingPage.current = 2;
+    listingRowsRef.current = [];
+    listingTotalRef.current = 0;
+    setRows([]);
     setLoading(true);
+    setLoadingMore(false);
     try {
-      const [l,t,s,q,options] = await Promise.all([
-        fetchClearanceListings({page:listPage,page_size:50,store_id:store,
+      const [l,t,summaryData,readinessData,options] = await Promise.all([
+        fetchClearanceListings({page:1,page_size:50,store_id:store,
           source_account_ref:sourceAccount,keyword,
           risk_level:risk||undefined}),
         fetchClearanceRequests({page:taskPage,page_size:50,store_id:store,
@@ -97,25 +110,67 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
         fetchClearanceReadiness(store,sourceAccount),
         fetchClearanceFacets(),
       ]);
+      if (listingEpoch.current !== epoch) return;
+      listingRowsRef.current = l.items;
+      listingTotalRef.current = l.total;
       setRows(l.items);
       setListTotal(l.total);
       setTasks(t.items);
       setTaskTotal(t.total);
-      setSummary(s);
-      setReadiness(q);
+      setSummary(summaryData);
+      setReadiness(readinessData);
       setFacets(options);
       setError("");
     } catch {
+      if (listingEpoch.current !== epoch) return;
       setError("清货中心真实数据读取失败，请检查接口权限、数据版本与网络连接。");
+      listingRowsRef.current = [];
+      listingTotalRef.current = 0;
       setRows([]);
+      setListTotal(0);
       setTasks([]);
       setSummary(null);
       setReadiness(null);
     } finally {
-      setLoading(false);
+      if (listingEpoch.current === epoch) {
+        listingFetching.current = false;
+        setLoading(false);
+      }
     }
-  }, [listPage,taskPage,store,sourceAccount,keyword,risk]);
+  }, [taskPage,store,sourceAccount,keyword,risk]);
   useEffect(()=>{ void Promise.resolve().then(() => reload()); },[reload]);
+
+  const loadMoreListings = useCallback(async () => {
+    if (listingFetching.current ||
+        listingRowsRef.current.length >= listingTotalRef.current) return;
+    const epoch = listingEpoch.current;
+    const pageNumber = nextListingPage.current;
+    listingFetching.current = true;
+    setLoadingMore(true);
+    try {
+      const result = await fetchClearanceListings({
+        page:pageNumber,page_size:50,store_id:store,
+        source_account_ref:sourceAccount,keyword,risk_level:risk||undefined,
+      });
+      if (listingEpoch.current !== epoch) return;
+      const seen = new Set(listingRowsRef.current.map(row=>row.listing.id));
+      const additions = result.items.filter(row=>!seen.has(row.listing.id));
+      listingRowsRef.current = [...listingRowsRef.current,...additions];
+      nextListingPage.current = pageNumber+1;
+      listingTotalRef.current = result.total;
+      setListTotal(result.total);
+      setRows(listingRowsRef.current);
+    } catch {
+      if (listingEpoch.current === epoch) {
+        void messageApi.error("加载后续 Listing 失败，请向下滚动重试");
+      }
+    } finally {
+      if (listingEpoch.current === epoch) {
+        listingFetching.current = false;
+        setLoadingMore(false);
+      }
+    }
+  }, [store,sourceAccount,keyword,risk,messageApi]);
 
   const stores = useMemo(()=>Array.from(new Map(facets.stores
     .filter(x=>!sourceAccount||x.source_account_ref===sourceAccount).map(x=>[
@@ -361,24 +416,35 @@ export default function ClearanceCenterLivePage({page}:{page:NavigationPage}) {
         <div className="clearance-toolbar" style={{display:"flex",gap:10,alignItems:"center",marginBottom:12}}>
           <Select value={sourceAccount} style={{width:150}}
             options={[{value:"",label:"全部账号"},...accountOptions]}
-            onChange={v=>{setSourceAccount(v);setStore("");setListPage(1);setTaskPage(1);}}/>
+            onChange={v=>{setSourceAccount(v);setStore("");setTaskPage(1);}}/>
           <Select value={store} style={{width:170}} options={[{value:"",label:"全部店铺"},...stores]}
-            onChange={v=>{setStore(v);setListPage(1);setTaskPage(1);}}/>
+            onChange={v=>{setStore(v);setTaskPage(1);}}/>
           {tab==="analysis"?<Select value={risk} style={{width:132}} options={[
             {value:"",label:"全部风险"},...Object.entries(riskLabel).map(([value,label])=>({value,label}))]}
-            onChange={v=>{setRisk(v);setListPage(1);}}/>:null}
+            onChange={v=>{setRisk(v);}}/>:null}
           <Input.Search style={{maxWidth:340,flex:1}} placeholder="搜索 Item ID / SKU / MSKU / 品名"
             value={searchDraft} onChange={e=>setSearchDraft(e.target.value)}
-            onSearch={v=>{setKeyword(v.trim());setListPage(1);}}/>
+            onSearch={v=>{setKeyword(v.trim());}}/>
           <div style={{flex:1}}/>
           <Button type="primary" icon={<FileAddOutlined/>} onClick={()=>openApply()}>申请 SKU</Button>
           <Button icon={<ReloadOutlined/>} onClick={()=>void reload()}>刷新</Button>
         </div>
-        {tab==="analysis"?<Table<ClearanceRow> className="clearance-live-list" size="small" bordered
-          rowKey={r=>r.listing.id} columns={listingColumns} dataSource={rows}
-          loading={loading} scroll={{x:1580}}
-          pagination={{current:listPage,pageSize:50,total:listTotal,showSizeChanger:false,
-            onChange:p=>setListPage(p)}}/>:
+        {tab==="analysis"?<div>
+          <Table<ClearanceRow> className="clearance-live-list" size="small" bordered
+            rowKey={r=>r.listing.id} columns={listingColumns} dataSource={rows}
+            loading={loading} scroll={{x:1580,y:460}} pagination={false}
+            onScroll={event=>{
+              const area=event.currentTarget;
+              if (area.scrollHeight-area.scrollTop-area.clientHeight<=120) {
+                void loadMoreListings();
+              }
+            }}/>
+          <div style={{textAlign:"center",padding:"8px 0",fontSize:12,color:"#64748b"}}>
+            {loadingMore?"正在加载后续 Listing…":
+              rows.length<listTotal?`已加载 ${rows.length} / ${listTotal} 条，向下滚动继续加载`:
+              `已加载全部 ${rows.length} 条 Listing`}
+          </div>
+        </div>:
           <Table<ClearanceRequest> size="small" bordered rowKey="id" columns={taskColumns}
             dataSource={tasks} loading={loading} scroll={{x:1440}}
             pagination={{current:taskPage,pageSize:50,total:taskTotal,showSizeChanger:false,
