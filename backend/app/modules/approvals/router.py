@@ -76,8 +76,7 @@ def list_approvals(
         data = data.model_copy(
             update={
                 "items": [
-                    item.model_copy(update={"clearance_stock_capital": None})
-                    for item in data.items
+                    item.model_copy(update={"clearance_stock_capital": None}) for item in data.items
                 ]
             }
         )
