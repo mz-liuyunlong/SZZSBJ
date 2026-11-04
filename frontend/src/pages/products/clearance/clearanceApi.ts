@@ -30,6 +30,8 @@ export interface ClearanceListing {
 export interface ClearanceEvaluation {
   risk_level: RiskLevel;
   candidate_status: CandidateStatus;
+  daily_evaluation_status?: "ready" | "stale";
+  historical_candidate_status?: CandidateStatus;
   coverage_days: number | null;
   current_wfs_available: string | null;
   inventory_captured_at: string | null;
@@ -65,7 +67,7 @@ export interface ClearancePage<T> {
   total: number;
   page: number;
   page_size: number;
-  evaluation_status?: "ready" | "not_ready" | "live_wfs";
+  evaluation_status?: "ready" | "not_ready" | "stale" | "live_wfs";
   run_date_la?: string | null;
   as_of_date_la?: string | null;
 }
@@ -76,7 +78,7 @@ export interface ClearanceSummary {
   observe: number | null;
   review_required: number | null;
   eligible_manual: number;
-  evaluation_status: "ready" | "not_ready";
+  evaluation_status: "ready" | "not_ready" | "stale";
   run_date_la: string | null;
   as_of_date_la: string | null;
 }
@@ -85,7 +87,7 @@ export interface ClearanceFacets {
   accounts: string[];
 }
 export interface ClearanceReadiness {
-  evaluation_status: "ready" | "not_ready";
+  evaluation_status: "ready" | "not_ready" | "stale";
   run_date_la: string | null;
   as_of_date_la: string | null;
   total_listings: number;
