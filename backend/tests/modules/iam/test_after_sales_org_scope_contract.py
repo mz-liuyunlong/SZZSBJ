@@ -141,3 +141,59 @@ def test_account_qualified_refund_scope_is_applied_to_reviewed_reads() -> None:
     assert session.info[ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY] == frozenset({
         ("ACCOUNT-1", "SHARED-UID")
     })
+
+
+def test_refunds_obey_account_store_filter_in_both_refund_and_sales_sql() -> None:
+    import json
+
+    from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+
+    session = MagicMock()
+    session.info = {STORE_SCOPE_SESSION_KEY: frozenset({("ACCOUNT-1", "STORE-1")})}
+    repository = AfterSalesRefundRepository(session)
+    refund_where, refund_params = repository._refund_where(
+        _query(), frozenset({"ACCOUNT-1", "ACCOUNT-2"})
+    )
+    sales_where, sales_params = repository._sales_where(
+        _query(), frozenset({"ACCOUNT-1", "ACCOUNT-2"})
+    )
+    assert any(
+        "stores.account_ref = r.source_account_ref" in clause
+        and "stores.store_key = r.store_id" in clause
+        for clause in refund_where
+    )
+    assert any(
+        "stores.account_ref = m.source_account_ref" in clause
+        and "stores.store_key = m.store_id" in clause
+        for clause in sales_where
+    )
+    assert json.loads(refund_params["account_store_pairs"]) == [
+        {"account_ref": "ACCOUNT-1", "store_key": "STORE-1"}
+    ]
+    assert refund_params["account_store_pairs"] == sales_params["account_store_pairs"]
+
+
+def test_refund_store_scope_is_required_even_if_org_scope_is_global() -> None:
+    from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+
+    request = Request({
+        "type": "http",
+        "method": "GET",
+        "path": "/api/after-sales/refunds/items",
+        "headers": [],
+    })
+    session = MagicMock()
+    session.info = {}
+    principal = Principal(
+        user_id="8", permissions=frozenset({"aftersales:refund-management:read"})
+    )
+    with (
+        patch("app.modules.after_sales.router.resolve_business_account_owner_pairs", return_value=None),
+        patch("app.modules.after_sales.router.resolve_business_owner_refs", return_value=None),
+        patch(
+            "app.modules.after_sales.router.resolve_account_store_scope",
+            return_value=frozenset({("ACCOUNT-1", "STORE-1")}),
+        ),
+    ):
+        require_refund_org_scope(request, principal, session)
+    assert session.info[STORE_SCOPE_SESSION_KEY] == frozenset({("ACCOUNT-1", "STORE-1")})
