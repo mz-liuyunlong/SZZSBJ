@@ -30,6 +30,8 @@ def metrics(sales: int = 30, **overrides):
         "positive_stock_days": 25,
         "inventory_fresh": True,
         "sales_complete": True,
+        "sales_7d_complete": True,
+        "sales_prev_7d_complete": True,
         "zero_sales_verified": True,
         "cost_complete": True,
         "listing_days": 100,
