@@ -32,6 +32,7 @@ class ApplySnapshotRequest(BaseModel):
     expected_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     allow_large_reduction: bool = False
     allow_identity_replacement: bool = False
+    critical_change_confirmation: str | None = None
 
 
 def _read_feishu():
@@ -94,6 +95,14 @@ def apply_organization_sync(
     session: db_session,
 ):
     """Fail closed if Feishu changed between preview and apply."""
+    if (
+        payload.allow_large_reduction or payload.allow_identity_replacement
+    ) and payload.critical_change_confirmation != "我已核对飞书通讯录授权范围":
+        raise ApiError(
+            code=ErrorCode.INVALID_REQUEST,
+            status_code=422,
+            message="高风险组织同步必须提供独立二次确认",
+        )
     departments, users = _read_feishu()
     try:
         run_id = apply_snapshot(

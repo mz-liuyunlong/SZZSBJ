@@ -104,12 +104,29 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
           cancelText: "取消",
           onOk: async () => {
             try {
+              const criticalChange = preview.large_reduction || preview.identity_replacement;
+              if (criticalChange) {
+                const explicitlyConfirmed = await new Promise<boolean>((confirm) => {
+                  Modal.confirm({
+                    title: "二次确认：组织身份发生重大变化",
+                    content: "此操作可能导致员工失去访问权限。请先核对飞书应用通讯录授权范围及新增、移除的员工和部门。",
+                    okText: "我已核对飞书通讯录授权范围",
+                    cancelText: "返回检查",
+                    onOk: () => confirm(true),
+                    onCancel: () => confirm(false),
+                  });
+                });
+                if (!explicitlyConfirmed) return;
+              }
               await backendRequest("/api/settings/organization/sync-apply", {
                 method: "POST",
                 body: JSON.stringify({
                   expected_hash: preview.snapshot_hash,
                   allow_large_reduction: preview.large_reduction,
                   allow_identity_replacement: preview.identity_replacement,
+                  critical_change_confirmation: criticalChange
+                    ? "我已核对飞书通讯录授权范围"
+                    : undefined,
                 }),
               });
               const saved = await backendRequest<DirectoryPreview>(
