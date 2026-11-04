@@ -152,3 +152,60 @@ def test_wfs_router_install_account_owner_scope_without_legacy_identity() -> Non
     assert session.info[ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY] == frozenset({
         ("source-a", "same-uid")
     })
+
+
+def test_wfs_store_scope_checks_account_store_pair_in_read_and_write_sql() -> None:
+    import json
+
+    from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+
+    session = MagicMock()
+    session.info = {STORE_SCOPE_SESSION_KEY: frozenset({("source-a", "store-one")})}
+    session.execute.return_value.scalar_one.return_value = 0
+    session.execute.return_value.mappings.return_value.all.return_value = []
+    WfsFeeAlertService(session).list_cases(
+        WfsFeeCaseQuery(), frozenset({"source-a", "source-b"})
+    )
+    for call in session.execute.call_args_list:
+        statement, params = call.args
+        assert "stores.account_ref=source_account_ref" in str(statement)
+        assert "stores.store_key=store_id" in str(statement)
+        assert json.loads(params["org_account_stores"]) == [
+            {"account_ref": "source-a", "store_key": "store-one"}
+        ]
+
+    session.execute.reset_mock()
+    session.execute.return_value.first.return_value = None
+    with pytest.raises(ApiError):
+        WfsFeeAlertService(session).ensure_case_visible(
+            UUID(int=1), frozenset({"source-a", "source-b"})
+        )
+    sql, params = session.execute.call_args.args
+    assert "FOR UPDATE" in str(sql)
+    assert "stores.store_key=store_id" in str(sql)
+    assert json.loads(params["org_account_stores"])[0]["account_ref"] == "source-a"
+
+
+def test_wfs_store_scope_installation_does_not_require_restricted_org_scope() -> None:
+    from app.modules.iam.store_scope import STORE_SCOPE_SESSION_KEY
+
+    request = Request({
+        "type": "http", "method": "GET",
+        "path": "/api/warehouse/wfs-fee-cases",
+        "headers": [],
+    })
+    session = MagicMock()
+    session.info = {}
+    principal = Principal(
+        user_id="8", permissions=frozenset({"page:warehouse:wfs-fee-alert:view"})
+    )
+    with (
+        patch("app.modules.warehouse_wfs.router.resolve_business_account_owner_pairs", return_value=None),
+        patch("app.modules.warehouse_wfs.router.resolve_business_owner_refs", return_value=None),
+        patch(
+            "app.modules.warehouse_wfs.router.resolve_account_store_scope",
+            return_value=frozenset({("source-a", "store-one")}),
+        ),
+    ):
+        require_wfs_org_scope(request, principal, session)
+    assert session.info[STORE_SCOPE_SESSION_KEY] == frozenset({("source-a", "store-one")})
