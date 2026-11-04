@@ -5,11 +5,14 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Select, and_, case, func, nulls_last, or_, select
+from sqlalchemy import Select, and_, case, func, nulls_last, or_, select, tuple_
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.modules.iam.organization_access import ORG_OWNER_SCOPE_SESSION_KEY
+from app.modules.iam.organization_access import (
+    ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY,
+    ORG_OWNER_SCOPE_SESSION_KEY,
+)
 from app.modules.product_management.models import (
     ManualProductTag,
     ManualProductTagAssignment,
@@ -77,6 +80,20 @@ class ProductManagementRepository:
         self.org_owner_refs: frozenset[str] | None = (
             info.get(ORG_OWNER_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
         )
+        self.account_owner_pairs: frozenset[tuple[str, str]] | None = (
+            info.get(ORG_OWNER_ACCOUNT_SCOPE_SESSION_KEY) if isinstance(info, dict) else None
+        )
+
+    def _owner_identity_filters(self) -> list[ColumnElement[bool]]:
+        clauses: list[ColumnElement[bool]] = []
+        if self.org_owner_refs is not None:
+            clauses.append(LingxingSkuProductInfoCurrent.owner_uid.in_(self.org_owner_refs))
+        if self.account_owner_pairs is not None:
+            clauses.append(tuple_(
+                LingxingSkuIdentity.source_account_ref,
+                LingxingSkuProductInfoCurrent.owner_uid,
+            ).in_(sorted(self.account_owner_pairs)))
+        return clauses
 
     def list_projections(
         self,
@@ -116,6 +133,7 @@ class ProductManagementRepository:
             pricing_ready_account_refs=pricing_ready_account_refs,
             invalid_pricing_rule_account_refs=invalid_pricing_rule_account_refs,
             org_owner_refs=self.org_owner_refs,
+            account_owner_pairs=self.account_owner_pairs,
         )
         effective_sku = func.coalesce(Product.sku, LingxingSkuIdentity.lingxing_sku_code)
         effective_name = func.coalesce(
@@ -208,6 +226,7 @@ class ProductManagementRepository:
             pricing_ready_account_refs=pricing_ready_account_refs,
             invalid_pricing_rule_account_refs=invalid_pricing_rule_account_refs,
             org_owner_refs=self.org_owner_refs,
+            account_owner_pairs=self.account_owner_pairs,
         )
         projections = (
             filtered.with_only_columns(
@@ -303,10 +322,8 @@ class ProductManagementRepository:
             LingxingSkuIdentity.is_active.is_(True),
             or_(Product.id.is_(None), Product.deleted_at.is_(None)),
         )
-        if self.org_owner_refs is not None:
-            statement = statement.where(
-                LingxingSkuProductInfoCurrent.owner_uid.in_(self.org_owner_refs)
-            )
+        if self.org_owner_refs is not None or self.account_owner_pairs is not None:
+            statement = statement.where(*self._owner_identity_filters())
         row = self.session.execute(statement).first()
         return None if row is None else tuple(row)
 
@@ -523,6 +540,7 @@ class ProductManagementRepository:
             pricing_ready_account_refs=pricing_ready_account_refs,
             invalid_pricing_rule_account_refs=invalid_pricing_rule_account_refs,
             org_owner_refs=self.org_owner_refs,
+            account_owner_pairs=self.account_owner_pairs,
         )
         base = (
             filtered.with_only_columns(
@@ -806,6 +824,7 @@ class ProductManagementRepository:
         pricing_ready_account_refs: frozenset[str] = frozenset(),
         invalid_pricing_rule_account_refs: frozenset[str] = frozenset(),
         org_owner_refs: frozenset[str] | None = None,
+        account_owner_pairs: frozenset[tuple[str, str]] | None = None,
     ) -> Select[
         tuple[
             LingxingSkuIdentity,
@@ -829,6 +848,11 @@ class ProductManagementRepository:
         )
         if org_owner_refs is not None:
             statement = statement.where(LingxingSkuProductInfoCurrent.owner_uid.in_(org_owner_refs))
+        if account_owner_pairs is not None:
+            statement = statement.where(tuple_(
+                LingxingSkuIdentity.source_account_ref,
+                LingxingSkuProductInfoCurrent.owner_uid,
+            ).in_(sorted(account_owner_pairs)))
         if sku is not None:
             statement = statement.where(effective_sku.contains(sku, autoescape=True))
         if sku_batch:
