@@ -410,6 +410,36 @@ def test_daily_evaluation_is_idempotent_and_sql_paginated(clearance_db: Session)
     assert audit["scheduled_run_status"] == "succeeded"
     assert audit["scheduled_attempt_count"] >= 1
     assert audit["scheduled_error_code"] is None
+    # An operator archives an item after the midnight run. Today's dashboard
+    # must filter the persisted score immediately without re-scoring it.
+    late_archive_id = clearance_db.scalar(
+        select(ListingManagementCurrentMart.id).where(
+            ListingManagementCurrentMart.source_account_ref == account,
+            ListingManagementCurrentMart.store_id == "ci-daily-store",
+            ListingManagementCurrentMart.item_id == "ci-daily-item-0003",
+        )
+    )
+    assert late_archive_id is not None
+    clearance_db.add(
+        ListingArchiveState(
+            id=uuid4(),
+            listing_id=late_archive_id,
+            source_account_ref=account,
+            store_id="ci-daily-store",
+            item_id="ci-daily-item-0003",
+            is_archived=True,
+            archived_by="ci-operator",
+        )
+    )
+    clearance_db.commit()
+    assert service.list_listings(
+        frozenset({account}), store_id="ci-daily-store",
+    )["total"] == 162
+    assert service.summary(
+        frozenset({account}), store_id="ci-daily-store",
+    )["total"] == 162
+    with pytest.raises(ApiError):
+        service.listing_detail(str(late_archive_id), frozenset({account}))
     # Daily risk does not authorize application when today's WFS stock sells out.
     from sqlalchemy import text
 
@@ -436,6 +466,9 @@ def test_daily_evaluation_is_idempotent_and_sql_paginated(clearance_db: Session)
     detail = service.listing_detail(listing_id,frozenset({account}))
     assert detail["evaluation"]["current_wfs_available"] == "0.0000"
     assert detail["evaluation"]["current_inventory_not_eligible"] is True
+    assert service.list_listings(
+        frozenset({account}), store_id="ci-daily-store",
+    )["total"] == 161
     with pytest.raises(ApiError):
         service.submit(_payload(listing_id,1),frozenset({account}),"operator-1")
     # Product owners must not inherit the full system run count.
