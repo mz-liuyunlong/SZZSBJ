@@ -368,12 +368,16 @@ const appendListingFilters = (search: URLSearchParams, params: ListingManagement
     search.set("keyword", keyword);
   }
 
-  const batchValues = (params.batchValues ?? []).map((value) => value.trim()).filter(Boolean);
-  if (batchValues.length > 0) {
+  if ((params.batchValues ?? []).some((value) => value.trim())) {
     search.set("search_field", backendSearchField(params.searchType));
-    search.set("batch_values", batchValues.join(","));
   }
 };
+
+const listingBatchValues = (params: ListingManagementParams): string[] =>
+  (params.batchValues ?? []).map((value) => value.trim()).filter(Boolean);
+
+const listingBatchBody = (search: URLSearchParams, batchValues: string[], columns: string[] = []) =>
+  JSON.stringify({ query: Object.fromEntries(search.entries()), batch_values: batchValues, columns });
 
 async function fetchListingManagementRowsFromApi(
   params: ListingManagementParams = {},
@@ -386,9 +390,15 @@ async function fetchListingManagementRowsFromApi(
   search.set("page_size", String(pageSize));
   appendListingFilters(search, params);
 
-  const envelope = await backendRequest<BackendListingData, ListingManagementApiMeta>(
-    `/api/listings/walmart?${search.toString()}`,
-  );
+  const batchValues = listingBatchValues(params);
+  const envelope = batchValues.length > 0
+    ? await backendRequest<BackendListingData, ListingManagementApiMeta>(
+      "/api/listings/walmart/batch-search",
+      { method: "POST", body: listingBatchBody(search, batchValues) },
+    )
+    : await backendRequest<BackendListingData, ListingManagementApiMeta>(
+      `/api/listings/walmart?${search.toString()}`,
+    );
 
   return {
     rows: envelope.data.items.map(toListingRow),
@@ -402,9 +412,15 @@ async function fetchListingManagementSummaryFromApi(
   const search = new URLSearchParams();
   appendListingFilters(search, { ...params, summaryFilter: "total" });
 
-  const envelope = await backendRequest<BackendListingSummaryData>(
-    `/api/listings/walmart/summary?${search.toString()}`,
-  );
+  const batchValues = listingBatchValues(params);
+  const envelope = batchValues.length > 0
+    ? await backendRequest<BackendListingSummaryData>(
+      "/api/listings/walmart/summary/batch-search",
+      { method: "POST", body: listingBatchBody(search, batchValues) },
+    )
+    : await backendRequest<BackendListingSummaryData>(
+      `/api/listings/walmart/summary?${search.toString()}`,
+    );
 
   return {
     total: envelope.data.total,
@@ -422,14 +438,22 @@ export async function exportListingManagementRows(
 ): Promise<void> {
   const search = new URLSearchParams();
   appendListingFilters(search, params);
-  if (columns && columns.length > 0) {
-    search.set("columns", columns.join(","));
+  const batchValues = listingBatchValues(params);
+  if (batchValues.length > 0) {
+    await backendDownload(
+      "/api/listings/walmart/export/batch-search",
+      "listing-management-export.csv",
+      { method: "POST", body: listingBatchBody(search, batchValues, columns ?? []) },
+    );
+  } else {
+    if (columns && columns.length > 0) {
+      search.set("columns", columns.join(","));
+    }
+    await backendDownload(
+      `/api/listings/walmart/export?${search.toString()}`,
+      "listing-management-export.csv",
+    );
   }
-
-  await backendDownload(
-    `/api/listings/walmart/export?${search.toString()}`,
-    "listing-management-export.csv",
-  );
 }
 
 async function fetchListingManagementFilterOptionsFromApi(): Promise<ListingManagementFilterOptions> {
