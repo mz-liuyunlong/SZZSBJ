@@ -697,9 +697,9 @@ export function applyListingEvaluationPreview(
       cutoffLa: preview.cutoff_la,
       ruleVersion: preview.rule_version,
     },
-    productGrade: hasPublishedGrade
-      ? row.productGrade
-      : validCandidate ? preview.grade_candidate! : row.productGrade,
+    // Candidate grades appear only inside the diagnostic popover.
+    // The table always displays the officially saved grade.
+    productGrade: row.productGrade,
     gradePreviewCandidate: !hasPublishedGrade && validCandidate,
     gradeDiagnostic: {
       reason: gradeReason,
