@@ -1,10 +1,13 @@
 """0062 and draft decisions on owned, disposable PostgreSQL databases only."""
 
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
@@ -36,7 +39,9 @@ from tests.db.test_domestic_chain_postgresql import (
     _version,
 )
 
-REVISION = "20261102_0071_skill_lib"
+REVISION = ScriptDirectory.from_config(
+    Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+).get_current_head()
 PREVIOUS = "20261027_0061_merge_purchase_main"
 
 
