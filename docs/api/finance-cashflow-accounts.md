@@ -27,7 +27,7 @@
 
 `POST /manual-lines`，请求：`account_key`、`business_date`、`direction`（in / out）、`amount`（正数，最多 2 位小数）、`description`（必填）、`counterparty_name`、`memo`、`category_code`（可空，空就按规则分类）、`idempotency_key`（重复提交只录一次）。
 
-- 币种跟账户走（rocky 2026-11-05）：页面列出全部账户，默认选名字叫「现金」的；手工账户（现金）只记人民币，其他币种返回 422；其他账户按自己的币种记，要记美元就选美元账户。现金账户上线时用 `backend/scripts/finance_cash_ensure_cash_account.py --apply` 补一次，不含账号，可重复执行。
+- 币种跟账户走（rocky 2026-11-05）：页面先选人民币或美元（默认人民币），再选这个币种的账户；人民币默认选名字叫「现金」的。手工账户（现金）只记人民币，其他币种返回 422。现金账户上线时用 `backend/scripts/finance_cash_ensure_cash_account.py --apply` 补一次，不含账号，可重复执行。
 - 任何启用中的账户都能录：现金这种手工账户，或者银行 / 平台流水里没有的那笔（比如另外扣的手续费，类别选 F01）。
 - 每录一笔，后台记成一次导入：一个批次 + 一个名为「手工录入」的虚拟文件（`provider = manual`，不存原件），流水进 `std_finance_cashflow_lines`，`source_ref = 手工`，事件表记一条 `manual_create`（谁、什么时候录的）。所以分类、初审终审、剔除、配对、导出都照常走。
 - 录错了用剔除；还没审核的也可以在导入记录里作废这一批。

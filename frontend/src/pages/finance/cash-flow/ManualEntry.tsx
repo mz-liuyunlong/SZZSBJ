@@ -5,16 +5,16 @@
 import { Button, DatePicker, Form, Input, InputNumber, Modal, Radio, Select, Typography, message } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useEffect, useMemo, useState } from "react";
-import { manualErrorText, PROVIDER_SHORT, useAdminAccounts, useCreateManualLine } from "@/pages/finance/cash-flow/accountsApi";
-import { defaultAccountKey, manualAccounts } from "@/pages/finance/cash-flow/manualEntryOptions";
-import { currencyName } from "@/pages/finance/currencyName";
+import { manualErrorText, useAdminAccounts, useCreateManualLine } from "@/pages/finance/cash-flow/accountsApi";
+import { accountLabel, DEFAULT_MANUAL_CURRENCY, defaultAccountKey, MANUAL_CURRENCIES, manualAccounts, type ManualCurrency } from "@/pages/finance/cash-flow/manualEntryOptions";
+import { currencyName, currencyText } from "@/pages/finance/currencyName";
 import type { CashSnapshot } from "@/pages/finance/localFinData";
 
 const FEE_CATEGORY = "F01";
 
 type EntryType = "normal" | "fee";
 interface FormValues {
-  type: EntryType; account_key?: string; business_date: Dayjs; direction: "in" | "out"; amount: number | string;
+  type: EntryType; account_key?: string; business_date: Dayjs; direction: "in" | "out"; currency: ManualCurrency; amount: number | string;
   description: string; counterparty_name?: string; memo?: string; category_code?: string;
 }
 
@@ -36,13 +36,16 @@ function ManualEntryModal({ data, onClose }: { data: CashSnapshot; onClose: () =
   const accounts = useAdminAccounts();
   const create = useCreateManualLine();
   const type = Form.useWatch("type", form) ?? "normal";
-  const accountKey = Form.useWatch("account_key", form);
-  const active = useMemo(() => manualAccounts((accounts.data ?? []).filter((row) => row.is_active)), [accounts.data]);
+  const currency = Form.useWatch("currency", form) ?? DEFAULT_MANUAL_CURRENCY;
+  const active = useMemo(() => manualAccounts((accounts.data ?? []).filter((row) => row.is_active), currency), [accounts.data, currency]);
   /* 账户读到后默认选现金；财务已经选过就不动。 */
   useEffect(() => {
     if (!form.getFieldValue("account_key")) form.setFieldsValue({ account_key: defaultAccountKey(active) });
   }, [active, form]);
-  const currency = active.find((row) => row.account_key === accountKey)?.currency_code;
+  /* 换币种要重选账户：人民币回到现金，美元让财务自己选。 */
+  const pickCurrency = (next: ManualCurrency) => {
+    form.setFieldsValue({ account_key: defaultAccountKey(manualAccounts(accounts.data?.filter((row) => row.is_active) ?? [], next)) });
+  };
   const catOptions = data.cats.map((cat) => ({ value: cat.code, label: `${cat.code} ${cat.big}·${cat.name}` }));
 
   const pickType = (next: EntryType) => {
@@ -85,17 +88,20 @@ function ManualEntryModal({ data, onClose }: { data: CashSnapshot; onClose: () =
       ]}>
       {holder}
       <Typography.Paragraph type="secondary">
-        用于现金账户（只记人民币），或者银行 / 平台流水里没有的那笔；币种跟所选账户走，要记美元就选美元账户（比如另外扣的手续费）。录完和导入的流水一样走初审、终审；录错了用「剔除」。
+        用于现金账户，或者银行 / 平台流水里没有的那笔（比如另外扣的手续费）。现金只记人民币。录完和导入的流水一样走初审、终审；录错了用「剔除」。
       </Typography.Paragraph>
       <Form<FormValues> form={form} layout="vertical" requiredMark="optional"
-        initialValues={{ type: "normal", direction: "out", business_date: dayjs() }}>
+        initialValues={{ type: "normal", direction: "out", business_date: dayjs(), currency: DEFAULT_MANUAL_CURRENCY }}>
         <Form.Item name="type" label="类型">
           <Radio.Group optionType="button" onChange={(event) => pickType(event.target.value as EntryType)}
             options={[{ value: "normal", label: "普通收支" }, { value: "fee", label: "手续费（流水里没有）" }]} />
         </Form.Item>
+        <Form.Item name="currency" label="币种">
+          <Radio.Group options={MANUAL_CURRENCIES} onChange={(event) => pickCurrency(event.target.value as ManualCurrency)} />
+        </Form.Item>
         <Form.Item name="account_key" label="账户" rules={[{ required: true, message: "选一个账户" }]}>
           <Select showSearch optionFilterProp="label" placeholder={accounts.isPending ? "读取中" : "选账户"} loading={accounts.isPending}
-            options={active.map((row) => ({ value: row.account_key, label: `${row.display_name} · ${currencyName(row.currency_code)}${row.account_no_last4 ? ` · 尾号 ${row.account_no_last4}` : ""} · ${PROVIDER_SHORT[row.provider] ?? row.provider}` }))} />
+            options={active.map((row) => ({ value: row.account_key, label: accountLabel(currencyText(row.display_name), currencyName(row.currency_code), row.account_no_last4) }))} />
         </Form.Item>
         <Form.Item name="business_date" label="日期" rules={[{ required: true, message: "选日期" }]}>
           <DatePicker style={{ width: "100%" }} disabledDate={(day) => day.isAfter(dayjs(), "day")} />
@@ -103,7 +109,7 @@ function ManualEntryModal({ data, onClose }: { data: CashSnapshot; onClose: () =
         <Form.Item name="direction" label="收入 / 支出">
           <Radio.Group options={[{ value: "in", label: "收入" }, { value: "out", label: "支出" }]} />
         </Form.Item>
-        <Form.Item name="amount" label={`金额${currency ? `（${currencyName(currency)}）` : ""}`} rules={[{ required: true, message: "填金额" }]}>
+        <Form.Item name="amount" label={`金额（${currencyName(currency)}）`} rules={[{ required: true, message: "填金额" }]}>
           <InputNumber<string> stringMode min="0.01" precision={2} style={{ width: "100%" }} placeholder="正数，方向看上面" />
         </Form.Item>
         <Form.Item name="description" label="摘要" rules={[{ required: true, whitespace: true, message: "写摘要" }]}>
