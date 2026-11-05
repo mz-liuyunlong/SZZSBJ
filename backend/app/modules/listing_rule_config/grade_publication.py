@@ -42,15 +42,15 @@ class GradePublishOutcome:
     already_published: int
 
 
-def _store_day_ad_spend_positive(value: Decimal | None) -> bool:
-    """A full-store zero-advertising day is an incomplete source day, not a valid zero."""
+def _all_stores_day_ad_spend_positive(value: Decimal | None) -> bool:
+    """The total across all Walmart stores must not be zero for a whole LA day."""
     return value is not None and value > Decimal("0")
 
 
-def _store_day_ad_spend_totals(
-    session: Session, listing: ListingManagementCurrentMart, start, cutoff
+def _all_stores_day_ad_spend_totals(
+    session: Session, start, cutoff
 ) -> dict:
-    """Only the exact account/store/LA dates; include standard and SEM advertising."""
+    """All accounts and stores, same LA day; standard plus SEM spend."""
     return {
         day: spend
         for day, spend in session.execute(
@@ -62,8 +62,6 @@ def _store_day_ad_spend_totals(
                 ),
             )
             .where(
-                DailySalesItemDayMart.source_account_ref == listing.source_account_ref,
-                DailySalesItemDayMart.store_id == listing.store_id,
                 DailySalesItemDayMart.business_date_la.between(start, cutoff),
             )
             .group_by(DailySalesItemDayMart.business_date_la)
@@ -198,11 +196,12 @@ class ListingGradePublicationService:
                 if len(days_seen) != len(rows):
                     blocked += 1
                     continue
-                # A store-wide zero advertising day signals an upstream outage
-                # in this business, even if one Listing legitimately has zero ads.
-                # Exclude those days from independently confirmed financial inputs.
-                store_ad_totals = _store_day_ad_spend_totals(
-                    self.session, listing, start, run.cutoff_date_la
+                # Only a zero total across ALL Walmart stores is the business
+                # anomaly signal. Individual stores/Listings may spend zero.
+                # This global check supplements (never replaces) the scoped,
+                # upstream-authenticated finance and advertising day proof.
+                all_stores_ad_totals = _all_stores_day_ad_spend_totals(
+                    self.session, start, run.cutoff_date_la
                 )
                 days = [
                     FinancialDay(
@@ -213,8 +212,8 @@ class ListingGradePublicationService:
                         missing_cost_codes=tuple(row.missing_cost_codes_json or ()),
                         upstream_confirmed=(
                             _day_is_attested(row)
-                            and _store_day_ad_spend_positive(
-                                store_ad_totals.get(row.business_date_la)
+                            and _all_stores_day_ad_spend_positive(
+                                all_stores_ad_totals.get(row.business_date_la)
                             )
                         ),
                     )
