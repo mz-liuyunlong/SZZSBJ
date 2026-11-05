@@ -644,12 +644,12 @@ function ListingManagementTable({
       width: columnWidths.lifecycle,
       onHeaderCell: headerCell,
       render: (_, row) => {
-        if (row.isArchived || ["清货期", "已归档"].includes(row.lifecycle)) {
-          return row.lifecycle || "—";
-        }
+        const workflowProtected = row.isArchived || ["清货期", "已归档"].includes(row.lifecycle);
         return (
           <span style={{ display: "flex", alignItems: "center", gap: 2, width: "100%" }}>
-          <LifecycleStageSelect row={row} disabled={lifecycleSaving} onSave={onSetLifecycle} />
+          {workflowProtected ? (row.lifecycle || "—") : (
+            <LifecycleStageSelect row={row} disabled={lifecycleSaving} onSave={onSetLifecycle} />
+          )}
           {/* LIFECYCLE_REASONS_LOCAL_V2: explain blank & predicted stages on click. */}
           {row.lifecycleDiagnostic && (
             <Popover
