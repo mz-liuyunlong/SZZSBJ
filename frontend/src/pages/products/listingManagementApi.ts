@@ -648,8 +648,10 @@ const diagnosticReasonCode = (reason: string | null, stage: string | null): stri
 };
 
 export function withPendingListingDiagnostics(row: ListingManagementRow): ListingManagementRow {
+  const hasPublishedGrade = !["", "未分级", "待评级"].includes(row.productGrade || "");
   return {
     ...row,
+    gradePreviewCandidate: false,
     lifecycleDiagnostic: {
       reasonCode: "PREVIEW_NOT_AVAILABLE",
       reasons: [{ code: "PREVIEW_NOT_AVAILABLE", title: "尚未获取判定数据", detail: "", advice: "" }],
@@ -658,7 +660,9 @@ export function withPendingListingDiagnostics(row: ListingManagementRow): Listin
       ruleVersion: 0,
     },
     gradeDiagnostic: {
-      reason: "评级诊断尚未取得；正式评级未发布。",
+      reason: hasPublishedGrade
+        ? "已保存的正式等级保持不变；评级诊断尚未取得。"
+        : "评级诊断尚未取得；正式评级未发布。",
       cutoffLa: "",
       sourceVerified: false,
     },
@@ -682,7 +686,9 @@ export function applyListingEvaluationPreview(
   const hasPublishedGrade = !["", "未分级", "待评级"].includes(row.productGrade || "");
   const validCandidate = !preview.published && ["A", "B", "C", "D"].includes(preview.grade_candidate ?? "");
   const stageExcluded = preview.missing_evidence.includes("LIFECYCLE_EXCLUDED_FROM_GRADING");
-  const gradeReason = stageExcluded
+  const gradeReason = hasPublishedGrade
+    ? "正式等级已保存；诊断试算仅供参考，不更改正式结果。"
+    : stageExcluded
     ? "当前生命周期不参与评级。"
     : validCandidate
       ? "仅供诊断：广告、成本与财务数据的正式完整性尚未确认，候选等级未发布。"
