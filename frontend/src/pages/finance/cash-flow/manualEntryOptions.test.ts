@@ -6,7 +6,8 @@ const usd = { account_key: "U", currency_code: "USD", display_name: "美元户",
 const cnh = { account_key: "H", currency_code: "CNH", display_name: "专用户", provider: "pingpong" };
 const cash = { account_key: "C", currency_code: "CNY", display_name: "现金", provider: "manual" };
 const cashUsd = { account_key: "M", currency_code: "USD", display_name: "现金", provider: "manual" };
-const rows = [bank, usd, cnh, cash, cashUsd];
+const cashCnh = { account_key: "N", currency_code: "CNH", display_name: "手工离岸", provider: "manual" };
+const rows = [bank, usd, cnh, cash, cashUsd, cashCnh];
 
 describe("manual entry accounts", () => {
   it("offers 人民币 first, then 美元", () => {

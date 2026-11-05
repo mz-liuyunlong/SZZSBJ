@@ -434,20 +434,8 @@ def test_ensure_cash_account_is_repeatable_and_keeps_a_stopped_one(session: Sess
     assert session.get(FinanceCashAccount, cash.account_key).is_active is False
 
 
-def test_only_cash_accounts_are_limited_to_rmb(session: Session) -> None:
-    admin = AccountAdminService(session)
-    cash_usd = admin.create(
-        CashAccountCreate(
-            display_name="美元现金",
-            entity="甲",
-            currency_code="USD",
-            kind="现金",
-            provider="manual",
-        )
-    )
-    with pytest.raises(ManualLineRejectedError, match="现金账户只记人民币"):
-        manual(session, cash_usd.account_key, "10", "in", date(2026, 10, 1))
-    bank_usd = admin.create(
+def _usd_bank(admin: AccountAdminService) -> str:
+    return admin.create(
         CashAccountCreate(
             display_name="美元户",
             entity="甲",
@@ -456,8 +444,59 @@ def test_only_cash_accounts_are_limited_to_rmb(session: Session) -> None:
             provider="boc",
             identity={"inquiry_account": "11223344"},
         )
+    ).account_key
+
+
+def test_only_cash_accounts_are_limited_to_rmb(session: Session) -> None:
+    # 接口已经建不出非人民币的手工账户；这里直接写库，确认录入这一关也拦得住旧数据。
+    session.add(
+        FinanceCashAccount(
+            account_key="OLD_MANUAL_USD",
+            display_name="旧美元现金",
+            entity="甲",
+            currency_code="USD",
+            kind="现金",
+            provider="manual",
+        )
     )
-    created = manual(session, bank_usd.account_key, "10", "out", date(2026, 10, 1))
+    session.flush()
+    with pytest.raises(ManualLineRejectedError, match="现金账户只记人民币"):
+        manual(session, "OLD_MANUAL_USD", "10", "in", date(2026, 10, 1))
+    created = manual(
+        session, _usd_bank(AccountAdminService(session)), "10", "out", date(2026, 10, 1)
+    )
     line = session.get(FinanceCashLine, created.line_uid)
     assert line is not None
     assert (line.currency_code, line.amount) == ("USD", Decimal("-10.0000"))
+
+
+@pytest.mark.parametrize("currency", ["USD", "CNH"])
+def test_manual_account_must_be_cny_on_create_and_update(session: Session, currency: str) -> None:
+    admin = AccountAdminService(session)
+    with pytest.raises(AccountRejectedError, match="手工账户只记人民币"):
+        admin.create(
+            CashAccountCreate(
+                display_name="手工",
+                entity="甲",
+                currency_code=currency,
+                kind="现金",
+                provider="manual",
+            )
+        )
+    cash = admin.create(
+        CashAccountCreate(
+            display_name="手工",
+            entity="甲",
+            currency_code="CNY",
+            kind="现金",
+            provider="manual",
+        )
+    ).account_key
+    with pytest.raises(AccountRejectedError, match="手工账户只记人民币"):
+        admin.update(cash, CashAccountUpdate(currency_code=currency))
+
+
+def test_switching_a_usd_account_to_manual_is_rejected(session: Session) -> None:
+    admin = AccountAdminService(session)
+    with pytest.raises(AccountRejectedError, match="手工账户只记人民币"):
+        admin.update(_usd_bank(admin), CashAccountUpdate(provider="manual", identity={}))

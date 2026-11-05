@@ -14,10 +14,10 @@ interface AccountRow { account_key: string; currency_code: string; display_name:
 /** 现金账户按名字认，只有人民币的算。 */
 export const isCashAccount = (row: AccountRow) => row.display_name === CASH_ACCOUNT_NAME && row.currency_code === "CNY";
 
-/** 这个币种能录的账户，现金排最前。人民币含 CNH。手工账户只收人民币，所以美元不列手工账户。 */
+/** 这个币种能录的账户，现金排最前。人民币含 CNH；手工账户只认 CNY，所以手工 CNH、手工美元都不列。 */
 export const manualAccounts = <T extends AccountRow>(rows: T[], currency: ManualCurrency): T[] =>
   rows
-    .filter((row) => (currency === "CNY" ? isRmb(row.currency_code) : row.currency_code === currency && row.provider !== "manual"))
+    .filter((row) => (row.provider === "manual" ? row.currency_code === "CNY" && currency === "CNY" : currency === "CNY" ? isRmb(row.currency_code) : row.currency_code === currency))
     .sort((left, right) => Number(isCashAccount(right)) - Number(isCashAccount(left)));
 
 export const defaultAccountKey = (rows: AccountRow[]): string | undefined => rows.find(isCashAccount)?.account_key;

@@ -92,15 +92,15 @@ function AccountForm({ editing, onClose }: { editing?: AdminAccount; onClose: ()
           <Form.Item name="kind" label="类型" rules={[{ required: true, message: "选类型" }]}>
             <Select style={{ width: 120 }} options={KIND_OPTIONS.map((value) => ({ value, label: value }))} />
           </Form.Item>
-          <Form.Item name="currency_code" label="币种" rules={[{ required: true }]} tooltip={locked ? "已有流水，不能改" : undefined}>
-            <Select style={{ width: 110 }} disabled={locked} options={CURRENCY_OPTIONS.map((value) => ({ value, label: value === "CNH" ? "人民币（离岸）" : currencyName(value) }))} />
+          <Form.Item name="currency_code" label="币种" rules={[{ required: true }]} tooltip={locked ? "已有流水，不能改" : provider === "manual" ? "手工账户只记人民币" : undefined}>
+            <Select style={{ width: 110 }} disabled={locked || provider === "manual"} options={CURRENCY_OPTIONS.map((value) => ({ value, label: value === "CNH" ? "人民币（离岸）" : currencyName(value) }))} />
           </Form.Item>
           <Form.Item name="sort_order" label="排序">
             <InputNumber<number> min={0} precision={0} style={{ width: 100 }} placeholder="自动" />
           </Form.Item>
         </Space>
         <Form.Item name="provider" label="流水来源" rules={[{ required: true }]} tooltip={locked ? "已有流水，不能改" : "决定导入时按哪种格式读文件；手工录入的账户不导入文件"}>
-          <Select disabled={locked} options={(Object.keys(PROVIDER_LABEL) as CashProvider[]).map((value) => ({ value, label: PROVIDER_LABEL[value] }))} />
+          <Select disabled={locked} onChange={(value: CashProvider) => { if (value === "manual") form.setFieldsValue({ currency_code: "CNY" }); }} options={(Object.keys(PROVIDER_LABEL) as CashProvider[]).map((value) => ({ value, label: PROVIDER_LABEL[value] }))} />
         </Form.Item>
         {provider === "boc" && (
           <Form.Item name="inquiry_account" label="查询账号" extra={identityHint ?? "中行「交易明细」表头里的查询账号；人民币户和外币户共用一个查询账号时，各建一个账户、币种不同"}>

@@ -143,6 +143,8 @@ class AccountAdminService:
             raise AccountRejectedError("平台不认识")
         if currency not in CURRENCIES:
             raise AccountRejectedError("币种只能是 CNY、USD、CNH")
+        if provider == PROVIDER_MANUAL and currency != "CNY":
+            raise AccountRejectedError("手工账户只记人民币")
 
     def _check_conflict(
         self, provider: str, currency: str, identity: dict[str, Any], skip_key: str | None

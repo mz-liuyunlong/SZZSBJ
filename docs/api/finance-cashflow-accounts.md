@@ -13,7 +13,7 @@
 规则：
 
 - 平台（`provider`）：`boc`、`shenzhen_rural_bank`、`cmb`、`payoneer`、`worldfirst`、`pingpong`、`manual`（手工录入，不导入文件）。
-- 币种只能是 CNY、USD、CNH。
+- 币种只能是 CNY、USD、CNH；手工账户只能是 CNY，新增和修改都拦（422）。
 - 识别值按平台：中行 `inquiry_account`（币种自动带上）；银座 / 招行 `account_no`（完整账号）；派安盈 `feature`（seller / collector）；PingPong `user_no` + `main`，或 `user_no` + `account_id`；万里汇、手工不用。
 - 同一份流水不能认成两个启用中的账户：撞了返回 409。
 - 已有流水的账户不能改平台和币种（409），没有删除接口，只能停用。停用后导入不再认它，已有流水照常显示。

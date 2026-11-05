@@ -283,7 +283,7 @@ def test_parse_statement_collector_account_and_fields():
                 "10/29/2026",
                 "17:53:10",
                 "2",
-                "Transfer from connected account ab@163.com",
+                "Transfer from connected account ab@example.com",
                 credit="237.37",
             ),
             srow("10/30/2026", "01:00:00", "3", "Payment to 某人", debit="5", status="Pending"),
@@ -301,7 +301,7 @@ def test_parse_statement_collector_account_and_fields():
         "CNY",
     )
     assert first.txn_time_utc == T1 and first.business_date == date(2026, 10, 15)
-    assert parsed.rows[2].description == "Transfer from connected account ab@163.com"
+    assert parsed.rows[2].description == "Transfer from connected account ab@example.com"
     late = P.parse_statement(
         statement([srow("10/31/2026", "20:00:00", "9", "Payment from STRIPE", credit="1")]),
         S.seed(),
