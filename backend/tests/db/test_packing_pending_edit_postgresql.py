@@ -6,9 +6,9 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+import sqlalchemy as sa
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError
