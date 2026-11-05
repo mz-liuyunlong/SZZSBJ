@@ -21,7 +21,7 @@ from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 from psycopg import sql
 from pydantic import ValidationError
-from sqlalchemy import create_engine, func, inspect, select, text
+from sqlalchemy import create_engine, func, inspect, select, text, update
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
@@ -39,6 +39,7 @@ from app.modules.finance_cashflow.models import (
     FinanceCashLineEvent,
     FinanceCashRawFile,
 )
+from app.modules.finance_cashflow.parsing import PARSER_VERSION
 from app.modules.finance_cashflow.schemas import CashflowLineEventRequest
 from app.modules.finance_cashflow.service import (
     CashflowService,
@@ -429,11 +430,9 @@ def test_line_exclusion_and_exclusion_list_anomaly(service, session):
     assert not [item for item in service.list_anomalies() if item.type == J.ALERT_EXCLUSION]
 
 
-def _load_migration():
-    path = (
-        Path(__file__).resolve().parents[3] / "alembic/versions/20261104_0072_finance_cashflow.py"
-    )
-    spec = importlib.util.spec_from_file_location("finance_cashflow_migration", path)
+def _load_migration(name: str = "20261104_0072_finance_cashflow"):
+    path = Path(__file__).resolve().parents[3] / f"alembic/versions/{name}.py"
+    spec = importlib.util.spec_from_file_location(f"migration_{name}", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -442,6 +441,8 @@ def _load_migration():
 def _downgrade(session: Session) -> None:
     context = MigrationContext.configure(session.connection())
     with Operations.context(context):
+        # 0081 的派安盈月结明细表引用了 0072 的表：先退掉它（空表才允许退）。
+        _load_migration("20261105_0081_finance_payoneer_statement").downgrade()
         _load_migration().downgrade()
 
 
@@ -1037,3 +1038,140 @@ def test_empty_database_round_trip_upgrade_downgrade_upgrade():
         engine.dispose()
         with psycopg.connect(**admin, autocommit=True) as cx:
             cx.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database)))
+
+
+def test_reupload_with_new_parser_refreshes_unmasked_email(service, session):
+    # 派安盈对方邮箱以前被打码；同一个文件在新版解析下再导一次，已有流水刷新成完整邮箱，不新增。
+    content = S.payoneer(
+        [
+            (
+                "10-04-2026",
+                "10:00:00",
+                "UTC",
+                "50",
+                "0",
+                "Completed",
+                "50",
+                "Transfer from connected account abcdef@example.com",
+            )
+        ]
+    )
+    upload(service, content)
+    line = session.scalars(select(FinanceCashLine)).one()
+    assert line.counterparty_name == "abcdef@example.com"
+    line.counterparty_name = "abc…@example.com"
+    session.execute(update(FinanceCashRawFile).values(parser_version="finance_cashflow/1"))
+    session.flush()
+    again = upload(service, content, name="again.csv")
+    assert (again.file.duplicate_of_file, again.file.rows_new) == (True, 0)
+    session.refresh(line)
+    assert line.counterparty_name == "abcdef@example.com"
+    assert session.scalars(select(FinanceCashRawFile.parser_version)).all() == [PARSER_VERSION]
+
+
+def test_manual_pair_and_confirm_fee_round_trip(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    first, second = active(service, "BOC_CNY")[:2]
+    for item in (first, second):
+        event(
+            service, item.line_uid, J.KIND_PAIR, payload={"pair_id": "M-test"}, expected_version=0
+        )
+    lines = {item.line_uid: item for item in active(service, "BOC_CNY")}
+    assert lines[first.line_uid].manual_pair == "M-test"
+    assert lines[first.line_uid].pair_id == lines[second.line_uid].pair_id
+    fee = (abs(first.amount) / 10).quantize(Decimal("0.01"))
+    event(
+        service,
+        first.line_uid,
+        J.KIND_CONFIRM_FEE,
+        payload={"fee_amount": str(fee), "transfer_category": "T02"},
+        expected_version=1,
+    )
+    read = next(item for item in active(service, "BOC_CNY") if item.line_uid == first.line_uid)
+    assert [(part.category_code, part.fee_layer) for part in read.parts or []] == [
+        ("T02", None),
+        ("F01", "fee"),
+    ]
+    assert sum(part.amount for part in read.parts or []) == abs(first.amount)
+    event(service, first.line_uid, J.KIND_UNPAIR, reason="配错了", expected_version=2)
+    lines = {item.line_uid: item for item in active(service, "BOC_CNY")}
+    assert lines[first.line_uid].manual_pair is None
+    event(
+        service,
+        first.line_uid,
+        J.KIND_SET_PART_TEXT,
+        payload={"index": 1, "description": "到账手续费"},
+        expected_version=3,
+    )
+    read = next(item for item in active(service, "BOC_CNY") if item.line_uid == first.line_uid)
+    assert [part.description for part in read.parts or []] == [None, "到账手续费"]
+
+
+def _payo_statement(rows) -> bytes:
+    head = (
+        "Transaction Date,Transaction Time,Time Zone,Transaction ID,Description,Credit Amount,"
+        "Debit Amount,Currency,Transfer Amount,Transfer Amount Currency,Status,Running Balance,"
+        "Additional Description,Store Name,Source,Target,Reference ID\n"
+    )
+    body = "".join(
+        f"{d},{t},UTC,{txn},{desc},{credit},{debit},USD,{tr},{tcur},Completed,1,,,,,\n"
+        for d, t, txn, desc, credit, debit, tr, tcur in rows
+    )
+    return ("﻿" + head + body).encode("utf-8")
+
+
+def test_payoneer_statement_fills_actual_cny_without_new_lines(service, session):
+    """月结补充只补实际到账：流水数不变，人民币按派安盈；作废这一批就回到空着。"""
+    weekly = S.payoneer(
+        [
+            (
+                "10-05-2026",
+                "17:00:00",
+                "UTC",
+                "3000",
+                "0",
+                "Completed",
+                "3000",
+                "Payment from STRIPE",
+            ),
+            (
+                "10-15-2026",
+                "15:56:15",
+                "UTC",
+                "0",
+                "-3000.00",  # 每周交易报告里扣款是负数
+                "Completed",
+                "3.77",
+                "Payment to 某行 (0000)",
+            ),
+        ]
+    )
+    upload(service, weekly, name="weekly.csv")
+    withdrawal = next(row for row in active(service) if row.amount < 0)
+    assert (withdrawal.amount_cny, withdrawal.fx_source) == (None, J.FX_SOURCE_PENDING)
+    statement = _payo_statement(
+        [
+            ("10/05/2026", "17:00:00", "1", "Payment from STRIPE", "3000", "", "", ""),
+            ("10/15/2026", "15:56:15", "2", "Payment to 某人", "", "3000.00", "20000.00", "CNY"),
+        ]
+    )
+    result = upload(service, statement, name="month.csv").file
+    assert (result.status, result.rows_parsed, result.rows_new) == ("parsed", 2, 0)
+    assert "读到 2 行（其中 2 行以前没导过）" in result.warnings[0]
+    assert "月结补充" in result.detected_note
+    lines = active(service)
+    assert len(lines) == 2
+    filled = next(row for row in lines if row.line_uid == withdrawal.line_uid)
+    assert filled.amount_cny == Decimal("-20000.0000")
+    assert (filled.fx_rate, filled.fx_source) == (Decimal("6.6667"), J.FX_SOURCE_PAYONEER)
+    again = upload(service, statement, name="month-again.csv").file
+    assert again.duplicate_of_file
+    service.void_import(result_import(session, "month.csv"), reason="导错", actor="admin")
+    back = next(row for row in active(service) if row.line_uid == withdrawal.line_uid)
+    assert back.amount_cny is None
+
+
+def result_import(session: Session, name: str) -> UUID:
+    return session.scalars(
+        select(FinanceCashRawFile.import_id).where(FinanceCashRawFile.file_name == name)
+    ).one()

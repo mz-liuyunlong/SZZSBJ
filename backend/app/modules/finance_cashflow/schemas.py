@@ -93,6 +93,11 @@ class CashflowFxRateRead(BaseModel):
 class CashflowLinePartRead(BaseModel):
     amount: Decimal
     category_code: str | None = None
+    # 有值 = 手续费行（「确认记为手续费」切出来的），值是手续费层，如 fee / payoneer。
+    fee_layer: str | None = None
+    # 拆分行自己的摘要 / 备注（set_part_text），空 = 沿用整笔的。
+    description: str | None = None
+    memo: str | None = None
 
 
 class CashflowLineRead(BaseModel):
@@ -104,6 +109,10 @@ class CashflowLineRead(BaseModel):
     currency_code: str
     amount: Decimal
     amount_cny: Decimal | None = None
+    # 折人民币用的汇率和来源：payoneer = 派安盈实际到账；
+    # lingxing = 领星当月汇率；pending = 提现等月结单。
+    fx_rate: Decimal | None = None
+    fx_source: str = ""
     balance_after: Decimal | None = None
     description: str
     memo: str
@@ -126,6 +135,8 @@ class CashflowLineRead(BaseModel):
     manual_description: str | None = None
     manual_memo: str | None = None
     parts: list[CashflowLinePartRead] | None = None
+    manual_pair: str | None = None
+    auto_exclude_reason: str | None = None
     version: int = 0
     # 还没挂单的流水：金额和日期对得上的审批单号，等财务选。
     approval_candidates: list[str] = Field(default_factory=list)

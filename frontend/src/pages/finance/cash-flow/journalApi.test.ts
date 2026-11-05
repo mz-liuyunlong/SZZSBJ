@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildLiveSnapshot, syncErrorText, syncFailedText, toFsDetail, type ApiApproval, cashErrorText, cashViewSource, nextImportNode, postLineEvent, resolveCashSource, toCashLine, type ApiAccount, type ApiAnomaly, type ApiCategory, type ApiLine } from "@/pages/finance/cash-flow/journalApi";
+import { buildLiveSnapshot, syncErrorText, syncFailedText, toFsDetail, type ApiApproval, cashErrorText, cashViewSource, fxNote, nextImportNode, postLineEvent, resolveCashSource, toCashLine, type ApiAccount, type ApiAnomaly, type ApiCategory, type ApiLine } from "@/pages/finance/cash-flow/journalApi";
 import { backendRequest, BackendRequestError } from "@/api/backendApi";
 
 vi.mock("@/api/backendApi", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/api/backendApi")>()), backendRequest: vi.fn() }));
@@ -149,5 +149,14 @@ describe("sync messages", () => {
   it("carries the provider code in the failure text", () => {
     expect(syncFailedText("FEISHU_APPROVAL_LIST_HTTP_400_CODE_1")).toContain("FEISHU_APPROVAL_LIST_HTTP_400_CODE_1");
     expect(syncFailedText(null)).toContain("同步失败");
+  });
+});
+
+describe("fxNote", () => {
+  it("labels Payoneer's own rate and the blank withdrawals waiting for the month-end statement", () => {
+    expect(fxNote(toCashLine(line({ amount_cny: "-20000.0000", fx_rate: "6.6751", fx_source: "payoneer" })))).toBe("派安盈实际汇率 6.6751");
+    expect(fxNote(toCashLine(line({ fx_source: "pending" })))).toBe("等派安盈月结单");
+    expect(fxNote(toCashLine(line({ amount_cny: "-88.7500", fx_rate: "7.1", fx_source: "lingxing" })))).toBeUndefined();
+    expect(fxNote(toCashLine(line()))).toBeUndefined();
   });
 });

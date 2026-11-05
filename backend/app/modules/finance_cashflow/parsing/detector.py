@@ -20,13 +20,14 @@ RANGE_RE = re.compile(
 
 @dataclass
 class Detection:
-    provider: str  # boc / shenzhen_rural_bank / payoneer / worldfirst / pingpong
+    provider: str  # boc / shenzhen_rural_bank / payoneer / worldfirst / pingpong / cmb
     note: str
     sheets: list = field(default_factory=list)  # [(name, rows)]
     csv_rows: list = field(default_factory=list)
     account_key: str | None = None  # 单账户文件直接给；中行 / PingPong 由解析器按行定
     inquiry_account: str = ""
     header_row: int = -1
+    pdf_pages: list = field(default_factory=list)  # PDF：每页的文本行
     declared_range: tuple | None = None
     skipped_rows: int = 0
 
@@ -47,12 +48,38 @@ def _range_in(rows, keys) -> tuple | None:
     return None
 
 
+CMB_TITLE = "招商银行交易流水"
+CMB_ACCOUNT = re.compile(r"账号[:：]\s*(\d{4})\**(\d{4})")
+CMB_RANGE = re.compile(r"^(\d{4}-\d{2}-\d{2})\s*--\s*(\d{4}-\d{2}-\d{2})$")
+
+
+def _detect_pdf(content: bytes, seed) -> Detection:
+    pages = readers.read_pdf_lines(content)
+    head = [line.strip() for line in (pages[0] if pages else [])[:30]]
+    if not any(CMB_TITLE in line for line in head):
+        raise RejectFile("PDF 认不出：目前只接招商银行「交易流水」PDF；中行请导「交易明细」xls")
+    masked = next((m for m in (CMB_ACCOUNT.search(line) for line in head) if m), None)
+    if masked is None:
+        raise RejectFile("招商银行流水 PDF 里没找到账号")
+    key = masked.group(1) + masked.group(2)  # 前 4 位 + 后 4 位，中间银行打了星号
+    if not seed.cmb_known(key):
+        raise RejectFile("招商银行流水，但账号没登记（尾号 %s）" % key[-4:])
+    declared = next((m.groups() for m in (CMB_RANGE.match(line) for line in head) if m), None)
+    return Detection(
+        "cmb",
+        "招商银行交易流水",
+        pdf_pages=pages,
+        inquiry_account=key,
+        declared_range=declared,
+    )
+
+
 def detect(
     content: bytes, seed, max_bytes=readers.MAX_UNZIPPED_BYTES, max_entries=readers.MAX_ZIP_ENTRIES
 ) -> Detection:
     kind = readers.kind_of(content)
     if kind == "pdf":
-        raise RejectFile("PDF 不是流水导出：中行请导「交易明细」xls；招商银行不接")
+        return _detect_pdf(content, seed)
     if kind == "text":
         try:
             head = content[:200].decode("utf-8-sig")
@@ -150,5 +177,5 @@ def detect(
                 declared_range=_range_in(rows[:hi], ("查询时间范围", "TimeRange", "Time Range")),
             )
     raise RejectFile(
-        "表头不认识（支持：万里汇 / PingPong / 中行交易明细 / 银座交易明细 / Payoneer CSV）"
+        "表头不认识（支持：万里汇 / PingPong / 中行交易明细 / 银座交易明细 / Payoneer CSV / 招商银行流水 PDF）"
     )

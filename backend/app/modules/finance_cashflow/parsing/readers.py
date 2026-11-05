@@ -134,3 +134,26 @@ def cell(v) -> str:
 def norm_head(v) -> str:
     """表头比较：去空白、去 [英文] 部分。"""
     return re.sub(r"\[.*$", "", re.sub(r"\s+", "", cell(v)))
+
+
+MAX_PDF_PAGES = 300
+
+
+def read_pdf_lines(content: bytes, max_pages: int = MAX_PDF_PAGES) -> list[list[str]]:
+    """PDF → 每页的文本行（pypdf 抽文字，不做 OCR；扫描件读不出字就当认不出）。"""
+    try:
+        from pypdf import PdfReader
+        from pypdf.errors import PdfReadError
+    except ImportError as exc:  # pragma: no cover - pypdf 是后端依赖
+        raise RejectFile("PDF 需要 pypdf 才能读取") from exc
+    try:
+        reader = PdfReader(io.BytesIO(content))
+        if reader.is_encrypted:
+            raise RejectFile("PDF 有密码，请导出不加密的版本")
+        if len(reader.pages) > max_pages:
+            raise RejectFile("PDF 超过 %d 页，请按月分开导出" % max_pages)
+        return [(page.extract_text() or "").splitlines() for page in reader.pages]
+    except RejectFile:
+        raise
+    except (PdfReadError, ValueError, KeyError, TypeError) as exc:
+        raise RejectFile("PDF 打不开") from exc

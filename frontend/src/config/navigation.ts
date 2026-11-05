@@ -248,6 +248,10 @@ export const navigation: NavigationGroup[] = [
       page('finance', 'cash_journal', '日记账', '/finance/cash/journal', {
         sidebarSection: 'finance-cash', status: 'building', readOnly: false, viewPermissionKey: 'page:finance:cash-flow:view',
       }),
+      // 2026-11-05 Rocky：新增账户在页面上做（含现金这种手工录入的账户），不用再改配置文件。
+      page('finance', 'cash_account_admin', '账户管理', '/finance/cash/account-admin', {
+        sidebarSection: 'finance-cash', status: 'building', readOnly: false, viewPermissionKey: 'page:finance:cash-flow:view',
+      }),
       page('finance', 'cash_stock', '备货资金', '/finance/cash/stock', {
         sidebarSection: 'finance-cash', status: 'building', readOnly: true, viewPermissionKey: 'page:finance:cash-flow:view',
       }),
