@@ -94,12 +94,15 @@ describe("ListingManagementPage acceptance contract", () => {
     expect(listingManagementMockData).toHaveLength(100);
     expect(new Set(listingManagementMockData.map((row) => row.id)).size).toBe(100);
     expect(listingColumnFields.map((field) => field.title)).toEqual([
-      "图片", "商品ID/品名", "SKU/MSKU", "店铺", "负责人", "标题", "产品类型",
-      "划线价", "在售价", "产品状态", "生命周期", "发货方式", "GPT分析", "上架时间", "类目", "WFS可售库存",
-      "在途库存", "近90天销量", "近30天广告费", "停用原因", "Listing状态", "购物车状态",
-      "Walmart卖家", "是否被跟卖", "检查时间", "评分", "评论数", "品牌", "标签", "产品标签", "GTIN",
-      "产品等级",
-      "归档原因",
+      "图片", "商品ID/品名", "SKU/MSKU", "店铺/负责人",
+      "标题", "图片数量", "划线价", "有无划线价",
+      "在售价", "类目", "WFS可售库存", "在途库存",
+      "上架时间", "近30天销量", "近30天广告费", "生命周期",
+      "listing等级", "停用原因", "Listing状态", "购物车状态",
+      "品牌", "Walmart卖家", "卖家数量", "卖家列表",
+      "是否被跟卖", "监控日期", "评分", "评论数",
+      "五点描述", "标签", "产品标签", "发货方式",
+      "GTIN", "GPT分析", "归档原因"
     ]);
     expect(fixedListingColumnKeys).toEqual(["image", "productIdName", "skuMsku"]);
   });
