@@ -11,8 +11,8 @@ from app.modules.listing_rule_config.grade_publication import (
     PROOF_KEY,
     PROOF_ORIGIN,
     ListingGradePublicationService,
-    _day_is_attested,
     _all_stores_day_ad_spend_positive,
+    _day_is_attested,
 )
 
 
