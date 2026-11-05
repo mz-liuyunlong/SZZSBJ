@@ -84,6 +84,12 @@ class CashflowCategoryRead(BaseModel):
     is_exclude: bool
 
 
+class CashflowFxRateRead(BaseModel):
+    month: str
+    currency_code: str
+    my_rate: Decimal | None
+
+
 class CashflowLinePartRead(BaseModel):
     amount: Decimal
     category_code: str | None = None

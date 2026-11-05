@@ -47,6 +47,7 @@ from app.modules.finance_cashflow.service import (
     LineNotFoundError,
     StorageNotConfiguredError,
 )
+from app.modules.fx_rates.models import LingxingFxRate
 from app.modules.product_management.models import ProductPricingRuleVersion
 from tests.modules.finance_cashflow import synth as S
 from tests.modules.finance_cashflow.test_parsing import boc_rows, eleven_account_files
@@ -603,9 +604,19 @@ def test_cny_amount_uses_month_rate(service, session):
     usd = ("来账", "20261010", "10:00:00", "USD", "10", "10", "X", "", "U1", "")
     upload(service, S.boc(S.BOC_A, [usd]))
     assert active(service, "BOC_USD")[0].amount_cny is None
-    session.add(_pricing_rule(Decimal("7.2")))
+    session.add(_fx_rate("2026-10", my_rate="7.2"))
     session.flush()
     assert active(service, "BOC_USD")[0].amount_cny == Decimal("72.0000")
+
+
+def _fx_rate(month: str, *, code: str = "USD", my_rate: str | None, rate_org: str | None = None):
+    return LingxingFxRate(
+        rate_month=month,
+        currency_code=code,
+        my_rate=None if my_rate is None else Decimal(my_rate),
+        rate_org=None if rate_org is None else Decimal(rate_org),
+        source="seed",
+    )
 
 
 def _pricing_rule(rate: Decimal) -> ProductPricingRuleVersion:
@@ -790,14 +801,50 @@ def test_concurrent_idempotency_key_returns_replay_not_500(service, session, mon
     assert (line.category_code, line.version) == ("G01", 1)
 
 
-def test_rate_only_reads_product_management_rule(service, session):
+def test_rate_only_reads_lingxing_usd_my_rate_of_the_same_month(service, session):
     usd = ("来账", "20261010", "10:00:00", "USD", "10", "10", "X", "", "U1", "")
     upload(service, S.boc(S.BOC_A, [usd]))
-    other = _pricing_rule(Decimal("9.9"))
-    other.rule_key = "other_rule"
-    session.add(other)
+    session.add_all(
+        [
+            _pricing_rule(Decimal("9.9")),
+            _fx_rate("2026-09", my_rate="8.8"),
+            _fx_rate("2026-10", code="EUR", my_rate="7.7"),
+            _fx_rate("2026-10", my_rate=None, rate_org="6.6"),
+        ]
+    )
     session.flush()
     assert active(service, "BOC_USD")[0].amount_cny is None
+
+
+def test_deploy_seed_fills_missing_rates_and_never_overwrites(session):
+    session.add(_fx_rate("2026-10", my_rate="7.1"))
+    session.flush()
+    data = {
+        "fx_rates": [
+            {"rate_month": "2026-10", "currency_code": "USD", "my_rate": "6.5", "rate_org": "6.6"},
+            {"rate_month": "2026-11", "currency_code": "usd", "my_rate": "6.4", "rate_org": "0"},
+        ]
+    }
+    assert load_deploy_data(session, data).fx_rates == 2
+    session.expire_all()
+    assert session.get(LingxingFxRate, ("2026-10", "USD")).my_rate == Decimal("7.1")
+    seeded = session.get(LingxingFxRate, ("2026-11", "USD"))
+    assert (seeded.my_rate, seeded.rate_org, seeded.source) == (Decimal("6.4"), None, "seed")
+
+
+@pytest.mark.parametrize(
+    ("row", "field"),
+    [
+        ({"rate_month": "2026-1", "currency_code": "USD"}, "rate_month"),
+        ({"rate_month": "2026-10", "currency_code": ""}, "currency_code"),
+        ({"rate_month": "2026-10", "currency_code": "USD", "my_rate": "abc"}, "my_rate"),
+        ({"rate_month": "2026-10", "currency_code": "USD", "rate_org": "-1"}, "rate_org"),
+    ],
+)
+def test_deploy_seed_rejects_bad_rows(session, row, field):
+    with pytest.raises(DeployFileError) as error:
+        load_deploy_data(session, {"fx_rates": [row]})
+    assert str(error.value) == f"fx_rates 第 1 条 {field} 不合格"
 
 
 FAKE_ACCOUNT_NO = "000011112222333"
@@ -916,7 +963,7 @@ def test_script_dry_run_writes_nothing(tmp_path, monkeypatch, capsys, session):
     get_settings.cache_clear()
     code = _run_script(tmp_path, monkeypatch, {"accounts": [_fake_account()]})
     assert code == 0
-    assert capsys.readouterr().out.strip() == "DRY_RUN accounts=1 rules=0 exclusions=0"
+    assert capsys.readouterr().out.strip() == "DRY_RUN accounts=1 rules=0 exclusions=0 fx_rates=0"
     assert session.get(FinanceCashAccount, "FAKE_K") is None
 
 

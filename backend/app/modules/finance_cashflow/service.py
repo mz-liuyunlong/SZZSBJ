@@ -3,8 +3,7 @@ from __future__ import annotations
 import hashlib
 import os
 import tempfile
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -52,7 +51,7 @@ from app.modules.finance_cashflow.schemas import (
     CashflowUploadData,
     CashflowVoidData,
 )
-from app.modules.product_management.models import ProductPricingRuleVersion
+from app.modules.fx_rates.reader import load_usd_cny_rates, usd_cny_rate_for
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 STORAGE_SUBDIR = Path("finance") / "cashflow"
@@ -105,42 +104,6 @@ def store_original(root: Path, sha256: str, kind: str, content: bytes) -> str:
         Path(temp_name).unlink(missing_ok=True)
         raise
     return relative.as_posix()
-
-
-@dataclass(frozen=True)
-class FxVersion:
-    source_account_ref: str
-    effective_from: datetime
-    effective_to: datetime | None
-    usd_cny_rate: Decimal
-
-
-def _month_start(day: date) -> date:
-    return day.replace(day=1)
-
-
-def _next_month(first_of_month: date) -> date:
-    return (first_of_month + timedelta(days=32)).replace(day=1)
-
-
-def month_usd_rate(versions: Iterable[FxVersion], day: date) -> Decimal | None:
-    """当月生效的统一美元汇率；当月没有就是空，不兜底。
-
-    表按店存多行，但汇率全公司统一（Rocky 2026-11-04），所以取当月内最新生效的那一行，不按店比对。
-    """
-    start = _month_start(day)
-    begin = datetime(start.year, start.month, 1, tzinfo=SHANGHAI)
-    following = _next_month(start)
-    end = datetime(following.year, following.month, 1, tzinfo=SHANGHAI)
-    in_month = [
-        version
-        for version in versions
-        if version.effective_from < end
-        and (version.effective_to is None or version.effective_to > begin)
-    ]
-    if not in_month:
-        return None
-    return max(in_month, key=lambda version: version.effective_from).usd_cny_rate
 
 
 class CashflowService:
@@ -564,32 +527,8 @@ class CashflowService:
     # ------------------------------------------------------------ 日记账读取
 
     def _usd_rate_lookup(self) -> Callable[[date], Decimal | None]:
-        rows = self.session.scalars(
-            select(ProductPricingRuleVersion).where(
-                ProductPricingRuleVersion.rule_key == "product_management",
-                ProductPricingRuleVersion.is_active.is_(True),
-                ProductPricingRuleVersion.usd_cny_rate.is_not(None),
-            )
-        ).all()
-        versions = [
-            FxVersion(
-                source_account_ref=row.source_account_ref,
-                effective_from=row.effective_from,
-                effective_to=row.effective_to,
-                usd_cny_rate=row.usd_cny_rate,
-            )
-            for row in rows
-            if row.usd_cny_rate is not None
-        ]
-        cache: dict[date, Decimal | None] = {}
-
-        def lookup(day: date) -> Decimal | None:
-            key = _month_start(day)
-            if key not in cache:
-                cache[key] = month_usd_rate(versions, key)
-            return cache[key]
-
-        return lookup
+        rates = load_usd_cny_rates(self.session)
+        return lambda day: usd_cny_rate_for(rates, day)
 
     def _compute(
         self,
