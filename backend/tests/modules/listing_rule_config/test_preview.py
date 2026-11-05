@@ -55,7 +55,7 @@ def test_grade_candidate_honors_configured_lifecycle_scope() -> None:
     assert not lifecycle_allows_grade("启动期", archived=True, config=config)
 
 
-def test_stockout_requires_prior_stock_and_wfs_fulfillment():
+def test_stockout_requires_actual_wfs_inventory_not_erp_fulfillment():
     rows = [
         SimpleNamespace(
             snapshot_date_la=CUTOFF - timedelta(days=i),
@@ -72,9 +72,14 @@ def test_stockout_requires_prior_stock_and_wfs_fulfillment():
         currently_archived=False,
     )
     assert result == ("断货期", 7, 7)
+    # A stale seller-fulfillment label never invalidates measured WFS stock.
+    for fulfillment_type in ("0", "2", None):
+        assert stockout_candidate(
+            rows, cutoff=CUTOFF, low_limit=5,
+            prior_effective_stock=True, fulfillment_type=fulfillment_type,
+            currently_archived=False,
+        )[0] == "断货期"
     for kwargs in (
-        {"prior_effective_stock": True, "fulfillment_type": "2", "currently_archived": False},
-        {"prior_effective_stock": True, "fulfillment_type": "0", "currently_archived": False},
         {"prior_effective_stock": False, "fulfillment_type": "1", "currently_archived": False},
         {"prior_effective_stock": True, "fulfillment_type": "1", "currently_archived": True},
     ):
