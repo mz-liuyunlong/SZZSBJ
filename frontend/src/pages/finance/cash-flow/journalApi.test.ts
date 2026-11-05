@@ -126,6 +126,11 @@ describe("approvals in the live snapshot", () => {
   it("keeps candidates on the live line", () => {
     expect(toCashLine(line({ approval_candidates: ["202610010001"] })).candidates).toEqual(["202610010001"]);
     expect(toCashLine(line()).candidates).toEqual([]);
+    const edited = toCashLine(line({ amount: "-100.00", manual_description: "房租", manual_memo: null, parts: [{ amount: "60.0000", category_code: "G02" }, { amount: "40.0000", category_code: null }] }));
+    expect([edited.sum, edited.origSum]).toEqual(["房租", line().description]);
+    expect(edited.memo).toBe(line().memo);
+    expect(edited.parts).toEqual([{ amt: -60, cat: "G02" }, { amt: -40, cat: "" }]);
+    expect(toCashLine(line()).parts).toBeUndefined();
   });
 
   it("marks attachments as metadata only so no link is built", () => {

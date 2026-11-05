@@ -52,6 +52,16 @@ KIND_ATTACH_REF = "attach_ref"
 KIND_DETACH_REF = "detach_ref"
 KIND_EXCLUDE = "exclude"
 KIND_UNEXCLUDE = "unexclude"
+KIND_REVIEW1_UNDO = "review1_undo"
+KIND_REVIEW2_UNDO = "review2_undo"
+KIND_SET_TEXT = "set_text"
+KIND_SPLIT = "split"
+KIND_SET_PART_CATEGORY = "set_part_category"
+KIND_UNSPLIT = "unsplit"
+# 撤销初审只能由当时做初审的人来撤（rocky 11-05）；接口层按事件表里的 actor 校验。
+REVIEW1_KINDS = frozenset({"review1_pass", "review1_reject"})
+TEXT_MAX = 500
+MAX_PARTS = 20
 KIND_AUTO_RESET = "auto_reset"
 KIND_AUTO_ATTACH_REF = "auto_attach_ref"
 
@@ -473,6 +483,7 @@ ERR_STAGE_NOT_ALLOWED = "CASHFLOW_STAGE_NOT_ALLOWED"
 ERR_INVALID_EVENT = "CASHFLOW_INVALID_EVENT"
 ERR_VERSION_CONFLICT = "CASHFLOW_VERSION_CONFLICT"
 ERR_IDEMPOTENCY_KEY_REUSED = "CASHFLOW_IDEMPOTENCY_KEY_REUSED"
+ERR_NOT_FIRST_REVIEWER = "CASHFLOW_NOT_FIRST_REVIEWER"
 
 
 class EventRejectedError(Exception):
@@ -494,6 +505,10 @@ class ReviewState:
     stage: str = STAGE_TODO
     stage_reason: str | None = None
     review_note: str | None = None
+    manual_description: str | None = None
+    manual_memo: str | None = None
+    # 拆分：[{"amount": "100.0000", "category_code": "G02" 或 None}]，金额合计 = 流水金额绝对值。
+    parts: list[dict[str, Any]] | None = None
 
 
 def _required_reason(reason: str | None, label: str) -> str:
@@ -538,8 +553,52 @@ def apply_event(
         _require_stage(state, frozenset({STAGE_OK1}), final_message)
         state.stage, state.stage_reason = STAGE_REJ2, _required_reason(reason, "终审不通过")
         return False
+    if kind == KIND_REVIEW1_UNDO:
+        # 初审通过 / 不通过都能撤，回到待初审；已经终审过的要先撤终审。
+        _require_stage(
+            state, frozenset({STAGE_OK1, STAGE_REJ1}), "这笔不是初审后的状态，不能撤销初审"
+        )
+        state.stage, state.stage_reason = STAGE_TODO, None
+        return False
+    if kind == KIND_REVIEW2_UNDO:
+        # 终审通过 / 驳回都能撤，回到待终审。
+        _require_stage(
+            state, frozenset({STAGE_OK2, STAGE_REJ2}), "这笔不是终审后的状态，不能撤销终审"
+        )
+        state.stage, state.stage_reason = STAGE_OK1, None
+        return False
+    if kind == KIND_SET_TEXT:
+        # 改摘要 / 备注只是显示用，银行原文保留、分类规则照原文算，不退回审核。
+        if not {"description", "memo"} & payload.keys():
+            raise EventRejectedError(422, "没有要改的摘要或备注")
+        if "description" in payload:
+            state.manual_description = _text(payload["description"])
+        if "memo" in payload:
+            state.manual_memo = _text(payload["memo"])
+        return False
     if kind == KIND_SET_CATEGORY:
+        if state.parts:
+            raise EventRejectedError(409, "这笔已拆分，请在拆分行上选类别")
         state.manual_category = _category(payload, valid_categories)
+    elif kind == KIND_SPLIT:
+        state.parts = _split_parts(payload, line_amount)
+    elif kind == KIND_SET_PART_CATEGORY:
+        if not state.parts:
+            raise EventRejectedError(409, "这笔没有拆分")
+        index = payload.get("index")
+        if (
+            not isinstance(index, int)
+            or isinstance(index, bool)
+            or not 0 <= index < len(state.parts)
+        ):
+            raise EventRejectedError(422, "拆分行不存在")
+        parts = [dict(part) for part in state.parts]
+        parts[index]["category_code"] = _category(payload, valid_categories)
+        state.parts = parts
+    elif kind == KIND_UNSPLIT:
+        if not state.parts:
+            raise EventRejectedError(409, "这笔没有拆分")
+        state.parts = None
     elif kind == KIND_ATTACH_REF:
         ref = _approval_ref(payload)
         if ref in state.refs:
@@ -575,6 +634,37 @@ def _category(payload: dict[str, Any], valid_categories: frozenset[str]) -> str 
     if not isinstance(code, str) or code not in valid_categories:
         raise EventRejectedError(422, "类别不存在")
     return code
+
+
+def _text(raw: Any) -> str | None:
+    """None 或空字符串 = 恢复银行原文。"""
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        raise EventRejectedError(422, "摘要 / 备注要是文字")
+    text = raw.strip()
+    if len(text) > TEXT_MAX:
+        raise EventRejectedError(422, f"摘要 / 备注最多 {TEXT_MAX} 个字")
+    return text or None
+
+
+def _split_parts(payload: dict[str, Any], line_amount: Decimal) -> list[dict[str, Any]]:
+    """先拆金额，类别拆完后逐行再选（rocky 11-05），所以每行类别先空着。"""
+    raw = payload.get("amounts")
+    if not isinstance(raw, list) or not 2 <= len(raw) <= MAX_PARTS:
+        raise EventRejectedError(422, f"拆分要 2 到 {MAX_PARTS} 行")
+    amounts: list[Decimal] = []
+    for item in raw:
+        try:
+            amount = Decimal(str(item))
+        except InvalidOperation as exc:
+            raise EventRejectedError(422, "拆分金额无效") from exc
+        if not amount.is_finite() or amount <= 0:
+            raise EventRejectedError(422, "拆分的每一行金额都要大于 0")
+        amounts.append(amount.quantize(Q4, rounding=ROUND_HALF_UP))
+    if sum(amounts, ZERO) != abs(line_amount).quantize(Q4, rounding=ROUND_HALF_UP):
+        raise EventRejectedError(422, "拆分金额合计要等于这笔流水的金额")
+    return [{"amount": str(amount), "category_code": None} for amount in amounts]
 
 
 def _approval_ref(payload: dict[str, Any]) -> str:

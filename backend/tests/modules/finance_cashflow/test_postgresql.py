@@ -261,6 +261,96 @@ def test_review_events_flow_and_append_only_history(service, session):
     assert (line.category_code, line.category_source, line.stage) == ("G01", "人工", J.STAGE_TODO)
 
 
+def test_undo_reviews_edit_text_and_split(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    line = active(service, "BOC_CNY")[0]
+    uid = line.line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    with pytest.raises(J.EventRejectedError) as caught:
+        service.post_event(
+            uid,
+            CashflowLineEventRequest(kind=J.KIND_REVIEW1_UNDO, expected_version=1),
+            actor="someone-else",
+            request_id="r",
+        )
+    assert (caught.value.status_code, caught.value.code) == (403, J.ERR_NOT_FIRST_REVIEWER)
+    session.rollback()
+    assert event(service, uid, J.KIND_REVIEW1_UNDO, expected_version=1).stage == J.STAGE_TODO
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=2)
+    event(service, uid, J.KIND_REVIEW2_PASS, expected_version=3)
+    undone = service.post_event(
+        uid,
+        CashflowLineEventRequest(kind=J.KIND_REVIEW2_UNDO, expected_version=4),
+        actor="another-admin",
+        request_id="r",
+    )
+    assert undone.stage == J.STAGE_OK1
+    edited = event(
+        service, uid, J.KIND_SET_TEXT, payload={"memo": "改过的备注"}, expected_version=5
+    )
+    assert (edited.stage, edited.auto_reset) == (J.STAGE_OK1, False)
+    half = abs(line.amount) / 2
+    event(service, uid, J.KIND_SPLIT, payload={"amounts": [str(half)] * 2}, expected_version=6)
+    event(
+        service,
+        uid,
+        J.KIND_SET_PART_CATEGORY,
+        payload={"index": 0, "category_code": "G01"},
+        expected_version=7,
+    )
+    read = next(item for item in active(service, "BOC_CNY") if item.line_uid == uid)
+    assert (read.memo, read.manual_memo, read.manual_description) == (line.memo, "改过的备注", None)
+    assert [(part.amount, part.category_code) for part in read.parts or []] == [
+        (half.quantize(Decimal("0.0001")), "G01"),
+        (half.quantize(Decimal("0.0001")), None),
+    ]
+    assert read.stage == J.STAGE_TODO
+
+
+def _downgrade_0078(session: Session) -> None:
+    path = (
+        Path(__file__).resolve().parents[3]
+        / "alembic/versions/20261105_0078_finance_journal_edit_split.py"
+    )
+    spec = importlib.util.spec_from_file_location("finance_edit_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    context = MigrationContext.configure(session.connection())
+    with Operations.context(context):
+        module.downgrade()
+
+
+def test_0078_downgrade_refuses_review1_undo_events(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    uid = active(service, "BOC_CNY")[0].line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    event(service, uid, J.KIND_REVIEW1_UNDO, expected_version=1)
+    with pytest.raises(RuntimeError, match="撤销审核记录"):
+        _downgrade_0078(session)
+
+
+def test_0078_downgrade_refuses_review2_undo_events(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    uid = active(service, "BOC_CNY")[0].line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    event(service, uid, J.KIND_REVIEW2_PASS, expected_version=1)
+    event(service, uid, J.KIND_REVIEW2_UNDO, expected_version=2)
+    with pytest.raises(RuntimeError, match="撤销审核记录"):
+        _downgrade_0078(session)
+
+
+def test_0078_downgrade_allowed_without_undo_or_edits(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    uid = active(service, "BOC_CNY")[0].line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    _downgrade_0078(session)
+    columns = {
+        column["name"]
+        for column in inspect(session.connection()).get_columns("manual_finance_cash_line_state")
+    }
+    assert not columns & {"manual_description", "manual_memo", "parts"}
+
+
 def test_stale_version_is_rejected(service):
     upload(service, S.boc(S.BOC_A, boc_rows()))
     uid = active(service, "BOC_CNY")[0].line_uid

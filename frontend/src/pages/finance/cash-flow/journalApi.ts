@@ -21,7 +21,8 @@ export const isCashLive = CASH_SOURCE === "api";
 export const cashViewSource = (view: string, isDev: boolean, live: boolean): "live" | "demo" | "building" =>
   view === "journal" && live ? "live" : isDev ? "demo" : "building";
 
-export type LineEventKind = "review1_pass" | "review1_reject" | "review2_pass" | "review2_reject" | "set_category" | "attach_ref" | "detach_ref" | "exclude" | "unexclude";
+export type LineEventKind = "review1_pass" | "review1_reject" | "review2_pass" | "review2_reject" | "set_category" | "attach_ref" | "detach_ref" | "exclude" | "unexclude"
+  | "review1_undo" | "review2_undo" | "set_text" | "split" | "set_part_category" | "unsplit";
 
 export interface ApiAccount {
   account_key: string; display_name: string; entity: string; currency_code: string; kind: string; provider: string; account_no_last4: string; is_active: boolean;
@@ -34,6 +35,10 @@ export interface ApiLine {
   source_ref: string; file_row_order: number; category_code: string | null; category_source: string; pair_id: string | null; flags: string[]; refs: string[];
   exclude_amount: string | null; exclude_reason: string | null; list_excluded_cny: string; stage: string; stage_reason: string | null; review_note: string | null; version: number;
   approval_candidates?: string[];
+  /** 人工改过的摘要 / 备注；null = 没改 */
+  manual_description?: string | null; manual_memo?: string | null;
+  /** 拆分：金额是正数（流水金额的绝对值拆开），类别拆完后逐行选 */
+  parts?: { amount: string; category_code: string | null }[] | null;
 }
 export interface ApiAnomaly { type: string; account_key: string; date: string; message: string; amount: string | null; line_uid: string | null }
 export interface ApiFileResult {
@@ -42,7 +47,9 @@ export interface ApiFileResult {
 }
 
 /** 接口流水：页面的 CashLine 加上写操作要用的字段。 */
-export interface LiveCashLine extends CashLine { uid: string; version: number; stage: string; stageReason?: string; reviewNote?: string; excludeReason?: string; candidates: string[] }
+export interface LiveCashLine extends CashLine { uid: string; version: number; stage: string; stageReason?: string; reviewNote?: string; excludeReason?: string; candidates: string[];
+  /** 银行原文（摘要 / 备注改过时用来对照） */
+  origSum: string; origMemo: string }
 
 export interface ApiApproval {
   serial: string; kind: string; status: string; status_text: string; state: string; started_at: string; completed_at: string; handled_at: string; applicant: string;
@@ -75,8 +82,11 @@ export function toCashLine(row: ApiLine): LiveCashLine {
     amt: Number(row.amount),
     cny: num(row.amount_cny),
     bal: num(row.balance_after),
-    sum: row.description,
-    memo: row.memo,
+    sum: row.manual_description ?? row.description,
+    memo: row.manual_memo ?? row.memo,
+    origSum: row.description,
+    origMemo: row.memo,
+    parts: row.parts?.length ? row.parts.map((part) => ({ amt: Math.sign(Number(row.amount)) * Number(part.amount), cat: part.category_code ?? "" })) : undefined,
     party: row.counterparty_name,
     refs: row.refs,
     cat: row.category_code ?? "",
@@ -220,6 +230,7 @@ export async function uploadStatement(file: File, importId: string): Promise<Api
 export function cashErrorText(error: unknown): string {
   if (!(error instanceof BackendRequestError)) return "操作失败，请稍后重试";
   if (error.status === 401) return "登录已过期，请重新登录";
+  if (error.code === "CASHFLOW_NOT_FIRST_REVIEWER") return "只有当时做初审的人能撤销初审";
   if (error.status === 403) return "只有超级管理员能操作";
   if (error.status === 404) return "这笔流水不存在，可能所在批次已作废";
   if (error.status === 409) return "这笔的状态已经变了，页面已刷新，请看过后再操作";

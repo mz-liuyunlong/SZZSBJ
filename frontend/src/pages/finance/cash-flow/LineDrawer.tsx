@@ -7,6 +7,7 @@ import { ALERT_GUIDE, alertShort, type CashAlert, type FsDetail } from "@/pages/
 import { accountLabel, type CashLine, type CashSnapshot, type FeishuApproval } from "@/pages/finance/localFinData";
 import { EMPTY, type ReviewMark, REVIEW_TAG, baseReview, PREVIEW_ACTION_TIP, type ApprovalView, amountDiff, compareRows } from "@/pages/finance/cash-flow/journalShared";
 import { CompareTable, ApprovalPanel } from "@/pages/finance/cash-flow/ApprovalDrawer";
+import { EditableText, ReviewUndo, SplitButton, SplitParts } from "@/pages/finance/cash-flow/LineActions";
 
 /* ======================================================= 异常（并入日记账；不分等级，所有异常都要处理） */
 export function AlertSection({ alerts }: { alerts: CashAlert[] }) {
@@ -52,8 +53,9 @@ export function LineDrawer({ line, review, data, details, approvalsOf, alerts, l
   const liveLine = live ? asLive(line) : undefined;
   return (
     <Drawer open width={720} rootClassName="fin-cash-flow__drawer" onClose={onClose} title={`流水 ${line.date} · ${accountLabel(account) || line.acct}`}
-      extra={<Space><Tooltip title={live ? "拆分这次不做" : LOCKED_TIP}><Button disabled>拆分</Button></Tooltip>{liveLine ? (liveLine.excludeReason ? <Button danger onClick={() => onUnexclude?.(liveLine)}>撤销剔除</Button> : <Button danger onClick={() => onExclude?.(liveLine)}>剔除</Button>) : <Tooltip title={LOCKED_TIP}><Button danger disabled>剔除</Button></Tooltip>}</Space>}
+      extra={<Space>{liveLine ? <SplitButton key={liveLine.id} line={liveLine} /> : <Tooltip title={LOCKED_TIP}><Button disabled>拆分</Button></Tooltip>}{liveLine ? (liveLine.excludeReason ? <Button danger onClick={() => onUnexclude?.(liveLine)}>撤销剔除</Button> : <Button danger onClick={() => onExclude?.(liveLine)}>剔除</Button>) : <Tooltip title={LOCKED_TIP}><Button danger disabled>剔除</Button></Tooltip>}</Space>}
       footer={<div className="fin-cash-flow__footer">
+        {liveLine && <ReviewUndo key={liveLine.id} line={liveLine} stage={mark.stage} />}
         <Tooltip title={turnTip || (live ? "" : PREVIEW_ACTION_TIP)}><Button type="primary" icon={<CheckOutlined aria-hidden="true" />} disabled={!finalTurn} onClick={() => onPass(line)}>终审通过</Button></Tooltip>
         <Tooltip title={turnTip || "必填原因，驳回到待初审"}><Button danger icon={<CloseOutlined aria-hidden="true" />} disabled={!finalTurn} onClick={() => onReject(line)}>终审不通过</Button></Tooltip>
       </div>}>
@@ -63,10 +65,10 @@ export function LineDrawer({ line, review, data, details, approvalsOf, alerts, l
         <Descriptions.Item label="金额"><FinMoney value={line.amt} cur={line.cur} masked={line.masked} /></Descriptions.Item>
         {line.cur !== "CNY" && <Descriptions.Item label="折人民币"><FinMoney value={line.cny} masked={line.masked} /></Descriptions.Item>}
         <Descriptions.Item label="余额"><FinMoney value={line.bal ?? null} cur={line.cur} masked={line.masked} /></Descriptions.Item>
-        <Descriptions.Item label="摘要">{line.masked ? "****" : line.sum || EMPTY}</Descriptions.Item>
-        <Descriptions.Item label="备注">{line.masked ? "****" : line.memo || EMPTY}</Descriptions.Item>
+        <Descriptions.Item label="摘要">{line.masked ? "****" : liveLine ? <EditableText key={`${liveLine.id}-sum`} line={liveLine} field="description" /> : line.sum || EMPTY}</Descriptions.Item>
+        <Descriptions.Item label="备注">{line.masked ? "****" : liveLine ? <EditableText key={`${liveLine.id}-memo`} line={liveLine} field="memo" /> : line.memo || EMPTY}</Descriptions.Item>
         <Descriptions.Item label="对方">{line.party || EMPTY}</Descriptions.Item>
-        <Descriptions.Item label="类别">{line.cat ? `${line.cat} ${cat?.big ?? ""}·${cat?.name ?? ""}` : <Tag color="red" bordered={false}>待分类</Tag>}<Typography.Text type="secondary">（来源：{line.cat_src || "—"}）</Typography.Text></Descriptions.Item>
+        {liveLine?.parts?.length ? <Descriptions.Item label={`拆分（${liveLine.parts.length} 行）`}><SplitParts line={liveLine} data={data} /></Descriptions.Item> : <Descriptions.Item label="类别">{line.cat ? `${line.cat} ${cat?.big ?? ""}·${cat?.name ?? ""}` : <Tag color="red" bordered={false}>待分类</Tag>}<Typography.Text type="secondary">（来源：{line.cat_src || "—"}）</Typography.Text></Descriptions.Item>}
         <Descriptions.Item label="配对">{line.pair || EMPTY}</Descriptions.Item>
         <Descriptions.Item label="标记">{line.flags.length ? line.flags.map((flag) => <Tag key={flag} bordered={false}>{flag}</Tag>) : EMPTY}</Descriptions.Item>
         {liveLine?.excludeReason && <Descriptions.Item label="剔除原因">{liveLine.excludeReason}</Descriptions.Item>}
@@ -86,7 +88,7 @@ export function LineDrawer({ line, review, data, details, approvalsOf, alerts, l
           {views.map((view) => <ApprovalPanel key={view.serial} view={view} onOpen={approvals.get(view.serial) ? () => onOpenApproval(approvals.get(view.serial) as FeishuApproval) : undefined} />)}
         </div>
       </>}
-      <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>类别、关联审批单在表格行上直接改；初审在表格右侧 ✓ ✗，终审可以在这里点。审核后再改类别 / 关联审批单 / {live ? "" : "拆分 / "}剔除会自动退回待初审。{live ? "审批单内容和凭证要等飞书同步上线后才有。" : Object.keys(details).length ? "" : "（审批单凭证数据没读到：先在 Mac 上运行 local_export/cash-flow.py）"}</Typography.Paragraph>
+      <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>类别、关联审批单在表格行上直接改；初审在表格右侧 ✓ ✗，终审可以在这里点；初审、终审点错了可以在底部撤销（撤销初审只限当时做初审的人）。审核后再改类别 / 关联审批单 / 拆分 / 剔除会自动退回待初审；改摘要、备注不会。{live ? "审批单内容和凭证要等飞书同步上线后才有。" : Object.keys(details).length ? "" : "（审批单凭证数据没读到：先在 Mac 上运行 local_export/cash-flow.py）"}</Typography.Paragraph>
     </Drawer>
   );
 }

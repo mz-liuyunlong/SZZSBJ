@@ -47,6 +47,7 @@ from app.modules.finance_cashflow.schemas import (
     CashflowLineEventData,
     CashflowLineEventRequest,
     CashflowLineListData,
+    CashflowLinePartRead,
     CashflowLineRead,
     CashflowUploadData,
     CashflowVoidData,
@@ -823,6 +824,11 @@ class CashflowService:
             stage=state.stage if state else journal.STAGE_TODO,
             stage_reason=state.stage_reason if state else None,
             review_note=state.review_note if state else None,
+            manual_description=state.manual_description if state else None,
+            manual_memo=state.manual_memo if state else None,
+            parts=[CashflowLinePartRead(**part) for part in state.parts]
+            if state and state.parts
+            else None,
             version=state.version if state else 0,
             approval_candidates=candidates or [],
         )
@@ -960,6 +966,9 @@ class CashflowService:
             stage=state.stage,
             stage_reason=state.stage_reason,
             review_note=state.review_note,
+            manual_description=state.manual_description,
+            manual_memo=state.manual_memo,
+            parts=[dict(part) for part in state.parts] if state.parts else None,
         )
         auto_reset = journal.apply_event(
             draft,
@@ -969,6 +978,8 @@ class CashflowService:
             line_amount=line.amount,
             valid_categories=self._category_codes(),
         )
+        if request.kind == journal.KIND_REVIEW1_UNDO:
+            self._require_first_reviewer(line_uid, actor)
         state.manual_category = draft.manual_category
         state.refs = draft.refs
         state.exclude_amount = draft.exclude_amount
@@ -976,6 +987,9 @@ class CashflowService:
         state.stage = draft.stage
         state.stage_reason = draft.stage_reason
         state.review_note = draft.review_note
+        state.manual_description = draft.manual_description
+        state.manual_memo = draft.manual_memo
+        state.parts = draft.parts
         state.version += 1
         state.updated_at = datetime.now(UTC)
         self._add_events(line_uid, request, auto_reset, actor, request_id)
@@ -1016,6 +1030,22 @@ class CashflowService:
             )
         self.session.rollback()
         return self._event_data(line_uid, replayed=True)
+
+    def _require_first_reviewer(self, line_uid: str, actor: str) -> None:
+        """撤销初审：只有最近一次做初审（通过或不通过）的人能撤。"""
+        last = self.session.scalars(
+            select(FinanceCashLineEvent.actor)
+            .where(
+                FinanceCashLineEvent.line_uid == line_uid,
+                FinanceCashLineEvent.kind.in_(journal.REVIEW1_KINDS),
+            )
+            .order_by(FinanceCashLineEvent.created_at.desc())
+            .limit(1)
+        ).first()
+        if last is not None and last != actor:
+            raise journal.EventRejectedError(
+                403, "只有当时做初审的人能撤销初审", journal.ERR_NOT_FIRST_REVIEWER
+            )
 
     def _category_codes(self) -> frozenset[str]:
         return frozenset(self.session.scalars(select(FinanceCashCategory.code)))

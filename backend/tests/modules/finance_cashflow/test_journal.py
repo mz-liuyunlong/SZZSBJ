@@ -376,3 +376,92 @@ def test_exclude_amount_rules():
             apply(J.ReviewState(), J.KIND_EXCLUDE, {"amount": bad}, "其他部门")
     with pytest.raises(J.EventRejectedError):
         apply(J.ReviewState(), J.KIND_EXCLUDE, {}, " ")
+
+
+def test_undo_first_review_back_to_todo():
+    for start in (J.STAGE_OK1, J.STAGE_REJ1):
+        state = J.ReviewState(stage=start, stage_reason="x")
+        assert apply(state, J.KIND_REVIEW1_UNDO) is False
+        assert (state.stage, state.stage_reason) == (J.STAGE_TODO, None)
+
+
+def test_undo_final_review_back_to_waiting_final():
+    for start in (J.STAGE_OK2, J.STAGE_REJ2):
+        state = J.ReviewState(stage=start, stage_reason="x")
+        assert apply(state, J.KIND_REVIEW2_UNDO) is False
+        assert (state.stage, state.stage_reason) == (J.STAGE_OK1, None)
+
+
+@pytest.mark.parametrize(
+    ("stage", "kind"),
+    [
+        (J.STAGE_TODO, J.KIND_REVIEW1_UNDO),
+        (J.STAGE_OK2, J.KIND_REVIEW1_UNDO),
+        (J.STAGE_REJ2, J.KIND_REVIEW1_UNDO),
+        (J.STAGE_TODO, J.KIND_REVIEW2_UNDO),
+        (J.STAGE_OK1, J.KIND_REVIEW2_UNDO),
+    ],
+)
+def test_undo_in_wrong_stage_is_rejected(stage, kind):
+    with pytest.raises(J.EventRejectedError) as caught:
+        apply(J.ReviewState(stage=stage), kind)
+    assert (caught.value.status_code, caught.value.code) == (409, J.ERR_STAGE_NOT_ALLOWED)
+
+
+def test_set_text_keeps_review_and_blank_restores_original():
+    state = J.ReviewState(stage=J.STAGE_OK2)
+    assert apply(state, J.KIND_SET_TEXT, {"description": " 房租 ", "memo": "10 月"}) is False
+    assert (state.manual_description, state.manual_memo, state.stage) == (
+        "房租",
+        "10 月",
+        J.STAGE_OK2,
+    )
+    apply(state, J.KIND_SET_TEXT, {"memo": ""})
+    assert (state.manual_description, state.manual_memo) == ("房租", None)
+    for bad in ({}, {"memo": 5}, {"description": "长" * 501}):
+        with pytest.raises(J.EventRejectedError):
+            apply(J.ReviewState(), J.KIND_SET_TEXT, bad)
+
+
+def test_split_then_choose_category_per_part():
+    state = J.ReviewState(stage=J.STAGE_OK1)
+    assert apply(state, J.KIND_SPLIT, {"amounts": ["6", "4"]}) is True
+    assert state.stage == J.STAGE_TODO
+    assert state.parts == [
+        {"amount": "6.0000", "category_code": None},
+        {"amount": "4.0000", "category_code": None},
+    ]
+    apply(state, J.KIND_SET_PART_CATEGORY, {"index": 1, "category_code": "G01"})
+    assert state.parts[1]["category_code"] == "G01"
+    with pytest.raises(J.EventRejectedError):
+        apply(state, J.KIND_SET_CATEGORY, {"category_code": "G01"})
+    apply(state, J.KIND_UNSPLIT)
+    assert state.parts is None
+
+
+@pytest.mark.parametrize(
+    ("kind", "payload", "start"),
+    [
+        (J.KIND_SPLIT, {"amounts": ["10"]}, {}),
+        (J.KIND_SPLIT, {"amounts": ["6", "3"]}, {}),
+        (J.KIND_SPLIT, {"amounts": ["11", "-1"]}, {}),
+        (J.KIND_SPLIT, {"amounts": ["abc", "10"]}, {}),
+        (J.KIND_SPLIT, {}, {}),
+        (J.KIND_SET_PART_CATEGORY, {"index": 0, "category_code": "G01"}, {}),
+        (J.KIND_UNSPLIT, {}, {}),
+    ],
+)
+def test_split_rejections(kind, payload, start):
+    with pytest.raises(J.EventRejectedError):
+        apply(J.ReviewState(**start), kind, payload)
+
+
+def test_split_part_rejects_bad_index_and_x01():
+    parts = [{"amount": "6", "category_code": None}, {"amount": "4", "category_code": None}]
+    for payload in (
+        {"index": 2, "category_code": "G01"},
+        {"index": True, "category_code": "G01"},
+        {"index": 0, "category_code": "X01"},
+    ):
+        with pytest.raises(J.EventRejectedError):
+            apply(J.ReviewState(parts=[dict(p) for p in parts]), J.KIND_SET_PART_CATEGORY, payload)
