@@ -164,7 +164,8 @@ const pmcPurchaseInterfaceKeys = new Set([
   "purchaseReceiptOrderList",
 ]);
 
-const moduleForInterface = (item: InterfaceDto): SyncTaskRow["module"] => {
+export const moduleForInterface = (item: Pick<InterfaceDto, "interface_key">): SyncTaskRow["module"] => {
+  if (item.interface_key === "lingxingFxRate") return "财务";
   if (dataPagesInterfaceKeys.has(item.interface_key)) {
     if (
       item.interface_key === "walmartAdvertiserList"

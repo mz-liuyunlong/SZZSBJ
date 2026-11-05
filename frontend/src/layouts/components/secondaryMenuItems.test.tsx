@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { navigation } from "@/config/navigation";
+import { isMockPageAccessibleForRole, isMockPageVisibleForRole } from "@/shared/permissions/mockAccess";
 import {
   SECONDARY_MENU_HIDDEN_PAGE_KEYS,
   secondaryMenuItems,
@@ -37,6 +38,7 @@ const expected = {
     "finance_performance_report",
     "finance_balance_sheet",
     "finance-cash",
+    "finance-settings",
     "finance_cost_exception",
     "finance_settings",
     "finance_data_import",
@@ -83,6 +85,35 @@ describe("secondary menu cleanup", () => {
       "finance_cash_journal",
       "finance_cash_stock",
     ]);
+  });
+
+  it("lists the exchange-rate page under the finance settings section", () => {
+    const group = navigation.find((item) => item.key === "finance");
+    if (!group) throw new Error("finance group missing");
+    const section = (secondaryMenuItems(group, group.children) ?? []).find(
+      (item) => item && "key" in item && item.key === "finance-settings",
+    );
+    const children = section && "children" in section ? section.children ?? [] : [];
+    expect(children.flatMap((item) => (item && "key" in item ? [String(item.key)] : []))).toEqual(["finance_fx_rates"]);
+  });
+
+  it("shows the exchange-rate page to super admins only, even for finance users", () => {
+    const group = navigation.find((item) => item.key === "finance");
+    if (!group) throw new Error("finance group missing");
+    const fxPage = group.children.find((item) => item.key === "finance_fx_rates");
+    if (!fxPage) throw new Error("fx page missing");
+    const financeUser = ["page:finance:cash-flow:view", "finance:read"];
+    expect(isMockPageVisibleForRole("user", fxPage, financeUser)).toBe(false);
+    expect(isMockPageAccessibleForRole("user", fxPage, financeUser)).toBe(false);
+    expect(isMockPageVisibleForRole("admin", fxPage, ["*"])).toBe(true);
+    expect(isMockPageAccessibleForRole("admin", fxPage, ["*"])).toBe(true);
+
+    const keysFor = (permissions: string[]) =>
+      (secondaryMenuItems(group, group.children.filter((item) => isMockPageVisibleForRole("user", item, permissions))) ?? [])
+        .flatMap((item) => (item && "key" in item ? [String(item.key)] : []));
+    expect(keysFor(financeUser)).toContain("finance-cash");
+    expect(keysFor(financeUser)).not.toContain("finance-settings");
+    expect(keysFor(["*"])).toContain("finance-settings");
   });
 
   it("restores operation logs and hides calendar only in the secondary menu", () => {
