@@ -58,7 +58,8 @@ describe("production Listing diagnostics", () => {
 
   it("shows unpublished grade candidates without claiming a persisted rating", () => {
     const row = applyListingEvaluationPreview(listing, preview);
-    expect(row.productGrade).toBe("B");
+    expect(row.productGrade).toBe("未分级");
+    expect(row.gradeDiagnostic?.candidate).toBe("B");
     expect(row.gradePreviewCandidate).toBe(true);
     expect(row.gradeDiagnostic?.sourceVerified).toBe(false);
     expect(row.gradeDiagnostic?.reason).toMatch(/未发布/);
