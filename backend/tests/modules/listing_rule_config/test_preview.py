@@ -118,6 +118,7 @@ def test_openapi_contains_batch_preview_route() -> None:
 
     assert "/api/listings/evaluation-preview/batch" in create_app().openapi()["paths"]
 
+
 def test_preview_uses_authoritative_wfs_decision_even_for_stale_fbm_label() -> None:
     from unittest.mock import MagicMock, patch
     from uuid import uuid4
