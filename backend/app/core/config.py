@@ -278,6 +278,14 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="FEISHU_APP_SECRET",
     )
+    finance_approval_codes: str | None = Field(
+        default=None,
+        validation_alias="FINANCE_APPROVAL_CODES",
+    )
+    finance_approval_excluded_department_ids: str | None = Field(
+        default=None,
+        validation_alias="FINANCE_APPROVAL_EXCLUDED_DEPARTMENT_IDS",
+    )
     feishu_base_url: str = Field(
         default="https://open.feishu.cn",
         validation_alias="FEISHU_BASE_URL",

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildLiveSnapshot, cashErrorText, cashViewSource, nextImportNode, postLineEvent, resolveCashSource, toCashLine, type ApiAccount, type ApiAnomaly, type ApiCategory, type ApiLine } from "@/pages/finance/cash-flow/journalApi";
+import { buildLiveSnapshot, syncErrorText, syncFailedText, toFsDetail, type ApiApproval, cashErrorText, cashViewSource, nextImportNode, postLineEvent, resolveCashSource, toCashLine, type ApiAccount, type ApiAnomaly, type ApiCategory, type ApiLine } from "@/pages/finance/cash-flow/journalApi";
 import { backendRequest, BackendRequestError } from "@/api/backendApi";
 
 vi.mock("@/api/backendApi", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/api/backendApi")>()), backendRequest: vi.fn() }));
@@ -97,5 +97,52 @@ describe("cashErrorText", () => {
     expect(cashErrorText(new BackendRequestError(403, "FORBIDDEN"))).toBe("只有超级管理员能操作");
     expect(cashErrorText(new BackendRequestError(413, "X"))).toBe("文件超过 20MB");
     expect(cashErrorText(new Error("x"))).toBe("操作失败，请稍后重试");
+  });
+});
+
+const approval = (over: Partial<ApiApproval> = {}): ApiApproval => ({
+  serial: "202610010001", kind: "付款申请", status: "APPROVED", status_text: "已同意", state: "已付", started_at: "2026-10-01 09:00", completed_at: "2026-10-02 10:00", handled_at: "2026-10-02 09:30", applicant: "申请人",
+  reason: "合成事由", amount: "100.0000", currency_code: "CNY", amount_cny: "100.0000", pay_method: "转账", invoice: "是", payee: "收款人", bank: "测试银行", last4: "1234", fee_category: "", related_serial: "",
+  items: [{ content: "明细", amount: "100", category: "" }], attachments: [{ source: "form", what: "附件", item: 0, is_image: false, title: "a.pdf" }], records: [], comments: [],
+  paid: [{ line_uid: "0123456789abcdef", amount_cny: "100.0000" }], paid_sum: "100.0000", fetched_at: null, ...over,
+});
+
+describe("approvals in the live snapshot", () => {
+  it("maps approvals and links paid lines by the page line id", () => {
+    const snapshot = buildLiveSnapshot([account], [category], [line()], [], [approval()]);
+    const item = snapshot.feishu[0];
+    expect(item.status).toBe("已同意");
+    expect(item.start).toBe("2026-10-01");
+    expect(item.end).toBe("2026-10-02");
+    expect(item.amount).toBe(100);
+    expect(item.paid.map((row) => row.line)).toEqual([snapshot.lines[0].id]);
+  });
+
+  it("drops paid lines the page does not have", () => {
+    const snapshot = buildLiveSnapshot([account], [category], [line()], [], [approval({ paid: [{ line_uid: "ffffffffffffffff", amount_cny: "1" }] })]);
+    expect(snapshot.feishu[0].paid).toEqual([]);
+  });
+
+  it("keeps candidates on the live line", () => {
+    expect(toCashLine(line({ approval_candidates: ["202610010001"] })).candidates).toEqual(["202610010001"]);
+    expect(toCashLine(line()).candidates).toEqual([]);
+  });
+
+  it("marks attachments as metadata only so no link is built", () => {
+    const detail = toFsDetail(approval());
+    expect(detail.files[0].name).toBe("");
+    expect(detail.files[0].title).toBe("a.pdf");
+    expect(detail.handled).toBe("2026-10-02 09:30");
+  });
+});
+
+describe("sync messages", () => {
+  it("explains configuration and queue problems", () => {
+    expect(syncErrorText(new BackendRequestError(409, "x", "r"))).toContain("还没配置");
+    expect(syncErrorText(new BackendRequestError(503, "x", "r"))).toContain("任务队列");
+  });
+  it("carries the provider code in the failure text", () => {
+    expect(syncFailedText("FEISHU_APPROVAL_LIST_HTTP_400_CODE_1")).toContain("FEISHU_APPROVAL_LIST_HTTP_400_CODE_1");
+    expect(syncFailedText(null)).toContain("同步失败");
   });
 });

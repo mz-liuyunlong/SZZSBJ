@@ -9,6 +9,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
+from app.modules.integration_sync.finance_approval_catalog import (
+    FINANCE_APPROVAL_PROVIDER,
+    FINANCE_APPROVAL_SYNC_SPEC,
+)
 from app.modules.integration_sync.handlers.lingxing_batch_product_info import ordered_id_hash
 from app.modules.integration_sync.models import (
     IntegrationSyncConfig,
@@ -589,8 +593,17 @@ class IntegrationSyncService:
             and interface.request_kind == "offset_page"
             and interface.handler_key == purchase_spec.handler_key
         )
+        is_finance_approval = (
+            interface.provider == FINANCE_APPROVAL_PROVIDER
+            and interface.interface_key == FINANCE_APPROVAL_SYNC_SPEC.interface_key
+            and interface.handler_key == FINANCE_APPROVAL_SYNC_SPEC.handler_key
+        )
         if productlist_only and not (
-            is_productlist or is_productinfo or is_pmc_purchase or is_data_pages
+            is_productlist
+            or is_productinfo
+            or is_pmc_purchase
+            or is_data_pages
+            or is_finance_approval
         ):
             raise ApiError(code=SYNC_PRODUCTLIST_ONLY, status_code=409)
         if is_pmc_purchase and (trigger is not TriggerType.MANUAL or config.schedule_enabled):
