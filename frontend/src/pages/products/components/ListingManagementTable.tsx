@@ -999,6 +999,7 @@ function ListingManagementTable({
         return (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
             <Tag color={color} style={{ marginInlineEnd: 0 }}>{grade}</Tag>
+            {row.gradePreviewCandidate && <span style={{ fontSize: 10, color: "#777" }}>试算</span>}
             {info && (
               <Popover trigger="click" placement="left" title="产品等级判定说明"
                 content={<div style={{ width: 284, fontSize: 12, lineHeight: 1.65 }}>
