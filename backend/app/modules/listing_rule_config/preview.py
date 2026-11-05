@@ -12,7 +12,7 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
@@ -22,10 +22,9 @@ from app.modules.data_pages.models import (
     ListingManagementCurrentMart,
     WalmartListingInventoryDailyFact,
 )
-from app.modules.listing_rule_config.evaluation import BusinessDay, lifecycle_listing
+from app.modules.listing_rule_config.automation import evaluate_listing
 from app.modules.listing_rule_config.models import ListingGradeRuleVersion
 from app.modules.listing_rule_config.schemas import ListingGradeRuleConfig
-from app.modules.walmart_monitor.models import StandardizedWalmartMonitorListingObservation
 
 ZERO = Decimal("0")
 LOS_ANGELES = ZoneInfo("America/Los_Angeles")
@@ -48,6 +47,9 @@ class ListingEvaluationPreview(BaseModel):
     current_lifecycle: str | None
     current_grade: str | None
     lifecycle_evidence_reason: str | None = None
+    first_positive_date_la: date | None = None
+    cutoff_wfs_available_quantity: Decimal | None = None
+    consecutive_low_stock_days: int = 0
     valid_stock_days_30: int = 0
     grade_publication_status: str = "upstream_unconfirmed"
     lifecycle_candidate: str | None = None
@@ -135,7 +137,7 @@ def stockout_candidate(
     currently_archived: bool,
     consecutive_days: int = 7,
 ) -> tuple[str | None, int, int]:
-    """Never infer WFS stockout from seller-fulfilled or missing snapshots."""
+    """Only Item-level WFS inventory evidence decides stockout eligibility."""
     since = cutoff - timedelta(days=consecutive_days - 1)
     recent = {
         row.snapshot_date_la: row for row in inventory if since <= row.snapshot_date_la <= cutoff
@@ -148,8 +150,7 @@ def stockout_candidate(
     candidate = (
         "断货期"
         if (
-            fulfillment_type == "1"
-            and not currently_archived
+            not currently_archived
             and prior_effective_stock
             and observed == consecutive_days
             and low == consecutive_days
@@ -201,7 +202,10 @@ class ListingEvaluationPreviewService:
         elif rule_version is None:
             raise ValueError("rule_version is required when config is provided")
 
-        start = cutoff - timedelta(days=max(30, config.medium_days) - 1)
+        # Financial candidate stays MSKU-scoped. Lifecycle must instead use the
+        # SAME account/store/Item WFS history and multi-MSKU sales aggregation
+        # as the audited automatic publisher. ERP fulfillment_type is not proof.
+        start = cutoff - timedelta(days=config.medium_days - 1)
         sales = list(
             self.session.scalars(
                 select(DailySalesItemDayMart).where(
@@ -213,6 +217,9 @@ class ListingEvaluationPreviewService:
                 )
             ).all()
         )
+        stock_start = cutoff - timedelta(
+            days=max(30, config.inventory_repair.stockout_consecutive_days) - 1
+        )
         stock = list(
             self.session.scalars(
                 select(WalmartListingInventoryDailyFact).where(
@@ -220,16 +227,16 @@ class ListingEvaluationPreviewService:
                     == listing.source_account_ref,
                     WalmartListingInventoryDailyFact.store_id == listing.store_id,
                     WalmartListingInventoryDailyFact.item_id == listing.item_id,
-                    WalmartListingInventoryDailyFact.msku.is_not_distinct_from(listing.msku),
-                    WalmartListingInventoryDailyFact.snapshot_date_la.between(
-                        cutoff
-                        - timedelta(
-                            days=max(30, config.inventory_repair.stockout_consecutive_days) - 1
-                        ),
-                        cutoff,
-                    ),
+                    WalmartListingInventoryDailyFact.snapshot_date_la.between(stock_start, cutoff),
                 )
             ).all()
+        )
+        stock_by_day = {row.snapshot_date_la: row.wfs_available_quantity for row in stock}
+        recent7 = [stock_by_day.get(cutoff - timedelta(days=i)) for i in range(7)]
+        observed = sum(quantity is not None for quantity in recent7)
+        low = sum(
+            quantity is not None and quantity <= config.inventory_repair.low_stock_max_units
+            for quantity in recent7
         )
         prior = self.session.scalar(
             select(WalmartListingInventoryDailyFact.snapshot_date_la)
@@ -237,11 +244,8 @@ class ListingEvaluationPreviewService:
                 WalmartListingInventoryDailyFact.source_account_ref == listing.source_account_ref,
                 WalmartListingInventoryDailyFact.store_id == listing.store_id,
                 WalmartListingInventoryDailyFact.item_id == listing.item_id,
-                WalmartListingInventoryDailyFact.msku.is_not_distinct_from(listing.msku),
-                WalmartListingInventoryDailyFact.snapshot_date_la
-                < cutoff - timedelta(days=config.inventory_repair.stockout_consecutive_days - 1),
-                WalmartListingInventoryDailyFact.wfs_available_quantity
-                > config.inventory_repair.low_stock_max_units,
+                WalmartListingInventoryDailyFact.snapshot_date_la <= cutoff,
+                WalmartListingInventoryDailyFact.wfs_available_quantity > 0,
             )
             .limit(1)
         )
@@ -250,45 +254,16 @@ class ListingEvaluationPreviewService:
         )
         archive_state_known = archive is not None
         archived = bool(archive is not None and archive.is_archived)
-        monitor_start = datetime.combine(start, datetime.min.time(), LOS_ANGELES).astimezone(UTC)
-        monitor_end = datetime.combine(
-            cutoff + timedelta(days=1),
-            datetime.min.time(),
-            LOS_ANGELES,
-        ).astimezone(UTC)
-        monitor_rows = list(
-            self.session.scalars(
-                select(StandardizedWalmartMonitorListingObservation)
-                .where(
-                    StandardizedWalmartMonitorListingObservation.source_account_ref
-                    == listing.source_account_ref,
-                    StandardizedWalmartMonitorListingObservation.store_id == listing.store_id,
-                    StandardizedWalmartMonitorListingObservation.item_id == listing.item_id,
-                    func.lower(StandardizedWalmartMonitorListingObservation.monitor_outcome)
-                    == "success",
-                    StandardizedWalmartMonitorListingObservation.captured_at >= monitor_start,
-                    StandardizedWalmartMonitorListingObservation.captured_at < monitor_end,
-                )
-                .order_by(StandardizedWalmartMonitorListingObservation.captured_at)
-            ).all()
-        )
-        monitor_by_day = {
-            row.captured_at.astimezone(LOS_ANGELES).date(): row for row in monitor_rows
-        }
         grade, n_short, n_medium, margin = basic_financial_candidate(
             sales, cutoff=cutoff, config=config
         )
-        stage, observed, low = stockout_candidate(
-            stock,
-            cutoff=cutoff,
-            low_limit=config.inventory_repair.low_stock_max_units,
-            prior_effective_stock=prior is not None,
-            fulfillment_type=listing.fulfillment_type,
-            currently_archived=archived,
-            consecutive_days=config.inventory_repair.stockout_consecutive_days,
-        )
-        lifecycle_reason = None
-        stock_valid30 = 0
+        # Read-only authoritative decision: this is the same function the
+        # publisher uses, including the locked first-stock provenance, manual
+        # overrides, archive protections and item-level WFS facts.
+        decision = evaluate_listing(self.session, listing, cutoff=cutoff, config=config)
+        stage = decision.stage
+        lifecycle_reason = decision.reason
+        stock_valid30 = decision.valid_stock_days_30
         known_stages = {
             "测品期",
             "打品期",
@@ -301,73 +276,13 @@ class ListingEvaluationPreviewService:
             "清货期",
             "已归档",
         }
-        if (
-            listing.fulfillment_type == "1"
-            and not archived
-            and listing.lifecycle_status in known_stages
-        ):
-            sales_by_day = {row.business_date_la: row for row in sales}
-            stock_by_day = {row.snapshot_date_la: row for row in stock}
-            business_days = []
-            for business_date in sorted(set(stock_by_day) | set(monitor_by_day)):
-                stock_row = stock_by_day.get(business_date)
-                monitor_row = monitor_by_day.get(business_date)
-                strike_abnormal = None
-                buybox_abnormal = None
-                if monitor_row is not None:
-                    if (
-                        monitor_row.strike_price_amount is not None
-                        and monitor_row.sale_price_amount is not None
-                    ):
-                        strike_abnormal = (
-                            monitor_row.strike_price_amount <= monitor_row.sale_price_amount
-                        )
-                    if monitor_row.buybox_status in {
-                        "未拥有",
-                        "LOST",
-                        "NOT_OWNED",
-                        "secondary",
-                        "other",
-                    }:
-                        buybox_abnormal = True
-                    elif monitor_row.buybox_status in {
-                        "拥有",
-                        "PRIMARY",
-                        "primary",
-                        "WON",
-                        "WINNING",
-                    }:
-                        buybox_abnormal = False
-                business_days.append(
-                    BusinessDay(
-                        day=business_date,
-                        wfs_qty=stock_row.wfs_available_quantity if stock_row else None,
-                        sales_qty=(
-                            sales_by_day[business_date].sales_qty
-                            if business_date in sales_by_day
-                            else None
-                        ),
-                        strike_price_abnormal=strike_abnormal,
-                        buybox_abnormal=buybox_abnormal,
-                    )
-                )
-            lifecycle_result = lifecycle_listing(
-                cutoff=cutoff,
-                previous_stage=listing.lifecycle_status,
-                days=business_days,
-                first_effective_stock=prior is not None,
-                config=config,
-            )
-            lifecycle_reason = lifecycle_result.reason
-            stock_valid30 = lifecycle_result.valid_stock_days_30
-            # This is a diagnostic based on current stage, not a proven stage as of cutoff.
-            if lifecycle_result.evidence_complete:
-                stage = lifecycle_result.stage
         missing = [
             "ADS_COST_PUBLICATION_PROOF_MISSING",
             "HISTORICAL_LIFECYCLE_APPROVAL_EVENTS_UNVERIFIED",
             "ZERO_SALES_DAY_COMPLETENESS_UNVERIFIED",
         ]
+        if lifecycle_reason and stage is None:
+            missing.append(lifecycle_reason)
         if stock_valid30 < config.lifecycle.growth_min_valid_days_30:
             missing.append("SALES_TREND_VALID_STOCK_DAYS_INSUFFICIENT")
         if listing.lifecycle_status not in known_stages:
@@ -388,10 +303,8 @@ class ListingEvaluationPreviewService:
             missing.append("BASIC_FINANCIAL_SAMPLE_INSUFFICIENT_OR_UNCALCULABLE")
         if observed < 7:
             missing.append("LATEST_WFS_SNAPSHOT_INCOMPLETE")
-        if listing.fulfillment_type == "0":
-            missing.append("WFS_ELIGIBLE_ACTIVE_FULFILLMENT_UNVERIFIED")
-        if listing.fulfillment_type not in {"0", "1"}:
-            missing.append("NON_WFS_OR_UNKNOWN_FULFILLMENT")
+        if prior is None:
+            missing.append("NO_POSITIVE_WFS_HISTORY")
         if archived:
             missing.append("CURRENT_ARCHIVE_STATE_NOT_AS_OF_CUTOFF")
         if stage is None and listing.lifecycle_status is None:
@@ -403,6 +316,9 @@ class ListingEvaluationPreviewService:
             current_lifecycle=listing.lifecycle_status,
             current_grade=listing.product_grade,
             lifecycle_evidence_reason=lifecycle_reason,
+            first_positive_date_la=decision.first_positive_date_la,
+            cutoff_wfs_available_quantity=stock_by_day.get(cutoff),
+            consecutive_low_stock_days=decision.consecutive_low_stock_days,
             valid_stock_days_30=stock_valid30,
             lifecycle_candidate=stage,
             grade_candidate=grade,

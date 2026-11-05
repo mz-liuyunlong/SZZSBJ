@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, text
@@ -212,3 +213,26 @@ def lifecycle_scheduler_tick() -> None:
             # pg_advisory_unlock must run on the connection that acquired it.
             lock_connection.execute(text("SELECT pg_advisory_unlock(2406251074)"))
             lock_connection.commit()
+
+
+@celery_app.task(name="listing_evaluation.publish_grade_run", ignore_result=False)
+def publish_grade_run(run_id: str) -> dict[str, int]:
+    """Explicit one-shot publication only; never registered in beat schedules.
+
+    Each daily input must contain reconciled finance + advertising provenance.
+    A missing upstream proof blocks publication rather than guessing zero ads.
+    """
+    from app.modules.listing_rule_config.grade_publication import (
+        ListingGradePublicationService,
+    )
+
+    if not get_settings().listing_evaluation_publish_enabled:
+        raise RuntimeError("LISTING_GRADE_PUBLICATION_NOT_ENABLED")
+    with Session(bind=get_engine(), autoflush=False, expire_on_commit=False) as session:
+        result = ListingGradePublicationService(session).publish_run(run_id=UUID(run_id))
+        return {
+            "examined": result.examined,
+            "published": result.published,
+            "blocked": result.blocked,
+            "already_published": result.already_published,
+        }

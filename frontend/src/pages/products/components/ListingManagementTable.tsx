@@ -236,7 +236,7 @@ const LIFECYCLE_REASON_WORDING: Record<string, { title: string; why: string; nex
   PREVIEW_NOT_AVAILABLE: {
     title: "尚未获取判定数据",
     why: "当前还没有取得这件商品的最新计算记录。",
-    next: "更新本地生命周期数据后再查看。",
+    next: "刷新后重试。",
   },
   WORKFLOW_PROTECTED: {
     title: "已由业务流程管理",
@@ -256,7 +256,7 @@ const LIFECYCLE_REASON_WORDING: Record<string, { title: string; why: string; nex
   TREND_CONFIRMED: {
     title: "已满足阶段判定条件",
     why: "现有销量、库存或监控记录符合当前的生命周期规则。",
-    next: "目前展示的是本地预测结果，尚未正式保存。",
+    next: "以正式保存的状态为准。",
   },
   CUTOFF_WFS_MISSING: {
     title: "当天库存记录缺失",
@@ -644,12 +644,12 @@ function ListingManagementTable({
       width: columnWidths.lifecycle,
       onHeaderCell: headerCell,
       render: (_, row) => {
-        if (row.isArchived || ["清货期", "已归档"].includes(row.lifecycle)) {
-          return row.lifecycle || "—";
-        }
+        const workflowProtected = row.isArchived || ["清货期", "已归档"].includes(row.lifecycle);
         return (
           <span style={{ display: "flex", alignItems: "center", gap: 2, width: "100%" }}>
-          <LifecycleStageSelect row={row} disabled={lifecycleSaving} onSave={onSetLifecycle} />
+          {workflowProtected ? (row.lifecycle || "—") : (
+            <LifecycleStageSelect row={row} disabled={lifecycleSaving} onSave={onSetLifecycle} />
+          )}
           {/* LIFECYCLE_REASONS_LOCAL_V2: explain blank & predicted stages on click. */}
           {row.lifecycleDiagnostic && (
             <Popover

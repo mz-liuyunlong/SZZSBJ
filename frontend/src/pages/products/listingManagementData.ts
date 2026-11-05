@@ -1,6 +1,7 @@
 /** Listing-management No-API acceptance data; replace it when a real API is approved. */
 export interface LifecyclePreviewDiagnostic {
   reasonCode: string;
+  candidateStage?: string | null;
   reasons: Array<{ code: string; title: string; detail: string; advice: string }>;
   evidence: Array<{ label: string; value: string }>;
   cutoffLa: string;

@@ -41,6 +41,9 @@ import {
   fetchListingGptAnalysisLink,
   fetchListingManagementFilterOptions,
   fetchListingManagementRows,
+  fetchListingEvaluationPreviews,
+  applyListingEvaluationPreview,
+  withPendingListingDiagnostics,
   fetchListingManagementSummary,
   fetchListingTags,
   restoreListingManagementRow,
@@ -259,6 +262,8 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [bulkLifecycleReason, setBulkLifecycleReason] = useState("");
   const [lifecycleSaving, setLifecycleSaving] = useState(false);
   const [listingRefreshToken, setListingRefreshToken] = useState(0);
+  // Ignore list and diagnostic responses created before a lifecycle write.
+  const lifecycleMutationEpochRef = useRef(0);
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [ruleConfigOpen, setRuleConfigOpen] = useState(false);
   const [evaluationMonitorOpen, setEvaluationMonitorOpen] = useState(false);
@@ -512,9 +517,10 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
 
   useEffect(() => {
     let active = true;
+    const requestEpoch = lifecycleMutationEpochRef.current;
 
     queueMicrotask(() => {
-      if (active) setIsTableRequesting(true);
+      if (active && requestEpoch === lifecycleMutationEpochRef.current) setIsTableRequesting(true);
     });
 
     void fetchListingManagementRows({
@@ -524,17 +530,42 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
       pageSize,
     })
       .then(({ rows: nextRows, meta }) => {
-        if (!active) return;
-        setRows(nextRows);
+        if (!active || requestEpoch !== lifecycleMutationEpochRef.current) return;
+        setRows(nextRows.map(withPendingListingDiagnostics));
         setTotalRows(meta.total);
+
+        // LISTING_DIAGNOSTIC_PRODUCTION_API_V1: enrich only the visible page,
+        // in bounded account-scoped API batches. A disabled/unavailable
+        // diagnostic endpoint must NEVER hide the explanation icons.
+        const loadDiagnostics = async () => {
+          for (let offset = 0; offset < nextRows.length; offset += 50) {
+            if (!active || requestEpoch !== lifecycleMutationEpochRef.current) return;
+            const batch = nextRows.slice(offset, offset + 50);
+            let previews: Awaited<ReturnType<typeof fetchListingEvaluationPreviews>>;
+            try {
+              previews = await fetchListingEvaluationPreviews(batch.map((item) => item.id));
+            } catch {
+              // Keep the visible pending diagnostic and avoid retry storms
+              // when the production read-only feature flag is disabled.
+              return;
+            }
+            if (!active || requestEpoch !== lifecycleMutationEpochRef.current) return;
+            const byId = new Map(previews.map((result) => [result.listing_id, result]));
+            setRows((current) => current.map((row) => {
+              const preview = byId.get(row.id);
+              return preview ? applyListingEvaluationPreview(row, preview) : row;
+            }));
+          }
+        };
+        void loadDiagnostics();
       })
       .catch(() => {
-        if (!active) return;
+        if (!active || requestEpoch !== lifecycleMutationEpochRef.current) return;
         setRows([]);
         setTotalRows(0);
       })
       .finally(() => {
-        if (active) setIsTableRequesting(false);
+        if (active && requestEpoch === lifecycleMutationEpochRef.current) setIsTableRequesting(false);
       });
 
     return () => {
@@ -831,14 +862,12 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     setLifecycleSaving(true);
     try {
       await setListingLifecycleBatch([row.id], stage, "单个 Listing 人工调整");
+      lifecycleMutationEpochRef.current += 1;
       clearResourceCache("listing-management:");
-      setRows((current) => current.map((item) => item.id === row.id ? {
-        ...item,
-        lifecycle: stage,
-        lifecyclePreview: false,
-        lifecyclePreviewReason: undefined,
-        lifecycleDiagnostic: undefined,
-      } : item));
+      setRows((current) => current.map((item) => item.id === row.id
+        ? withPendingListingDiagnostics({ ...item, lifecycle: stage, lifecyclePreview: false, lifecyclePreviewReason: undefined })
+        : item));
+      setListingRefreshToken((value) => value + 1);
       void messageApi.success("生命周期已保存");
       return true;
     } catch {
@@ -859,10 +888,14 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     try {
       const ids = selectedListingRows.map((row) => row.id);
       await setListingLifecycleBatch(ids, bulkLifecycleStage, bulkLifecycleReason.trim() || "批量人工调整");
+      lifecycleMutationEpochRef.current += 1;
       const wanted = new Set(ids);
       const nextStage = bulkLifecycleStage;
       clearResourceCache("listing-management:");
-      setRows((current) => current.map((row) => wanted.has(row.id) ? { ...row, lifecycle: nextStage, lifecyclePreview: false, lifecyclePreviewReason: undefined } : row));
+      setRows((current) => current.map((row) => wanted.has(row.id)
+        ? withPendingListingDiagnostics({ ...row, lifecycle: nextStage, lifecyclePreview: false, lifecyclePreviewReason: undefined })
+        : row));
+      setListingRefreshToken((value) => value + 1);
       setBulkLifecycleOpen(false);
       setBulkLifecycleStage(null);
       setBulkLifecycleReason("");
