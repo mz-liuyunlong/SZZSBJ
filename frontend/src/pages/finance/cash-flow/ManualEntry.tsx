@@ -36,11 +36,13 @@ function ManualEntryModal({ data, onClose }: { data: CashSnapshot; onClose: () =
   const accounts = useAdminAccounts();
   const create = useCreateManualLine();
   const type = Form.useWatch("type", form) ?? "normal";
+  const accountKey = Form.useWatch("account_key", form);
   const active = useMemo(() => manualAccounts((accounts.data ?? []).filter((row) => row.is_active)), [accounts.data]);
   /* 账户读到后默认选现金；财务已经选过就不动。 */
   useEffect(() => {
     if (!form.getFieldValue("account_key")) form.setFieldsValue({ account_key: defaultAccountKey(active) });
   }, [active, form]);
+  const currency = active.find((row) => row.account_key === accountKey)?.currency_code;
   const catOptions = data.cats.map((cat) => ({ value: cat.code, label: `${cat.code} ${cat.big}·${cat.name}` }));
 
   const pickType = (next: EntryType) => {
@@ -83,7 +85,7 @@ function ManualEntryModal({ data, onClose }: { data: CashSnapshot; onClose: () =
       ]}>
       {holder}
       <Typography.Paragraph type="secondary">
-        只记人民币。用于现金账户，或者人民币银行 / 平台流水里没有的那笔（比如另外扣的手续费）。录完和导入的流水一样走初审、终审；录错了用「剔除」。
+        用于现金账户（只记人民币），或者银行 / 平台流水里没有的那笔；币种跟所选账户走，要记美元就选美元账户（比如另外扣的手续费）。录完和导入的流水一样走初审、终审；录错了用「剔除」。
       </Typography.Paragraph>
       <Form<FormValues> form={form} layout="vertical" requiredMark="optional"
         initialValues={{ type: "normal", direction: "out", business_date: dayjs() }}>
@@ -101,7 +103,7 @@ function ManualEntryModal({ data, onClose }: { data: CashSnapshot; onClose: () =
         <Form.Item name="direction" label="收入 / 支出">
           <Radio.Group options={[{ value: "in", label: "收入" }, { value: "out", label: "支出" }]} />
         </Form.Item>
-        <Form.Item name="amount" label="金额（人民币）" rules={[{ required: true, message: "填金额" }]}>
+        <Form.Item name="amount" label={`金额${currency ? `（${currencyName(currency)}）` : ""}`} rules={[{ required: true, message: "填金额" }]}>
           <InputNumber<string> stringMode min="0.01" precision={2} style={{ width: "100%" }} placeholder="正数，方向看上面" />
         </Form.Item>
         <Form.Item name="description" label="摘要" rules={[{ required: true, whitespace: true, message: "写摘要" }]}>

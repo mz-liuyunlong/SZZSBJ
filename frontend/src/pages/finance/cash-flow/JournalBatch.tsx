@@ -13,7 +13,6 @@ import { pairLines } from "@/pages/finance/cash-flow/journalPair";
 import { catFilter, groupedCatOptions } from "@/pages/finance/cash-flow/journalSelection";
 import { isExcluded, isFirstPending, PREVIEW_ACTION_TIP, REVIEW_TAG, type ReviewMark } from "@/pages/finance/cash-flow/journalShared";
 import type { CashLine, CashSnapshot } from "@/pages/finance/localFinData";
-import { currencyName } from "@/pages/finance/currencyName";
 
 type BatchKind = "pass1" | "pass2" | "reject2" | "category" | "exclude" | "pair";
 interface BatchDef { label: string; event: LineEventKind; reason: boolean; danger?: boolean; liveOnly?: boolean; done: string; skipText: string }
@@ -171,7 +170,7 @@ export function JournalBatchActions({ live, data, rows, selected, reviewOf, need
     const header = ["日期", "时间", "流水 id", "账户", "币种", "金额", "折人民币", "余额", "摘要", "备注", "对方", "类别", "类别来源", "审批单", "异常", "审核状态", "不通过原因", "差额说明", "剔除"];
     const body = source.map((line) => {
       const mark = reviewOf(line);
-      return [line.date, line.time ?? "", line.id, accountName.get(line.acct) ?? line.acct, currencyName(line.cur), hide(line, line.amt), line.cur === "CNY" ? "" : hide(line, line.cny), hide(line, line.bal),
+      return [line.date, line.time ?? "", line.id, accountName.get(line.acct) ?? line.acct, line.cur, hide(line, line.amt), line.cur === "CNY" ? "" : hide(line, line.cny), hide(line, line.bal),
         hide(line, line.sum), hide(line, line.memo !== line.sum ? line.memo : ""), line.party ?? "", line.parts ? `拆分 ${line.parts.length} 行` : catName.get(line.cat) ?? line.cat ?? "", line.cat_src ?? "",
         line.refs.join(" "), alertsText(line), REVIEW_TAG[mark.stage].text, mark.reason ?? "", mark.note ?? "", isExcluded(line) ? "是" : ""];
     });

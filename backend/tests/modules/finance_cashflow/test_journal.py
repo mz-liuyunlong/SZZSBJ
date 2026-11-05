@@ -143,7 +143,7 @@ def test_fx_cny_usd_and_cnh():
     )
     assert result["c"].amount_cny == Decimal("10")
     assert result["u"].amount_cny == Decimal("71.0000")
-    assert result["h"].amount_cny is None
+    assert result["h"].amount_cny == Decimal("10")  # CNH 按 1:1
     assert by_uid(compute([line("u", 10, cur="USD")]))["u"].amount_cny is None
 
 

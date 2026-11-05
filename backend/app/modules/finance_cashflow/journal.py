@@ -232,8 +232,8 @@ class JournalResult:
 
 
 def to_cny(amount: Decimal, currency_code: str, usd_rate: Decimal | None) -> Decimal | None:
-    """CNY 原值；USD 用当月生效汇率，没有就空；CNH 也空。不兜底。"""
-    if currency_code == "CNY":
+    """CNY 原值；CNH 按 1:1（rocky 2026-11-05：现阶段汇率一样）；USD 用当月汇率，没有就空。"""
+    if currency_code in {"CNY", "CNH"}:
         return amount
     if currency_code == "USD" and usd_rate is not None:
         return (amount * usd_rate).quantize(Q4, rounding=ROUND_HALF_UP)

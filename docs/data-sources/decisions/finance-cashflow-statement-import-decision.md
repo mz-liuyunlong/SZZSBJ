@@ -74,7 +74,7 @@ PDF 回单一律拒绝并给出中文原因。招商银行流水 PDF 2026-11-05 
 | `business_date` | date；**财务流水业务日统一 = Asia/Shanghai**（规则文档 §3 / §7 登记为 time-money 规则的例外）；派安盈 CSV 为 UTC 时间列，按 Asia/Shanghai 折算 |
 | `source_time` | timestamptz（UTC）+ `source_timezone`（来源时区：银行 / PingPong / 万里汇 = Asia/Shanghai，派安盈 = CSV 的 Time zone 列）；原文另存 `source_time_raw` |
 | `amount` | `numeric(18,4)`，入正出负；CSV / xlsx 文本单元格按字符串转 `Decimal`，xls 浮点单元格先 `repr` 成字符串再转 `Decimal`，全链路不经 float 运算，原文保留在 RAW |
-| `currency_code` | CNY / USD / CNH（CNH 不折算为 CNY） |
+| `currency_code` | CNY / USD / CNH（CNH 按 1:1 折人民币，rocky 2026-11-05为 CNY） |
 | `balance_after` | `numeric(18,4)`，可空（派安盈部分行、PingPong 子账户按导出列）；取值规则同 `amount` |
 | `counterparty_name` | text，敏感字段（个人姓名）；字段权限控制返回 |
 | `counterparty_account_last4` | 只存后 4 位；完整卡号、身份证号**不入库**（解析阶段剥离） |

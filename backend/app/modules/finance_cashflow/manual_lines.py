@@ -83,8 +83,8 @@ def create_manual_line(
         raise ManualLineRejectedError("账户不存在", status_code=404)
     if not account.is_active:
         raise ManualLineRejectedError("这个账户已停用，不能再录")
-    if account.currency_code != "CNY":
-        raise ManualLineRejectedError("手工录入只记人民币")
+    if account.provider == PROVIDER_MANUAL and account.currency_code != "CNY":
+        raise ManualLineRejectedError("现金账户只记人民币")
     if payload.business_date > _today():
         raise ManualLineRejectedError("日期不能晚于今天")
     if payload.category_code is not None and (

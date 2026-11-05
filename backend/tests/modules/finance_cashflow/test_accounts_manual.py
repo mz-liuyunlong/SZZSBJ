@@ -37,6 +37,7 @@ from app.modules.finance_cashflow.manual_lines import (
 from app.modules.finance_cashflow.models import (
     FinanceCashAccount,
     FinanceCashImport,
+    FinanceCashLine,
     FinanceCashLineEvent,
 )
 from app.modules.finance_cashflow.parsing import detector, readers
@@ -433,8 +434,9 @@ def test_ensure_cash_account_is_repeatable_and_keeps_a_stopped_one(session: Sess
     assert session.get(FinanceCashAccount, cash.account_key).is_active is False
 
 
-def test_manual_line_only_takes_rmb_accounts(session: Session) -> None:
-    usd = AccountAdminService(session).create(
+def test_only_cash_accounts_are_limited_to_rmb(session: Session) -> None:
+    admin = AccountAdminService(session)
+    cash_usd = admin.create(
         CashAccountCreate(
             display_name="美元现金",
             entity="甲",
@@ -443,5 +445,19 @@ def test_manual_line_only_takes_rmb_accounts(session: Session) -> None:
             provider="manual",
         )
     )
-    with pytest.raises(ManualLineRejectedError, match="只记人民币"):
-        manual(session, usd.account_key, "10", "in", date(2026, 10, 1))
+    with pytest.raises(ManualLineRejectedError, match="现金账户只记人民币"):
+        manual(session, cash_usd.account_key, "10", "in", date(2026, 10, 1))
+    bank_usd = admin.create(
+        CashAccountCreate(
+            display_name="美元户",
+            entity="甲",
+            currency_code="USD",
+            kind="对公",
+            provider="boc",
+            identity={"inquiry_account": "11223344"},
+        )
+    )
+    created = manual(session, bank_usd.account_key, "10", "out", date(2026, 10, 1))
+    line = session.get(FinanceCashLine, created.line_uid)
+    assert line is not None
+    assert (line.currency_code, line.amount) == ("USD", Decimal("-10.0000"))
