@@ -13,7 +13,7 @@ from decimal import Decimal
 from hashlib import sha256
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -40,6 +40,35 @@ class GradePublishOutcome:
     published: int
     blocked: int
     already_published: int
+
+
+def _store_day_ad_spend_positive(value: Decimal | None) -> bool:
+    """A full-store zero-advertising day is an incomplete source day, not a valid zero."""
+    return value is not None and value > Decimal("0")
+
+
+def _store_day_ad_spend_totals(
+    session: Session, listing: ListingManagementCurrentMart, start, cutoff
+) -> dict:
+    """Only the exact account/store/LA dates; include standard and SEM advertising."""
+    return {
+        day: spend
+        for day, spend in session.execute(
+            select(
+                DailySalesItemDayMart.business_date_la,
+                func.sum(
+                    func.coalesce(DailySalesItemDayMart.ad_spend_amount, 0)
+                    + func.coalesce(DailySalesItemDayMart.sem_ad_spend_amount, 0)
+                ),
+            )
+            .where(
+                DailySalesItemDayMart.source_account_ref == listing.source_account_ref,
+                DailySalesItemDayMart.store_id == listing.store_id,
+                DailySalesItemDayMart.business_date_la.between(start, cutoff),
+            )
+            .group_by(DailySalesItemDayMart.business_date_la)
+        ).all()
+    }
 
 
 def _day_is_attested(row: DailySalesItemDayMart) -> bool:
@@ -169,6 +198,12 @@ class ListingGradePublicationService:
                 if len(days_seen) != len(rows):
                     blocked += 1
                     continue
+                # A store-wide zero advertising day signals an upstream outage
+                # in this business, even if one Listing legitimately has zero ads.
+                # Exclude those days from independently confirmed financial inputs.
+                store_ad_totals = _store_day_ad_spend_totals(
+                    self.session, listing, start, run.cutoff_date_la
+                )
                 days = [
                     FinancialDay(
                         day=row.business_date_la,
@@ -176,7 +211,12 @@ class ListingGradePublicationService:
                         profit=row.gross_profit_amount,
                         cost_status=row.cost_status,
                         missing_cost_codes=tuple(row.missing_cost_codes_json or ()),
-                        upstream_confirmed=_day_is_attested(row),
+                        upstream_confirmed=(
+                            _day_is_attested(row)
+                            and _store_day_ad_spend_positive(
+                                store_ad_totals.get(row.business_date_la)
+                            )
+                        ),
                     )
                     for row in rows
                 ]
