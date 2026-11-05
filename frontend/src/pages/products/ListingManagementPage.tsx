@@ -41,6 +41,9 @@ import {
   fetchListingGptAnalysisLink,
   fetchListingManagementFilterOptions,
   fetchListingManagementRows,
+  fetchListingEvaluationPreviews,
+  applyListingEvaluationPreview,
+  withPendingListingDiagnostics,
   fetchListingManagementSummary,
   fetchListingTags,
   restoreListingManagementRow,
@@ -525,8 +528,33 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     })
       .then(({ rows: nextRows, meta }) => {
         if (!active) return;
-        setRows(nextRows);
+        setRows(nextRows.map(withPendingListingDiagnostics));
         setTotalRows(meta.total);
+
+        // LISTING_DIAGNOSTIC_PRODUCTION_API_V1: enrich only the visible page,
+        // in bounded account-scoped API batches. A disabled/unavailable
+        // diagnostic endpoint must NEVER hide the explanation icons.
+        const loadDiagnostics = async () => {
+          for (let offset = 0; offset < nextRows.length; offset += 50) {
+            if (!active) return;
+            const batch = nextRows.slice(offset, offset + 50);
+            let previews;
+            try {
+              previews = await fetchListingEvaluationPreviews(batch.map((item) => item.id));
+            } catch {
+              // Keep the visible pending diagnostic and avoid retry storms
+              // when the production read-only feature flag is disabled.
+              return;
+            }
+            if (!active) return;
+            const byId = new Map(previews.map((result) => [result.listing_id, result]));
+            setRows((current) => current.map((row) => {
+              const preview = byId.get(row.id);
+              return preview ? applyListingEvaluationPreview(row, preview) : row;
+            }));
+          }
+        };
+        void loadDiagnostics();
       })
       .catch(() => {
         if (!active) return;
