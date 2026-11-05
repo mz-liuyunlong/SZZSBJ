@@ -90,7 +90,7 @@ def eligible_listings(
     accounts: scope,
 ):
     data = ClearanceService(session).list_listings(
-        accounts,
+        _requested_accounts(accounts, query.source_account_ref),
         store_id=query.store_id,
         keyword=query.keyword,
         eligible_only=True,
