@@ -25,7 +25,7 @@
 | cron / 脚本 / 外部 API | 无 cron。Demo 侧脚本（`fin_ingest_uploads.py` 同步到 Mac 再重建）仅为原型过渡，正式系统不依赖。不调用任何银行 / 平台 API。 |
 | 人工写库入口 | 上传即人工入口；流水行本身不允许人工编辑（分类 / 备注 / 复核属于后续「现金状况」PRP，另行决策）。作废只允许整批作废（软删除 + 审计）。 |
 | 外部平台重新获取可能性 | 可以：中行企业网银「交易明细」xls、深通村镇银座「交易明细查询列表」xlsx、派安盈 Transactions CSV、万里汇导出 xlsx、PingPong 账单明细 xlsx 都能按日期段重新导出；重复导出靠行指纹去重。 |
-| 少量配置数据可行性 | 可行：账户主数据 11 条（见 §3 表 A；`BOC_USD` 四颗洋葱中行外币户独立入库，与 `ZSBJ_BOC_USD` 同为「同一导出内按币种拆户」），由 migration 种子写入，变更走审批后的维护接口（本期不做维护页，改动走 migration / 负责人授权脚本）。 |
+| 少量配置数据可行性 | 可行：账户主数据 11 条（见 §3 表 A；`BOC_USD` A 主体中行外币户独立入库，与 `ZSBJ_BOC_USD` 同为「同一导出内按币种拆户」），账户主数据不进仓库，上线时由部署 AI 用 `backend/scripts/finance_cash_deploy_load.py` 从本地文件写入；迁移只放类别和不带名字的规则（本期不做维护页，账户变更重新执行该脚本）。 |
 | 短期策略 | 文件导入（本决策）。 |
 | 长期策略 | 仍为文件导入：银行无开放 API；PingPong / 派安盈 / 万里汇 API 接入被 Rocky 明确否决（2026-10-31）。若未来改接 API，另立决策。 |
 
@@ -33,7 +33,7 @@
 
 | 数据集 | 层 | 对象（建议名） | 分类 | 权威来源 | 必要约束 |
 |---|---|---|---|---|---|
-| A 现金账户主数据 | L7 DIM | `dim_finance_cash_accounts` | `NEW_SYSTEM_OWNED` | 财务 / Rocky 确认的账户清单（§3 表 A） | migration 种子；字段：account_key、display_name、entity（法人主体）、currency_code、kind（对公 / 平台 / 对公外币）、provider（boc / shenzhen_rural_bank / payoneer / worldfirst / pingpong）、account_no_last4、identity_hint（识别用：账号 / 用户编号 / 子账户 Id，**只存识别所需、不存完整卡号以外的敏感项**）、is_active、effective_from。 |
+| A 现金账户主数据 | L7 DIM | `dim_finance_cash_accounts` | `NEW_SYSTEM_OWNED` | 财务 / Rocky 确认的账户清单（§3 表 A） | 账户主数据不进仓库，上线时由部署 AI 用 `backend/scripts/finance_cash_deploy_load.py` 从本地文件写入；迁移只放类别和不带名字的规则。字段：account_key、display_name、entity（法人主体）、currency_code、kind（对公 / 平台 / 对公外币）、provider（boc / shenzhen_rural_bank / payoneer / worldfirst / pingpong）、account_no_last4、identity_hint（识别用：账号 / 用户编号 / 子账户 Id，**只存识别所需、不存完整卡号以外的敏感项**）、is_active、effective_from。 |
 | B 导入批次 | L1 Landing | `landing_finance_cashflow_imports` | `NEW_SYSTEM_OWNED` | 本接口 | 一次上传 = 一批；记录 uploader（principal）、上传时间、文件数、识别结果、状态（received / parsed / voided / failed）、request_id；`void` 只改状态并写审计，不删行。 |
 | C 原始文件 | L2 RAW | `raw_finance_cashflow_files` | `ARCHIVE_ONLY` | 银行 / 平台导出原件 | 原件存储方式（**待负责人批准**，见 §8）：建议 bytea，备选受控目录 + 路径；sha256、size、原文件名、识别出的 account_key、表头声明区间（有则记）、解析器版本；append-only；同 sha256 重复上传返回已有记录不重存。不进入任何业务 API 响应。 |
 | D 标准化流水 | L3 Standardized | `std_finance_cashflow_lines` | `NEW_SYSTEM_OWNED` | 由 C 经确定性解析得到 | 字段见 §4；`line_uid` 唯一（account_key + 指纹）；重复导入同一行 = 以最新文件为准（更新 raw_file_id 引用，不新增）；金额 `numeric(18,4)` + currency_code，文件中的数字按字符串转 Decimal、不经 float；业务日期 + 来源时间 + 来源时区；对方户名 / 卡号尾号为敏感字段。 |
@@ -48,22 +48,22 @@
 
 | account_key | 显示名 | 主体 | 币种 | provider | 识别特征（文件内） |
 |---|---|---|---|---|---|
-| `BOC_CNY` | 四颗洋葱 · 中行人民币户 | 四颗洋葱 | CNY | boc | 中行企业网银「交易明细」导出 xls / xlsx，表头含「查询账号[Inquirer account]」与明细表头「交易类型[Transaction Type]」，查询账号尾号 = 5951，CNY 行 |
-| `BOC_USD` | 四颗洋葱 · 中行外汇户 | 四颗洋葱 | USD | boc | 同上文件内 USD 行（若单独导出则按账号 尾号 5951 + 币种 USD） |
-| `ZSBJ_BOC` | 掌上便捷 · 中行对公 | 四颗洋葱（代管） | CNY | boc | 查询账号尾号 = 6815，CNY 行 |
-| `ZSBJ_BOC_USD` | 掌上便捷 · 中行外币户 | 四颗洋葱（代管） | USD | boc | 查询账号尾号 = 6815 导出中的 USD 行（账号 尾号 1389） |
-| `ZSBJ_YZ` | 掌上便捷 · 银座对公 | 四颗洋葱（代管） | CNY | shenzhen_rural_bank | xlsx「交易明细查询列表」/「对方账户名」，账号 尾号 0015 |
-| `PAYONEER` | 派安盈 · 四颗洋葱 | 四颗洋葱 | USD | payoneer | CSV 首行 `Currency,Payout method,Transaction date…`，描述以 `Payment from Walmart` / `Card charge` / `Maintenance fee` 为主 |
-| `PAYONEER_FH` | 派安盈 · 主账号（FurnitureHaven 归集） | 四颗洋葱 | USD | payoneer | 同格式，描述以 `STRIPE` / `connected account` 为主 |
-| `WORLDFIRST` | 万里汇 | 四颗洋葱 | USD | worldfirst | xlsx 表头含「子账号昵称」「动账类型」 |
-| `PINGPONG_MAIN_USD` / `PINGPONG_MAIN_CNH` | PingPong · 专用户 USD / CNH | 四颗洋葱 | USD / CNH | pingpong | xlsx 表头含「出账/入账」「流水号」，用户编号尾号 = 8366，按「账号Id」+ 币种分子账户 |
-| `PINGPONG_STORE_A` | PingPong · 本公司店铺户 A | 四颗洋葱 | USD | pingpong | 同上文件中本用户编号下的店铺账户行，按「账号Id」区分；店铺户再增加时顺延 `PINGPONG_STORE_B`…（账号 Id 全值只在种子里） |
+| `BOC_CNY` | A 主体 · 中行人民币户 | A 主体 | CNY | boc | 中行企业网银「交易明细」导出 xls / xlsx，表头含「查询账号[Inquirer account]」与明细表头「交易类型[Transaction Type]」，查询账号（部署时登记），CNY 行 |
+| `BOC_USD` | A 主体 · 中行外汇户 | A 主体 | USD | boc | 同上文件内 USD 行（若单独导出则按部署时登记的账号 + 币种 USD） |
+| `ZSBJ_BOC` | B 主体 · 中行对公 | A 主体（代管） | CNY | boc | 查询账号（部署时登记），CNY 行 |
+| `ZSBJ_BOC_USD` | B 主体 · 中行外币户 | A 主体（代管） | USD | boc | 查询账号（部署时登记）导出中的 USD 行（外币账号部署时登记） |
+| `ZSBJ_YZ` | B 主体 · 银座对公 | A 主体（代管） | CNY | shenzhen_rural_bank | xlsx「交易明细查询列表」/「对方账户名」，账号部署时登记 |
+| `PAYONEER` | 派安盈 · A 主体 | A 主体 | USD | payoneer | CSV 首行 `Currency,Payout method,Transaction date…`，描述以 `Payment from Walmart` / `Card charge` / `Maintenance fee` 为主 |
+| `PAYONEER_FH` | 派安盈 · 主账号（店铺归集） | A 主体 | USD | payoneer | 同格式，描述以 `STRIPE` / `connected account` 为主 |
+| `WORLDFIRST` | 万里汇 | A 主体 | USD | worldfirst | xlsx 表头含「子账号昵称」「动账类型」 |
+| `PINGPONG_MAIN_USD` / `PINGPONG_MAIN_CNH` | PingPong · 专用户 USD / CNH | A 主体 | USD / CNH | pingpong | xlsx 表头含「出账/入账」「流水号」，用户编号（部署时登记），按「账号Id」+ 币种分子账户 |
+| `PINGPONG_STORE_A` | PingPong · 本公司店铺户 A | A 主体 | USD | pingpong | 同上文件中本用户编号下的店铺账户行，按「账号Id」区分；店铺户再增加时顺延 `PINGPONG_STORE_B`…（账号 Id 部署时登记） |
 
 PDF（回单 / 招行流水）一律拒绝并给出中文原因；招商银行账户不在范围（Rocky 2026-10-29）。
 
 派安盈两户按描述特征计数归户：两类特征计数**相等时拒绝该文件**（提示人工指定账户）。xlsx 解压上限：解压后总大小 ≤ 50 MB、条目数 ≤ 200，超限拒绝（防 zip 炸弹）。
 
-本仓库为 Public，文档只写账号 / 用户编号**尾号**；完整识别值放在 `dim_finance_cash_accounts` 的 migration 种子里由负责人在 PR 中审阅（种子值本身属 confidential，实现 PR 需按 `docs/SENSITIVE_DATA_AND_PERMISSION_RULES.md` 处理，必要时改为部署时注入）。
+仓库可能公开：文档不写公司主体名、账号和用户编号，**尾号也不写**（Rocky 2026-11-04）；账户主数据不进仓库，上线时由部署 AI 用 `backend/scripts/finance_cash_deploy_load.py` 从本地文件写入；迁移只放类别和不带名字的规则（本地文件属 confidential，按 `docs/SENSITIVE_DATA_AND_PERMISSION_RULES.md` 处理，用完不留在服务器的仓库目录里）。
 
 ## 4. 标准化流水字段（表 D 契约要点）
 
@@ -78,7 +78,7 @@ PDF（回单 / 招行流水）一律拒绝并给出中文原因；招商银行�
 | `balance_after` | `numeric(18,4)`，可空（派安盈部分行、PingPong 子账户按导出列）；取值规则同 `amount` |
 | `counterparty_name` | text，敏感字段（个人姓名）；字段权限控制返回 |
 | `counterparty_account_last4` | 只存后 4 位；完整卡号、身份证号**不入库**（解析阶段剥离） |
-| `description` / `memo` | 原文保留；连续 ≥16 位数字串在**展示层**脱敏为 `…` + 末 4 位（与卡号尾号口径一致；原文仍在 RAW） |
+| `description` / `memo` | 入库前脱敏（长数字串留末 4 位、证件号剔除）；原文只参与指纹计算，不落库 |
 | `source_ref` | 银行流水号 / 报文号，存后 10 位 |
 | `statement_row_no` | 文件内行号；配合 `file_row_order` 支持「严格按银行明细顺序」 |
 | `raw_file_id` / `import_id` | 血缘：`first_import_id` / `first_raw_file_id`（首次出现）与 `last_import_id` / `last_raw_file_id`（最近一次出现）都存；作废最新批时，若该行也出现在更早的未作废批里，归属回退到最近一个未作废批；若只出现在被作废批里，行标 `voided_at`（不删） |
