@@ -542,6 +542,33 @@ def test_gap_pair_rejected_outside_tolerance(received, day, tail):
     assert not [alert for alert in result.alerts if alert.type == J.ALERT_PAIR_GAP]
 
 
+def test_cnh_out_pairs_with_cny_in_for_the_same_amount():
+    result = compute(
+        [
+            line("o", -1000, account="P", cur="CNH", desc="内部调拨"),
+            line("i", 1000, account="B", cur="CNY", desc="内部调拨"),
+        ]
+    )
+    items = by_uid(result)
+    assert items["o"].pair_id and items["o"].pair_id == items["i"].pair_id
+    assert "汇率区间配对待核" not in items["o"].flags
+    assert not [alert for alert in result.alerts if alert.type == J.ALERT_PAIR_GAP]
+    assert not [alert for alert in result.alerts if alert.type == J.ALERT_UNPAIRED]
+
+
+def test_cnh_out_pairs_with_cny_in_and_reports_the_fee_gap():
+    result = compute(
+        [
+            line("o", -1000, account="P", cur="CNH", desc="内部调拨", counterparty_last4="0000"),
+            line("i", 995, account="B", cur="CNY", desc="内部调拨", account_last4="0000"),
+        ]
+    )
+    items = by_uid(result)
+    assert items["o"].pair_id and items["o"].pair_id == items["i"].pair_id
+    gaps = [alert for alert in result.alerts if alert.type == J.ALERT_PAIR_GAP]
+    assert [(alert.line_uid, alert.amount) for alert in gaps] == [("o", Decimal("5"))]
+
+
 def test_confirmed_fee_pairs_without_gap_alert():
     parts = [
         {"amount": "9986.8000", "category_code": "T02"},

@@ -602,6 +602,11 @@ def _mark_pair(members: Sequence[ComputedLine], used: set[str]) -> None:
         used.add(member.source.line_uid)
 
 
+def _pair_currency(code: str) -> str:
+    """配对时 CNH 和 CNY 算同一币种（rocky 2026-11-05：现阶段汇率一样）。"""
+    return "CNY" if code == "CNH" else code
+
+
 def pair_value(line: ComputedLine) -> tuple[Decimal, str]:
     """配对比较用的金额（带符号）和币种；带差额配对、手动配对、一对一 / 一对多都走这里。
 
@@ -622,13 +627,13 @@ def pair_value(line: ComputedLine) -> tuple[Decimal, str]:
                 ),
                 ZERO,
             )
-        return sign * value, match.transfer_currency
+        return sign * value, _pair_currency(match.transfer_currency)
     if source.parts:
         kept = [part for part in source.parts if not part.get("fee_layer")]
         if len(kept) != len(source.parts):
             total = sum((Decimal(str(part["amount"])) for part in kept), ZERO)
-            return sign * total, source.currency_code
-    return source.amount, source.currency_code
+            return sign * total, _pair_currency(source.currency_code)
+    return source.amount, _pair_currency(source.currency_code)
 
 
 def _gap_alert(out: ComputedLine, gap: Decimal, other: ComputedLine) -> Alert:
