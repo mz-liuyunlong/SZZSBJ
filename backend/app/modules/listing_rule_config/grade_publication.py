@@ -136,7 +136,6 @@ class ListingGradePublicationService:
                 if (
                     listing.lifecycle_status not in config.included_stages
                     or listing.lifecycle_status in {"清货期", "已归档"}
-                    or listing.product_grade not in (None, "", "未分级", "待评级")
                     or snap.cutoff_date_la != run.cutoff_date_la
                     or snap.rule_version != run.rule_version
                 ):
