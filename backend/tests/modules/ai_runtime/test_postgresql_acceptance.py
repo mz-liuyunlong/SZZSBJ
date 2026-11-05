@@ -321,7 +321,9 @@ def test_0071_real_historical_migration_preserves_jobs_and_blocks_populated_roll
             ).scalar_one()
             assert pinned == 0
         with engine.begin() as cx:
-            head_before_failed_downgrade = cx.scalar(text("SELECT version_num FROM alembic_version"))
+            head_before_failed_downgrade = cx.scalar(
+                text("SELECT version_num FROM alembic_version")
+            )
         result = subprocess.run(
             [sys.executable, "-m", "alembic", "downgrade", "20261102_0070_ai_skill_soft_delete"],
             cwd=root,
