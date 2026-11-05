@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "20261104_0072_wfs_la_lock"
-down_revision: str | Sequence[str] | None = "20261102_0071_skill_lib"
+revision: str = "20261105_0073_wfs_la_lock"
+down_revision: str | Sequence[str] | None = "20261104_0072_finance_cashflow"
 branch_labels = None
 depends_on = None
 

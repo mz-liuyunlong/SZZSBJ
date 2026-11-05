@@ -29,10 +29,11 @@ WALMART_REMOTE_HEAD_REVISION = "20261029_0068_walmart_remote_jobs"
 WALMART_GATEWAY_LEDGER_REVISION = "20261031_0069_walmart_gateway_ledger"
 SKILL_0070_REVISION = "20261102_0070_ai_skill_soft_delete"
 SKILL_0071_REVISION = "20261102_0071_skill_lib"
-LISTING_0072_REVISION = "20261104_0072_wfs_la_lock"
-LISTING_0073_REVISION = "20261104_0073_listing_lifecycle_manual"
-LISTING_0074_REVISION = "20261104_0074_listing_lifecycle_auto"
-LISTING_0075_REVISION = "20261105_0075_listing_product_tags"
+FINANCE_CASHFLOW_REVISION = "20261104_0072_finance_cashflow"
+LISTING_0073_REVISION = "20261105_0073_wfs_la_lock"
+LISTING_0074_REVISION = "20261105_0074_listing_lifecycle_manual"
+LISTING_0075_REVISION = "20261105_0075_listing_lifecycle_auto"
+LISTING_0076_REVISION = "20261105_0076_listing_product_tags"
 WFS_DETECTION_HEAD_REVISION = "20261026_0061_wfs_fee_detection_evidence"
 SYNC_ANOMALY_HEAD_REVISION = "20261027_0062_sync_anomaly_center"
 AI_RUNTIME_PREVIOUS_REVISION = "20261027_0063_ai_runtime"
@@ -79,11 +80,11 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20261026_0055_purchase_board_draft_no",
         LISTING_INTEGRATION_HEAD_REVISION,
     }
-    assert script.get_heads() == [LISTING_0075_REVISION]
-    assert script.get_revision(LISTING_0072_REVISION).down_revision == SKILL_0071_REVISION
-    assert script.get_revision(LISTING_0073_REVISION).down_revision == LISTING_0072_REVISION
+    assert script.get_heads() == [LISTING_0076_REVISION]
+    assert script.get_revision(LISTING_0073_REVISION).down_revision == FINANCE_CASHFLOW_REVISION
     assert script.get_revision(LISTING_0074_REVISION).down_revision == LISTING_0073_REVISION
     assert script.get_revision(LISTING_0075_REVISION).down_revision == LISTING_0074_REVISION
+    assert script.get_revision(LISTING_0076_REVISION).down_revision == LISTING_0075_REVISION
     assert script.get_revision(WALMART_REMOTE_HEAD_REVISION).down_revision == FINAL_HEAD_REVISION
     assert (
         script.get_revision(WALMART_GATEWAY_LEDGER_REVISION).down_revision
@@ -359,6 +360,6 @@ def test_revision_files_have_unique_ids_and_form_one_connected_graph() -> None:
                     revisions.append(ast.literal_eval(node.value))
     assert len(revisions) == len(set(revisions)), "duplicate full Alembic revision ID"
     script = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
-    assert script.get_heads() == [LISTING_0075_REVISION]
+    assert script.get_heads() == [LISTING_0076_REVISION]
     assert len(script.get_bases()) == 1
     assert {item.revision for item in script.walk_revisions()} == set(revisions)
