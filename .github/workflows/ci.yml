@@ -75,7 +75,17 @@ jobs:
           uv sync --frozen
           uv run alembic upgrade head
           uv run pytest -q -rs tests/modules/ai_runtime/test_postgresql_acceptance.py
-          uv run alembic downgrade 20261027_0063_ai_runtime
+          # Listing lifecycle history is intentionally irreversible. Verify that
+          # a destructive downgrade fails atomically, rather than requiring it to succeed.
+          read_head='import os; from sqlalchemy import create_engine, text; engine = create_engine(os.environ["TEST_DATABASE_URL"]); print(engine.connect().scalar(text("SELECT version_num FROM alembic_version"))); engine.dispose()'
+          before="$(uv run python -c "$read_head")"
+          if uv run alembic downgrade 20261027_0063_ai_runtime > /tmp/ai-rollback-check.log 2>&1; then
+            echo "ERROR: protected historical audit was downgraded"
+            exit 1
+          fi
+          grep -F "Immutable lifecycle audit cannot be destructively downgraded" /tmp/ai-rollback-check.log
+          after="$(uv run python -c "$read_head")"
+          test "$before" = "$after"
           uv run alembic upgrade head
 
   frontend-if-present:

@@ -34,6 +34,9 @@ from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 from app.modules.integration_sync.catalog import IntegrationCatalogService
 from app.modules.integration_sync.data_pages_catalog import DATA_PAGES_SYNC_INTERFACE_SPECS_BY_KEY
 from app.modules.integration_sync.parsers.lingxing_data_pages import DataPagesParserKey
+from app.modules.integration_sync.listing_product_tags_sync import (
+    refresh_listing_product_tags,
+)
 from app.modules.integration_sync.wfs_first_stock import (
     listing_identity,
     observe_first_wfs_stock,
@@ -1614,6 +1617,8 @@ class DataPagesRealSyncRunner:
                 "now": now,
             },
         )
+        # Match exact account+SKU; write provider tags separately from custom tags.
+        refresh_listing_product_tags(self.session, self.source_account_ref)
         return _row_count(
             self.session, "mart_listing_management_current", self.source_account_ref, None
         )

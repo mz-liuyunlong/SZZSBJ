@@ -89,3 +89,126 @@ def scheduler_tick() -> None:
             )
         finally:
             session.execute(text("SELECT pg_advisory_unlock(2406251026)"))
+
+
+@celery_app.task(name="listing_lifecycle.scheduler_tick", ignore_result=True)
+def lifecycle_scheduler_tick() -> None:
+    """Daily T-2 lifecycle publisher; fully opt-in and independent of grading.
+
+    Connection-scoped advisory lock lives on a dedicated connection. Business
+    mutations run in a separate engine-bound Session whose commits are real.
+    """
+    settings = get_settings()
+    if not settings.listing_lifecycle_auto_enabled:
+        return
+    if settings.app_env == "production" and not settings.listing_lifecycle_production_approved:
+        return
+
+    now = datetime.now(UTC)
+    local = now.astimezone(CHINA_TZ)
+    import json
+
+    from app.modules.listing_rule_config.automation import (
+        process_lifecycle_batch,
+        verify_schema,
+    )
+
+    engine = get_engine()
+    with engine.connect() as lock_connection:
+        acquired = lock_connection.scalar(text("SELECT pg_try_advisory_lock(2406251074)"))
+        if not acquired:
+            return
+        try:
+            # The independent session is not enlisted in lock_connection's
+            # implicit transaction. Every session.commit() is durable.
+            with Session(bind=engine, autoflush=False, expire_on_commit=False) as session:
+                rule_row = session.scalar(
+                    select(ListingGradeRuleVersion)
+                    .where(ListingGradeRuleVersion.effective_from <= now)
+                    .order_by(ListingGradeRuleVersion.version.desc())
+                    .limit(1)
+                )
+                if not rule_is_due(rule_row, now):
+                    return
+                config = (
+                    ListingGradeRuleConfig.model_validate(rule_row.config_json)
+                    if rule_row is not None
+                    else ListingGradeRuleConfig()
+                )
+                version = rule_row.version if rule_row is not None else 0
+                cutoff = rating_cutoff_la(now)
+                verify_schema(session)
+                existing = (
+                    session.execute(
+                        text("""
+                    SELECT status, cutoff_date_la
+                    FROM biz_listing_lifecycle_auto_runs
+                    WHERE schedule_date_cn=:today
+                """),
+                        {"today": local.date()},
+                    )
+                    .mappings()
+                    .first()
+                )
+                if existing is not None:
+                    # Failed jobs are not retried unattended without evidence.
+                    return
+                session.execute(
+                    text("""
+                    INSERT INTO biz_listing_lifecycle_auto_runs (
+                        schedule_date_cn, cutoff_date_la, status, rule_version, started_at
+                    ) VALUES (:today, :cutoff, 'running', :version, :now)
+                """),
+                    {
+                        "today": local.date(),
+                        "cutoff": cutoff,
+                        "version": version,
+                        "now": now,
+                    },
+                )
+                session.commit()
+                try:
+                    result = process_lifecycle_batch(
+                        session,
+                        cutoff=cutoff,
+                        config=config,
+                        rule_version=version,
+                        dry_run=False,
+                    )
+                    session.execute(
+                        text("""
+                        UPDATE biz_listing_lifecycle_auto_runs
+                        SET status='succeeded', examined=:examined, updated=:updated,
+                            unchanged=:unchanged, skipped=:skipped,
+                            skipped_reasons_json=CAST(:reasons AS jsonb),
+                            finished_at=:now
+                        WHERE schedule_date_cn=:today AND status='running'
+                    """),
+                        {
+                            "examined": result.examined,
+                            "updated": result.updated,
+                            "unchanged": result.unchanged,
+                            "skipped": result.skipped,
+                            "reasons": json.dumps(result.skipped_reasons),
+                            "today": local.date(),
+                            "now": datetime.now(UTC),
+                        },
+                    )
+                    session.commit()
+                except Exception:
+                    session.rollback()
+                    session.execute(
+                        text("""
+                        UPDATE biz_listing_lifecycle_auto_runs
+                        SET status='failed', error_code='LIFECYCLE_AUTO_EXECUTION_FAILED',
+                            finished_at=:now
+                        WHERE schedule_date_cn=:today
+                    """),
+                        {"today": local.date(), "now": datetime.now(UTC)},
+                    )
+                    session.commit()
+                    raise
+        finally:
+            # pg_advisory_unlock must run on the connection that acquired it.
+            lock_connection.execute(text("SELECT pg_advisory_unlock(2406251074)"))
+            lock_connection.commit()

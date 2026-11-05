@@ -124,6 +124,62 @@ def test_listing_query_reads_raw_start_time_by_stable_business_key() -> None:
     assert "dim_walmart_listings.item_id =" in sql
 
 
+def test_listing_first_wfs_date_is_per_store_item_and_positive_stock_only() -> None:
+    repository = ListingManagementRepository(MagicMock(spec=Session))
+    statement = repository._filtered_listing_statement(
+        account_refs=frozenset({"synthetic-account"}),
+        store_id=None,
+        owner_ref="",
+        product_type="",
+        status="",
+        tag="",
+        summary_filter="total",
+        search_field="sku",
+        keyword="",
+        batch_values="",
+    )
+    sql = str(statement.compile())
+    assert "min(fact_walmart_listing_inventory_daily.snapshot_date_la)" in sql
+    assert (
+        "fact_walmart_listing_inventory_daily.source_account_ref = "
+        "mart_listing_management_current.source_account_ref"
+    ) in sql
+    assert (
+        "fact_walmart_listing_inventory_daily.store_id = mart_listing_management_current.store_id"
+    ) in sql
+    assert (
+        "fact_walmart_listing_inventory_daily.item_id = mart_listing_management_current.item_id"
+    ) in sql
+    # The first positive observation is based on WFS inventory, not listing date.
+    assert "fact_walmart_listing_inventory_daily.wfs_available_quantity >=" in sql
+
+
+def test_listing_first_wfs_date_prefers_immutable_lock_if_table_exists() -> None:
+    session = MagicMock(spec=Session)
+    session.execute.return_value.scalar.return_value = "listing_wfs_first_stock_la_locked"
+    repository = ListingManagementRepository(session)
+    statement = repository._filtered_listing_statement(
+        account_refs=frozenset({"synthetic-account"}),
+        store_id=None,
+        owner_ref="",
+        product_type="",
+        status="",
+        tag="",
+        summary_filter="total",
+        search_field="sku",
+        keyword="",
+        batch_values="",
+    )
+    sql = str(statement.compile())
+    assert "listing_wfs_first_stock_la_locked.first_wfs_available_date_la" in sql
+    assert (
+        "listing_wfs_first_stock_la_locked.store_id = mart_listing_management_current.store_id"
+    ) in sql
+    assert (
+        "listing_wfs_first_stock_la_locked.item_id = mart_listing_management_current.item_id"
+    ) in sql
+
+
 def test_listing_management_route_fails_closed_for_auth_permission_and_scope() -> None:
     assert TestClient(create_app()).get("/api/listings/walmart").status_code == 401
 

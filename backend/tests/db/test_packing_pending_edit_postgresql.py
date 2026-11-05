@@ -1,11 +1,14 @@
 """0062 and draft decisions on owned, disposable PostgreSQL databases only."""
 
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError
@@ -36,7 +39,9 @@ from tests.db.test_domestic_chain_postgresql import (
     _version,
 )
 
-REVISION = "20261104_0072_finance_cashflow"
+REVISION = ScriptDirectory.from_config(
+    Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+).get_current_head()
 PREVIOUS = "20261027_0061_merge_purchase_main"
 
 

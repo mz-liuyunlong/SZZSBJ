@@ -1,7 +1,8 @@
+// LISTING_LAYOUT_20261104_V2: 35 visible columns; 5 auxiliary fields hidden from front table.
 /** Listing-management page backed by DATA-PAGES MART API. */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Key } from "react";
-import { Button, Card, Form, Input, Modal, message } from "antd";
+import { Button, Card, Form, Input, Modal, Select, message } from "antd";
 
 import PageShell from "@/components/page/PageShell";
 import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
@@ -28,7 +29,6 @@ import ListingManagementSummaryCards, {
 import ListingManagementTable from "@/pages/products/components/ListingManagementTable";
 import ListingRuleConfigDrawer from "@/pages/products/components/ListingRuleConfigDrawer";
 import ListingEvaluationMonitor from "@/pages/products/components/ListingEvaluationMonitor";
-import ListingEvaluationPreviewModal from "@/pages/products/components/ListingEvaluationPreviewModal";
 import ListingManagementToolbar, {
   type ListingManagementFilters,
 } from "@/pages/products/components/ListingManagementToolbar";
@@ -45,17 +45,20 @@ import {
   fetchListingTags,
   restoreListingManagementRow,
   saveListingGptAnalysisLink,
+  setListingLifecycleBatch,
   updateListingTag,
   type ListingManagementFilterOptions,
   type ListingManagementSummary,
 } from "@/pages/products/listingManagementApi";
 import { backendDownloadErrorMessage } from "@/api/backendApi";
 import {
+  listingLifecycleOptions,
   fixedListingColumnKeys,
   listingColumnFields,
   type ListingManagementRow,
 } from "@/pages/products/listingManagementData";
 
+import { clearResourceCache } from "@/shared/preload/resourceCache";
 import "@/pages/products/ListingManagementPage.css";
 
 const TEMPLATE_PENDING = "列模板接口待接入";
@@ -88,6 +91,7 @@ const listingExportColumnGroups: ListExportColumnGroup[] = [
       { key: "developer", label: "开发人" },
       { key: "product_grade", label: "商品等级" },
       { key: "tags", label: "自定义标签" },
+      { key: "product_tags", label: "产品标签" },
     ],
   },
   {
@@ -113,6 +117,19 @@ const listingExportColumnGroups: ListExportColumnGroup[] = [
       { key: "sales_14d", label: "近14天销量" },
       { key: "sales_30d", label: "近30天销量" },
       { key: "ad_spend_30d", label: "近30天广告费" },
+    ],
+  },
+  {
+    title: "监控补充",
+    fields: [
+      { key: "monitor_seller_offer_count", label: "卖家数量" },
+      { key: "monitor_seller_names", label: "卖家列表" },
+      { key: "monitor_has_strikethrough", label: "有无划线价" },
+      { key: "monitor_strikethrough_source", label: "划线价来源" },
+      { key: "monitor_image_count", label: "图片数量" },
+      { key: "monitor_image_urls", label: "图片URL" },
+      { key: "monitor_key_features", label: "五点描述" },
+      { key: "monitor_review_fetch_status", label: "评论获取状态" },
     ],
   },
   {
@@ -165,6 +182,7 @@ const defaultColumnWidths: Record<string, number> = {
   skuMsku: 190,
   msku: 130,
   productId: 150,
+  storeOwner: 172,
   store: 120,
   owner: 110,
   sku: 130,
@@ -192,7 +210,16 @@ const defaultColumnWidths: Record<string, number> = {
   rating: 100,
   reviewCount: 110,
   brand: 130,
+  sellerOfferCount: 120,
+  sellerNames: 170,
+  hasStrikethrough: 130,
+  strikethroughSource: 150,
+  imageCount: 110,
+  imageUrls: 140,
+  keyFeatures: 140,
+  reviewFetchStatus: 130,
   tags: 130,
+  productTags: 180,
   gtin: 160,
   productGrade: 120,
   archiveReason: 180,
@@ -227,11 +254,14 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [gptAnalysisForm] = Form.useForm<ListingGptAnalysisFormValues>();
   const [managedTags, setManagedTags] = useState<CustomProductTag[]>([]);
   const [batchTagOpen, setBatchTagOpen] = useState(false);
+  const [bulkLifecycleOpen, setBulkLifecycleOpen] = useState(false);
+  const [bulkLifecycleStage, setBulkLifecycleStage] = useState<string | null>(null);
+  const [bulkLifecycleReason, setBulkLifecycleReason] = useState("");
+  const [lifecycleSaving, setLifecycleSaving] = useState(false);
   const [listingRefreshToken, setListingRefreshToken] = useState(0);
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [ruleConfigOpen, setRuleConfigOpen] = useState(false);
   const [evaluationMonitorOpen, setEvaluationMonitorOpen] = useState(false);
-  const [evaluationListing, setEvaluationListing] = useState<ListingManagementRow | null>(null);
   const [isTagManagerLoading, setIsTagManagerLoading] = useState(false);
   const pageStateKey = "listing-management";
   const listingManagementPageRootRef = useRef<HTMLDivElement | null>(null);
@@ -243,7 +273,10 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     DEFAULT_LISTING_SUMMARY_FILTER_KEY,
   );
   const [columnConfigOpen, setColumnConfigOpen] = usePageStateCache(`${pageStateKey}:columnConfigOpen`, false);
-  const [appliedColumnKeys, setAppliedColumnKeys] = usePageStateCache<string[]>(`${pageStateKey}:appliedColumnKeys`, defaultColumnKeys);
+  const [appliedColumnKeys, setAppliedColumnKeys] = usePageStateCache<string[]>(`${pageStateKey}:appliedColumnKeys:layout-20261104-v2`, defaultColumnKeys);
+  const [productTagColumnInitialized, setProductTagColumnInitialized] = usePageStateCache(
+    `${pageStateKey}:productTagsColumnInitialized:v1`, false,
+  );
   const [columnWidths, setColumnWidths] = usePageStateCache<Record<string, number>>(`${pageStateKey}:columnWidths`, defaultColumnWidths);
   const [currentPage, setCurrentPage] = usePageStateCache(`${pageStateKey}:currentPage`, 1);
   const [pageSize, setPageSize] = usePageStateCache(`${pageStateKey}:pageSize`, REPORT_TABLE_DEFAULT_PAGE_SIZE);
@@ -327,12 +360,21 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     160,
   );
 
-  useEffect(() => {
-    setAppliedColumnKeys((current) => (
-      current.includes("gptAnalysis") ? current : [...current, "gptAnalysis"]
-    ));
-  }, [setAppliedColumnKeys]);
 
+
+  // Add the new field once for existing saved column layouts, without
+  // forcing it back after the user subsequently hides it.
+  useEffect(() => {
+    if (productTagColumnInitialized) return;
+    setAppliedColumnKeys((current) => {
+      if (current.includes("productTags")) return current;
+      const position = current.indexOf("tags");
+      const next = [...current];
+      next.splice(position >= 0 ? position + 1 : next.length, 0, "productTags");
+      return next;
+    });
+    setProductTagColumnInitialized(true);
+  }, [productTagColumnInitialized, setProductTagColumnInitialized, setAppliedColumnKeys]);
 
   const reloadListingTags = useCallback(async (options: { showError?: boolean } = {}) => {
     setIsTagManagerLoading(true);
@@ -721,10 +763,10 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
       platform: "Walmart US",
       status: row.listingStatus || row.productStatus,
       store: row.store,
-      listPrice: row.listPrice,
-      salePrice: row.salePrice,
-      rating: row.rating,
-      reviewCount: row.reviewCount,
+      listPrice: row.listPrice ?? undefined,
+      salePrice: row.salePrice ?? undefined,
+      rating: row.rating ?? undefined,
+      reviewCount: row.reviewCount ?? undefined,
       wfsAvailableInventory: row.wfsAvailableInventory,
     });
   };
@@ -780,6 +822,58 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     const selectedIds = new Set(selectedRowKeys.map(String));
     return rows.filter((row) => selectedIds.has(row.id));
   }, [rows, selectedRowKeys]);
+
+  // Manual changes are persisted by the server before updating any visible row.
+  // LIFECYCLE_INLINE_CONFIRM_20261105: the row changes only after a successful API response.
+  const handleSetLifecycleSingle = useCallback(async (row: ListingManagementRow, stage: string): Promise<boolean> => {
+    if (lifecycleSaving) return false;
+    if (stage === row.lifecycle) return true;
+    setLifecycleSaving(true);
+    try {
+      await setListingLifecycleBatch([row.id], stage, "单个 Listing 人工调整");
+      clearResourceCache("listing-management:");
+      setRows((current) => current.map((item) => item.id === row.id ? {
+        ...item,
+        lifecycle: stage,
+        lifecyclePreview: false,
+        lifecyclePreviewReason: undefined,
+        lifecycleDiagnostic: undefined,
+      } : item));
+      void messageApi.success("生命周期已保存");
+      return true;
+    } catch {
+      void messageApi.error("生命周期未保存：请检查写入权限、数据库迁移或当前只读环境");
+      return false;
+    } finally {
+      setLifecycleSaving(false);
+    }
+  }, [lifecycleSaving, messageApi]);
+
+  const handleSetLifecycleBulk = useCallback(async () => {
+    if (!bulkLifecycleStage || !selectedListingRows.length || lifecycleSaving) return;
+    if (selectedListingRows.some((row) => row.isArchived || ["清货期", "已归档"].includes(row.lifecycle))) {
+      void messageApi.error("所选 Listing 包含清货或归档状态，请移除后再修改");
+      return;
+    }
+    setLifecycleSaving(true);
+    try {
+      const ids = selectedListingRows.map((row) => row.id);
+      await setListingLifecycleBatch(ids, bulkLifecycleStage, bulkLifecycleReason.trim() || "批量人工调整");
+      const wanted = new Set(ids);
+      const nextStage = bulkLifecycleStage;
+      clearResourceCache("listing-management:");
+      setRows((current) => current.map((row) => wanted.has(row.id) ? { ...row, lifecycle: nextStage, lifecyclePreview: false, lifecyclePreviewReason: undefined } : row));
+      setBulkLifecycleOpen(false);
+      setBulkLifecycleStage(null);
+      setBulkLifecycleReason("");
+      setSelectedRowKeys([]);
+      void messageApi.success(`已保存 ${ids.length} 个 Listing 的生命周期`);
+    } catch {
+      void messageApi.error("批量保存失败：未更新页面状态，请核查权限和数据库");
+    } finally {
+      setLifecycleSaving(false);
+    }
+  }, [bulkLifecycleReason, bulkLifecycleStage, lifecycleSaving, messageApi, selectedListingRows]);
 
   const handleBatchArchiveListings = useCallback(() => {
     if (selectedListingRows.length === 0) {
@@ -860,7 +954,6 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
       {messageContextHolder}
       <ListingRuleConfigDrawer open={ruleConfigOpen} onClose={() => setRuleConfigOpen(false)} />
       <ListingEvaluationMonitor open={evaluationMonitorOpen} onClose={() => setEvaluationMonitorOpen(false)} />
-      <ListingEvaluationPreviewModal listing={evaluationListing} onClose={() => setEvaluationListing(null)} />
       <div ref={listingManagementPageRootRef} className="listing-management">
         <Card size="small" className="listing-management__page-card">
           <RequestLoadingOverlay spinning={isTableRequesting} label="正在加载Listing数据，请稍候" />
@@ -929,9 +1022,17 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
               onSelectionChange={setSelectedRowKeys}
               onOpenDetail={openListingAnalysis}
               onOpenGptAnalysis={openGptAnalysisModal}
-              onOpenEvaluation={setEvaluationListing}
               onArchiveListing={(row) => void handleArchiveListing(row)}
               onRestoreListing={(row) => void handleRestoreListing(row)}
+              onSetLifecycle={handleSetLifecycleSingle}
+              onBatchEditLifecycle={() => {
+                if (!selectedListingRows.length) {
+                  void messageApi.warning("请先勾选 Listing");
+                  return;
+                }
+                setBulkLifecycleOpen(true);
+              }}
+              lifecycleSaving={lifecycleSaving}
               onBatchArchive={handleBatchArchiveListings}
               onBatchRestore={handleBatchRestoreListings}
               onBatchSetTags={() => {
@@ -1009,6 +1110,36 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
           onClose={() => setAnalysisSource(null)}
         />
       </div>
+        <Modal
+          title={`批量修改生命周期（${selectedListingRows.length} 个 Listing）`}
+          open={bulkLifecycleOpen}
+          okText="确认修改"
+          cancelText="取消"
+          okButtonProps={{ disabled: !bulkLifecycleStage || !selectedListingRows.length }}
+          confirmLoading={lifecycleSaving}
+          maskClosable={!lifecycleSaving}
+          destroyOnHidden
+          onOk={() => void handleSetLifecycleBulk()}
+          onCancel={() => { if (!lifecycleSaving) setBulkLifecycleOpen(false); }}
+        >
+          <div style={{ display: "grid", gap: 12 }}>
+            <div>统一设置所选 Listing 的生命周期：</div>
+            <Select
+              style={{ width: "100%" }}
+              placeholder="选择目标阶段"
+              options={[...listingLifecycleOptions]}
+              value={bulkLifecycleStage}
+              onChange={setBulkLifecycleStage}
+            />
+            <Input.TextArea
+              placeholder="修改原因（选填）"
+              autoSize={{ minRows: 2, maxRows: 3 }}
+              maxLength={200}
+              value={bulkLifecycleReason}
+              onChange={(event) => setBulkLifecycleReason(event.target.value)}
+            />
+          </div>
+        </Modal>
         <ProductTagAssignmentModal
           open={batchTagOpen}
           selectedProductCount={selectedRowKeys.length}

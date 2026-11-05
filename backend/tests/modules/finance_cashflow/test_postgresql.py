@@ -4,23 +4,28 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
+import psycopg
 import pytest
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from alembic.script import ScriptDirectory
+from psycopg import sql
 from pydantic import ValidationError
 from sqlalchemy import create_engine, func, inspect, select, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
-from alembic import command
 from app.core.config import Settings, SettingsError, get_settings, get_test_database_url
 from app.modules.finance_cashflow import journal as J
 from app.modules.finance_cashflow.deploy_load import DeployFileError, load_deploy_data
@@ -47,6 +52,9 @@ from tests.modules.finance_cashflow import synth as S
 from tests.modules.finance_cashflow.test_parsing import boc_rows, eleven_account_files
 
 FINANCE_REVISION = "20261104_0072_finance_cashflow"
+CURRENT_HEAD_REVISION = ScriptDirectory.from_config(
+    Config(str(Path(__file__).resolve().parents[3] / "alembic.ini"))
+).get_current_head()
 PREVIOUS_REVISION = "20261102_0071_skill_lib"
 BATCH_1 = UUID("00000000-0000-0000-0000-000000000001")
 BATCH_2 = UUID("00000000-0000-0000-0000-000000000002")
@@ -443,7 +451,7 @@ def test_downgrade_refuses_business_data_without_lines(
         assert set(inspect(connection).get_table_names()) & FINANCE_TABLES == FINANCE_TABLES
         assert len(FINANCE_TABLES) == 11
         version = connection.scalar(text("select version_num from alembic_version"))
-        assert version == FINANCE_REVISION
+        assert version == CURRENT_HEAD_REVISION
     finally:
         # 只清掉本条测试写的合成数据（夹具外层事务最后也会整体回滚）。
         session.rollback()
@@ -823,19 +831,53 @@ def test_script_dry_run_writes_nothing(tmp_path, monkeypatch, capsys, session):
 
 
 def test_empty_database_round_trip_upgrade_downgrade_upgrade():
-    """空库往返：upgrade head → downgrade 0071 → upgrade head；表能删干净再建回来，种子不重复。"""
+    """Finance 0072 round trip on a separate disposable database, not the shared 0076 DB."""
     try:
         url = get_test_database_url(Settings())  # type: ignore[call-arg]
     except (SettingsError, ValidationError):
         pytest.skip("isolated PostgreSQL test database is not configured")
-    config = Config(str(Path(__file__).resolve().parents[3] / "alembic.ini"))
-    engine = create_engine(url, poolclass=NullPool, hide_parameters=True)
+    parsed = make_url(url)
+    assert os.environ.get("APP_ENV") == "test"
+    assert parsed.drivername == "postgresql+psycopg"
+    assert parsed.host in ("127.0.0.1", "localhost")
+    assert parsed.database == "finance_cashflow_ci"
+    assert parsed.username == "finance_cashflow_ci"
+
+    database = "finance_roundtrip_" + uuid4().hex[:18]
+    admin = dict(
+        host=parsed.host,
+        port=parsed.port,
+        user=parsed.username,
+        password=parsed.password,
+        dbname=parsed.database,
+    )
+    with psycopg.connect(**admin, autocommit=True) as cx:
+        cx.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database)))
+
+    target = parsed.set(database=database)
+    env = os.environ.copy()
+    env["APP_ENV"] = "test"
+    env["TEST_DATABASE_URL"] = target.render_as_string(hide_password=False)
+    env.pop("PRODUCTION_MIGRATIONS_AUTHORIZED", None)
+    root = Path(__file__).resolve().parents[3]
+    engine = create_engine(target, poolclass=NullPool, hide_parameters=True)
     finance_tables = {
         "dim_finance_cash_accounts",
         "std_finance_cashflow_lines",
         "manual_finance_cash_line_state",
         "manual_finance_cash_exclusions",
     }
+
+    def migrate(operation: str, revision: str) -> None:
+        result = subprocess.run(
+            [sys.executable, "-m", "alembic", operation, revision],
+            cwd=root,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
 
     def state() -> tuple[str, set[str]]:
         with engine.connect() as connection:
@@ -844,16 +886,17 @@ def test_empty_database_round_trip_upgrade_downgrade_upgrade():
         return revision, tables
 
     try:
-        command.upgrade(config, FINANCE_REVISION)
+        migrate("upgrade", FINANCE_REVISION)
         assert state() == (FINANCE_REVISION, finance_tables)
         with engine.connect() as connection:
             assert connection.scalar(text("select count(*) from std_finance_cashflow_lines")) == 0
-        command.downgrade(config, PREVIOUS_REVISION)
+        migrate("downgrade", PREVIOUS_REVISION)
         assert state() == (PREVIOUS_REVISION, set())
-        command.upgrade(config, FINANCE_REVISION)
+        migrate("upgrade", FINANCE_REVISION)
         assert state() == (FINANCE_REVISION, finance_tables)
         with engine.connect() as connection:
             assert connection.scalar(text("select count(*) from dim_finance_cash_categories")) == 26
     finally:
-        command.upgrade(config, "head")
         engine.dispose()
+        with psycopg.connect(**admin, autocommit=True) as cx:
+            cx.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database)))
