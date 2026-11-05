@@ -206,6 +206,11 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="LINGXING_PRODUCTLIST_RAW_RUN_DIR",
     )
+    finance_cashflow_max_upload_bytes: int = Field(
+        default=20_971_520,
+        ge=1,
+        validation_alias="FINANCE_CASHFLOW_MAX_UPLOAD_BYTES",
+    )
     media_cache_enabled: bool = Field(
         default=False,
         validation_alias="MEDIA_CACHE_ENABLED",

@@ -23,6 +23,7 @@ from app.modules.decodo.router import (
 from app.modules.decodo.router import (
     settings_router as decodo_settings_router,
 )
+from app.modules.finance_cashflow.router import router as finance_cashflow_router
 from app.modules.iam.password_reset_router import router as password_reset_router
 from app.modules.iam.rbac_router import router as rbac_router
 from app.modules.iam.router import router as iam_router
@@ -96,6 +97,7 @@ def create_app() -> FastAPI:
     application.include_router(listing_preview_router)
     application.include_router(operation_logs_rows_router)
     application.include_router(operation_logs_router)
+    application.include_router(finance_cashflow_router)
     application.include_router(operation_plans_router)
     application.include_router(pmc_purchase_router)
     application.include_router(pmc_domestic_router)

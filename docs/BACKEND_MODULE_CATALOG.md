@@ -28,6 +28,22 @@
 
 新增通用后端模块后，AI 必须更新本文件。
 
+## Finance Journal Backend V1
+
+| 项目 | 内容 |
+|---|---|
+| Module name | Finance Journal Backend V1 |
+| Module key | `finance-journal-backend-v1` |
+| Status | `approved_for_implementation`；Rocky 2026-11-04 批准 PRP；未上线 |
+| Purpose | 银行 / 平台流水文件导入、去重，日记账分类、内部转账配对、手填审批单号、剔除、初审终审、异常、折人民币 |
+| Backend files | `backend/app/modules/finance_cashflow/`；`backend/scripts/finance_cash_deploy_load.py`；一个 additive Alembic revision |
+| Permission | 全部接口 `require_super_admin`；不新增权限点、数据范围、字段权限 |
+| Storage | 原件存 `MEDIA_STORAGE_ROOT/finance/cashflow/`；账户和带名字的规则上线时导入，不进仓库 |
+| Documentation | `docs/api/finance-cashflow-import.md` |
+| PRP / Decision | `PRPs/finance-journal-backend-v1.md`；`docs/data-sources/decisions/finance-cashflow-statement-import-decision.md` |
+| PR | TBD |
+| Not in scope | 飞书审批同步、自动挂单、拆分、结账锁月、规则版本化和维护页、导出、账户总览、备货资金、Demo 历史迁移、PDF |
+
 ## WFS Fee Anomaly Auto Detection V1
 
 | 项目 | 内容 |
