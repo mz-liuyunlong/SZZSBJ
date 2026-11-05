@@ -47,9 +47,7 @@ def _all_stores_day_ad_spend_positive(value: Decimal | None) -> bool:
     return value is not None and value > Decimal("0")
 
 
-def _all_stores_day_ad_spend_totals(
-    session: Session, start, cutoff
-) -> dict:
+def _all_stores_day_ad_spend_totals(session: Session, start, cutoff) -> dict:
     """All accounts and stores, same LA day; standard plus SEM spend."""
     return {
         day: spend
