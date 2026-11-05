@@ -158,7 +158,9 @@ class ListingGradePublicationService:
                             DailySalesItemDayMart.store_id == listing.store_id,
                             DailySalesItemDayMart.item_id == listing.item_id,
                             DailySalesItemDayMart.msku.is_not_distinct_from(listing.msku),
-                            DailySalesItemDayMart.business_date_la.between(start, run.cutoff_date_la),
+                            DailySalesItemDayMart.business_date_la.between(
+                                start, run.cutoff_date_la
+                            ),
                         )
                     )
                 )
