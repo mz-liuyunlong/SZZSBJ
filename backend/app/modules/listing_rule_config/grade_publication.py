@@ -8,6 +8,7 @@ This module does not issue attestations, enable schedules or modify lifecycle.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from hashlib import sha256
 from datetime import timedelta
 from decimal import Decimal
 from uuid import UUID
@@ -208,7 +209,18 @@ class ListingGradePublicationService:
                 listing.product_grade = result.grade
                 snap.published = True
                 snap.publication_status = "published"
-                snap.evidence_json = []
+                # Preserve the original diagnostic rejection evidence and
+                # append immutable provenance for the later verified release.
+                proof_tokens = sorted(
+                    str(row.source_lineage_json[PROOF_KEY]["evidence_sha256"])
+                    for row in rows
+                    if _day_is_attested(row)
+                )
+                proof_digest = sha256("|".join(proof_tokens).encode("ascii")).hexdigest()
+                snap.evidence_json = [
+                    *(snap.evidence_json or []),
+                    f"GRADE_PUBLISHED_FINANCE_ADS_SHA256:{proof_digest}",
+                ]
                 published += 1
 
         # The follow-up service is already idempotent and creates C/D actions
