@@ -52,14 +52,20 @@ export function secondaryMenuItems(group: NavigationGroup, pages: NavigationPage
   const visiblePages = pages.filter(
     (page) => !SECONDARY_MENU_HIDDEN_PAGE_KEYS.has(page.key),
   );
-  const root = visiblePages.filter(
-    (p) => !p.sidebarSection,
-  ).map(leaf);
-  const sections = (group.sidebarSections ?? []).flatMap((section) => {
-    const children = visiblePages.filter(
-      (p) => p.sidebarSection === section.key,
-    ).map(leaf);
-    return children.length ? [{ type: "group" as const, key: section.key, className: "main-layout__menu-section", label: section.title, children }] : [];
+  // 分组出现在其第一个页面所在的位置（保持 navigation.ts 的顺序）；没有分组的导航结果与原来一致。
+  const items: NonNullable<MenuProps["items"]> = [];
+  const placed = new Set<string>();
+  visiblePages.forEach((page) => {
+    if (!page.sidebarSection) {
+      items.push(leaf(page));
+      return;
+    }
+    if (placed.has(page.sidebarSection)) return;
+    const section = (group.sidebarSections ?? []).find((s) => s.key === page.sidebarSection);
+    placed.add(page.sidebarSection);
+    if (!section) return;
+    const children = visiblePages.filter((p) => p.sidebarSection === section.key).map(leaf);
+    if (children.length) items.push({ type: "group" as const, key: section.key, className: "main-layout__menu-section", label: section.title, children });
   });
-  return [...root, ...sections];
+  return items;
 }

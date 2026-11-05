@@ -1,0 +1,18 @@
+/* 资金流水（本组样式，类名以 .fin-cash-flow 开头）。颜色 / 字号全部走 antd token 与公共变量。 */
+.fin-cash-flow__drawer .fin-cash-flow__section { margin-top: 16px; }
+.fin-cash-flow__drawer .fin-cash-flow__approval + .fin-cash-flow__approval { margin-top: 12px; }
+.fin-cash-flow__drawer .fin-cash-flow__thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.fin-cash-flow__drawer .fin-cash-flow__thumb { display: inline-flex; flex-direction: column; gap: 4px; width: 104px; }
+.fin-cash-flow__drawer .fin-cash-flow__thumb .ant-image-img { object-fit: cover; }
+.fin-cash-flow__drawer .fin-cash-flow__footer { display: flex; justify-content: flex-end; gap: 8px; }
+/* 日记账搜索：搜索类型下拉加宽，四个字的选项（摘要备注 / 审批单号）能看全 */
+.fin-cash-flow__search.report-table-connected-search { width: 460px; max-width: 460px; flex: 0 0 460px; }
+.fin-cash-flow__search.report-table-connected-search > .ant-select { width: 116px; flex: 0 0 116px; }
+
+/* 日记账：5 张统计卡；异常段落与找不到对应流水的提示条 */
+.fin-cash-flow__alerts { display: flex; flex-direction: column; gap: var(--ant-margin-sm, 12px); }
+.fin-cash-flow__alert .fin-cash-flow__alert-msg { margin: var(--ant-margin-xxs, 4px) 0; }
+.fin-cash-flow__orphans { margin-bottom: var(--ant-margin-sm, 12px); }
+.fin-cash-flow__orphans ul { margin: 0; padding-left: var(--ant-padding-lg, 24px); }
+.fin-cash-flow__import-table { margin-top: var(--ant-margin-xs, 8px); }
+.fin-cash-flow__import-desc .ant-descriptions-item-label { width: 120px; white-space: nowrap; }
