@@ -38,7 +38,7 @@ function ListingFieldGrid({ items }: { items: ListingFieldItem[] }) {
       {items.map((item) => (
         <div key={item.label} className="listing-management__detail-field">
           <div className="listing-management__detail-field-label">{item.label}</div>
-          <div className="listing-management__detail-field-value">{item.value || "-"}</div>
+          <div className="listing-management__detail-field-value">{item.value === "" ? "-" : item.value}</div>
         </div>
       ))}
     </div>
@@ -86,14 +86,14 @@ function ListingDetailModal({ row, onClose }: ListingDetailModalProps) {
           <Typography.Title level={4}>销售库存</Typography.Title>
           <ListingFieldGrid
             items={[
-              { label: "划线价", value: `$${row.listPrice.toFixed(2)}` },
-              { label: "在售价", value: `$${row.salePrice.toFixed(2)}` },
+              { label: "划线价", value: row.listPrice == null ? "-" : `$${row.listPrice.toFixed(2)}` },
+              { label: "在售价", value: row.salePrice == null ? "-" : `$${row.salePrice.toFixed(2)}` },
               { label: "WFS可售库存", value: row.wfsAvailableInventory },
               { label: "在途库存", value: row.inboundInventory },
               { label: "近90天销量", value: row.sales90Days },
               { label: "近30天广告费", value: `$${row.adSpend30Days.toFixed(2)}` },
-              { label: "评分", value: row.rating },
-              { label: "评论数", value: row.reviewCount },
+              { label: "评分", value: row.rating ?? "-" },
+              { label: "评论数", value: row.reviewCount ?? "-" },
             ]}
           />
         </section>

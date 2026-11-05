@@ -52,14 +52,6 @@ describe("approval workbench demo isolation", () => {
     expect(rows[0].can_review).toBe(false);
   });
 
-  it("uses the backend for clearance approval instead of local demo", async () => {
-    vi.mocked(fetchApprovals).mockClear();
-    const request = {...filters, approval_type: "clearance_request"};
-    const result = await fetchWorkbenchList(request);
-    expect(fetchApprovals).toHaveBeenCalledWith(request);
-    expect(result.data.items[0].id).toBe("REAL-WFS-001");
-  });
-
   it("never queries the backend for demo-only business", async () => {
     vi.mocked(fetchApprovals).mockClear();
 
@@ -89,7 +81,7 @@ describe("approval workbench demo isolation", () => {
   it("combines real WFS and demo rows only in All", async () => {
     const result = await fetchWorkbenchList(filters);
 
-    expect(result.meta.total).toBe(4);
+    expect(result.meta.total).toBe(5);
     expect(result.data.items[0].id).toBe("REAL-WFS-001");
     expect(result.data.items.slice(1).every(isDemoApproval)).toBe(true);
   });

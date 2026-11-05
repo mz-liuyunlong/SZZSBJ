@@ -79,7 +79,7 @@ export function demoColumnsForBusiness(
   onDetail: (item: ApprovalItem) => void,
   onAction?: (item: ApprovalItem, action: "approve" | "reject") => void,
 ): ProColumns<ApprovalItem>[] | null {
-  if (!["purchase", "listing", "price"].includes(business)) return null;
+  if (!["purchase", "clearance", "listing", "price"].includes(business)) return null;
   const profile = (row: ApprovalItem) => demoProfiles[row.id];
   const common = {
     title: col("title", business === "purchase" ? "采购事项" : business === "clearance" ? "申请单 / 商品" : business === "listing" ? "归档申请 / 商品" : "调价申请 / 商品", 235, r => <div className="approval-demo__subject"><Button type="link" size="small" onClick={() => onDetail(r)}>{r.title}</Button><small>{r.business_ref} · {r.source_account_ref}</small></div>),

@@ -160,7 +160,7 @@ export const navigation: NavigationGroup[] = [
       page('products', 'product_management', '产品管理', '/products/management'),
       page('products', 'listing_management', 'Listing管理', '/products/listing-management'),
       page('products', 'clearance_center', '清货中心', '/products/clearance-center', {
-        status: 'testing', readOnly: false, migrationMode: 'native',
+        status: 'testing', readOnly: true, migrationMode: 'native',
         viewPermissionKey: 'page:products:product-management:view',
       }),
       page('products', 'claim_center', '认领中心', '/products/claim-center'),
@@ -232,14 +232,31 @@ export const navigation: NavigationGroup[] = [
     key: 'finance',
     title: '财务',
     icon: createElement(DollarOutlined, { 'aria-hidden': true }),
+    sidebarSections: [{ key: 'finance-cash', title: '资金流水' }],
     children: [
-      page('finance', 'profit_center', '利润中心', '/finance/profit-center'),
-      page('finance', 'sku_cash_profit', '单品现金利润', '/finance/sku-cash-profit'),
-      page('finance', 'walmart_settlement', '沃尔玛返还明细', '/finance/walmart-settlement'),
-      page('finance', 'settlement_reconciliation', '结算对账', '/finance/settlement-reconciliation'),
-      page('finance', 'ad_cost', '广告费用', '/finance/ad-cost'),
-      page('finance', 'ad_bill', '广告账单', '/finance/ad-bill'),
-      page('finance', 'performance_report', '业绩报表', '/finance/performance-report'),
+      // 2026-11-02 财务菜单按业务（Rocky）确认的 Demo 10 个标签重排；新增页面的导航与权限点待负责人批准（PR-D），本地预览先行。
+      page('finance', 'profit_center', '经营总览', '/finance/profit-center'),
+      page('finance', 'sku_cash_profit', '现金利润', '/finance/sku-cash-profit'),
+      page('finance', 'settlement_profit', '结算利润', '/finance/settlement-profit'),
+      page('finance', 'settlement_reconciliation', '回款对账', '/finance/settlement-reconciliation'),
+      page('finance', 'performance_report', '财务报表', '/finance/performance-report'),
+      page('finance', 'balance_sheet', '资产负债表', '/finance/balance-sheet'),
+      page('finance', 'cash_accounts', '账户总览（按月）', '/finance/cash/accounts', {
+        sidebarSection: 'finance-cash', status: 'building', readOnly: true, viewPermissionKey: 'page:finance:cash-flow:view',
+      }),
+      // 2026-11-04 Rocky：「日记账（初审·终审）」改名「日记账」；资金异常并入日记账显示，去掉「异常」页。
+      page('finance', 'cash_journal', '日记账', '/finance/cash/journal', {
+        sidebarSection: 'finance-cash', status: 'building', readOnly: false, viewPermissionKey: 'page:finance:cash-flow:view',
+      }),
+      page('finance', 'cash_stock', '备货资金', '/finance/cash/stock', {
+        sidebarSection: 'finance-cash', status: 'building', readOnly: true, viewPermissionKey: 'page:finance:cash-flow:view',
+      }),
+      page('finance', 'cost_exception', '成本异常处理', '/finance/cost-exception'),
+      page('finance', 'settings', '口径与设置', '/finance/settings'),
+      page('finance', 'data_import', '数据导入', '/finance/data-import', {
+        status: 'building', readOnly: true,
+        tabs: [{ key: 'tasks', title: '导入任务' }, { key: 'templates', title: '导入模板' }, { key: 'history', title: '导入历史' }, { key: 'failures', title: '失败记录' }],
+      }),
     ],
   },
   {

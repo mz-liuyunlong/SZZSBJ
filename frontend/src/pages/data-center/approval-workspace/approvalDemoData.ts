@@ -291,7 +291,7 @@ export async function fetchWorkbenchList(
   filters: ApprovalFilters,
 ): Promise<ApprovalResponse> {
   // WFS 查询完全交给原有真实接口处理。
-  if (filters.approval_type === "wfs_case_abandon" || filters.approval_type === "clearance_request") {
+  if (filters.approval_type === "wfs_case_abandon") {
     return fetchApprovals(filters);
   }
 
@@ -301,7 +301,7 @@ export async function fetchWorkbenchList(
     return fetchApprovals(filters);
   }
 
-  const mockItems = getFilteredDemoItems(filters).filter(x => x.approval_type !== "clearance_request");
+  const mockItems = getFilteredDemoItems(filters);
   const offset = (filters.page - 1) * filters.page_size;
 
   // 采购、清货、Listing、价格四类：仅使用本地演示记录。
@@ -325,7 +325,7 @@ export async function fetchWorkbenchList(
   // WFS 先展示，后面接演示记录，保持分页 total 准确。
   const real = await fetchApprovals({
     ...filters,
-    approval_type: undefined,
+    approval_type: "wfs_case_abandon",
   });
 
   const realTotal = real.meta.total;

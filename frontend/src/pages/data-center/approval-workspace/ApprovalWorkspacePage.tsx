@@ -174,48 +174,6 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
    setDemoActionError(false);
   });
   if (demoColumns) return demoColumns;
-  if (business === "clearance") {
-    const canClearanceReview = hasPermission(permissions, "action:products:clearance:review");
-    return [
-      { title:"商品 ID / 品名", key:"clearance-item", width:220, render:(_,r) =>
-        <div className="approval-clearance-cell"><strong>{r.clearance_product_name || r.title}</strong>
-          <small>{r.clearance_item_id || "—"}</small></div> },
-      { title:"SKU / MSKU", key:"clearance-sku", width:160, render:(_,r) =>
-        <div className="approval-clearance-cell"><strong>{r.clearance_sku || "—"}</strong>
-          <small>{r.clearance_msku || "—"}</small></div> },
-      { title:"店铺 / 负责人", key:"clearance-store", width:150, render:(_,r) =>
-        <div className="approval-clearance-cell"><strong>{r.clearance_store || r.source_account_ref}</strong>
-          <small>{r.clearance_owner || "—"}</small></div> },
-      { title:"风险等级", key:"clearance-risk", width:100, render:(_,r) =>
-        <span className={`approval-list__risk approval-list__risk--${r.risk_level}`}>{riskNames[r.risk_level]}</span> },
-      { title:"申请时间", key:"clearance-date", width:150, render:(_,r) =>
-        r.submitted_at ? new Date(r.submitted_at).toLocaleString("zh-CN") : "—" },
-      { title:"清货原因", key:"clearance-reason", width:150, render:(_,r) => r.reason || "—" },
-      { title:"清货方式", key:"clearance-methods", width:160, render:(_,r) =>
-        r.clearance_methods?.join("、") || "—" },
-      { title:"目标清货量", key:"clearance-qty", width:110, render:(_,r) =>
-        r.clearance_target_qty == null ? "—" : `${r.clearance_target_qty} 件` },
-      { title:"WFS可售 / 上架天数", key:"clearance-stock", width:150, render:(_,r) =>
-        <div className="approval-clearance-cell"><strong>{r.clearance_wfs_available ?? "—"}</strong>
-        <small>上架：{r.clearance_listing_days == null ? "—" : `${r.clearance_listing_days} 天`}</small></div> },
-      { title:"库存成本", key:"clearance-capital", width:110, render:(_,r) =>
-        r.clearance_stock_capital == null ? "—" : formatMoney(r.clearance_stock_capital, {currency:"USD"}) },
-      { title:"审批状态", key:"clearance-status", width:110, render:(_,r) =>
-        <StatusTag label={statusNames[r.status]} semantic={statusTone[r.status]}/> },
-      { title:"操作", key:"clearance-actions", width:190, render:(_,r) =>
-        <Space size={4}>
-          <Button type="link" size="small" onClick={()=>setSelected(r)}>详情</Button>
-          {filters.tab==="pending" && r.can_review && canClearanceReview ? <>
-            <Button type="link" size="small" onClick={()=>{
-              setSelected(r);setDirectReviewAction("approved");setReviewOnly(true);
-            }}>通过</Button>
-            <Button type="link" size="small" danger onClick={()=>{
-              setSelected(r);setDirectReviewAction("rejected");setReviewOnly(true);
-            }}>驳回</Button>
-          </> : null}
-        </Space> },
-    ] as ProColumns<ApprovalItem>[];
-  }
   const map: Record<string, ProColumns<ApprovalItem>> = {
    approval_type: { key:"approval_type", render:(_,r) => <div className="approval-list__type"><span className={`approval-list__category approval-list__category--${r.approval_type === "wfs_case_abandon" ? "wfs" : "other"}`}>{approvalBusinessLabel(r.approval_type)}</span><span className="approval-list__reference" title={r.id}>{r.id.slice(0,8)}</span></div> },
    business_ref: { key:"business_ref", render:(_,r) => <span title={r.business_ref}>{r.business_ref || "—"}</span> },
@@ -477,7 +435,6 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   <ApprovalDetailDrawer reviewOnly={reviewOnly} directReviewAction={directReviewAction}
    selected={selected && !isDemoApproval(selected) ? selected : undefined}
    canReview={hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-review")}
-   canClearanceReview={hasPermission(permissions, "action:products:clearance:review")}
    canAdmin={hasPermission(permissions, "*")}
    canSupplement={hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-request")}
    canPurchaseSupplement={hasPermission(permissions, "action:pmc:purchase-board:override")}

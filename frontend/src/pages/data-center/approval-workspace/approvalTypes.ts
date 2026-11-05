@@ -9,17 +9,6 @@ export type ApprovalRisk = "low" | "medium" | "high";
 export type ApprovalStatus = "submitted" | "info_required" | "approved" | "rejected" | "withdrawn" | "legacy_unverified";
 export type Decision = "approved" | "rejected" | "info_required";
 export interface ApprovalItem {
-  clearance_item_id?: string | null;
-  clearance_product_name?: string | null;
-  clearance_sku?: string | null;
-  clearance_msku?: string | null;
-  clearance_store?: string | null;
-  clearance_owner?: string | null;
-  clearance_methods?: string[] | null;
-  clearance_target_qty?: number | null;
-  clearance_wfs_available?: string | null;
-  clearance_listing_days?: number | null;
-  clearance_stock_capital?: string | null;
   case_opened_at?: string | null;
   follow_count?: number | null;
  id: string; version: number; approval_type: string; business_ref: string;

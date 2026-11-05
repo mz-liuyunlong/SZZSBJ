@@ -6,7 +6,7 @@ describe("V3 approval business registry",()=>{
  });
  it("preserves WFS-only columns and does not pretend unsupported types are live",()=>{
   expect(approvalBusinessByKey.wfs.columns).toContain("follow_log");
-  expect(approvalBusinessByKey.clearance.live).toBe(true);
+  expect(approvalBusinessByKey.clearance.live).toBe(false);
   expect(approvalBusinessByKey.listing.live).toBe(false);
   expect(approvalBusinessByKey.disposal.live).toBe(false);
   expect(approvalBusinessByKey.price.live).toBe(false);

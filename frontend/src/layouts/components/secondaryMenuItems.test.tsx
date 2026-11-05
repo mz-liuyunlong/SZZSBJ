@@ -29,6 +29,18 @@ const expected = {
     "operations_log",
     "operations_plan",
   ],
+  finance: [
+    "finance_profit_center",
+    "finance_sku_cash_profit",
+    "finance_settlement_profit",
+    "finance_settlement_reconciliation",
+    "finance_performance_report",
+    "finance_balance_sheet",
+    "finance-cash",
+    "finance_cost_exception",
+    "finance_settings",
+    "finance_data_import",
+  ],
 };
 
 describe("secondary menu cleanup", () => {
@@ -57,6 +69,21 @@ describe("secondary menu cleanup", () => {
       expect(keys).toEqual(expectedKeys);
     },
   );
+
+  it("places the finance cash-flow section after the balance sheet with its 3 pages in order (异常 removed)", () => {
+    const group = navigation.find((item) => item.key === "finance");
+    expect(group).toBeDefined();
+    if (!group) return;
+    const section = (secondaryMenuItems(group, group.children) ?? []).find(
+      (item) => item && "key" in item && item.key === "finance-cash",
+    );
+    const children = section && "children" in section ? section.children ?? [] : [];
+    expect(children.flatMap((item) => (item && "key" in item ? [String(item.key)] : []))).toEqual([
+      "finance_cash_accounts",
+      "finance_cash_journal",
+      "finance_cash_stock",
+    ]);
+  });
 
   it("restores operation logs and hides calendar only in the secondary menu", () => {
     expect(SECONDARY_MENU_HIDDEN_PAGE_KEYS.has("operations_log")).toBe(false);
