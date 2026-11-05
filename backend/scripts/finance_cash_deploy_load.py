@@ -46,7 +46,10 @@ def main() -> int:
     finally:
         session.close()
     mode = "APPLIED" if args.apply else "DRY_RUN"
-    print(f"{mode} accounts={counts.accounts} rules={counts.rules} exclusions={counts.exclusions}")
+    print(
+        f"{mode} accounts={counts.accounts} rules={counts.rules} "
+        f"exclusions={counts.exclusions} fx_rates={counts.fx_rates}"
+    )
     return 0
 
 

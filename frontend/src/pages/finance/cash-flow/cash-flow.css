@@ -16,3 +16,7 @@
 .fin-cash-flow__orphans ul { margin: 0; padding-left: var(--ant-padding-lg, 24px); }
 .fin-cash-flow__import-table { margin-top: var(--ant-margin-xs, 8px); }
 .fin-cash-flow__import-desc .ant-descriptions-item-label { width: 120px; white-space: nowrap; }
+/* 日记账表格里可直接改的摘要 / 备注：内容占满，后面跟「已改」和铅笔 */
+.fin-cash-flow__cell-text { display: flex; align-items: flex-start; gap: var(--ant-margin-xxs, 4px); min-width: 0; }
+.fin-cash-flow__cell-text .fin-cash-flow__cell-body { flex: 1 1 auto; min-width: 0; }
+.fin-cash-flow__cell-text .fin-cash-flow__cell-edit { flex: none; }

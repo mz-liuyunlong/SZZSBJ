@@ -17,6 +17,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -168,6 +169,41 @@ class FinanceCashLineOccurrence(Base):
     seen_seq: Mapped[int] = mapped_column(BigInteger, Identity(), nullable=False)
 
 
+class FinancePayoneerStatementRow(Base):
+    """派安盈月结明细的每一行（月底补充导入）：只用来给已有提现补实际到账金额，不是流水。
+
+    和流水的对应在读取时按「账户 + 金额 + 交易时间」算，不落表；作废批次的行读取时跳过。
+    """
+
+    __tablename__ = "std_finance_payoneer_statement_rows"
+    __table_args__ = (
+        UniqueConstraint("raw_file_id", "row_no"),
+        Index("ix_std_finance_payoneer_statement_rows_account_txn", "account_key", "txn_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    raw_file_id: Mapped[UUID] = mapped_column(
+        ForeignKey("raw_finance_cashflow_files.file_id"), nullable=False
+    )
+    import_id: Mapped[UUID] = mapped_column(
+        ForeignKey("landing_finance_cashflow_imports.import_id"), nullable=False
+    )
+    account_key: Mapped[str] = mapped_column(
+        ForeignKey("dim_finance_cash_accounts.account_key"), nullable=False
+    )
+    row_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    txn_id: Mapped[str] = mapped_column(String(32), nullable=False, default="", server_default="")
+    txn_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    business_date: Mapped[date] = mapped_column(Date, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    currency_code: Mapped[str] = mapped_column(String(8), nullable=False)
+    transfer_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    transfer_currency: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="", server_default=""
+    )
+
+
 class FinanceCashImportQuality(Base):
     __tablename__ = "dq_run_finance_cashflow_import"
 
@@ -265,6 +301,13 @@ class FinanceCashLineState(Base):
     )
     stage_reason: Mapped[str | None] = mapped_column(Text)
     review_note: Mapped[str | None] = mapped_column(Text)
+    # 人工改过的摘要 / 备注（只用于显示；银行原文在 std 表里不动，分类规则照原文算）。
+    manual_description: Mapped[str | None] = mapped_column(Text)
+    manual_memo: Mapped[str | None] = mapped_column(Text)
+    # 拆分：[{"amount": "100.0000", "category_code": "G02" | null}]；null = 没拆分。
+    parts: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    # 人工配对号：同号的几笔算同一笔内部转账（rocky 11-05）。
+    manual_pair: Mapped[str | None] = mapped_column(String(40))
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
@@ -286,3 +329,61 @@ class FinanceCashExclusion(Base):
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     registered_by: Mapped[str] = mapped_column(String(255), nullable=False)
     registered_on: Mapped[date | None] = mapped_column(Date)
+
+
+class FinanceCashApproval(Base):
+    """飞书审批单（费用报销、付款申请、备用金申请、备用金核销）。
+
+    只留账号尾号，不存完整银行账号；附件只留元数据，不存下载链接。
+    """
+
+    __tablename__ = "std_finance_feishu_approvals"
+    __table_args__ = (
+        Index("uq_std_finance_feishu_approvals_serial", "serial_number", unique=True),
+        Index("ix_std_finance_feishu_approvals_started", "started_at"),
+    )
+
+    instance_code: Mapped[str] = mapped_column(String(64), primary_key=True)
+    serial_number: Mapped[str] = mapped_column(String(32), nullable=False)
+    approval_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    handled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    applicant_user_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="", server_default=""
+    )
+    department_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="", server_default=""
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    currency_code: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="CNY", server_default="CNY"
+    )
+    pay_method: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    invoice: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    payee: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    payee_bank: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    payee_account_last4: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="", server_default=""
+    )
+    fee_category: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    related_serial: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    items: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    attachments: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    records: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    comments: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    last_run_id: Mapped[UUID | None] = mapped_column()
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )

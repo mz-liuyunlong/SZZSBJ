@@ -51,10 +51,10 @@ Risk is a single primary code chosen by precedence: source conflict, exclusion s
 | Retained normalized interfaces | 329 | Present in `interfaces.csv`; not equivalent to approved |
 | Explicit Walmart retained interfaces | 32 | Platform text explicitly names Walmart/WFS |
 | Deleted interfaces | 335 | Must not enter implementation without re-evaluation |
-| Deleted / do-not-use / non-Walmart | 471 | Excluded by current classification |
+| Deleted / do-not-use / non-Walmart | 470 | Excluded by current classification |
 | Matching legacy Markdown evidence | 17 | Interface-level repository snapshot found by document basename |
 | Normalized-CSV-only evidence | 647 | No matching interface-level legacy Markdown in this checkout |
-| Structurally complete (`READY_FOR_PRP`) | 186 | PRP planning only; no real-call authorization |
+| Structurally complete (`READY_FOR_PRP`) | 187 | PRP planning only; no real-call authorization |
 | Structurally incomplete/conflicting | 7 | Partial, missing, conflicting, or owner-decision status |
 | High priority (`P0` + `P1`) | 426 | Priority copied from normalized indexes |
 | Risk-coded interfaces | 664 | Primary risk is not `NONE` |
@@ -63,12 +63,12 @@ Risk is a single primary code chosen by precedence: source conflict, exclusion s
 
 | Contract status | Count |
 |---|---:|
-| `READY_FOR_PRP` | 186 |
+| `READY_FOR_PRP` | 187 |
 | `PARTIAL_CONTRACT` | 7 |
 | `PROVIDER_CONTRACT_MISSING` | 0 |
 | `CONTRACT_SOURCE_CONFLICT` | 0 |
 | `DO_NOT_USE` | 136 |
-| `DELETED` | 335 |
+| `DELETED` | 334 |
 | `NOT_WALMART` | 0 |
 | `NEED_OWNER_DECISION` | 0 |
 
@@ -79,14 +79,14 @@ Risk is a single primary code chosen by precedence: source conflict, exclusion s
 | `NONE` | 0 |
 | `MISSING_REQUEST_PARAMS` | 7 |
 | `MISSING_RESPONSE_FIELDS` | 0 |
-| `AUTH_UNKNOWN` | 186 |
+| `AUTH_UNKNOWN` | 187 |
 | `RATE_LIMIT_UNKNOWN` | 0 |
 | `PAGINATION_UNKNOWN` | 0 |
 | `FIELD_CONFLICT` | 0 |
 | `SOURCE_CONFLICT` | 0 |
 | `RAW_ONLY` | 0 |
 | `DO_NOT_USE` | 136 |
-| `DELETED` | 335 |
+| `DELETED` | 334 |
 | `NOT_WALMART` | 0 |
 
 
@@ -106,6 +106,7 @@ The initial redacted snapshots are under `docs/integrations/lingxing/contracts/`
 | Key | Interface | Before | After | Owner decision | Boundary |
 |---|---|---|---|---|---|
 | `LX-4B9473A2D2E1` | 查询收货单列表 `/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/getOrderList` | `DO_NOT_USE` | `READY_FOR_PRP` (risk `AUTH_UNKNOWN`) | mz-liuyunlong, 2026-09-18, 方案 A, `docs/data-sources/decisions/pmc-purchase-board-decision.md` | Read-only per `official_verified_interfaces.csv`; PRP planning only; not provider verification; not real-call authorization; production use requires separate authorization |
+| `LX-C6759B059E67` | 查询汇率 `/erp/sc/routing/finance/currency/currencyMonth` | `DELETED` | `READY_FOR_PRP` (risk `AUTH_UNKNOWN`) | rocky, 2026-11-05, `docs/data-sources/decisions/lingxing-fx-rate-source-decision.md` | Read-only; request body only `date`; verified by read-only probes on 2026-11-02 and 2026-11-05; PRP planning only; the first production run requires separate authorization |
 - Never infer authentication, account scope, rate limits, pagination, side effects, or field meaning from a similar endpoint.
 
 ## Source set

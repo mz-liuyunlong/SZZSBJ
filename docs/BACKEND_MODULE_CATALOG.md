@@ -28,6 +28,22 @@
 
 新增通用后端模块后，AI 必须更新本文件。
 
+## Lingxing FX Rate V1
+
+| 项目 | 内容 |
+|---|---|
+| Module name | Lingxing FX Rate V1 |
+| Module key | `lingxing-fx-rate-v1` |
+| Status | `approved_for_implementation`；Rocky 2026-11-05 批准；未上线 |
+| Purpose | 全系统统一汇率来源：领星月汇率表、任务中心同步、公共读取函数 |
+| Backend files | `backend/app/modules/fx_rates/`；`backend/app/modules/integration_sync/fx_catalog.py`、`handlers/lingxing_fx_rate_sync.py`；`backend/scripts/bootstrap_fx_governance.py`、`enable_fx_sync.py`；一个 additive Alembic revision |
+| Permission | 沿用任务中心权限；不新增权限点 |
+| Documentation | `docs/integrations/lingxing/contracts/finance-lx-c6759b059e67.md` |
+| PRP / Decision | `PRPs/lingxing-fx-rate-v1.md`；`docs/data-sources/decisions/lingxing-fx-rate-source-decision.md` |
+| PR | TBD |
+| Frontend | 另提前端 PR：财务 → 财务设置 → 资金 汇率（只读）；任务中心归到财务分组 |
+| Not in scope | 产品定价、日销利润、WFS、结算利润改读（PR-2）；页面改汇率 |
+
 ## Finance Journal Backend V1
 
 | 项目 | 内容 |

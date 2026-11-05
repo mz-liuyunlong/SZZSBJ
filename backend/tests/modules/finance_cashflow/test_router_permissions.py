@@ -30,8 +30,14 @@ ENDPOINTS = [
     ("POST", f"/api/finance/cashflow/imports/{IMPORT_ID}/void"),
     ("GET", "/api/finance/cashflow/accounts"),
     ("GET", "/api/finance/cashflow/categories"),
+    ("GET", "/api/finance/cashflow/fx-rates"),
+    ("GET", "/api/finance/cashflow/fx-rates/sync"),
+    ("POST", "/api/finance/cashflow/fx-rates/sync"),
     ("GET", "/api/finance/cashflow/lines"),
     ("GET", "/api/finance/cashflow/anomalies"),
+    ("GET", "/api/finance/cashflow/approvals"),
+    ("GET", "/api/finance/cashflow/approvals/sync"),
+    ("POST", "/api/finance/cashflow/approvals/sync"),
     ("POST", f"/api/finance/cashflow/lines/{UID}/events"),
 ]
 

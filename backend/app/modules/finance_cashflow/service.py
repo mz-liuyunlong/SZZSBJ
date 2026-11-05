@@ -4,7 +4,6 @@ import hashlib
 import os
 import tempfile
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -17,9 +16,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.modules.finance_cashflow import approvals as approval_rules
 from app.modules.finance_cashflow import journal
 from app.modules.finance_cashflow.models import (
     FinanceCashAccount,
+    FinanceCashApproval,
     FinanceCashCategory,
     FinanceCashClassifyRule,
     FinanceCashExclusion,
@@ -30,8 +31,9 @@ from app.modules.finance_cashflow.models import (
     FinanceCashLineOccurrence,
     FinanceCashLineState,
     FinanceCashRawFile,
+    FinancePayoneerStatementRow,
 )
-from app.modules.finance_cashflow.parsing import PARSER_VERSION, readers
+from app.modules.finance_cashflow.parsing import PARSER_VERSION, payoneer_statement, readers
 from app.modules.finance_cashflow.parsing.model import Line, RejectFile
 from app.modules.finance_cashflow.parsing.pipeline import ParsedFile, parse_file
 from app.modules.finance_cashflow.parsing.seed import Seed, SeedAccount
@@ -45,11 +47,12 @@ from app.modules.finance_cashflow.schemas import (
     CashflowLineEventData,
     CashflowLineEventRequest,
     CashflowLineListData,
+    CashflowLinePartRead,
     CashflowLineRead,
     CashflowUploadData,
     CashflowVoidData,
 )
-from app.modules.product_management.models import ProductPricingRuleVersion
+from app.modules.fx_rates.reader import load_usd_cny_rates, usd_cny_rate_for
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 STORAGE_SUBDIR = Path("finance") / "cashflow"
@@ -102,42 +105,6 @@ def store_original(root: Path, sha256: str, kind: str, content: bytes) -> str:
         Path(temp_name).unlink(missing_ok=True)
         raise
     return relative.as_posix()
-
-
-@dataclass(frozen=True)
-class FxVersion:
-    source_account_ref: str
-    effective_from: datetime
-    effective_to: datetime | None
-    usd_cny_rate: Decimal
-
-
-def _month_start(day: date) -> date:
-    return day.replace(day=1)
-
-
-def _next_month(first_of_month: date) -> date:
-    return (first_of_month + timedelta(days=32)).replace(day=1)
-
-
-def month_usd_rate(versions: Iterable[FxVersion], day: date) -> Decimal | None:
-    """当月生效的统一美元汇率；当月没有就是空，不兜底。
-
-    表按店存多行，但汇率全公司统一（Rocky 2026-11-04），所以取当月内最新生效的那一行，不按店比对。
-    """
-    start = _month_start(day)
-    begin = datetime(start.year, start.month, 1, tzinfo=SHANGHAI)
-    following = _next_month(start)
-    end = datetime(following.year, following.month, 1, tzinfo=SHANGHAI)
-    in_month = [
-        version
-        for version in versions
-        if version.effective_from < end
-        and (version.effective_to is None or version.effective_to > begin)
-    ]
-    if not in_month:
-        return None
-    return max(in_month, key=lambda version: version.effective_from).usd_cny_rate
 
 
 class CashflowService:
@@ -215,6 +182,14 @@ class CashflowService:
         batch = self._import_for_upload(import_id, actor, request_id)
         duplicate = self._active_duplicate(sha256)
         if duplicate is not None:
+            if duplicate.parser_version != PARSER_VERSION:
+                # 同一个文件用新版解析再导一次：已有流水只刷新显示文字（如邮箱不再打码），不新增。
+                try:
+                    self._refresh_texts(parse_file(content, self._seed()).lines)
+                except RejectFile:
+                    pass
+                else:
+                    duplicate.parser_version = PARSER_VERSION
             result = self._file_result(duplicate)
             result.duplicate_of_file = True
             result.file_name = file_name
@@ -224,6 +199,8 @@ class CashflowService:
             self.session.commit()
             return CashflowUploadData(import_id=batch.import_id, file=result)
         storage_path = store_original(Path(root), sha256, readers.kind_of(content), content)
+        if payoneer_statement.is_statement(content):
+            return self._upload_statement(batch, file_name, sha256, content, storage_path)
         try:
             parsed = parse_file(content, self._seed())
         except RejectFile as exc:
@@ -241,6 +218,117 @@ class CashflowService:
         self._refresh_batch_status(batch, result.status == STATUS_PARSED)
         self.session.commit()
         return CashflowUploadData(import_id=batch.import_id, file=result)
+
+    def _upload_statement(
+        self,
+        batch: FinanceCashImport,
+        file_name: str,
+        sha256: str,
+        content: bytes,
+        storage_path: str,
+    ) -> CashflowUploadData:
+        """派安盈月结明细：只存明细行，读取时补到已有提现上，不新增流水。"""
+        try:
+            parsed = payoneer_statement.parse_statement(content, self._seed())
+        except RejectFile as exc:
+            result = self._save_rejected(batch, file_name, sha256, content, storage_path, str(exc))
+            self._refresh_batch_status(batch, False)
+            self.session.commit()
+            return CashflowUploadData(import_id=batch.import_id, file=result)
+        except payoneer_statement.UNEXPECTED_ERRORS:
+            result = self._save_rejected(
+                batch,
+                file_name,
+                sha256,
+                content,
+                storage_path,
+                "文件内容解析失败，请确认是派安盈的原始导出",
+            )
+            self._refresh_batch_status(batch, False)
+            self.session.commit()
+            return CashflowUploadData(import_id=batch.import_id, file=result)
+        seen = set(
+            self.session.scalars(
+                select(FinancePayoneerStatementRow.txn_id)
+                .join(
+                    FinanceCashImport,
+                    FinanceCashImport.import_id == FinancePayoneerStatementRow.import_id,
+                )
+                .where(
+                    FinancePayoneerStatementRow.account_key == parsed.account_key,
+                    FinanceCashImport.status != STATUS_VOIDED,
+                )
+            )
+        )
+        raw = FinanceCashRawFile(
+            import_id=batch.import_id,
+            file_name=file_name,
+            sha256=sha256,
+            size_bytes=len(content),
+            storage_path=storage_path,
+            provider=payoneer_statement.PROVIDER,
+            account_keys=[parsed.account_key],
+            parser_version=PARSER_VERSION,
+            status=STATUS_PARSED,
+        )
+        self.session.add(raw)
+        self.session.flush()
+        self.session.add_all(
+            FinancePayoneerStatementRow(
+                raw_file_id=raw.file_id,
+                import_id=batch.import_id,
+                account_key=parsed.account_key,
+                row_no=row.row_no,
+                txn_id=row.txn_id,
+                txn_time=row.txn_time_utc,
+                business_date=row.business_date,
+                description=row.description,
+                amount=row.amount,
+                currency_code=row.currency_code,
+                transfer_amount=row.transfer_amount,
+                transfer_currency=row.transfer_currency,
+            )
+            for row in parsed.rows
+        )
+        rows_new = sum(1 for row in parsed.rows if not row.txn_id or row.txn_id not in seen)
+        withdrawals = [
+            row
+            for row in parsed.rows
+            if row.amount < 0 and journal.PAYONEER_WITHDRAWAL.match(row.description)
+        ]
+        in_cny = sum(1 for row in withdrawals if row.transfer_currency == "CNY")
+        # 页面把 rows_new 显示成「新增 N 行」：月结补充不新增流水，所以填 0，读到多少写在说明里。
+        warnings = [
+            f"派安盈月结补充，不新增流水：读到 {len(parsed.rows)} 行"
+            f"（其中 {rows_new} 行以前没导过），"
+            f"提现 {len(withdrawals)} 笔，到账人民币 {in_cny} 笔"
+        ]
+        self.session.add(
+            FinanceCashImportQuality(
+                file_id=raw.file_id,
+                rows_parsed=len(parsed.rows),
+                rows_new=0,
+                rows_duplicate=0,
+                balance_chain_ok=None,
+                warnings=warnings,
+            )
+        )
+        self._refresh_batch_status(batch, True)
+        self.session.commit()
+        return CashflowUploadData(
+            import_id=batch.import_id,
+            file=CashflowFileResult(
+                file_id=raw.file_id,
+                file_name=file_name,
+                sha256=sha256,
+                size=len(content),
+                status=STATUS_PARSED,
+                account_keys=[parsed.account_key],
+                detected_note=parsed.note,
+                rows_parsed=len(parsed.rows),
+                warnings=warnings,
+            ),
+        )
 
     def _refresh_batch_status(self, batch: FinanceCashImport, parsed: bool) -> None:
         if parsed:
@@ -311,6 +399,7 @@ class CashflowService:
             )
         )
         new_rows = [line for line in parsed.lines if line.line_uid not in existing]
+        self._refresh_texts([line for line in parsed.lines if line.line_uid in existing])
         self.session.add_all(
             self._line_row(line, batch.import_id, raw.file_id) for line in new_rows
         )
@@ -356,6 +445,20 @@ class CashflowService:
             balance_chain_ok=parsed.balance_chain_ok,
             warnings=parsed.warnings,
         )
+
+    def _refresh_texts(self, lines: Iterable[Line]) -> None:
+        """已有流水按这次解析刷新对方 / 摘要 / 备注。
+        line_uid 按原文算，不受影响；人工改的摘要 / 备注另存，不覆盖。"""
+        by_uid = {line.line_uid: line for line in lines}
+        if not by_uid:
+            return
+        for row in self.session.scalars(
+            select(FinanceCashLine).where(FinanceCashLine.line_uid.in_(list(by_uid)))
+        ):
+            fresh = by_uid[row.line_uid]
+            row.counterparty_name = fresh.counterparty_name
+            row.description = fresh.description
+            row.memo = fresh.memo
 
     @staticmethod
     def _line_row(line: Line, import_id: UUID, file_id: UUID) -> FinanceCashLine:
@@ -561,38 +664,16 @@ class CashflowService:
     # ------------------------------------------------------------ 日记账读取
 
     def _usd_rate_lookup(self) -> Callable[[date], Decimal | None]:
-        rows = self.session.scalars(
-            select(ProductPricingRuleVersion).where(
-                ProductPricingRuleVersion.rule_key == "product_management",
-                ProductPricingRuleVersion.is_active.is_(True),
-                ProductPricingRuleVersion.usd_cny_rate.is_not(None),
-            )
-        ).all()
-        versions = [
-            FxVersion(
-                source_account_ref=row.source_account_ref,
-                effective_from=row.effective_from,
-                effective_to=row.effective_to,
-                usd_cny_rate=row.usd_cny_rate,
-            )
-            for row in rows
-            if row.usd_cny_rate is not None
-        ]
-        cache: dict[date, Decimal | None] = {}
-
-        def lookup(day: date) -> Decimal | None:
-            key = _month_start(day)
-            if key not in cache:
-                cache[key] = month_usd_rate(versions, key)
-            return cache[key]
-
-        return lookup
+        rates = load_usd_cny_rates(self.session)
+        return lambda day: usd_cny_rate_for(rates, day)
 
     def _compute(
         self,
     ) -> tuple[journal.JournalResult, dict[str, FinanceCashLine], dict[str, FinanceCashLineState]]:
         rows = self.session.execute(
-            select(FinanceCashLine, FinanceCashAccount.provider)
+            select(
+                FinanceCashLine, FinanceCashAccount.provider, FinanceCashAccount.account_no_last4
+            )
             .join(
                 FinanceCashAccount,
                 FinanceCashAccount.account_key == FinanceCashLine.account_key,
@@ -602,11 +683,19 @@ class CashflowService:
         states = {
             state.line_uid: state for state in self.session.scalars(select(FinanceCashLineState))
         }
+        rules = [
+            journal.Rule(rule.rule_type, rule.pattern, rule.category_code, rule.sort_order)
+            for rule in self.session.scalars(select(FinanceCashClassifyRule))
+        ]
+        classifier = journal.Classifier(rules)
+        approval_cats = self._approval_categories(classifier)
         inputs: list[journal.LineInput] = []
         by_uid: dict[str, FinanceCashLine] = {}
-        for line, provider in rows:
+        for line, provider, account_last4 in rows:
             state = states.get(line.line_uid)
             by_uid[line.line_uid] = line
+            refs = list(state.refs or []) if state else []
+            from_refs = [approval_cats[ref] for ref in refs if ref in approval_cats]
             inputs.append(
                 journal.LineInput(
                     line_uid=line.line_uid,
@@ -621,14 +710,17 @@ class CashflowService:
                     counterparty_name=line.counterparty_name,
                     file_row_order=line.file_row_order,
                     manual_category=state.manual_category if state else None,
-                    refs=list(state.refs or []) if state else [],
+                    refs=refs,
                     exclude_amount=state.exclude_amount if state else None,
+                    approval_category=approval_rules.single_value(c[0] for c in from_refs),
+                    approval_rule_category=approval_rules.single_value(c[1] for c in from_refs),
+                    parts=list(state.parts) if state and state.parts else None,
+                    manual_pair=state.manual_pair if state else None,
+                    counterparty_last4=line.counterparty_account_last4 or "",
+                    account_last4=account_last4 or "",
+                    source_time=line.source_time,
                 )
             )
-        rules = [
-            journal.Rule(rule.rule_type, rule.pattern, rule.category_code, rule.sort_order)
-            for rule in self.session.scalars(select(FinanceCashClassifyRule))
-        ]
         internal = frozenset(
             self.session.scalars(
                 select(FinanceCashCategory.code).where(FinanceCashCategory.is_internal.is_(True))
@@ -654,12 +746,117 @@ class CashflowService:
         ]
         result = journal.compute_journal(
             inputs,
-            journal.Classifier(rules),
+            classifier,
             internal,
             self._usd_rate_lookup(),
             exclusions,
+            self._statement_rows(),
+            datetime.now(SHANGHAI).date(),
         )
+        self._flag_auto_attached(result)
         return result, by_uid, states
+
+    def _statement_rows(self) -> list[journal.StatementRow]:
+        """未作废批次里的派安盈月结明细行。"""
+        rows = self.session.scalars(
+            select(FinancePayoneerStatementRow)
+            .join(
+                FinanceCashImport,
+                FinanceCashImport.import_id == FinancePayoneerStatementRow.import_id,
+            )
+            .where(FinanceCashImport.status != STATUS_VOIDED)
+            .order_by(FinancePayoneerStatementRow.id)
+        ).all()
+        return [
+            journal.StatementRow(
+                row_key=f"{row.raw_file_id}:{row.row_no}",
+                account_key=row.account_key,
+                txn_id=row.txn_id,
+                txn_time=row.txn_time,
+                business_date=row.business_date,
+                description=row.description,
+                amount=row.amount,
+                currency_code=row.currency_code,
+                transfer_amount=row.transfer_amount,
+                transfer_currency=row.transfer_currency,
+            )
+            for row in rows
+        ]
+
+    def approval_rows(self) -> list[FinanceCashApproval]:
+        """进日记账报销闭环的审批单：排除配置里不走这边账的部门。"""
+        raw = self.settings.finance_approval_excluded_department_ids or ""
+        excluded = {item.strip() for item in raw.split(",") if item.strip()}
+        rows = self.session.scalars(select(FinanceCashApproval)).all()
+        return [row for row in rows if row.department_id not in excluded]
+
+    def match_approvals(self) -> list[approval_rules.MatchApproval]:
+        out: list[approval_rules.MatchApproval] = []
+        for row in self.approval_rows():
+            anchor = row.completed_at or row.started_at
+            out.append(
+                approval_rules.MatchApproval(
+                    serial=row.serial_number,
+                    status=row.status,
+                    amount=row.amount,
+                    currency_code=row.currency_code,
+                    payee=row.payee,
+                    anchor_day=anchor.astimezone(SHANGHAI).date() if anchor else None,
+                )
+            )
+        return out
+
+    def _approval_categories(
+        self, classifier: journal.Classifier
+    ) -> dict[str, tuple[str | None, str | None]]:
+        """单号 → (表单写明的类别, 按事由和明细跑规则的类别)。"""
+        names_to_code = {
+            row.name: row.code
+            for row in self.session.scalars(select(FinanceCashCategory))
+            if not row.is_exclude
+        }
+        out: dict[str, tuple[str | None, str | None]] = {}
+        for row in self.session.scalars(select(FinanceCashApproval)):
+            details = " ".join(str(item.get("content") or "") for item in row.items or [])
+            out[row.serial_number] = (
+                approval_rules.form_category_code(row.fee_category, names_to_code),
+                classifier.classify(f"{row.reason} {details}", ""),
+            )
+        return out
+
+    def _flag_auto_attached(self, result: journal.JournalResult) -> None:
+        auto = {
+            (line_uid, str((payload or {}).get("ref") or ""))
+            for line_uid, payload in self.session.execute(
+                select(FinanceCashLineEvent.line_uid, FinanceCashLineEvent.payload).where(
+                    FinanceCashLineEvent.kind == journal.KIND_AUTO_ATTACH_REF
+                )
+            )
+        }
+        if not auto:
+            return
+        for item in result.lines:
+            if any((item.source.line_uid, ref) in auto for ref in item.source.refs):
+                item.flags.append("自动匹配")
+
+    def _approval_candidates(self, result: journal.JournalResult) -> dict[str, list[str]]:
+        approvals = self.match_approvals()
+        if not approvals:
+            return {}
+        lines = [
+            approval_rules.MatchLine(
+                line_uid=item.source.line_uid,
+                business_date=item.source.business_date,
+                amount=item.source.amount,
+                currency_code=item.source.currency_code,
+                counterparty_name=item.source.counterparty_name,
+                text="",
+                refs=tuple(item.source.refs),
+                stage="",
+            )
+            for item in result.lines
+        ]
+        return approval_rules.candidates_by_line(lines, approvals)
 
     def list_lines(
         self,
@@ -688,10 +885,14 @@ class CashflowService:
             reverse=True,
         )
         window = selected[(page - 1) * page_size : page * page_size]
+        candidates = self._approval_candidates(result)
         return CashflowLineListData(
             items=[
                 self._line_read(
-                    item, by_uid[item.source.line_uid], states.get(item.source.line_uid)
+                    item,
+                    by_uid[item.source.line_uid],
+                    states.get(item.source.line_uid),
+                    candidates.get(item.source.line_uid, []),
                 )
                 for item in window
             ],
@@ -705,6 +906,7 @@ class CashflowService:
         item: journal.ComputedLine,
         line: FinanceCashLine,
         state: FinanceCashLineState | None,
+        candidates: list[str] | None = None,
     ) -> CashflowLineRead:
         local_time = line.source_time.astimezone(SHANGHAI) if line.source_time else None
         return CashflowLineRead(
@@ -716,6 +918,8 @@ class CashflowService:
             currency_code=line.currency_code,
             amount=line.amount,
             amount_cny=item.amount_cny,
+            fx_rate=item.fx_rate,
+            fx_source=item.fx_source,
             balance_after=line.balance_after,
             description=line.description,
             memo=line.memo,
@@ -734,7 +938,15 @@ class CashflowService:
             stage=state.stage if state else journal.STAGE_TODO,
             stage_reason=state.stage_reason if state else None,
             review_note=state.review_note if state else None,
+            manual_description=state.manual_description if state else None,
+            manual_memo=state.manual_memo if state else None,
+            parts=[CashflowLinePartRead(**part) for part in state.parts]
+            if state and state.parts
+            else None,
+            manual_pair=state.manual_pair if state else None,
+            auto_exclude_reason=item.auto_exclude_reason,
             version=state.version if state else 0,
+            approval_candidates=candidates or [],
         )
 
     def list_anomalies(self) -> list[CashflowAnomalyRead]:
@@ -870,6 +1082,10 @@ class CashflowService:
             stage=state.stage,
             stage_reason=state.stage_reason,
             review_note=state.review_note,
+            manual_description=state.manual_description,
+            manual_memo=state.manual_memo,
+            parts=[dict(part) for part in state.parts] if state.parts else None,
+            manual_pair=state.manual_pair,
         )
         auto_reset = journal.apply_event(
             draft,
@@ -879,6 +1095,8 @@ class CashflowService:
             line_amount=line.amount,
             valid_categories=self._category_codes(),
         )
+        if request.kind == journal.KIND_REVIEW1_UNDO:
+            self._require_first_reviewer(line_uid, actor)
         state.manual_category = draft.manual_category
         state.refs = draft.refs
         state.exclude_amount = draft.exclude_amount
@@ -886,6 +1104,10 @@ class CashflowService:
         state.stage = draft.stage
         state.stage_reason = draft.stage_reason
         state.review_note = draft.review_note
+        state.manual_description = draft.manual_description
+        state.manual_memo = draft.manual_memo
+        state.parts = draft.parts
+        state.manual_pair = draft.manual_pair
         state.version += 1
         state.updated_at = datetime.now(UTC)
         self._add_events(line_uid, request, auto_reset, actor, request_id)
@@ -926,6 +1148,22 @@ class CashflowService:
             )
         self.session.rollback()
         return self._event_data(line_uid, replayed=True)
+
+    def _require_first_reviewer(self, line_uid: str, actor: str) -> None:
+        """撤销初审：只有最近一次做初审（通过或不通过）的人能撤。"""
+        last = self.session.scalars(
+            select(FinanceCashLineEvent.actor)
+            .where(
+                FinanceCashLineEvent.line_uid == line_uid,
+                FinanceCashLineEvent.kind.in_(journal.REVIEW1_KINDS),
+            )
+            .order_by(FinanceCashLineEvent.created_at.desc())
+            .limit(1)
+        ).first()
+        if last is not None and last != actor:
+            raise journal.EventRejectedError(
+                403, "只有当时做初审的人能撤销初审", journal.ERR_NOT_FIRST_REVIEWER
+            )
 
     def _category_codes(self) -> frozenset[str]:
         return frozenset(self.session.scalars(select(FinanceCashCategory.code)))

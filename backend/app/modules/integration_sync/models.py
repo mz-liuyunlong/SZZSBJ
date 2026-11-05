@@ -39,7 +39,7 @@ class IntegrationInterface(Base):
     __table_args__ = (
         UniqueConstraint("provider", "interface_key"),
         UniqueConstraint("provider", "method", "endpoint_path"),
-        CheckConstraint("method = 'POST'", name="method_post"),
+        CheckConstraint("method IN ('POST', 'GET')", name="method_post"),
         CheckConstraint(f"request_kind IN ({REQUEST_KINDS})", name="request_kind"),
     )
 

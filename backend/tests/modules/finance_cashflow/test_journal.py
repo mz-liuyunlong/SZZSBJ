@@ -3,13 +3,13 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date
 from decimal import Decimal
 
 import pytest
 
 from app.modules.finance_cashflow import journal as J
-from app.modules.finance_cashflow.service import FxVersion, month_usd_rate
+from app.modules.fx_rates.reader import usd_cny_rate_for
 
 CATEGORIES = frozenset({"G01", "F01", "T02", "X01"})
 INTERNAL = frozenset({"T02"})
@@ -143,29 +143,15 @@ def test_fx_cny_usd_and_cnh():
     )
     assert result["c"].amount_cny == Decimal("10")
     assert result["u"].amount_cny == Decimal("71.0000")
-    assert result["h"].amount_cny is None
+    assert result["h"].amount_cny == Decimal("10")  # CNH 按 1:1
     assert by_uid(compute([line("u", 10, cur="USD")]))["u"].amount_cny is None
 
 
-def fx(account, start, end, rate):
-    return FxVersion(account, start, end, Decimal(rate))
-
-
-def test_month_rate_uses_latest_version_in_month_and_no_fallback():
-    versions = [
-        fx("S1", datetime(2026, 9, 1, tzinfo=UTC), datetime(2026, 10, 15, tzinfo=UTC), "7.0"),
-        fx("S1", datetime(2026, 10, 15, tzinfo=UTC), None, "7.1"),
-    ]
-    assert month_usd_rate(versions, date(2026, 10, 20)) == Decimal("7.1")
-    assert month_usd_rate(versions, date(2026, 8, 20)) is None
-
-
-def test_month_rate_reads_the_same_value_from_rows_stored_per_store():
-    versions = [
-        fx("S1", datetime(2026, 9, 1, tzinfo=UTC), None, "7.0"),
-        fx("S2", datetime(2026, 9, 1, tzinfo=UTC), None, "7.0"),
-    ]
-    assert month_usd_rate(versions, date(2026, 10, 1)) == Decimal("7.0")
+def test_month_rate_is_read_by_business_month_and_no_fallback():
+    rates = {"2026-09": Decimal("7.0"), "2026-10": Decimal("7.1")}
+    assert usd_cny_rate_for(rates, date(2026, 10, 20)) == Decimal("7.1")
+    assert usd_cny_rate_for(rates, date(2026, 8, 20)) is None
+    assert usd_cny_rate_for(rates, date(2026, 11, 1)) is None
 
 
 def test_balance_alert_when_previous_balance_is_missing():
@@ -376,3 +362,313 @@ def test_exclude_amount_rules():
             apply(J.ReviewState(), J.KIND_EXCLUDE, {"amount": bad}, "其他部门")
     with pytest.raises(J.EventRejectedError):
         apply(J.ReviewState(), J.KIND_EXCLUDE, {}, " ")
+
+
+def test_undo_first_review_back_to_todo():
+    for start in (J.STAGE_OK1, J.STAGE_REJ1):
+        state = J.ReviewState(stage=start, stage_reason="x")
+        assert apply(state, J.KIND_REVIEW1_UNDO) is False
+        assert (state.stage, state.stage_reason) == (J.STAGE_TODO, None)
+
+
+def test_undo_final_review_back_to_waiting_final():
+    for start in (J.STAGE_OK2, J.STAGE_REJ2):
+        state = J.ReviewState(stage=start, stage_reason="x")
+        assert apply(state, J.KIND_REVIEW2_UNDO) is False
+        assert (state.stage, state.stage_reason) == (J.STAGE_OK1, None)
+
+
+@pytest.mark.parametrize(
+    ("stage", "kind"),
+    [
+        (J.STAGE_TODO, J.KIND_REVIEW1_UNDO),
+        (J.STAGE_OK2, J.KIND_REVIEW1_UNDO),
+        (J.STAGE_REJ2, J.KIND_REVIEW1_UNDO),
+        (J.STAGE_TODO, J.KIND_REVIEW2_UNDO),
+        (J.STAGE_OK1, J.KIND_REVIEW2_UNDO),
+    ],
+)
+def test_undo_in_wrong_stage_is_rejected(stage, kind):
+    with pytest.raises(J.EventRejectedError) as caught:
+        apply(J.ReviewState(stage=stage), kind)
+    assert (caught.value.status_code, caught.value.code) == (409, J.ERR_STAGE_NOT_ALLOWED)
+
+
+def test_set_text_keeps_review_and_blank_restores_original():
+    state = J.ReviewState(stage=J.STAGE_OK2)
+    assert apply(state, J.KIND_SET_TEXT, {"description": " 房租 ", "memo": "10 月"}) is False
+    assert (state.manual_description, state.manual_memo, state.stage) == (
+        "房租",
+        "10 月",
+        J.STAGE_OK2,
+    )
+    apply(state, J.KIND_SET_TEXT, {"memo": ""})
+    assert (state.manual_description, state.manual_memo) == ("房租", None)
+    for bad in ({}, {"memo": 5}, {"description": "长" * 501}):
+        with pytest.raises(J.EventRejectedError):
+            apply(J.ReviewState(), J.KIND_SET_TEXT, bad)
+
+
+def test_split_then_choose_category_per_part():
+    state = J.ReviewState(stage=J.STAGE_OK1)
+    assert apply(state, J.KIND_SPLIT, {"amounts": ["6", "4"]}) is True
+    assert state.stage == J.STAGE_TODO
+    assert state.parts == [
+        {"amount": "6.0000", "category_code": None},
+        {"amount": "4.0000", "category_code": None},
+    ]
+    apply(state, J.KIND_SET_PART_CATEGORY, {"index": 1, "category_code": "G01"})
+    assert state.parts[1]["category_code"] == "G01"
+    with pytest.raises(J.EventRejectedError):
+        apply(state, J.KIND_SET_CATEGORY, {"category_code": "G01"})
+    apply(state, J.KIND_UNSPLIT)
+    assert state.parts is None
+
+
+@pytest.mark.parametrize(
+    ("kind", "payload", "start"),
+    [
+        (J.KIND_SPLIT, {"amounts": ["10"]}, {}),
+        (J.KIND_SPLIT, {"amounts": ["6", "3"]}, {}),
+        (J.KIND_SPLIT, {"amounts": ["11", "-1"]}, {}),
+        (J.KIND_SPLIT, {"amounts": ["abc", "10"]}, {}),
+        (J.KIND_SPLIT, {}, {}),
+        (J.KIND_SET_PART_CATEGORY, {"index": 0, "category_code": "G01"}, {}),
+        (J.KIND_UNSPLIT, {}, {}),
+    ],
+)
+def test_split_rejections(kind, payload, start):
+    with pytest.raises(J.EventRejectedError):
+        apply(J.ReviewState(**start), kind, payload)
+
+
+def test_part_text_keeps_review_and_blank_clears():
+    state = J.ReviewState(stage=J.STAGE_OK1)
+    apply(state, J.KIND_SPLIT, {"amounts": ["6", "4"]})
+    state.stage = J.STAGE_OK1
+    payload = {"index": 1, "description": " 手续费 ", "memo": "银行扣"}
+    assert apply(state, J.KIND_SET_PART_TEXT, payload) is False
+    assert state.stage == J.STAGE_OK1
+    assert state.parts[1] == {
+        "amount": "4.0000",
+        "category_code": None,
+        "description": "手续费",
+        "memo": "银行扣",
+    }
+    apply(state, J.KIND_SET_PART_CATEGORY, {"index": 1, "category_code": "G01"})
+    apply(state, J.KIND_SET_PART_TEXT, {"index": 1, "memo": ""})
+    assert state.parts[1] == {"amount": "4.0000", "category_code": "G01", "description": "手续费"}
+    for payload in ({"index": 1}, {"index": 2, "memo": "x"}, {"index": 0, "memo": "x" * 501}):
+        with pytest.raises(J.EventRejectedError):
+            apply(state, J.KIND_SET_PART_TEXT, payload)
+    with pytest.raises(J.EventRejectedError):
+        apply(J.ReviewState(), J.KIND_SET_PART_TEXT, {"index": 0, "memo": "x"})
+
+
+def test_split_part_rejects_bad_index_and_x01():
+    parts = [{"amount": "6", "category_code": None}, {"amount": "4", "category_code": None}]
+    for payload in (
+        {"index": 2, "category_code": "G01"},
+        {"index": True, "category_code": "G01"},
+        {"index": 0, "category_code": "X01"},
+    ):
+        with pytest.raises(J.EventRejectedError):
+            apply(J.ReviewState(parts=[dict(p) for p in parts]), J.KIND_SET_PART_CATEGORY, payload)
+
+
+# ---------------------------------------------------------------- 第三轮（rocky 11-05）
+
+
+def test_gap_pair_by_tail_number_reports_fee_gap():
+    # 合成数据：付出 10000 给尾号 0000 的户，两天后到 9986.80：差 13.20（0.13%）配上，差额进异常。
+    result = compute(
+        [
+            line(
+                "o",
+                -10000,
+                account="P",
+                cur="USD",
+                day="2026-10-24",
+                desc="内部调拨",
+                counterparty_last4="0000",
+            ),
+            line(
+                "i",
+                "9986.80",
+                account="B",
+                cur="USD",
+                day="2026-10-26",
+                desc="内部调拨",
+                account_last4="0000",
+            ),
+        ]
+    )
+    items = by_uid(result)
+    assert items["o"].pair_id and items["o"].pair_id == items["i"].pair_id
+    gaps = [alert for alert in result.alerts if alert.type == J.ALERT_PAIR_GAP]
+    assert [(alert.line_uid, alert.amount, alert.currency_code) for alert in gaps] == [
+        ("o", Decimal("13.20"), "USD")
+    ]
+    assert not [alert for alert in result.alerts if alert.type == J.ALERT_UNPAIRED]
+
+
+@pytest.mark.parametrize(
+    ("received", "day", "tail"),
+    [
+        ("9900", "2026-10-26", "0000"),  # 差 100 > 50 美元上限
+        ("9986.80", "2026-10-30", "0000"),  # 6 天
+        ("9986.80", "2026-10-26", "9999"),  # 尾号对不上
+        ("10010", "2026-10-26", "0000"),  # 到账比扣款多
+    ],
+)
+def test_gap_pair_rejected_outside_tolerance(received, day, tail):
+    result = compute(
+        [
+            line(
+                "o",
+                -10000,
+                account="P",
+                cur="USD",
+                day="2026-10-24",
+                desc="内部调拨",
+                counterparty_last4="0000",
+            ),
+            line(
+                "i", received, account="B", cur="USD", day=day, desc="内部调拨", account_last4=tail
+            ),
+        ]
+    )
+    assert by_uid(result)["o"].pair_id is None
+    assert not [alert for alert in result.alerts if alert.type == J.ALERT_PAIR_GAP]
+
+
+def test_cnh_out_pairs_with_cny_in_for_the_same_amount():
+    result = compute(
+        [
+            line("o", -1000, account="P", cur="CNH", desc="内部调拨"),
+            line("i", 1000, account="B", cur="CNY", desc="内部调拨"),
+        ]
+    )
+    items = by_uid(result)
+    assert items["o"].pair_id and items["o"].pair_id == items["i"].pair_id
+    assert "汇率区间配对待核" not in items["o"].flags
+    assert not [alert for alert in result.alerts if alert.type == J.ALERT_PAIR_GAP]
+    assert not [alert for alert in result.alerts if alert.type == J.ALERT_UNPAIRED]
+
+
+def test_cnh_out_pairs_with_cny_in_and_reports_the_fee_gap():
+    result = compute(
+        [
+            line("o", -1000, account="P", cur="CNH", desc="内部调拨", counterparty_last4="0000"),
+            line("i", 995, account="B", cur="CNY", desc="内部调拨", account_last4="0000"),
+        ]
+    )
+    items = by_uid(result)
+    assert items["o"].pair_id and items["o"].pair_id == items["i"].pair_id
+    gaps = [alert for alert in result.alerts if alert.type == J.ALERT_PAIR_GAP]
+    assert [(alert.line_uid, alert.amount) for alert in gaps] == [("o", Decimal("5"))]
+
+
+def test_confirmed_fee_pairs_without_gap_alert():
+    parts = [
+        {"amount": "9986.8000", "category_code": "T02"},
+        {"amount": "13.2000", "category_code": "F01", "fee_layer": "fee"},
+    ]
+    result = compute(
+        [
+            line(
+                "o",
+                -10000,
+                account="P",
+                cur="USD",
+                day="2026-10-24",
+                desc="内部调拨",
+                counterparty_last4="0000",
+                parts=parts,
+            ),
+            line(
+                "i",
+                "9986.80",
+                account="B",
+                cur="USD",
+                day="2026-10-26",
+                desc="内部调拨",
+                account_last4="0000",
+            ),
+        ]
+    )
+    assert by_uid(result)["o"].pair_id == by_uid(result)["i"].pair_id
+    assert not [alert for alert in result.alerts if alert.type == J.ALERT_PAIR_GAP]
+
+
+def test_manual_pair_wins_and_reports_gap_even_without_internal_category():
+    result = compute(
+        [
+            line("o", -500, account="A", desc="看不懂", manual_pair="M1"),
+            line("i", 480, account="B", day="2026-10-28", desc="看不懂", manual_pair="M1"),
+            line("x", 480, account="C", desc="内部调拨"),
+        ]
+    )
+    items = by_uid(result)
+    assert items["o"].pair_id == items["i"].pair_id and "人工配对" in items["o"].flags
+    assert items["x"].pair_id is None
+    gaps = [alert for alert in result.alerts if alert.type == J.ALERT_PAIR_GAP]
+    assert [(alert.line_uid, alert.amount) for alert in gaps] == [("o", Decimal("20"))]
+
+
+def test_rule_x01_is_auto_excluded_and_manual_category_undoes_it():
+    classifier = J.Classifier([J.Rule("text", "归集-万里汇主账号", "X01", 1)])
+    lines = [
+        line("s", "-92.24", desc="归集-万里汇主账号 / 子账号 梅州"),
+        line("u", "-92.24", desc="归集-万里汇主账号 / 子账号 梅州", manual_category="G01"),
+    ]
+    items = by_uid(J.compute_journal(lines, classifier, INTERNAL, lambda _day: None))
+    assert (items["s"].category_code, items["s"].auto_exclude_reason) == (
+        "X01",
+        J.AUTO_EXCLUDE_REASON,
+    )
+    assert "已剔除" in items["s"].flags
+    assert (items["u"].category_code, items["u"].auto_exclude_reason) == ("G01", None)
+
+
+def test_confirm_fee_splits_unsplit_line_into_transfer_and_fee():
+    state = J.ReviewState(stage=J.STAGE_OK1)
+    payload = {"fee_amount": "13.20", "transfer_category": "T02"}
+    assert apply(state, J.KIND_CONFIRM_FEE, payload, amount="-10000") is True
+    assert state.parts == [
+        {"amount": "9986.8000", "category_code": "T02"},
+        {"amount": "13.2000", "category_code": "F01", "fee_layer": "fee"},
+    ]
+    with pytest.raises(J.EventRejectedError):  # 同一层只能确认一次
+        apply(state, J.KIND_CONFIRM_FEE, payload, amount="-10000")
+    apply(
+        state, J.KIND_CONFIRM_FEE, {"fee_amount": "18.40", "fee_layer": "payoneer"}, amount="-10000"
+    )
+    assert state.parts[0]["amount"] == "9968.4000"
+    assert state.parts[-1] == {"amount": "18.4000", "category_code": "F01", "fee_layer": "payoneer"}
+    apply(state, J.KIND_UNSPLIT)
+    assert state.parts is None
+
+
+@pytest.mark.parametrize("fee", ["0", "-1", "abc", "10", "11"])
+def test_confirm_fee_rejections(fee):
+    with pytest.raises(J.EventRejectedError):
+        apply(J.ReviewState(), J.KIND_CONFIRM_FEE, {"fee_amount": fee})
+
+
+def test_pair_and_unpair_keep_review_but_need_final_undone_first():
+    state = J.ReviewState(stage=J.STAGE_OK1)
+    assert apply(state, J.KIND_PAIR, {"pair_id": "M1"}) is False
+    assert (state.manual_pair, state.stage) == ("M1", J.STAGE_OK1)
+    with pytest.raises(J.EventRejectedError) as caught:
+        apply(state, J.KIND_UNPAIR, reason="  ")
+    assert caught.value.status_code == 422
+    apply(state, J.KIND_UNPAIR, reason="配错了")
+    assert state.manual_pair is None
+    with pytest.raises(J.EventRejectedError):
+        apply(state, J.KIND_UNPAIR, reason="配错了")
+    with pytest.raises(J.EventRejectedError):
+        apply(J.ReviewState(), J.KIND_PAIR, {"pair_id": ""})
+    with pytest.raises(J.EventRejectedError) as caught:
+        apply(J.ReviewState(stage=J.STAGE_OK2, manual_pair="M1"), J.KIND_UNPAIR)
+    assert caught.value.code == J.ERR_STAGE_NOT_ALLOWED

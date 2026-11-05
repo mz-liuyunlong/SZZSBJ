@@ -3,6 +3,7 @@ import { Card, Tag, Tooltip } from "antd";
 import type { ReactNode } from "react";
 import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
 import { MoneyCell } from "@/components/report-table/cells";
+import { currencyName, isRmb } from "@/pages/finance/currencyName";
 import { usePreviewMeta } from "@/pages/finance/localFinData";
 import "@/pages/finance/finance.css";
 
@@ -28,12 +29,12 @@ export function PreviewTag() {
 
 export const LOCKED_TIP = "本地预览只读：正式接口上线后可用";
 
-/** 金额：CNY / USD 用共享 MoneyCell；CNH 等其他币种带币种前缀；masked 显示 ****。 */
+/** 金额：人民币、美元用共享 MoneyCell；其他币种带币种前缀；masked 显示 ****。 */
 export function FinMoney({ value, cur = "CNY", masked }: { value: number | null | undefined; cur?: string; masked?: boolean }) {
   if (masked) return <span className="report-table-metric">****</span>;
-  if (cur === "CNY" || cur === "USD") return <MoneyCell value={value} currency={cur === "USD" ? "$" : "¥"} />;
+  if (isRmb(cur) || cur === "USD") return <MoneyCell value={value} currency={cur === "USD" ? "$" : "¥"} />;
   if (value == null || !Number.isFinite(value)) return <span className="report-table-metric">—</span>;
-  return <span className={`report-table-metric${value < 0 ? " finance-board__metric--neg" : ""}`}>{cur} {value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
+  return <span className={`report-table-metric${value < 0 ? " finance-board__metric--neg" : ""}`}>{currencyName(cur)} {value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
 }
 
 function FinanceBoardFrame({ title, subtitle, loading, toolbar, summary, children, preview = true }: FinanceBoardFrameProps) {

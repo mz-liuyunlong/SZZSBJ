@@ -21,7 +21,7 @@ from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 from psycopg import sql
 from pydantic import ValidationError
-from sqlalchemy import create_engine, func, inspect, select, text
+from sqlalchemy import create_engine, func, inspect, select, text, update
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
@@ -39,6 +39,7 @@ from app.modules.finance_cashflow.models import (
     FinanceCashLineEvent,
     FinanceCashRawFile,
 )
+from app.modules.finance_cashflow.parsing import PARSER_VERSION
 from app.modules.finance_cashflow.schemas import CashflowLineEventRequest
 from app.modules.finance_cashflow.service import (
     CashflowService,
@@ -47,6 +48,7 @@ from app.modules.finance_cashflow.service import (
     LineNotFoundError,
     StorageNotConfiguredError,
 )
+from app.modules.fx_rates.models import LingxingFxRate
 from app.modules.product_management.models import ProductPricingRuleVersion
 from tests.modules.finance_cashflow import synth as S
 from tests.modules.finance_cashflow.test_parsing import boc_rows, eleven_account_files
@@ -261,6 +263,96 @@ def test_review_events_flow_and_append_only_history(service, session):
     assert (line.category_code, line.category_source, line.stage) == ("G01", "人工", J.STAGE_TODO)
 
 
+def test_undo_reviews_edit_text_and_split(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    line = active(service, "BOC_CNY")[0]
+    uid = line.line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    with pytest.raises(J.EventRejectedError) as caught:
+        service.post_event(
+            uid,
+            CashflowLineEventRequest(kind=J.KIND_REVIEW1_UNDO, expected_version=1),
+            actor="someone-else",
+            request_id="r",
+        )
+    assert (caught.value.status_code, caught.value.code) == (403, J.ERR_NOT_FIRST_REVIEWER)
+    session.rollback()
+    assert event(service, uid, J.KIND_REVIEW1_UNDO, expected_version=1).stage == J.STAGE_TODO
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=2)
+    event(service, uid, J.KIND_REVIEW2_PASS, expected_version=3)
+    undone = service.post_event(
+        uid,
+        CashflowLineEventRequest(kind=J.KIND_REVIEW2_UNDO, expected_version=4),
+        actor="another-admin",
+        request_id="r",
+    )
+    assert undone.stage == J.STAGE_OK1
+    edited = event(
+        service, uid, J.KIND_SET_TEXT, payload={"memo": "改过的备注"}, expected_version=5
+    )
+    assert (edited.stage, edited.auto_reset) == (J.STAGE_OK1, False)
+    half = abs(line.amount) / 2
+    event(service, uid, J.KIND_SPLIT, payload={"amounts": [str(half)] * 2}, expected_version=6)
+    event(
+        service,
+        uid,
+        J.KIND_SET_PART_CATEGORY,
+        payload={"index": 0, "category_code": "G01"},
+        expected_version=7,
+    )
+    read = next(item for item in active(service, "BOC_CNY") if item.line_uid == uid)
+    assert (read.memo, read.manual_memo, read.manual_description) == (line.memo, "改过的备注", None)
+    assert [(part.amount, part.category_code) for part in read.parts or []] == [
+        (half.quantize(Decimal("0.0001")), "G01"),
+        (half.quantize(Decimal("0.0001")), None),
+    ]
+    assert read.stage == J.STAGE_TODO
+
+
+def _downgrade_0078(session: Session) -> None:
+    path = (
+        Path(__file__).resolve().parents[3]
+        / "alembic/versions/20261105_0078_finance_journal_edit_split.py"
+    )
+    spec = importlib.util.spec_from_file_location("finance_edit_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    context = MigrationContext.configure(session.connection())
+    with Operations.context(context):
+        module.downgrade()
+
+
+def test_0078_downgrade_refuses_review1_undo_events(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    uid = active(service, "BOC_CNY")[0].line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    event(service, uid, J.KIND_REVIEW1_UNDO, expected_version=1)
+    with pytest.raises(RuntimeError, match="撤销审核记录"):
+        _downgrade_0078(session)
+
+
+def test_0078_downgrade_refuses_review2_undo_events(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    uid = active(service, "BOC_CNY")[0].line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    event(service, uid, J.KIND_REVIEW2_PASS, expected_version=1)
+    event(service, uid, J.KIND_REVIEW2_UNDO, expected_version=2)
+    with pytest.raises(RuntimeError, match="撤销审核记录"):
+        _downgrade_0078(session)
+
+
+def test_0078_downgrade_allowed_without_undo_or_edits(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    uid = active(service, "BOC_CNY")[0].line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    _downgrade_0078(session)
+    columns = {
+        column["name"]
+        for column in inspect(session.connection()).get_columns("manual_finance_cash_line_state")
+    }
+    assert not columns & {"manual_description", "manual_memo", "parts"}
+
+
 def test_stale_version_is_rejected(service):
     upload(service, S.boc(S.BOC_A, boc_rows()))
     uid = active(service, "BOC_CNY")[0].line_uid
@@ -338,11 +430,9 @@ def test_line_exclusion_and_exclusion_list_anomaly(service, session):
     assert not [item for item in service.list_anomalies() if item.type == J.ALERT_EXCLUSION]
 
 
-def _load_migration():
-    path = (
-        Path(__file__).resolve().parents[3] / "alembic/versions/20261104_0072_finance_cashflow.py"
-    )
-    spec = importlib.util.spec_from_file_location("finance_cashflow_migration", path)
+def _load_migration(name: str = "20261104_0072_finance_cashflow"):
+    path = Path(__file__).resolve().parents[3] / f"alembic/versions/{name}.py"
+    spec = importlib.util.spec_from_file_location(f"migration_{name}", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -351,6 +441,8 @@ def _load_migration():
 def _downgrade(session: Session) -> None:
     context = MigrationContext.configure(session.connection())
     with Operations.context(context):
+        # 0081 的派安盈月结明细表引用了 0072 的表：先退掉它（空表才允许退）。
+        _load_migration("20261105_0081_finance_payoneer_statement").downgrade()
         _load_migration().downgrade()
 
 
@@ -513,9 +605,19 @@ def test_cny_amount_uses_month_rate(service, session):
     usd = ("来账", "20261010", "10:00:00", "USD", "10", "10", "X", "", "U1", "")
     upload(service, S.boc(S.BOC_A, [usd]))
     assert active(service, "BOC_USD")[0].amount_cny is None
-    session.add(_pricing_rule(Decimal("7.2")))
+    session.add(_fx_rate("2026-10", my_rate="7.2"))
     session.flush()
     assert active(service, "BOC_USD")[0].amount_cny == Decimal("72.0000")
+
+
+def _fx_rate(month: str, *, code: str = "USD", my_rate: str | None, rate_org: str | None = None):
+    return LingxingFxRate(
+        rate_month=month,
+        currency_code=code,
+        my_rate=None if my_rate is None else Decimal(my_rate),
+        rate_org=None if rate_org is None else Decimal(rate_org),
+        source="seed",
+    )
 
 
 def _pricing_rule(rate: Decimal) -> ProductPricingRuleVersion:
@@ -700,14 +802,50 @@ def test_concurrent_idempotency_key_returns_replay_not_500(service, session, mon
     assert (line.category_code, line.version) == ("G01", 1)
 
 
-def test_rate_only_reads_product_management_rule(service, session):
+def test_rate_only_reads_lingxing_usd_my_rate_of_the_same_month(service, session):
     usd = ("来账", "20261010", "10:00:00", "USD", "10", "10", "X", "", "U1", "")
     upload(service, S.boc(S.BOC_A, [usd]))
-    other = _pricing_rule(Decimal("9.9"))
-    other.rule_key = "other_rule"
-    session.add(other)
+    session.add_all(
+        [
+            _pricing_rule(Decimal("9.9")),
+            _fx_rate("2026-09", my_rate="8.8"),
+            _fx_rate("2026-10", code="EUR", my_rate="7.7"),
+            _fx_rate("2026-10", my_rate=None, rate_org="6.6"),
+        ]
+    )
     session.flush()
     assert active(service, "BOC_USD")[0].amount_cny is None
+
+
+def test_deploy_seed_fills_missing_rates_and_never_overwrites(session):
+    session.add(_fx_rate("2026-10", my_rate="7.1"))
+    session.flush()
+    data = {
+        "fx_rates": [
+            {"rate_month": "2026-10", "currency_code": "USD", "my_rate": "6.5", "rate_org": "6.6"},
+            {"rate_month": "2026-11", "currency_code": "usd", "my_rate": "6.4", "rate_org": "0"},
+        ]
+    }
+    assert load_deploy_data(session, data).fx_rates == 2
+    session.expire_all()
+    assert session.get(LingxingFxRate, ("2026-10", "USD")).my_rate == Decimal("7.1")
+    seeded = session.get(LingxingFxRate, ("2026-11", "USD"))
+    assert (seeded.my_rate, seeded.rate_org, seeded.source) == (Decimal("6.4"), None, "seed")
+
+
+@pytest.mark.parametrize(
+    ("row", "field"),
+    [
+        ({"rate_month": "2026-1", "currency_code": "USD"}, "rate_month"),
+        ({"rate_month": "2026-10", "currency_code": ""}, "currency_code"),
+        ({"rate_month": "2026-10", "currency_code": "USD", "my_rate": "abc"}, "my_rate"),
+        ({"rate_month": "2026-10", "currency_code": "USD", "rate_org": "-1"}, "rate_org"),
+    ],
+)
+def test_deploy_seed_rejects_bad_rows(session, row, field):
+    with pytest.raises(DeployFileError) as error:
+        load_deploy_data(session, {"fx_rates": [row]})
+    assert str(error.value) == f"fx_rates 第 1 条 {field} 不合格"
 
 
 FAKE_ACCOUNT_NO = "000011112222333"
@@ -826,7 +964,7 @@ def test_script_dry_run_writes_nothing(tmp_path, monkeypatch, capsys, session):
     get_settings.cache_clear()
     code = _run_script(tmp_path, monkeypatch, {"accounts": [_fake_account()]})
     assert code == 0
-    assert capsys.readouterr().out.strip() == "DRY_RUN accounts=1 rules=0 exclusions=0"
+    assert capsys.readouterr().out.strip() == "DRY_RUN accounts=1 rules=0 exclusions=0 fx_rates=0"
     assert session.get(FinanceCashAccount, "FAKE_K") is None
 
 
@@ -900,3 +1038,140 @@ def test_empty_database_round_trip_upgrade_downgrade_upgrade():
         engine.dispose()
         with psycopg.connect(**admin, autocommit=True) as cx:
             cx.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database)))
+
+
+def test_reupload_with_new_parser_refreshes_unmasked_email(service, session):
+    # 派安盈对方邮箱以前被打码；同一个文件在新版解析下再导一次，已有流水刷新成完整邮箱，不新增。
+    content = S.payoneer(
+        [
+            (
+                "10-04-2026",
+                "10:00:00",
+                "UTC",
+                "50",
+                "0",
+                "Completed",
+                "50",
+                "Transfer from connected account abcdef@example.com",
+            )
+        ]
+    )
+    upload(service, content)
+    line = session.scalars(select(FinanceCashLine)).one()
+    assert line.counterparty_name == "abcdef@example.com"
+    line.counterparty_name = "abc…@example.com"
+    session.execute(update(FinanceCashRawFile).values(parser_version="finance_cashflow/1"))
+    session.flush()
+    again = upload(service, content, name="again.csv")
+    assert (again.file.duplicate_of_file, again.file.rows_new) == (True, 0)
+    session.refresh(line)
+    assert line.counterparty_name == "abcdef@example.com"
+    assert session.scalars(select(FinanceCashRawFile.parser_version)).all() == [PARSER_VERSION]
+
+
+def test_manual_pair_and_confirm_fee_round_trip(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    first, second = active(service, "BOC_CNY")[:2]
+    for item in (first, second):
+        event(
+            service, item.line_uid, J.KIND_PAIR, payload={"pair_id": "M-test"}, expected_version=0
+        )
+    lines = {item.line_uid: item for item in active(service, "BOC_CNY")}
+    assert lines[first.line_uid].manual_pair == "M-test"
+    assert lines[first.line_uid].pair_id == lines[second.line_uid].pair_id
+    fee = (abs(first.amount) / 10).quantize(Decimal("0.01"))
+    event(
+        service,
+        first.line_uid,
+        J.KIND_CONFIRM_FEE,
+        payload={"fee_amount": str(fee), "transfer_category": "T02"},
+        expected_version=1,
+    )
+    read = next(item for item in active(service, "BOC_CNY") if item.line_uid == first.line_uid)
+    assert [(part.category_code, part.fee_layer) for part in read.parts or []] == [
+        ("T02", None),
+        ("F01", "fee"),
+    ]
+    assert sum(part.amount for part in read.parts or []) == abs(first.amount)
+    event(service, first.line_uid, J.KIND_UNPAIR, reason="配错了", expected_version=2)
+    lines = {item.line_uid: item for item in active(service, "BOC_CNY")}
+    assert lines[first.line_uid].manual_pair is None
+    event(
+        service,
+        first.line_uid,
+        J.KIND_SET_PART_TEXT,
+        payload={"index": 1, "description": "到账手续费"},
+        expected_version=3,
+    )
+    read = next(item for item in active(service, "BOC_CNY") if item.line_uid == first.line_uid)
+    assert [part.description for part in read.parts or []] == [None, "到账手续费"]
+
+
+def _payo_statement(rows) -> bytes:
+    head = (
+        "Transaction Date,Transaction Time,Time Zone,Transaction ID,Description,Credit Amount,"
+        "Debit Amount,Currency,Transfer Amount,Transfer Amount Currency,Status,Running Balance,"
+        "Additional Description,Store Name,Source,Target,Reference ID\n"
+    )
+    body = "".join(
+        f"{d},{t},UTC,{txn},{desc},{credit},{debit},USD,{tr},{tcur},Completed,1,,,,,\n"
+        for d, t, txn, desc, credit, debit, tr, tcur in rows
+    )
+    return ("﻿" + head + body).encode("utf-8")
+
+
+def test_payoneer_statement_fills_actual_cny_without_new_lines(service, session):
+    """月结补充只补实际到账：流水数不变，人民币按派安盈；作废这一批就回到空着。"""
+    weekly = S.payoneer(
+        [
+            (
+                "10-05-2026",
+                "17:00:00",
+                "UTC",
+                "3000",
+                "0",
+                "Completed",
+                "3000",
+                "Payment from STRIPE",
+            ),
+            (
+                "10-15-2026",
+                "15:56:15",
+                "UTC",
+                "0",
+                "-3000.00",  # 每周交易报告里扣款是负数
+                "Completed",
+                "3.77",
+                "Payment to 某行 (0000)",
+            ),
+        ]
+    )
+    upload(service, weekly, name="weekly.csv")
+    withdrawal = next(row for row in active(service) if row.amount < 0)
+    assert (withdrawal.amount_cny, withdrawal.fx_source) == (None, J.FX_SOURCE_PENDING)
+    statement = _payo_statement(
+        [
+            ("10/05/2026", "17:00:00", "1", "Payment from STRIPE", "3000", "", "", ""),
+            ("10/15/2026", "15:56:15", "2", "Payment to 某人", "", "3000.00", "20000.00", "CNY"),
+        ]
+    )
+    result = upload(service, statement, name="month.csv").file
+    assert (result.status, result.rows_parsed, result.rows_new) == ("parsed", 2, 0)
+    assert "读到 2 行（其中 2 行以前没导过）" in result.warnings[0]
+    assert "月结补充" in result.detected_note
+    lines = active(service)
+    assert len(lines) == 2
+    filled = next(row for row in lines if row.line_uid == withdrawal.line_uid)
+    assert filled.amount_cny == Decimal("-20000.0000")
+    assert (filled.fx_rate, filled.fx_source) == (Decimal("6.6667"), J.FX_SOURCE_PAYONEER)
+    again = upload(service, statement, name="month-again.csv").file
+    assert again.duplicate_of_file
+    service.void_import(result_import(session, "month.csv"), reason="导错", actor="admin")
+    back = next(row for row in active(service) if row.line_uid == withdrawal.line_uid)
+    assert back.amount_cny is None
+
+
+def result_import(session: Session, name: str) -> UUID:
+    return session.scalars(
+        select(FinanceCashRawFile.import_id).where(FinanceCashRawFile.file_name == name)
+    ).one()

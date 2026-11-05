@@ -92,3 +92,22 @@ class Seed:
         return next(
             (a for a in self._active("pingpong") if a.match.get("account_id") == account_id), None
         )
+
+    def cmb(self, key: str, currency: str):
+        """招商银行：PDF 里账号只露前 4 后 4 位，按这 8 位 + 币种认账户。"""
+        return next(
+            (
+                a
+                for a in self._active("cmb")
+                if cmb_key(a.match.get("account_no", "")) == key and a.currency_code == currency
+            ),
+            None,
+        )
+
+    def cmb_known(self, key: str) -> bool:
+        return any(cmb_key(a.match.get("account_no", "")) == key for a in self._active("cmb"))
+
+
+def cmb_key(account_no: str) -> str:
+    digits = "".join(ch for ch in str(account_no) if ch.isdigit())
+    return digits[:4] + digits[-4:] if len(digits) >= 8 else ""

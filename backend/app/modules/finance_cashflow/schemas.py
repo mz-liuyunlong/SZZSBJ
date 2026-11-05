@@ -84,6 +84,22 @@ class CashflowCategoryRead(BaseModel):
     is_exclude: bool
 
 
+class CashflowFxRateRead(BaseModel):
+    month: str
+    currency_code: str
+    my_rate: Decimal | None
+
+
+class CashflowLinePartRead(BaseModel):
+    amount: Decimal
+    category_code: str | None = None
+    # 有值 = 手续费行（「确认记为手续费」切出来的），值是手续费层，如 fee / payoneer。
+    fee_layer: str | None = None
+    # 拆分行自己的摘要 / 备注（set_part_text），空 = 沿用整笔的。
+    description: str | None = None
+    memo: str | None = None
+
+
 class CashflowLineRead(BaseModel):
     line_uid: str
     account_key: str
@@ -93,6 +109,10 @@ class CashflowLineRead(BaseModel):
     currency_code: str
     amount: Decimal
     amount_cny: Decimal | None = None
+    # 折人民币用的汇率和来源：payoneer = 派安盈实际到账；
+    # lingxing = 领星当月汇率；pending = 提现等月结单。
+    fx_rate: Decimal | None = None
+    fx_source: str = ""
     balance_after: Decimal | None = None
     description: str
     memo: str
@@ -111,7 +131,15 @@ class CashflowLineRead(BaseModel):
     stage: str = "todo"
     stage_reason: str | None = None
     review_note: str | None = None
+    # 人工改过的摘要 / 备注；null = 没改，显示银行原文（description / memo）。
+    manual_description: str | None = None
+    manual_memo: str | None = None
+    parts: list[CashflowLinePartRead] | None = None
+    manual_pair: str | None = None
+    auto_exclude_reason: str | None = None
     version: int = 0
+    # 还没挂单的流水：金额和日期对得上的审批单号，等财务选。
+    approval_candidates: list[str] = Field(default_factory=list)
 
 
 class CashflowLineListData(BaseModel):
@@ -147,3 +175,78 @@ class CashflowLineEventData(BaseModel):
     version: int
     auto_reset: bool = False
     replayed: bool = False
+
+
+class CashflowApprovalItemRead(BaseModel):
+    content: str = ""
+    amount: Decimal | None = None
+    category: str = ""
+
+
+class CashflowApprovalFileRead(BaseModel):
+    source: str
+    what: str = ""
+    item: int = 0
+    is_image: bool = False
+    title: str = ""
+
+
+class CashflowApprovalRecordRead(BaseModel):
+    node: str = ""
+    act: str = ""
+    who: str = ""
+    time: str = ""
+    note: str = ""
+    files: int = 0
+
+
+class CashflowApprovalCommentRead(BaseModel):
+    who: str = ""
+    time: str = ""
+    note: str = ""
+
+
+class CashflowApprovalPaidRead(BaseModel):
+    line_uid: str
+    amount_cny: Decimal
+
+
+class CashflowApprovalRead(BaseModel):
+    serial: str
+    kind: str
+    status: str
+    status_text: str
+    state: str
+    started_at: str = ""
+    completed_at: str = ""
+    handled_at: str = ""
+    applicant: str = ""
+    reason: str = ""
+    amount: Decimal | None = None
+    currency_code: str = "CNY"
+    amount_cny: Decimal | None = None
+    pay_method: str = ""
+    invoice: str = ""
+    payee: str = ""
+    bank: str = ""
+    last4: str = ""
+    fee_category: str = ""
+    related_serial: str = ""
+    items: list[CashflowApprovalItemRead] = Field(default_factory=list)
+    attachments: list[CashflowApprovalFileRead] = Field(default_factory=list)
+    records: list[CashflowApprovalRecordRead] = Field(default_factory=list)
+    comments: list[CashflowApprovalCommentRead] = Field(default_factory=list)
+    paid: list[CashflowApprovalPaidRead] = Field(default_factory=list)
+    paid_sum: Decimal = Decimal("0")
+    fetched_at: datetime | None = None
+
+
+class CashflowApprovalSyncData(BaseModel):
+    run_id: UUID | None = None
+    status: str = "never"  # never / queued / running / succeeded / failed
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    error_code: str | None = None
+    records_seen: int = 0
+    records_written: int = 0
+    last_success_at: datetime | None = None
