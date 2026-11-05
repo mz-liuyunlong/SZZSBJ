@@ -12,7 +12,7 @@ from app.modules.listing_rule_config.grade_publication import (
     PROOF_ORIGIN,
     ListingGradePublicationService,
     _day_is_attested,
-    _store_day_ad_spend_positive,
+    _all_stores_day_ad_spend_positive,
 )
 
 
@@ -40,14 +40,14 @@ def _financial_day(**kwargs):
     return SimpleNamespace(**row)
 
 
-def test_full_store_zero_ad_spend_blocks_rating_day_not_listing_zero():
+def test_all_stores_zero_ad_spend_blocks_rating_day_not_single_store_zero():
     from decimal import Decimal
 
-    assert not _store_day_ad_spend_positive(None)
-    assert not _store_day_ad_spend_positive(Decimal("0"))
-    assert _store_day_ad_spend_positive(Decimal("0.01"))
-    # One Listing with zero can coexist with another Listing's positive
-    # expense; publication checks the *store/day total* instead.
+    assert not _all_stores_day_ad_spend_positive(None)
+    assert not _all_stores_day_ad_spend_positive(Decimal("0"))
+    assert _all_stores_day_ad_spend_positive(Decimal("0.01"))
+    # One store with zero may be legitimate when other stores spent money.
+    # The publication guard checks the aggregate across ALL stores/day.
 
 
 def test_evidence_must_prove_both_finance_and_ads():
