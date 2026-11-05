@@ -538,7 +538,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
           for (let offset = 0; offset < nextRows.length; offset += 50) {
             if (!active) return;
             const batch = nextRows.slice(offset, offset + 50);
-            let previews;
+            let previews: Awaited<ReturnType<typeof fetchListingEvaluationPreviews>>;
             try {
               previews = await fetchListingEvaluationPreviews(batch.map((item) => item.id));
             } catch {
