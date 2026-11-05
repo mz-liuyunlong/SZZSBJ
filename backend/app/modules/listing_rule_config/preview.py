@@ -265,8 +265,16 @@ class ListingEvaluationPreviewService:
         lifecycle_reason = decision.reason
         stock_valid30 = decision.valid_stock_days_30
         known_stages = {
-            "测品期", "打品期", "启动期", "上升期", "稳定期",
-            "下滑期", "断货期", "修复期", "清货期", "已归档",
+            "测品期",
+            "打品期",
+            "启动期",
+            "上升期",
+            "稳定期",
+            "下滑期",
+            "断货期",
+            "修复期",
+            "清货期",
+            "已归档",
         }
         missing = [
             "ADS_COST_PUBLICATION_PROOF_MISSING",
