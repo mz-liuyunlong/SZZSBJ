@@ -45,6 +45,18 @@ describe("production Listing diagnostics", () => {
     expect(row.gradeDiagnostic?.sourceVerified).toBe(false);
   });
 
+  it("resets stale diagnostic and preserves a saved grade after manual edits", () => {
+    const saved = { ...listing, productGrade: "A", gradePreviewCandidate: true };
+    const pending = withPendingListingDiagnostics(saved);
+    expect(pending.productGrade).toBe("A");
+    expect(pending.gradePreviewCandidate).toBe(false);
+    expect(pending.lifecycleDiagnostic?.reasonCode).toBe("PREVIEW_NOT_AVAILABLE");
+    expect(pending.gradeDiagnostic?.reason).toMatch(/已保存/);
+    const updated = applyListingEvaluationPreview(pending, { ...preview, grade_candidate: "B" });
+    expect(updated.productGrade).toBe("A");
+    expect(updated.gradeDiagnostic?.reason).toMatch(/正式等级已保存/);
+  });
+
   it("explains historical WFS evidence without claiming this is not WFS", () => {
     const row = applyListingEvaluationPreview(listing, preview);
     expect(row.lifecycle).toBe("待判定");
