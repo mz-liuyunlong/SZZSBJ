@@ -597,6 +597,123 @@ export async function setListingLifecycleBatch(
   return response.data;
 }
 
+// LISTING_DIAGNOSTIC_PRODUCTION_API_V1
+// The API returns read-only candidate evidence, never a published grade.
+export interface ListingEvaluationPreviewResult {
+  listing_id: string;
+  cutoff_la: string;
+  current_lifecycle: string | null;
+  current_grade: string | null;
+  lifecycle_candidate: string | null;
+  lifecycle_evidence_reason: string | null;
+  first_positive_date_la: string | null;
+  cutoff_wfs_available_quantity: string | null;
+  consecutive_low_stock_days: number;
+  grade_candidate: string | null;
+  valid_short: number;
+  valid_medium: number;
+  weighted_margin_percent: string | null;
+  valid_stock_days_30: number;
+  observed_stock_days_7: number;
+  low_stock_days_7: number;
+  prior_effective_stock: boolean;
+  currently_archived: boolean;
+  rule_version: number;
+  missing_evidence: string[];
+  published: boolean;
+}
+
+export async function fetchListingEvaluationPreviews(
+  listingIds: string[],
+): Promise<ListingEvaluationPreviewResult[]> {
+  if (!listingIds.length) return [];
+  if (listingIds.length > 50) throw new Error("Listing diagnostic API accepts at most 50 IDs");
+  const response = await backendRequest<{ items: ListingEvaluationPreviewResult[]; total: number }>(
+    "/api/listings/evaluation-preview/batch",
+    { method: "POST", body: JSON.stringify({ listing_ids: listingIds }) },
+  );
+  return response.data.items;
+}
+
+const diagnosticReasonCode = (reason: string | null, stage: string | null): string => {
+  if (stage) return "TREND_CONFIRMED";
+  if (!reason) return "OTHER_EVIDENCE_INCOMPLETE";
+  if (reason.includes("HISTORICAL_FIRST_WFS")) return "HISTORICAL_LAUNCH_UNVERIFIED";
+  if (reason.includes("FIRST_WFS_POSITIVE")) return "NO_POSITIVE_WFS_HISTORY";
+  if (reason.includes("CUTOFF_WFS_SNAPSHOT")) return "CUTOFF_WFS_MISSING";
+  if (reason.includes("ARCHIVED") || reason.includes("WORKFLOW_STAGE") || reason.includes("MANUAL_STAGE")) return "WORKFLOW_PROTECTED";
+  if (reason.includes("STOCKOUT")) return "STOCKOUT_EVIDENCE_INCOMPLETE";
+  if (reason.includes("SALES") || reason.includes("趋势") || reason.includes("有效")) return "SALES_VALID_DAYS_INSUFFICIENT";
+  return "OTHER_EVIDENCE_INCOMPLETE";
+};
+
+export function withPendingListingDiagnostics(row: ListingManagementRow): ListingManagementRow {
+  return {
+    ...row,
+    lifecycleDiagnostic: {
+      reasonCode: "PREVIEW_NOT_AVAILABLE",
+      reasons: [{ code: "PREVIEW_NOT_AVAILABLE", title: "尚未获取判定数据", detail: "", advice: "" }],
+      evidence: [],
+      cutoffLa: "",
+      ruleVersion: 0,
+    },
+    gradeDiagnostic: {
+      reason: "评级诊断尚未取得；正式评级未发布。",
+      cutoffLa: "",
+      sourceVerified: false,
+    },
+  };
+}
+
+export function applyListingEvaluationPreview(
+  row: ListingManagementRow,
+  preview: ListingEvaluationPreviewResult,
+): ListingManagementRow {
+  if (row.id !== preview.listing_id) return row;
+  const candidate = preview.lifecycle_candidate;
+  const reason = preview.lifecycle_evidence_reason;
+  const reasonCode = diagnosticReasonCode(reason, candidate);
+  const evidence = [
+    { label: "截止日WFS可售", value: preview.cutoff_wfs_available_quantity == null ? "缺失" : `${preview.cutoff_wfs_available_quantity} 件` },
+    { label: "Listing当前WFS库存", value: `${row.wfsAvailableInventory} 件` },
+    { label: "近30天有效销量日", value: `${preview.valid_stock_days_30} / 30 天` },
+    { label: "当前连续低库存", value: `${preview.consecutive_low_stock_days} 天` },
+    { label: "历史首次有货观测", value: preview.first_positive_date_la ?? "缺失" },
+  ];
+  const hasPublishedGrade = !["", "未分级", "待评级"].includes(row.productGrade || "");
+  const validCandidate = !preview.published && ["A", "B", "C", "D"].includes(preview.grade_candidate ?? "");
+  const stageExcluded = preview.missing_evidence.includes("LIFECYCLE_EXCLUDED_FROM_GRADING");
+  const gradeReason = stageExcluded
+    ? "当前生命周期不参与评级。"
+    : validCandidate
+      ? "仅供诊断：广告、成本与财务数据的正式完整性尚未确认，候选等级未发布。"
+      : "财务有效天数不足、利润率不可计算或正式发布证据未通过。";
+  return {
+    ...row,
+    lifecycleDiagnostic: {
+      reasonCode,
+      candidateStage: candidate,
+      reasons: [{ code: reasonCode, title: reason ?? "暂无可发布生命周期", detail: reason ?? "", advice: "" }],
+      evidence,
+      cutoffLa: preview.cutoff_la,
+      ruleVersion: preview.rule_version,
+    },
+    productGrade: hasPublishedGrade
+      ? row.productGrade
+      : validCandidate ? preview.grade_candidate! : row.productGrade,
+    gradePreviewCandidate: !hasPublishedGrade && validCandidate,
+    gradeDiagnostic: {
+      reason: gradeReason,
+      cutoffLa: preview.cutoff_la,
+      candidate: preview.grade_candidate ?? undefined,
+      valid7: preview.valid_short,
+      valid14: preview.valid_medium,
+      weightedMargin: preview.weighted_margin_percent,
+      sourceVerified: false,
+    },
+  };
+}
+
 const cacheKey = (...parts: unknown[]) => "listing-management:" + stableCacheKey(parts);
 
 export function fetchListingManagementRows(
