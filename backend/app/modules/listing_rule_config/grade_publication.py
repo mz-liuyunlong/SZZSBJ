@@ -8,9 +8,9 @@ This module does not issue attestations, enable schedules or modify lifecycle.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from hashlib import sha256
 from datetime import timedelta
 from decimal import Decimal
+from hashlib import sha256
 from uuid import UUID
 
 from sqlalchemy import select
