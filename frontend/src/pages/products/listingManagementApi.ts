@@ -675,7 +675,6 @@ export function applyListingEvaluationPreview(
   const reasonCode = diagnosticReasonCode(reason, candidate);
   const evidence = [
     { label: "截止日WFS可售", value: preview.cutoff_wfs_available_quantity == null ? "缺失" : `${preview.cutoff_wfs_available_quantity} 件` },
-    { label: "Listing当前WFS库存", value: `${row.wfsAvailableInventory} 件` },
     { label: "近30天有效销量日", value: `${preview.valid_stock_days_30} / 30 天` },
     { label: "当前连续低库存", value: `${preview.consecutive_low_stock_days} 天` },
     { label: "历史首次有货观测", value: preview.first_positive_date_la ?? "缺失" },
