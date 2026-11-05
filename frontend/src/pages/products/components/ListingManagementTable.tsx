@@ -236,7 +236,7 @@ const LIFECYCLE_REASON_WORDING: Record<string, { title: string; why: string; nex
   PREVIEW_NOT_AVAILABLE: {
     title: "尚未获取判定数据",
     why: "当前还没有取得这件商品的最新计算记录。",
-    next: "请检查正式诊断接口是否已启用，或稍后刷新页面。",
+    next: "刷新后重试。",
   },
   WORKFLOW_PROTECTED: {
     title: "已由业务流程管理",
@@ -256,7 +256,7 @@ const LIFECYCLE_REASON_WORDING: Record<string, { title: string; why: string; nex
   TREND_CONFIRMED: {
     title: "已满足阶段判定条件",
     why: "现有销量、库存或监控记录符合当前的生命周期规则。",
-    next: "当前显示只读诊断，只有正式发布流程才会修改已保存状态。",
+    next: "以正式保存的状态为准。",
   },
   CUTOFF_WFS_MISSING: {
     title: "当天库存记录缺失",
@@ -360,7 +360,7 @@ function LifecycleDiagnosticCard({
   });
   return (
     <div style={{ width: 300, maxHeight: 370, overflowY: "auto", fontSize: 12, lineHeight: 1.55 }}>
-      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{diagnostic.candidateStage ? `候选：${diagnostic.candidateStage}（诊断）` : primary.title}</div>
+      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{primary.title}</div>
       <div style={{ color: "#555", marginBottom: 10 }}>{primary.why}</div>
       <div style={{ background: "#f4f8ff", padding: "8px 10px", borderRadius: 6, marginBottom: 10 }}>
         <span style={{ color: "#1677ff", fontWeight: 600 }}>下一步：</span>
@@ -999,7 +999,6 @@ function ListingManagementTable({
         return (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
             <Tag color={color} style={{ marginInlineEnd: 0 }}>{grade}</Tag>
-            {row.gradePreviewCandidate && <span style={{ fontSize: 10, color: "#777" }}>试算</span>}
             {info && (
               <Popover trigger="click" placement="left" title="产品等级判定说明"
                 content={<div style={{ width: 284, fontSize: 12, lineHeight: 1.65 }}>
