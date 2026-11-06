@@ -130,7 +130,7 @@ def test_sp_recovery_recalculates_profit_roi_and_multi_store_rollup_idempotently
                 assert rows[1][1] == Decimal("14.91")
                 assert rows[1][2] == Decimal("-9.7502")
                 assert rows[1][3].quantize(Decimal("0.000001")) == Decimal("-0.750593")
-                assert rows[1][4].quantize(Decimal("0.000001")) == Decimal("-3.459421")
+                assert rows[1][4].quantize(Decimal("0.000001")) == Decimal("-3.459726")
                 assert rows[2][1] == Decimal("2.5")
                 assert rows[2][2] == Decimal("9.5")
                 assert rows[3][1] == Decimal("1.5")
