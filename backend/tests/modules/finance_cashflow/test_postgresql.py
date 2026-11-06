@@ -261,6 +261,87 @@ def test_review_events_flow_and_append_only_history(service, session):
     assert (line.category_code, line.category_source, line.stage) == ("G01", "人工", J.STAGE_TODO)
 
 
+def test_undo_reviews_edit_text_and_split(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    line = active(service, "BOC_CNY")[0]
+    uid = line.line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    assert event(service, uid, J.KIND_REVIEW1_UNDO, expected_version=1).stage == J.STAGE_TODO
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=2)
+    event(service, uid, J.KIND_REVIEW2_PASS, expected_version=3)
+    undone = service.post_event(
+        uid,
+        CashflowLineEventRequest(kind=J.KIND_REVIEW2_UNDO, expected_version=4),
+        actor="another-admin",
+        request_id="r",
+    )
+    assert undone.stage == J.STAGE_OK1
+    edited = event(
+        service, uid, J.KIND_SET_TEXT, payload={"memo": "改过的备注"}, expected_version=5
+    )
+    assert (edited.stage, edited.auto_reset) == (J.STAGE_OK1, False)
+    half = abs(line.amount) / 2
+    event(service, uid, J.KIND_SPLIT, payload={"amounts": [str(half)] * 2}, expected_version=6)
+    event(
+        service,
+        uid,
+        J.KIND_SET_PART_CATEGORY,
+        payload={"index": 0, "category_code": "G01"},
+        expected_version=7,
+    )
+    read = next(item for item in active(service, "BOC_CNY") if item.line_uid == uid)
+    assert (read.memo, read.manual_memo, read.manual_description) == (line.memo, "改过的备注", None)
+    assert [(part.amount, part.category_code) for part in read.parts or []] == [
+        (half.quantize(Decimal("0.0001")), "G01"),
+        (half.quantize(Decimal("0.0001")), None),
+    ]
+    assert read.stage == J.STAGE_TODO
+
+
+def _downgrade_0078(session: Session) -> None:
+    path = (
+        Path(__file__).resolve().parents[3]
+        / "alembic/versions/20261105_0078_finance_journal_edit_split.py"
+    )
+    spec = importlib.util.spec_from_file_location("finance_edit_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    context = MigrationContext.configure(session.connection())
+    with Operations.context(context):
+        module.downgrade()
+
+
+def test_0078_downgrade_refuses_review1_undo_events(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    uid = active(service, "BOC_CNY")[0].line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    event(service, uid, J.KIND_REVIEW1_UNDO, expected_version=1)
+    with pytest.raises(RuntimeError, match="撤销审核记录"):
+        _downgrade_0078(session)
+
+
+def test_0078_downgrade_refuses_review2_undo_events(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    uid = active(service, "BOC_CNY")[0].line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    event(service, uid, J.KIND_REVIEW2_PASS, expected_version=1)
+    event(service, uid, J.KIND_REVIEW2_UNDO, expected_version=2)
+    with pytest.raises(RuntimeError, match="撤销审核记录"):
+        _downgrade_0078(session)
+
+
+def test_0078_downgrade_allowed_without_undo_or_edits(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    uid = active(service, "BOC_CNY")[0].line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    _downgrade_0078(session)
+    columns = {
+        column["name"]
+        for column in inspect(session.connection()).get_columns("manual_finance_cash_line_state")
+    }
+    assert not columns & {"manual_description", "manual_memo", "parts"}
+
+
 def test_stale_version_is_rejected(service):
     upload(service, S.boc(S.BOC_A, boc_rows()))
     uid = active(service, "BOC_CNY")[0].line_uid
@@ -315,7 +396,7 @@ def test_line_exclusion_and_exclusion_list_anomaly(service, session):
             "exclusions": [
                 {
                     "entry_key": "e1",
-                    "ref": "202610100001",
+                    "ref": "209910100001",
                     "amount_cny": "5",
                     "reason": "其他部门",
                     "registered_on": "2026-10-22",
@@ -332,7 +413,7 @@ def test_line_exclusion_and_exclusion_list_anomaly(service, session):
         service,
         lines[1].line_uid,
         J.KIND_ATTACH_REF,
-        payload={"ref": "202610100001"},
+        payload={"ref": "209910100001"},
         expected_version=0,
     )
     assert not [item for item in service.list_anomalies() if item.type == J.ALERT_EXCLUSION]
@@ -792,7 +873,7 @@ def test_script_write_failure_prints_only_the_error_type(tmp_path, monkeypatch, 
                 "exclusions": [
                     {
                         "entry_key": "e",
-                        "ref": "202610100001",
+                        "ref": "209910100001",
                         "registered_on": "秘密日期",
                         "amount_cny": "1",
                         "reason": "x",
@@ -804,7 +885,7 @@ def test_script_write_failure_prints_only_the_error_type(tmp_path, monkeypatch, 
         (
             {
                 "exclusions": [
-                    {"entry_key": "e", "ref": "202610100001", "amount_cny": "1", "reason": "x"}
+                    {"entry_key": "e", "ref": "209910100001", "amount_cny": "1", "reason": "x"}
                 ]
             },
             "FILE_INVALID: exclusions 第 1 条 registered_on 不合格",
@@ -900,3 +981,71 @@ def test_empty_database_round_trip_upgrade_downgrade_upgrade():
         engine.dispose()
         with psycopg.connect(**admin, autocommit=True) as cx:
             cx.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database)))
+
+
+def _first_reviewed_line(service):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    uid = active(service, "BOC_CNY")[0].line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    return uid
+
+
+def _undo(service, uid, *, actor, version=1, key=None):
+    return service.post_event(
+        uid,
+        CashflowLineEventRequest(
+            kind=J.KIND_REVIEW1_UNDO, expected_version=version, idempotency_key=key
+        ),
+        actor=actor,
+        request_id="r",
+    )
+
+
+def _undo_actors(session, uid):
+    return session.scalars(
+        select(FinanceCashLineEvent.actor).where(
+            FinanceCashLineEvent.line_uid == uid,
+            FinanceCashLineEvent.kind == J.KIND_REVIEW1_UNDO,
+        )
+    ).all()
+
+
+def test_undo_first_review_by_the_original_reviewer(service, session):
+    uid = _first_reviewed_line(service)
+    assert _undo(service, uid, actor="admin").stage == J.STAGE_TODO
+    assert _undo_actors(session, uid) == ["admin"]
+
+
+def test_undo_first_review_by_someone_else_with_the_same_permission(service, session):
+    uid = _first_reviewed_line(service)
+    assert _undo(service, uid, actor="another-admin").stage == J.STAGE_TODO
+    assert _undo_actors(session, uid) == ["another-admin"]
+
+
+def test_undo_first_review_without_a_review_event_is_allowed(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    uid = active(service, "BOC_CNY")[0].line_uid
+    state = service._state_for_update(uid)
+    state.stage = J.STAGE_OK1
+    state.version = 1
+    session.flush()
+    assert _undo(service, uid, actor="another-admin").stage == J.STAGE_TODO
+    assert _undo_actors(session, uid) == ["another-admin"]
+
+
+def test_undo_first_review_rejects_a_stale_version(service, session):
+    uid = _first_reviewed_line(service)
+    with pytest.raises(J.EventRejectedError) as caught:
+        _undo(service, uid, actor="admin", version=0)
+    assert caught.value.status_code == 409
+    session.rollback()
+    assert _undo_actors(session, uid) == []
+
+
+def test_undo_first_review_repeat_is_idempotent(service, session):
+    uid = _first_reviewed_line(service)
+    first = _undo(service, uid, actor="admin", key="undo-1")
+    again = _undo(service, uid, actor="admin", key="undo-1")
+    assert (first.replayed, again.replayed) == (False, True)
+    assert again.version == first.version
+    assert _undo_actors(session, uid) == ["admin"]

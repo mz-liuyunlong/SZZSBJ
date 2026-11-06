@@ -84,6 +84,11 @@ class CashflowCategoryRead(BaseModel):
     is_exclude: bool
 
 
+class CashflowLinePartRead(BaseModel):
+    amount: Decimal
+    category_code: str | None = None
+
+
 class CashflowLineRead(BaseModel):
     line_uid: str
     account_key: str
@@ -111,6 +116,10 @@ class CashflowLineRead(BaseModel):
     stage: str = "todo"
     stage_reason: str | None = None
     review_note: str | None = None
+    # 人工改过的摘要 / 备注；null = 没改，显示银行原文（description / memo）。
+    manual_description: str | None = None
+    manual_memo: str | None = None
+    parts: list[CashflowLinePartRead] | None = None
     version: int = 0
     # 还没挂单的流水：金额和日期对得上的审批单号，等财务选。
     approval_candidates: list[str] = Field(default_factory=list)

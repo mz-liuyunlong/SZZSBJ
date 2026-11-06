@@ -101,7 +101,7 @@ describe("cashErrorText", () => {
 });
 
 const approval = (over: Partial<ApiApproval> = {}): ApiApproval => ({
-  serial: "202610010001", kind: "付款申请", status: "APPROVED", status_text: "已同意", state: "已付", started_at: "2026-10-01 09:00", completed_at: "2026-10-02 10:00", handled_at: "2026-10-02 09:30", applicant: "申请人",
+  serial: "209901010001", kind: "付款申请", status: "APPROVED", status_text: "已同意", state: "已付", started_at: "2026-10-01 09:00", completed_at: "2026-10-02 10:00", handled_at: "2026-10-02 09:30", applicant: "申请人",
   reason: "合成事由", amount: "100.0000", currency_code: "CNY", amount_cny: "100.0000", pay_method: "转账", invoice: "是", payee: "收款人", bank: "测试银行", last4: "1234", fee_category: "", related_serial: "",
   items: [{ content: "明细", amount: "100", category: "" }], attachments: [{ source: "form", what: "附件", item: 0, is_image: false, title: "a.pdf" }], records: [], comments: [],
   paid: [{ line_uid: "0123456789abcdef", amount_cny: "100.0000" }], paid_sum: "100.0000", fetched_at: null, ...over,
@@ -130,8 +130,13 @@ describe("approvals in the live snapshot", () => {
   });
 
   it("keeps candidates on the live line", () => {
-    expect(toCashLine(line({ approval_candidates: ["202610010001"] })).candidates).toEqual(["202610010001"]);
+    expect(toCashLine(line({ approval_candidates: ["209901010001"] })).candidates).toEqual(["209901010001"]);
     expect(toCashLine(line()).candidates).toEqual([]);
+    const edited = toCashLine(line({ amount: "-100.00", manual_description: "房租", manual_memo: null, parts: [{ amount: "60.0000", category_code: "G02" }, { amount: "40.0000", category_code: null }] }));
+    expect([edited.sum, edited.origSum]).toEqual(["房租", line().description]);
+    expect(edited.memo).toBe(line().memo);
+    expect(edited.parts).toEqual([{ amt: -60, cat: "G02" }, { amt: -40, cat: "" }]);
+    expect(toCashLine(line()).parts).toBeUndefined();
   });
 
   it("marks attachments as metadata only so no link is built", () => {

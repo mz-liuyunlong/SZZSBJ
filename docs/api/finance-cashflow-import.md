@@ -28,7 +28,7 @@
 | `POST /imports/{import_id}/void` | 整批作废 | body `{reason}`，必填。只出现在这批的流水标作废；也出现在别的未作废批次的，归属退回最近一个未作废批次。只属于这一批的流水里有已初审或已终审的，拒绝作废，什么都不改：409，错误码 `CASHFLOW_IMPORT_HAS_REVIEWED_LINES`，`details` 带 `count` 和 `line_ids`；要先退回这些流水的审核。 |
 | `GET /accounts` | 账户 | 含流水条数、最近文件名、覆盖区间、来源（表头 / 首末笔）。不返回识别用的完整账号。 |
 | `GET /categories` | 类别字典 | 26 个类别 |
-| `GET /lines` | 日记账流水 | `account_key`、`from`、`to`、`page`、`page_size`（最大 2000）；日期倒序 |
+| `GET /lines` | 日记账流水 | `account_key`、`from`、`to`、`page`、`page_size`（最大 2000）；日期倒序。`description` / `memo` 是银行原文，`manual_description` / `manual_memo` 是人工改过的（没改为 null）；`parts` 是拆分行 `[{amount, category_code}]`（没拆为 null） |
 | `GET /anomalies` | 异常 | 读时计算；有流水的带 `line_uid`，找不到流水的 `line_uid=null` |
 | `POST /lines/{line_uid}/events` | 人工动作 | 见下 |
 
@@ -46,8 +46,14 @@ body：`{kind, payload, reason, expected_version, idempotency_key}`。`expected_
 | `attach_ref` / `detach_ref` | `payload.ref`，12 位数字 | 手填审批单号 |
 | `exclude` | `reason` 必填；`payload.amount` 可选（原币），不填即整笔 | 整笔剔除后生效类别为 X01 |
 | `unexclude` | | 撤销剔除 |
+| `review1_undo` | | 撤销初审：ok1 / rej1 → todo。有初审权限的人都可以撤，不限当时做初审的人（rocky 2026-11-06）；事件表记下撤销人 |
+| `review2_undo` | | 撤销终审：ok2 / rej2 → ok1 |
+| `set_text` | `payload.description` / `payload.memo`，至少一个；空字符串或 null 表示恢复银行原文；每项最多 500 字 | 只改显示，银行原文不动，分类规则照原文算；不退回审核 |
+| `split` | `payload.amounts`：2 到 20 个正数，合计等于流水金额绝对值 | 拆分后各行类别为空，再逐行选；再拆一次会整体替换 |
+| `set_part_category` | `payload.index`（从 0 起）、`payload.category_code`（空值表示清掉） | 给拆分行选类别；X01 不能选 |
+| `unsplit` | | 取消拆分 |
 
-已初审或已终审的流水，再改类别、单号或剔除，自动退回 todo，并多记一条 `auto_reset` 事件。阶段不允许返回 409；内容不合格返回 422；流水不存在或已作废返回 404。
+已初审或已终审的流水，再改类别、单号、剔除或拆分，自动退回 todo，并多记一条 `auto_reset` 事件。阶段不允许返回 409；内容不合格返回 422；流水不存在或已作废返回 404。
 
 ### 错误码
 
@@ -62,7 +68,7 @@ body：`{kind, payload, reason, expected_version, idempotency_key}`。`expected_
 | 404 | `CASHFLOW_LINE_NOT_FOUND` | 流水不存在或已作废 |
 | 409 | `CASHFLOW_VERSION_CONFLICT` | `expected_version` 和当前版本不符，别人刚改过 |
 | 409 | `CASHFLOW_STAGE_NOT_ALLOWED` | 当前审核阶段不允许这个动作（例如没初审就终审） |
-| 422 / 409 | `CASHFLOW_INVALID_EVENT` | 内容不合格（缺原因、类别不存在、单号不是 12 位、剔除金额无效、不支持的 kind）返回 422；重复挂同一单号、摘不存在的单号、撤销没剔除的流水返回 409 |
+| 422 / 409 | `CASHFLOW_INVALID_EVENT` | 内容不合格（缺原因、类别不存在、单号不是 12 位、剔除金额无效、不支持的 kind）返回 422；重复挂同一单号、摘不存在的单号、撤销没剔除的流水、已拆分的流水改整笔类别、没拆分就选拆分行类别 / 取消拆分返回 409 |
 | 409 | `CASHFLOW_IDEMPOTENCY_KEY_REUSED` | 幂等键已经用在别的操作上 |
 | 503 | `CASHFLOW_STORAGE_NOT_CONFIGURED` | `MEDIA_STORAGE_ROOT` 没配 |
 | 413 | `CASHFLOW_UPLOAD_TOO_LARGE` | 文件超过 `FINANCE_CASHFLOW_MAX_UPLOAD_BYTES` |

@@ -23,8 +23,8 @@ from app.modules.integration_sync.finance_approval_catalog import (
 )
 from app.modules.integration_sync.handlers.feishu_finance_approval_sync import month_slices
 
-SERIAL = "202610010001"
-OTHER = "202610010002"
+SERIAL = "209901010001"
+OTHER = "209901010002"
 LOCKED = frozenset({J.STAGE_OK1, J.STAGE_OK2})
 
 
@@ -672,3 +672,14 @@ def test_allocate_random_inputs_are_non_negative_exact_and_repeatable():
         assert sum(shares.values()) == total  # type: ignore[arg-type]
         assert all(share.as_tuple().exponent == -2 for share in shares.values())  # type: ignore[union-attr]
         assert allocate_payment(line, names, rows, RATE) == shares
+
+
+def test_allocate_one_zero_amount_gets_zero_and_the_rest_sums_up():
+    shares = allocate_payment(
+        Decimal("-100"),
+        ["A", "B", "C"],
+        {"A": _row("0"), "B": _row("100"), "C": _row("300")},
+        RATE,
+    )
+    assert shares == {"A": Decimal("0.00"), "B": Decimal("25.00"), "C": Decimal("75.00")}
+    assert sum(shares.values()) == Decimal("100")

@@ -49,8 +49,8 @@ from app.modules.integration_sync.handlers.feishu_finance_approval_sync import (
 )
 from app.modules.integration_sync.models import IntegrationSyncRun, IntegrationSyncRunWorkItem
 
-SERIAL = "202610010001"
-OTHER = "202610010002"
+SERIAL = "209901010001"
+OTHER = "209901010002"
 THIRD = "209901010003"
 PAYMENT_CODE = "TEST-0002"
 TEST_CODES = "费用报销=TEST-0001,付款申请=TEST-0002,备用金申请=TEST-0003,备用金核销=TEST-0004"

@@ -9,6 +9,7 @@ import ResetButton from "@/components/report-table/ResetButton";
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
 import FinanceBoardFrame, { FinMoney, LOCKED_TIP } from "@/pages/finance/FinanceBoardFrame";
 import ImportDrawer from "@/pages/finance/cash-flow/ImportDrawer";
+import { CellText } from "@/pages/finance/cash-flow/LineActions";
 import { asLive, cashErrorText, postLineEvent, syncErrorText, syncFailedText, useApprovalSync, useRefreshJournal, type LineEventKind, type LiveCashLine } from "@/pages/finance/cash-flow/journalApi";
 import { ALERT_GUIDE, alertShort, toCashAlerts, useApprovals, type CashAlert, type FsDetail } from "@/pages/finance/cash-flow/data";
 import { accountLabel, fmtMoney, type CashLine, type CashSnapshot, type FeishuApproval } from "@/pages/finance/localFinData";
@@ -215,8 +216,8 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
   const columnDefs: Record<string, ProColumns<CashLine>[]> = {
     date: [{ key: "date", title: "日期", dataIndex: "date", width: 116, fixed: "left", render: (_, row) => <span className="finance-board__stack">{row.date}<span className="finance-board__sub">{row.id.split(":").pop()}</span></span> }],
     acct: [{ key: "acct", title: "账户", dataIndex: "acct", width: 200, render: (_, row) => accountMap.get(row.acct)?.name ?? row.acct }],
-    sum: [{ key: "sum", title: "摘要", dataIndex: "sum", width: 180, render: (_, row) => (row.masked ? <Typography.Text type="secondary">****</Typography.Text> : <Typography.Text ellipsis={{ tooltip: row.sum }} style={{ maxWidth: 164 }}>{row.sum || EMPTY}</Typography.Text>) }],
-    memo: [{ key: "memo", title: "备注", dataIndex: "memo", width: 300, render: (_, row) => (row.masked ? <Typography.Text type="secondary">****</Typography.Text> : row.memo && row.memo !== row.sum ? <Typography.Text type="secondary" className="finance-board__fulltext">{row.memo}</Typography.Text> : EMPTY) }],
+    sum: [{ key: "sum", title: "摘要", dataIndex: "sum", width: 180, render: (_, row) => (row.masked ? <Typography.Text type="secondary">****</Typography.Text> : <CellText line={row} field="description"><Typography.Text ellipsis={{ tooltip: row.sum }} style={{ maxWidth: 164 }}>{row.sum || EMPTY}</Typography.Text></CellText>) }],
+    memo: [{ key: "memo", title: "备注", dataIndex: "memo", width: 300, render: (_, row) => (row.masked ? <Typography.Text type="secondary">****</Typography.Text> : <CellText line={row} field="memo">{row.memo && row.memo !== row.sum ? <Typography.Text type="secondary" className="finance-board__fulltext">{row.memo}</Typography.Text> : EMPTY}</CellText>) }],
     party: [{ key: "party", title: "对方", dataIndex: "party", width: 200, render: (_, row) => (row.party ? <Typography.Text ellipsis={{ tooltip: row.party }} style={{ maxWidth: 184 }}>{row.party}</Typography.Text> : EMPTY) }],
     amt: [{ key: "amt", title: "金额", dataIndex: "amt", width: 130, align: "right", render: (_, row) => <FinMoney value={row.amt} cur={row.cur} masked={row.masked} /> }],
     cny: [{ key: "cny", title: "折人民币", dataIndex: "cny", width: 130, align: "right", render: (_, row) => (row.cur === "CNY" ? EMPTY : <FinMoney value={row.cny} masked={row.masked} />) }],
