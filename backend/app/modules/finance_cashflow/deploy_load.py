@@ -1,6 +1,7 @@
-"""上线时导入不进仓库的配置：账户（含银行账号）、带名字的分类规则、剔除清单。
+"""上线时导入不进仓库的配置：账户（含银行账号）、带名字的分类规则、剔除清单、汇率种子。
 
-可重复执行：账户按 account_key 更新；source=deploy 的规则整组替换；清单按 entry_key 更新。
+可重复执行：账户按 account_key 更新；source=deploy 的规则整组替换；清单按 entry_key 更新；
+汇率只补没有的月份和币种。
 只输出条数，不输出账号、名字、金额。
 """
 
@@ -22,6 +23,7 @@ from app.modules.finance_cashflow.models import (
     FinanceCashClassifyRule,
     FinanceCashExclusion,
 )
+from app.modules.fx_rates.models import LingxingFxRate
 
 PROVIDERS = frozenset({"boc", "shenzhen_rural_bank", "payoneer", "worldfirst", "pingpong"})
 CURRENCIES = frozenset({"CNY", "USD", "CNH"})
@@ -38,6 +40,7 @@ class LoadCounts:
     accounts: int
     rules: int
     exclusions: int
+    fx_rates: int = 0
 
 
 def _int_field(row: dict[str, Any], key: str, section: str, index: int) -> int:
@@ -157,12 +160,49 @@ def _exclusions(raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def _rate_field(row: dict[str, Any], key: str, index: int) -> Decimal | None:
+    value = row.get(key)
+    if value is None or value == "":
+        return None
+    try:
+        rate = Decimal(str(value))
+    except InvalidOperation as exc:
+        raise DeployFileError(f"fx_rates 第 {index} 条 {key} 不合格") from exc
+    if not rate.is_finite() or rate < 0:
+        raise DeployFileError(f"fx_rates 第 {index} 条 {key} 不合格")
+    return rate if rate > 0 else None
+
+
+def _fx_rates(raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for index, row in enumerate(raw, start=1):
+        month = str(row.get("rate_month") or "")
+        if not re.fullmatch(r"\d{4}-\d{2}", month):
+            raise DeployFileError(f"fx_rates 第 {index} 条 rate_month 不合格")
+        code = str(row.get("currency_code") or "").strip().upper()
+        if not code or len(code) > 8:
+            raise DeployFileError(f"fx_rates 第 {index} 条 currency_code 不合格")
+        out.append(
+            {
+                "rate_month": month,
+                "currency_code": code,
+                "currency_name": str(row.get("currency_name") or "")[:64] or None,
+                "rate_org": _rate_field(row, "rate_org", index),
+                "my_rate": _rate_field(row, "my_rate", index),
+                "lx_update_time": str(row.get("lx_update_time") or "")[:32] or None,
+                "source": "seed",
+            }
+        )
+    return out
+
+
 def load_deploy_data(session: Session, data: dict[str, Any]) -> LoadCounts:
     """校验并写入，不提交；由调用方决定提交还是回滚（演练）。"""
     categories = frozenset(session.scalars(select(FinanceCashCategory.code)))
     accounts = _accounts(data.get("accounts") or [])
     rules = _rules(data.get("rules") or [], categories)
     exclusions = _exclusions(data.get("exclusions") or [])
+    fx_rates = _fx_rates(data.get("fx_rates") or [])
     for row in accounts:
         statement = pg_insert(FinanceCashAccount).values(**row)
         session.execute(
@@ -184,5 +224,17 @@ def load_deploy_data(session: Session, data: dict[str, Any]) -> LoadCounts:
                 set_={key: statement.excluded[key] for key in row if key != "entry_key"},
             )
         )
+    for row in fx_rates:
+        # 只补没有的月份：同步拉到的数据优先，种子不覆盖。
+        session.execute(
+            pg_insert(LingxingFxRate)
+            .values(**row)
+            .on_conflict_do_nothing(index_elements=["rate_month", "currency_code"])
+        )
     session.flush()
-    return LoadCounts(accounts=len(accounts), rules=len(rules), exclusions=len(exclusions))
+    return LoadCounts(
+        accounts=len(accounts),
+        rules=len(rules),
+        exclusions=len(exclusions),
+        fx_rates=len(fx_rates),
+    )

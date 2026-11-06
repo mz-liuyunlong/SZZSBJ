@@ -3,13 +3,13 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date
 from decimal import Decimal
 
 import pytest
 
 from app.modules.finance_cashflow import journal as J
-from app.modules.finance_cashflow.service import FxVersion, month_usd_rate
+from app.modules.fx_rates.reader import usd_cny_rate_for
 
 CATEGORIES = frozenset({"G01", "F01", "T02", "X01"})
 INTERNAL = frozenset({"T02"})
@@ -147,25 +147,11 @@ def test_fx_cny_usd_and_cnh():
     assert by_uid(compute([line("u", 10, cur="USD")]))["u"].amount_cny is None
 
 
-def fx(account, start, end, rate):
-    return FxVersion(account, start, end, Decimal(rate))
-
-
-def test_month_rate_uses_latest_version_in_month_and_no_fallback():
-    versions = [
-        fx("S1", datetime(2026, 9, 1, tzinfo=UTC), datetime(2026, 10, 15, tzinfo=UTC), "7.0"),
-        fx("S1", datetime(2026, 10, 15, tzinfo=UTC), None, "7.1"),
-    ]
-    assert month_usd_rate(versions, date(2026, 10, 20)) == Decimal("7.1")
-    assert month_usd_rate(versions, date(2026, 8, 20)) is None
-
-
-def test_month_rate_reads_the_same_value_from_rows_stored_per_store():
-    versions = [
-        fx("S1", datetime(2026, 9, 1, tzinfo=UTC), None, "7.0"),
-        fx("S2", datetime(2026, 9, 1, tzinfo=UTC), None, "7.0"),
-    ]
-    assert month_usd_rate(versions, date(2026, 10, 1)) == Decimal("7.0")
+def test_month_rate_is_read_by_business_month_and_no_fallback():
+    rates = {"2026-09": Decimal("7.0"), "2026-10": Decimal("7.1")}
+    assert usd_cny_rate_for(rates, date(2026, 10, 20)) == Decimal("7.1")
+    assert usd_cny_rate_for(rates, date(2026, 8, 20)) is None
+    assert usd_cny_rate_for(rates, date(2026, 11, 1)) is None
 
 
 def test_balance_alert_when_previous_balance_is_missing():

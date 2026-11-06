@@ -13,6 +13,7 @@ from app.modules.integration_sync.finance_approval_catalog import (
     FINANCE_APPROVAL_PROVIDER,
     FINANCE_APPROVAL_SYNC_SPEC,
 )
+from app.modules.integration_sync.fx_catalog import FX_RATE_SYNC_SPEC
 from app.modules.integration_sync.handlers.lingxing_batch_product_info import ordered_id_hash
 from app.modules.integration_sync.models import (
     IntegrationSyncConfig,
@@ -598,12 +599,20 @@ class IntegrationSyncService:
             and interface.interface_key == FINANCE_APPROVAL_SYNC_SPEC.interface_key
             and interface.handler_key == FINANCE_APPROVAL_SYNC_SPEC.handler_key
         )
+        is_fx = (
+            interface.provider == "lingxing"
+            and interface.interface_key == FX_RATE_SYNC_SPEC.interface_key
+            and interface.method == "POST"
+            and interface.endpoint_path == FX_RATE_SYNC_SPEC.endpoint_path
+            and interface.handler_key == FX_RATE_SYNC_SPEC.handler_key
+        )
         if productlist_only and not (
             is_productlist
             or is_productinfo
             or is_pmc_purchase
             or is_data_pages
             or is_finance_approval
+            or is_fx
         ):
             raise ApiError(code=SYNC_PRODUCTLIST_ONLY, status_code=409)
         if is_pmc_purchase and (trigger is not TriggerType.MANUAL or config.schedule_enabled):
