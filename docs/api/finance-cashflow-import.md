@@ -28,6 +28,9 @@
 | `POST /imports/{import_id}/void` | 整批作废 | body `{reason}`，必填。只出现在这批的流水标作废；也出现在别的未作废批次的，归属退回最近一个未作废批次。只属于这一批的流水里有已初审或已终审的，拒绝作废，什么都不改：409，错误码 `CASHFLOW_IMPORT_HAS_REVIEWED_LINES`，`details` 带 `count` 和 `line_ids`；要先退回这些流水的审核。 |
 | `GET /accounts` | 账户 | 含流水条数、最近文件名、覆盖区间、来源（表头 / 首末笔）。不返回识别用的完整账号。 |
 | `GET /categories` | 类别字典 | 26 个类别 |
+| `GET /fx-rates` | 领星美元月汇率，只读 | 新月份在前；领星没给汇率的月份 `my_rate` 为空 |
+| `GET /fx-rates/sync` | 最近一次同步汇率的状态 | `never` / `queued` / `running` / `succeeded` / `failed`，失败带 `error_code` |
+| `POST /fx-rates/sync` | 手动同步汇率 | 走任务中心的同步任务，已在跑就不重复开；没打开返回 409，队列不可用返回 503 |
 | `GET /lines` | 日记账流水 | `account_key`、`from`、`to`、`page`、`page_size`（最大 2000）；日期倒序。`description` / `memo` 是银行原文，`manual_description` / `manual_memo` 是人工改过的（没改为 null）；`parts` 是拆分行 `[{amount, category_code}]`（没拆为 null） |
 | `GET /anomalies` | 异常 | 读时计算；有流水的带 `line_uid`，找不到流水的 `line_uid=null` |
 | `POST /lines/{line_uid}/events` | 人工动作 | 见下 |
@@ -100,7 +103,7 @@ body：`{kind, payload, reason, expected_version, idempotency_key}`。`expected_
 
 - 类别：整笔剔除 → X01；人工 > 规则 > 待分类。
 - 配对：T02 类；15 天内、方向相反、不同账户；同币种差不超过 1 元，或跨币种按备注 USD 金额；再试一出多入（最多 3 笔）；同一平台多笔 USD 换一笔 CNH 按汇率 6.3~7.6 配，标「汇率区间配对待核」。
-- 折人民币：CNY 原值；USD 用 `ref_product_pricing_rule_versions.usd_cny_rate` 当月生效的统一值（表按店存多行，取当月内最新生效的一行）；当月没有才为空；CNH 为空。不兜底。
+- 折人民币：CNY 原值；USD 用领星月汇率 `fact_lingxing_fx_rate.my_rate` 业务日所在月的值；当月没有才为空；CNH 为空。不兜底。
 - 剔除清单：按日期顺序在命中流水上按人民币扣；没有人民币金额的流水不扣；扣不完出异常。
 - 异常的 `currency_code`：`amount` 的币种。`剔除未命中` 按人民币算，填 `CNY`；其他填这笔流水的币种。
 - 异常类型：`余额不连续`、`内部转账未配对`、`剔除未命中`（页面显示「要剔除的款没找到」）；`对方账户不在日记账` 只是提示，不算异常。

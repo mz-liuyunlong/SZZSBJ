@@ -1,7 +1,9 @@
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Literal, Protocol
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.integration_sync.data_pages_catalog import (
@@ -12,6 +14,7 @@ from app.modules.integration_sync.finance_approval_catalog import (
     FINANCE_APPROVAL_SOURCE_REF,
     FINANCE_APPROVAL_SYNC_SPEC,
 )
+from app.modules.integration_sync.fx_catalog import FX_RATE_SCHEDULE_CRON, FX_RATE_SYNC_SPEC
 from app.modules.integration_sync.models import (
     IntegrationInterface,
     IntegrationInterfaceDependency,
@@ -545,6 +548,68 @@ class IntegrationCatalogService:
         except Exception:
             self.session.rollback()
             raise
+
+    def bootstrap_fx_governance(
+        self,
+        source_account_ref: str,
+    ) -> WfsGovernanceBootstrapResult:
+        """Create the FX catalog/config with outbound and schedule disabled."""
+
+        source_account_ref = validate_data_pages_source_account_ref(source_account_ref)
+        spec = FX_RATE_SYNC_SPEC
+        try:
+            interface, interface_status = self._bootstrap_data_pages_interface(spec)
+            policy, policy_status = self._bootstrap_data_pages_retention_policy(spec)
+            config_status = self._bootstrap_data_pages_sync_config(
+                interface,
+                policy,
+                spec,
+                source_account_ref,
+            )
+            self.session.commit()
+            return WfsGovernanceBootstrapResult(
+                interface_statuses=(interface_status,),
+                retention_policy_statuses=(policy_status,),
+                sync_config_statuses=(config_status,),
+            )
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def enable_fx_sync(self, source_account_ref: str) -> bool:
+        """Turn on the FX sync: manual runs and the weekly schedule.
+
+        Safe to repeat: a cron or next run already set in the task centre is kept.
+        """
+        from app.modules.integration_sync.scheduler import next_cron_instant
+
+        source_account_ref = validate_data_pages_source_account_ref(source_account_ref)
+        interface = self.session.scalars(
+            select(IntegrationInterface).where(
+                IntegrationInterface.provider == "lingxing",
+                IntegrationInterface.interface_key == FX_RATE_SYNC_SPEC.interface_key,
+            )
+        ).one_or_none()
+        if interface is None:
+            return False
+        config = self.session.scalars(
+            select(IntegrationSyncConfig).where(
+                IntegrationSyncConfig.interface_id == interface.id,
+                IntegrationSyncConfig.source_account_ref == source_account_ref,
+            )
+        ).one_or_none()
+        if config is None:
+            return False
+        interface.outbound_enabled = True
+        config.is_enabled = True
+        config.schedule_enabled = True
+        config.schedule_cron = config.schedule_cron or FX_RATE_SCHEDULE_CRON
+        config.schedule_timezone = "UTC"
+        config.next_run_at = config.next_run_at or next_cron_instant(
+            config.schedule_cron, datetime.now(UTC)
+        )
+        self.session.commit()
+        return True
 
     def _bootstrap_data_pages_interface(
         self,

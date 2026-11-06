@@ -21,6 +21,12 @@ from app.modules.finance_cashflow.approval_sync import (
     latest_sync,
     start_sync,
 )
+from app.modules.finance_cashflow.fx_sync import (
+    FxSyncNotConfiguredError,
+    FxSyncUnavailableError,
+    latest_fx_sync,
+    start_fx_sync,
+)
 from app.modules.finance_cashflow.journal import EventRejectedError
 from app.modules.finance_cashflow.schemas import (
     CashflowAccountRead,
@@ -28,6 +34,7 @@ from app.modules.finance_cashflow.schemas import (
     CashflowApprovalRead,
     CashflowApprovalSyncData,
     CashflowCategoryRead,
+    CashflowFxRateRead,
     CashflowImportListData,
     CashflowImportRead,
     CashflowLineEventData,
@@ -45,6 +52,7 @@ from app.modules.finance_cashflow.service import (
     LineNotFoundError,
     StorageNotConfiguredError,
 )
+from app.modules.fx_rates.reader import list_usd_cny_rates
 
 logger = logging.getLogger("app.finance_cashflow")
 
@@ -64,6 +72,8 @@ ERR_EMPTY_UPLOAD = "CASHFLOW_EMPTY_UPLOAD"
 ERR_VOID_REASON_REQUIRED = "CASHFLOW_VOID_REASON_REQUIRED"
 ERR_APPROVAL_SYNC_NOT_CONFIGURED = "CASHFLOW_APPROVAL_SYNC_NOT_CONFIGURED"
 ERR_APPROVAL_SYNC_UNAVAILABLE = "CASHFLOW_APPROVAL_SYNC_UNAVAILABLE"
+ERR_FX_SYNC_NOT_CONFIGURED = "CASHFLOW_FX_SYNC_NOT_CONFIGURED"
+ERR_FX_SYNC_UNAVAILABLE = "CASHFLOW_FX_SYNC_UNAVAILABLE"
 
 
 def _too_large() -> ApiError:
@@ -248,6 +258,72 @@ def list_categories(
     principal: admin_principal,
 ) -> SuccessEnvelope[list[CashflowCategoryRead], None]:
     return success_response(request, data=CashflowService(session).list_categories())
+
+
+@router.get(
+    "/fx-rates",
+    responses=ERRORS,
+    operation_id="listFinanceCashflowFxRates",
+    summary="领星美元月汇率，只读，新月份在前",
+)
+def list_fx_rates(
+    request: Request,
+    session: db_session,
+    principal: admin_principal,
+) -> SuccessEnvelope[list[CashflowFxRateRead], None]:
+    rows = list_usd_cny_rates(session)
+    return success_response(
+        request,
+        data=[
+            CashflowFxRateRead(
+                month=row.rate_month, currency_code=row.currency_code, my_rate=row.my_rate
+            )
+            for row in rows
+        ],
+    )
+
+
+@router.get(
+    "/fx-rates/sync",
+    responses=ERRORS,
+    operation_id="getFinanceCashflowFxSync",
+    summary="最近一次同步领星汇率的状态",
+)
+def get_fx_sync(
+    request: Request,
+    session: db_session,
+    principal: admin_principal,
+) -> SuccessEnvelope[CashflowApprovalSyncData, None]:
+    return success_response(request, data=latest_fx_sync(session))
+
+
+@router.post(
+    "/fx-rates/sync",
+    status_code=202,
+    responses=ERRORS,
+    operation_id="startFinanceCashflowFxSync",
+    summary="手动同步领星汇率（走任务中心的同步任务，已在跑就不重复开）",
+)
+def post_fx_sync(
+    request: Request,
+    session: db_session,
+    principal: admin_principal,
+) -> SuccessEnvelope[CashflowApprovalSyncData, None]:
+    try:
+        data = start_fx_sync(session, actor=principal.user_id, request_id=get_request_id(request))
+    except FxSyncNotConfiguredError as exc:
+        raise ApiError(
+            code=ERR_FX_SYNC_NOT_CONFIGURED,
+            status_code=409,
+            message="汇率同步任务还没打开",
+        ) from exc
+    except FxSyncUnavailableError as exc:
+        raise ApiError(
+            code=ERR_FX_SYNC_UNAVAILABLE,
+            status_code=503,
+            message="任务队列暂时不可用，请稍后再试",
+        ) from exc
+    return success_response(request, data=data)
 
 
 @router.get(
