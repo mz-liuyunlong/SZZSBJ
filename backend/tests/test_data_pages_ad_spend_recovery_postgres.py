@@ -6,6 +6,7 @@ from decimal import Decimal
 
 import pytest
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.modules.integration_sync.data_pages_ad_spend_recovery import (
@@ -205,7 +206,7 @@ def test_sp_recovery_rejects_missing_profit_rollup_and_rollback_is_atomic():
                 savepoint = conn.begin_nested()
                 try:
                     with Session(bind=conn) as session:
-                        with pytest.raises(Exception):
+                        with pytest.raises(ProgrammingError):
                             recover_standard_ad_spend(session, "account", day)
                 finally:
                     savepoint.rollback()
