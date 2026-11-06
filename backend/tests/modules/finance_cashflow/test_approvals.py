@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import random
 from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -546,7 +547,7 @@ def test_allocate_line_without_cny_is_pending():
     }
 
 
-def test_allocate_rounding_remainder_goes_to_the_largest():
+def test_allocate_rounding_remainder_goes_to_the_largest_fractions():
     shares = allocate_payment(
         Decimal("-100"),
         ["A", "B", "C"],
@@ -570,3 +571,104 @@ def test_allocate_approval_without_amount_is_pending():
         Decimal("-100"), ["A", "B"], {"A": _row("100"), "B": _row(None)}, RATE
     )
     assert shares == {"A": None, "B": None}
+
+
+def _equal(count, amount="100"):
+    names = [chr(ord("A") + index) for index in range(count)]
+    return names, {name: _row(amount) for name in names}
+
+
+def test_allocate_two_fen_to_four_equal_approvals_is_never_negative():
+    names, rows = _equal(4)
+    assert allocate_payment(Decimal("-0.02"), names, rows, RATE) == {
+        "A": Decimal("0.01"),
+        "B": Decimal("0.01"),
+        "C": Decimal("0.00"),
+        "D": Decimal("0.00"),
+    }
+
+
+def test_allocate_one_fen_goes_to_exactly_one_approval():
+    names, rows = _equal(5)
+    shares = allocate_payment(Decimal("-0.01"), names, rows, RATE)
+    assert list(shares.values()) == [Decimal("0.01")] + [Decimal("0.00")] * 4
+
+
+def test_allocate_one_fen_goes_to_the_largest_weight_first():
+    shares = allocate_payment(
+        Decimal("-0.01"), ["A", "B", "C"], {"A": _row("1"), "B": _row("5"), "C": _row("2")}, RATE
+    )
+    assert shares == {"A": Decimal("0.00"), "B": Decimal("0.01"), "C": Decimal("0.00")}
+
+
+def test_allocate_one_hundred_by_different_ratios():
+    shares = allocate_payment(
+        Decimal("-100"), ["A", "B", "C"], {"A": _row("1"), "B": _row("2"), "C": _row("3")}, RATE
+    )
+    # 精确值 16.666… / 33.333… / 50，先取整再把剩下的 1 分给小数最大的 A。
+    assert shares == {"A": Decimal("16.67"), "B": Decimal("33.33"), "C": Decimal("50.00")}
+
+
+def test_allocate_mixed_usd_and_cny_with_a_remainder():
+    # 权重 700 : 300 : 300，0.05 元精确值 0.0269 / 0.0115 / 0.0115。
+    shares = allocate_payment(
+        Decimal("-0.05"),
+        ["U", "C1", "C2"],
+        {"U": _row("100", "USD"), "C1": _row("300"), "C2": _row("300")},
+        RATE,
+    )
+    assert shares == {"U": Decimal("0.03"), "C1": Decimal("0.01"), "C2": Decimal("0.01")}
+
+
+def test_allocate_refund_splits_the_same_way_as_a_payment():
+    # 退款（流入）在这里也按正数分，冲减由 _read 按流水方向处理。
+    names, rows = _equal(3)
+    assert allocate_payment(Decimal("10"), names, rows, RATE) == allocate_payment(
+        Decimal("-10"), names, rows, RATE
+    )
+
+
+def test_allocate_rounds_a_payment_below_one_fen_first():
+    # 美元流水折人民币带 4 位小数：先四舍五入到分，每张都是分。
+    names, rows = _equal(2)
+    shares = allocate_payment(Decimal("-710.1250"), names, rows, RATE)
+    assert shares == {"A": Decimal("355.07"), "B": Decimal("355.06")}
+    assert allocate_payment(Decimal("-710.1250"), ["A"], rows, RATE) == {"A": Decimal("710.13")}
+
+
+def test_allocate_zero_weight_gets_nothing_and_all_zero_is_pending():
+    rows = {"A": _row("0"), "B": _row("3"), "C": _row("3")}
+    shares = allocate_payment(Decimal("-0.05"), ["A", "B", "C"], rows, RATE)
+    assert shares == {"A": Decimal("0.00"), "B": Decimal("0.03"), "C": Decimal("0.02")}
+    assert allocate_payment(Decimal("-1"), ["A", "B"], {"A": _row("0"), "B": _row("0")}, RATE) == {
+        "A": None,
+        "B": None,
+    }
+
+
+def test_allocate_result_does_not_depend_on_the_order_of_refs():
+    names, rows = _equal(4)
+    forward = allocate_payment(Decimal("-0.02"), names, rows, RATE)
+    backward = allocate_payment(Decimal("-0.02"), list(reversed(names)), rows, RATE)
+    assert forward == backward
+
+
+def test_allocate_random_inputs_are_non_negative_exact_and_repeatable():
+    rng = random.Random(20261106)
+    for _ in range(2000):
+        count = rng.randint(2, 8)
+        names = [f"S{index}" for index in range(count)]
+        rows = {
+            name: _row(str(Decimal(rng.randint(0, 5_000_000)) / 100), rng.choice(["CNY", "USD"]))
+            for name in names
+        }
+        if not any(row.amount for row in rows.values()):
+            continue
+        fen = rng.choice([rng.randint(0, 20), rng.randint(0, 100_000_000)])
+        total = Decimal(fen) / 100
+        line = -total if rng.random() < 0.5 else total
+        shares = allocate_payment(line, names, rows, RATE)
+        assert all(share is not None and share >= 0 for share in shares.values())
+        assert sum(shares.values()) == total  # type: ignore[arg-type]
+        assert all(share.as_tuple().exponent == -2 for share in shares.values())  # type: ignore[union-attr]
+        assert allocate_payment(line, names, rows, RATE) == shares
