@@ -33,6 +33,11 @@ export interface CashPart {
   cat: string;
   ref?: string;
   note?: string;
+  /** 手续费行（「确认记为手续费」切出来的）：手续费层，如 fee / payoneer */
+  fee?: string;
+  /** 拆分行自己的摘要 / 备注（没填 = 沿用整笔的摘要，备注空着） */
+  sum?: string;
+  memo?: string;
 }
 
 export interface CashLine {
@@ -202,6 +207,6 @@ export const accountLabel = (account?: CashAccount) => (account ? `${account.nam
 const moneyFmt = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const fmtMoney = (value: number | null | undefined, cur = "CNY") => {
   if (value == null || !Number.isFinite(value)) return "—";
-  const symbol = cur === "USD" ? "$" : cur === "CNH" ? "CNH " : "¥";
+  const symbol = cur === "USD" ? "$" : "¥";
   return `${value < 0 ? "-" : ""}${symbol}${moneyFmt.format(Math.abs(value))}`;
 };

@@ -11,7 +11,7 @@ import re
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
@@ -35,6 +35,30 @@ ALERT_BALANCE = "余额不连续"
 ALERT_UNPAIRED = "内部转账未配对"
 ALERT_EXCLUSION = "剔除未命中"  # 页面显示名是「要剔除的款没找到」
 HINT_NOT_IN_JOURNAL = "对方账户不在日记账"
+# 派安盈月结补充（rocky 11-05）：人民币以派安盈为准；差额只进异常，点「确认记为手续费」才拆。
+ALERT_PAYONEER_FEE = "派安盈提现到账差额"
+ALERT_PAYONEER_MISSING = "缺派安盈实际汇率"
+ALERT_STATEMENT_UNMATCHED = "月结单有、流水没有"
+ALERT_STATEMENT_AMBIGUOUS = "月结单匹配到多笔"
+ALERT_STATEMENT_CONFLICT = "月结单前后不一致"
+FEE_LAYER_PAYONEER = "payoneer"
+FX_SOURCE_PAYONEER = "payoneer"
+FX_SOURCE_LINGXING = "lingxing"
+FX_SOURCE_PENDING = "pending"
+PAYONEER_WITHDRAWAL = re.compile(r"^Payment to\b")
+STATEMENT_TIME_TOL_SECONDS = 120
+STATEMENT_DAY_TOL = 1
+
+# 配上了但两边金额差一点（银行在中间扣了费）：差额挂在付出那笔上，等人点「确认记为手续费」。
+ALERT_PAIR_GAP = "转账到账差额"
+FEE_CATEGORY = "F01"
+FEE_LAYER_DEFAULT = "fee"
+# 带差额的自动配对（rocky 11-05）：对方尾号 = 另一个账户尾号，5 天内，差额不超过 0.5% 且不超过上限。
+GAP_PAIR_DAYS = 5
+GAP_PAIR_RATIO = Decimal("0.005")
+GAP_PAIR_CAP = {"USD": Decimal("50"), "CNY": Decimal("300"), "CNH": Decimal("300")}
+# 规则剔除只用于对冲行（目前是万里汇子账号归集到主账号的那笔，rocky 11-05 定的原因文字）。
+AUTO_EXCLUDE_REASON = "已在主账号记录"
 
 STAGE_TODO = "todo"
 STAGE_REJ1 = "rej1"
@@ -57,7 +81,12 @@ KIND_REVIEW2_UNDO = "review2_undo"
 KIND_SET_TEXT = "set_text"
 KIND_SPLIT = "split"
 KIND_SET_PART_CATEGORY = "set_part_category"
+KIND_SET_PART_TEXT = "set_part_text"
 KIND_UNSPLIT = "unsplit"
+KIND_CONFIRM_FEE = "confirm_fee"
+KIND_PAIR = "pair"
+KIND_UNPAIR = "unpair"
+PAIR_ID_MAX = 40
 TEXT_MAX = 500
 MAX_PARTS = 20
 KIND_AUTO_RESET = "auto_reset"
@@ -118,6 +147,36 @@ class LineInput:
     # 挂的审批单带来的类别：表单写明的类别压过规则；按事由跑规则得来的只补空白。
     approval_category: str | None = None
     approval_rule_category: str | None = None
+    # 拆分行（含手续费行，带 fee_layer）、手动配对号、对方账号尾号 / 本账户尾号（带差额配对用）。
+    parts: list[dict[str, Any]] | None = None
+    manual_pair: str | None = None
+    counterparty_last4: str = ""
+    account_last4: str = ""
+    # 交易时间（UTC）：派安盈月结补充按它和金额对到这笔。
+    source_time: datetime | None = None
+
+
+@dataclass(frozen=True)
+class StatementRow:
+    """派安盈月结明细的一行（已去重前）；row_key 在全部批次里唯一。"""
+
+    row_key: str
+    account_key: str
+    txn_id: str
+    txn_time: datetime
+    business_date: date
+    description: str
+    amount: Decimal
+    currency_code: str
+    transfer_amount: Decimal | None
+    transfer_currency: str
+
+
+@dataclass(frozen=True)
+class StatementMatch:
+    txn_id: str
+    transfer_amount: Decimal | None
+    transfer_currency: str
 
 
 @dataclass(frozen=True)
@@ -141,6 +200,15 @@ class ComputedLine:
     pair_id: str | None = None
     list_excluded_cny: Decimal = ZERO
     flags: list[str] = field(default_factory=list)
+    auto_exclude_reason: str | None = None
+    # 折人民币用的汇率和来源：payoneer = 派安盈实际到账；
+    # lingxing = 领星当月汇率；pending = 等月结单。
+    fx_rate: Decimal | None = None
+    fx_source: str = ""
+    statement: StatementMatch | None = None
+    # 配对用的金额和币种（pair_value 算）：派安盈提现用派安盈写的到账金额；拆分过的不算手续费行。
+    pair_amount: Decimal = ZERO
+    pair_currency: str = ""
 
 
 @dataclass(frozen=True)
@@ -162,8 +230,8 @@ class JournalResult:
 
 
 def to_cny(amount: Decimal, currency_code: str, usd_rate: Decimal | None) -> Decimal | None:
-    """CNY 原值；USD 用当月生效汇率，没有就空；CNH 也空。不兜底。"""
-    if currency_code == "CNY":
+    """CNY 原值；CNH 按 1:1（rocky 2026-11-05：现阶段汇率一样）；USD 用当月汇率，没有就空。"""
+    if currency_code in {"CNY", "CNH"}:
         return amount
     if currency_code == "USD" and usd_rate is not None:
         return (amount * usd_rate).quantize(Q4, rounding=ROUND_HALF_UP)
@@ -176,9 +244,15 @@ def compute_journal(
     internal_categories: frozenset[str],
     usd_rate_of: Callable[[date], Decimal | None],
     exclusions: Sequence[ExclusionEntry] = (),
+    statement_rows: Sequence[StatementRow] = (),
+    today: date | None = None,
 ) -> JournalResult:
-    computed = [_classify_line(line, classifier, usd_rate_of) for line in lines]
-    alerts = _balance_alerts(lines)
+    matches, alerts = match_statement(lines, statement_rows, today)
+    computed = [
+        _classify_line(line, classifier, usd_rate_of, matches.get(line.line_uid)) for line in lines
+    ]
+    alerts.extend(_balance_alerts(lines))
+    alerts.extend(_payoneer_fee_alerts(computed))
     alerts.extend(_pair_lines(computed, internal_categories))
     alerts.extend(_apply_exclusions(computed, exclusions))
     for item in computed:
@@ -186,12 +260,41 @@ def compute_journal(
     return JournalResult(lines=computed, alerts=alerts)
 
 
+def is_payoneer_withdrawal(line: LineInput) -> bool:
+    """派安盈提现（Payment to 银行 / 个人）：人民币要等月结单，用派安盈自己的汇率。"""
+    return (
+        line.provider == "payoneer"
+        and line.amount < 0
+        and PAYONEER_WITHDRAWAL.match(line.description or "") is not None
+    )
+
+
+def _fx(
+    line: LineInput,
+    usd_rate_of: Callable[[date], Decimal | None],
+    match: StatementMatch | None,
+) -> tuple[Decimal | None, Decimal | None, str]:
+    """(折人民币, 汇率, 来源)。派安盈到账是人民币的用派安盈的数；提现还没对上月结单的留空。"""
+    if match and match.transfer_amount and match.transfer_currency == "CNY" and line.amount:
+        cny = match.transfer_amount if line.amount > 0 else -match.transfer_amount
+        rate = (match.transfer_amount / abs(line.amount)).quantize(Q4, rounding=ROUND_HALF_UP)
+        return cny, rate, FX_SOURCE_PAYONEER
+    if match is None and is_payoneer_withdrawal(line):
+        return None, None, FX_SOURCE_PENDING
+    usd_rate = usd_rate_of(line.business_date) if line.currency_code == "USD" else None
+    value = to_cny(line.amount, line.currency_code, usd_rate)
+    if usd_rate is None or value is None:
+        return value, None, ""
+    return value, usd_rate, FX_SOURCE_LINGXING
+
+
 def _classify_line(
     line: LineInput,
     classifier: Classifier,
     usd_rate_of: Callable[[date], Decimal | None],
+    match: StatementMatch | None = None,
 ) -> ComputedLine:
-    amount_cny = to_cny(line.amount, line.currency_code, usd_rate_of(line.business_date))
+    amount_cny, fx_rate, fx_source = _fx(line, usd_rate_of, match)
     code: str | None
     if line.exclude_amount is not None and line.exclude_amount == abs(line.amount):
         code, source = EXCLUDE_CATEGORY, SOURCE_MANUAL
@@ -204,9 +307,227 @@ def _classify_line(
         source = SOURCE_RULE if code else ""
         if not code and line.approval_rule_category:
             code, source = line.approval_rule_category, SOURCE_APPROVAL_RULE
-    return ComputedLine(
-        source=line, category_code=code, category_source=source, amount_cny=amount_cny
+    computed = ComputedLine(
+        source=line,
+        category_code=code,
+        category_source=source,
+        amount_cny=amount_cny,
+        fx_rate=fx_rate,
+        fx_source=fx_source,
+        statement=match,
     )
+    if code == EXCLUDE_CATEGORY and source == SOURCE_RULE:
+        # 规则剔除（对冲行）：不用写原因，人工改类别就撤销了。
+        computed.auto_exclude_reason = AUTO_EXCLUDE_REASON
+        computed.flags.append("已剔除")
+    return computed
+
+
+# ---------------------------------------------------------------- 派安盈月结补充
+
+
+def _statement_key(row: StatementRow) -> tuple[str, str]:
+    return (row.account_key, row.txn_id or row.row_key)
+
+
+def _statement_values(row: StatementRow) -> tuple[object, ...]:
+    return (
+        row.txn_time,
+        row.amount,
+        row.currency_code,
+        row.transfer_amount,
+        row.transfer_currency,
+    )
+
+
+def _statement_alert(kind: str, row: StatementRow, message: str) -> Alert:
+    return Alert(
+        type=kind,
+        account_key=row.account_key,
+        date=row.business_date.isoformat(),
+        message=message,
+        amount=row.amount,
+        currency_code=row.currency_code,
+    )
+
+
+def _dedupe_statement(rows: Sequence[StatementRow]) -> tuple[list[StatementRow], list[Alert]]:
+    """同一交易号导过多次：内容一样只算一次；不一样就不补，进异常让人确认，不悄悄覆盖。"""
+    groups: dict[tuple[str, str], list[StatementRow]] = defaultdict(list)
+    for row in rows:
+        groups[_statement_key(row)].append(row)
+    kept: list[StatementRow] = []
+    alerts: list[Alert] = []
+    for group in groups.values():
+        if len({_statement_values(row) for row in group}) == 1:
+            kept.append(group[0])
+            continue
+        first = group[0]
+        alerts.append(
+            _statement_alert(
+                ALERT_STATEMENT_CONFLICT,
+                first,
+                f"交易号 {first.txn_id} 前后导入的金额或到账不一样，这笔先不补；"
+                "请核对后把错的那次导入作废",
+            )
+        )
+    return kept, alerts
+
+
+def _time_close(line: LineInput, row: StatementRow) -> bool:
+    if line.source_time is None:
+        return False
+    gap = abs((line.source_time - row.txn_time).total_seconds())
+    return gap <= STATEMENT_TIME_TOL_SECONDS
+
+
+def _statement_candidates(row: StatementRow, withdrawals: Sequence[LineInput]) -> list[LineInput]:
+    same = [
+        line
+        for line in withdrawals
+        if line.account_key == row.account_key
+        and line.currency_code == row.currency_code
+        and line.amount == row.amount
+    ]
+    exact = [line for line in same if _time_close(line, row)]
+    if exact:
+        return exact
+    return [
+        line
+        for line in same
+        if _days_between(line.business_date, row.business_date) <= STATEMENT_DAY_TOL
+    ]
+
+
+def _month_ended(day: date, today: date | None) -> bool:
+    return today is not None and (day.year, day.month) < (today.year, today.month)
+
+
+def match_statement(
+    lines: Sequence[LineInput], rows: Sequence[StatementRow], today: date | None
+) -> tuple[dict[str, StatementMatch], list[Alert]]:
+    """月结明细的提现对到已有流水：同账户、金额分毫不差、交易时间相同（没有时间就日期前后一天）。
+
+    对上唯一一笔才补；一对多不猜，进异常。只看提现（Payment to），别的行只是对账用。
+    """
+    kept, alerts = _dedupe_statement(rows)
+    withdrawals = [line for line in lines if is_payoneer_withdrawal(line)]
+    matches: dict[str, StatementMatch] = {}
+    claimed: dict[str, str] = {}
+    covered: set[tuple[str, int, int]] = set()
+    for row in sorted(kept, key=lambda item: (item.txn_time, item.row_key)):
+        covered.add((row.account_key, row.business_date.year, row.business_date.month))
+        if row.amount >= 0 or not PAYONEER_WITHDRAWAL.match(row.description or ""):
+            continue
+        found = [
+            line for line in _statement_candidates(row, withdrawals) if line.line_uid not in claimed
+        ]
+        if not found:
+            alerts.append(
+                _statement_alert(
+                    ALERT_STATEMENT_UNMATCHED,
+                    row,
+                    f"月结单交易号 {row.txn_id} 提现 {abs(row.amount):.2f} {row.currency_code}，"
+                    "日记账里没有对应流水：请补导这一周的交易报告",
+                )
+            )
+            continue
+        if len(found) > 1:
+            alerts.append(
+                _statement_alert(
+                    ALERT_STATEMENT_AMBIGUOUS,
+                    row,
+                    f"月结单交易号 {row.txn_id} 提现 {abs(row.amount):.2f} {row.currency_code}，"
+                    f"日记账里有 {len(found)} 笔金额、日期都一样，系统不猜，请人工核对",
+                )
+            )
+            continue
+        claimed[found[0].line_uid] = row.txn_id
+        matches[found[0].line_uid] = StatementMatch(
+            txn_id=row.txn_id,
+            transfer_amount=row.transfer_amount,
+            transfer_currency=row.transfer_currency,
+        )
+    for line in withdrawals:
+        if line.line_uid in matches:
+            continue
+        month_covered = (
+            line.account_key,
+            line.business_date.year,
+            line.business_date.month,
+        ) in covered
+        if not month_covered and not _month_ended(line.business_date, today):
+            continue
+        reason = (
+            "这个月的派安盈月结单里没找到这笔"
+            if month_covered
+            else "这个月已结束，还没导派安盈月结单"
+        )
+        alerts.append(
+            Alert(
+                type=ALERT_PAYONEER_MISSING,
+                account_key=line.account_key,
+                date=line.business_date.isoformat(),
+                message=(
+                    f"提现 {abs(line.amount):.2f} {line.currency_code}：{reason}，折人民币先空着"
+                ),
+                amount=line.amount,
+                currency_code=line.currency_code,
+                line_uid=line.line_uid,
+            )
+        )
+    return matches, alerts
+
+
+def fee_parts_total(parts: Sequence[dict[str, Any]] | None, layer: str) -> Decimal:
+    return sum(
+        (Decimal(str(part["amount"])) for part in parts or [] if part.get("fee_layer") == layer),
+        ZERO,
+    )
+
+
+def payoneer_fee_gap(line: ComputedLine) -> Decimal | None:
+    """派安盈那层：扣款 − 派安盈写的到账（同币种才算）；已确认记手续费的不再报。"""
+    match = line.statement
+    source = line.source
+    if (
+        match is None
+        or match.transfer_amount is None
+        or match.transfer_currency != source.currency_code
+    ):
+        return None
+    gap = abs(source.amount) - match.transfer_amount
+    if gap <= EXACT_TOL:
+        return None
+    left = gap - fee_parts_total(source.parts, FEE_LAYER_PAYONEER)
+    return gap if left > EXACT_TOL else None
+
+
+def _payoneer_fee_alerts(lines: Sequence[ComputedLine]) -> list[Alert]:
+    alerts: list[Alert] = []
+    for line in lines:
+        gap = payoneer_fee_gap(line)
+        if gap is None or line.statement is None:
+            continue
+        source = line.source
+        cur = source.currency_code
+        received = line.statement.transfer_amount or ZERO
+        line.flags.append("派安盈到账差额待确认")
+        alerts.append(
+            Alert(
+                type=ALERT_PAYONEER_FEE,
+                account_key=source.account_key,
+                date=source.business_date.isoformat(),
+                message=(
+                    f"扣款 {abs(source.amount):.2f} {cur}，派安盈写到账 {received:.2f} {cur}，"
+                    f"差 {gap:.2f} {cur}（疑似派安盈手续费），交易号 {line.statement.txn_id}"
+                ),
+                amount=gap,
+                currency_code=cur,
+                line_uid=source.line_uid,
+            )
+        )
+    return alerts
 
 
 def _balance_alerts(lines: Sequence[LineInput]) -> list[Alert]:
@@ -254,17 +575,17 @@ def _usd_in_memo(line: LineInput) -> Decimal | None:
 
 def _pair_match(first: ComputedLine, second: ComputedLine) -> bool:
     a, b = first.source, second.source
-    if a.amount * b.amount >= 0 or a.account_key == b.account_key:
+    if first.pair_amount * second.pair_amount >= 0 or a.account_key == b.account_key:
         return False
     if _days_between(a.business_date, b.business_date) > PAIR_DAYS:
         return False
-    outgoing, incoming = (a, b) if a.amount < 0 else (b, a)
-    if outgoing.currency_code == incoming.currency_code:
-        return abs(abs(outgoing.amount) - incoming.amount) <= ROUND_TOL
-    usd_leg = outgoing if outgoing.currency_code == "USD" else incoming
+    outgoing, incoming = (first, second) if first.pair_amount < 0 else (second, first)
+    if outgoing.pair_currency == incoming.pair_currency:
+        return abs(abs(outgoing.pair_amount) - incoming.pair_amount) <= ROUND_TOL
+    usd_leg = outgoing if outgoing.pair_currency == "USD" else incoming
     other_leg = incoming if usd_leg is outgoing else outgoing
-    wanted = _usd_in_memo(other_leg)
-    return wanted is not None and abs(abs(usd_leg.amount) - wanted) <= EXACT_TOL
+    wanted = _usd_in_memo(other_leg.source)
+    return wanted is not None and abs(abs(usd_leg.pair_amount) - wanted) <= EXACT_TOL
 
 
 def _pair_id(members: Iterable[ComputedLine]) -> str:
@@ -279,9 +600,142 @@ def _mark_pair(members: Sequence[ComputedLine], used: set[str]) -> None:
         used.add(member.source.line_uid)
 
 
+def _pair_currency(code: str) -> str:
+    """配对时 CNH 和 CNY 算同一币种（rocky 2026-11-05：现阶段汇率一样）。"""
+    return "CNY" if code == "CNH" else code
+
+
+def pair_value(line: ComputedLine) -> tuple[Decimal, str]:
+    """配对比较用的金额（带符号）和币种；带差额配对、手动配对、一对一 / 一对多都走这里。
+
+    派安盈提现对上月结单的：用派安盈写的到账金额和币种（人民币提现按实际人民币配），
+    同币种时再减去确认过的非派安盈层手续费行；拆过的按非手续费行合计；否则整笔。
+    """
+    source = line.source
+    sign = Decimal(1) if source.amount > 0 else Decimal(-1)
+    match = line.statement
+    if match is not None and match.transfer_amount:
+        value = match.transfer_amount
+        if match.transfer_currency == source.currency_code:
+            value -= sum(
+                (
+                    Decimal(str(part["amount"]))
+                    for part in source.parts or []
+                    if part.get("fee_layer") and part.get("fee_layer") != FEE_LAYER_PAYONEER
+                ),
+                ZERO,
+            )
+        return sign * value, _pair_currency(match.transfer_currency)
+    if source.parts:
+        kept = [part for part in source.parts if not part.get("fee_layer")]
+        if len(kept) != len(source.parts):
+            total = sum((Decimal(str(part["amount"])) for part in kept), ZERO)
+            return sign * total, _pair_currency(source.currency_code)
+    return source.amount, _pair_currency(source.currency_code)
+
+
+def _gap_alert(out: ComputedLine, gap: Decimal, other: ComputedLine) -> Alert:
+    source = out.source
+    return Alert(
+        type=ALERT_PAIR_GAP,
+        account_key=source.account_key,
+        date=source.business_date.isoformat(),
+        message=(
+            f"扣款 {source.currency_code} {abs(source.amount):.2f}，"
+            f"到账 {other.source.amount:.2f}（{other.source.account_key} "
+            f"{other.source.business_date.isoformat()}），差额 {gap:.2f}"
+        ),
+        amount=gap,
+        currency_code=source.currency_code,
+        line_uid=source.line_uid,
+    )
+
+
+def _pair_gap(first: ComputedLine, second: ComputedLine) -> Decimal | None:
+    """两笔是一出一进、同币种时返回差额（扣款 − 到账，可能为 0），否则 None。"""
+    (a, a_cur), (b, b_cur) = pair_value(first), pair_value(second)
+    if a * b >= 0 or a_cur != b_cur:
+        return None
+    out, into = (a, b) if a < 0 else (b, a)
+    return abs(out) - into
+
+
+def _pair_manual(lines: Sequence[ComputedLine], used: set[str]) -> list[Alert]:
+    """人工点的配对：同一个配对号的几笔算一组；一出一进、有差额的也提示差额。"""
+    groups: dict[str, list[ComputedLine]] = defaultdict(list)
+    for line in lines:
+        if line.source.manual_pair:
+            groups[line.source.manual_pair].append(line)
+    alerts: list[Alert] = []
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        _mark_pair(members, used)
+        for member in members:
+            member.flags.append("人工配对")
+        if len(members) == 2:
+            gap = _pair_gap(members[0], members[1])
+            if gap is not None and gap > EXACT_TOL:
+                out, into = sorted(members, key=lambda item: item.source.amount)
+                alerts.append(_gap_alert(out, gap, into))
+    return alerts
+
+
+def _gap_pair_ok(out: ComputedLine, into: ComputedLine, gap: Decimal) -> bool:
+    cap = GAP_PAIR_CAP.get(out.source.currency_code)
+    if cap is None or gap < 0:
+        return False
+    return gap <= cap and gap <= abs(pair_value(out)[0]) * GAP_PAIR_RATIO
+
+
+def _tail_match(out: ComputedLine, into: ComputedLine) -> bool:
+    a, b = out.source, into.source
+    return bool(
+        (a.counterparty_last4 and a.counterparty_last4 == b.account_last4)
+        or (b.counterparty_last4 and b.counterparty_last4 == a.account_last4)
+    )
+
+
+def _pair_with_gap(candidates: Sequence[ComputedLine], used: set[str]) -> list[Alert]:
+    """前面几轮都没配上的：对方尾号对得上、5 天内、差额在容差内，就配上并把差额挂成异常。
+    已经确认过手续费的（拆出手续费行后差额为 0），配上但不再提示。"""
+    left = [line for line in candidates if line.source.line_uid not in used]
+    outgoing = [line for line in left if line.source.amount < 0]
+    incoming = [line for line in left if line.source.amount > 0]
+    alerts: list[Alert] = []
+    for out in outgoing:
+        best: tuple[Decimal, int, ComputedLine] | None = None
+        for into in incoming:
+            if into.source.line_uid in used or into.source.account_key == out.source.account_key:
+                continue
+            days = _days_between(out.source.business_date, into.source.business_date)
+            if days > GAP_PAIR_DAYS or not _tail_match(out, into):
+                continue
+            gap = _pair_gap(out, into)
+            if gap is None or not _gap_pair_ok(out, into, gap):
+                continue
+            if best is None or (gap, days) < (best[0], best[1]):
+                best = (gap, days, into)
+        if best is None:
+            continue
+        gap, _, into = best
+        _mark_pair([out, into], used)
+        if gap > EXACT_TOL:
+            alerts.append(_gap_alert(out, gap, into))
+    return alerts
+
+
 def _pair_lines(lines: Sequence[ComputedLine], internal: frozenset[str]) -> list[Alert]:
+    for line in lines:
+        line.pair_amount, line.pair_currency = pair_value(line)
+    used: set[str] = set()
+    alerts = _pair_manual(lines, used)
     candidates = sorted(
-        (line for line in lines if line.category_code in internal),
+        (
+            line
+            for line in lines
+            if line.category_code in internal and line.source.line_uid not in used
+        ),
         key=lambda x: (
             x.source.business_date,
             x.source.account_key,
@@ -289,11 +743,10 @@ def _pair_lines(lines: Sequence[ComputedLine], internal: frozenset[str]) -> list
             x.source.line_uid,
         ),
     )
-    used: set[str] = set()
     _pair_one_to_one(candidates, used)
     _pair_one_to_many(candidates, used)
     _pair_fx_range(candidates, used)
-    alerts: list[Alert] = []
+    alerts.extend(_pair_with_gap(candidates, used))
     for line in candidates:
         if line.source.line_uid in used:
             continue
@@ -328,8 +781,8 @@ def _pair_one_to_one(candidates: Sequence[ComputedLine], used: set[str]) -> None
 
 def _pair_one_to_many(candidates: Sequence[ComputedLine], used: set[str]) -> None:
     left = [line for line in candidates if line.source.line_uid not in used]
-    outgoing = [line for line in left if line.source.amount < 0]
-    incoming = [line for line in left if line.source.amount > 0]
+    outgoing = [line for line in left if line.pair_amount < 0]
+    incoming = [line for line in left if line.pair_amount > 0]
     for out in outgoing:
         pool = [
             line
@@ -377,9 +830,9 @@ def _pair_fx_range(candidates: Sequence[ComputedLine], used: set[str]) -> None:
 def _find_combo(out: ComputedLine, pool: Sequence[ComputedLine]) -> tuple[ComputedLine, ...] | None:
     for size in (1, 2, 3):
         for combo in itertools.combinations(pool, size):
-            if all(item.source.currency_code == out.source.currency_code for item in combo):
-                total = sum((item.source.amount for item in combo), ZERO)
-                if abs(abs(out.source.amount) - total) <= ROUND_TOL:
+            if all(item.pair_currency == out.pair_currency for item in combo):
+                total = sum((item.pair_amount for item in combo), ZERO)
+                if abs(abs(out.pair_amount) - total) <= ROUND_TOL:
                     return combo
                 continue
             if out.amount_cny is None or any(item.amount_cny is None for item in combo):
@@ -481,6 +934,7 @@ ERR_STAGE_NOT_ALLOWED = "CASHFLOW_STAGE_NOT_ALLOWED"
 ERR_INVALID_EVENT = "CASHFLOW_INVALID_EVENT"
 ERR_VERSION_CONFLICT = "CASHFLOW_VERSION_CONFLICT"
 ERR_IDEMPOTENCY_KEY_REUSED = "CASHFLOW_IDEMPOTENCY_KEY_REUSED"
+ERR_PAIR_CONFLICT = "CASHFLOW_PAIR_CONFLICT"
 
 
 class EventRejectedError(Exception):
@@ -506,6 +960,7 @@ class ReviewState:
     manual_memo: str | None = None
     # 拆分：[{"amount": "100.0000", "category_code": "G02" 或 None}]，金额合计 = 流水金额绝对值。
     parts: list[dict[str, Any]] | None = None
+    manual_pair: str | None = None
 
 
 def _required_reason(reason: str | None, label: str) -> str:
@@ -573,23 +1028,52 @@ def apply_event(
         if "memo" in payload:
             state.manual_memo = _text(payload["memo"])
         return False
+    if kind == KIND_SET_PART_TEXT:
+        # 拆分行自己的摘要 / 备注（rocky 11-05）：和整笔改摘要一样只改显示，不退回审核。
+        index = _part_index(state, payload)
+        if not {"description", "memo"} & payload.keys():
+            raise EventRejectedError(422, "没有要改的摘要或备注")
+        parts = [dict(part) for part in state.parts or []]
+        for field in ("description", "memo"):
+            if field in payload:
+                value = _text(payload[field])
+                if value is None:
+                    parts[index].pop(field, None)
+                else:
+                    parts[index][field] = value
+        state.parts = parts
+        return False
+    if kind in {KIND_PAIR, KIND_UNPAIR}:
+        _require_stage(
+            state,
+            frozenset({STAGE_TODO, STAGE_REJ1, STAGE_OK1, STAGE_REJ2}),
+            "这笔已终审，先撤销终审再改配对",
+        )
+    if kind == KIND_PAIR:
+        # 配对只是把两笔认成同一笔内部转账，不动金额和类别，不退回审核；两边各发一次。
+        pair_id = str(payload.get("pair_id") or "").strip()
+        if not pair_id or len(pair_id) > PAIR_ID_MAX:
+            raise EventRejectedError(422, "配对号无效")
+        state.manual_pair = pair_id
+        return False
+    if kind == KIND_UNPAIR:
+        if not state.manual_pair:
+            raise EventRejectedError(409, "这笔没有人工配对")
+        # 取消配对必须写原因（rocky 11-05），原因记在事件里，操作记录能看到。
+        _required_reason(reason, "取消配对")
+        state.manual_pair = None
+        return False
     if kind == KIND_SET_CATEGORY:
         if state.parts:
             raise EventRejectedError(409, "这笔已拆分，请在拆分行上选类别")
         state.manual_category = _category(payload, valid_categories)
     elif kind == KIND_SPLIT:
         state.parts = _split_parts(payload, line_amount)
+    elif kind == KIND_CONFIRM_FEE:
+        state.parts = _fee_parts(state.parts, payload, line_amount, valid_categories)
     elif kind == KIND_SET_PART_CATEGORY:
-        if not state.parts:
-            raise EventRejectedError(409, "这笔没有拆分")
-        index = payload.get("index")
-        if (
-            not isinstance(index, int)
-            or isinstance(index, bool)
-            or not 0 <= index < len(state.parts)
-        ):
-            raise EventRejectedError(422, "拆分行不存在")
-        parts = [dict(part) for part in state.parts]
+        index = _part_index(state, payload)
+        parts = [dict(part) for part in state.parts or []]
         parts[index]["category_code"] = _category(payload, valid_categories)
         state.parts = parts
     elif kind == KIND_UNSPLIT:
@@ -620,6 +1104,15 @@ def apply_event(
         state.stage, state.stage_reason = STAGE_TODO, None
         return True
     return False
+
+
+def _part_index(state: ReviewState, payload: dict[str, Any]) -> int:
+    if not state.parts:
+        raise EventRejectedError(409, "这笔没有拆分")
+    index = payload.get("index")
+    if not isinstance(index, int) or isinstance(index, bool) or not 0 <= index < len(state.parts):
+        raise EventRejectedError(422, "拆分行不存在")
+    return index
 
 
 def _category(payload: dict[str, Any], valid_categories: frozenset[str]) -> str | None:
@@ -662,6 +1155,52 @@ def _split_parts(payload: dict[str, Any], line_amount: Decimal) -> list[dict[str
     if sum(amounts, ZERO) != abs(line_amount).quantize(Q4, rounding=ROUND_HALF_UP):
         raise EventRejectedError(422, "拆分金额合计要等于这笔流水的金额")
     return [{"amount": str(amount), "category_code": None} for amount in amounts]
+
+
+def _fee_parts(
+    parts: list[dict[str, Any]] | None,
+    payload: dict[str, Any],
+    line_amount: Decimal,
+    valid_categories: frozenset[str],
+) -> list[dict[str, Any]]:
+    """「确认记为手续费」：从这笔里切出一行手续费（F01，带 fee_layer），其余留作转账行。
+    没拆过的拆成两行（转账行沿用传来的类别）；拆过的从最大的非手续费行里扣。
+    同一层手续费（fee_layer）只能确认一次；取消用「取消拆分」。"""
+    try:
+        fee = Decimal(str(payload.get("fee_amount")))
+    except InvalidOperation as exc:
+        raise EventRejectedError(422, "手续费金额无效") from exc
+    if not fee.is_finite() or fee <= 0:
+        raise EventRejectedError(422, "手续费金额要大于 0")
+    fee = fee.quantize(Q4, rounding=ROUND_HALF_UP)
+    layer = str(payload.get("fee_layer") or FEE_LAYER_DEFAULT).strip()[:32]
+    if FEE_CATEGORY not in valid_categories:
+        raise EventRejectedError(422, "类别不存在")
+    current = [dict(part) for part in parts] if parts else None
+    if current is None:
+        transfer_cat = _category(
+            {"category_code": payload.get("transfer_category")}, valid_categories
+        )
+        current = [
+            {
+                "amount": str(abs(line_amount).quantize(Q4, rounding=ROUND_HALF_UP)),
+                "category_code": transfer_cat,
+            }
+        ]
+    if any(part.get("fee_layer") == layer for part in current):
+        raise EventRejectedError(409, "这笔的这层手续费已经确认过了")
+    if len(current) >= MAX_PARTS:
+        raise EventRejectedError(422, f"拆分最多 {MAX_PARTS} 行")
+    kept = [index for index, part in enumerate(current) if not part.get("fee_layer")]
+    if not kept:
+        raise EventRejectedError(409, "这笔没有可以扣手续费的行")
+    target = max(kept, key=lambda index: Decimal(str(current[index]["amount"])))
+    rest = Decimal(str(current[target]["amount"])) - fee
+    if rest <= 0:
+        raise EventRejectedError(422, "手续费不能大于等于这笔的金额")
+    current[target]["amount"] = str(rest.quantize(Q4, rounding=ROUND_HALF_UP))
+    current.append({"amount": str(fee), "category_code": FEE_CATEGORY, "fee_layer": layer})
+    return current
 
 
 def _approval_ref(payload: dict[str, Any]) -> str:

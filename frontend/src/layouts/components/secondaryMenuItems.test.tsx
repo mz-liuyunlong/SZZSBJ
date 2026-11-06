@@ -72,7 +72,7 @@ describe("secondary menu cleanup", () => {
     },
   );
 
-  it("places the finance cash-flow section after the balance sheet with its 3 pages in order (异常 removed)", () => {
+  it("places the finance cash-flow section after the balance sheet with its 4 pages in order (异常 removed)", () => {
     const group = navigation.find((item) => item.key === "finance");
     expect(group).toBeDefined();
     if (!group) return;
@@ -83,6 +83,7 @@ describe("secondary menu cleanup", () => {
     expect(children.flatMap((item) => (item && "key" in item ? [String(item.key)] : []))).toEqual([
       "finance_cash_accounts",
       "finance_cash_journal",
+      "finance_cash_account_admin",
       "finance_cash_stock",
     ]);
   });

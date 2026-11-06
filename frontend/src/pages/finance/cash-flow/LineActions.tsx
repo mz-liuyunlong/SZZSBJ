@@ -7,8 +7,11 @@ import { Button, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Ta
 import { useMemo, useState, type ReactNode } from "react";
 import { FinMoney } from "@/pages/finance/FinanceBoardFrame";
 import { asLive, cashErrorText, postLineEvent, useRefreshJournal, type LineEventKind, type LiveCashLine } from "@/pages/finance/cash-flow/journalApi";
-import { EMPTY, type ReviewStage } from "@/pages/finance/cash-flow/journalShared";
-import type { CashLine, CashSnapshot } from "@/pages/finance/localFinData";
+import type { CashAlert } from "@/pages/finance/cash-flow/data";
+import { EMPTY, FEE_ALERT_TYPES, type ReviewStage } from "@/pages/finance/cash-flow/journalShared";
+import { catFilter, groupedCatOptions } from "@/pages/finance/cash-flow/journalSelection";
+import { PAIR_DAYS, pairCandidates, pairLines } from "@/pages/finance/cash-flow/journalPair";
+import { accountLabel, type CashLine, type CashSnapshot } from "@/pages/finance/localFinData";
 
 /** 写一条事件：成功提示、失败给原因，不管成败都重读（失败多半是别人刚改过）。 */
 function useLineEvent() {
@@ -115,7 +118,7 @@ export function SplitButton({ line }: { line: LiveCashLine }) {
     return (
       <>
         {holder}
-        <Popconfirm title="取消拆分？各行选好的类别会清掉，回到整笔一个类别。" okText="取消拆分" cancelText="不了" onConfirm={() => void send(line, "unsplit", {}, "已取消拆分")}>
+        <Popconfirm title="取消拆分？各行选好的类别会清掉（确认过的手续费行也一起取消），回到整笔一个类别。" okText="取消拆分" cancelText="不了" onConfirm={() => void send(line, "unsplit", {}, "已取消拆分")}>
           <Button loading={busy}>取消拆分</Button>
         </Popconfirm>
       </>
@@ -148,27 +151,161 @@ export function SplitButton({ line }: { line: LiveCashLine }) {
 /** 拆分后的各行：金额 + 类别下拉（按大类分组，可搜索；X01 不能选，剔除用剔除按钮）。 */
 export function SplitParts({ line, data }: { line: LiveCashLine; data: CashSnapshot }) {
   const { send, busy, holder } = useLineEvent();
-  const options = useMemo(() => {
-    const groups = new Map<string, { value: string; label: string }[]>();
-    for (const cat of data.cats) {
-      if (cat.code === "X01") continue;
-      groups.set(cat.big, [...(groups.get(cat.big) ?? []), { value: cat.code, label: `${cat.code} ${cat.big}·${cat.name}` }]);
-    }
-    return Array.from(groups, ([big, items]) => ({ label: big, title: big, options: items }));
-  }, [data.cats]);
+  const options = useMemo(() => groupedCatOptions(data.cats), [data.cats]);
   const rows = (line.parts ?? []).map((part, index) => ({ ...part, index }));
   return (
     <>
       {holder}
       <Table size="small" pagination={false} rowKey="index" dataSource={rows} columns={[
-        { key: "no", title: "行", width: 48, render: (_, row) => row.index + 1 },
+        { key: "no", title: "行", width: 92, render: (_, row) => <Space size={4}>{row.index + 1}{row.fee && <Tag bordered={false} color="orange">手续费</Tag>}</Space> },
         { key: "amt", title: "金额", width: 140, align: "right", render: (_, row) => <FinMoney value={row.amt} cur={line.cur} /> },
         { key: "cat", title: "类别", render: (_, row) => (
           <Select size="small" showSearch style={{ width: 260 }} disabled={busy} value={row.cat || undefined} options={options} placeholder={<Typography.Text type="danger">待分类</Typography.Text>}
-            filterOption={(input, option) => String(option?.label ?? "").toLowerCase().includes(input.trim().toLowerCase())}
+            filterOption={catFilter}
             onChange={(value: string) => void send(line, "set_part_category", { index: row.index, category_code: value }, `第 ${row.index + 1} 行已选类别`)} />
         ) },
       ]} />
     </>
+  );
+}
+
+/** 「确认记为手续费」（rocky 11-05）：两边配上了但到账少一点，核对后点一下，把这笔拆成转账行 + 手续费行（F01）。
+ * 不自动拆；哪些异常能点、切成哪一层手续费看 FEE_ALERT_TYPES。点错了用「取消拆分」。 */
+export function FeeConfirm({ line, alert }: { line: LiveCashLine; alert: CashAlert }) {
+  const { send, busy, holder } = useLineEvent();
+  const layer = FEE_ALERT_TYPES[alert.type];
+  const fee = Math.abs(alert.amt ?? 0);
+  if (!layer || !fee) return null;
+  const done = line.parts?.some((part) => part.fee === layer);
+  if (done) return <Tag bordered={false} color="green">手续费已确认</Tag>;
+  const total = Math.abs(line.amt ?? 0);
+  const title = `扣款 ${total.toFixed(2)}，到账 ${(total - fee).toFixed(2)}，差额 ${fee.toFixed(2)} 记为手续费（F01）？这笔会拆成转账行和手续费行。`;
+  return (
+    <>
+      {holder}
+      <Popconfirm title={title} okText="确认" cancelText="取消" onConfirm={() => void send(line, "confirm_fee", { fee_amount: fee.toFixed(2), fee_layer: layer, alert_type: alert.type, transfer_category: line.cat && line.cat !== "X01" ? line.cat : null }, `已把 ${fee.toFixed(2)} 记为手续费`)}>
+        <Button size="small" type="primary" ghost loading={busy}>确认记为手续费</Button>
+      </Popconfirm>
+    </>
+  );
+}
+
+/** 详情里的「配对」/「取消配对」：配对从候选里选一笔；取消配对把同一组的几笔一起取消。 */
+export function PairButton({ line, data, stageOf }: { line: LiveCashLine; data: CashSnapshot; stageOf: (line: CashLine) => ReviewStage }) {
+  const refresh = useRefreshJournal();
+  const [messageApi, holder] = message.useMessage();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [picked, setPicked] = useState<string>();
+  const [keyword, setKeyword] = useState("");
+  const candidates = useMemo(() => {
+    if (!open) return [];
+    const names = new Map(data.accounts.map((item) => [item.id, accountLabel(item)]));
+    return pairCandidates(line, data.lines, keyword, (acct) => names.get(acct) || acct);
+  }, [open, line, data.lines, data.accounts, keyword]);
+  const [unpairOpen, setUnpairOpen] = useState(false);
+  const [unpairReason, setUnpairReason] = useState("");
+  const run = async (lines: LiveCashLine[], kind: "pair" | "unpair", reason?: string) => {
+    const locked = lines.filter((item) => stageOf(item) === "ok2");
+    if (locked.length) { void messageApi.warning("有一笔已终审，先在它的详情里撤销终审再改配对"); return; }
+    setBusy(true);
+    const failed = await pairLines(lines, kind, reason);
+    setBusy(false);
+    setOpen(false);
+    setUnpairOpen(false);
+    setUnpairReason("");
+    setPicked(undefined);
+    setKeyword("");
+    void refresh();
+    if (failed.length) void messageApi.error(failed.join("；"));
+    else void messageApi.success(kind === "pair" ? "已配对" : "已取消配对");
+  };
+  if (line.manualPair) {
+    const group = data.lines.flatMap((item) => { const other = asLive(item); return other && other.manualPair === line.manualPair ? [other] : []; });
+    return (
+      <>
+        {holder}
+        <Button loading={busy} onClick={() => setUnpairOpen(true)}>取消配对</Button>
+        <Modal open={unpairOpen} title={`取消这 ${group.length} 笔的人工配对`} okText="取消配对" cancelText="不了" confirmLoading={busy} okButtonProps={{ disabled: !unpairReason.trim() }}
+          onOk={() => void run(group, "unpair", unpairReason.trim())} onCancel={() => { setUnpairOpen(false); setUnpairReason(""); }} destroyOnHidden>
+          <Typography.Paragraph type="secondary">原因必填，会记在这几笔的操作记录里。</Typography.Paragraph>
+          <Input.TextArea autoFocus aria-label="取消配对原因" placeholder="例如：配错了，应该配 10-24 那笔" maxLength={500} showCount autoSize={{ minRows: 2, maxRows: 4 }} value={unpairReason} onChange={(event) => setUnpairReason(event.target.value)} />
+        </Modal>
+      </>
+    );
+  }
+  if (line.pair) return <Tooltip title="已自动配对"><Button disabled>配对</Button></Tooltip>;
+  const chosen = candidates.find((item) => item.line.id === picked)?.line;
+  return (
+    <>
+      {holder}
+      <Button onClick={() => setOpen(true)}>配对</Button>
+      <Modal open={open} width={760} title="配对：选另一个账户里对应的那笔" okText="配对" cancelText="取消" confirmLoading={busy} okButtonProps={{ disabled: !chosen }}
+        onOk={() => { const other = chosen && asLive(chosen); if (other) void run([line, other], "pair"); }} onCancel={() => { setOpen(false); setKeyword(""); }} destroyOnHidden>
+        <Typography.Paragraph type="secondary">这笔 {line.date} <FinMoney value={line.amt} cur={line.cur} />。默认列出其他账户 {PAIR_DAYS} 天内方向相反、还没配对的流水，金额最接近的排前面；找不到就在下面搜索（不限日期）。两边金额有差的，配上后在异常里显示差额，可以确认记为手续费。</Typography.Paragraph>
+        <Input.Search allowClear placeholder="搜索：账户、金额、摘要、备注、对方（空格隔开多个词）" style={{ marginBottom: 8 }} value={keyword} onChange={(event) => { setKeyword(event.target.value); setPicked(undefined); }} />
+        <Table size="small" pagination={false} rowKey={(row) => row.line.id} dataSource={candidates} scroll={{ y: 360 }}
+          rowSelection={{ type: "radio", selectedRowKeys: picked ? [picked] : [], onChange: (keys) => setPicked(String(keys[0])) }}
+          onRow={(row) => ({ onClick: () => setPicked(row.line.id) })}
+          locale={{ emptyText: keyword.trim() ? "搜不到：换个关键词试试（金额可以只输整数部分）" : "15 天内没有候选：在上面搜索账户、金额或摘要" }}
+          columns={[
+            { key: "date", title: "日期", width: 100, render: (_, row) => row.line.date },
+            { key: "acct", title: "账户", width: 160, render: (_, row) => accountLabel(data.accounts.find((item) => item.id === row.line.acct)) || row.line.acct },
+            { key: "amt", title: "金额", width: 130, align: "right", render: (_, row) => <FinMoney value={row.line.amt} cur={row.line.cur} /> },
+            { key: "diff", title: "差额", width: 90, align: "right", render: (_, row) => (Number.isFinite(row.diff) ? row.diff.toFixed(2) : "币种不同") },
+            { key: "sum", title: "摘要 / 对方", ellipsis: true, render: (_, row) => [row.line.sum, row.line.party].filter(Boolean).join(" · ") || EMPTY },
+          ]} />
+      </Modal>
+    </>
+  );
+}
+
+/** 表格里拆分子行的类别格子：直接改这一行的类别（同一个可搜索的分组下拉）。 */
+export function PartCategoryCell({ line, index, data, fee }: { line: LiveCashLine; index: number; data: CashSnapshot; fee?: string }) {
+  const { send, busy, holder } = useLineEvent();
+  const options = useMemo(() => groupedCatOptions(data.cats), [data.cats]);
+  const part = line.parts?.[index];
+  if (!part) return null;
+  return (
+    <span className="finance-board__stack">
+      {holder}
+      <Select size="small" showSearch filterOption={catFilter} popupMatchSelectWidth={280} style={{ width: 200 }} disabled={busy} value={part.cat || undefined} options={options}
+        placeholder={<Typography.Text type="danger">待分类</Typography.Text>} onChange={(value: string) => void send(line, "set_part_category", { index, category_code: value }, `第 ${index + 1} 行已选类别`)} />
+      <span className="finance-board__sub">{fee ? "手续费行" : "拆分行"}</span>
+    </span>
+  );
+}
+
+/** 表格里拆分子行的摘要 / 备注格子（rocky 11-05）：点铅笔改这一行自己的；清空保存 = 摘要沿用原行、备注清掉。不退回审核。 */
+export function PartTextCell({ line, index, field, children }: { line: LiveCashLine; index: number; field: "description" | "memo"; children: ReactNode }) {
+  const { send, busy, holder } = useLineEvent();
+  const part = line.parts?.[index];
+  const [draft, setDraft] = useState<string>();
+  if (!part) return null;
+  const own = (field === "description" ? part.sum : part.memo) ?? "";
+  const label = field === "description" ? "摘要" : "备注";
+  const save = async () => {
+    if (draft === undefined) return;
+    if (await send(line, "set_part_text", { index, [field]: draft.trim() || null }, draft.trim() ? `第 ${index + 1} 行${label}已保存` : `第 ${index + 1} 行${label}已清掉`)) setDraft(undefined);
+  };
+  if (draft !== undefined) {
+    return (
+      <Space direction="vertical" size={4} style={{ width: "100%" }}>
+        {holder}
+        <Input.TextArea autoFocus aria-label={`拆分第 ${index + 1} 行${label}`} autoSize={{ minRows: 1, maxRows: 4 }} maxLength={500} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") setDraft(undefined); }} onPressEnter={(event) => { if (!event.shiftKey) { event.preventDefault(); void save(); } }} />
+        <Space size={8} wrap>
+          <Button size="small" type="primary" loading={busy} onClick={() => void save()}>保存</Button>
+          <Button size="small" onClick={() => setDraft(undefined)}>取消</Button>
+          <Typography.Text type="secondary">{field === "description" ? "清空保存 = 沿用原行摘要" : "清空保存 = 不写备注"}</Typography.Text>
+        </Space>
+      </Space>
+    );
+  }
+  return (
+    <div className="fin-cash-flow__cell-text">
+      {holder}
+      <div className="fin-cash-flow__cell-body">{children}</div>
+      <Tooltip title={`改拆分第 ${index + 1} 行的${label}（只改显示，不退回审核）`}><Button size="small" type="text" className="fin-cash-flow__cell-edit" aria-label={`改拆分第 ${index + 1} 行${label}`} icon={<EditOutlined aria-hidden="true" />} onClick={() => setDraft(own)} /></Tooltip>
+    </div>
   );
 }

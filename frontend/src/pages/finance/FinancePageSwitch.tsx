@@ -5,6 +5,7 @@
 import type { NavigationPage } from "@/config/navigation";
 import FinanceCashFlowPage from "@/pages/finance/FinanceCashFlowPage";
 import FinancePlaceholderPage from "@/pages/finance/FinancePlaceholderPage";
+import AccountsAdminPage from "@/pages/finance/cash-flow/AccountsAdminPage";
 import FxRatesPage from "@/pages/finance/cash-flow/FxRatesPage";
 
 type PageComponent = (props: { page: NavigationPage }) => React.JSX.Element;
@@ -15,6 +16,8 @@ const PAGES: Record<string, PageComponent> = { finance_fx_rates: FxRatesPage };
 const CASH_VIEWS = { finance_cash_journal: "journal", finance_cash_stock: "stock" } as const;
 
 function FinancePageSwitch({ page }: { page: NavigationPage }) {
+  // 资金流水 · 账户管理（新增 / 修改 / 停用账户），只走正式接口
+  if (page.key === "finance_cash_account_admin") return <AccountsAdminPage page={page} />;
   if (page.key.startsWith("finance_cash_")) {
     // 第 7 组：资金流水共用一个页面文件（账户总览 / 日记账 / 备货资金）
     const view = CASH_VIEWS[page.key as keyof typeof CASH_VIEWS] ?? "accounts";
