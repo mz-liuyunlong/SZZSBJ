@@ -91,9 +91,7 @@ def test_sp_recovery_recalculates_profit_roi_and_multi_store_rollup_idempotently
                     {"day": day},
                 )
                 with Session(bind=conn) as session:
-                    assert recover_standard_ad_spend(session, "account", day) == Decimal(
-                        "18.91"
-                    )
+                    assert recover_standard_ad_spend(session, "account", day) == Decimal("18.91")
                     first = conn.execute(
                         text(
                             "select id,ad_spend_amount,gross_profit_amount,"
@@ -108,23 +106,27 @@ def test_sp_recovery_recalculates_profit_roi_and_multi_store_rollup_idempotently
                             "order by local_sku"
                         )
                     ).all()
-                    assert recover_standard_ad_spend(session, "account", day) == Decimal(
-                        "18.91"
+                    assert recover_standard_ad_spend(session, "account", day) == Decimal("18.91")
+                    assert (
+                        first
+                        == conn.execute(
+                            text(
+                                "select id,ad_spend_amount,gross_profit_amount,"
+                                "gross_margin,roi from mart_daily_sales_item_day "
+                                "order by id"
+                            )
+                        ).all()
                     )
-                    assert first == conn.execute(
-                        text(
-                            "select id,ad_spend_amount,gross_profit_amount,"
-                            "gross_margin,roi from mart_daily_sales_item_day "
-                            "order by id"
-                        )
-                    ).all()
-                    assert sku_first == conn.execute(
-                        text(
-                            "select local_sku,ad_spend_amount,gross_profit_amount,"
-                            "gross_margin,roi from mart_order_profit_sku_day "
-                            "order by local_sku"
-                        )
-                    ).all()
+                    assert (
+                        sku_first
+                        == conn.execute(
+                            text(
+                                "select local_sku,ad_spend_amount,gross_profit_amount,"
+                                "gross_margin,roi from mart_order_profit_sku_day "
+                                "order by local_sku"
+                            )
+                        ).all()
+                    )
 
                 rows = {row[0]: row for row in first}
                 assert rows[1][1] == Decimal("14.91")
