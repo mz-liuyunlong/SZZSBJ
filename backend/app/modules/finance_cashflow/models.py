@@ -265,6 +265,11 @@ class FinanceCashLineState(Base):
     )
     stage_reason: Mapped[str | None] = mapped_column(Text)
     review_note: Mapped[str | None] = mapped_column(Text)
+    # 人工改过的摘要 / 备注（只用于显示；银行原文在 std 表里不动，分类规则照原文算）。
+    manual_description: Mapped[str | None] = mapped_column(Text)
+    manual_memo: Mapped[str | None] = mapped_column(Text)
+    # 拆分：[{"amount": "100.0000", "category_code": "G02" | null}]；null = 没拆分。
+    parts: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
