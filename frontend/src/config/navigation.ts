@@ -232,7 +232,7 @@ export const navigation: NavigationGroup[] = [
     key: 'finance',
     title: '财务',
     icon: createElement(DollarOutlined, { 'aria-hidden': true }),
-    sidebarSections: [{ key: 'finance-cash', title: '资金流水' }],
+    sidebarSections: [{ key: 'finance-cash', title: '资金流水' }, { key: 'finance-settings', title: '财务设置' }],
     children: [
       // 2026-11-02 财务菜单按业务（Rocky）确认的 Demo 10 个标签重排；新增页面的导航与权限点待负责人批准（PR-D），本地预览先行。
       page('finance', 'profit_center', '经营总览', '/finance/profit-center'),
@@ -250,6 +250,11 @@ export const navigation: NavigationGroup[] = [
       }),
       page('finance', 'cash_stock', '备货资金', '/finance/cash/stock', {
         sidebarSection: 'finance-cash', status: 'building', readOnly: true, viewPermissionKey: 'page:finance:cash-flow:view',
+      }),
+      // 2026-11-05 Rocky：这次上线新增汇率页面，只读，读领星月汇率。接口只给超管，所以不沿用资金流水的页面权限：
+      // 用自己的权限点 page:finance:fx-rates:view，这个权限点不分配给任何角色，只有超管（*）能看到入口和打开页面。
+      page('finance', 'fx_rates', '资金 汇率', '/finance/fund-settings/fx-rates', {
+        sidebarSection: 'finance-settings', status: 'building', readOnly: true, viewPermissionKey: 'page:finance:fx-rates:view',
       }),
       page('finance', 'cost_exception', '成本异常处理', '/finance/cost-exception'),
       page('finance', 'settings', '口径与设置', '/finance/settings'),

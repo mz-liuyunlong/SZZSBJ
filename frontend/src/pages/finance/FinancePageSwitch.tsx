@@ -5,11 +5,12 @@
 import type { NavigationPage } from "@/config/navigation";
 import FinanceCashFlowPage from "@/pages/finance/FinanceCashFlowPage";
 import FinancePlaceholderPage from "@/pages/finance/FinancePlaceholderPage";
+import FxRatesPage from "@/pages/finance/cash-flow/FxRatesPage";
 
 type PageComponent = (props: { page: NavigationPage }) => React.JSX.Element;
 
 // 其他标签各自提 PR 时再加回
-const PAGES: Record<string, PageComponent> = {};
+const PAGES: Record<string, PageComponent> = { finance_fx_rates: FxRatesPage };
 
 const CASH_VIEWS = { finance_cash_journal: "journal", finance_cash_stock: "stock" } as const;
 
