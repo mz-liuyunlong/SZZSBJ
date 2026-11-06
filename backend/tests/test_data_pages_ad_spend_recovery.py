@@ -21,18 +21,25 @@ def test_recovery_updates_daily_and_profit_only_when_totals_agree():
         _result(0),  # no ambiguous Daily Sales business keys
         _result(285),
         _result(6185),
-        _result(None),
-        _result(None),
+        _result(None),  # update Daily Sales SP spend
+        _result(None),  # reconcile Daily Sales profit, margin and ROI
+        _result(None),  # roll up SKU-day SP spend and profit
         _result((Decimal("2020.51"), Decimal("2020.51"))),
     ]
     assert recover_standard_ad_spend(session, "account", "2026-10-29") == Decimal("2020.51")
-    sql = [str(call.args[0]) for call in session.execute.call_args_list]
+    sql = [str(call.args[0]).lower() for call in session.execute.call_args_list]
+    assert len(sql) == 7
     assert "update mart_daily_sales_item_day" in sql[3]
-    assert "update mart_order_profit_sku_day" in sql[4]
+    assert "update mart_daily_sales_item_day" in sql[4]
+    assert "gross_profit_amount = e.profit" in sql[4]
+    assert "gross_margin = e.margin" in sql[4]
+    assert "roi = e.roi" in sql[4]
+    assert "update mart_order_profit_sku_day" in sql[5]
+    assert "gross_profit_amount = e.profit" in sql[5]
     assert "source_account_ref=:account" in sql[3]
-    assert "business_date_la=:day" in sql[4]
-    assert "insert into" not in " ".join(sql).lower()
-    assert "delete from" not in " ".join(sql).lower()
+    assert "business_date_la = :day" in sql[5]
+    assert "insert into" not in " ".join(sql)
+    assert "delete from" not in " ".join(sql)
 
 
 def test_recovery_refuses_ambiguous_mart_keys():
@@ -57,8 +64,9 @@ def test_recovery_refuses_inconsistent_profit_rollup():
         _result(0),
         _result(285),
         _result(6185),
-        _result(None),
-        _result(None),
+        _result(None),  # update Daily Sales SP spend
+        _result(None),  # reconcile Daily Sales profit, margin and ROI
+        _result(None),  # roll up SKU-day SP spend and profit
         _result((Decimal("2020.51"), Decimal("0"))),
     ]
     with pytest.raises(ValueError, match="PROFIT_ROLLUP_MISMATCH"):
