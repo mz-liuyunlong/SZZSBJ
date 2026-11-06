@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from ..model import RejectFile
-from . import boc, payoneer, pingpong, shenzhen_rural_bank, worldfirst
+from . import boc, cmb, payoneer, pingpong, shenzhen_rural_bank, worldfirst
 
 PARSERS = {
     "boc": boc.parse,
@@ -10,6 +10,7 @@ PARSERS = {
     "payoneer": payoneer.parse,
     "worldfirst": worldfirst.parse,
     "pingpong": pingpong.parse,
+    "cmb": cmb.parse,
 }
 
 

@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { backendRequest, BackendRequestError } from "@/api/backendApi";
 import type { CashAccount, CashLine, CashSnapshot, FeishuApproval } from "@/pages/finance/localFinData";
 import type { FsDetail } from "@/pages/finance/cash-flow/data";
+import { currencyText } from "@/pages/finance/currencyName";
 
 const BASE = "/api/finance/cashflow";
 const PAGE_SIZE = 2000;
@@ -21,7 +22,8 @@ export const isCashLive = CASH_SOURCE === "api";
 export const cashViewSource = (view: string, isDev: boolean, live: boolean): "live" | "demo" | "building" =>
   view === "journal" && live ? "live" : isDev ? "demo" : "building";
 
-export type LineEventKind = "review1_pass" | "review1_reject" | "review2_pass" | "review2_reject" | "set_category" | "attach_ref" | "detach_ref" | "exclude" | "unexclude";
+export type LineEventKind = "review1_pass" | "review1_reject" | "review2_pass" | "review2_reject" | "set_category" | "attach_ref" | "detach_ref" | "exclude" | "unexclude"
+  | "review1_undo" | "review2_undo" | "set_text" | "split" | "set_part_category" | "set_part_text" | "unsplit" | "confirm_fee" | "pair" | "unpair";
 
 export interface ApiAccount {
   account_key: string; display_name: string; entity: string; currency_code: string; kind: string; provider: string; account_no_last4: string; is_active: boolean;
@@ -34,6 +36,14 @@ export interface ApiLine {
   source_ref: string; file_row_order: number; category_code: string | null; category_source: string; pair_id: string | null; flags: string[]; refs: string[];
   exclude_amount: string | null; exclude_reason: string | null; list_excluded_cny: string; stage: string; stage_reason: string | null; review_note: string | null; version: number;
   approval_candidates?: string[];
+  /** 人工改过的摘要 / 备注；null = 没改 */
+  manual_description?: string | null; manual_memo?: string | null;
+  /** 拆分：金额是正数（流水金额的绝对值拆开），类别拆完后逐行选 */
+  parts?: { amount: string; category_code: string | null; fee_layer?: string | null; description?: string | null; memo?: string | null }[] | null;
+  /** 人工配对号（同号的几笔是同一笔内部转账）；规则自动剔除的原因（如万里汇子账号归集行） */
+  manual_pair?: string | null; auto_exclude_reason?: string | null;
+  /** 折人民币的汇率和来源：payoneer = 派安盈实际到账；lingxing = 领星当月汇率；pending = 派安盈提现等月结单 */
+  fx_rate?: string | null; fx_source?: string;
 }
 export interface ApiAnomaly { type: string; account_key: string; date: string; message: string; amount: string | null; line_uid: string | null }
 export interface ApiFileResult {
@@ -42,7 +52,11 @@ export interface ApiFileResult {
 }
 
 /** 接口流水：页面的 CashLine 加上写操作要用的字段。 */
-export interface LiveCashLine extends CashLine { uid: string; version: number; stage: string; stageReason?: string; reviewNote?: string; excludeReason?: string; candidates: string[] }
+export interface LiveCashLine extends CashLine { uid: string; version: number; stage: string; stageReason?: string; reviewNote?: string; excludeReason?: string; candidates: string[];
+  /** 银行原文（摘要 / 备注改过时用来对照） */
+  origSum: string; origMemo: string;
+  manualPair?: string; autoExcludeReason?: string;
+  fxRate?: number; fxSource?: string }
 
 export interface ApiApproval {
   serial: string; kind: string; status: string; status_text: string; state: string; started_at: string; completed_at: string; handled_at: string; applicant: string;
@@ -59,7 +73,7 @@ export const asLive = (line: CashLine) => ("uid" in line ? (line as LiveCashLine
 const num = (value: string | null | undefined) => (value == null ? null : Number(value));
 
 export function toCashAccount(row: ApiAccount): CashAccount {
-  return { id: row.account_key, name: row.display_name, entity: row.entity, cur: row.currency_code, kind: row.kind, stmt: row.account_no_last4 ? `尾号 ${row.account_no_last4}` : "" };
+  return { id: row.account_key, name: currencyText(row.display_name), entity: row.entity, cur: row.currency_code, kind: row.kind, stmt: row.account_no_last4 ? `尾号 ${row.account_no_last4}` : "" };
 }
 
 export function toCashLine(row: ApiLine): LiveCashLine {
@@ -75,8 +89,11 @@ export function toCashLine(row: ApiLine): LiveCashLine {
     amt: Number(row.amount),
     cny: num(row.amount_cny),
     bal: num(row.balance_after),
-    sum: row.description,
-    memo: row.memo,
+    sum: row.manual_description ?? row.description,
+    memo: row.manual_memo ?? row.memo,
+    origSum: row.description,
+    origMemo: row.memo,
+    parts: row.parts?.length ? row.parts.map((part) => ({ amt: Math.sign(Number(row.amount)) * Number(part.amount), cat: part.category_code ?? "", ...(part.fee_layer ? { fee: part.fee_layer } : {}), ...(part.description ? { sum: part.description } : {}), ...(part.memo ? { memo: part.memo } : {}) })) : undefined,
     party: row.counterparty_name,
     refs: row.refs,
     cat: row.category_code ?? "",
@@ -91,7 +108,20 @@ export function toCashLine(row: ApiLine): LiveCashLine {
     reviewNote: row.review_note ?? undefined,
     excludeReason: row.exclude_reason ?? undefined,
     candidates: row.approval_candidates ?? [],
+    manualPair: row.manual_pair ?? undefined,
+    autoExcludeReason: row.auto_exclude_reason ?? undefined,
+    fxRate: row.fx_rate == null ? undefined : Number(row.fx_rate),
+    fxSource: row.fx_source || undefined,
   };
+}
+
+/** 折人民币旁边的一句说明（rocky 11-05）：派安盈提现用派安盈自己的汇率；月结单没到之前留空。 */
+export function fxNote(line: CashLine): string | undefined {
+  const live = asLive(line);
+  if (!live?.fxSource) return undefined;
+  if (live.fxSource === "payoneer") return `派安盈实际汇率 ${live.fxRate?.toFixed(4) ?? ""}`;
+  if (live.fxSource === "pending") return "等派安盈月结单";
+  return undefined;
 }
 
 export function toFeishuApproval(row: ApiApproval, idOfLine: Map<string, string>): FeishuApproval {
@@ -130,7 +160,7 @@ export function buildLiveSnapshot(accounts: ApiAccount[], categories: ApiCategor
     feishu: approvals.map((row) => toFeishuApproval(row, idOf)),
     flow: { months, by_acct: {} },
     anomalies: anomalies.map((row) => ({
-      type: row.type, sev: "", acct: row.account_key, date: row.date, msg: row.message, amt: num(row.amount),
+      type: row.type, sev: "", acct: row.account_key, date: row.date, msg: currencyText(row.message), amt: num(row.amount),
       ...(row.line_uid && idOf.has(row.line_uid) ? { line: idOf.get(row.line_uid) } : {}),
     })),
   };
@@ -203,6 +233,15 @@ export async function postLineEvent(line: LiveCashLine, kind: LineEventKind, fie
   const { data } = await backendRequest<{ stage: string; version: number; auto_reset: boolean }>(`${BASE}/lines/${line.uid}/events`, {
     method: "POST",
     body: JSON.stringify({ kind, payload: fields.payload ?? {}, reason: fields.reason, expected_version: line.version, idempotency_key: crypto.randomUUID() }),
+  });
+  return data;
+}
+
+/** 配对 / 取消配对：几笔一次发给后端，放在一个事务里，全部成功或者都不变。 */
+export async function postPairEvent(lines: LiveCashLine[], kind: "pair" | "unpair", reason?: string) {
+  const { data } = await backendRequest<{ pair_id: string; lines: { line_uid: string; version: number }[] }>(`${BASE}/lines/pair-events`, {
+    method: "POST",
+    body: JSON.stringify({ kind, lines: lines.map((line) => ({ line_uid: line.uid, expected_version: line.version })), reason, idempotency_key: crypto.randomUUID() }),
   });
   return data;
 }

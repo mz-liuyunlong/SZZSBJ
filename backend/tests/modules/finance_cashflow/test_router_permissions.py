@@ -30,12 +30,16 @@ ENDPOINTS = [
     ("POST", f"/api/finance/cashflow/imports/{IMPORT_ID}/void"),
     ("GET", "/api/finance/cashflow/accounts"),
     ("GET", "/api/finance/cashflow/categories"),
+    ("GET", "/api/finance/cashflow/fx-rates"),
+    ("GET", "/api/finance/cashflow/fx-rates/sync"),
+    ("POST", "/api/finance/cashflow/fx-rates/sync"),
     ("GET", "/api/finance/cashflow/lines"),
     ("GET", "/api/finance/cashflow/anomalies"),
     ("GET", "/api/finance/cashflow/approvals"),
     ("GET", "/api/finance/cashflow/approvals/sync"),
     ("POST", "/api/finance/cashflow/approvals/sync"),
     ("POST", f"/api/finance/cashflow/lines/{UID}/events"),
+    ("POST", "/api/finance/cashflow/lines/pair-events"),
 ]
 
 
@@ -68,6 +72,17 @@ def test_other_users_get_403_even_with_finance_page_permission(client_for, metho
         user_id="u1", permissions=frozenset({"page:finance:cash-flow:view", "finance:read"})
     )
     assert client_for(finance_user).request(method, path).status_code == 403
+
+
+def test_undo_first_review_needs_the_review_permission(client_for):
+    finance_user = Principal(
+        user_id="u1", permissions=frozenset({"page:finance:cash-flow:view", "finance:read"})
+    )
+    response = client_for(finance_user).post(
+        f"/api/finance/cashflow/lines/{UID}/events",
+        json={"kind": "review1_undo", "expected_version": 1},
+    )
+    assert response.status_code == 403
 
 
 def super_admin() -> Principal:
@@ -110,6 +125,27 @@ def test_event_without_expected_version_is_422(client_for):
         f"/api/finance/cashflow/lines/{UID}/events", json={"kind": "review1_pass"}
     )
     assert response.status_code == 422
+
+
+def test_pair_event_without_expected_version_is_422(client_for):
+    response = client_for(super_admin()).post(
+        "/api/finance/cashflow/lines/pair-events",
+        json={"kind": "pair", "lines": [{"line_uid": UID}, {"line_uid": UID}]},
+    )
+    assert response.status_code == 422
+
+
+def test_pair_event_refusal_returns_its_code(client_for, monkeypatch):
+    def refuse(self, payload, *, actor, request_id):
+        raise J.EventRejectedError(409, "有一笔已被别人改过", J.ERR_VERSION_CONFLICT)
+
+    monkeypatch.setattr(CashflowService, "post_pair_event", refuse)
+    response = client_for(super_admin()).post(
+        "/api/finance/cashflow/lines/pair-events",
+        json={"kind": "pair", "lines": [{"line_uid": UID, "expected_version": 0}]},
+    )
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == J.ERR_VERSION_CONFLICT
 
 
 def test_void_blocked_returns_code_count_and_line_ids(client_for, monkeypatch):

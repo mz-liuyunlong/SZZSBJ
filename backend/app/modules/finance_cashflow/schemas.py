@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -84,6 +84,22 @@ class CashflowCategoryRead(BaseModel):
     is_exclude: bool
 
 
+class CashflowFxRateRead(BaseModel):
+    month: str
+    currency_code: str
+    my_rate: Decimal | None
+
+
+class CashflowLinePartRead(BaseModel):
+    amount: Decimal
+    category_code: str | None = None
+    # 有值 = 手续费行（「确认记为手续费」切出来的），值是手续费层，如 fee / payoneer。
+    fee_layer: str | None = None
+    # 拆分行自己的摘要 / 备注（set_part_text），空 = 沿用整笔的。
+    description: str | None = None
+    memo: str | None = None
+
+
 class CashflowLineRead(BaseModel):
     line_uid: str
     account_key: str
@@ -93,6 +109,10 @@ class CashflowLineRead(BaseModel):
     currency_code: str
     amount: Decimal
     amount_cny: Decimal | None = None
+    # 折人民币用的汇率和来源：payoneer = 派安盈实际到账；
+    # lingxing = 领星当月汇率；pending = 提现等月结单。
+    fx_rate: Decimal | None = None
+    fx_source: str = ""
     balance_after: Decimal | None = None
     description: str
     memo: str
@@ -111,6 +131,12 @@ class CashflowLineRead(BaseModel):
     stage: str = "todo"
     stage_reason: str | None = None
     review_note: str | None = None
+    # 人工改过的摘要 / 备注；null = 没改，显示银行原文（description / memo）。
+    manual_description: str | None = None
+    manual_memo: str | None = None
+    parts: list[CashflowLinePartRead] | None = None
+    manual_pair: str | None = None
+    auto_exclude_reason: str | None = None
     version: int = 0
     # 还没挂单的流水：金额和日期对得上的审批单号，等财务选。
     approval_candidates: list[str] = Field(default_factory=list)
@@ -148,6 +174,28 @@ class CashflowLineEventData(BaseModel):
     stage_reason: str | None = None
     version: int
     auto_reset: bool = False
+    replayed: bool = False
+
+
+class CashflowPairLineRef(BaseModel):
+    line_uid: str = Field(max_length=16)
+    expected_version: int = Field(ge=0)
+
+
+class CashflowPairEventRequest(BaseModel):
+    """配对 / 取消配对：几笔放在一个事务里，全部成功或者都不变。"""
+
+    kind: Literal["pair", "unpair"]
+    lines: list[CashflowPairLineRef] = Field(min_length=1, max_length=20)
+    reason: str | None = Field(default=None, max_length=500)
+    # 每笔事件的幂等键是「这个键:流水号」，列长 128，这里留出流水号的 17 位。
+    idempotency_key: str | None = Field(default=None, max_length=100)
+
+
+class CashflowPairEventData(BaseModel):
+    kind: str
+    pair_id: str
+    lines: list[CashflowLineEventData]
     replayed: bool = False
 
 

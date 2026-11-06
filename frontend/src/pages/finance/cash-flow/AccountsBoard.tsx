@@ -10,6 +10,7 @@ import { fmtMoney, type CashAccount, type CashFlowMonth, type CashSnapshot } fro
 import ReportFacetSelect from "@/shared/report-filters";
 import { type JournalHandoff, KIND_COLOR, EMPTY, isUncat, NO_FLOW_TYPE, mergeFeishu, noFlowAlerts, orphanInScope, icon, writeHandoff } from "@/pages/finance/cash-flow/journalShared";
 import { BoardTable } from "@/pages/finance/cash-flow/BoardTable";
+import { currencyName } from "@/pages/finance/currencyName";
 
 /* ======================================================= 账户总览（按月） */
 export function AccountsBoard({ data }: { data: CashSnapshot }) {
@@ -36,7 +37,7 @@ export function AccountsBoard({ data }: { data: CashSnapshot }) {
     return { ...account, ...(data.flow.by_acct[account.id]?.[month] ?? {}), n_lines: lines.length, uncat: lines.filter(isUncat).length };
   });
   const toCny = (row: Row, value: number | null | undefined) => (value == null ? 0 : row.cur !== "USD" ? value : fx == null ? 0 : value * fx);
-  const fxNote = fx == null ? "缺 USD 汇率，合计不含美元" : `汇率 ${fx}`;
+  const fxNote = fx == null ? "缺美元汇率，合计不含美元" : `汇率 ${fx}`;
   const inExt = rows.reduce((total, row) => total + toCny(row, row.in_ext), 0);
   const outExt = rows.reduce((total, row) => total + toCny(row, row.out_ext), 0);
   const noFlow = noFlowAlerts(data, mergeFeishu(data, overviewDetails)).filter((item) => orphanInScope(item, [], month)).length;
@@ -52,7 +53,7 @@ export function AccountsBoard({ data }: { data: CashSnapshot }) {
   const columns: ProColumns<Row>[] = [
     { title: "账户", dataIndex: "name", width: 280, fixed: "left", render: (_, row) => <Typography.Text strong>{row.name}</Typography.Text> },
     { title: "类型", dataIndex: "kind", width: 80, render: (_, row) => <Tag bordered={false} color={KIND_COLOR[row.kind]}>{row.kind}</Tag> },
-    { title: "币种", dataIndex: "cur", width: 70 },
+    { title: "币种", dataIndex: "cur", width: 70, render: (_, row) => currencyName(row.cur) },
     { title: "流水覆盖", width: 190, tooltip: "表头声明的查询区间优先；没有的按文件首末两笔；区间内没有行 = 该段无交易", render: (_, row) => { const cov = coverage[row.id]; return cov ? <span className="finance-board__stack">{cov.from} ~ {cov.to}<span className="finance-board__sub">{cov.src === "表头" ? "表头声明" : "按首末笔"}</span></span> : EMPTY; } },
     { title: "期初", dataIndex: "open", width: 140, align: "right", render: (_, row) => <FinMoney value={row.open} cur={row.cur} /> },
     { title: "外部流入", dataIndex: "in_ext", width: 140, align: "right", render: (_, row) => <FinMoney value={row.in_ext} cur={row.cur} /> },

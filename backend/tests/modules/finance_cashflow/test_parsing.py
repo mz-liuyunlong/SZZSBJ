@@ -208,7 +208,8 @@ def test_rejected_files_get_a_reason(content):
 
 
 def test_pdf_reason_is_the_rule_text():
-    with pytest.raises(RejectFile, match="PDF 不是流水导出"):
+    # 招商银行流水 PDF 之外的 PDF 一律拒收（招行见 test_accounts_manual.py）
+    with pytest.raises(RejectFile, match="PDF 打不开|PDF 认不出"):
         parse_file(b"%PDF-1.4", S.seed())
 
 
@@ -294,7 +295,7 @@ def test_masking():
     )
     assert "110101199003071234" not in text
     assert "…7890" in text
-    assert "abc…@example.com" in text
+    assert "abcdef@example.com" in text  # 邮箱不再打码（rocky 11-05）
     line = parse_file(S.boc(S.BOC_A, boc_rows()), S.seed()).lines[0]
     assert line.counterparty_account_last4 == "1234"
 

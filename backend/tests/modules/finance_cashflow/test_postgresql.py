@@ -21,7 +21,7 @@ from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 from psycopg import sql
 from pydantic import ValidationError
-from sqlalchemy import create_engine, func, inspect, select, text
+from sqlalchemy import create_engine, func, inspect, select, text, update
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
@@ -39,7 +39,8 @@ from app.modules.finance_cashflow.models import (
     FinanceCashLineEvent,
     FinanceCashRawFile,
 )
-from app.modules.finance_cashflow.schemas import CashflowLineEventRequest
+from app.modules.finance_cashflow.parsing import PARSER_VERSION
+from app.modules.finance_cashflow.schemas import CashflowLineEventRequest, CashflowPairEventRequest
 from app.modules.finance_cashflow.service import (
     CashflowService,
     ImportHasReviewedLinesError,
@@ -47,6 +48,7 @@ from app.modules.finance_cashflow.service import (
     LineNotFoundError,
     StorageNotConfiguredError,
 )
+from app.modules.fx_rates.models import LingxingFxRate
 from app.modules.product_management.models import ProductPricingRuleVersion
 from tests.modules.finance_cashflow import synth as S
 from tests.modules.finance_cashflow.test_parsing import boc_rows, eleven_account_files
@@ -261,6 +263,87 @@ def test_review_events_flow_and_append_only_history(service, session):
     assert (line.category_code, line.category_source, line.stage) == ("G01", "人工", J.STAGE_TODO)
 
 
+def test_undo_reviews_edit_text_and_split(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    line = active(service, "BOC_CNY")[0]
+    uid = line.line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    assert event(service, uid, J.KIND_REVIEW1_UNDO, expected_version=1).stage == J.STAGE_TODO
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=2)
+    event(service, uid, J.KIND_REVIEW2_PASS, expected_version=3)
+    undone = service.post_event(
+        uid,
+        CashflowLineEventRequest(kind=J.KIND_REVIEW2_UNDO, expected_version=4),
+        actor="another-admin",
+        request_id="r",
+    )
+    assert undone.stage == J.STAGE_OK1
+    edited = event(
+        service, uid, J.KIND_SET_TEXT, payload={"memo": "改过的备注"}, expected_version=5
+    )
+    assert (edited.stage, edited.auto_reset) == (J.STAGE_OK1, False)
+    half = abs(line.amount) / 2
+    event(service, uid, J.KIND_SPLIT, payload={"amounts": [str(half)] * 2}, expected_version=6)
+    event(
+        service,
+        uid,
+        J.KIND_SET_PART_CATEGORY,
+        payload={"index": 0, "category_code": "G01"},
+        expected_version=7,
+    )
+    read = next(item for item in active(service, "BOC_CNY") if item.line_uid == uid)
+    assert (read.memo, read.manual_memo, read.manual_description) == (line.memo, "改过的备注", None)
+    assert [(part.amount, part.category_code) for part in read.parts or []] == [
+        (half.quantize(Decimal("0.0001")), "G01"),
+        (half.quantize(Decimal("0.0001")), None),
+    ]
+    assert read.stage == J.STAGE_TODO
+
+
+def _downgrade_0078(session: Session) -> None:
+    path = (
+        Path(__file__).resolve().parents[3]
+        / "alembic/versions/20261105_0078_finance_journal_edit_split.py"
+    )
+    spec = importlib.util.spec_from_file_location("finance_edit_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    context = MigrationContext.configure(session.connection())
+    with Operations.context(context):
+        module.downgrade()
+
+
+def test_0078_downgrade_refuses_review1_undo_events(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    uid = active(service, "BOC_CNY")[0].line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    event(service, uid, J.KIND_REVIEW1_UNDO, expected_version=1)
+    with pytest.raises(RuntimeError, match="撤销审核记录"):
+        _downgrade_0078(session)
+
+
+def test_0078_downgrade_refuses_review2_undo_events(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    uid = active(service, "BOC_CNY")[0].line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    event(service, uid, J.KIND_REVIEW2_PASS, expected_version=1)
+    event(service, uid, J.KIND_REVIEW2_UNDO, expected_version=2)
+    with pytest.raises(RuntimeError, match="撤销审核记录"):
+        _downgrade_0078(session)
+
+
+def test_0078_downgrade_allowed_without_undo_or_edits(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    uid = active(service, "BOC_CNY")[0].line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    _downgrade_0078(session)
+    columns = {
+        column["name"]
+        for column in inspect(session.connection()).get_columns("manual_finance_cash_line_state")
+    }
+    assert not columns & {"manual_description", "manual_memo", "parts"}
+
+
 def test_stale_version_is_rejected(service):
     upload(service, S.boc(S.BOC_A, boc_rows()))
     uid = active(service, "BOC_CNY")[0].line_uid
@@ -315,7 +398,7 @@ def test_line_exclusion_and_exclusion_list_anomaly(service, session):
             "exclusions": [
                 {
                     "entry_key": "e1",
-                    "ref": "202610100001",
+                    "ref": "209910100001",
                     "amount_cny": "5",
                     "reason": "其他部门",
                     "registered_on": "2026-10-22",
@@ -332,17 +415,15 @@ def test_line_exclusion_and_exclusion_list_anomaly(service, session):
         service,
         lines[1].line_uid,
         J.KIND_ATTACH_REF,
-        payload={"ref": "202610100001"},
+        payload={"ref": "209910100001"},
         expected_version=0,
     )
     assert not [item for item in service.list_anomalies() if item.type == J.ALERT_EXCLUSION]
 
 
-def _load_migration():
-    path = (
-        Path(__file__).resolve().parents[3] / "alembic/versions/20261104_0072_finance_cashflow.py"
-    )
-    spec = importlib.util.spec_from_file_location("finance_cashflow_migration", path)
+def _load_migration(name: str = "20261104_0072_finance_cashflow"):
+    path = Path(__file__).resolve().parents[3] / f"alembic/versions/{name}.py"
+    spec = importlib.util.spec_from_file_location(f"migration_{name}", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -351,6 +432,8 @@ def _load_migration():
 def _downgrade(session: Session) -> None:
     context = MigrationContext.configure(session.connection())
     with Operations.context(context):
+        # 0081 的派安盈月结明细表引用了 0072 的表：先退掉它（空表才允许退）。
+        _load_migration("20261105_0081_finance_payoneer_statement").downgrade()
         _load_migration().downgrade()
 
 
@@ -513,9 +596,19 @@ def test_cny_amount_uses_month_rate(service, session):
     usd = ("来账", "20261010", "10:00:00", "USD", "10", "10", "X", "", "U1", "")
     upload(service, S.boc(S.BOC_A, [usd]))
     assert active(service, "BOC_USD")[0].amount_cny is None
-    session.add(_pricing_rule(Decimal("7.2")))
+    session.add(_fx_rate("2026-10", my_rate="7.2"))
     session.flush()
     assert active(service, "BOC_USD")[0].amount_cny == Decimal("72.0000")
+
+
+def _fx_rate(month: str, *, code: str = "USD", my_rate: str | None, rate_org: str | None = None):
+    return LingxingFxRate(
+        rate_month=month,
+        currency_code=code,
+        my_rate=None if my_rate is None else Decimal(my_rate),
+        rate_org=None if rate_org is None else Decimal(rate_org),
+        source="seed",
+    )
 
 
 def _pricing_rule(rate: Decimal) -> ProductPricingRuleVersion:
@@ -700,14 +793,50 @@ def test_concurrent_idempotency_key_returns_replay_not_500(service, session, mon
     assert (line.category_code, line.version) == ("G01", 1)
 
 
-def test_rate_only_reads_product_management_rule(service, session):
+def test_rate_only_reads_lingxing_usd_my_rate_of_the_same_month(service, session):
     usd = ("来账", "20261010", "10:00:00", "USD", "10", "10", "X", "", "U1", "")
     upload(service, S.boc(S.BOC_A, [usd]))
-    other = _pricing_rule(Decimal("9.9"))
-    other.rule_key = "other_rule"
-    session.add(other)
+    session.add_all(
+        [
+            _pricing_rule(Decimal("9.9")),
+            _fx_rate("2026-09", my_rate="8.8"),
+            _fx_rate("2026-10", code="EUR", my_rate="7.7"),
+            _fx_rate("2026-10", my_rate=None, rate_org="6.6"),
+        ]
+    )
     session.flush()
     assert active(service, "BOC_USD")[0].amount_cny is None
+
+
+def test_deploy_seed_fills_missing_rates_and_never_overwrites(session):
+    session.add(_fx_rate("2026-10", my_rate="7.1"))
+    session.flush()
+    data = {
+        "fx_rates": [
+            {"rate_month": "2026-10", "currency_code": "USD", "my_rate": "6.5", "rate_org": "6.6"},
+            {"rate_month": "2026-11", "currency_code": "usd", "my_rate": "6.4", "rate_org": "0"},
+        ]
+    }
+    assert load_deploy_data(session, data).fx_rates == 2
+    session.expire_all()
+    assert session.get(LingxingFxRate, ("2026-10", "USD")).my_rate == Decimal("7.1")
+    seeded = session.get(LingxingFxRate, ("2026-11", "USD"))
+    assert (seeded.my_rate, seeded.rate_org, seeded.source) == (Decimal("6.4"), None, "seed")
+
+
+@pytest.mark.parametrize(
+    ("row", "field"),
+    [
+        ({"rate_month": "2026-1", "currency_code": "USD"}, "rate_month"),
+        ({"rate_month": "2026-10", "currency_code": ""}, "currency_code"),
+        ({"rate_month": "2026-10", "currency_code": "USD", "my_rate": "abc"}, "my_rate"),
+        ({"rate_month": "2026-10", "currency_code": "USD", "rate_org": "-1"}, "rate_org"),
+    ],
+)
+def test_deploy_seed_rejects_bad_rows(session, row, field):
+    with pytest.raises(DeployFileError) as error:
+        load_deploy_data(session, {"fx_rates": [row]})
+    assert str(error.value) == f"fx_rates 第 1 条 {field} 不合格"
 
 
 FAKE_ACCOUNT_NO = "000011112222333"
@@ -792,7 +921,7 @@ def test_script_write_failure_prints_only_the_error_type(tmp_path, monkeypatch, 
                 "exclusions": [
                     {
                         "entry_key": "e",
-                        "ref": "202610100001",
+                        "ref": "209910100001",
                         "registered_on": "秘密日期",
                         "amount_cny": "1",
                         "reason": "x",
@@ -804,7 +933,7 @@ def test_script_write_failure_prints_only_the_error_type(tmp_path, monkeypatch, 
         (
             {
                 "exclusions": [
-                    {"entry_key": "e", "ref": "202610100001", "amount_cny": "1", "reason": "x"}
+                    {"entry_key": "e", "ref": "209910100001", "amount_cny": "1", "reason": "x"}
                 ]
             },
             "FILE_INVALID: exclusions 第 1 条 registered_on 不合格",
@@ -826,7 +955,7 @@ def test_script_dry_run_writes_nothing(tmp_path, monkeypatch, capsys, session):
     get_settings.cache_clear()
     code = _run_script(tmp_path, monkeypatch, {"accounts": [_fake_account()]})
     assert code == 0
-    assert capsys.readouterr().out.strip() == "DRY_RUN accounts=1 rules=0 exclusions=0"
+    assert capsys.readouterr().out.strip() == "DRY_RUN accounts=1 rules=0 exclusions=0 fx_rates=0"
     assert session.get(FinanceCashAccount, "FAKE_K") is None
 
 
@@ -900,3 +1029,388 @@ def test_empty_database_round_trip_upgrade_downgrade_upgrade():
         engine.dispose()
         with psycopg.connect(**admin, autocommit=True) as cx:
             cx.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database)))
+
+
+def _first_reviewed_line(service):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    uid = active(service, "BOC_CNY")[0].line_uid
+    event(service, uid, J.KIND_REVIEW1_PASS, expected_version=0)
+    return uid
+
+
+def _undo(service, uid, *, actor, version=1, key=None):
+    return service.post_event(
+        uid,
+        CashflowLineEventRequest(
+            kind=J.KIND_REVIEW1_UNDO, expected_version=version, idempotency_key=key
+        ),
+        actor=actor,
+        request_id="r",
+    )
+
+
+def _undo_actors(session, uid):
+    return session.scalars(
+        select(FinanceCashLineEvent.actor).where(
+            FinanceCashLineEvent.line_uid == uid,
+            FinanceCashLineEvent.kind == J.KIND_REVIEW1_UNDO,
+        )
+    ).all()
+
+
+def test_undo_first_review_by_the_original_reviewer(service, session):
+    uid = _first_reviewed_line(service)
+    assert _undo(service, uid, actor="admin").stage == J.STAGE_TODO
+    assert _undo_actors(session, uid) == ["admin"]
+
+
+def test_undo_first_review_by_someone_else_with_the_same_permission(service, session):
+    uid = _first_reviewed_line(service)
+    assert _undo(service, uid, actor="another-admin").stage == J.STAGE_TODO
+    assert _undo_actors(session, uid) == ["another-admin"]
+
+
+def test_undo_first_review_without_a_review_event_is_allowed(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    uid = active(service, "BOC_CNY")[0].line_uid
+    state = service._state_for_update(uid)
+    state.stage = J.STAGE_OK1
+    state.version = 1
+    session.flush()
+    assert _undo(service, uid, actor="another-admin").stage == J.STAGE_TODO
+    assert _undo_actors(session, uid) == ["another-admin"]
+
+
+def test_undo_first_review_rejects_a_stale_version(service, session):
+    uid = _first_reviewed_line(service)
+    with pytest.raises(J.EventRejectedError) as caught:
+        _undo(service, uid, actor="admin", version=0)
+    assert caught.value.status_code == 409
+    session.rollback()
+    assert _undo_actors(session, uid) == []
+
+
+def test_undo_first_review_repeat_is_idempotent(service, session):
+    uid = _first_reviewed_line(service)
+    first = _undo(service, uid, actor="admin", key="undo-1")
+    again = _undo(service, uid, actor="admin", key="undo-1")
+    assert (first.replayed, again.replayed) == (False, True)
+    assert again.version == first.version
+    assert _undo_actors(session, uid) == ["admin"]
+
+
+def test_reupload_with_new_parser_refreshes_unmasked_email(service, session):
+    # 派安盈对方邮箱以前被打码；同一个文件在新版解析下再导一次，已有流水刷新成完整邮箱，不新增。
+    content = S.payoneer(
+        [
+            (
+                "10-04-2026",
+                "10:00:00",
+                "UTC",
+                "50",
+                "0",
+                "Completed",
+                "50",
+                "Transfer from connected account abcdef@example.com",
+            )
+        ]
+    )
+    upload(service, content)
+    line = session.scalars(select(FinanceCashLine)).one()
+    assert line.counterparty_name == "abcdef@example.com"
+    line.counterparty_name = "abc…@example.com"
+    session.execute(update(FinanceCashRawFile).values(parser_version="finance_cashflow/1"))
+    session.flush()
+    again = upload(service, content, name="again.csv")
+    assert (again.file.duplicate_of_file, again.file.rows_new) == (True, 0)
+    session.refresh(line)
+    assert line.counterparty_name == "abcdef@example.com"
+    assert session.scalars(select(FinanceCashRawFile.parser_version)).all() == [PARSER_VERSION]
+
+
+OUT_ROW = ("往账", "20261010", "10:00:00", "CNY", "100", "900", "某户", "", "T1", "内部调拨")
+
+
+def two_accounts(service: CashflowService):
+    """两个账户各一笔，一出一进；按流水号排好，后面那笔就是事务里后处理的那笔。"""
+    upload(service, S.boc(S.BOC_A, [OUT_ROW]), name="a.xlsx")
+    upload(service, S.boc(S.BOC_B, boc_rows(n=1)), name="b.xlsx")
+    return sorted(
+        [active(service, "BOC_CNY")[0], active(service, "ZSBJ_BOC")[0]],
+        key=lambda item: item.line_uid,
+    )
+
+
+def pair_request(kind: str, lines, *, versions=None, reason=None, key=None):
+    versions = versions or [0] * len(lines)
+    return CashflowPairEventRequest(
+        kind=kind,
+        lines=[
+            {"line_uid": line.line_uid, "expected_version": version}
+            for line, version in zip(lines, versions, strict=True)
+        ],
+        reason=reason,
+        idempotency_key=key,
+    )
+
+
+def send_pair(service: CashflowService, request: CashflowPairEventRequest):
+    return service.post_pair_event(request, actor="admin", request_id="r")
+
+
+def pair_events(session: Session) -> list[FinanceCashLineEvent]:
+    return list(
+        session.scalars(
+            select(FinanceCashLineEvent).where(FinanceCashLineEvent.kind.in_(["pair", "unpair"]))
+        )
+    )
+
+
+def assert_unpaired(service: CashflowService, session: Session, lines, versions) -> None:
+    current = {item.line_uid: item for item in active(service)}
+    assert [current[line.line_uid].manual_pair for line in lines] == [None] * len(lines)
+    assert [current[line.line_uid].version for line in lines] == versions
+    assert pair_events(session) == []
+
+
+def test_pair_event_changes_both_lines_and_records_an_event_each(service, session):
+    first, second = two_accounts(service)
+    done = send_pair(service, pair_request("pair", [first, second], key="k1"))
+    assert [(item.line_uid, item.version) for item in done.lines] == [
+        (first.line_uid, 1),
+        (second.line_uid, 1),
+    ]
+    current = {item.line_uid: item for item in active(service)}
+    assert current[first.line_uid].manual_pair == done.pair_id
+    assert current[second.line_uid].manual_pair == done.pair_id
+    assert current[first.line_uid].pair_id == current[second.line_uid].pair_id
+    events = pair_events(session)
+    assert sorted(item.line_uid for item in events) == [first.line_uid, second.line_uid]
+    assert {item.actor for item in events} == {"admin"}
+    assert all(item.payload["pair_id"] == done.pair_id for item in events)
+
+    again = send_pair(service, pair_request("pair", [first, second], key="k1"))
+    assert again.replayed is True
+    assert again.pair_id == done.pair_id
+    assert [item.version for item in again.lines] == [1, 1]
+    assert len(pair_events(session)) == 2
+
+
+def test_pair_event_version_conflict_on_one_line_changes_nothing(service, session):
+    first, second = two_accounts(service)
+    event(service, second.line_uid, J.KIND_SET_TEXT, payload={"memo": "改过"}, expected_version=0)
+    with pytest.raises(J.EventRejectedError) as conflict:
+        send_pair(service, pair_request("pair", [first, second]))
+    assert conflict.value.status_code == 409
+    assert conflict.value.code == J.ERR_VERSION_CONFLICT
+    assert_unpaired(service, session, [first, second], [0, 1])
+
+
+def test_pair_event_rolls_back_the_first_line_when_a_later_one_is_refused(service, session):
+    # 第一笔已经在事务里改好了，第二笔已终审被拒：第一笔也要退回去。
+    first, second = two_accounts(service)
+    for version, kind in enumerate((J.KIND_REVIEW1_PASS, J.KIND_REVIEW2_PASS)):
+        event(service, second.line_uid, kind, expected_version=version)
+    with pytest.raises(J.EventRejectedError) as refused:
+        send_pair(service, pair_request("pair", [first, second], versions=[0, 2]))
+    assert refused.value.code == J.ERR_STAGE_NOT_ALLOWED
+    assert_unpaired(service, session, [first, second], [0, 2])
+
+
+def test_pair_event_missing_line_changes_nothing(service, session):
+    first, second = two_accounts(service)
+    request = CashflowPairEventRequest(
+        kind="pair",
+        lines=[
+            {"line_uid": first.line_uid, "expected_version": 0},
+            {"line_uid": "f" * 16, "expected_version": 0},
+        ],
+    )
+    with pytest.raises(LineNotFoundError):
+        send_pair(service, request)
+    assert_unpaired(service, session, [first, second], [0, 0])
+
+
+def test_pair_event_refuses_lines_that_cannot_be_a_pair(service, session):
+    first, second = two_accounts(service)
+    upload(service, S.boc(S.BOC_A, boc_rows(prefix="S", n=2)), name="c.xlsx")
+    same_account = [item for item in active(service, "BOC_CNY") if item.line_uid != first.line_uid][
+        :2
+    ]
+    same_direction = next(item for item in active(service, "BOC_CNY") if item.amount > 0)
+    in_line = first if first.amount > 0 else second
+    for lines, match in (
+        ([first], "至少要两笔"),
+        (same_account, "不同账户"),
+        ([same_direction, in_line], "一出一进"),
+    ):
+        with pytest.raises(J.EventRejectedError, match=match) as refused:
+            send_pair(service, pair_request("pair", lines))
+        assert refused.value.status_code == 422
+    with pytest.raises(J.EventRejectedError, match="两次"):
+        send_pair(service, pair_request("pair", [first, first]))
+    assert pair_events(session) == []
+
+
+def test_pair_event_refuses_a_line_already_in_another_pair(service, session):
+    first, second = two_accounts(service)
+    send_pair(service, pair_request("pair", [first, second]))
+    with pytest.raises(J.EventRejectedError) as refused:
+        send_pair(service, pair_request("pair", [first, second], versions=[1, 1]))
+    assert refused.value.code == J.ERR_PAIR_CONFLICT
+    assert len(pair_events(session)) == 2
+
+
+def test_unpair_event_is_all_or_nothing(service, session):
+    first, second = two_accounts(service)
+    pair_id = send_pair(service, pair_request("pair", [first, second])).pair_id
+
+    # 只取消一半：拒绝，不留下落单的一笔。
+    with pytest.raises(J.EventRejectedError) as partial:
+        send_pair(service, pair_request("unpair", [first], versions=[1], reason="配错了"))
+    assert partial.value.code == J.ERR_PAIR_CONFLICT
+    # 不写原因：拒绝。
+    with pytest.raises(J.EventRejectedError, match="原因"):
+        send_pair(service, pair_request("unpair", [first, second], versions=[1, 1], reason=" "))
+    # 第二笔被别人改过：两笔都不变。
+    event(service, second.line_uid, J.KIND_SET_TEXT, payload={"memo": "改过"}, expected_version=1)
+    with pytest.raises(J.EventRejectedError) as conflict:
+        send_pair(
+            service, pair_request("unpair", [first, second], versions=[1, 1], reason="配错了")
+        )
+    assert conflict.value.code == J.ERR_VERSION_CONFLICT
+    current = {item.line_uid: item for item in active(service)}
+    assert current[first.line_uid].manual_pair == pair_id
+    assert current[second.line_uid].manual_pair == pair_id
+    assert current[first.line_uid].version == 1
+    assert [item.kind for item in pair_events(session)] == ["pair", "pair"]
+
+    done = send_pair(
+        service, pair_request("unpair", [first, second], versions=[1, 2], reason="配错了")
+    )
+    assert done.pair_id == pair_id
+    current = {item.line_uid: item for item in active(service)}
+    assert current[first.line_uid].manual_pair is None
+    assert current[second.line_uid].manual_pair is None
+    unpaired = [item for item in pair_events(session) if item.kind == "unpair"]
+    assert sorted(item.line_uid for item in unpaired) == [first.line_uid, second.line_uid]
+    assert {item.reason for item in unpaired} == {"配错了"}
+
+
+def test_pair_event_key_cannot_be_reused_for_other_lines(service, session):
+    first, second = two_accounts(service)
+    send_pair(service, pair_request("pair", [first, second], key="k2"))
+    with pytest.raises(J.EventRejectedError) as reused:
+        send_pair(
+            service, pair_request("unpair", [first, second], versions=[1, 1], reason="x", key="k2")
+        )
+    assert reused.value.code == J.ERR_IDEMPOTENCY_KEY_REUSED
+
+
+def test_single_line_event_no_longer_accepts_pair_or_unpair(service, session):
+    first, _ = two_accounts(service)
+    for kind in (J.KIND_PAIR, J.KIND_UNPAIR):
+        with pytest.raises(J.EventRejectedError, match="pair-events") as refused:
+            event(service, first.line_uid, kind, payload={"pair_id": "M1"}, expected_version=0)
+        assert refused.value.status_code == 422
+
+
+def test_manual_pair_and_confirm_fee_round_trip(service, session):
+    first, second = two_accounts(service)
+    send_pair(service, pair_request("pair", [first, second]))
+    fee = (abs(first.amount) / 10).quantize(Decimal("0.01"))
+    event(
+        service,
+        first.line_uid,
+        J.KIND_CONFIRM_FEE,
+        payload={"fee_amount": str(fee), "transfer_category": "T02"},
+        expected_version=1,
+    )
+    read = next(item for item in active(service) if item.line_uid == first.line_uid)
+    assert [(part.category_code, part.fee_layer) for part in read.parts or []] == [
+        ("T02", None),
+        ("F01", "fee"),
+    ]
+    assert sum(part.amount for part in read.parts or []) == abs(first.amount)
+    send_pair(service, pair_request("unpair", [first, second], versions=[2, 1], reason="配错了"))
+    current = {item.line_uid: item for item in active(service)}
+    assert current[first.line_uid].manual_pair is None
+    event(
+        service,
+        first.line_uid,
+        J.KIND_SET_PART_TEXT,
+        payload={"index": 1, "description": "到账手续费"},
+        expected_version=3,
+    )
+    read = next(item for item in active(service) if item.line_uid == first.line_uid)
+    assert [part.description for part in read.parts or []] == [None, "到账手续费"]
+
+
+def _payo_statement(rows) -> bytes:
+    head = (
+        "Transaction Date,Transaction Time,Time Zone,Transaction ID,Description,Credit Amount,"
+        "Debit Amount,Currency,Transfer Amount,Transfer Amount Currency,Status,Running Balance,"
+        "Additional Description,Store Name,Source,Target,Reference ID\n"
+    )
+    body = "".join(
+        f"{d},{t},UTC,{txn},{desc},{credit},{debit},USD,{tr},{tcur},Completed,1,,,,,\n"
+        for d, t, txn, desc, credit, debit, tr, tcur in rows
+    )
+    return ("﻿" + head + body).encode("utf-8")
+
+
+def test_payoneer_statement_fills_actual_cny_without_new_lines(service, session):
+    """月结补充只补实际到账：流水数不变，人民币按派安盈；作废这一批就回到空着。"""
+    weekly = S.payoneer(
+        [
+            (
+                "10-05-2026",
+                "17:00:00",
+                "UTC",
+                "3000",
+                "0",
+                "Completed",
+                "3000",
+                "Payment from STRIPE",
+            ),
+            (
+                "10-15-2026",
+                "15:56:15",
+                "UTC",
+                "0",
+                "-3000.00",  # 每周交易报告里扣款是负数
+                "Completed",
+                "0.00",
+                "Payment to 某行 (0000)",
+            ),
+        ]
+    )
+    upload(service, weekly, name="weekly.csv")
+    withdrawal = next(row for row in active(service) if row.amount < 0)
+    assert (withdrawal.amount_cny, withdrawal.fx_source) == (None, J.FX_SOURCE_PENDING)
+    statement = _payo_statement(
+        [
+            ("10/05/2026", "17:00:00", "1", "Payment from STRIPE", "3000", "", "", ""),
+            ("10/15/2026", "15:56:15", "2", "Payment to 某人", "", "3000.00", "19500.00", "CNY"),
+        ]
+    )
+    result = upload(service, statement, name="month.csv").file
+    assert (result.status, result.rows_parsed, result.rows_new) == ("parsed", 2, 0)
+    assert "读到 2 行（其中 2 行以前没导过）" in result.warnings[0]
+    assert "月结补充" in result.detected_note
+    lines = active(service)
+    assert len(lines) == 2
+    filled = next(row for row in lines if row.line_uid == withdrawal.line_uid)
+    assert filled.amount_cny == Decimal("-19500.0000")
+    assert (filled.fx_rate, filled.fx_source) == (Decimal("6.5000"), J.FX_SOURCE_PAYONEER)
+    again = upload(service, statement, name="month-again.csv").file
+    assert again.duplicate_of_file
+    service.void_import(result_import(session, "month.csv"), reason="导错", actor="admin")
+    back = next(row for row in active(service) if row.line_uid == withdrawal.line_uid)
+    assert back.amount_cny is None
+
+
+def result_import(session: Session, name: str) -> UUID:
+    return session.scalars(
+        select(FinanceCashRawFile.import_id).where(FinanceCashRawFile.file_name == name)
+    ).one()

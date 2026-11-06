@@ -402,7 +402,7 @@ Each row reports whether normalized request/response evidence exists and whether
 | `LX-836E011F05F7` | 查询利润报表-父ASIN | `/bd/profit/report/open/report/parent/asin/list` | `normalized CSV only` | No | No | `DELETED` | No | `DELETED` |
 | `LX-067CAC8E94C1` | 查询利润统计-ASIN | `/bd/profit/statistics/open/asin/list` | `normalized CSV only` | No | No | `DELETED` | No | `DELETED` |
 | `LX-D391B0E9A207` | 查询利润统计-父ASIN | `/bd/profit/statistics/open/parent/asin/list` | `normalized CSV only` | No | No | `DELETED` | No | `DELETED` |
-| `LX-C6759B059E67` | 查询汇率 | `/erp/sc/routing/finance/currency/currencyMonth` | `normalized CSV only` | No | No | `DELETED` | No | `DELETED` |
+| `LX-C6759B059E67` | 查询汇率 | `/erp/sc/routing/finance/currency/currencyMonth` | `docs/integrations/lingxing/contracts/finance-lx-c6759b059e67.md` | Yes | Yes | `READY_FOR_PRP` | Yes | `AUTH_UNKNOWN` |
 | `LX-29D1971BB402` | 查询结算中心 - 交易明细 | `/bd/sp/api/open/settlement/transaction/detail/list` | `normalized CSV only` | No | No | `DELETED` | No | `DELETED` |
 | `LX-0FFECA57D294` | 查询结算中心 - 结算汇总 | `/bd/sp/api/open/settlement/summary/list` | `normalized CSV only` | No | No | `DELETED` | No | `DELETED` |
 | `LX-D797CA8C373A` | 立即重算-利润报表数据 | `/bd/profit/report/open/report/settle/compute/manual` | `normalized CSV only` | Yes | Yes | `DO_NOT_USE` | No | `side_effect_endpoint; not eligible for read-only sync PRP; requires separate owner approval if ever needed` |

@@ -26,6 +26,10 @@ from app.modules.integration_sync.handlers.lingxing_batch_product_info import (
     BatchPlan,
     LingxingBatchGetProductInfoSyncHandler,
 )
+from app.modules.integration_sync.handlers.lingxing_fx_rate_sync import (
+    FxRateSyncError,
+    LingxingFxRateSyncHandler,
+)
 from app.modules.integration_sync.handlers.lingxing_pmc_domestic_sync import (
     PMC_DOMESTIC_HANDLERS,
 )
@@ -102,6 +106,11 @@ class SyncRunExecutionService:
             and run.interface_key == "wfsProfitOrder"
             and interface.handler_key == LingxingWfsSettlementSyncHandler.handler_key
         )
+        is_fx = (
+            run.provider == "lingxing"
+            and run.interface_key == "lingxingFxRate"
+            and interface.handler_key == LingxingFxRateSyncHandler.handler_key
+        )
 
         purchase_handler = PMC_PURCHASE_HANDLERS.get(run.interface_key)
         if (
@@ -147,7 +156,7 @@ class SyncRunExecutionService:
                 self._fail(run, "SYNC_CONFIG_DISABLED")
                 return
 
-        if is_data_pages or is_wfs:
+        if is_data_pages or is_wfs or is_fx:
             if run.trigger_type not in {"manual", "schedule", "retry", "backfill"}:
                 self._fail(run, "SYNC_TRIGGER_NOT_EXECUTABLE")
                 return
@@ -221,6 +230,13 @@ class SyncRunExecutionService:
                 self._execute_data_pages_run(run)
                 return
 
+            if is_fx:
+                LingxingFxRateSyncHandler(
+                    self.session,
+                    heartbeat=lambda: self._heartbeat_lock(run.id),
+                ).execute(run, interface)
+                return
+
             if is_wfs:
                 LingxingWfsSettlementSyncHandler(
                     self.session,
@@ -260,6 +276,7 @@ class SyncRunExecutionService:
             DataPagesRealSyncError,
             ProductInfoOneTimeRunError,
             WfsSettlementSyncError,
+            FxRateSyncError,
         ) as error:
             self.session.rollback()
             recovered = self.repository.get_run_for_update(run_id)
