@@ -17,9 +17,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.modules.finance_cashflow import approvals as approval_rules
 from app.modules.finance_cashflow import journal
 from app.modules.finance_cashflow.models import (
     FinanceCashAccount,
+    FinanceCashApproval,
     FinanceCashCategory,
     FinanceCashClassifyRule,
     FinanceCashExclusion,
@@ -602,11 +604,19 @@ class CashflowService:
         states = {
             state.line_uid: state for state in self.session.scalars(select(FinanceCashLineState))
         }
+        rules = [
+            journal.Rule(rule.rule_type, rule.pattern, rule.category_code, rule.sort_order)
+            for rule in self.session.scalars(select(FinanceCashClassifyRule))
+        ]
+        classifier = journal.Classifier(rules)
+        approval_cats = self._approval_categories(classifier)
         inputs: list[journal.LineInput] = []
         by_uid: dict[str, FinanceCashLine] = {}
         for line, provider in rows:
             state = states.get(line.line_uid)
             by_uid[line.line_uid] = line
+            refs = list(state.refs or []) if state else []
+            from_refs = [approval_cats[ref] for ref in refs if ref in approval_cats]
             inputs.append(
                 journal.LineInput(
                     line_uid=line.line_uid,
@@ -621,14 +631,12 @@ class CashflowService:
                     counterparty_name=line.counterparty_name,
                     file_row_order=line.file_row_order,
                     manual_category=state.manual_category if state else None,
-                    refs=list(state.refs or []) if state else [],
+                    refs=refs,
                     exclude_amount=state.exclude_amount if state else None,
+                    approval_category=approval_rules.single_value(c[0] for c in from_refs),
+                    approval_rule_category=approval_rules.single_value(c[1] for c in from_refs),
                 )
             )
-        rules = [
-            journal.Rule(rule.rule_type, rule.pattern, rule.category_code, rule.sort_order)
-            for rule in self.session.scalars(select(FinanceCashClassifyRule))
-        ]
         internal = frozenset(
             self.session.scalars(
                 select(FinanceCashCategory.code).where(FinanceCashCategory.is_internal.is_(True))
@@ -654,12 +662,88 @@ class CashflowService:
         ]
         result = journal.compute_journal(
             inputs,
-            journal.Classifier(rules),
+            classifier,
             internal,
             self._usd_rate_lookup(),
             exclusions,
         )
+        self._flag_auto_attached(result)
         return result, by_uid, states
+
+    def approval_rows(self) -> list[FinanceCashApproval]:
+        """进日记账报销闭环的审批单：排除配置里不走这边账的部门。"""
+        raw = self.settings.finance_approval_excluded_department_ids or ""
+        excluded = {item.strip() for item in raw.split(",") if item.strip()}
+        rows = self.session.scalars(select(FinanceCashApproval)).all()
+        return [row for row in rows if row.department_id not in excluded]
+
+    def match_approvals(self) -> list[approval_rules.MatchApproval]:
+        out: list[approval_rules.MatchApproval] = []
+        for row in self.approval_rows():
+            anchor = row.completed_at or row.started_at
+            out.append(
+                approval_rules.MatchApproval(
+                    serial=row.serial_number,
+                    status=row.status,
+                    amount=row.amount,
+                    currency_code=row.currency_code,
+                    payee=row.payee,
+                    anchor_day=anchor.astimezone(SHANGHAI).date() if anchor else None,
+                )
+            )
+        return out
+
+    def _approval_categories(
+        self, classifier: journal.Classifier
+    ) -> dict[str, tuple[str | None, str | None]]:
+        """单号 → (表单写明的类别, 按事由和明细跑规则的类别)。"""
+        names_to_code = {
+            row.name: row.code
+            for row in self.session.scalars(select(FinanceCashCategory))
+            if not row.is_exclude
+        }
+        out: dict[str, tuple[str | None, str | None]] = {}
+        for row in self.session.scalars(select(FinanceCashApproval)):
+            details = " ".join(str(item.get("content") or "") for item in row.items or [])
+            out[row.serial_number] = (
+                approval_rules.form_category_code(row.fee_category, names_to_code),
+                classifier.classify(f"{row.reason} {details}", ""),
+            )
+        return out
+
+    def _flag_auto_attached(self, result: journal.JournalResult) -> None:
+        auto = {
+            (line_uid, str((payload or {}).get("ref") or ""))
+            for line_uid, payload in self.session.execute(
+                select(FinanceCashLineEvent.line_uid, FinanceCashLineEvent.payload).where(
+                    FinanceCashLineEvent.kind == journal.KIND_AUTO_ATTACH_REF
+                )
+            )
+        }
+        if not auto:
+            return
+        for item in result.lines:
+            if any((item.source.line_uid, ref) in auto for ref in item.source.refs):
+                item.flags.append("自动匹配")
+
+    def _approval_candidates(self, result: journal.JournalResult) -> dict[str, list[str]]:
+        approvals = self.match_approvals()
+        if not approvals:
+            return {}
+        lines = [
+            approval_rules.MatchLine(
+                line_uid=item.source.line_uid,
+                business_date=item.source.business_date,
+                amount=item.source.amount,
+                currency_code=item.source.currency_code,
+                counterparty_name=item.source.counterparty_name,
+                text="",
+                refs=tuple(item.source.refs),
+                stage="",
+            )
+            for item in result.lines
+        ]
+        return approval_rules.candidates_by_line(lines, approvals)
 
     def list_lines(
         self,
@@ -688,10 +772,14 @@ class CashflowService:
             reverse=True,
         )
         window = selected[(page - 1) * page_size : page * page_size]
+        candidates = self._approval_candidates(result)
         return CashflowLineListData(
             items=[
                 self._line_read(
-                    item, by_uid[item.source.line_uid], states.get(item.source.line_uid)
+                    item,
+                    by_uid[item.source.line_uid],
+                    states.get(item.source.line_uid),
+                    candidates.get(item.source.line_uid, []),
                 )
                 for item in window
             ],
@@ -705,6 +793,7 @@ class CashflowService:
         item: journal.ComputedLine,
         line: FinanceCashLine,
         state: FinanceCashLineState | None,
+        candidates: list[str] | None = None,
     ) -> CashflowLineRead:
         local_time = line.source_time.astimezone(SHANGHAI) if line.source_time else None
         return CashflowLineRead(
@@ -735,6 +824,7 @@ class CashflowService:
             stage_reason=state.stage_reason if state else None,
             review_note=state.review_note if state else None,
             version=state.version if state else 0,
+            approval_candidates=candidates or [],
         )
 
     def list_anomalies(self) -> list[CashflowAnomalyRead]:

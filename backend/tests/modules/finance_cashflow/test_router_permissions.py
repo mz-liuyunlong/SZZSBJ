@@ -32,6 +32,9 @@ ENDPOINTS = [
     ("GET", "/api/finance/cashflow/categories"),
     ("GET", "/api/finance/cashflow/lines"),
     ("GET", "/api/finance/cashflow/anomalies"),
+    ("GET", "/api/finance/cashflow/approvals"),
+    ("GET", "/api/finance/cashflow/approvals/sync"),
+    ("POST", "/api/finance/cashflow/approvals/sync"),
     ("POST", f"/api/finance/cashflow/lines/{UID}/events"),
 ]
 

@@ -2,15 +2,15 @@
 import { CheckOutlined, CloseOutlined, SettingOutlined } from "@ant-design/icons";
 import { Alert, AutoComplete, Button, Input, Modal, Select, Space, Tag, Tooltip, Typography, message } from "antd";
 import { type ProColumns } from "@ant-design/pro-components";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import CommittedSearch from "@/components/report-table/CommittedSearch";
 import ManagementStatCards, { type ManagementStatCardItem } from "@/components/report-table/ManagementStatCards";
 import ResetButton from "@/components/report-table/ResetButton";
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
 import FinanceBoardFrame, { FinMoney, LOCKED_TIP } from "@/pages/finance/FinanceBoardFrame";
 import ImportDrawer from "@/pages/finance/cash-flow/ImportDrawer";
-import { asLive, cashErrorText, postLineEvent, useRefreshJournal, type LineEventKind, type LiveCashLine } from "@/pages/finance/cash-flow/journalApi";
-import { ALERT_GUIDE, alertShort, toCashAlerts, useApprovals, type CashAlert } from "@/pages/finance/cash-flow/data";
+import { asLive, cashErrorText, postLineEvent, syncErrorText, syncFailedText, useApprovalSync, useRefreshJournal, type LineEventKind, type LiveCashLine } from "@/pages/finance/cash-flow/journalApi";
+import { ALERT_GUIDE, alertShort, toCashAlerts, useApprovals, type CashAlert, type FsDetail } from "@/pages/finance/cash-flow/data";
 import { accountLabel, fmtMoney, type CashLine, type CashSnapshot, type FeishuApproval } from "@/pages/finance/localFinData";
 import ReportFacetSelect from "@/shared/report-filters";
 import { writeUserPreference } from "@/shared/preferences/userPreferenceCache";
@@ -20,7 +20,7 @@ import { BoardTable } from "@/pages/finance/cash-flow/BoardTable";
 import { LineDrawer } from "@/pages/finance/cash-flow/LineDrawer";
 
 /* ======================================================= 日记账 */
-export function JournalBoard({ data, live = false }: { data: CashSnapshot; live?: boolean }) {
+export function JournalBoard({ data, live = false, liveDetails }: { data: CashSnapshot; live?: boolean; liveDetails?: Record<string, FsDetail> }) {
   const refresh = useRefreshJournal();
   const handoff = useMemo(() => readHandoff(), []);
   const [accounts, setAccounts] = useState<string[]>(handoff.account ? [handoff.account] : []);
@@ -58,11 +58,30 @@ export function JournalBoard({ data, live = false }: { data: CashSnapshot; live?
   const [excludeAmount, setExcludeAmount] = useState("");
   const [excludeReason, setExcludeReason] = useState("");
   const approvalsFile = useApprovals(!live);
-  const details = useMemo(() => approvalsFile.data?.items ?? {}, [approvalsFile.data]);
+  const details = useMemo(() => (live ? liveDetails : approvalsFile.data?.items) ?? {}, [live, liveDetails, approvalsFile.data]);
+  const approvalSync = useApprovalSync(live);
+  const syncStatus = approvalSync.state?.status;
+  const lastSyncStatus = useRef(syncStatus);
   const [columnKeys, setColumnKeys] = useState<string[]>(readJournalColumns);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [messageApi, messageHolder] = message.useMessage();
+  /* 同步跑完：刷新日记账，告诉财务结果。 */
+  useEffect(() => {
+    const previous = lastSyncStatus.current;
+    lastSyncStatus.current = syncStatus;
+    if (!live || (previous !== "queued" && previous !== "running") || syncStatus === previous) return;
+    if (syncStatus === "succeeded") {
+      void messageApi.success(`审批单同步完成：查到 ${approvalSync.state?.records_seen ?? 0} 张，更新 ${approvalSync.state?.records_written ?? 0} 张`);
+      void refresh();
+    } else if (syncStatus === "failed") {
+      void messageApi.error(syncFailedText(approvalSync.state?.error_code ?? null));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在状态变化时提示一次
+  }, [syncStatus, live]);
+  const startApprovalSync = () => {
+    approvalSync.start().catch((error: unknown) => { void messageApi.error(syncErrorText(error)); });
+  };
   const reviewOf = (line: CashLine) => reviews[line.id] ?? baseReview(line);
   /* 接口模式重读后，详情要用最新的那一行，否则带着旧版本号去写会被拒。 */
   const freshLine = lineOpen ? data.lines.find((line) => line.id === lineOpen.id) ?? lineOpen : undefined;
@@ -210,6 +229,7 @@ export function JournalBoard({ data, live = false }: { data: CashSnapshot; live?
     refs: [{ key: "refs", title: "审批单", dataIndex: "refs", width: 230, tooltip: "这笔付款对应哪张飞书审批单。自动：备注里有单号直接关联；金额 + 收款人 + 45 天内唯一候选自动关联。对不上的在这里输入或选未付审批单", render: (_, row) => (
       <span className="finance-board__stack">
         {row.refs.length > 0 && <Space size={4} wrap>{row.refs.map((ref) => { const item = approvals.get(ref); return <Tooltip key={ref} title={item ? `${item.kind} · ${item.state} · 点击看审批单` : "飞书里没找到"}><Tag bordered={false} className="finance-board__ref" color={item ? STATE_COLOR[item.state] ?? "blue" : "red"} closable={live} onClose={(event) => { event.preventDefault(); void send(row, "detach_ref", { payload: { ref } }); }} onClick={() => item && setApprovalOpen(item)}>{ref}</Tag></Tooltip>; })}</Space>}
+        {live && !row.refs.length && (asLive(row)?.candidates.length ?? 0) > 0 && <Space size={4} wrap className="fin-cash-flow__candidates"><Typography.Text type="secondary">候选：</Typography.Text>{asLive(row)?.candidates.map((ref) => { const item = approvals.get(ref); return <Tooltip key={ref} title={item ? `点击挂上 · ${item.kind} · ${fmtMoney(item.amount, item.cur)} · 收款人 ${item.payee || EMPTY} · ${(item.reason || "").slice(0, 30)}` : "点击挂上"}><Tag bordered={false} color="gold" className="finance-board__ref" onClick={() => { void send(row, "attach_ref", { payload: { ref } }, `已挂上 ${ref}`); }}>{ref}</Tag></Tooltip>; })}</Space>}
         {live ? <Input size="small" style={{ width: 200 }} placeholder="输入 12 位审批单号，回车" onPressEnter={(event) => { const input = event.currentTarget; const ref = input.value.trim(); if (!/^\d{12}$/.test(ref)) { void messageApi.warning("审批单号是 12 位数字"); return; } void send(row, "attach_ref", { payload: { ref } }).then((ok) => { if (ok) input.value = ""; }); }} /> : <Tooltip title={LOCKED_TIP}><AutoComplete size="small" disabled style={{ width: 200 }} placeholder="关联审批单（输入或选未付单）" options={openApprovalOptions} /></Tooltip>}
       </span>) }],
     alert: [{ key: "alert", title: "异常", width: 150, tooltip: "这笔流水上待处理的异常（灰色是数据提示，不算异常）；点详情看说明和处理方法", render: (_, row) => {
@@ -260,7 +280,7 @@ export function JournalBoard({ data, live = false }: { data: CashSnapshot; live?
         <ReportFacetSelect mode="multiple" ariaLabel="异常" placeholder="异常" unit="类" triggerWidth={150} value={alertTypes} options={alertTypeOptions} onChange={(value) => setAlertTypes((value as string[] | undefined) ?? [])} />
         <CommittedSearch className="finance-board__search fin-cash-flow__search" typeAriaLabel="搜索类型" typeOptions={[{ value: "text", label: "摘要备注" }, { value: "party", label: "收款人" }, { value: "ref", label: "审批单号" }]} typeValue={search.field} inputAriaLabel="搜索流水" inputPlaceholder="输入后回车" inputValue={search.keyword} onCommit={({ searchField, keyword }) => setSearch({ field: searchField, keyword })} />
         <ResetButton onClick={() => { setAccounts([]); setMonth(""); setFlow(""); setCats([]); setStages([]); setAlertTypes([]); setSearch({ field: "text", keyword: "" }); setCard("all"); }} />
-        <Space className="finance-board__toolbar-actions" size={8}><Button type="primary" onClick={() => setImportOpen(true)}>流水导入</Button><Tooltip title={LOCKED_TIP}><Space><Button disabled>批量操作</Button><Button disabled>导出 Excel</Button></Space></Tooltip><Button aria-label="列配置" icon={<SettingOutlined aria-hidden="true" />} onClick={() => setColumnConfigOpen(true)} /></Space>
+        <Space className="finance-board__toolbar-actions" size={8}>{live && <Tooltip title={approvalSync.state?.last_success_at ? `上次同步成功：${new Date(approvalSync.state.last_success_at).toLocaleString("zh-CN", { hour12: false })}` : "还没同步过"}><Button loading={approvalSync.running} onClick={startApprovalSync}>{approvalSync.running ? "同步中" : "同步审批单"}</Button></Tooltip>}<Button type="primary" onClick={() => setImportOpen(true)}>流水导入</Button><Tooltip title={LOCKED_TIP}><Space><Button disabled>批量操作</Button><Button disabled>导出 Excel</Button></Space></Tooltip><Button aria-label="列配置" icon={<SettingOutlined aria-hidden="true" />} onClick={() => setColumnConfigOpen(true)} /></Space>
       </>}
       summary={<ManagementStatCards<ReviewCard> ariaLabel="日记账统计" className="finance-board__summary finance-board__summary--5" cards={cards} activeKey={card} onCardClick={(key) => setCard(card === key ? "all" : key)} />}
     >

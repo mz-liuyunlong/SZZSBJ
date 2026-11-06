@@ -22,8 +22,10 @@ export function CompareTable({ rows }: { rows: CompareRow[] }) {
 export function ApprovalPanel({ view, onOpen }: { view: ApprovalView; onOpen?: () => void }) {
   const hide = (value: string) => (view.masked ? "****" : value || EMPTY);
   const files = view.detail?.files ?? [];
-  const images = files.filter((file) => file.img);
-  const others = files.filter((file) => !file.img);
+  /* 接口版附件只存了元数据（name 为空），只列文件名，原件到飞书看。 */
+  const images = files.filter((file) => file.img && file.name);
+  const others = files.filter((file) => !file.img && file.name);
+  const metaOnly = files.filter((file) => !file.name);
   return (
     <div className="fin-cash-flow__approval">
       <Descriptions size="small" column={1} bordered title={<Space size={8}>{onOpen ? <Button type="link" size="small" style={{ padding: 0 }} onClick={onOpen}>{view.serial}</Button> : view.serial}<Typography.Text type="secondary">{view.kind || "飞书里没找到这张单"}</Typography.Text>{view.status && <Tag bordered={false}>{view.status}</Tag>}{view.state && <Tag bordered={false} color={STATE_COLOR[view.state]}>{view.state}</Tag>}</Space>}>
@@ -63,6 +65,7 @@ export function ApprovalPanel({ view, onOpen }: { view: ApprovalView; onOpen?: (
           : files.length === 0
             ? <div><Typography.Text type="secondary">飞书上这张单没有截图或附件。</Typography.Text></div>
             : <>
+              {metaOnly.length > 0 && <div className="fin-cash-flow__section"><Typography.Text type="secondary">原件在飞书这张单上看：</Typography.Text>{metaOnly.map((file, index) => <div key={`${file.src}-${index}`}>{file.item ? `明细${file.item} · ` : ""}{file.what}{file.title && file.title !== "<nil>" ? `：${file.title}` : ""}</div>)}</div>}
               <Image.PreviewGroup>
                 <div className="fin-cash-flow__thumbs">
                   {images.map((file) => (
@@ -113,7 +116,7 @@ export function ApprovalDrawer({ item, data, details, onClose }: { item?: Feishu
       <Divider orientation="left" plain>付款流水（{item.paid.length}）</Divider>
       {item.paid.length ? item.paid.map((paid) => {
         const line = lines.get(paid.line);
-        return <div key={paid.line}><Tag bordered={false} color="blue">{paid.line}</Tag>{line ? `${line.date} ${accounts.get(line.acct) ?? line.acct} ` : ""}<FinMoney value={paid.amt ?? null} masked={item.masked} /></div>;
+        return <div key={paid.line}><Tag bordered={false} color="blue">{paid.line}</Tag>{line ? `${line.date} ${accounts.get(line.acct) ?? line.acct} ` : ""}{paid.amt == null && item.state === "待定" ? "待定" : <FinMoney value={paid.amt ?? null} masked={item.masked} />}</div>;
       }) : <Typography.Text type="secondary">还没对上付款流水</Typography.Text>}
       <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>来源：{data.meta.feishu_src.join("；")}。正式系统由飞书审批 API 同步。</Typography.Paragraph>
     </Drawer>

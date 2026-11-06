@@ -3,9 +3,10 @@
  * 数据来源由 VITE_FINANCE_CASH_SOURCE 决定：demo 读 Demo 快照，api 读接口；不设时开发环境 demo、正式构建 api。
  * 接口结果转成页面现有的 CashSnapshot 结构，页面组件不用分两套。金额后端按字符串给，这里才转数字，只用来显示。
  */
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { backendRequest, BackendRequestError } from "@/api/backendApi";
-import type { CashAccount, CashLine, CashSnapshot } from "@/pages/finance/localFinData";
+import type { CashAccount, CashLine, CashSnapshot, FeishuApproval } from "@/pages/finance/localFinData";
+import type { FsDetail } from "@/pages/finance/cash-flow/data";
 
 const BASE = "/api/finance/cashflow";
 const PAGE_SIZE = 2000;
@@ -32,6 +33,7 @@ export interface ApiLine {
   amount: string; amount_cny: string | null; balance_after: string | null; description: string; memo: string; counterparty_name: string; counterparty_account_last4: string;
   source_ref: string; file_row_order: number; category_code: string | null; category_source: string; pair_id: string | null; flags: string[]; refs: string[];
   exclude_amount: string | null; exclude_reason: string | null; list_excluded_cny: string; stage: string; stage_reason: string | null; review_note: string | null; version: number;
+  approval_candidates?: string[];
 }
 export interface ApiAnomaly { type: string; account_key: string; date: string; message: string; amount: string | null; line_uid: string | null }
 export interface ApiFileResult {
@@ -40,7 +42,18 @@ export interface ApiFileResult {
 }
 
 /** 接口流水：页面的 CashLine 加上写操作要用的字段。 */
-export interface LiveCashLine extends CashLine { uid: string; version: number; stage: string; stageReason?: string; reviewNote?: string; excludeReason?: string }
+export interface LiveCashLine extends CashLine { uid: string; version: number; stage: string; stageReason?: string; reviewNote?: string; excludeReason?: string; candidates: string[] }
+
+export interface ApiApproval {
+  serial: string; kind: string; status: string; status_text: string; state: string; started_at: string; completed_at: string; handled_at: string; applicant: string;
+  reason: string; amount: string | null; currency_code: string; amount_cny: string | null; pay_method: string; invoice: string; payee: string; bank: string; last4: string;
+  fee_category: string; related_serial: string; items: { content: string; amount: string | null; category: string }[];
+  attachments: { source: string; what: string; item: number; is_image: boolean; title: string }[];
+  records: { node: string; act: string; who: string; time: string; note: string; files: number }[];
+  comments: { who: string; time: string; note: string }[];
+  paid: { line_uid: string; amount_cny: string | null }[]; paid_sum: string; fetched_at: string | null;
+}
+export interface ApprovalSyncState { run_id: string | null; status: string; started_at: string | null; finished_at: string | null; error_code: string | null; records_seen: number; records_written: number; last_success_at: string | null }
 export const asLive = (line: CashLine) => ("uid" in line ? (line as LiveCashLine) : undefined);
 
 const num = (value: string | null | undefined) => (value == null ? null : Number(value));
@@ -77,19 +90,44 @@ export function toCashLine(row: ApiLine): LiveCashLine {
     stageReason: row.stage_reason ?? undefined,
     reviewNote: row.review_note ?? undefined,
     excludeReason: row.exclude_reason ?? undefined,
+    candidates: row.approval_candidates ?? [],
   };
 }
 
-export function buildLiveSnapshot(accounts: ApiAccount[], categories: ApiCategory[], lines: ApiLine[], anomalies: ApiAnomaly[]): CashSnapshot {
+export function toFeishuApproval(row: ApiApproval, idOfLine: Map<string, string>): FeishuApproval {
+  const paid = row.paid.flatMap((item) => {
+    const line = idOfLine.get(item.line_uid);
+    return line ? [{ line, date: "", acct: "", amt: item.amount_cny == null ? null : Number(item.amount_cny), cur: "CNY" }] : [];
+  });
+  return {
+    serial: row.serial, kind: row.kind, status: row.status_text, start: row.started_at.slice(0, 10), end: row.completed_at.slice(0, 10), applicant: row.applicant, reason: row.reason,
+    amount: num(row.amount), cur: row.currency_code, pay: row.pay_method, payee: row.payee, bank: row.bank, last4: row.last4,
+    items: row.items.map((item) => ({ c: item.content, a: num(item.amount) })), rel: row.related_serial, invoice: row.invoice, src: "飞书审批同步", cat: "", masked: false,
+    paid, paid_sum: Number(row.paid_sum), cny: num(row.amount_cny), state: row.state,
+  };
+}
+
+/** 附件只存了元数据：name 留空，页面据此只列文件名，不出下载链接。 */
+export function toFsDetail(row: ApiApproval): FsDetail {
+  return {
+    serial: row.serial, kind: row.kind, status: row.status_text, start: row.started_at, end: row.completed_at, handled: row.handled_at, applicant: row.applicant,
+    reason: row.reason, amount: num(row.amount), cur: row.currency_code, invoice: row.invoice, pay: row.pay_method, payee: row.payee, account_name: row.payee, bank: row.bank, last4: row.last4,
+    items: row.items.map((item) => ({ c: item.content, a: num(item.amount) })),
+    files: row.attachments.map((file) => ({ name: "", src: file.source, what: file.what, item: file.item, img: file.is_image, title: file.title })),
+    records: row.records, comments: row.comments,
+  };
+}
+
+export function buildLiveSnapshot(accounts: ApiAccount[], categories: ApiCategory[], lines: ApiLine[], anomalies: ApiAnomaly[], approvals: ApiApproval[] = []): CashSnapshot {
   const cashLines = lines.map(toCashLine);
   const idOf = new Map(cashLines.map((line) => [line.uid, line.id]));
   const months = Array.from(new Set(cashLines.map((line) => line.m))).sort();
   return {
-    meta: { built: "", start: months[0] ?? "", months, feishu_src: [], fx: {}, summary: {} },
+    meta: { built: "", start: months[0] ?? "", months, feishu_src: ["飞书审批同步"], fx: {}, summary: {} },
     accounts: accounts.map(toCashAccount),
     cats: categories.map((row) => ({ code: row.code, big: row.big, name: row.name, internal: row.is_internal })),
     lines: cashLines,
-    feishu: [],
+    feishu: approvals.map((row) => toFeishuApproval(row, idOf)),
     flow: { months, by_acct: {} },
     anomalies: anomalies.map((row) => ({
       type: row.type, sev: "", acct: row.account_key, date: row.date, msg: row.message, amt: num(row.amount),
@@ -108,13 +146,18 @@ async function fetchAllLines(): Promise<ApiLine[]> {
 }
 
 async function fetchSnapshot() {
-  const [accounts, categories, lines, anomalies] = await Promise.all([
+  const [accounts, categories, lines, anomalies, approvals] = await Promise.all([
     backendRequest<ApiAccount[]>(`${BASE}/accounts`),
     backendRequest<ApiCategory[]>(`${BASE}/categories`),
     fetchAllLines(),
     backendRequest<ApiAnomaly[]>(`${BASE}/anomalies`),
+    backendRequest<ApiApproval[]>(`${BASE}/approvals`),
   ]);
-  return { accounts: accounts.data, snapshot: buildLiveSnapshot(accounts.data, categories.data, lines, anomalies.data) };
+  return {
+    accounts: accounts.data,
+    snapshot: buildLiveSnapshot(accounts.data, categories.data, lines, anomalies.data, approvals.data),
+    details: Object.fromEntries(approvals.data.map((row) => [row.serial, toFsDetail(row)])) as Record<string, FsDetail>,
+  };
 }
 
 const QUERY_KEY = ["finance-cashflow", "journal"];
@@ -127,6 +170,34 @@ export function useRefreshJournal() {
   const client = useQueryClient();
   return () => client.invalidateQueries({ queryKey: QUERY_KEY });
 }
+
+const SYNC_KEY = ["finance-cashflow", "approval-sync"];
+const isSyncActive = (status?: string) => status === "queued" || status === "running";
+
+/** 同步审批单：点一下建一次任务；跑的时候每 3 秒看一次状态。 */
+export function useApprovalSync(enabled: boolean) {
+  const client = useQueryClient();
+  const state = useQuery({
+    queryKey: SYNC_KEY,
+    enabled,
+    retry: false,
+    refetchInterval: (query) => (isSyncActive(query.state.data?.status) ? 3000 : false),
+    queryFn: async () => (await backendRequest<ApprovalSyncState>(`${BASE}/approvals/sync`)).data,
+  });
+  const start = useMutation({
+    mutationFn: async () => (await backendRequest<ApprovalSyncState>(`${BASE}/approvals/sync`, { method: "POST" })).data,
+    onSuccess: (data) => client.setQueryData(SYNC_KEY, data),
+  });
+  return { state: state.data, running: start.isPending || isSyncActive(state.data?.status), start: start.mutateAsync };
+}
+
+/** 同步失败的原因：飞书错误码原样带上，方便查。 */
+export function syncErrorText(error: unknown): string {
+  if (error instanceof BackendRequestError && error.status === 409) return "审批单同步任务还没配置，请联系管理员";
+  if (error instanceof BackendRequestError && error.status === 503) return "任务队列暂时不可用，请稍后再试";
+  return cashErrorText(error);
+}
+export const syncFailedText = (code: string | null) => `同步失败${code ? `（${code}）` : ""}，已同步的单子不受影响，可以再点一次`;
 
 export async function postLineEvent(line: LiveCashLine, kind: LineEventKind, fields: { payload?: Record<string, unknown>; reason?: string } = {}) {
   const { data } = await backendRequest<{ stage: string; version: number; auto_reset: boolean }>(`${BASE}/lines/${line.uid}/events`, {

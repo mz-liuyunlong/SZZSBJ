@@ -14,7 +14,7 @@ export interface JournalHandoff { account?: string; card?: ReviewCard; cats?: st
 
 export const HANDOFF_KEY = "finance:cash-journal:handoff";
 export const OPEN_STATES = ["未付", "部分已付", "金额不符", "金额缺失"];
-export const STATE_COLOR: Record<string, string> = { 已付: "green", 未付: "red", 部分已付: "orange", 金额不符: "volcano", 已取消: "default", 金额缺失: "purple" };
+export const STATE_COLOR: Record<string, string> = { 已付: "green", 未付: "red", 部分已付: "orange", 金额不符: "volcano", 已取消: "default", 金额缺失: "purple", 待定: "gold" };
 export const KIND_COLOR: Record<string, string> = { 对公: "blue", 对私: "orange", 现金: "orange", 平台: "purple", 其他: "gold" };
 export const EMPTY = "—";
 
