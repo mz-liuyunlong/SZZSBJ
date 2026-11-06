@@ -191,6 +191,7 @@ def test_board_list_returns_envelope_meta_and_validates_params(monkeypatch: Any)
         "page": 1,
         "page_size": 50,
         "total": 1,
+        "hidden_owner_names": ["小罗"],
     }
 
     # validation: search_values without search_type, bad range, unknown status

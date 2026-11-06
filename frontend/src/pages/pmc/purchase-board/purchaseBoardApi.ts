@@ -206,6 +206,7 @@ interface BackendPendingPlan {
   product_name: string | null;
   quantity_plan: number | null;
   remark_item_id: string | null;
+  draft_no?: string | null;
 }
 
 interface BackendPendingPlanListData {
@@ -222,6 +223,7 @@ interface BackendPurchaseReadMeta {
   page?: number | null;
   page_size?: number | null;
   total?: number | null;
+  hidden_owner_names?: string[];
 }
 
 interface BackendProductManagementOptions {
@@ -246,6 +248,7 @@ const mapMeta = (meta: BackendPurchaseReadMeta | undefined): PurchaseReadMeta =>
   freshnessAt: meta?.freshness_at ?? null,
   ruleVersion: meta?.rule_version ?? null,
   total: meta?.total ?? null,
+  hiddenOwnerNames: meta?.hidden_owner_names ?? [],
 });
 
 const mapStore = (store: BackendStoreRef): PurchaseStoreRef => ({
@@ -367,6 +370,7 @@ const mapPendingPlan = (plan: BackendPendingPlan): PendingPurchasePlan => ({
   productName: plan.product_name,
   quantityPlan: plan.quantity_plan,
   remarkItemId: plan.remark_item_id,
+  draftNo: plan.draft_no ?? null,
 });
 
 /** Splits batch input the same way the backend normalises `search_values`. */

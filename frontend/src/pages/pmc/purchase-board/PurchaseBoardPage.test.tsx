@@ -143,7 +143,7 @@ const summary: PurchaseBoardSummary = {
   wfsNotReadyLines: 0,
   unattributedStoreLines: 2,
   asOf: "2026-09-24",
-  meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: null },
+  meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: null, hiddenOwnerNames: [] },
 };
 
 const lastListCall = () => vi.mocked(listPurchaseBoard).mock.calls.at(-1);
@@ -171,7 +171,7 @@ beforeEach(() => {
   vi.mocked(listPurchaseBoard).mockResolvedValue({
     rows: [row],
     total: 1,
-    meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: 1 },
+    meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: 1, hiddenOwnerNames: [] },
   });
   vi.mocked(getPurchaseBoardSummary).mockResolvedValue(summary);
   vi.mocked(getPurchaseBoardOwnerOptions).mockResolvedValue([{ uid: "u-1", name: "Owner One", count: 3 }]);
@@ -189,10 +189,11 @@ beforeEach(() => {
       productName: "Gadget",
       quantityPlan: 20,
       remarkItemId: null,
+      draftNo: "CG261102-087",
     }],
     total: 1,
     thresholdDays: 7,
-    meta: { freshnessAt: null, ruleVersion: 1, total: 1 },
+    meta: { freshnessAt: null, ruleVersion: 1, total: 1, hiddenOwnerNames: [] },
   });
   vi.mocked(getPurchaseOrderDetail).mockResolvedValue({
     purchaseOrderSn: "PO1",
@@ -226,7 +227,7 @@ beforeEach(() => {
       ruleVersion: 1,
       calculatedAt: "2026-09-23T03:00:00Z",
     }],
-    meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: null },
+    meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: null, hiddenOwnerNames: [] },
   });
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -249,7 +250,7 @@ it("shows every verified remark identity without calling multiple values a confl
       identities: [
         { itemId: "19051502014", msku: "SKU-A", gtin: "00012345678905", fulfillmentType: "1" },
         { itemId: "33333333333", msku: "SKU-B", gtin: "00012345678906", fulfillmentType: "1" },
-      ] } }], total: 1, meta: { freshnessAt: "2026-10-27T00:00:00Z", ruleVersion: 1, total: 1 },
+      ] } }], total: 1, meta: { freshnessAt: "2026-10-27T00:00:00Z", ruleVersion: 1, total: 1, hiddenOwnerNames: [] },
   });
   await renderPage();
   expect(await screen.findByText("多 listing（2）")).toBeInTheDocument();
@@ -382,7 +383,7 @@ describe("PurchaseBoardPage", () => {
     await renderPage();
     // No S2-overdue order lines come back for the card filter.
     vi.mocked(listPurchaseBoard).mockResolvedValue({
-      rows: [], total: 0, meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: 0 },
+      rows: [], total: 0, meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: 0, hiddenOwnerNames: [] },
     });
 
     fireEvent.click(screen.getByRole("button", { name: "待采购超时：6" }));
@@ -404,6 +405,8 @@ describe("PurchaseBoardPage", () => {
     expect(await screen.findByText("P3")).toBeInTheDocument();
     expect(screen.getByText("超时 7 天")).toBeInTheDocument();
     expect(screen.getByText(/超时阈值 7 天/)).toBeInTheDocument();
+    // 8088: the drill-down carries the draft number from the plan remark.
+    expect(screen.getByText("CG261102-087")).toBeInTheDocument();
   });
 
   it("shows an honest permission message instead of fake data when the API denies access", async () => {

@@ -101,7 +101,18 @@ class PmcPurchaseReadRepository:
                     options.append(b.stage_code == status.upper())
             clauses.append(or_(*options))
         values = query.normalized_search_values()
-        if values and query.search_type:
+        if values and query.search_type == "draft_plan":
+            from json import dumps
+
+            plan_list = cast(b.plan_sns_json, Text)
+            clauses.append(
+                or_(
+                    b.draft_no.in_(values),
+                    b.plan_sn.in_(values),
+                    *[plan_list.contains(dumps(value), autoescape=True) for value in values],
+                )
+            )
+        elif values and query.search_type:
             scalar_match = _SEARCH_COLUMNS[query.search_type].in_(values)
             if query.search_type in ("item_id", "gtin", "msku"):
                 # Search only the dedicated identity list, never arbitrary lineage evidence.
