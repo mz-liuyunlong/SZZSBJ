@@ -12,6 +12,9 @@
 |---|---|
 | `MEDIA_STORAGE_ROOT` | 原件存放根目录，文件落在 `finance/cashflow/<sha 前两位>/<sha>.<扩展名>`。没配时上传返回 503，不写到别处。 |
 | `FINANCE_CASHFLOW_MAX_UPLOAD_BYTES` | 单文件上限，默认 20 MB（20971520）。 |
+| `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | 同步审批单用的飞书应用，和后端其他飞书功能共用。 |
+| `FINANCE_APPROVAL_CODES` | 四类审批定义编码，格式 `费用报销=…,付款申请=…,备用金申请=…,备用金核销=…`，真实值不进仓库。没配置或缺一类时同步失败，错误码 `SYNC_FEISHU_APPROVAL_CODES_NOT_CONFIGURED`。 |
+| `FINANCE_APPROVAL_EXCLUDED_DEPARTMENT_IDS` | 逗号分隔的飞书部门 ID，这些部门的审批单不进报销闭环。 |
 
 账户和带名字的分类规则不进仓库，上线时用 `backend/scripts/finance_cash_deploy_load.py` 导入。没导入账户时，上传被拒收并写明「没登记」。
 
@@ -64,6 +67,28 @@ body：`{kind, payload, reason, expected_version, idempotency_key}`。`expected_
 | 503 | `CASHFLOW_STORAGE_NOT_CONFIGURED` | `MEDIA_STORAGE_ROOT` 没配 |
 | 413 | `CASHFLOW_UPLOAD_TOO_LARGE` | 文件超过 `FINANCE_CASHFLOW_MAX_UPLOAD_BYTES` |
 | 422 | `CASHFLOW_EMPTY_UPLOAD` | 上传内容为空 |
+
+## 飞书审批单
+
+| 方法与路径 | 用途 | 说明 |
+|---|---|---|
+| `GET /approvals` | 审批单列表 | 费用报销、付款申请、备用金申请、备用金核销；带已付流水和付款状态（已付 / 未付 / 部分已付 / 金额不符 / 金额缺失 / 待定 / 审批中 / 已取消）。一笔付款挂多张单时，按这笔的人民币和各单金额比例分，尾差给金额最大的那张；算不出来的单状态为待定，`paid[].amount_cny` 为空 |
+| `GET /approvals/sync` | 最近一次同步的状态 | `status`：never / queued / running / succeeded / failed；失败时 `error_code` 带接口名、HTTP 状态和飞书错误码 |
+| `POST /approvals/sync` | 手动同步 | 202；走任务中心的同步任务（接口 `financeApprovalInstances`），已有一次在跑就返回它，不重复开。没登记任务回 409 `CASHFLOW_APPROVAL_SYNC_NOT_CONFIGURED`；队列不可用回 503 `CASHFLOW_APPROVAL_SYNC_UNAVAILABLE` |
+
+- 上线要跑一次 `FINANCE_APPROVAL_BOOTSTRAP_AUTHORIZED=true python backend/scripts/bootstrap_finance_approval_governance.py` 登记任务；定时默认关闭，以后在任务中心打开即可，手动和定时走同一个处理逻辑。
+- 只取飞书只读接口；每次查最近 90 天，切成每段不超过 30 天。已结束超过 14 天且取过的单不再取详情。
+- 申请人和审批记录里的处理人，读取时按系统员工表 `app_users.feishu_user_id` 换成姓名（优先 `feishu_name`，其次 `display_name`），匹配不到的显示编号；不调飞书通讯录接口。
+- 只存账号尾号，不存完整账号；附件和截图只存元数据（来源、名称、是否图片），不存下载链接。
+
+## 自动挂单
+
+每次同步结束、以及流水导入后各跑一次；可重复执行。
+
+1. 流水摘要或备注里写了审批单号（`20` 开头的 12 位数字，且是系统里有的、没取消的单）：直接挂。
+2. 金额相等（差不超过 0.011）、都是人民币、流水日期在审批通过前 3 天到通过后 45 天内、收款人对得上，并且这笔流水只对得上这一张已同意的单、这张单也只对得上这一笔：自动挂，事件 `auto_attach_ref`（actor=system），流水带「自动匹配」标记。单子没写收款人时，唯一也算。
+3. 其余放在流水的 `approval_candidates`，由财务选。审批中的单只进候选，不自动挂。
+4. 已初审或终审的流水不动；财务手动摘掉过的「流水 + 单号」组合不再自动挂回去。
 
 ## 读时计算的口径
 

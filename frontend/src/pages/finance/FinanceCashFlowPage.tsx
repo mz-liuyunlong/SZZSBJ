@@ -46,7 +46,7 @@ function FinanceCashFlowPage({ page, view }: { page: NavigationPage; view: CashF
           />
         </FinanceBoardFrame>
       ) : view === "accounts" ? <AccountsBoard data={data} />
-        : <JournalBoard data={data} live={liveJournal} />}
+        : <JournalBoard data={data} live={liveJournal} liveDetails={liveQuery.data?.details} />}
     </PageShell>
   );
 }

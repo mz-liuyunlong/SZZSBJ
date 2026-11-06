@@ -18,6 +18,10 @@ from app.modules.integration_sync.data_pages_real_sync import (
     DataPagesRealSyncSummary,
     data_pages_client,
 )
+from app.modules.integration_sync.finance_approval_catalog import FINANCE_APPROVAL_PROVIDER
+from app.modules.integration_sync.handlers.feishu_finance_approval_sync import (
+    FeishuFinanceApprovalSyncHandler,
+)
 from app.modules.integration_sync.handlers.lingxing_batch_product_info import (
     BatchPlan,
     LingxingBatchGetProductInfoSyncHandler,
@@ -80,6 +84,12 @@ class SyncRunExecutionService:
         interface = self.repository.get_interface(run.interface_id)
         if interface is None:
             self._fail(run, "SYNC_INTERFACE_NOT_FOUND")
+            return
+        if (
+            run.provider == FINANCE_APPROVAL_PROVIDER
+            and interface.handler_key == FeishuFinanceApprovalSyncHandler.handler_key
+        ):
+            FeishuFinanceApprovalSyncHandler(self.session).execute(run, interface)
             return
         is_data_pages = (
             run.provider == "lingxing"

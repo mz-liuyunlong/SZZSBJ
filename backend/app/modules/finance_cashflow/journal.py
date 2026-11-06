@@ -28,6 +28,8 @@ USD_IN_MEMO = re.compile(r"USD\s*([\d,]+(?:\.\d+)?)")
 NOT_IN_JOURNAL = re.compile(r"忽略")
 SOURCE_MANUAL = "人工"
 SOURCE_RULE = "规则"
+SOURCE_APPROVAL = "审批单"
+SOURCE_APPROVAL_RULE = "审批单(规则)"
 
 ALERT_BALANCE = "余额不连续"
 ALERT_UNPAIRED = "内部转账未配对"
@@ -51,6 +53,7 @@ KIND_DETACH_REF = "detach_ref"
 KIND_EXCLUDE = "exclude"
 KIND_UNEXCLUDE = "unexclude"
 KIND_AUTO_RESET = "auto_reset"
+KIND_AUTO_ATTACH_REF = "auto_attach_ref"
 
 
 @dataclass(frozen=True)
@@ -104,6 +107,9 @@ class LineInput:
     manual_category: str | None = None
     refs: list[str] = field(default_factory=list)
     exclude_amount: Decimal | None = None
+    # 挂的审批单带来的类别：表单写明的类别压过规则；按事由跑规则得来的只补空白。
+    approval_category: str | None = None
+    approval_rule_category: str | None = None
 
 
 @dataclass(frozen=True)
@@ -183,9 +189,13 @@ def _classify_line(
         code, source = EXCLUDE_CATEGORY, SOURCE_MANUAL
     elif line.manual_category:
         code, source = line.manual_category, SOURCE_MANUAL
+    elif line.approval_category:
+        code, source = line.approval_category, SOURCE_APPROVAL
     else:
         code = classifier.classify(f"{line.description} {line.memo}", line.counterparty_name)
         source = SOURCE_RULE if code else ""
+        if not code and line.approval_rule_category:
+            code, source = line.approval_rule_category, SOURCE_APPROVAL_RULE
     return ComputedLine(
         source=line, category_code=code, category_source=source, amount_cny=amount_cny
     )

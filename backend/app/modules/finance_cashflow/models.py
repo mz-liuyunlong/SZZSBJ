@@ -286,3 +286,61 @@ class FinanceCashExclusion(Base):
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     registered_by: Mapped[str] = mapped_column(String(255), nullable=False)
     registered_on: Mapped[date | None] = mapped_column(Date)
+
+
+class FinanceCashApproval(Base):
+    """飞书审批单（费用报销、付款申请、备用金申请、备用金核销）。
+
+    只留账号尾号，不存完整银行账号；附件只留元数据，不存下载链接。
+    """
+
+    __tablename__ = "std_finance_feishu_approvals"
+    __table_args__ = (
+        Index("uq_std_finance_feishu_approvals_serial", "serial_number", unique=True),
+        Index("ix_std_finance_feishu_approvals_started", "started_at"),
+    )
+
+    instance_code: Mapped[str] = mapped_column(String(64), primary_key=True)
+    serial_number: Mapped[str] = mapped_column(String(32), nullable=False)
+    approval_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    handled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    applicant_user_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="", server_default=""
+    )
+    department_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="", server_default=""
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    currency_code: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="CNY", server_default="CNY"
+    )
+    pay_method: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    invoice: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    payee: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    payee_bank: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    payee_account_last4: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="", server_default=""
+    )
+    fee_category: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    related_serial: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    items: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    attachments: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    records: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    comments: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    last_run_id: Mapped[UUID | None] = mapped_column()
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
