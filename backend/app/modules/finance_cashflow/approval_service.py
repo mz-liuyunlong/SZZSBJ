@@ -6,6 +6,7 @@ from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal
+from fractions import Fraction
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -36,14 +37,18 @@ def allocate_payment(
 ) -> dict[str, Decimal | None]:
     """一笔付款的人民币分给它挂的各张审批单（rocky 2026-11-06）。
 
-    按实际付出去的人民币，按各单金额比例分，四舍五入到分，尾差给金额最大的那张，
-    加起来正好等于这笔付款。算不出来（流水没有人民币、缺汇率、单找不到）的整笔待定（None）。
+    按实际付出去的人民币，按各单金额比例分，精度到分。用最大余数法：每张先向下取整到分，
+    剩下的几分钱按小数部分从大到小每张补 1 分，所以不会出现负数，加起来正好等于这笔付款。
+    小数部分一样大时先给权重大的，再给单号小的，同样的输入每次结果都一样。
+    流水人民币带分以下的小数时，先四舍五入到分再分。
+    流水没有人民币的整笔待定（None）。只挂一张单时，这笔的人民币全算这张的。
+    挂多张单时，缺汇率、单找不到、单没有金额、金额合计为 0 的也整笔待定。
     """
     serials = list(dict.fromkeys(refs))
     pending: dict[str, Decimal | None] = dict.fromkeys(serials)
     if line_cny is None or not serials:
         return pending
-    total = abs(line_cny)
+    total = abs(line_cny).quantize(FEN, rounding=ROUND_HALF_UP)
     if len(serials) == 1:
         return {serials[0]: total}
     rows = [approvals.get(serial) for serial in serials]
@@ -62,17 +67,23 @@ def allocate_payment(
     whole = sum(weights, Decimal("0"))
     if not whole:
         return pending
-    largest = weights.index(max(weights))
-    shares: dict[str, Decimal | None] = {}
-    given = Decimal("0")
-    for index, serial in enumerate(serials):
-        if index == largest:
-            continue
-        share = (total * weights[index] / whole).quantize(FEN, rounding=ROUND_HALF_UP)
-        shares[serial] = share
-        given += share
-    shares[serials[largest]] = total - given
-    return {serial: shares[serial] for serial in serials}
+    return dict(zip(serials, _split_fen(total, serials, weights, whole), strict=True))
+
+
+def _split_fen(
+    total: Decimal, serials: Sequence[str], weights: Sequence[Decimal], whole: Decimal
+) -> list[Decimal]:
+    """最大余数法。全程用分数算，不受 Decimal 除法精度影响。"""
+    total_fen = int(total / FEN)
+    exact = [Fraction(total_fen) * Fraction(weight) / Fraction(whole) for weight in weights]
+    fen = [int(value) for value in exact]
+    order = sorted(
+        range(len(serials)),
+        key=lambda index: (fen[index] - exact[index], -weights[index], serials[index]),
+    )
+    for index in order[: total_fen - sum(fen)]:
+        fen[index] += 1
+    return [Decimal(value) * FEN for value in fen]
 
 
 def _local_text(value: datetime | None) -> str:

@@ -51,6 +51,7 @@ from app.modules.integration_sync.models import IntegrationSyncRun, IntegrationS
 
 SERIAL = "202610010001"
 OTHER = "202610010002"
+THIRD = "209901010003"
 PAYMENT_CODE = "TEST-0002"
 TEST_CODES = "费用报销=TEST-0001,付款申请=TEST-0002,备用金申请=TEST-0003,备用金核销=TEST-0004"
 # 2026-10-01 12:00（上海时间）
@@ -609,6 +610,29 @@ def test_list_one_cny_payment_shared_by_ratio_adds_up(session):
     assert (items[SERIAL].paid_sum, items[SERIAL].state) == (Decimal("100.00"), "已付")
     assert (items[OTHER].paid_sum, items[OTHER].state) == (Decimal("200.00"), "已付")
     assert items[SERIAL].paid_sum + items[OTHER].paid_sum == Decimal("300")
+
+
+def test_list_tiny_payment_shared_is_never_negative(session):
+    _approvals(session, (SERIAL, "100", "CNY"), (OTHER, "100", "CNY"), (THIRD, "100", "CNY"))
+    _line_with_refs(session, [SERIAL, OTHER, THIRD], amount="-0.02")
+    items = _listed(session)
+    assert [items[serial].paid_sum for serial in (SERIAL, OTHER, THIRD)] == [
+        Decimal("0.01"),
+        Decimal("0.01"),
+        Decimal("0.00"),
+    ]
+
+
+def test_list_refund_with_a_remainder_offsets_the_payment(session):
+    _approvals(session, (SERIAL, "100", "CNY"), (OTHER, "100", "CNY"))
+    _line_with_refs(session, [SERIAL, OTHER], amount="-200")
+    _line_with_refs(session, [SERIAL, OTHER], uid="fedcba9876543210", amount="0.03")
+    items = _listed(session)
+    # 退款 0.03 分成 0.02 / 0.01，分别冲减两张单。
+    assert items[SERIAL].paid_sum == Decimal("99.98")
+    assert items[OTHER].paid_sum == Decimal("99.99")
+    assert sum(item.amount_cny for item in items[SERIAL].paid) == Decimal("99.98")
+    assert sum(item.amount_cny for item in items[OTHER].paid) == Decimal("99.99")
 
 
 def test_list_usd_one_to_one_uses_the_line_cny(session, monkeypatch):

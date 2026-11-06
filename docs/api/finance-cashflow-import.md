@@ -72,7 +72,7 @@ body：`{kind, payload, reason, expected_version, idempotency_key}`。`expected_
 
 | 方法与路径 | 用途 | 说明 |
 |---|---|---|
-| `GET /approvals` | 审批单列表 | 费用报销、付款申请、备用金申请、备用金核销；带已付流水和付款状态（已付 / 未付 / 部分已付 / 金额不符 / 金额缺失 / 待定 / 审批中 / 已取消）。一笔付款挂多张单时，按这笔的人民币和各单金额比例分，尾差给金额最大的那张；算不出来的单状态为待定，`paid[].amount_cny` 为空 |
+| `GET /approvals` | 审批单列表 | 费用报销、付款申请、备用金申请、备用金核销；带已付流水和付款状态（已付 / 未付 / 部分已付 / 金额不符 / 金额缺失 / 待定 / 审批中 / 已取消）。一笔付款挂多张单时，按这笔的人民币和各单金额比例分，按最大余数法分到分：每张先向下取整，剩下的几分按小数部分从大到小补，相同时先给金额大的、再给单号小的；结果不会是负数，合计等于这笔付款（这笔的人民币带分以下小数时，先四舍五入到分）。算不出来的单状态为待定，`paid[].amount_cny` 为空 |
 | `GET /approvals/sync` | 最近一次同步的状态 | `status`：never / queued / running / succeeded / failed；失败时 `error_code` 带接口名、HTTP 状态和飞书错误码 |
 | `POST /approvals/sync` | 手动同步 | 202；走任务中心的同步任务（接口 `financeApprovalInstances`），已有一次在跑就返回它，不重复开。没登记任务回 409 `CASHFLOW_APPROVAL_SYNC_NOT_CONFIGURED`；队列不可用回 503 `CASHFLOW_APPROVAL_SYNC_UNAVAILABLE` |
 
