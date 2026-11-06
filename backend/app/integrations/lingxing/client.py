@@ -37,6 +37,7 @@ type LingxingEndpoint = Literal[
     "/pb/mp/shop/v2/getSellerList",
     "/basicOpen/multiplatform/profit/report/order",
     "/erp/sc/routing/data/local_inventory/productList",
+    "/erp/sc/routing/finance/currency/currencyMonth",
     "/pb/mp/order/v2/list",
     "/basicOpen/openapi/multiplatform/walmart/returnOrder/list",
     "/basicOpen/adReport/advertiser/list",
@@ -275,6 +276,18 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
         require_json_body=True,
         allowed_body_fields=frozenset({"productIds"}),
         required_body_fields=frozenset({"productIds"}),
+        store_field=None,
+        page_size_field=None,
+        auth_strategy="query_sign",
+    ),
+    # Monthly FX rates. Read-only; one request per month, no pagination.
+    "/erp/sc/routing/finance/currency/currencyMonth": LingxingEndpointContract(
+        method="POST",
+        outbound_enabled=True,
+        allow_query_parameters=False,
+        require_json_body=True,
+        allowed_body_fields=frozenset({"date"}),
+        required_body_fields=frozenset({"date"}),
         store_field=None,
         page_size_field=None,
         auth_strategy="query_sign",
@@ -553,6 +566,44 @@ class LingxingReadonlyClient:
             contract,
             page_size_limit=1000,
             first_page_only=False,
+        )
+        return self._fetch_page(capture, page, contract)
+
+    def fetch_fx_month(
+        self,
+        *,
+        month: str,
+        source_account_ref: str,
+        run_id: str,
+        work_item_id: str,
+    ) -> LingxingRawEnvelope:
+        """Fetch one month of Lingxing FX rates for the governed sync."""
+        if not self._settings.lingxing_enable_real_calls:
+            raise LingxingClientError("Lingxing calls are disabled")
+        if not source_account_ref or source_account_ref != source_account_ref.strip():
+            raise LingxingClientError("Lingxing source account scope is invalid")
+        page = LingxingPageRequest.model_construct(
+            page_no=1,
+            page_size=1,
+            params=None,
+            body={"date": month},
+        )
+        capture = LingxingCaptureRequest(
+            api_path="/erp/sc/routing/finance/currency/currencyMonth",
+            pages=(page,),
+            store_ids=(source_account_ref,),
+            object_type="lingxing_fx_rate",
+            trace_id=run_id,
+            run_id=run_id,
+            batch_id=work_item_id,
+        )
+        contract = _ENDPOINT_CONTRACTS[capture.api_path]
+        self._validate_outbound_contract(
+            capture,
+            page,
+            contract,
+            page_size_limit=1,
+            first_page_only=True,
         )
         return self._fetch_page(capture, page, contract)
 
