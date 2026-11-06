@@ -70,6 +70,17 @@ def test_other_users_get_403_even_with_finance_page_permission(client_for, metho
     assert client_for(finance_user).request(method, path).status_code == 403
 
 
+def test_undo_first_review_needs_the_review_permission(client_for):
+    finance_user = Principal(
+        user_id="u1", permissions=frozenset({"page:finance:cash-flow:view", "finance:read"})
+    )
+    response = client_for(finance_user).post(
+        f"/api/finance/cashflow/lines/{UID}/events",
+        json={"kind": "review1_undo", "expected_version": 1},
+    )
+    assert response.status_code == 403
+
+
 def super_admin() -> Principal:
     return Principal(user_id="admin", permissions=frozenset({"*"}))
 
