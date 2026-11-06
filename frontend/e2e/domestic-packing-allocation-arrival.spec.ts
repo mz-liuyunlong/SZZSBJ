@@ -68,10 +68,9 @@ test("modify saves a draft through PUT and survives refresh without approval", a
     };
     else if (path.endsWith("/pending/summary")) data = { pending: 1, overdue: 0, blocked: 0, approved: 0, rejected: 0 };
     else if (path.endsWith("/filter-options")) data = { stores: [], owners: [] };
-    else if (path.endsWith("/edit-options")) data = {
-      candidate, cross_store_proof_available: false,
-      listings: [{ store_id: "S1", store_name: "测试店铺", item_id: candidate.item_id,
-        gtin: candidate.gtin, msku: candidate.msku, listing_version: "b".repeat(64), cross_store: false }],
+    else if (path.endsWith("/listing-search")) data = {
+      items: [{ store_id: "S1", store_name: "测试店铺", item_id: candidate.item_id, gtin: candidate.gtin, msku: candidate.msku,
+        local_sku: candidate.sku, listing_version: "b".repeat(64), cross_store: false, wfs_converted: true, usable: true, blocked_reasons: [] }],
     };
     else if (path.endsWith(`/pending/${id}/draft`) && request.method() === "PUT") {
       saved = true;
@@ -90,12 +89,14 @@ test("modify saves a draft through PUT and survives refresh without approval", a
   const dialog = page.getByRole("dialog", { name: "修改打包单", exact: true });
   await expect(dialog.getByRole("spinbutton")).toHaveValue("60");
   await dialog.getByRole("spinbutton").fill("25");
-  await expect(dialog.getByText("测试店铺 / 11111111111", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("测试店铺 / 11111111111 / SYN-MSKU / SYN-SKU", { exact: true })).toBeVisible();
+  await dialog.getByPlaceholder("例：客户要求分两批 / 换店铺发").fill("按实际到货调整");
   await dialog.getByRole("button", { name: /^保\s*存$/ }).click();
   await expect(page.getByText("已修改未审批", { exact: true })).toBeVisible();
   expect(writes).toEqual([{ method: "PUT",
     path: `/api/pmc/domestic/packing-approval/pending/${id}/draft`,
-    body: expect.objectContaining({ qty: 25, candidate_version: candidate.candidate_version }),
+    body: expect.objectContaining({ candidate_version: candidate.candidate_version, edit_reason: "按实际到货调整",
+      lines: [expect.objectContaining({ target_store_id: "S1", target_item_id: "11111111111", qty: 25 })] }),
   }]);
   await page.reload();
   await expect(page.getByText("已修改未审批", { exact: true })).toBeVisible();
