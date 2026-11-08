@@ -10,6 +10,7 @@ from app.core.auth import Principal, require_principal
 from app.core.permissions import (
     has_permission,
     require_any_permission,
+    require_permission,
 )
 from app.db.session import get_db_session
 from app.modules.iam.field_access import (
