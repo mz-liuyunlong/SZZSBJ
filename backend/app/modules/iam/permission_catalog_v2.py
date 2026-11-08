@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 PermissionType = Literal["page", "action", "field"]
@@ -62,206 +64,30 @@ def _page(module_key: str, page_key: str, name: str, sort_order: int) -> PageDef
     )
 
 
-MODULES: tuple[ModuleDefinition, ...] = (
-    ModuleDefinition(
-        "dashboard",
-        "工作台",
-        10,
-        (
-            _page("dashboard", "today_sales", "今日销售", 10),
-            _page("dashboard", "today_profit", "今日利润", 20),
-            _page("dashboard", "ad_spend", "广告花费", 30),
-            _page("dashboard", "refund_rate", "退款率", 40),
-            _page("dashboard", "inventory_alert", "库存预警", 50),
-            _page("dashboard", "review_alert", "Review预警", 60),
-            _page("dashboard", "ads_alert", "广告异常", 70),
-            _page("dashboard", "listing_alert", "Listing异常", 80),
-            _page("dashboard", "wfs_alert", "WFS异常", 90),
-            _page("dashboard", "todo", "待办任务", 100),
-        ),
-    ),
-    ModuleDefinition(
-        "products",
-        "产品",
-        20,
-        (
-            _page("products", "product_management", "产品管理", 10),
-            _page("products", "listing_management", "Listing管理", 20),
-            _page("products", "claim_center", "认领中心", 30),
-            _page("products", "new_product_analysis", "新品分析", 40),
-            _page("products", "lifecycle", "产品生命周期", 50),
-            _page("products", "grade", "产品等级", 60),
-        ),
-    ),
-    ModuleDefinition(
-        "sales",
-        "销售",
-        30,
-        (
-            _page("sales", "daily_sales", "每日销售", 10),
-            _page("sales", "order_profit", "订单利润", 20),
-            _page("sales", "review_dashboard", "Review看板", 30),
-            _page("sales", "restock_suggestion", "补货建议", 40),
-            _page("sales", "shipping_plan", "发货计划", 50),
-            _page("sales", "trend", "销售趋势", 60),
-        ),
-    ),
-    ModuleDefinition(
-        "ads",
-        "广告",
-        40,
-        (
-            _page("ads", "overview", "广告总览", 10),
-            _page("ads", "campaigns", "广告活动", 20),
-            _page("ads", "keyword_library", "词库", 30),
-            _page("ads", "keyword_rank", "关键词排名", 40),
-            _page("ads", "negative_keywords", "否定关键词", 50),
-            _page("ads", "search_terms", "搜索词", 60),
-            _page("ads", "ai_optimization_log", "AI优化记录", 70),
-            _page("ads", "bid_adjustment_log", "调价记录", 80),
-            _page("ads", "operation_log", "操作日志", 90),
-        ),
-    ),
-    ModuleDefinition(
-        "aftersales",
-        "售后",
-        50,
-        (
-            _page("aftersales", "refund_management", "退款管理", 10),
-            _page("aftersales", "return_management", "退货管理", 20),
-            _page("aftersales", "customer_messages", "客户消息", 30),
-            _page("aftersales", "case_management", "Case管理", 40),
-            _page("aftersales", "claims", "索赔/赔付", 50),
-            _page("aftersales", "negative_feedback", "负面反馈", 60),
-            _page("aftersales", "statistics", "售后统计", 70),
-        ),
-    ),
-    ModuleDefinition(
-        "warehouse",
-        "仓库",
-        60,
-        (
-            _page("warehouse", "inventory_detail", "库存明细", 10),
-            _page("warehouse", "inventory_alert", "库存预警", 20),
-            _page("warehouse", "wfs_fee_alert", "WFS费用异常", 30),
-            _page("warehouse", "storage_fee", "仓储费", 40),
-            _page("warehouse", "inbound_transport", "入库运输", 50),
-            _page("warehouse", "removal_disposal", "移除/弃置", 60),
-            _page("warehouse", "pmc_dashboard", "PMC看板", 70),
-            _page("warehouse", "inbound_difference", "入库差异", 80),
-            _page("warehouse", "inventory_age", "库存库龄", 90),
-        ),
-    ),
-    ModuleDefinition(
-        "finance",
-        "财务",
-        70,
-        (
-            _page("finance", "profit_center", "利润中心", 10),
-            _page("finance", "sku_cash_profit", "单品现金利润", 20),
-            _page("finance", "settlement_profit", "结算利润", 25),
-            _page("finance", "walmart_settlement", "沃尔玛返还明细", 30),
-            _page("finance", "settlement_reconciliation", "结算对账", 40),
-            _page("finance", "ad_cost", "广告费用", 50),
-            _page("finance", "ad_bill", "广告账单", 60),
-            _page("finance", "performance_report", "业绩报表", 70),
-            _page("finance", "balance_sheet", "资产负债表", 75),
-            _page("finance", "cash_flow", "资金流水（四个菜单共用）", 80),
-            _page("finance", "cost_exception", "成本异常处理", 90),
-            _page("finance", "settings", "口径与设置", 100),
-            _page("finance", "data_import", "数据导入", 110),
-        ),
-    ),
-    ModuleDefinition(
-        "operations",
-        "运营",
-        80,
-        (
-            _page("operations", "log", "运营日志", 10),
-            _page("operations", "plan", "运营计划", 20),
-            _page("operations", "todo", "运营待办", 30),
-            _page("operations", "calendar", "运营日历", 40),
-            _page("operations", "promotion_center", "推广中心", 50),
-        ),
-    ),
-    ModuleDefinition(
-        "purchase",
-        "采购",
-        90,
-        (
-            _page("purchase", "plan", "采购计划", 10),
-            _page("purchase", "order", "采购单", 20),
-        ),
-    ),
-    ModuleDefinition(
-        "pmc",
-        "PMC",
-        100,
-        (
-            _page("pmc", "purchase_board", "采购看板", 10),
-            _page("pmc", "logistics", "物流", 15),
-            _page("pmc", "domestic_warehouse_board", "国内仓看板", 20),
-        ),
-    ),
-    ModuleDefinition(
-        "ai_center",
-        "AI中心",
-        110,
-        (
-            _page("ai_center", "assistant", "AI助手", 10),
-            _page("ai_center", "ads_optimization", "广告优化", 20),
-            _page("ai_center", "image_generation", "图片生成", 30),
-            _page("ai_center", "copywriting", "文案生成", 40),
-            _page("ai_center", "product_research", "智能选品", 50),
-            _page("ai_center", "competitor_analysis", "竞品分析", 60),
-            _page("ai_center", "keyword_rules", "关键词规则", 70),
-            _page("ai_center", "keyword_launch", "关键词投放", 80),
-        ),
-    ),
-    ModuleDefinition(
-        "data_center",
-        "数据中心",
-        120,
-        (
-            _page("data_center", "approval_workspace", "审批工作台", 10),
-            _page("data_center", "walmart_monitoring", "沃尔玛监控", 20),
-            _page("data_center", "alert_center", "预警中心", 30),
-            _page("data_center", "data_import", "数据导入", 40),
-            _page("data_center", "data_export", "数据导出", 50),
-            _page("data_center", "walmart_remote", "沃尔玛采集", 55),
-            _page("data_center", "task_center", "任务中心", 60),
-            _page("data_center", "api_docs", "API文档", 70),
-        ),
-    ),
-    ModuleDefinition(
-        "statistics",
-        "统计",
-        130,
-        (
-            _page("statistics", "business_overview", "经营总览", 10),
-            _page("statistics", "account_health", "账号健康", 20),
-            _page("statistics", "product_performance", "产品表现", 30),
-            _page("statistics", "return_analysis", "退货分析", 40),
-            _page("statistics", "sales_analysis", "销售分析", 50),
-            _page("statistics", "profit_analysis", "利润分析", 60),
-            _page("statistics", "ads_analysis", "广告分析", 70),
-            _page("statistics", "inventory_analysis", "库存分析", 80),
-        ),
-    ),
-    ModuleDefinition(
-        "settings",
-        "设置",
-        140,
-        (
-            _page("settings", "user_management", "用户管理", 10),
-            _page("settings", "fee_rules", "费用规则", 20),
-            _page("settings", "role_management", "角色管理", 30),
-            _page("settings", "business_config", "业务配置", 40),
-            _page("settings", "system_config", "系统配置", 50),
-            _page("settings", "logs", "日志", 60),
-        ),
-    ),
-)
+def _load_navigation_modules() -> tuple[ModuleDefinition, ...]:
+    """Read the generated navigation registry; no second hard-coded page list."""
+    payload = json.loads(
+        Path(__file__).with_name("navigation_permissions.json").read_text(encoding="utf-8")
+    )
+    return tuple(
+        ModuleDefinition(
+            module_key=module["module_key"],
+            name=module["name"],
+            sort_order=int(module["sort_order"]),
+            pages=tuple(
+                PageDefinition(
+                    page_key=page["page_key"],
+                    name=page["name"],
+                    sort_order=int(page["sort_order"]),
+                )
+                for page in module["pages"]
+            ),
+        )
+        for module in payload["modules"]
+    )
+
+
+MODULES: tuple[ModuleDefinition, ...] = _load_navigation_modules()
 
 ACTIONS: tuple[ActionDefinition, ...] = (
     ActionDefinition("ai_center_keyword_launch", "manage", "维护关键词来源与分析", 10),
@@ -339,6 +165,16 @@ ACTIONS: tuple[ActionDefinition, ...] = (
         "high",
     ),
     ActionDefinition("settings_role_management", "view_audit", "查看权限审计", 50),
+    ActionDefinition("finance_cash_flow", "import", "上传资金流水", 10, "high"),
+    ActionDefinition("finance_cash_flow", "void-import", "作废资金流水批次", 20, "high"),
+    ActionDefinition("finance_cash_flow", "edit-journal", "审核和编辑日记账", 30, "high"),
+    ActionDefinition("finance_cash_flow", "sync-approvals", "手动同步财务审批单", 40, "high"),
+    ActionDefinition("finance_cash_flow", "manage-accounts", "新增及维护财务账户", 50, "high"),
+    ActionDefinition("finance_fx_rates", "sync", "手动同步月汇率", 10, "high"),
+    ActionDefinition("settings_business_config", "manage-connectors", "配置业务连接器与密钥", 10, "high"),
+    ActionDefinition("settings_business_config", "manage-decodo", "配置 Decodo 接口", 20, "high"),
+    ActionDefinition("settings_business_config", "manage-notifications", "配置通知规则", 30, "high"),
+
 )
 
 FIELDS: tuple[FieldDefinition, ...] = (
@@ -356,6 +192,12 @@ PAGE_DEFINITIONS = {
     for module in MODULES
     for page in module.pages
 }
+# Keyword-rule approvals retain an internal compatibility key even though
+# their old navigation page was retired. Do not grant it automatically.
+PAGE_DEFINITIONS.setdefault(
+    "ai_center_keyword_rules",
+    ("ai_center", "AI中心", _page("ai_center", "keyword_rules", "关键词规则", 999)),
+)
 
 
 def _slug(value: str) -> str:

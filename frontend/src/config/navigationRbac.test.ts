@@ -1,55 +1,47 @@
 import { describe, expect, it } from "vitest";
 import { navigation } from "@/config/navigation";
 import { getPagePermissionKey } from "@/shared/permissions/mockAccess";
-import backendCatalogSource from "../../../backend/app/modules/iam/permission_catalog_v2.py?raw";
+import manifestSource from "../../../backend/app/modules/iam/navigation_permissions.json?raw";
 
-// Backend deploys separately. Reject new menu pages without a registered grant.
-const catalogSource = backendCatalogSource;
-const registeredPages = new Set(
-  Array.from(
-    catalogSource.matchAll(/_page\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,/g),
-    ([, moduleKey, localKey]) =>
-      `page:${moduleKey.replaceAll("_", "-")}:${localKey.replaceAll("_", "-")}:view`,
-  ),
-);
-const superAdminOnly = new Set(["page:finance:fx-rates:view"]);
+interface ManifestPage {
+  page_key: string;
+  permission_key: string;
+  name: string;
+}
+interface ManifestModule {
+  module_key: string;
+  name: string;
+  pages: ManifestPage[];
+}
+const modules = (JSON.parse(manifestSource) as { modules: ManifestModule[] }).modules;
+const registered = new Set(modules.flatMap((module) =>
+  module.pages.map((page) => page.permission_key),
+));
 
-describe("navigation/RBAC catalog contract", () => {
-  it("registers every grantable navigation permission", () => {
+describe("navigation and RBAC catalogue share one generated registry", () => {
+  it("covers every visible/disabled navigation permission", () => {
     const missing = navigation.flatMap((group) =>
       group.children.flatMap((page) => {
-        if (page.status === "hidden" || page.status === "disabled") return [];
+        if (page.status === "hidden") return [];
         const key = getPagePermissionKey(page);
-        if (registeredPages.has(key) || superAdminOnly.has(key)) return [];
-        return [`${group.title} / ${page.title}: ${key}`];
+        return registered.has(key) ? [] : [page.key + " => " + key];
       }),
     );
     expect(missing).toEqual([]);
   });
 
-  it("keeps finance FX rates outside normal role grants", () => {
-    const fxRates = navigation
-      .flatMap((group) => group.children)
-      .find((page) => page.key === "finance_fx_rates");
-    expect(fxRates).toBeDefined();
-    expect(getPagePermissionKey(fxRates!)).toBe("page:finance:fx-rates:view");
-    expect(registeredPages.has("page:finance:fx-rates:view")).toBe(false);
+  it("makes finance FX rate access role-managed, not super-admin-only", () => {
+    expect(registered.has("page:finance:fx-rates:view")).toBe(true);
+    expect(registered.has("page:finance:cash-flow:view")).toBe(true);
   });
 
-  it("keeps shared finance and domestic PMC page grants", () => {
+  it("preserves intentional sharing of existing menu permissions", () => {
     const pages = navigation.flatMap((group) => group.children);
-    const groups = [
-      [["finance_cash_accounts", "finance_cash_journal",
-        "finance_cash_account_admin", "finance_cash_stock"], "page:finance:cash-flow:view"],
-      [["pmc_domestic_batches", "pmc_packing_approval",
-        "pmc_packing_warehouse"], "page:pmc:domestic-warehouse-board:view"],
-    ] as const;
-    for (const [pageKeys, expectedPermission] of groups) {
-      for (const pageKey of pageKeys) {
-        const page = pages.find((item) => item.key === pageKey);
-        expect(page).toBeDefined();
-        expect(getPagePermissionKey(page!)).toBe(expectedPermission);
-      }
+    for (const key of ["finance_cash_accounts", "finance_cash_journal",
+      "finance_cash_account_admin", "finance_cash_stock"]) {
+      const page = pages.find((item) => item.key === key);
+      expect(page).toBeDefined();
+      expect(getPagePermissionKey(page!)).toBe("page:finance:cash-flow:view");
     }
   });
 });

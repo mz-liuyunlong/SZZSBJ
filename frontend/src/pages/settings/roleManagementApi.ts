@@ -1,5 +1,6 @@
 import { backendRequest } from "@/api/backendApi";
 import { navigation } from "@/config/navigation";
+import { getPagePermissionKey } from "@/shared/permissions/mockAccess";
 import type {
   PermissionGroup,
   RoleAuditEvent,
@@ -76,10 +77,15 @@ interface BackendAuditEvent {
   created_at: string;
 }
 
-// Use navigation titles for display; only backend-registered keys are grantable.
-const navigationPageNames = new Map(
-  navigation.flatMap((group) => group.children.map((page) => [page.key, page.title] as const)),
-);
+// Merge menu titles by their effective page permission (including shared grants).
+const navigationPageNames = new Map<string, string[]>();
+navigation.forEach((group) => group.children.forEach((page) => {
+  if (page.status === "hidden") return;
+  const permission = getPagePermissionKey(page);
+  const names = navigationPageNames.get(permission) ?? [];
+  names.push(page.title);
+  navigationPageNames.set(permission, names);
+}));
 const navigationModuleNames = new Map(
   navigation.map((group) => [group.key, group.title] as const),
 );
@@ -154,7 +160,7 @@ export function buildRolePermissionCatalog(
     const pageItems: string[] = [];
 
     module.pages.forEach((page) => {
-      const pageName = navigationPageNames.get(page.page_key) ?? page.name;
+      const pageName = navigationPageNames.get(page.permission_key)?.join(" / ") ?? page.name;
       pageItems.push(page.permission_key);
       permissionLabels[page.permission_key] = pageName;
       permissionDescriptions[page.permission_key] = `允许进入并查看「${pageName}」页面`;

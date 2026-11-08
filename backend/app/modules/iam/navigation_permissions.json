@@ -1,0 +1,691 @@
+{
+  "version": 1,
+  "modules": [
+    {
+      "module_key": "dashboard",
+      "name": "工作台",
+      "sort_order": 10,
+      "pages": [
+        {
+          "page_key": "dashboard_today_sales",
+          "name": "工作台",
+          "permission_key": "page:dashboard:today-sales:view",
+          "sort_order": 10
+        },
+        {
+          "page_key": "dashboard_today_profit",
+          "name": "今日利润",
+          "permission_key": "page:dashboard:today-profit:view",
+          "sort_order": 20
+        },
+        {
+          "page_key": "dashboard_ad_spend",
+          "name": "广告花费",
+          "permission_key": "page:dashboard:ad-spend:view",
+          "sort_order": 30
+        },
+        {
+          "page_key": "dashboard_refund_rate",
+          "name": "退款率",
+          "permission_key": "page:dashboard:refund-rate:view",
+          "sort_order": 40
+        },
+        {
+          "page_key": "dashboard_inventory_alert",
+          "name": "库存预警",
+          "permission_key": "page:dashboard:inventory-alert:view",
+          "sort_order": 50
+        },
+        {
+          "page_key": "dashboard_review_alert",
+          "name": "Review预警",
+          "permission_key": "page:dashboard:review-alert:view",
+          "sort_order": 60
+        },
+        {
+          "page_key": "dashboard_ads_alert",
+          "name": "广告异常",
+          "permission_key": "page:dashboard:ads-alert:view",
+          "sort_order": 70
+        },
+        {
+          "page_key": "dashboard_listing_alert",
+          "name": "Listing异常",
+          "permission_key": "page:dashboard:listing-alert:view",
+          "sort_order": 80
+        },
+        {
+          "page_key": "dashboard_wfs_alert",
+          "name": "WFS异常",
+          "permission_key": "page:dashboard:wfs-alert:view",
+          "sort_order": 90
+        },
+        {
+          "page_key": "dashboard_todo",
+          "name": "待办任务",
+          "permission_key": "page:dashboard:todo:view",
+          "sort_order": 100
+        }
+      ]
+    },
+    {
+      "module_key": "products",
+      "name": "产品",
+      "sort_order": 20,
+      "pages": [
+        {
+          "page_key": "products_product_management",
+          "name": "产品管理 / 清货中心",
+          "permission_key": "page:products:product-management:view",
+          "sort_order": 10
+        },
+        {
+          "page_key": "products_listing_management",
+          "name": "Listing管理",
+          "permission_key": "page:products:listing-management:view",
+          "sort_order": 20
+        },
+        {
+          "page_key": "products_claim_center",
+          "name": "认领中心",
+          "permission_key": "page:products:claim-center:view",
+          "sort_order": 30
+        },
+        {
+          "page_key": "products_new_product_analysis",
+          "name": "新品表现",
+          "permission_key": "page:products:new-product-analysis:view",
+          "sort_order": 40
+        },
+        {
+          "page_key": "products_lifecycle",
+          "name": "产品生命周期",
+          "permission_key": "page:products:lifecycle:view",
+          "sort_order": 50
+        },
+        {
+          "page_key": "products_grade",
+          "name": "产品等级",
+          "permission_key": "page:products:grade:view",
+          "sort_order": 60
+        }
+      ]
+    },
+    {
+      "module_key": "sales",
+      "name": "销售",
+      "sort_order": 30,
+      "pages": [
+        {
+          "page_key": "sales_daily_sales",
+          "name": "每日销售",
+          "permission_key": "page:sales:daily-sales:view",
+          "sort_order": 10
+        },
+        {
+          "page_key": "sales_order_profit",
+          "name": "订单利润",
+          "permission_key": "page:sales:order-profit:view",
+          "sort_order": 20
+        },
+        {
+          "page_key": "sales_review_dashboard",
+          "name": "Review看板",
+          "permission_key": "page:sales:review-dashboard:view",
+          "sort_order": 30
+        },
+        {
+          "page_key": "sales_restock_suggestion",
+          "name": "补货建议",
+          "permission_key": "page:sales:restock-suggestion:view",
+          "sort_order": 40
+        },
+        {
+          "page_key": "sales_shipping_plan",
+          "name": "发货计划",
+          "permission_key": "page:sales:shipping-plan:view",
+          "sort_order": 50
+        },
+        {
+          "page_key": "sales_trend",
+          "name": "销售趋势",
+          "permission_key": "page:sales:trend:view",
+          "sort_order": 60
+        }
+      ]
+    },
+    {
+      "module_key": "ads",
+      "name": "广告",
+      "sort_order": 40,
+      "pages": [
+        {
+          "page_key": "ads_overview",
+          "name": "广告总览",
+          "permission_key": "page:ads:overview:view",
+          "sort_order": 10
+        },
+        {
+          "page_key": "ads_campaigns",
+          "name": "广告活动",
+          "permission_key": "page:ads:campaigns:view",
+          "sort_order": 20
+        },
+        {
+          "page_key": "ads_keyword_library",
+          "name": "词库",
+          "permission_key": "page:ads:keyword-library:view",
+          "sort_order": 30
+        },
+        {
+          "page_key": "ads_keyword_rank",
+          "name": "关键词排名",
+          "permission_key": "page:ads:keyword-rank:view",
+          "sort_order": 40
+        },
+        {
+          "page_key": "ads_negative_keywords",
+          "name": "否定关键词",
+          "permission_key": "page:ads:negative-keywords:view",
+          "sort_order": 50
+        },
+        {
+          "page_key": "ads_search_terms",
+          "name": "搜索词",
+          "permission_key": "page:ads:search-terms:view",
+          "sort_order": 60
+        },
+        {
+          "page_key": "ads_ai_optimization_log",
+          "name": "AI优化记录",
+          "permission_key": "page:ads:ai-optimization-log:view",
+          "sort_order": 70
+        },
+        {
+          "page_key": "ads_bid_adjustment_log",
+          "name": "调价记录",
+          "permission_key": "page:ads:bid-adjustment-log:view",
+          "sort_order": 80
+        },
+        {
+          "page_key": "ads_operation_log",
+          "name": "操作日志",
+          "permission_key": "page:ads:operation-log:view",
+          "sort_order": 90
+        }
+      ]
+    },
+    {
+      "module_key": "aftersales",
+      "name": "售后",
+      "sort_order": 50,
+      "pages": [
+        {
+          "page_key": "aftersales_refund_management",
+          "name": "退款管理",
+          "permission_key": "page:aftersales:refund-management:view",
+          "sort_order": 10
+        },
+        {
+          "page_key": "aftersales_return_management",
+          "name": "退货管理",
+          "permission_key": "page:aftersales:return-management:view",
+          "sort_order": 20
+        },
+        {
+          "page_key": "aftersales_customer_messages",
+          "name": "客户消息",
+          "permission_key": "page:aftersales:customer-messages:view",
+          "sort_order": 30
+        },
+        {
+          "page_key": "aftersales_case_management",
+          "name": "Case管理",
+          "permission_key": "page:aftersales:case-management:view",
+          "sort_order": 40
+        },
+        {
+          "page_key": "aftersales_claims",
+          "name": "索赔/赔付",
+          "permission_key": "page:aftersales:claims:view",
+          "sort_order": 50
+        },
+        {
+          "page_key": "aftersales_negative_feedback",
+          "name": "负面反馈",
+          "permission_key": "page:aftersales:negative-feedback:view",
+          "sort_order": 60
+        },
+        {
+          "page_key": "aftersales_statistics",
+          "name": "售后统计",
+          "permission_key": "page:aftersales:statistics:view",
+          "sort_order": 70
+        }
+      ]
+    },
+    {
+      "module_key": "warehouse",
+      "name": "仓库",
+      "sort_order": 60,
+      "pages": [
+        {
+          "page_key": "warehouse_inventory_detail",
+          "name": "库存明细",
+          "permission_key": "page:warehouse:inventory-detail:view",
+          "sort_order": 10
+        },
+        {
+          "page_key": "warehouse_inventory_alert",
+          "name": "库存预警",
+          "permission_key": "page:warehouse:inventory-alert:view",
+          "sort_order": 20
+        },
+        {
+          "page_key": "warehouse_wfs_fee_alert",
+          "name": "WFS费用异常",
+          "permission_key": "page:warehouse:wfs-fee-alert:view",
+          "sort_order": 30
+        },
+        {
+          "page_key": "warehouse_storage_fee",
+          "name": "仓储费",
+          "permission_key": "page:warehouse:storage-fee:view",
+          "sort_order": 40
+        },
+        {
+          "page_key": "warehouse_inbound_transport",
+          "name": "入库运输",
+          "permission_key": "page:warehouse:inbound-transport:view",
+          "sort_order": 50
+        },
+        {
+          "page_key": "warehouse_removal_disposal",
+          "name": "移除/弃置",
+          "permission_key": "page:warehouse:removal-disposal:view",
+          "sort_order": 60
+        },
+        {
+          "page_key": "warehouse_pmc_dashboard",
+          "name": "PMC看板",
+          "permission_key": "page:warehouse:pmc-dashboard:view",
+          "sort_order": 70
+        },
+        {
+          "page_key": "warehouse_inbound_difference",
+          "name": "入库差异",
+          "permission_key": "page:warehouse:inbound-difference:view",
+          "sort_order": 80
+        },
+        {
+          "page_key": "warehouse_inventory_age",
+          "name": "库存库龄",
+          "permission_key": "page:warehouse:inventory-age:view",
+          "sort_order": 90
+        }
+      ]
+    },
+    {
+      "module_key": "finance",
+      "name": "财务",
+      "sort_order": 70,
+      "pages": [
+        {
+          "page_key": "finance_profit_center",
+          "name": "经营总览",
+          "permission_key": "page:finance:profit-center:view",
+          "sort_order": 10
+        },
+        {
+          "page_key": "finance_sku_cash_profit",
+          "name": "现金利润",
+          "permission_key": "page:finance:sku-cash-profit:view",
+          "sort_order": 20
+        },
+        {
+          "page_key": "finance_settlement_profit",
+          "name": "结算利润",
+          "permission_key": "page:finance:settlement-profit:view",
+          "sort_order": 30
+        },
+        {
+          "page_key": "finance_settlement_reconciliation",
+          "name": "回款对账",
+          "permission_key": "page:finance:settlement-reconciliation:view",
+          "sort_order": 40
+        },
+        {
+          "page_key": "finance_performance_report",
+          "name": "财务报表",
+          "permission_key": "page:finance:performance-report:view",
+          "sort_order": 50
+        },
+        {
+          "page_key": "finance_balance_sheet",
+          "name": "资产负债表",
+          "permission_key": "page:finance:balance-sheet:view",
+          "sort_order": 60
+        },
+        {
+          "page_key": "finance_cash_flow",
+          "name": "账户总览（按月） / 日记账 / 账户管理 / 备货资金",
+          "permission_key": "page:finance:cash-flow:view",
+          "sort_order": 70
+        },
+        {
+          "page_key": "finance_fx_rates",
+          "name": "资金 汇率",
+          "permission_key": "page:finance:fx-rates:view",
+          "sort_order": 80
+        },
+        {
+          "page_key": "finance_cost_exception",
+          "name": "成本异常处理",
+          "permission_key": "page:finance:cost-exception:view",
+          "sort_order": 90
+        },
+        {
+          "page_key": "finance_settings",
+          "name": "口径与设置",
+          "permission_key": "page:finance:settings:view",
+          "sort_order": 100
+        },
+        {
+          "page_key": "finance_data_import",
+          "name": "数据导入",
+          "permission_key": "page:finance:data-import:view",
+          "sort_order": 110
+        }
+      ]
+    },
+    {
+      "module_key": "operations",
+      "name": "运营",
+      "sort_order": 80,
+      "pages": [
+        {
+          "page_key": "operations_log",
+          "name": "运营日志",
+          "permission_key": "page:operations:log:view",
+          "sort_order": 10
+        },
+        {
+          "page_key": "operations_plan",
+          "name": "运营计划",
+          "permission_key": "page:operations:plan:view",
+          "sort_order": 20
+        },
+        {
+          "page_key": "operations_todo",
+          "name": "运营待办",
+          "permission_key": "page:operations:todo:view",
+          "sort_order": 30
+        },
+        {
+          "page_key": "operations_calendar",
+          "name": "运营日历",
+          "permission_key": "page:operations:calendar:view",
+          "sort_order": 40
+        },
+        {
+          "page_key": "operations_promotion_center",
+          "name": "推广中心",
+          "permission_key": "page:operations:promotion-center:view",
+          "sort_order": 50
+        }
+      ]
+    },
+    {
+      "module_key": "purchase",
+      "name": "采购",
+      "sort_order": 90,
+      "pages": [
+        {
+          "page_key": "purchase_plan",
+          "name": "采购计划",
+          "permission_key": "page:purchase:plan:view",
+          "sort_order": 10
+        },
+        {
+          "page_key": "purchase_order",
+          "name": "采购单",
+          "permission_key": "page:purchase:order:view",
+          "sort_order": 20
+        }
+      ]
+    },
+    {
+      "module_key": "pmc",
+      "name": "PMC",
+      "sort_order": 100,
+      "pages": [
+        {
+          "page_key": "pmc_purchase_board",
+          "name": "采购看板",
+          "permission_key": "page:pmc:purchase-board:view",
+          "sort_order": 10
+        },
+        {
+          "page_key": "pmc_logistics",
+          "name": "物流",
+          "permission_key": "page:pmc:logistics:view",
+          "sort_order": 20
+        },
+        {
+          "page_key": "pmc_domestic_warehouse_board",
+          "name": "批次看板 / 打包单审批 / 打包单（仓库）",
+          "permission_key": "page:pmc:domestic-warehouse-board:view",
+          "sort_order": 30
+        },
+        {
+          "page_key": "pmc_wfs",
+          "name": "待发货打包单 / 系统货件",
+          "permission_key": "page:pmc:wfs:view",
+          "sort_order": 40
+        }
+      ]
+    },
+    {
+      "module_key": "ai_center",
+      "name": "AI中心",
+      "sort_order": 110,
+      "pages": [
+        {
+          "page_key": "ai_center_assistant",
+          "name": "AI助手",
+          "permission_key": "page:ai-center:assistant:view",
+          "sort_order": 10
+        },
+        {
+          "page_key": "ai_center_ads_optimization",
+          "name": "广告优化",
+          "permission_key": "page:ai-center:ads-optimization:view",
+          "sort_order": 20
+        },
+        {
+          "page_key": "ai_center_keyword_launch",
+          "name": "关键词投放",
+          "permission_key": "page:ai-center:keyword-launch:view",
+          "sort_order": 30
+        },
+        {
+          "page_key": "ai_center_image_generation",
+          "name": "图片生成",
+          "permission_key": "page:ai-center:image-generation:view",
+          "sort_order": 40
+        },
+        {
+          "page_key": "ai_center_copywriting",
+          "name": "文案生成",
+          "permission_key": "page:ai-center:copywriting:view",
+          "sort_order": 50
+        },
+        {
+          "page_key": "ai_center_product_research",
+          "name": "智能选品",
+          "permission_key": "page:ai-center:product-research:view",
+          "sort_order": 60
+        },
+        {
+          "page_key": "ai_center_competitor_analysis",
+          "name": "竞品分析",
+          "permission_key": "page:ai-center:competitor-analysis:view",
+          "sort_order": 70
+        }
+      ]
+    },
+    {
+      "module_key": "data_center",
+      "name": "数据中心",
+      "sort_order": 120,
+      "pages": [
+        {
+          "page_key": "data_center_approval_workspace",
+          "name": "审批工作台",
+          "permission_key": "page:data-center:approval-workspace:view",
+          "sort_order": 10
+        },
+        {
+          "page_key": "data_center_walmart_monitoring",
+          "name": "沃尔玛监控",
+          "permission_key": "page:data-center:walmart-monitoring:view",
+          "sort_order": 20
+        },
+        {
+          "page_key": "data_center_alert_center",
+          "name": "预警中心",
+          "permission_key": "page:data-center:alert-center:view",
+          "sort_order": 30
+        },
+        {
+          "page_key": "data_center_data_import",
+          "name": "数据导入",
+          "permission_key": "page:data-center:data-import:view",
+          "sort_order": 40
+        },
+        {
+          "page_key": "data_center_data_export",
+          "name": "数据导出",
+          "permission_key": "page:data-center:data-export:view",
+          "sort_order": 50
+        },
+        {
+          "page_key": "data_center_walmart_remote",
+          "name": "沃尔玛采集",
+          "permission_key": "page:data-center:walmart-remote:view",
+          "sort_order": 60
+        },
+        {
+          "page_key": "data_center_task_center",
+          "name": "任务中心",
+          "permission_key": "page:data-center:task-center:view",
+          "sort_order": 70
+        },
+        {
+          "page_key": "data_center_api_docs",
+          "name": "API文档",
+          "permission_key": "page:data-center:api-docs:view",
+          "sort_order": 80
+        }
+      ]
+    },
+    {
+      "module_key": "statistics",
+      "name": "统计",
+      "sort_order": 130,
+      "pages": [
+        {
+          "page_key": "statistics_business_overview",
+          "name": "经营总览",
+          "permission_key": "page:statistics:business-overview:view",
+          "sort_order": 10
+        },
+        {
+          "page_key": "statistics_account_health",
+          "name": "账号健康",
+          "permission_key": "page:statistics:account-health:view",
+          "sort_order": 20
+        },
+        {
+          "page_key": "statistics_product_performance",
+          "name": "产品表现",
+          "permission_key": "page:statistics:product-performance:view",
+          "sort_order": 30
+        },
+        {
+          "page_key": "statistics_return_analysis",
+          "name": "退货分析",
+          "permission_key": "page:statistics:return-analysis:view",
+          "sort_order": 40
+        },
+        {
+          "page_key": "statistics_sales_analysis",
+          "name": "销售分析",
+          "permission_key": "page:statistics:sales-analysis:view",
+          "sort_order": 50
+        },
+        {
+          "page_key": "statistics_profit_analysis",
+          "name": "利润分析",
+          "permission_key": "page:statistics:profit-analysis:view",
+          "sort_order": 60
+        },
+        {
+          "page_key": "statistics_ads_analysis",
+          "name": "广告分析",
+          "permission_key": "page:statistics:ads-analysis:view",
+          "sort_order": 70
+        },
+        {
+          "page_key": "statistics_inventory_analysis",
+          "name": "库存分析",
+          "permission_key": "page:statistics:inventory-analysis:view",
+          "sort_order": 80
+        }
+      ]
+    },
+    {
+      "module_key": "settings",
+      "name": "设置",
+      "sort_order": 140,
+      "pages": [
+        {
+          "page_key": "settings_user_management",
+          "name": "用户管理",
+          "permission_key": "page:settings:user-management:view",
+          "sort_order": 10
+        },
+        {
+          "page_key": "settings_fee_rules",
+          "name": "费用规则",
+          "permission_key": "page:settings:fee-rules:view",
+          "sort_order": 20
+        },
+        {
+          "page_key": "settings_role_management",
+          "name": "角色管理",
+          "permission_key": "page:settings:role-management:view",
+          "sort_order": 30
+        },
+        {
+          "page_key": "settings_business_config",
+          "name": "业务配置",
+          "permission_key": "page:settings:business-config:view",
+          "sort_order": 40
+        },
+        {
+          "page_key": "settings_system_config",
+          "name": "系统配置",
+          "permission_key": "page:settings:system-config:view",
+          "sort_order": 50
+        },
+        {
+          "page_key": "settings_logs",
+          "name": "日志",
+          "permission_key": "page:settings:logs:view",
+          "sort_order": 60
+        }
+      ]
+    }
+  ]
+}

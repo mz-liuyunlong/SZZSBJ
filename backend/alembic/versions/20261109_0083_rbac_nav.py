@@ -1,4 +1,4 @@
-"""Register new navigation page permissions without granting any role.
+"""Register role-managed navigation pages and sensitive actions without granting roles.
 
 Revision ID: 20261109_0083_rbac_nav
 Revises: 20261108_0082_clearance_center
@@ -11,33 +11,30 @@ from collections.abc import Sequence
 from sqlalchemy import text
 
 from alembic import op
+from app.modules.iam.permission_catalog_v2 import PERMISSION_DEFINITIONS
 
 revision: str = "20261109_0083_rbac_nav"
 down_revision: str | Sequence[str] | None = "20261108_0082_clearance_center"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Four finance menu entries deliberately share the cash-flow grant.
-# Do not register the FX-rate page, which is super-admin-only.
-NEW_PAGE_ROWS: tuple[tuple[str, str, str, int, int], ...] = (
-    ("finance", "settlement_profit", "结算利润", 70, 25),
-    ("finance", "balance_sheet", "资产负债表", 70, 75),
-    ("finance", "cash_flow", "资金流水（四个菜单共用）", 70, 80),
-    ("finance", "cost_exception", "成本异常处理", 70, 90),
-    ("finance", "settings", "口径与设置", 70, 100),
-    ("finance", "data_import", "数据导入", 70, 110),
-    ("pmc", "logistics", "物流", 100, 15),
-    ("data_center", "walmart_remote", "沃尔玛采集", 120, 55),
-)
+# A role grants a permission only through app_role_permissions; this revision adds
+# definitions, never grants. Reused navigation keys remain shared as before.
+NEW_ACTION_PREFIXES = ("action:finance:", "action:settings:business-config:")
 
 
-def _permission_key(module_key: str, page_key: str) -> str:
-    return f"page:{module_key.replace('_', '-')}:{page_key.replace('_', '-')}:view"
+def _registered_definitions():
+    return (
+        entry
+        for entry in PERMISSION_DEFINITIONS
+        if entry.permission_type == "page"
+        or entry.permission_key.startswith(NEW_ACTION_PREFIXES)
+    )
 
 
 def upgrade() -> None:
     bind = op.get_bind()
-    for module_key, page_key, title, module_order, page_order in NEW_PAGE_ROWS:
+    for definition in _registered_definitions():
         bind.execute(
             text(
                 """
@@ -47,43 +44,30 @@ def upgrade() -> None:
                     sort_order, is_active, created_at, updated_at
                 )
                 values (
-                    :permission_key, :name, :module_key, :description, 'page',
-                    :module_key, :page_key, null, null, 'normal',
+                    :permission_key, :name, :module_key, :description, :permission_type,
+                    :module_key, :page_key, :action_key, :field_key, :risk_level,
                     :sort_order, true, now(), now()
                 )
                 on conflict (permission_key) do nothing
                 """
             ),
             {
-                "permission_key": _permission_key(module_key, page_key),
-                "name": title,
-                "module_key": module_key,
-                "page_key": f"{module_key}_{page_key}",
-                "description": f"允许进入并查看「{title}」页面",
-                "sort_order": module_order * 1000 + page_order,
+                "permission_key": definition.permission_key,
+                "name": definition.name,
+                "description": definition.description,
+                "permission_type": definition.permission_type,
+                "module_key": definition.module_key,
+                "page_key": definition.page_key,
+                "action_key": definition.action_key,
+                "field_key": definition.field_key,
+                "risk_level": definition.risk_level,
+                "sort_order": definition.sort_order,
             },
         )
 
 
 def downgrade() -> None:
-    keys = [_permission_key(module, page) for module, page, *_ in NEW_PAGE_ROWS]
-    bind = op.get_bind()
-    assigned_count = bind.execute(
-        text(
-            """
-            select count(*)
-            from app_role_permissions
-            where permission_key = any(:permission_keys)
-            """
-        ),
-        {"permission_keys": keys},
-    ).scalar_one()
-    if assigned_count:
-        raise RuntimeError(
-            "Cannot remove role-navigation permissions while assigned to roles; "
-            "review grants and use an approved compensating migration."
-        )
-    bind.execute(
-        text("delete from app_permissions where permission_key = any(:permission_keys)"),
-        {"permission_keys": keys},
+    raise RuntimeError(
+        "Role-managed navigation catalog may have active grants; use an "
+        "approved compensating migration instead of deleting permissions."
     )
