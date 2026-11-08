@@ -34,3 +34,9 @@ See `docs/data-sources/decisions/clearance-center-20261106.md`. Unknown values m
 ## Rollback / release
 
 Local install does not run DB migrations, push, commit or deploy. For app runtime rollback, switch source release while preserving immutable clearance tables and approval audit. Migration destructive downgrade intentionally refused. Rollback decisions require explicit owner authorization.
+
+## PR #324 CI verification
+
+This draft remains unmerged. Migration 0082 follows finance 0081; clearance
+lifecycle and approval history downgrades are refused. The full CI suite must
+pass on the reviewed commit before any merge or production authorization.
