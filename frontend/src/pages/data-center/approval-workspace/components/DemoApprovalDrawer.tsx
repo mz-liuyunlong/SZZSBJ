@@ -10,8 +10,8 @@ interface Props { selected?: ApprovalItem; onClose(): void; initialAction?: "app
 const usd = (n: number | string | null | undefined) => n == null ? "—" : `$${Number(n).toFixed(2)}`;
 const num = (n: number | undefined) => n == null ? "—" : n.toLocaleString("zh-CN");
 const pct = (n: number | null | undefined) => n == null || !Number.isFinite(n) ? "—" : `${n.toFixed(1)}%`;
-const status: Record<string,string> = {submitted:"待审批",approved:"已审批",rejected:"驳回记录"};
-const risk: Record<string,string> = {low:"低风险",medium:"中风险",high:"高风险"};
+const status: Record<string,string> = {submitted:"待审批",approved:"已审批",rejected:"驳回记录",withdrawn:"已撤回",info_required:"待补资料",legacy_unverified:"历史待核验"};
+const risk: Record<string,string> = {low:"低风险",medium:"中风险",high:"高风险",unknown:"待评估"};
 const approvalType: Record<string,string> = {purchase:"采购审批",clearance:"清货审批",listing:"Listing归档",price:"价格调整"};
 const info = (label: string, value: string | number | undefined) => ({key:label,label,children:value ?? "—"});
 
@@ -63,19 +63,23 @@ function ClearanceDetail({
   currentStatus,
   reviewedAt,
   reviewNote,
+  isLive = false,
+  liveRecord,
 }: {
   seed: DemoSeed;
   p: DemoBusinessProfile;
   currentStatus: DemoSeed["status"];
   reviewedAt: string | null;
   reviewNote: string;
+  isLive?: boolean;
+  liveRecord?: ApprovalItem;
 }) {
   const products = p.clearanceSkus ?? [];
   // 详情只展示当前申请记录指定的主 SKU
   const current = products.find((item) => item.sku === seed.sku);
-  const totalAvailable = current?.available ?? 0;
-  const appliedQty = current?.target ?? 0;
-  const remaining = Math.max(0, totalAvailable - appliedQty);
+  const totalAvailable = current?.available;
+  const appliedQty = current?.target ?? p.targetQty;
+  const remaining = totalAvailable == null || appliedQty == null ? undefined : Math.max(0, totalAvailable - appliedQty);
   const currentRisk = risk[seed.risk];
   const submittedAt = formatDemoTime(seed.submitted_at);
   const methods = p.methods?.join("、") ?? "—";
@@ -88,7 +92,7 @@ function ClearanceDetail({
           <strong>{current?.name ?? seed.title}</strong>
           <small>{current ? `${current.item} · ${current.sku} · ${current.msku}` : seed.sku}</small>
         </div>
-        <Tag color={seed.risk === "high" ? "error" : seed.risk === "medium" ? "warning" : "success"}>{currentRisk}</Tag>
+        <Tag color={seed.risk === "high" ? "error" : seed.risk === "medium" ? "warning" : seed.risk === "low" ? "success" : "default"}>{currentRisk}</Tag>
       </div>
       <div className="approval-demo__clearance-base-grid">
         <div><span>店铺</span><strong>{seed.store}</strong></div>
@@ -100,11 +104,11 @@ function ClearanceDetail({
         <div><span>单件毛利空间</span><strong>—</strong></div>
         <div><span>清货原因</span><strong>{seed.reason}</strong></div>
         <div><span>清货方式</span><strong>{methods}</strong></div>
-        <div><span>申请清货数量</span><strong>{num(appliedQty)} 件</strong></div>
+        <div><span>申请清货数量</span><strong>{appliedQty == null ? "—" : `${num(appliedQty)} 件`}</strong></div>
         <div><span>计划完成日期</span><strong>{p.deadline ?? "—"}</strong></div>
         <div><span>申请状态</span><strong><Tag color={currentStatus === "approved" ? "success" : currentStatus === "rejected" ? "error" : "warning"}>{status[currentStatus]}</Tag></strong></div>
       </div>
-      <div className="approval-demo__snapshot-note">当前为清货审批 Mock 申请资料；划线价、购物车及完整毛利数据未提供时以 — 展示。</div>
+      <div className="approval-demo__snapshot-note">{isLive ? "当前仅展示真实接口提供的资料；未取得的指标显示 —。" : "当前为清货审批 Mock 申请资料；划线价、购物车及完整毛利数据未提供时以 — 展示。"}</div>
     </Section>
 
     <Section heading="02 清货方案对比" note="系统建议 vs 运营申请">
@@ -132,18 +136,18 @@ function ClearanceDetail({
               <div><span>最低保本售价</span><b>—</b></div>
               <div><span>预计净回款</span><b>—</b></div>
               <div><span>预计清货盈亏</span><b>—</b></div>
-              <div><span>清货后剩余库存</span><b>{num(remaining)} 件</b></div>
+              <div><span>清货后剩余库存</span><b>{remaining == null ? "—" : `${num(remaining)} 件`}</b></div>
               <div><span>单件毛利空间</span><b>—</b></div>
             </div>
           </div>
         </div>
       </div>
       <div className="approval-demo__delta-row">系统建议快照未提供，暂无法计算申请数量、售价及盈亏差异。</div>
-      <div className="approval-demo__compare-alert">当前 Mock 资料未提供系统建议历史快照及完整清货费用口径，净回款、盈亏和保本价暂不展示，避免使用当前售价或库存成本代替清货测算。</div>
+      <div className="approval-demo__compare-alert">{isLive ? "未取得可核实的规则建议快照或完整费用口径，不展示模拟净回款、盈亏或保本价。" : "当前 Mock 资料未提供系统建议历史快照及完整清货费用口径，净回款、盈亏和保本价暂不展示，避免使用当前售价或库存成本代替清货测算。"}</div>
     </Section>
 
     <Section heading="03 SKU 经营与库存风险" note="当前最新数据">
-      <div className="approval-demo__timestamp">当前展示清货审批 Mock 经营数据</div>
+      <div className="approval-demo__timestamp">{isLive ? "经营指标未取得时显示 —，不使用模拟数据" : "当前展示清货审批 Mock 经营数据"}</div>
       {current ? <>
         <div className="approval-demo__sku-metrics">
           <div><span>WFS 可售库存</span><strong>{num(current.available)} 件</strong><small>当前可售</small></div>
@@ -159,7 +163,7 @@ function ClearanceDetail({
             <div className="approval-demo__business-matrix"><BusinessMatrix sku={current}/></div>
           </div>
           <div className="approval-demo__mini-panel">
-            <div className="approval-demo__mini-head"><b>库存与风险依据</b><Tag color={seed.risk === "high" ? "error" : seed.risk === "medium" ? "warning" : "success"}>{currentRisk}</Tag></div>
+            <div className="approval-demo__mini-head"><b>库存与风险依据</b><Tag color={seed.risk === "high" ? "error" : seed.risk === "medium" ? "warning" : seed.risk === "low" ? "success" : "default"}>{currentRisk}</Tag></div>
             <div className="approval-demo__risk-reasons">
               <div><b>申请风险等级 · {currentRisk}</b><p>{seed.reason}</p></div>
               <div><b>申请佐证资料</b><p>{seed.evidence || "未提供补充佐证资料"}</p></div>
@@ -183,7 +187,7 @@ function ClearanceDetail({
         </div>
         {reviewedAt ? <div className="approval-demo__timeline-item">
           <i className={`approval-demo__timeline-dot ${currentStatus === "approved" ? "approval-demo__timeline-dot--done" : "approval-demo__timeline-dot--rejected"}`}/>
-          <div><b>演示审批人{currentStatus === "approved" ? "审批通过" : "驳回申请"}</b><p>{reviewNote || "本地演示操作，未调用正式审批接口。"}</p></div>
+          <div><b>{isLive ? (liveRecord?.reviewed_by || "审批人") : "演示审批人"}{currentStatus === "approved" ? "审批通过" : "驳回申请"}</b><p>{reviewNote || (isLive ? "审批意见未提供" : "本地演示操作，未调用正式审批接口。")}</p></div>
           <time>{formatDemoTime(reviewedAt)}</time>
         </div> : currentStatus === "submitted" ? <div className="approval-demo__timeline-item">
           <i className="approval-demo__timeline-dot approval-demo__timeline-dot--pending"/>
@@ -191,7 +195,7 @@ function ClearanceDetail({
           <time>待处理</time>
         </div> : <div className="approval-demo__timeline-item">
           <i className={`approval-demo__timeline-dot ${currentStatus === "approved" ? "approval-demo__timeline-dot--done" : "approval-demo__timeline-dot--rejected"}`}/>
-          <div><b>Mock 记录：{status[currentStatus]}</b><p>原始演示数据未提供审批意见和审批时间。</p></div>
+          <div><b>{isLive ? "审批记录" : "Mock 记录"}：{status[currentStatus] ?? "—"}</b><p>原始演示数据未提供审批意见和审批时间。</p></div>
           <time>—</time>
         </div>}
       </div>
@@ -255,8 +259,23 @@ function Side({seed}:{seed:DemoSeed}) {
   </aside>;
 }
 function DemoApprovalDrawerContent({selected,onClose,initialAction}:Props) {
-  const seed = selected ? getDemoSeed(selected.id) : undefined;
-  const p = seed ? demoProfiles[seed.id] : undefined;
+  const live = selected && selected.approval_type === "clearance_request" && !selected.id.startsWith("DEMO-") ? selected : undefined;
+  const isLive = Boolean(live);
+  const seed: DemoSeed | undefined = selected ? getDemoSeed(selected.id) ?? (live ? {
+    id: live.id, approval_type: live.approval_type, title: live.title,
+    business_ref: live.business_ref, applicant: live.applicant_id || "—",
+    store: live.clearance_details?.store_name ?? live.source_account_ref ?? "—",
+    status: live.status as DemoSeed["status"],
+    risk: live.risk_level as DemoSeed["risk"], amount: null,
+    submitted_at: live.submitted_at || "", reason: live.reason || "",
+    evidence: "", sku: live.clearance_details?.sku || "—", plan: "",
+  } : undefined) : undefined;
+  const p: DemoBusinessProfile | undefined = seed ? demoProfiles[seed.id] ?? (live ? {
+    kind: "clearance", owner: live.clearance_details?.owner_ref ?? live.applicant_id ?? "—",
+    targetQty: live.clearance_details?.requested_qty,
+    methods: live.clearance_details?.methods ?? [],
+    clearanceSkus: [],
+  } : undefined) : undefined;
   const isClearance = p?.kind === "clearance";
   const [clearanceStatus, setClearanceStatus] = useState<DemoSeed["status"]>(seed?.status ?? "submitted");
   const [actionType, setActionType] = useState<"approve" | "reject" | null>(initialAction ?? null);
@@ -266,6 +285,7 @@ function DemoApprovalDrawerContent({selected,onClose,initialAction}:Props) {
   const [reviewNote, setReviewNote] = useState("");
 
   const openAction = (type: "approve" | "reject") => {
+    if (isLive) return; // Real clearance actions remain blocked in this UI-only phase.
     setActionType(type);
     setActionNote("");
     setActionError(false);
@@ -275,6 +295,7 @@ function DemoApprovalDrawerContent({selected,onClose,initialAction}:Props) {
     setActionError(false);
   };
   const confirmAction = () => {
+    if (isLive) return;
     if (!actionType) return;
     const note = actionNote.trim();
     if (actionType === "reject" && !note) {
@@ -305,9 +326,9 @@ function DemoApprovalDrawerContent({selected,onClose,initialAction}:Props) {
               <div className="approval-demo__clearance-eyebrow">CLEARANCE APPROVAL · DETAIL</div>
               <div className="approval-demo__clearance-title-line">
                 <h2>{seed.title}</h2>
-                <Tag color="blue">演示数据</Tag>
+                <Tag color="blue">{isLive ? "真实申请" : "演示数据"}</Tag>
                 <Tag color={clearanceStatus === "approved" ? "success" : clearanceStatus === "rejected" ? "error" : "warning"}>{status[clearanceStatus]}</Tag>
-                <Tag color={seed.risk === "high" ? "error" : seed.risk === "medium" ? "warning" : "success"}>{risk[seed.risk]}</Tag>
+                <Tag color={seed.risk === "high" ? "error" : seed.risk === "medium" ? "warning" : seed.risk === "low" ? "success" : "default"}>{risk[seed.risk]}</Tag>
               </div>
               <div className="approval-demo__clearance-request-id">申请编号：{seed.id}</div>
             </div>
@@ -321,13 +342,13 @@ function DemoApprovalDrawerContent({selected,onClose,initialAction}:Props) {
           </div>
         </header>
         <main className="approval-demo__clearance-body">
-          <ClearanceDetail seed={seed} p={p} currentStatus={clearanceStatus} reviewedAt={reviewedAt} reviewNote={reviewNote}/>
+          <ClearanceDetail seed={seed} p={p} currentStatus={clearanceStatus} reviewedAt={live?.reviewed_at ?? reviewedAt} reviewNote={reviewNote} isLive={isLive} liveRecord={live}/>
         </main>
         <footer className="approval-demo__clearance-footer">
-          <span>演示交互仅更新当前详情状态，不调用正式审批接口或执行平台操作。</span>
+          <span>{isLive ? "当前真实清货审批仅展示资料；本阶段未开放提交、通过和驳回。" : "演示交互仅更新当前详情状态，不调用正式审批接口或执行平台操作。"}</span>
           <div>
-            <Button danger disabled={clearanceStatus !== "submitted"} onClick={() => openAction("reject")}>驳回</Button>
-            <Button type="primary" disabled={clearanceStatus !== "submitted"} onClick={() => openAction("approve")}>审批通过</Button>
+            <Button danger disabled={isLive || clearanceStatus !== "submitted"} onClick={() => openAction("reject")}>驳回</Button>
+            <Button type="primary" disabled={isLive || clearanceStatus !== "submitted"} onClick={() => openAction("approve")}>审批通过</Button>
           </div>
         </footer>
         <Modal

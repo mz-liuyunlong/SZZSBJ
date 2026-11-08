@@ -1,5 +1,6 @@
 import type { ApprovalFilters, ApprovalItem } from "./approvalTypes";
 import { fetchApprovals } from "./approvalApi";
+import { fetchClearanceApprovals } from "@/pages/products/clearance/clearanceApi";
 
 export interface DemoSeed {
   id: string;
@@ -253,6 +254,7 @@ export function getFilteredDemoItems(
   filters: ApprovalFilters,
 ): ApprovalItem[] {
   return demoSeeds
+    .filter(seed => seed.approval_type !== "clearance_request" || ((import.meta.env.DEV && import.meta.env.MODE !== "test") && seed.id === "DEMO-CLR-001"))
     .filter((seed) =>
       !filters.approval_type ||
       seed.approval_type === filters.approval_type,
@@ -285,11 +287,28 @@ export function getFilteredDemoItems(
     .map(toApprovalItem);
 }
 
-type ApprovalResponse = Awaited<ReturnType<typeof fetchApprovals>>;
+type ApprovalResponse = Pick<Awaited<ReturnType<typeof fetchApprovals>>, "data" | "meta">;
 
 export async function fetchWorkbenchList(
   filters: ApprovalFilters,
 ): Promise<ApprovalResponse> {
+  // CLEARANCE_APPROVAL_VISIBILITY_V32: real sandbox application, never Demo.
+  if (filters.approval_type === "clearance_request") {
+    return fetchClearanceApprovals(filters) as Promise<ApprovalResponse>;
+  }
+  if (!filters.approval_type) {
+    return fetchAllWithRealClearanceV32(filters);
+  }
+
+  if (filters.approval_type === "clearance_request") {
+    if((import.meta.env.DEV && import.meta.env.MODE !== "test")){
+      const demo = getFilteredDemoItems(filters);
+      const offset = (filters.page - 1) * filters.page_size;
+      return {data:{items:demo.slice(offset,offset+filters.page_size)},
+        meta:{page:filters.page,page_size:filters.page_size,total:demo.length}} as ApprovalResponse;
+    }
+    return fetchClearanceApprovals(filters);
+  }
   // WFS 查询完全交给原有真实接口处理。
   if (filters.approval_type === "wfs_case_abandon") {
     return fetchApprovals(filters);
@@ -301,7 +320,7 @@ export async function fetchWorkbenchList(
     return fetchApprovals(filters);
   }
 
-  const mockItems = getFilteredDemoItems(filters);
+  const mockItems = getFilteredDemoItems(filters).filter(item => item.approval_type !== "clearance_request");
   const offset = (filters.page - 1) * filters.page_size;
 
   // 采购、清货、Listing、价格四类：仅使用本地演示记录。
@@ -359,5 +378,68 @@ export async function fetchWorkbenchList(
       ...real.meta,
       total: realTotal + mockItems.length,
     },
+  };
+}
+
+/** CLEARANCE_APPROVAL_VISIBILITY_V32
+ * List only real clearance approvals, including in All.  Keep the existing WFS
+ * endpoint and every non-clearance demo business untouched.  The all-business
+ * order is: real clearance, real WFS, then other-business demo rows; this makes
+ * newly submitted clearance requests visible on the first page immediately.
+ * Global pages are constructed from source offset ranges without creating
+ * duplicate rows or silently hiding real requests at pagination boundaries.
+ */
+async function fetchAllWithRealClearanceV32(filters: ApprovalFilters): Promise<ApprovalResponse> {
+  const probe = { ...filters, page: 1, page_size: 1 };
+  const [clearanceHead, wfsHead] = await Promise.all([
+    fetchClearanceApprovals({ ...probe, approval_type: "clearance_request" }),
+    fetchApprovals({ ...probe, approval_type: "wfs_case_abandon" }),
+  ]);
+  const clearanceTotal = clearanceHead.meta.total;
+  const wfsTotal = wfsHead.meta.total;
+  // Keep other demo business families unchanged; never display DEMO-CLR as real.
+  const otherDemo = getFilteredDemoItems(filters).filter(item => item.approval_type !== "clearance_request");
+  const offset = (filters.page - 1) * filters.page_size;
+  const end = offset + filters.page_size;
+  const sourcePageSize = 50; // Both API endpoints support this small bounded page size.
+
+  async function fromSource(
+    fetcher: (args: ApprovalFilters) => Promise<ApprovalResponse>,
+    approvalType: string,
+    sourceStart: number,
+    total: number,
+  ): Promise<ApprovalItem[]> {
+    const start = Math.max(offset - sourceStart, 0);
+    const stop = Math.min(total, end - sourceStart);
+    if (stop <= start) return [];
+    const found: ApprovalItem[] = [];
+    let cursor = start;
+    while (cursor < stop) {
+      const page = Math.floor(cursor / sourcePageSize) + 1;
+      const index = cursor % sourcePageSize;
+      const needed = Math.min(stop - cursor, sourcePageSize - index);
+      const response = await fetcher({
+        ...filters, approval_type: approvalType, page, page_size: sourcePageSize,
+      });
+      const chunk = response.data.items.slice(index, index + needed);
+      if (chunk.length !== needed) {
+        throw new Error("Approval source pagination changed during clearance listing; reload to retry");
+      }
+      found.push(...chunk);
+      cursor += needed;
+    }
+    return found;
+  }
+
+  const [clearanceRows, wfsRows] = await Promise.all([
+    fromSource((args) => fetchClearanceApprovals(args) as Promise<ApprovalResponse>, "clearance_request", 0, clearanceTotal),
+    fromSource(fetchApprovals, "wfs_case_abandon", clearanceTotal, wfsTotal),
+  ]);
+  const demoStart = Math.max(0, offset - clearanceTotal - wfsTotal);
+  const demoEnd = Math.max(0, end - clearanceTotal - wfsTotal);
+  return {
+    ...wfsHead,
+    data: { ...wfsHead.data, items: [...clearanceRows, ...wfsRows, ...otherDemo.slice(demoStart, demoEnd)] },
+    meta: { ...wfsHead.meta, page: filters.page, page_size: filters.page_size, total: clearanceTotal + wfsTotal + otherDemo.length },
   };
 }

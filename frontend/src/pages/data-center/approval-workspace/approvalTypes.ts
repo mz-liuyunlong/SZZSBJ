@@ -5,10 +5,16 @@ export const approvalTabs: { label: string; value: ApprovalTab }[] = [
  { label: "已审批", value: "approved" },
  { label: "驳回记录", value: "rejected" },
 ];
-export type ApprovalRisk = "low" | "medium" | "high";
+export type ApprovalRisk = "low" | "medium" | "high" | "unknown" | "none";
 export type ApprovalStatus = "submitted" | "info_required" | "approved" | "rejected" | "withdrawn" | "legacy_unverified";
 export type Decision = "approved" | "rejected" | "info_required";
 export interface ApprovalItem {
+ /** Live clearance data supplied by the existing API, never by demo profiles. */
+ clearance_details?: {
+  sku: string | null; msku: string | null; item_id: string;
+  store_id: string; store_name: string | null; owner_ref: string | null;
+  requested_qty: number; methods: string[];
+ };
   case_opened_at?: string | null;
   follow_count?: number | null;
  id: string; version: number; approval_type: string; business_ref: string;
@@ -56,7 +62,7 @@ export const approvalColumnFields = [
  { key: "status", title: "状态" },
  { key: "action", title: "操作" },
 ];
-export const riskNames: Record<ApprovalRisk, string> = { low: "低风险", medium: "中风险", high: "高风险" };
+export const riskNames: Record<ApprovalRisk, string> = { low: "低风险", medium: "中风险", high: "高风险", unknown: "待评估",none:"无风险" };
 export const statusNames: Record<ApprovalStatus, string> = {
  submitted: "待审批", info_required: "待补资料",
  approved: "已审批", rejected: "已驳回", withdrawn: "已撤回",

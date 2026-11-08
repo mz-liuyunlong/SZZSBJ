@@ -1,5 +1,7 @@
+import { completeClearanceApplication, getClearanceApplication, getClearanceListing, submitClearanceApplication, type ApplicationDetail } from "./clearanceApi";
+import { BackendRequestError } from "@/api/backendApi";
 import { QuestionCircleOutlined } from "@ant-design/icons";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Card, Checkbox, DatePicker, Divider, Form, Input, InputNumber, Modal, Progress, Select, Space, Switch, Table, Tag, Typography, message, Tooltip, Tabs } from "antd";
 import dayjs from "dayjs";
 import type { ColumnsType } from "antd/es/table";
@@ -12,48 +14,33 @@ import {
  activeTaskFor,
  chinaToday,
  chinaNow,
- nextClearanceTaskId,
  coverage,
  evaluateProduct,
  findProduct,
  taskProgress,
  taskQty,
  taskRemoved,
- taskRisk,
  taskSold,
  taskStore,
  validateRules,
  type ClearanceProduct,
  type ClearanceRules,
- type ClearanceTask,
- type ClearanceTaskLine,
- type RulesHistory,
  type StoredClearance,
 } from "./clearanceModel";
 import { RiskTag, StatusTag } from "./clearanceUi";
-import { CLEARANCE_RULE_GROUPS, CLEARANCE_RULE_SPECS, CLEARANCE_RULE_SPEC_BY_KEY, type ClearanceRuleSpec } from "./clearanceRuleCatalog";
+import { CLEARANCE_RULE_GROUPS, CLEARANCE_RULE_SPECS, type ClearanceRuleSpec } from "./clearanceRuleCatalog";
 import { integer, money, percent } from "./clearanceUiConfig";
 
-const deepCopy=<T,>(x:T):T=>JSON.parse(JSON.stringify(x)) as T;
-interface Props {data:StoredClearance;onChange:(data:StoredClearance)=>void;role:string}
-export function ClearanceRulesPanel({data,onChange,role}:Props){
+interface Props {data:StoredClearance;onChange:(data:StoredClearance)=>void;role:string;readOnly?:boolean;onSaveRule?:(rules:ClearanceRules)=>Promise<void>}
+export function ClearanceRulesPanel({data,readOnly=false,onSaveRule}:Props){
  const [draft,setDraft]=useState<ClearanceRules>(()=>({...DEFAULT_RULES,...data.rules}));
  const error=validateRules(draft);
  const same=JSON.stringify(draft)===JSON.stringify(data.rules);
- const apply=()=>{
+ const apply=async()=>{
+  if(readOnly||!onSaveRule)return;
   const invalid=validateRules(draft);if(invalid){void message.error(invalid);return;}
-  const changes=(Object.keys(draft) as (keyof ClearanceRules)[]).filter(k=>draft[k]!==data.rules[k]);
-  if(!changes.length){void message.info("规则未发生变化");return;}
-  const version=data.ruleVersion+1;
-  const before=CLEARANCE_PRODUCTS.map(x=>evaluateProduct(x,data.rules));
-  const after=CLEARANCE_PRODUCTS.map(x=>evaluateProduct(x,draft));
-  const added=after.filter((x,i)=>x.auto&&!before[i].auto).length;
-  const removed=after.filter((x,i)=>!x.auto&&before[i].auto).length;
-  const changed=after.filter((x,i)=>x.level!==before[i].level).length;
-  const labels=changes.map(k=>CLEARANCE_RULE_SPEC_BY_KEY.get(k)?.label??String(k));
-  const row:RulesHistory={version,actor:role,at:chinaToday(),summary:labels.slice(0,8).join("、")+(labels.length>8?" 等"+labels.length+"项":"")+"；新增 "+added+"、退出 "+removed+"、等级变化 "+changed};
-  onChange({...data,rules:{...draft},ruleVersion:version,ruleHistory:[row,...data.ruleHistory].slice(0,20)});
-  void message.success("规则 V"+version+" 已保存并应用");
+  if(same&&data.ruleVersion>0){void message.info("规则未发生变化");return;}
+  try{await onSaveRule({...draft});}catch{/* Keep edited values on version conflict or failure. */}
  };
  const renderSpec=(f:ClearanceRuleSpec)=>{
   const title=<Tooltip
@@ -91,7 +78,7 @@ export function ClearanceRulesPanel({data,onChange,role}:Props){
    {error&&<Typography.Text type="danger" className="clearance-block">{error}</Typography.Text>}
    <div className="clearance-rule-actions clearance-rule-explained-actions">
     <Button className="clearance-rule-actions__default" onClick={()=>setDraft({...DEFAULT_RULES})}>默认值</Button>
-    <Button className="clearance-rule-actions__save" type="primary" disabled={Boolean(error)||same} onClick={apply}>保存并应用</Button>
+    <Button className="clearance-rule-actions__save" type="primary" disabled={Boolean(error)||readOnly||(same&&data.ruleVersion>0)} onClick={()=>{void apply();}}>保存并应用</Button>
    </div>
   </Card>
  </div>;
@@ -115,7 +102,7 @@ interface SkuDeepAnalysisModalProps {
 }
 type SkuDetailTab = "business" | "inventory";
 
-function SkuDeepAnalysisModal({ product, data, role, onClose, onApply, onRemoveManual }: SkuDeepAnalysisModalProps) {
+function SkuDeepAnalysisModal({ product, data, onClose, onApply, onRemoveManual }: SkuDeepAnalysisModalProps) {
   const [activeTab, setActiveTab] = useState<SkuDetailTab>("business");
   const [quantity, setQuantity] = useState<number>(product.avail);
   const [price, setPrice] = useState<number>(product.price);
@@ -124,10 +111,10 @@ function SkuDeepAnalysisModal({ product, data, role, onClose, onApply, onRemoveM
 
   const risk = evaluateProduct(product, data.rules);
   const activeTask = activeTaskFor(data.tasks, product.id);
-  const eligible = product.avail > 0 && product.owner === role && !activeTask;
+  const eligible = true;
   const safeQuantity = Math.max(0, Math.min(product.avail, Number(quantity) || 0));
-  const safePrice = Math.max(0, Number(price) || 0);
-  const estimatedRevenue = safeQuantity * safePrice;
+  const safePrice = Number.isFinite(price)?Math.max(0,price):undefined;
+  const estimatedRevenue = safePrice===undefined?Number.NaN:safeQuantity * safePrice;
   const remainingInventory = Math.max(0, product.avail - safeQuantity);
   const p7 = product.per[7];
   const riskMessages = [
@@ -167,7 +154,7 @@ function SkuDeepAnalysisModal({ product, data, role, onClose, onApply, onRemoveM
   const renderPeriodValue = (key: string, days: 7 | 14 | 30) => {
     const metric = product.per[days];
     if (key === "units") return integer(metric.units);
-    if (key === "daily") return (metric.units / days).toFixed(2);
+    if (key === "daily") return Number.isFinite(metric.units) ? (metric.units / days).toFixed(2) : "—";
     if (key === "revenue") return money(metric.revenue);
     if (key === "ads") return money(metric.ads);
     if (key === "adRate") return percent(metric.adRate);
@@ -231,7 +218,7 @@ function SkuDeepAnalysisModal({ product, data, role, onClose, onApply, onRemoveM
                     <div className="clearance-sku-metric"><span>上架天数</span><strong>{integer(product.listingDays)} <small>天</small></strong><em>当前上架时长</em></div>
                   </div>
                   <div className="clearance-sku-metric-group">
-                    <div className="clearance-sku-metric"><span>Listing 评分</span><strong className={product.rating < data.rules.ratingThreshold ? "clearance-sku-value-negative" : ""}>{product.rating.toFixed(1)} <small>/ 5</small></strong><em>{integer(product.reviewCount)} 条评价</em></div>
+                    <div className="clearance-sku-metric"><span>Listing 评分</span><strong className={product.rating < data.rules.ratingThreshold ? "clearance-sku-value-negative" : ""}>{Number.isFinite(product.rating)?product.rating.toFixed(1):"—"} <small>/ 5</small></strong><em>{integer(product.reviewCount)} 条评价</em></div>
                     <div className="clearance-sku-metric"><span>30 天退货率</span><strong>{product.per[30].units > 0 ? percent(product.returns / product.per[30].units * 100) : "—"}</strong><em>30 天退货 {integer(product.returns)} 次</em></div>
                   </div>
                 </div>
@@ -342,13 +329,69 @@ function SkuDeepAnalysisModal({ product, data, role, onClose, onApply, onRemoveM
 }
 
 
-export function ClearanceDialogs({data,onChange,role,applicant,setApplicant,manualOpen,setManualOpen,taskId,setTaskId,apply,setApply}:ModalsProps){
+// CLEARANCE_COMPLETE_V53: the execution log is sourced exclusively from the
+// real application detail API. Never infer sales or history from Mock state.
+
+// CLEARANCE_DETAIL_DISPLAY_V54
+function formatClearanceTaskDateV54(value?: string | null): string {
+  const raw = String(value ?? "").trim();
+  if (!raw || raw === "—") return "—";
+
+  if (/T/.test(raw) && /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)) {
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/Los_Angeles",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(parsed);
+
+      const year = parts.find(p => p.type === "year")?.value;
+      const month = parts.find(p => p.type === "month")?.value;
+      const day = parts.find(p => p.type === "day")?.value;
+
+      if (year && month && day)
+        return `${year}/${month}/${day}`;
+    }
+  }
+
+  const d = raw.match(/^(\d{4})[-/](\d{2})[-/](\d{2})/);
+  return d ? `${d[1]}/${d[2]}/${d[3]}` : "—";
+}
+
+type ClearanceTaskEventV53 = ApplicationDetail["events"][number];
+const CLEARANCE_EVENT_LABELS_V53: Record<string, string> = {
+  submitted: "提交清货申请", approved: "审批通过", running: "审批通过，开始执行",
+  rejected: "审批驳回", cancelled: "撤销清货申请", done: "完成清货",
+  stock_closed: "库存售罄，任务关闭", sales_reconciled: "销售数量已核对",
+};
+function clearanceEventV53(event: ClearanceTaskEventV53) {
+  const note = event.detail_json?.["reason"];
+  const reason = typeof note === "string" && note.trim() ? note.trim() : "";
+  const label = CLEARANCE_EVENT_LABELS_V53[event.event_type] ?? `任务操作：${event.event_type}`;
+  return {
+    at: event.created_at || "",
+    who: event.actor_ref || "系统",
+    text: event.event_type === "done" && reason ? `${label} · ${reason}` : label,
+  };
+}
+
+export function ClearanceDialogs({data,onChange,role,readOnly=false,applicant,setApplicant,manualOpen,setManualOpen,taskId,setTaskId,apply,setApply}:ModalsProps){
  const [manualSelection,setManualSelection]=useState<string[]>([]);
  const [manualWizardActive,setManualWizardActive]=useState(false);
  const [manualSearch,setManualSearch]=useState("");
 
  const [removeTarget,setRemoveTarget]=useState<string|null>(null);
  const [removeNote,setRemoveNote]=useState("");
+ const [completeOpenV53,setCompleteOpenV53]=useState(false);
+ const [completeNoteV53,setCompleteNoteV53]=useState("");
+ const [completingV53,setCompletingV53]=useState(false);
+ // Store only completed asynchronous responses; loading is derived from the
+ // active task key, so opening or switching tasks needs no setState in an effect.
+ const [taskEventsV53,setTaskEventsV53]=useState<{
+   key:string; events:ClearanceTaskEventV53[]; error:boolean;
+ }|null>(null);
  const [form]=Form.useForm<ApplyValues>();
  const [progressForm]=Form.useForm<{lines:Record<string,{sold:number;removed:number;disposed:number}>}>();
  const product=applicant?findProduct(applicant):undefined;
@@ -356,15 +399,58 @@ export function ClearanceDialogs({data,onChange,role,applicant,setApplicant,manu
 const taskProductV7 = task ? findProduct(task.lines[0]?.id) : undefined;
  const taskCompletedV7 = task ? taskSold(task) + taskRemoved(task) : 0;
  const taskRemainingV7 = task ? Math.max(0, taskQty(task) - taskCompletedV7) : 0;
- const taskLatestV7 = task?.history[task.history.length - 1];
+ const taskVersionV53 = task?.version;
+ const taskEventsKeyV53 = taskId ? `${taskId}:${taskVersionV53 ?? "unknown"}` : null;
+ useEffect(()=>{
+   if(!taskId || !taskEventsKeyV53)return;
+   let active=true;
+   // No synchronous state update here: the previous response is ignored by
+   // its task/version key until this asynchronous request has completed.
+   void getClearanceApplication(taskId).then(detail=>{
+     if(!active)return;
+     if(detail.application?.id!==taskId || !Array.isArray(detail.events))
+       throw new Error("清货详情不匹配或事件列表缺失");
+     setTaskEventsV53({key:taskEventsKeyV53,events:detail.events,error:false});
+   }).catch(error=>{
+     if(!active)return;
+     console.warn("Clearance execution history load failed",error);
+     setTaskEventsV53({key:taskEventsKeyV53,events:[],error:true});
+   });
+   return ()=>{active=false;};
+ },[taskId,taskEventsKeyV53]);
+ const eventsCurrentV53 = Boolean(taskEventsKeyV53 && taskEventsV53?.key === taskEventsKeyV53);
+ const eventsLoadingV53 = Boolean(taskEventsKeyV53 && !eventsCurrentV53);
+ const eventsErrorV53 = Boolean(eventsCurrentV53 && taskEventsV53?.error);
+ const taskHistoryV53 = eventsCurrentV53 && !eventsErrorV53
+   ? taskEventsV53?.events.map(clearanceEventV53) ?? [] : [];
+ const taskLatestV7 = taskHistoryV53[taskHistoryV53.length - 1];
  const taskApprovalV7 = !task ? "—" :
    ["ready","running","paused","done"].includes(task.status)
      ? "已通过" : STATUS_NAMES[task.status];
- const change=(patch:Partial<StoredClearance>)=>onChange({...data,...patch});
+ const confirmCompleteV53=async()=>{
+   if(!task || task.status!=="running" || completingV53)return;
+   setCompletingV53(true);
+   try {
+     const result=await completeClearanceApplication(task.id,completeNoteV53.trim());
+     if(result.id!==task.id || result.status!=="done")
+       throw new Error("完成接口返回的任务 ID 或状态不匹配");
+     setCompleteOpenV53(false);
+     setCompleteNoteV53("");
+     setTaskId(null);
+     window.dispatchEvent(new Event("szzsbj-clearance-application-updated"));
+     void message.success("清货任务已完成，实际销量保持原值");
+   } catch (error) {
+     console.warn("Clearance manual completion failed",error);
+     void message.error("完成清货失败，请确认操作权限及任务是否仍在执行中");
+   } finally {
+     setCompletingV53(false);
+   }
+ };
+ const change=(patch:Partial<StoredClearance>)=>{if(readOnly){void message.warning("当前仅开放真实清货数据查询");return;}onChange({...data,...patch});};
  const begin=(ids:string[],source:"auto"|"manual",editId?:string,preserveSelection=false)=>{
   if(!ids.length)return;
   const ps=ids.map(findProduct);
-  if(ps.some(x=>!x||x.owner!==role||x.avail<=0||(!editId&&activeTaskFor(data.tasks,x.id)))){void message.error("SKU 无权限、无库存或已有有效申请");return;}
+  if(ps.some(x=>!x)){void message.error("未找到商品 ID");return;}
   if(new Set(ps.map(x=>x?.store)).size!==1){void message.error("同一清货申请仅允许同一店铺的 SKU");return;}
   if(!preserveSelection)setManualSelection([]);setApply({ids,source,editId});setApplicant(null);setTaskId(null);
  };
@@ -407,7 +493,7 @@ const reasonAliases: Record<string,string> = {
 
  // 沿用原申请表单的50%默认数量，不新增清货算法
  const recommendedQuantity = (x:ClearanceProduct) =>
-  Math.max(1,Math.min(x.avail,Math.floor(x.avail*.5)));
+  Math.max(1,Math.min(300,x.avail,Math.floor(x.avail*.5)));
 
  const quantityFor = (x:ClearanceProduct) => {
   const fallback = old?.lines.find(l=>l.id===x.id)?.qty
@@ -439,30 +525,51 @@ const reasonAliases: Record<string,string> = {
  const coveragePercent = totalAvailable>0
   ? Math.min(100,Math.round(totalPlannedQuantity/totalAvailable*100))
   : 0;
- const submit=(values:ApplyValues)=>{
-  if(!apply)return;
-  const quantities=values.quantities||{};
-  if(applyProducts.some(x=>x.owner!==role||x.avail<=0)||(!old&&applyProducts.some(x=>activeTaskFor(data.tasks,x.id)))||new Set(applyProducts.map(x=>x.store)).size!==1){void message.error("SKU 权限、库存、重复申请或店铺校验失败");return;}
-  if(applyProducts.some(x=>!Number.isInteger(quantities[x.id])||quantities[x.id]<1||quantities[x.id]>x.avail)){void message.error("每个 SKU 的申请数量必须为正整数且不超过可售库存");return;}
-  const now=chinaToday();
-  const timestamp=chinaNow();
-  if(!values.remark.trim()){void message.error("申请说明不能为空");return;}
-  if(values.due.format("YYYY-MM-DD")<now){void message.error("计划完成日期不得早于今天");return;}
-  const lines:ClearanceTaskLine[]=applyProducts.map(x=>({id:x.id,qty:quantities[x.id],sold:old?.lines.find(l=>l.id===x.id)?.sold??0,removed:old?.lines.find(l=>l.id===x.id)?.removed??0,disposed:old?.lines.find(l=>l.id===x.id)?.disposed??0}));
-  const nextTasks=deepCopy(data.tasks);
-  if(old){
-   const pos=nextTasks.findIndex(t=>t.id===old.id);
-   if(!["supplement","rejected"].includes(old.status)){void message.error("当前状态不允许重提");return;}
-   nextTasks[pos]={...old,lines,status:"pending",reason:values.reason,methods:values.methods,due:values.due.format("YYYY-MM-DD"),remark:values.remark.trim(),version:old.version+1,ruleVersion:data.ruleVersion,submitted:timestamp,history:[...old.history,{at:timestamp,who:role,text:"补充资料并重新提交审批"}]};
-   nextTasks[pos].riskAtSubmission=taskRisk(nextTasks[pos],data.rules);
-  }else{
-   const fresh:ClearanceTask={id:nextClearanceTaskId(nextTasks,timestamp),lines,status:"pending",reason:values.reason,methods:values.methods,owner:role,requester:role,approver:"李主管",date:now,due:values.due.format("YYYY-MM-DD"),submitted:timestamp,remark:values.remark.trim(),source:apply.source,version:1,ruleVersion:data.ruleVersion,riskAtSubmission:"low",history:[{at:timestamp,who:role,text:"提交清货申请至统一审批工作台（本地演示）"}]};
-   fresh.riskAtSubmission=taskRisk(fresh,data.rules);nextTasks.unshift(fresh);
+ const submit=async (values:ApplyValues)=>{
+  if(!apply || applyProducts.length!==1){void message.error("一次只能申请一个WFS商品");return;}
+  const selected=applyProducts[0];
+  const identity=selected.id.split("::");
+  if(identity.length!==3 || identity.some(x=>!x)){
+    void message.error("仅支持真实WFS商品ID；演示数据不可提交审批");return;
   }
-  change({tasks:nextTasks,manual:apply.source==="manual"?[...new Set([...data.manual,...apply.ids])]:data.manual});
-  closeApply();void message.success("申请已加入清货管理（仅本地 Mock，不会发送真实审批）");
+  const [source_account_ref,store_id,item_id]=identity;
+  const requested=Number(values.quantities?.[selected.id]);
+  if(!Number.isInteger(requested)||requested<1){void message.error("清货数量必须为正整数");return;}
+  const methods=values.methods??[];
+  if(!methods.length || methods.some(x=>!(["降价","广告清货"].includes(x)))){
+    void message.error("清货方式只支持降价、广告清货");return;
+  }
+  try{
+    const latest=await getClearanceListing({source_account_ref,store_id,item_id});
+    if(!latest.available||latest.available<1){void message.error("WFS可售库存不足");return;}
+    const qty=Math.min(requested,latest.available);
+    if(qty!==requested)void message.info(`最新WFS库存为${qty}件，目标清货数量已自动调整`);
+    await submitClearanceApplication({
+      source_account_ref,store_id,item_id,qty,
+      reason:values.reason,methods,note:values.remark?.trim()??"",
+      planned_completion_date:values.due?.format("YYYY-MM-DD"),
+    });
+    closeApply();
+    void message.success("清货申请已提交至统一审批工作台");
+    window.dispatchEvent(new Event("szzsbj-clearance-application-updated"));
+  }catch(error){
+    // CLEARANCE_EXPLICIT_REJECTION_V57: only display real backend reasons.
+    const errors:Record<string,string> = {
+      CLEARANCE_LISTING_ARCHIVED:"该商品已归档，无法申请清货。请在Listing管理查看归档原因",
+      CLEARANCE_STOCK_UNKNOWN:"当前无法确认WFS可售库存，请刷新数据后再申请",
+      CLEARANCE_OUT_OF_STOCK:"当前WFS可售库存为0，无法申请清货",
+      CLEARANCE_QUANTITY_EXCEEDED:"申请数量超过最新WFS可售库存，请刷新并调整数量",
+      CLEARANCE_DUPLICATE_APPLICATION:"该商品已有待审批或执行中的清货申请，不能重复提交",
+      FORBIDDEN:"当前账号没有该商品的清货申请权限",
+      DATA_SCOPE_DENIED:"当前账号无法访问该店铺的商品",
+      INVALID_REQUEST:"申请未通过后端校验，请确认商品归档状态、库存及重复申请",
+    };
+    const code = error instanceof BackendRequestError ? error.code ?? "" : "";
+    void message.error(errors[code] ?? (code ? `清货申请失败（${code}），请核对数据后重试` : "清货申请失败，请检查网络或联系管理员"));
+  }
  };
  const taskProgressSave=(values:{lines:Record<string,{sold:number;removed:number;disposed:number}>})=>{
+  if(readOnly){void message.warning("当前仅开放真实清货数据查询");return;}
   if(!task||task.status!=="running"||task.owner!==role)return;
   const lines=task.lines.map(row=>({...row,...values.lines?.[row.id]}));
   for(const line of lines){
@@ -480,15 +587,13 @@ const reasonAliases: Record<string,string> = {
   )
  );
  const selectedProduct=manualSelection[0]?findProduct(manualSelection[0]):undefined;
- const eligible=(x:ClearanceProduct)=>x.avail>0&&x.owner===role&&!activeTaskFor(data.tasks,x.id);
+ const eligible=(x:ClearanceProduct)=>Boolean(x);
 
  const manualFlow=manualOpen||(manualWizardActive&&apply?.source==="manual");
  const manualStep2=!manualOpen&&manualWizardActive&&apply?.source==="manual";
  const manualProductColumns:ColumnsType<ClearanceProduct>=[
   {title:"商品",width:460,render:(_,x)=>{
-   const active=activeTaskFor(data.tasks,x.id);
-   const why=active?"该 SKU 已有清货任务，不能重复申请":
-    x.owner!==role?"仅限负责人申请":x.avail<=0?"暂无 WFS 可售库存":"";
+   const why="";
    return <div className="clearance-wizard-product">
     <span className="clearance-wizard-thumb">▦</span>
     <div className="clearance-wizard-product-text">
@@ -502,8 +607,7 @@ const reasonAliases: Record<string,string> = {
   {title:"当前售价",width:110,render:(_,x)=><div className="clearance-wizard-meta"><small>当前售价</small><strong>{money(x.price)}</strong></div>},
   {title:"风险",width:90,render:(_,x)=><RiskTag level={evaluateProduct(x,data.rules).level}/>},
   {title:"操作",width:124,render:(_,x)=>{
-   const active=activeTaskFor(data.tasks,x.id);
-   if(active)return <Button danger size="small" onClick={()=>{closeApply();setTaskId(active.id);}}>查看原任务</Button>;
+   // Existing tasks do not prohibit a new application.
    if(!eligible(x))return <Button size="small" disabled>不可申请</Button>;
    const chosen=manualSelection[0]===x.id;
    return <Button size="small" className={chosen?"clearance-wizard-select is-selected":"clearance-wizard-select"}
@@ -773,7 +877,7 @@ const reasonAliases: Record<string,string> = {
               >
                 <Checkbox.Group
                   className="clearance-apply-methods"
-                  options={METHODS.map(x=>({label:x,value:x}))}
+                  options={METHODS.filter(x=>x==="降价"||x==="广告清货").map(x=>({label:x,value:x}))}
                 />
               </Form.Item>
 
@@ -967,7 +1071,7 @@ const reasonAliases: Record<string,string> = {
 
           <div className="task-v7-info-item">
             <span>申请时间</span>
-            <strong>{task.submitted}</strong>
+            <strong>{formatClearanceTaskDateV54(task.submitted)}</strong>
           </div>
 
           <div className="task-v7-info-item">
@@ -981,7 +1085,7 @@ const reasonAliases: Record<string,string> = {
 
           <div className="task-v7-info-item">
             <span>计划完成日期</span>
-            <strong>{task.due}</strong>
+            <strong>{formatClearanceTaskDateV54(task.due)}</strong>
           </div>
 
           <div className="task-v7-info-item">
@@ -1054,7 +1158,7 @@ const reasonAliases: Record<string,string> = {
               </span>
 
               <span className="task-v7-time">
-                {taskLatestV7?.at?.slice(5)??"—"}
+                {formatClearanceTaskDateV54(taskLatestV7?.at)}
               </span>
 
               <Button
@@ -1095,7 +1199,7 @@ const reasonAliases: Record<string,string> = {
 
       <div className="task-v7-timeline-list">
 
-        {[...task.history].reverse().map((entry,index)=>(
+        {[...taskHistoryV53].reverse().map((entry,index)=>(
           <div className="task-v7-timeline-item" key={`${entry.at}-${index}`}>
             <i className={
               entry.text.includes("提交")?"pending":"success"
@@ -1103,12 +1207,15 @@ const reasonAliases: Record<string,string> = {
 
             <div>
               <strong>{entry.text}</strong>
-              <small>{entry.at} · {entry.who}</small>
+              <small>{formatClearanceTaskDateV54(entry.at)} · {entry.who}</small>
             </div>
           </div>
         ))}
 
-        {task.history.length===0?
+        {eventsLoadingV53?<div className="task-v7-empty">正在读取真实操作记录…</div>:null}
+        {!eventsLoadingV53&&eventsErrorV53?
+          <div className="task-v7-empty">操作记录读取失败，请关闭后重新打开任务详情</div>:null}
+        {!eventsLoadingV53&&!eventsErrorV53&&taskHistoryV53.length===0?
           <div className="task-v7-empty">暂无操作记录</div>:null}
 
       </div>
@@ -1117,12 +1224,45 @@ const reasonAliases: Record<string,string> = {
   </div>
 
   <footer className="task-v7-footer">
-    <span>审批在独立审批工作台完成；本页面仅查看任务与执行记录。</span>
-    <Button onClick={()=>setTaskId(null)}>关闭</Button>
+    <span>审批在独立审批工作台完成；执行中的任务可经权限校验后人工完成。</span>
+    <Space size={12}>
+      <Button onClick={()=>setTaskId(null)} disabled={completingV53}>关闭</Button>
+      {task.status==="running"&&!readOnly&&
+        <Button type="primary" className="task-v7-complete-action" disabled={completingV53} onClick={()=>{setCompleteNoteV53("");setCompleteOpenV53(true);}}>
+          完成清货
+        </Button>}
+    </Space>
   </footer>
 
 </div>}
 </Modal>
+  <Modal
+    title="确认完成清货"
+    open={completeOpenV53&&task?.status==="running"}
+    centered
+    destroyOnHidden
+    maskClosable={!completingV53}
+    closable={!completingV53}
+    onCancel={()=>{if(!completingV53){setCompleteOpenV53(false);setCompleteNoteV53("");}}}
+    onOk={()=>{void confirmCompleteV53();}}
+    okText="确认完成"
+    okButtonProps={{loading:completingV53}}
+    cancelButtonProps={{disabled:completingV53}}
+  >
+    <Form layout="vertical">
+      <Form.Item label="完成说明（选填）" style={{marginBottom:0}}>
+        <Input.TextArea
+          value={completeNoteV53}
+          onChange={event=>setCompleteNoteV53(event.target.value)}
+          maxLength={4000}
+          showCount
+          rows={3}
+          style={{resize:"none"}}
+          placeholder="请输入完成说明"
+        />
+      </Form.Item>
+    </Form>
+  </Modal>
   <Modal title="更新累计清货执行进度" width={800} open={progressOpen} onCancel={()=>setProgressOpen(false)} onOk={()=>progressForm.submit()} okText="保存执行进度" destroyOnHidden>
    <Typography.Paragraph type="secondary">只记录 Mock 进度；各 SKU 的销售、移除、弃置总和不可超过目标，累计数值不得回退。</Typography.Paragraph>
    <Form form={progressForm} onFinish={taskProgressSave} layout="vertical">{task?.lines.map(l=><Card size="small" key={l.id} title={findProduct(l.id)?.sku+" · 目标 "+l.qty+"件"}><div className="clearance-progress-fields">{(["sold","removed","disposed"] as const).map((k,i)=><Form.Item key={k} label={["已销售","已移除","已弃置"][i]} name={["lines",l.id,k]}><InputNumber min={l[k]} max={l.qty} precision={0}/></Form.Item>)}</div></Card>)}</Form>

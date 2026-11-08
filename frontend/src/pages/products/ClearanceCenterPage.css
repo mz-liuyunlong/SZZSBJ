@@ -3543,3 +3543,34 @@ th.clearance-metric-group-header {
 .clearance-wizard-existing-form .clearance-apply-content {flex:1 1 auto!important;min-height:0;max-height:100%;overflow-y:auto}
 .clearance-wizard-modal .clearance-apply-footer {display:none!important}
 @media(max-width:760px){.clearance-wizard-modal .ant-modal-content {height:calc(100vh - 20px)!important;max-height:calc(100vh - 20px)!important}.clearance-wizard-pane {padding:12px 14px}.clearance-wizard-search>small {display:none}}
+
+
+/* CLEARANCE_DETAIL_DISPLAY_V54 */
+
+.clearance-task-detail-v7
+.task-v7-footer
+.ant-btn.ant-btn-primary.task-v7-complete-action {
+  background: #1677ff !important;
+  border-color: #1677ff !important;
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+.clearance-task-detail-v7
+.task-v7-footer
+.ant-btn.ant-btn-primary.task-v7-complete-action:not(:disabled):hover {
+  background: #0958d9 !important;
+  border-color: #0958d9 !important;
+  color: #ffffff !important;
+}
+
+.clearance-task-detail-v7 .task-v7-timeline-item small,
+.clearance-task-detail-v7 .task-v7-time {
+  color: #475569;
+  font-size: 11px;
+}
+
+.clearance-task-detail-v7 .task-v7-info-item > span,
+.clearance-task-detail-v7 .task-v7-footer > span {
+  color: #52657d;
+}

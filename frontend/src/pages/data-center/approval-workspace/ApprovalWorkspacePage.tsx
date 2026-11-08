@@ -31,6 +31,7 @@ import EmptyState from "@/shared/states/EmptyState";
 import { formatMoney } from "@/shared/formatters/money";
 
 import ApprovalDetailDrawer from "./components/ApprovalDetailDrawer";
+import ClearanceApprovalDetailDrawer from "./components/ClearanceApprovalDetailDrawer";
 import BulkApprovalModal from "./components/BulkApprovalModal";
 import type { ApprovalFilters, ApprovalItem, ApprovalTab } from "./approvalTypes";
 import { approvalColumnFields, approvalTabs, riskNames, statusNames } from "./approvalTypes";
@@ -82,6 +83,11 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
  const [loading, setLoading] = useState(true);
  const [loadError, setLoadError] = useState(false);
  const [selected, setSelected] = useState<ApprovalItem>();
+  const [clearanceTableAction, setClearanceTableAction] =
+    useState<{
+      item: ApprovalItem;
+      decision: "approved" | "rejected";
+    } | null>(null);
  const [demoActionIntent, setDemoActionIntent] = useState<"approve" | "reject">();
  const [demoActionTarget, setDemoActionTarget] = useState<ApprovalItem>();
  const [demoActionNote, setDemoActionNote] = useState("");
@@ -168,6 +174,19 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
  const columns = useMemo((): ProColumns<ApprovalItem>[] => {
   // V3: only demo businesses use dedicated fields; WFS and All retain existing columns.
   const demoColumns = demoColumnsForBusiness(business, setSelected, (item, action) => {
+    // V34: real clearance decisions are not Demo actions.
+    if (item.approval_type === "clearance_request" && !isDemoApproval(item)) {
+      // CLEARANCE_TABLE_ACTION_ISOLATED_V40
+      setSelected(undefined);
+      setDirectReviewAction(undefined);
+      setReviewOnly(false);
+      setClearanceTableAction({
+        item,
+        decision: action === "approve" ? "approved" : "rejected",
+      });
+      return;
+    }
+
    setDemoActionTarget(item);
    setDemoActionIntent(action);
    setDemoActionNote("");
@@ -225,7 +244,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
    applicant_id: { key:"applicant_id", render:(_,r) => <div className="approval-list__applicant"><span>{r.applicant_id || "申请人待核实"}</span></div> },
    submitted_at: { key:"submitted_at", render:(_,r) => <div className="approval-list__time"><span>{r.submitted_at ? new Date(r.submitted_at).toLocaleString("zh-CN", {month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"}</span></div> },
    status: { key:"status", render:(_,r) => <StatusTag label={statusNames[r.status]} semantic={statusTone[r.status]}/> },
-   action: { key:"action", render:(_,r) => <div className="approval-list__actions"><Button size="small" type="text" onClick={() => setSelected(r)}>详情 <ArrowRightOutlined/></Button>{filters.tab === "pending" && r.can_review && (r.approval_type === "wfs_case_abandon" ? hasPermission(permissions,"action:warehouse:wfs-fee-alert:archive-review") : hasPermission(permissions,"*")) && <><Button size="small" onClick={() => {
+   action: { key:"action", render:(_,r) => <div className="approval-list__actions"><Button size="small" type="text" onClick={() => setSelected(r)}>详情 <ArrowRightOutlined/></Button>{filters.tab === "pending" && r.can_review && (r.approval_type === "clearance_request" ? r.can_review : r.approval_type === "wfs_case_abandon" ? hasPermission(permissions,"action:warehouse:wfs-fee-alert:archive-review") : hasPermission(permissions,"*")) && <><Button size="small" onClick={() => {
           setDirectReviewAction("approved");
           setReviewOnly(true);
           setSelected(r);
@@ -338,7 +357,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   <BulkApprovalModal rows={bulkRows} onCancel={() => setBulkRows([])}
    onUpdated={() => {setSelectedBulkKeys([]);reload();}}/>
   <DemoApprovalDrawer
-    selected={selected && isDemoApproval(selected) ? selected : undefined}
+    selected={selected && (isDemoApproval(selected) || selected.approval_type === "clearance_request") ? selected : undefined}
     onClose={() => setSelected(undefined)}
    />
  <Modal
@@ -432,8 +451,37 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
     </div>
   </Modal>
 
+  {/* CLEARANCE_SINGLE_DRAWER_V42 */}
+  <ClearanceApprovalDetailDrawer
+    selected={
+      clearanceTableAction?.item ??
+      (selected?.approval_type === "clearance_request"
+        ? selected
+        : undefined)
+    }
+    directReviewAction={
+      clearanceTableAction?.decision ??
+      (selected?.approval_type === "clearance_request"
+        ? directReviewAction
+        : undefined)
+    }
+    onClose={() => {
+      setClearanceTableAction(null);
+      setSelected(undefined);
+      setReviewOnly(false);
+      setDirectReviewAction(undefined);
+    }}
+    onUpdated={() => {
+      setClearanceTableAction(null);
+      setSelected(undefined);
+      setReviewOnly(false);
+      setDirectReviewAction(undefined);
+      reload();
+    }}
+  />
+
   <ApprovalDetailDrawer reviewOnly={reviewOnly} directReviewAction={directReviewAction}
-   selected={selected && !isDemoApproval(selected) ? selected : undefined}
+   selected={selected && !isDemoApproval(selected) && selected.approval_type !== "clearance_request" ? selected : undefined}
    canReview={hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-review")}
    canAdmin={hasPermission(permissions, "*")}
    canSupplement={hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-request")}

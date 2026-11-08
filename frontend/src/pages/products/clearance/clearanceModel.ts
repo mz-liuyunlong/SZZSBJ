@@ -1,7 +1,7 @@
 /** WFS clearance demo domain: pure, deterministic and free of production side effects. */
 export const CLEARANCE_STORAGE_KEY = "wfs_clearance_center_v4_20261024";
 export type PeriodDays = 7 | 14 | 30;
-export type RiskLevel = "high" | "medium" | "low";
+export type RiskLevel = "high" | "medium" | "low" | "unknown" | "none";
 export type TaskStatus = "pending" | "supplement" | "ready" | "running" | "paused" | "done" | "rejected" | "cancelled";
 export type ClearanceSource = "auto" | "manual";
 export interface SalesPeriod {
@@ -13,6 +13,12 @@ export interface SalesPeriod {
   margin: number | null;
 }
 export interface ClearanceProduct {
+  /** Server-issued full rule evidence; missing is not an empty-risk result. */
+  riskDetailPayload?: unknown;
+  /** Only populated for genuine backend listings; bypasses Mock risk evaluation. */
+  liveRisk?: {level:RiskLevel;reasons:string[];business:string[]};
+  liveSelloutDays?: number | null;
+  liveCapitalAtCostUsd?: number | null;
   id: string;
   sku: string;
   msku: string;
@@ -179,9 +185,10 @@ export const STATUS_NAMES: Record<TaskStatus,string> = {
   pending:"待审批",supplement:"待补资料",ready:"待执行",running:"执行中",
   paused:"已暂停",done:"已完成",rejected:"已驳回",cancelled:"已撤回",
 };
-export const RISK_NAMES: Record<RiskLevel,string> = {high:"高风险",medium:"中风险",low:"低风险"};
+export const RISK_NAMES: Record<RiskLevel,string> = {high:"高风险",medium:"中风险",low:"低风险",unknown:"待评估",none:"无风险"};
 export interface RiskEvaluation {level:RiskLevel;auto:boolean;reasons:string[];business:string[]}
 export function coverage(x:ClearanceProduct):number|null{
+  if(x.liveRisk) return x.liveSelloutDays??null;
   const units=x.per[30].units;
   return units>0?Math.ceil(x.avail/(units/30)):null;
 }
@@ -217,6 +224,8 @@ export function businessSignals(x:ClearanceProduct,r:ClearanceRules):string[]{
   return [...signals,...newerBusinessSignals(x,r)];
 }
 export function evaluateProduct(x:ClearanceProduct,r:ClearanceRules):RiskEvaluation{
+  r={...r,enableAged:false,enableAverageAge:false,enableAgedRatio:false,enableRepeatBacklog:false};
+  if(x.liveRisk)return {level:x.liveRisk.level,auto:x.liveRisk.level==="high"||x.liveRisk.level==="medium",reasons:x.liveRisk.reasons,business:x.liveRisk.business};
   const cov=coverage(x),business=businessSignals(x,r),reasons:string[]=[];
   let level:RiskLevel="low";
   if(x.avail<=0)return {level,auto:false,reasons:["无WFS可售库存"],business};
@@ -304,6 +313,24 @@ export interface ClearanceTask {
   history:TaskHistory[];version:number;ruleVersion:number;riskAtSubmission:RiskLevel;
 }
 const productById=new Map(CLEARANCE_PRODUCTS.map(x=>[x.id,x]));
+/** Replace demo registry only after a successful real API response. */
+export function replaceClearancePreviewProducts(rows:ClearanceProduct[]):void{
+  CLEARANCE_PRODUCTS.splice(0,CLEARANCE_PRODUCTS.length,...rows);
+  productById.clear();
+  rows.forEach(x=>productById.set(x.id,x));
+  if((import.meta.env.DEV && import.meta.env.MODE !== "test")){
+    const missing={units:NaN,revenue:NaN,ads:NaN,profit:NaN,adRate:null,margin:null};
+    productById.set("DEMO-CLR-201",{
+      id:"DEMO-CLR-201",sku:"DEMO-SKU-201",msku:"DEMO-MSKU-201",
+      item:"DEMO-ITEM-201",name:"厨房密封储物罐",
+      store:"演示美区一店",owner:"演示运营A",
+      avail:450,res:NaN,bad:NaN,inbound:NaN,age:NaN,listingDays:NaN,
+      ageLots:[],returns:NaN,rating:NaN,reviewCount:NaN,price:NaN,cost:NaN,
+      per:{7:missing,14:missing,30:missing},
+      liveRisk:{level:"unknown",reasons:["DEV only"],business:[]},
+    });
+  }
+}
 export const findProduct=(id:string):ClearanceProduct|undefined=>productById.get(id);
 export const activeTaskFor=(tasks:ClearanceTask[],id:string)=>tasks.find(t=>t.lines.some(l=>l.id===id)&&["pending","supplement","ready","running","paused"].includes(t.status));
 export const latestTaskFor=(tasks:ClearanceTask[],id:string)=>tasks.filter(t=>t.lines.some(l=>l.id===id)).sort((a,b)=>b.submitted.localeCompare(a.submitted))[0];

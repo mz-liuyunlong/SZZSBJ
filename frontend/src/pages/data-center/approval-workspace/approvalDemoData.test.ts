@@ -18,6 +18,13 @@ vi.mock("./approvalApi", () => ({
   })),
 }));
 
+vi.mock("@/pages/products/clearance/clearanceApi", () => ({
+  fetchClearanceApprovals: vi.fn(async (filters: ApprovalFilters) => ({
+    data: { items: [] },
+    meta: { page: filters.page, page_size: filters.page_size, total: 0 },
+  })),
+}));
+
 import { fetchApprovals } from "./approvalApi";
 import {
   demoSeeds,
@@ -44,12 +51,14 @@ describe("approval workbench demo isolation", () => {
   it("marks demo records as non-reviewable", () => {
     const rows = getFilteredDemoItems({
       ...filters,
-      approval_type: "clearance_request",
+      approval_type: "price_adjustment",
     });
 
     expect(rows).toHaveLength(1);
     expect(isDemoApproval(rows[0])).toBe(true);
     expect(rows[0].can_review).toBe(false);
+    // Clearance records must come from its real API, never from demo seeds.
+    expect(getFilteredDemoItems({...filters, approval_type:"clearance_request"})).toHaveLength(0);
   });
 
   it("never queries the backend for demo-only business", async () => {
@@ -81,7 +90,7 @@ describe("approval workbench demo isolation", () => {
   it("combines real WFS and demo rows only in All", async () => {
     const result = await fetchWorkbenchList(filters);
 
-    expect(result.meta.total).toBe(5);
+    expect(result.meta.total).toBe(4); // clearance demo seeds are excluded after real API activation
     expect(result.data.items[0].id).toBe("REAL-WFS-001");
     expect(result.data.items.slice(1).every(isDemoApproval)).toBe(true);
   });

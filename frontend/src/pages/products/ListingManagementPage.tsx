@@ -5,6 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Button, Card, Form, Input, Modal, Select, message } from "antd";
 
 import PageShell from "@/components/page/PageShell";
+import { getClearanceLifecycleOverrides } from "./clearance/clearanceApi";
 import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
 import CustomTagManagerModal, { type CustomProductTag } from "@/components/product-tags/CustomTagManagerModal";
 import ProductTagAssignmentModal from "@/components/product-tags/ProductTagAssignmentModal";
@@ -532,6 +533,16 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
       .then(({ rows: nextRows, meta }) => {
         if (!active || requestEpoch !== lifecycleMutationEpochRef.current) return;
         setRows(nextRows.map(withPendingListingDiagnostics));
+        // Local clearance approval overlay; no writes to the real Listing MART.
+        // Exact identity uses account+store ID+Item ID, never SKU.
+        void getClearanceLifecycleOverrides().then(items => {
+          if(!active || requestEpoch !== lifecycleMutationEpochRef.current) return;
+          const approved=new Set(items.filter(item=>item.stage==="清货期")
+            .map(item=>`${item.source_account_ref}::${item.store_id}::${item.item_id}`));
+          setRows(current=>current.map(row=>approved.has(`${row.sourceAccountRef}::${row.storeId}::${row.productId}`)
+            ? {...row,lifecycle:"清货期",lifecyclePreview:true,
+               lifecyclePreviewReason:"本地55433审批通过，15432真实数据仍只读"} : row));
+        }).catch(()=>{});
         setTotalRows(meta.total);
 
         // LISTING_DIAGNOSTIC_PRODUCTION_API_V1: enrich only the visible page,

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from celery import Celery
 from celery.schedules import crontab
@@ -25,6 +27,7 @@ TASK_IMPORTS = (
     "app.modules.operation_logs.tasks",
     "app.modules.business_connectors.tasks",
     "app.modules.listing_rule_config.tasks",
+    "app.modules.clearance.tasks",
     "app.modules.ai_runtime.tasks",
 )
 
@@ -34,6 +37,7 @@ TASK_ROUTES = {
     "business_connectors.*": {"queue": NOTIFICATION_QUEUE, "routing_key": NOTIFICATION_QUEUE},
     "listing_evaluation.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "listing_lifecycle.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
+    "clearance.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "ai_runtime.*": {"queue": AI_QUEUE, "routing_key": AI_QUEUE},
     "walmart_scf.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "walmart_remote.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
@@ -139,6 +143,19 @@ def create_celery_app(
             },
         },
     )
+    # Never enqueue disabled clearance ticks; unrelated Beat entries are untouched.
+    if _is_production_env() and _env_truthy(os.getenv("SZZSBJ_CLEARANCE_AUTO_ENABLED")):
+        celery.conf.beat_schedule = {
+            **celery.conf.beat_schedule,
+            "clearance-la-daily-scheduler": {
+                "task": "clearance.scheduler_tick",
+                "schedule": crontab(
+                    minute=0,
+                    hour=0,
+                    nowfun=lambda: datetime.now(ZoneInfo("America/Los_Angeles")),
+                ),
+            },
+        }
     return celery
 
 
