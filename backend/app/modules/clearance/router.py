@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.core.api import SuccessEnvelope, success_response
-from app.core.auth import Principal
+from app.core.auth import Principal, require_principal
 from app.core.permissions import has_permission, require_any_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
@@ -23,6 +23,7 @@ from .rules import CLEARANCE_RULE_CATALOG, ClearanceRules
 router = APIRouter(prefix="/api/clearance", tags=["WFS Clearance Center"])
 db_session = Annotated[Session, Depends(get_db_session)]
 account_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
+authenticated = Annotated[Principal, Depends(require_principal)]
 view = Annotated[
     Principal,
     Depends(
@@ -191,7 +192,7 @@ def apply(
     request: Request,
     payload: ClearanceApply,
     session: db_session,
-    principal: view,
+    principal: authenticated,
     accounts: account_scope,
 ):
     with storage_session(session, writable=True) as write:
