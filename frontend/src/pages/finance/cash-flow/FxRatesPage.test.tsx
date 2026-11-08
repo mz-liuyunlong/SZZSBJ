@@ -61,7 +61,7 @@ beforeEach(() => {
   messages.success.mockClear();
   messages.error.mockClear();
   vi.mocked(backendRequest).mockReset();
-  vi.mocked(fetchCurrentUser).mockReset().mockResolvedValue({ isSuperAdmin: true } as never);
+  vi.mocked(fetchCurrentUser).mockReset().mockResolvedValue({ isSuperAdmin: false, permissions: ["action:finance:fx-rates:sync"] } as never);
 });
 afterEach(() => {
   cleanup();
@@ -134,7 +134,7 @@ describe("failure text", () => {
     expect(fxSyncFailedText(null)).toContain("同步失败");
     expect(fxSyncErrorText(new BackendRequestError(409, "X"))).toContain("还没打开");
     expect(fxSyncErrorText(new BackendRequestError(503, "X"))).toContain("任务队列");
-    expect(fxSyncErrorText(new BackendRequestError(403, "X"))).toBe("只有超级管理员能同步");
+    expect(fxSyncErrorText(new BackendRequestError(403, "X"))).toBe("当前角色没有汇率同步权限");
   });
 });
 
@@ -183,23 +183,23 @@ describe("FxRatesPage", () => {
     expect(await screen.findByText("汇率读取失败")).toBeTruthy();
   });
 
-  it("greys out the sync button for anyone who is not a super admin, and says why", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue({ isSuperAdmin: false } as never);
+  it("greys out the sync button when the role has no sync permission, and says why", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue({ isSuperAdmin: false, permissions: [] } as never);
     const posts = vi.fn();
     serve({ rates: () => [], syncPost: posts });
     showPage();
     const button = await screen.findByRole("button", { name: "手动同步" });
-    await waitFor(() => expect(button.parentElement?.getAttribute("title")).toBe("只有超级管理员能同步"));
+    await waitFor(() => expect(button.parentElement?.getAttribute("title")).toBe("当前角色没有汇率同步权限"));
     expect((button as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(button);
     expect(posts).not.toHaveBeenCalled();
   });
 
-  it("enables the sync button for a super admin with no hint", async () => {
+  it("enables the sync button for a non-admin granted the sync action", async () => {
     serve({ rates: () => [] });
     showPage();
     await waitFor(() => expect((screen.getByRole("button", { name: "手动同步" }) as HTMLButtonElement).disabled).toBe(false));
-    expect(screen.queryByTitle("只有超级管理员能同步")).toBeNull();
+    expect(screen.queryByTitle("当前角色没有汇率同步权限")).toBeNull();
   });
 
   it("says the same thing when the backend answers 403", async () => {
@@ -207,7 +207,7 @@ describe("FxRatesPage", () => {
     showPage();
     await waitFor(() => expect((screen.getByRole("button", { name: "手动同步" }) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByRole("button", { name: "手动同步" }));
-    await waitFor(() => expect(messages.error).toHaveBeenCalledWith("只有超级管理员能同步"));
+    await waitFor(() => expect(messages.error).toHaveBeenCalledWith("当前角色没有汇率同步权限"));
   });
 
   it("disables the button while syncing, then refreshes and reports the counts", async () => {

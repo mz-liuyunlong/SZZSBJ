@@ -298,6 +298,20 @@ export async function createRole(values: RoleFormValues): Promise<RoleManagement
   return toRow(response.data);
 }
 
+// Preserve assigned historical grants not represented in the current catalog.
+// Saving an unrelated permission group must never silently revoke legacy grants.
+export function permissionKeysForRoleSave(
+  role: Pick<RoleManagementRow, "permissionKeys">,
+  permissions: RolePermissionState,
+  catalog: RolePermissionCatalog,
+): string[] {
+  const known = catalogPermissionKeys(catalog);
+  return [...new Set([
+    ...stateToPermissionKeys(permissions, catalog),
+    ...role.permissionKeys.filter((key) => !known.has(key)),
+  ])].sort();
+}
+
 export async function saveRolePermissions(
   role: RoleManagementRow,
   permissions: RolePermissionState,
@@ -308,7 +322,7 @@ export async function saveRolePermissions(
     {
       method: "PATCH",
       body: JSON.stringify({
-        permission_keys: stateToPermissionKeys(permissions, catalog),
+        permission_keys: permissionKeysForRoleSave(role, permissions, catalog),
         expected_version: role.version,
       }),
     },

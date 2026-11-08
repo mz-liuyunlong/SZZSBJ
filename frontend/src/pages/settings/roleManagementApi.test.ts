@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildRolePermissionCatalog,
   normalizeRoleDataScopes,
+  permissionKeysForRoleSave,
+  permissionKeysToState,
 } from "@/pages/settings/roleManagementApi";
 
 describe("buildRolePermissionCatalog", () => {
@@ -73,6 +75,41 @@ describe("normalizeRoleDataScopes", () => {
     ])).toEqual([
       { scopeType: "source_account", scopeValue: "account-a" },
       { scopeType: "store", scopeValue: "store-1" },
+    ]);
+  });
+});
+
+
+describe("permissionKeysForRoleSave", () => {
+  it("preserves historical grants absent from the current visible catalog", () => {
+    const catalog = {
+      pagePermissionGroups: [{ title: "设置", items: ["page:settings:logs:view"] }],
+      actionPermissionGroups: [],
+      fieldPermissionGroups: [],
+      permissionLabels: {},
+      permissionDescriptions: {},
+      highRiskPermissions: new Set<string>(),
+    };
+    const permissions = permissionKeysToState(
+      ["page:settings:logs:view"],
+      catalog,
+    );
+    const role = {
+      permissionKeys: [
+        "page:settings:logs:view",
+        "page:finance:retired-report:view",
+        "legacy:custom:read",
+      ],
+    };
+    expect(permissionKeysForRoleSave(role, permissions, catalog)).toEqual([
+      "legacy:custom:read",
+      "page:finance:retired-report:view",
+      "page:settings:logs:view",
+    ]);
+    permissions.pagePermissions["page:settings:logs:view"] = false;
+    expect(permissionKeysForRoleSave(role, permissions, catalog)).toEqual([
+      "legacy:custom:read",
+      "page:finance:retired-report:view",
     ]);
   });
 });
