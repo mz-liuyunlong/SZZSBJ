@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.celery_app import celery_app, get_broker_url
 from app.db.session import get_engine
+
 from . import service
 
 LA = ZoneInfo("America/Los_Angeles")
@@ -57,36 +59,48 @@ def scheduler_tick() -> None:
             return
         try:
             with Session(engine) as session:
-                old = session.execute(text("""
+                old = session.execute(
+                    text("""
                     SELECT status FROM biz_clearance_daily_runs
                     WHERE business_date_la=:date
-                """), {"date": today}).first()
+                """),
+                    {"date": today},
+                ).first()
                 if old is not None:
                     return
                 version, _ = service.rule_version(session)
-                session.execute(text("""
+                session.execute(
+                    text("""
                     INSERT INTO biz_clearance_daily_runs
                         (business_date_la,status,rule_version,examined,started_at)
                     VALUES (:date,'running',:version,0,now())
                     ON CONFLICT (business_date_la) DO NOTHING
-                """), {"date": today, "version": version})
+                """),
+                    {"date": today, "version": version},
+                )
                 session.commit()
                 try:
                     result = service.recalculate_all(session)
                     service.batch_reconcile_running(session)
-                    session.execute(text("""
+                    session.execute(
+                        text("""
                         UPDATE biz_clearance_daily_runs
                         SET status='succeeded',examined=:examined,finished_at=now()
                         WHERE business_date_la=:date AND status='running'
-                    """), {"date": today, "examined": result["examined"]})
+                    """),
+                        {"date": today, "examined": result["examined"]},
+                    )
                     session.commit()
                 except Exception:
                     session.rollback()
-                    session.execute(text("""
+                    session.execute(
+                        text("""
                         UPDATE biz_clearance_daily_runs
                         SET status='failed',error_code='CLEARANCE_RECALC_FAILED',finished_at=now()
                         WHERE business_date_la=:date AND status='running'
-                    """), {"date": today})
+                    """),
+                        {"date": today},
+                    )
                     session.commit()
                     raise
         finally:

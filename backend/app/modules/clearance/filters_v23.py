@@ -3,6 +3,7 @@
 Filters are applied to the same WFS-eligible Listing population BEFORE paging.
 No writes, no extra database schema and no synthetic owner/risk values.
 """
+
 from __future__ import annotations
 
 from sqlalchemy import text
@@ -10,14 +11,19 @@ from sqlalchemy.orm import Session
 
 STORE_SEPARATOR = "::"
 RISK_LEVELS = frozenset({"high", "medium", "low", "none", "unknown"})
-WFS_PREDICATE = "l.wfs_available_quantity > 0 AND l.wfs_available_quantity = trunc(l.wfs_available_quantity)"
+WFS_PREDICATE = (
+    "l.wfs_available_quantity > 0 AND l.wfs_available_quantity = trunc(l.wfs_available_quantity)"
+)
 
 
 def owner_parts(session: Session) -> tuple[str, str]:
     """Resolve owners using the same SKU/account master as Listing Management."""
-    relation = session.scalar(text("SELECT to_regclass(:relation)"), {
-        "relation": "public.dwd_lingxing_sku_product_info_current",
-    })
+    relation = session.scalar(
+        text("SELECT to_regclass(:relation)"),
+        {
+            "relation": "public.dwd_lingxing_sku_product_info_current",
+        },
+    )
     if relation is None:
         return "", "COALESCE(NULLIF(BTRIM(l.owner_ref), ''), '未分配')"
     join = """
@@ -31,16 +37,24 @@ def owner_parts(session: Session) -> tuple[str, str]:
     return join, "COALESCE(owner_match.owner_name, NULLIF(BTRIM(l.owner_ref), ''), '未分配')"
 
 
-def scoped_parts(session: Session, accounts: frozenset[str], keyword: str = "",
-                 store_refs: tuple[str, ...] = (), owner_names: tuple[str, ...] = (),
-                 *, owner_needed: bool = False) -> tuple[str, dict[str, object]]:
+def scoped_parts(
+    session: Session,
+    accounts: frozenset[str],
+    keyword: str = "",
+    store_refs: tuple[str, ...] = (),
+    owner_names: tuple[str, ...] = (),
+    *,
+    owner_needed: bool = False,
+) -> tuple[str, dict[str, object]]:
     """Shared SQL source for both paginated data and facets; account-scoped."""
     join, owner_expr = owner_parts(session) if (owner_needed or owner_names) else ("", "")
     parts = ["l.source_account_ref = ANY(:accounts)", WFS_PREDICATE]
     params: dict[str, object] = {"accounts": sorted(accounts)}
     if keyword.strip():
-        parts.append("(l.item_id ILIKE :keyword OR l.msku ILIKE :keyword "
-            "OR l.local_sku ILIKE :keyword OR l.title ILIKE :keyword)")
+        parts.append(
+            "(l.item_id ILIKE :keyword OR l.msku ILIKE :keyword "
+            "OR l.local_sku ILIKE :keyword OR l.title ILIKE :keyword)"
+        )
         params["keyword"] = "%" + keyword.strip() + "%"
     if store_refs:
         parts.append("(l.source_account_ref || '::' || l.store_id) = ANY(:store_refs)")
@@ -55,15 +69,22 @@ def list_filter_options(session: Session, accounts: frozenset[str]) -> dict:
     """Full authorized WFS population, not current table page."""
     # Use one owner-source check and the same owner expression in both facets.
     join, owner_expr = owner_parts(session)
-    clause = ("FROM mart_listing_management_current AS l " + join +
-              " WHERE l.source_account_ref = ANY(:accounts) AND " + WFS_PREDICATE)
+    clause = (
+        "FROM mart_listing_management_current AS l "
+        + join
+        + " WHERE l.source_account_ref = ANY(:accounts) AND "
+        + WFS_PREDICATE
+    )
     params = {"accounts": sorted(accounts)}
-    rows = session.execute(text(f"""
+    rows = session.execute(
+        text(f"""
         SELECT DISTINCT l.source_account_ref, l.store_id,
                COALESCE(NULLIF(BTRIM(l.store_name), ''), l.store_id) AS display_store,
                {owner_expr} AS display_owner
         {clause}
-    """), params).all()
+    """),
+        params,
+    ).all()
     stores: dict[str, str] = {}
     owners: set[str] = set()
     for account, store_id, name, owner in rows:
@@ -73,18 +94,34 @@ def list_filter_options(session: Session, accounts: frozenset[str]) -> dict:
         stores[ref] = str(name or store_id)
         owners.add(str(owner or "未分配"))
     return {
-        "stores": [{"value": ref, "label": label, "source_account_ref": ref.split(STORE_SEPARATOR, 1)[0]}
-                   for ref, label in sorted(stores.items(), key=lambda pair: (pair[1], pair[0]))],
+        "stores": [
+            {"value": ref, "label": label, "source_account_ref": ref.split(STORE_SEPARATOR, 1)[0]}
+            for ref, label in sorted(stores.items(), key=lambda pair: (pair[1], pair[0]))
+        ],
         "owners": [{"value": name, "label": name} for name in sorted(owners)],
-        "risks": [{"value": value, "label": label} for value, label in (
-            ("high", "高风险"), ("medium", "中风险"), ("low", "低风险"),
-            ("none", "无风险"), ("unknown", "待评估"))],
+        "risks": [
+            {"value": value, "label": label}
+            for value, label in (
+                ("high", "高风险"),
+                ("medium", "中风险"),
+                ("low", "低风险"),
+                ("none", "无风险"),
+                ("unknown", "待评估"),
+            )
+        ],
     }
 
 
-def search_risk_filtered(session: Session, accounts: frozenset[str], keyword: str,
-                         page: int, page_size: int, store_refs: tuple[str, ...],
-                         owner_names: tuple[str, ...], risk_levels: tuple[str, ...]) -> dict:
+def search_risk_filtered(
+    session: Session,
+    accounts: frozenset[str],
+    keyword: str,
+    page: int,
+    page_size: int,
+    store_refs: tuple[str, ...],
+    owner_names: tuple[str, ...],
+    risk_levels: tuple[str, ...],
+) -> dict:
     """Evaluate the whole scoped population with one set of batched source reads.
 
     No risk-index tables are available on the protected 0076 data source.
@@ -93,29 +130,53 @@ def search_risk_filtered(session: Session, accounts: frozenset[str], keyword: st
     """
     from collections import defaultdict
     from datetime import timedelta
+
     from sqlalchemy import select, text, tuple_
-    from app.modules.data_pages.models import ListingManagementCurrentMart, DailySalesItemDayMart
+
+    from app.modules.data_pages.models import DailySalesItemDayMart, ListingManagementCurrentMart
     from app.modules.product_management.daily_sales_costs import (
-        load_daily_sales_costs, normalize_sku_key,
+        load_daily_sales_costs,
+        normalize_sku_key,
     )
+
     from .read_only_listings import (
-        _commission_for_listings, _owner_names_for_listings, _page_first_wfs_dates,
-        _product_data_for_listings, read_business_snapshot,
+        _commission_for_listings,
+        _owner_names_for_listings,
+        _page_first_wfs_dates,
+        _product_data_for_listings,
+        read_business_snapshot,
     )
     from .repository import la_today
 
     clause, params = scoped_parts(session, accounts, keyword, store_refs, owner_names)
-    ids = session.execute(text(
-        "SELECT l.id " + clause +
-        " ORDER BY l.store_id, l.item_id, l.source_account_ref, l.id"
-    ), params).scalars().all()
+    ids = (
+        session.execute(
+            text(
+                "SELECT l.id "
+                + clause
+                + " ORDER BY l.store_id, l.item_id, l.source_account_ref, l.id"
+            ),
+            params,
+        )
+        .scalars()
+        .all()
+    )
     if not ids:
-        return {"items": [], "page": page, "page_size": page_size,
-                "has_more": False, "total": 0, "total_scope": "filtered_wfs_stock_eligible",
-                "risk_filter_applied": True, "rule_version": 0,
-                "risk_model_ready": False, "risk_calculated_in_memory": True}
-    found = session.scalars(select(ListingManagementCurrentMart).where(
-        ListingManagementCurrentMart.id.in_(ids))).all()
+        return {
+            "items": [],
+            "page": page,
+            "page_size": page_size,
+            "has_more": False,
+            "total": 0,
+            "total_scope": "filtered_wfs_stock_eligible",
+            "risk_filter_applied": True,
+            "rule_version": 0,
+            "risk_model_ready": False,
+            "risk_calculated_in_memory": True,
+        }
+    found = session.scalars(
+        select(ListingManagementCurrentMart).where(ListingManagementCurrentMart.id.in_(ids))
+    ).all()
     by_id = {row.id: row for row in found}
     listings = [by_id[row_id] for row_id in ids if row_id in by_id]
     cutoff = la_today() - timedelta(days=1)
@@ -134,12 +195,17 @@ def search_risk_filtered(session: Session, accounts: frozenset[str], keyword: st
     daily = defaultdict(list)
     keys = sorted({(row.source_account_ref, row.store_id, row.item_id) for row in listings})
     for start in range(0, len(keys), 150):
-        batch = keys[start:start + 150]
-        facts = session.scalars(select(DailySalesItemDayMart).where(
-            tuple_(DailySalesItemDayMart.source_account_ref,
-                   DailySalesItemDayMart.store_id, DailySalesItemDayMart.item_id).in_(batch),
-            DailySalesItemDayMart.business_date_la.between(cutoff - timedelta(days=29), cutoff),
-        )).all()
+        batch = keys[start : start + 150]
+        facts = session.scalars(
+            select(DailySalesItemDayMart).where(
+                tuple_(
+                    DailySalesItemDayMart.source_account_ref,
+                    DailySalesItemDayMart.store_id,
+                    DailySalesItemDayMart.item_id,
+                ).in_(batch),
+                DailySalesItemDayMart.business_date_la.between(cutoff - timedelta(days=29), cutoff),
+            )
+        ).all()
         for fact in facts:
             daily[(fact.source_account_ref, fact.store_id, fact.item_id)].append(fact)
 
@@ -151,11 +217,15 @@ def search_risk_filtered(session: Session, accounts: frozenset[str], keyword: st
         stock = int(available)
         key = (listing.source_account_ref, listing.store_id, listing.item_id)
         row = read_business_snapshot(
-            session, listing, page_available=stock,
-            page_daily_rows=daily.get(key, []), first_dates_batched=True,
+            session,
+            listing,
+            page_available=stock,
+            page_daily_rows=daily.get(key, []),
+            first_dates_batched=True,
             first_date_for_page=first_map.get(key),
             page_cost=costs_by_key.get((listing.source_account_ref, listing.local_sku)),
-            product_data=product_map, store_commissions=commission_map,
+            product_data=product_map,
+            store_commissions=commission_map,
         )
         if row.get("risk") not in risk_levels:
             continue
@@ -165,8 +235,15 @@ def search_risk_filtered(session: Session, accounts: frozenset[str], keyword: st
             row["owner_name"] = owner
         matched.append(row)
     start = (page - 1) * page_size
-    return {"items": matched[start:start + page_size], "page": page,
-            "page_size": page_size, "has_more": start + page_size < len(matched),
-            "total": len(matched), "total_scope": "filtered_wfs_stock_eligible",
-            "risk_filter_applied": True, "rule_version": 0,
-            "risk_model_ready": False, "risk_calculated_in_memory": True}
+    return {
+        "items": matched[start : start + page_size],
+        "page": page,
+        "page_size": page_size,
+        "has_more": start + page_size < len(matched),
+        "total": len(matched),
+        "total_scope": "filtered_wfs_stock_eligible",
+        "risk_filter_applied": True,
+        "rule_version": 0,
+        "risk_model_ready": False,
+        "risk_calculated_in_memory": True,
+    }

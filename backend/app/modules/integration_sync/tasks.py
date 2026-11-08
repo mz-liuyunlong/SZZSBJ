@@ -23,16 +23,39 @@ def execute_sync_run(run_id: str) -> None:
         SyncRunExecutionService(session).execute(parsed_run_id)
         # Only a successful relevant source sync may request a scoped
         # recalculation. A clearance failure cannot make sync fail.
-        run = session.execute(text(
-            "SELECT status,interface_key,source_account_ref "
-            "FROM gov_integration_sync_runs WHERE id=:id"
-        ), {"id": parsed_run_id}).mappings().first()
-        if run and run["status"] == "succeeded" and any(
-            term in str(run["interface_key"]).lower() for term in
-            ("wfs", "inventory", "listing", "sales", "order", "sem", "advertis", "refund", "return", "profit")
+        run = (
+            session.execute(
+                text(
+                    "SELECT status,interface_key,source_account_ref "
+                    "FROM gov_integration_sync_runs WHERE id=:id"
+                ),
+                {"id": parsed_run_id},
+            )
+            .mappings()
+            .first()
+        )
+        if (
+            run
+            and run["status"] == "succeeded"
+            and any(
+                term in str(run["interface_key"]).lower()
+                for term in (
+                    "wfs",
+                    "inventory",
+                    "listing",
+                    "sales",
+                    "order",
+                    "sem",
+                    "advertis",
+                    "refund",
+                    "return",
+                    "profit",
+                )
+            )
         ):
             try:
                 from app.modules.clearance.tasks import enqueue_scope_recalculation
+
                 enqueue_scope_recalculation(run["source_account_ref"])
             except Exception:
                 logger.warning("clearance_post_sync_recalculation_deferred run_id=%s", run_id)

@@ -3,16 +3,17 @@
 The live database is NEVER a migration or write destination.
 This module does not replace the local database engine.
 """
+
 from __future__ import annotations
 
 import os
 import stat
+from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterator
 
-from sqlalchemy import Engine, URL, create_engine, event, text
+from sqlalchemy import URL, Engine, create_engine, event, text
 from sqlalchemy.orm import Session
 
 from app.core.config import AppEnvironment, get_database_url, get_settings
@@ -26,11 +27,7 @@ def _validate_environment() -> None:
         raise RuntimeError("Live read requires local environment")
 
     local = get_database_url()
-    if (
-        local.host != "127.0.0.1"
-        or local.port != 55433
-        or local.database != "szzsbj_dev"
-    ):
+    if local.host != "127.0.0.1" or local.port != 55433 or local.database != "szzsbj_dev":
         raise RuntimeError("Local database identity mismatch")
 
 
@@ -101,23 +98,18 @@ def live_read_session() -> Iterator[Session]:
 
 def probe_live_read() -> dict[str, object]:
     with get_live_read_engine().connect() as connection:
-        row = connection.execute(text(
-            "SELECT current_database(), current_user, "
-            "current_setting('transaction_read_only')"
-        )).one()
+        row = connection.execute(
+            text(
+                "SELECT current_database(), current_user, current_setting('transaction_read_only')"
+            )
+        ).one()
 
-        if tuple(row) != (
-            "szzsbj_app", "szzsbj_local_rw", "on"
-        ):
+        if tuple(row) != ("szzsbj_app", "szzsbj_local_rw", "on"):
             raise RuntimeError("Live database read-only check failed")
 
-        revision = connection.scalar(text(
-            "SELECT version_num FROM alembic_version"
-        ))
+        revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
 
-        users = connection.scalar(text(
-            "SELECT count(*) FROM app_users"
-        ))
+        users = connection.scalar(text("SELECT count(*) FROM app_users"))
 
         return {
             "database": row[0],

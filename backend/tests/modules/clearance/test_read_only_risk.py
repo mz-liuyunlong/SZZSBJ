@@ -1,4 +1,5 @@
 """Verify pure risk restoration against source-backed facts without any DB writes."""
+
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -13,9 +14,13 @@ from app.modules.clearance.rules import ClearanceRules
 
 def listing():
     return SimpleNamespace(
-        source_account_ref="HK2613", store_id="S1", item_id="i1",
-        sale_price_amount=Decimal("15"), sale_price_currency_code="USD",
-        inbound_quantity=Decimal("0"), average_rating=Decimal("4.6"),
+        source_account_ref="HK2613",
+        store_id="S1",
+        item_id="i1",
+        sale_price_amount=Decimal("15"),
+        sale_price_currency_code="USD",
+        inbound_quantity=Decimal("0"),
+        average_rating=Decimal("4.6"),
         review_count=10,
     )
 
@@ -35,7 +40,7 @@ def window(units: int | None, days: int = 30) -> dict:
 
 
 def test_uses_existing_rule_evaluator_for_high_coverage():
-    w = {7:window(7, 7), 14:window(14, 14), 30:window(30)}
+    w = {7: window(7, 7), 14: window(14, 14), 30: window(30)}
     level, reasons, signals, gaps, metrics = module._assess_read_only(listing(), 240, w, 120, None)
     assert level == "high"
     assert metrics["sellout_days"] == 240
@@ -44,7 +49,7 @@ def test_uses_existing_rule_evaluator_for_high_coverage():
 
 
 def test_medium_rule_and_new_product_protection():
-    w = {7:window(7, 7), 14:window(14, 14), 30:window(30)}
+    w = {7: window(7, 7), 14: window(14, 14), 30: window(30)}
     assert module._assess_read_only(listing(), 120, w, 120, None)[0] == "medium"
     assert module._assess_read_only(listing(), 120, w, 40, None)[0] == "low"
     # Unknown first-WFS date cannot waive 60-day new-product protection.
@@ -55,7 +60,7 @@ def test_medium_rule_and_new_product_protection():
 
 
 def test_zero_sales_requires_first_stock_date_and_complete_window():
-    w = {7:window(0, 7), 14:window(0, 14), 30:window(0)}
+    w = {7: window(0, 7), 14: window(0, 14), 30: window(0)}
     assert module._assess_read_only(listing(), 120, w, 32, None)[0] == "high"
     assert module._assess_read_only(listing(), 120, w, None, None)[0] == "unknown"
     w[30] = window(None)
@@ -63,7 +68,7 @@ def test_zero_sales_requires_first_stock_date_and_complete_window():
 
 
 def test_incomplete_sales_cannot_be_inferred_from_listing_mart():
-    w = {7:window(None, 7), 14:window(None, 14), 30:window(None)}
+    w = {7: window(None, 7), 14: window(None, 14), 30: window(None)}
     level, _, _, gaps, metrics = module._assess_read_only(listing(), 100, w, None, None)
     assert level == "unknown"
     assert "sales_30d_completeness" in gaps
@@ -73,13 +78,23 @@ def test_incomplete_sales_cannot_be_inferred_from_listing_mart():
 def test_effective_days_respect_verified_first_stock():
     cutoff = date(2026, 11, 5)
     first = cutoff - timedelta(days=4)
-    rows = {first + timedelta(days=i): [SimpleNamespace(
-        msku="SKU-A", sales_qty=Decimal(2), sales_amount=Decimal(20),
-        sales_currency_code="USD", ad_spend_amount=Decimal(3),
-        ad_spend_currency_code="USD", cost_status="complete",
-        gross_profit_amount=Decimal(5), gross_profit_currency_code="USD",
-        return_qty=Decimal(0),
-    )] for i in range(5)}
+    rows = {
+        first + timedelta(days=i): [
+            SimpleNamespace(
+                msku="SKU-A",
+                sales_qty=Decimal(2),
+                sales_amount=Decimal(20),
+                sales_currency_code="USD",
+                ad_spend_amount=Decimal(3),
+                ad_spend_currency_code="USD",
+                cost_status="complete",
+                gross_profit_amount=Decimal(5),
+                gross_profit_currency_code="USD",
+                return_qty=Decimal(0),
+            )
+        ]
+        for i in range(5)
+    }
     w = module._window_stats(rows, cutoff, 30, first)
     assert w["complete"] is True
     assert w["units"] == Decimal(10)
@@ -92,6 +107,7 @@ def test_no_silent_error_handling_or_state_table_writes():
     class Exploding:
         def scalar(self, *_args, **_kwargs):
             raise RuntimeError("unexpected business SQL failure")
+
     with pytest.raises(RuntimeError, match="unexpected business SQL failure"):
         module._first_wfs_date(Exploding(), listing())
     assert ClearanceRules().highCoverage == 180
@@ -106,19 +122,29 @@ def test_full_snapshot_uses_real_daily_fact_rows_and_never_persists(monkeypatch)
     first = cutoff - timedelta(days=120)
     source_rows = []
     for i in range(30):
-        source_rows.append(SimpleNamespace(
-            business_date_la=cutoff - timedelta(days=i),
-            msku="M1", sales_qty=Decimal(1), sales_amount=Decimal("20"),
-            sales_currency_code="USD", ad_spend_amount=Decimal("2"),
-            ad_spend_currency_code="USD", gross_profit_amount=Decimal("5"),
-            gross_profit_currency_code="USD", return_qty=Decimal(0),
-            cost_status="complete", cost_quantity=Decimal(1),
-            purchase_cost_total_usd=Decimal(4), first_leg_cost_total_usd=Decimal(2),
-        ))
+        source_rows.append(
+            SimpleNamespace(
+                business_date_la=cutoff - timedelta(days=i),
+                msku="M1",
+                sales_qty=Decimal(1),
+                sales_amount=Decimal("20"),
+                sales_currency_code="USD",
+                ad_spend_amount=Decimal("2"),
+                ad_spend_currency_code="USD",
+                gross_profit_amount=Decimal("5"),
+                gross_profit_currency_code="USD",
+                return_qty=Decimal(0),
+                cost_status="complete",
+                cost_quantity=Decimal(1),
+                purchase_cost_total_usd=Decimal(4),
+                first_leg_cost_total_usd=Decimal(2),
+            )
+        )
 
     class FakeSession:
         def __init__(self):
             self.statements = []
+
         def scalars(self, statement):
             sql = str(statement)
             self.statements.append(sql)
@@ -154,19 +180,22 @@ def test_full_snapshot_uses_real_daily_fact_rows_and_never_persists(monkeypatch)
 
 def test_optional_first_wfs_source_never_uses_unverified_listing_age():
     from datetime import date
+
     class LookupSession:
         def __init__(self, found):
-            self.found=found
-            self.queries=[]
+            self.found = found
+            self.queries = []
+
         def scalar(self, sql, params=None):
             self.queries.append(str(sql))
             if "to_regclass" in str(sql):
                 return "listing_wfs_first_stock_la_locked" if self.found else None
             return date(2026, 9, 1)
-    missing=LookupSession(False)
+
+    missing = LookupSession(False)
     assert module._first_wfs_date(missing, listing()) is None
-    assert len(missing.queries)==1
-    present=LookupSession(True)
+    assert len(missing.queries) == 1
+    present = LookupSession(True)
     assert module._first_wfs_date(present, listing()) == date(2026, 9, 1)
-    assert len(present.queries)==2
+    assert len(present.queries) == 2
     assert all(q.lstrip().startswith("SELECT") for q in present.queries)

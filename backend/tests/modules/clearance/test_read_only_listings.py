@@ -1,4 +1,5 @@
 """Clearance-only read fallback; no production DB or network is accessed."""
+
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
@@ -49,12 +50,24 @@ class ReadSession:
 
 def listing():
     return SimpleNamespace(
-        id=uuid4(), source_account_ref="HK2613", store_id="store-1", item_id="item-5",
-        msku="MSKU-1", local_sku="SKU-1", title="Real Listing", local_name="Real Listing",
-        store_name="Store", owner_ref="Owner", sale_price_currency_code="USD",
-        sale_price_amount=Decimal("15.25"), picture_url=None,
-        sales_7d=Decimal("12"), sales_14d=Decimal("24"), sales_30d=Decimal("48"),
-        average_rating=Decimal("4.2"), review_count=27,
+        id=uuid4(),
+        source_account_ref="HK2613",
+        store_id="store-1",
+        item_id="item-5",
+        msku="MSKU-1",
+        local_sku="SKU-1",
+        title="Real Listing",
+        local_name="Real Listing",
+        store_name="Store",
+        owner_ref="Owner",
+        sale_price_currency_code="USD",
+        sale_price_amount=Decimal("15.25"),
+        picture_url=None,
+        sales_7d=Decimal("12"),
+        sales_14d=Decimal("24"),
+        sales_30d=Decimal("48"),
+        average_rating=Decimal("4.2"),
+        review_count=27,
     )
 
 
@@ -69,6 +82,7 @@ def test_unrelated_database_errors_are_not_suppressed():
     class Broken:
         def scalar(self, *_args, **_kwargs):
             raise RuntimeError("real SQL error")
+
     with pytest.raises(RuntimeError, match="real SQL error"):
         fallback.risk_read_model_ready(Broken())
 
@@ -78,10 +92,12 @@ def test_scoped_keyword_pagination_uses_select_only_and_source_rows(monkeypatch)
     item.wfs_available_quantity = 13
     session = ReadSession(ids=[item.id], rows=[item])
     monkeypatch.setattr(fallback, "current_available", lambda _s, _l: 13)
-    monkeypatch.setattr(fallback, "read_business_snapshot", lambda _s, listing: {"item_id": listing.item_id, "available": 13})
-    result = fallback.search_unassessed_listings(
-        session, frozenset({"HK2613"}), "SKU-1", 2, 50
+    monkeypatch.setattr(
+        fallback,
+        "read_business_snapshot",
+        lambda _s, listing: {"item_id": listing.item_id, "available": 13},
     )
+    result = fallback.search_unassessed_listings(session, frozenset({"HK2613"}), "SKU-1", 2, 50)
     assert result["items"] == [{"item_id": "item-5", "available": 13}]
     assert result["rule_version"] == 0 and result["risk_model_ready"] is False
     sql, params = session.statements[0]
@@ -91,7 +107,10 @@ def test_scoped_keyword_pagination_uses_select_only_and_source_rows(monkeypatch)
     assert params["accounts"] == ["HK2613"]
     assert params["limit"] == 51 and params["offset"] == 50
     assert params["keyword"] == "%SKU-1%"
-    assert all(not stmt.lstrip().startswith(("INSERT", "UPDATE", "DELETE")) for stmt, _ in session.statements)
+    assert all(
+        not stmt.lstrip().startswith(("INSERT", "UPDATE", "DELETE"))
+        for stmt, _ in session.statements
+    )
 
 
 def test_no_matching_wfs_listing_returns_empty_not_fake_data():
@@ -134,10 +153,17 @@ def test_exact_total_is_sql_count_of_scoped_wfs_pool(monkeypatch):
     item.wfs_available_quantity = 8
     session = CountingSession(ids=[item.id], rows=[item])
     monkeypatch.setattr(fallback, "current_available", lambda _s, _l: 8)
-    monkeypatch.setattr(fallback, "read_business_snapshot", lambda _s, row: {"item_id": row.item_id, "available": 8})
+    monkeypatch.setattr(
+        fallback, "read_business_snapshot", lambda _s, row: {"item_id": row.item_id, "available": 8}
+    )
     result = fallback.search_unassessed_listings(
-        session, frozenset({"HK2613"}), "SKU", 1, 50,
-        exact_total=True, risk_only_requested=True,
+        session,
+        frozenset({"HK2613"}),
+        "SKU",
+        1,
+        50,
+        exact_total=True,
+        risk_only_requested=True,
     )
     assert result["total"] == 318
     assert result["total_scope"] == "all_wfs_stock_eligible"
@@ -152,8 +178,13 @@ def test_empty_page_still_returns_exact_total():
         def scalar(self, statement, params=None):
             assert "COUNT(*)" in str(statement)
             return 0
+
     result = fallback.search_unassessed_listings(
-        CountingEmptySession(), frozenset({"HK2613"}), "", 2, 50,
+        CountingEmptySession(),
+        frozenset({"HK2613"}),
+        "",
+        2,
+        50,
         exact_total=True,
     )
     assert result["total"] == 0
@@ -163,8 +194,6 @@ def test_empty_page_still_returns_exact_total():
 
 def test_unrequested_total_does_not_issue_count():
     session = ReadSession()
-    result = fallback.search_unassessed_listings(
-        session, frozenset({"HK2613"}), "", 1, 50
-    )
+    result = fallback.search_unassessed_listings(session, frozenset({"HK2613"}), "", 1, 50)
     assert result["total"] is None
     assert len(session.statements) == 1

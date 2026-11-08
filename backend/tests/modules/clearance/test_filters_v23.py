@@ -1,8 +1,12 @@
 """V23 WFS dropdown filters: read-only, account-scoped, pre-pagination."""
+
 from __future__ import annotations
 
 from app.modules.clearance.filters_v23 import (
-    WFS_PREDICATE, list_filter_options, scoped_parts, search_risk_filtered,
+    WFS_PREDICATE,
+    list_filter_options,
+    scoped_parts,
+    search_risk_filtered,
 )
 
 
@@ -29,8 +33,11 @@ class FacetSession:
 def test_scoped_filter_is_account_protected_and_parameterized():
     session = FacetSession()
     clause, params = scoped_parts(
-        session, frozenset({"primary"}), "microwave",
-        store_refs=("primary::111", "primary::222"), owner_names=("Helen", "Lucy"),
+        session,
+        frozenset({"primary"}),
+        "microwave",
+        store_refs=("primary::111", "primary::222"),
+        owner_names=("Helen", "Lucy"),
     )
     assert "l.source_account_ref = ANY(:accounts)" in clause
     assert WFS_PREDICATE in clause
@@ -39,9 +46,12 @@ def test_scoped_filter_is_account_protected_and_parameterized():
     assert "ANY(:owner_names)" in clause
     assert "LATERAL" in clause
     assert "Helen" not in clause and "microwave" not in clause
-    assert params == {"accounts": ["primary"], "keyword": "%microwave%",
-                      "store_refs": ["primary::111", "primary::222"],
-                      "owner_names": ["Helen", "Lucy"]}
+    assert params == {
+        "accounts": ["primary"],
+        "keyword": "%microwave%",
+        "store_refs": ["primary::111", "primary::222"],
+        "owner_names": ["Helen", "Lucy"],
+    }
 
 
 def test_filter_options_are_from_full_wfs_scope_not_page():
@@ -50,7 +60,11 @@ def test_filter_options_are_from_full_wfs_scope_not_page():
     assert [x["value"] for x in result["stores"]] == ["primary::111", "primary::222"]
     assert [x["value"] for x in result["owners"]] == ["Helen", "Lucy", "未分配"]
     assert [x["value"] for x in result["risks"]] == [
-        "high", "medium", "low", "none", "unknown",
+        "high",
+        "medium",
+        "low",
+        "none",
+        "unknown",
     ]
     sql, params = session.statements[-1]
     assert WFS_PREDICATE in sql
@@ -68,8 +82,9 @@ def test_missing_owner_master_uses_existing_listing_owner_reference():
 
 def test_global_risk_filter_uses_whole_population_not_first_page(monkeypatch):
     import sys
-    from types import ModuleType, SimpleNamespace
     from datetime import date
+    from types import ModuleType, SimpleNamespace
+
     from sqlalchemy import Column, Date, Integer, String
     from sqlalchemy.orm import declarative_base
 
@@ -108,9 +123,14 @@ def test_global_risk_filter_uses_whole_population_not_first_page(monkeypatch):
     reader._page_first_wfs_dates = lambda *_args: {}
     reader._product_data_for_listings = lambda *_args: {}
     seen = []
+
     def fake_snapshot(_session, item, **_kwargs):
         seen.append(item.id)
-        return {"item_id": item.item_id, "risk": {1: "high", 2: "none", 3: "medium", 4: "unknown"}[item.id]}
+        return {
+            "item_id": item.item_id,
+            "risk": {1: "high", 2: "none", 3: "medium", 4: "unknown"}[item.id],
+        }
+
     reader.read_business_snapshot = fake_snapshot
     monkeypatch.setitem(sys.modules, reader.__name__, reader)
 
@@ -118,24 +138,35 @@ def test_global_risk_filter_uses_whole_population_not_first_page(monkeypatch):
     repo.la_today = lambda: date(2026, 11, 8)
     monkeypatch.setitem(sys.modules, repo.__name__, repo)
 
-    listings = [Listing(id=n, source_account_ref="primary", store_id="111",
-                        item_id=f"ITEM-{n}", local_sku=f"SKU-{n}",
-                        wfs_available_quantity=10) for n in (1, 2, 3, 4)]
+    listings = [
+        Listing(
+            id=n,
+            source_account_ref="primary",
+            store_id="111",
+            item_id=f"ITEM-{n}",
+            local_sku=f"SKU-{n}",
+            wfs_available_quantity=10,
+        )
+        for n in (1, 2, 3, 4)
+    ]
 
     class Session:
         def scalar(self, _statement, _params=None):
             return None
+
         def execute(self, sql, params):
             assert "l.source_account_ref = ANY(:accounts)" in str(sql)
             assert params["store_refs"] == ["primary::111"]
             return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [1, 2, 3, 4]))
+
         def scalars(self, sql):
             if "v23_test_listing" in str(sql):
                 return SimpleNamespace(all=lambda: listings)
             return SimpleNamespace(all=lambda: [])
 
-    result = search_risk_filtered(Session(), frozenset({"primary"}), "", 2, 1,
-                                  ("primary::111",), (), ("high", "medium"))
+    result = search_risk_filtered(
+        Session(), frozenset({"primary"}), "", 2, 1, ("primary::111",), (), ("high", "medium")
+    )
     assert seen == [1, 2, 3, 4]
     assert result["total"] == 2
     assert result["items"] == [{"item_id": "ITEM-3", "risk": "medium"}]

@@ -469,7 +469,11 @@ def evaluate_listing(
                     and day.sales_qty is not None
                 )
     return decide_lifecycle(
-        previous_stage=(None if listing.lifecycle_status == "清货期" and can_resume_lifecycle(session, listing) else listing.lifecycle_status),
+        previous_stage=(
+            None
+            if listing.lifecycle_status == "清货期" and can_resume_lifecycle(session, listing)
+            else listing.lifecycle_status
+        ),
         first_positive=first_positive,
         cutoff=cutoff,
         days=days,

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Period = Literal[7, 14, 30]
+
 
 class ClearanceRules(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -76,7 +78,7 @@ class ClearanceRules(BaseModel):
     enableClearanceReview: bool = False
 
     @model_validator(mode="after")
-    def ensure_ascending_stock_thresholds(self) -> "ClearanceRules":
+    def ensure_ascending_stock_thresholds(self) -> ClearanceRules:
         if not self.assistCoverage < self.mediumCoverage < self.highCoverage:
             raise ValueError("售罄阈值必须满足：经营辅助 < 中风险 < 高风险")
         return self

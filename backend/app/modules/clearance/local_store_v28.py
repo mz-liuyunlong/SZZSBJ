@@ -4,13 +4,14 @@ Local dev reads existing data from the authorized 15432 tunnel and writes only
 clearance/approval test records to the separate local Docker database 55433.
 The guard is fail closed, checks BOTH URLs, and is never a global session override.
 """
+
 from __future__ import annotations
 
-from contextlib import contextmanager
-from functools import lru_cache
 import os
 import re
-from typing import Iterator
+from collections.abc import Iterator
+from contextlib import contextmanager
+from functools import lru_cache
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
@@ -19,9 +20,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.api import ApiError, ErrorCode
 from app.core.config import get_database_url, get_settings
 
-_LOCAL_WRITE_ROUTES = frozenset({
-    ("POST", "/api/clearance/applications"),
-})
+_LOCAL_WRITE_ROUTES = frozenset(
+    {
+        ("POST", "/api/clearance/applications"),
+    }
+)
 _UUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 _REVIEW = re.compile(rf"/api/clearance/applications/{_UUID}/(review|cancel|complete|reconcile)\Z")
 
@@ -45,12 +48,15 @@ def checked_local_db_url():
     target = make_url(raw)
     if (
         not source.drivername.startswith("postgresql")
-        or source.host != "127.0.0.1" or source.port != 15432
+        or source.host != "127.0.0.1"
+        or source.port != 15432
         or source.database != "szzsbj_app"
         or not target.drivername.startswith("postgresql")
-        or target.host != "127.0.0.1" or target.port != 55433
+        or target.host != "127.0.0.1"
+        or target.port != 55433
         or target.database != "szzsbj_dev"
-        or source.query or target.query
+        or source.query
+        or target.query
     ):
         _blocked()
     return target
@@ -59,7 +65,9 @@ def checked_local_db_url():
 def is_clearance_write_route(method: str, path: str) -> bool:
     if not is_local():
         return False
-    if not ((method, path) in _LOCAL_WRITE_ROUTES or (method == "POST" and _REVIEW.fullmatch(path))):
+    if not (
+        (method, path) in _LOCAL_WRITE_ROUTES or (method == "POST" and _REVIEW.fullmatch(path))
+    ):
         return False
     try:
         return checked_local_db_url() is not None
@@ -90,15 +98,27 @@ def storage_session(read_session: Session, *, writable: bool = False) -> Iterato
         if db_name != "szzsbj_dev":
             _blocked()
         table_names = (
-            "biz_clearance_applications", "biz_clearance_events",
-            "biz_clearance_rule_versions", "app_approval_requests",
-            "app_approval_events", "app_approval_step_decisions",
-            "biz_listing_lifecycle_manual_states", "biz_listing_lifecycle_manual_history",
+            "biz_clearance_applications",
+            "biz_clearance_events",
+            "biz_clearance_rule_versions",
+            "app_approval_requests",
+            "app_approval_events",
+            "app_approval_step_decisions",
+            "biz_listing_lifecycle_manual_states",
+            "biz_listing_lifecycle_manual_history",
         )
-        missing = [name for name in table_names if store.scalar(
-            text("SELECT to_regclass(:table_name)"), {"table_name": f"public.{name}"}) is None]
+        missing = [
+            name
+            for name in table_names
+            if store.scalar(
+                text("SELECT to_regclass(:table_name)"), {"table_name": f"public.{name}"}
+            )
+            is None
+        ]
         if missing:
-            raise RuntimeError("Local clearance test schema is incomplete; no schema modification attempted")
+            raise RuntimeError(
+                "Local clearance test schema is incomplete; no schema modification attempted"
+            )
         yield store
         if store.in_transaction():
             store.rollback()  # A read endpoint never implicitly commits.

@@ -58,6 +58,7 @@ def permitted_local_write(method: str, path: str) -> bool:
     # V28: allow ONLY isolated clearance actions, after strict 15432/55433 URL checks.
     if method == "POST":
         from app.modules.clearance.local_store_v28 import is_clearance_write_route
+
         if is_clearance_write_route(method, path):
             return True
     if method == "PUT":
