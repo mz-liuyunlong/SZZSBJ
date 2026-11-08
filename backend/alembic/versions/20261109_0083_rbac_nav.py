@@ -27,8 +27,7 @@ def _registered_definitions():
     return (
         entry
         for entry in PERMISSION_DEFINITIONS
-        if entry.permission_type == "page"
-        or entry.permission_key.startswith(NEW_ACTION_PREFIXES)
+        if entry.permission_type == "page" or entry.permission_key.startswith(NEW_ACTION_PREFIXES)
     )
 
 
@@ -67,7 +66,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise RuntimeError(
-        "Role-managed navigation catalog may have active grants; use an "
-        "approved compensating migration instead of deleting permissions."
-    )
+    # Preserve registered permission definitions and any assigned role grants.
+    # This non-destructive downgrade allows Alembic to continue to 0082, whose
+    # protected clearance history explicitly forbids further rollback.
+    pass

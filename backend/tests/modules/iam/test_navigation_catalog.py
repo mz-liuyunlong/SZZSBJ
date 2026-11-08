@@ -8,18 +8,15 @@ from app.modules.iam.permission_catalog_v2 import ACTIONS, PERMISSION_DEFINITION
 
 def test_generated_navigation_pages_are_grantable_in_role_management() -> None:
     manifest = json.loads(
-        (Path(__file__).resolve().parents[3] / "app/modules/iam/navigation_permissions.json")
-        .read_text(encoding="utf-8")
+        (
+            Path(__file__).resolve().parents[3] / "app/modules/iam/navigation_permissions.json"
+        ).read_text(encoding="utf-8")
     )
     registered = {
-        item.permission_key
-        for item in PERMISSION_DEFINITIONS
-        if item.permission_type == "page"
+        item.permission_key for item in PERMISSION_DEFINITIONS if item.permission_type == "page"
     }
     menu_keys = {
-        page["permission_key"]
-        for module in manifest["modules"]
-        for page in module["pages"]
+        page["permission_key"] for module in manifest["modules"] for page in module["pages"]
     }
     assert menu_keys <= registered
     assert "page:finance:fx-rates:view" in menu_keys

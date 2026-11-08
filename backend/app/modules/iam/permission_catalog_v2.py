@@ -171,10 +171,13 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ActionDefinition("finance_cash_flow", "sync-approvals", "手动同步财务审批单", 40, "high"),
     ActionDefinition("finance_cash_flow", "manage-accounts", "新增及维护财务账户", 50, "high"),
     ActionDefinition("finance_fx_rates", "sync", "手动同步月汇率", 10, "high"),
-    ActionDefinition("settings_business_config", "manage-connectors", "配置业务连接器与密钥", 10, "high"),
+    ActionDefinition(
+        "settings_business_config", "manage-connectors", "配置业务连接器与密钥", 10, "high"
+    ),
     ActionDefinition("settings_business_config", "manage-decodo", "配置 Decodo 接口", 20, "high"),
-    ActionDefinition("settings_business_config", "manage-notifications", "配置通知规则", 30, "high"),
-
+    ActionDefinition(
+        "settings_business_config", "manage-notifications", "配置通知规则", 30, "high"
+    ),
 )
 
 FIELDS: tuple[FieldDefinition, ...] = (
