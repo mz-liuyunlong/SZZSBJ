@@ -19,13 +19,14 @@ import { ClearanceLiveManagementTable } from "./clearance/ClearanceLiveTables";
 import { ANALYSIS_FIELDS, MANAGEMENT_FIELDS, PERIODS, money } from "./clearance/clearanceUiConfig";
 import {
   CLEARANCE_PRODUCTS, DEFAULT_RULES, replaceClearancePreviewProducts, activeTaskFor, coverage, evaluateProduct,
-  type RiskLevel, type StoredClearance, type PeriodDays, type ClearanceProduct, type ClearanceTask,
+  type RiskLevel, type StoredClearance, type PeriodDays, type ClearanceProduct, type ClearanceTask, type ClearanceRules,
 } from "./clearance/clearanceModel";
 import { ClearanceDialogs, ClearanceRulesPanel } from "./clearance/clearanceDialogs";
 import "./ClearanceCenterPage.css";
 import { getClearanceFilterOptions, listClearanceListings, type ClearanceList, type ClearanceFilterOptions } from "./clearance/clearanceApi";
 import { fromLiveListing } from "./clearance/clearanceLiveAdapter";
-import { listClearanceApplications, type ClearanceApplication } from "./clearance/clearanceApi";
+import { listClearanceApplications, getClearanceRules, getClearanceRuleHistory, saveClearanceRules, type RuleResponse, type ClearanceApplication } from "./clearance/clearanceApi";
+import { rulesFromServer, fullRulesForSave, ruleChangeReason } from "./clearance/clearanceRulesAdapter";
 
 type Tab="analysis"|"management";
 type FilterState={store:string[];owner:string[];risk:string[];status:string;quick:string;sort:string;query:string};
@@ -36,7 +37,7 @@ const analysisDefaults=ANALYSIS_FIELDS.map(([key])=>key);
 const managementDefaults=MANAGEMENT_FIELDS.map(([key])=>key);
 
 export default function ClearanceCenterPage({page}:{page:NavigationPage}){
- const [data] = useState<StoredClearance>(()=>({
+ const [data,setData] = useState<StoredClearance>(()=>({
   tasks:(import.meta.env.DEV && import.meta.env.MODE !== "test") ? [{
    id:"DEMO-CLR-001",lines:[{id:"DEMO-CLR-201",qty:120,sold:0,removed:0,disposed:0}],
    status:"pending",reason:"本地验收记录（非真实申请）",methods:["降价"],
@@ -47,7 +48,11 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
    version:1,ruleVersion:0,riskAtSubmission:"unknown",
   }] : [],manual:[],ignored:[],rules:{...DEFAULT_RULES},ruleVersion:0,ruleHistory:[],
  }));
+ // Legacy mock/dialog mutations are unchanged; persisted rule updates use a separate handler.
  const update=(next:StoredClearance)=>{void next;void message.warning("清货规则保存当前阶段未接入；仅展示内存默认规则");};
+ const [ruleServer,setRuleServer]=useState<RuleResponse|null>(null);
+ const [rulesReady,setRulesReady]=useState(false);
+ const savingRules=useRef(false);
  const [liveRows,setLiveRows] = useState<ClearanceProduct[]>([]);
  const requestSerial=useRef(0);
  const [loadError,setLoadError] = useState(false);
@@ -168,6 +173,52 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
  const [tab,setTab]=useState<Tab>("analysis");
   // PR285_RULES_SIDE_DRAWER_V1
   const [rulesOpen,setRulesOpen]=useState(false);
+ useEffect(()=>{
+  if(!rulesOpen)return;
+  let active=true;
+  setRulesReady(false);
+  void getClearanceRules().then(server=>{
+   const rules=rulesFromServer(server);
+   if(!active)return;
+   setRuleServer(server);
+   setData(current=>({...current,rules,ruleVersion:server.version,ruleHistory:[]}));
+   setRulesReady(true);
+   void getClearanceRuleHistory().then(history=>{
+    if(active)setData(current=>({...current,ruleHistory:history.map(row=>({
+     version:row.version,actor:row.changed_by,at:row.changed_at??"",summary:row.change_reason,
+    }))}));
+   }).catch(()=>{if(active)void message.error("清货规则历史读取失败");});
+  }).catch(()=>{
+   if(active){setRuleServer(null);setRulesReady(false);void message.error("清货规则读取失败");}
+  });
+  return ()=>{active=false;};
+ },[rulesOpen]);
+ const saveRulesFromPanel=async(draft:ClearanceRules):Promise<void>=>{
+  const server=ruleServer;
+  if(!rulesReady||!server?.can_edit||savingRules.current)return;
+  const config=fullRulesForSave(server,draft);
+  const reason=ruleChangeReason(server,draft);
+  savingRules.current=true;
+  try{
+   const saved=await saveClearanceRules(server.version,config,reason);
+   if(!Number.isInteger(saved.version)||saved.version<1)throw new Error("Invalid saved rule version");
+   const current:RuleResponse={...server,version:saved.version,persisted:true,config};
+   const rules=rulesFromServer(current);
+   setRuleServer(current);
+   setData(previous=>({...previous,rules,ruleVersion:saved.version}));
+   void message.success("规则保存成功");
+   try{
+    const history=await getClearanceRuleHistory();
+    setData(previous=>({...previous,ruleHistory:history.map(row=>({
+     version:row.version,actor:row.changed_by,at:row.changed_at??"",summary:row.change_reason,
+    }))}));
+   }catch{void message.error("清货规则历史读取失败");}
+  }catch(error){
+   void message.error("规则保存失败");
+   throw error;
+  }finally{savingRules.current=false;}
+ };
+
  const [period,setPeriod]=useState<PeriodDays>(30);
  const role="刘运营";
  const [filters,setFilters]=useState<FilterState>({...blankFilters});
@@ -298,7 +349,8 @@ const metrics=useMemo(():ManagementStatCardItem<string>[]=>{
       data={data}
       onChange={update}
       role={role}
-      readOnly
+      readOnly={!rulesReady || !ruleServer?.can_edit}
+      onSaveRule={saveRulesFromPanel}
     />
   </Drawer>
 

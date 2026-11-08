@@ -76,6 +76,9 @@ class ClearanceRules(BaseModel):
     enableFloorPrice: bool = False
     allowedClearanceLoss: float = Field(default=0, ge=0, le=1000000)
     enableClearanceReview: bool = False
+    # Existing re-backlog reminder is not a batch-age rule or admission signal.
+    # Retain the current flag in versioned config without changing risk evaluation.
+    enableRepeatBacklog: bool = False
 
     @model_validator(mode="after")
     def ensure_ascending_stock_thresholds(self) -> ClearanceRules:

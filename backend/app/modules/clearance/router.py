@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, SuccessEnvelope, success_response
 from app.core.auth import Principal, require_principal
-from app.core.permissions import has_permission, require_any_permission, require_permission
+from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
 
@@ -24,14 +24,9 @@ router = APIRouter(prefix="/api/clearance", tags=["WFS Clearance Center"])
 db_session = Annotated[Session, Depends(get_db_session)]
 account_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
 authenticated = Annotated[Principal, Depends(require_principal)]
-view = Annotated[
-    Principal,
-    Depends(
-        require_any_permission(
-            "page:products:product-management:view", "action:products:clearance-center:review"
-        )
-    ),
-]
+# All authenticated users may search their scoped Listings before applying.
+# Review, rule management, and completion permissions remain independent.
+view = authenticated
 manage = Annotated[
     Principal, Depends(require_permission("action:products:clearance-center:manage-rules"))
 ]
@@ -45,7 +40,7 @@ class Strict(BaseModel):
 
 
 class RuleUpdate(Strict):
-    expected_version: int = Field(ge=1)
+    expected_version: int = Field(ge=0)
     config: ClearanceRules
     reason: str = Field(min_length=2, max_length=500)
 
@@ -74,11 +69,13 @@ class NoteWrite(Strict):
 @router.get("/rules", response_model=SuccessEnvelope[dict[str, Any], None])
 def rules_get(request: Request, session: db_session, principal: view):
     with storage_session(session) as store:
-        version, config = service.rule_version(store, require_persisted=True)
+        saved = service.persisted_rule_version(store)
+    version, config = saved if saved is not None else (0, ClearanceRules())
     return success_response(
         request,
         data={
             "version": version,
+            "persisted": saved is not None,
             "config": config.model_dump(),
             "catalog": [
                 {"group": group, "key": key, "label": label, "kind": kind}
@@ -127,12 +124,14 @@ def rules_save(request: Request, payload: RuleUpdate, session: db_session, princ
 
 
 @router.post("/recalculate", response_model=SuccessEnvelope[dict[str, Any], None])
-def recalculate(request: Request, session: db_session, principal: manage):
+def recalculate(
+    request: Request, session: db_session, principal: manage, accounts: account_scope
+):
     # Explicitly authorized manual recalculation; never dispatch an automatic task.
     # In local mode the source Session reads 15432 and the storage Session writes 55433.
     if is_local():
         with storage_session(session, writable=True) as write:
-            result = service.recalculate_all(session, risk_session=write)
+            result = service.recalculate_all(session, accounts=accounts, risk_session=write)
     else:
         from .tasks import run_daily
 

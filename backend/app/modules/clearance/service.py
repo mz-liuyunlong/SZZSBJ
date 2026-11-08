@@ -212,7 +212,8 @@ def _approval_event(
     )
 
 
-def rule_version(session: Session, *, require_persisted: bool = False) -> tuple[int, ClearanceRules]:
+def persisted_rule_version(session: Session) -> tuple[int, ClearanceRules] | None:
+    """Return only database-saved rules; no synthetic history or persisted defaults."""
     row = (
         session.execute(
             text("""
@@ -223,13 +224,22 @@ def rule_version(session: Session, *, require_persisted: bool = False) -> tuple[
         .mappings()
         .first()
     )
-    if row:
-        return int(row["version"]), ClearanceRules.model_validate(row["config_json"])
+    if row is None:
+        return None
+    return int(row["version"]), ClearanceRules.model_validate(row["config_json"])
+
+
+def rule_version(session: Session, *, require_persisted: bool = False) -> tuple[int, ClearanceRules]:
+    saved = persisted_rule_version(session)
+    if saved is not None:
+        return saved
     if require_persisted:
         raise ApiError(
             code="CLEARANCE_RULES_NOT_PERSISTED", status_code=409,
             message="清货规则尚未保存到数据库，无法作为已生效规则读取",
         )
+    # Legacy risk preview may still use in-memory fallback; GET /rules
+    # exposes version 0 and persisted=false until an authorized user saves.
     return 1, ClearanceRules()
 
 
@@ -255,12 +265,19 @@ def save_rules(
 ) -> int:
     # Serialize concurrent saves using the same transaction-scoped advisory lock.
     session.execute(text("SELECT pg_advisory_xact_lock(2406251077)"))
-    current, old = rule_version(session)
-    if current != expected_version:
-        invalid()
-    if config == old:
-        return current
-    new_version = current + 1
+    saved = persisted_rule_version(session)
+    if saved is None:
+        # First save is expected_version=0, even when saving exact defaults.
+        if expected_version != 0:
+            invalid()
+        new_version = 1
+    else:
+        current, old = saved
+        if current != expected_version:
+            invalid()
+        if config == old:
+            return current
+        new_version = current + 1
     session.execute(
         text("""
         INSERT INTO biz_clearance_rule_versions (version, config_json, changed_by, change_reason)

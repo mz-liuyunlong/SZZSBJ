@@ -48,7 +48,7 @@ export interface ClearanceList {
 }
 export type ClearanceRules = Record<string, number | boolean>;
 export interface RuleSpec { group: string; key: string; label: string; kind: "number" | "switch" | "lookback" }
-export interface RuleResponse { version: number; config: ClearanceRules; catalog: RuleSpec[]; can_edit: boolean }
+export interface RuleResponse { version: number; persisted: boolean; config: ClearanceRules; catalog: RuleSpec[]; can_edit: boolean }
 export interface ClearanceApplication {
   id: string;
   source_account_ref: string;

@@ -25,33 +25,23 @@ import {
  validateRules,
  type ClearanceProduct,
  type ClearanceRules,
- type RulesHistory,
  type StoredClearance,
 } from "./clearanceModel";
 import { RiskTag, StatusTag } from "./clearanceUi";
-import { CLEARANCE_RULE_GROUPS, CLEARANCE_RULE_SPECS, CLEARANCE_RULE_SPEC_BY_KEY, type ClearanceRuleSpec } from "./clearanceRuleCatalog";
+import { CLEARANCE_RULE_GROUPS, CLEARANCE_RULE_SPECS, type ClearanceRuleSpec } from "./clearanceRuleCatalog";
 import { integer, money, percent } from "./clearanceUiConfig";
 
-interface Props {data:StoredClearance;onChange:(data:StoredClearance)=>void;role:string;readOnly?:boolean}
-export function ClearanceRulesPanel({data,onChange,role,readOnly=false}:Props){
+interface Props {data:StoredClearance;onChange:(data:StoredClearance)=>void;role:string;readOnly?:boolean;onSaveRule?:(rules:ClearanceRules)=>Promise<void>}
+export function ClearanceRulesPanel({data,readOnly=false,onSaveRule}:Props){
  const [draft,setDraft]=useState<ClearanceRules>(()=>({...DEFAULT_RULES,...data.rules}));
+ useEffect(()=>{setDraft({...DEFAULT_RULES,...data.rules});},[data.rules]);
  const error=validateRules(draft);
  const same=JSON.stringify(draft)===JSON.stringify(data.rules);
- const apply=()=>{
-  if(readOnly){void message.warning("清货规则保存当前阶段未接入");return;}
+ const apply=async()=>{
+  if(readOnly||!onSaveRule)return;
   const invalid=validateRules(draft);if(invalid){void message.error(invalid);return;}
-  const changes=(Object.keys(draft) as (keyof ClearanceRules)[]).filter(k=>draft[k]!==data.rules[k]);
-  if(!changes.length){void message.info("规则未发生变化");return;}
-  const version=data.ruleVersion+1;
-  const before=CLEARANCE_PRODUCTS.map(x=>evaluateProduct(x,data.rules));
-  const after=CLEARANCE_PRODUCTS.map(x=>evaluateProduct(x,draft));
-  const added=after.filter((x,i)=>x.auto&&!before[i].auto).length;
-  const removed=after.filter((x,i)=>!x.auto&&before[i].auto).length;
-  const changed=after.filter((x,i)=>x.level!==before[i].level).length;
-  const labels=changes.map(k=>CLEARANCE_RULE_SPEC_BY_KEY.get(k)?.label??String(k));
-  const row:RulesHistory={version,actor:role,at:chinaToday(),summary:labels.slice(0,8).join("、")+(labels.length>8?" 等"+labels.length+"项":"")+"；新增 "+added+"、退出 "+removed+"、等级变化 "+changed};
-  onChange({...data,rules:{...draft},ruleVersion:version,ruleHistory:[row,...data.ruleHistory].slice(0,20)});
-  void message.warning("规则已在本机试算，但尚未保存到清货专属数据库；"+"不能视为全量规则已生效");
+  if(same&&data.ruleVersion>0){void message.info("规则未发生变化");return;}
+  try{await onSaveRule({...draft});}catch{/* Keep edited values on version conflict or failure. */}
  };
  const renderSpec=(f:ClearanceRuleSpec)=>{
   const title=<Tooltip
@@ -89,7 +79,7 @@ export function ClearanceRulesPanel({data,onChange,role,readOnly=false}:Props){
    {error&&<Typography.Text type="danger" className="clearance-block">{error}</Typography.Text>}
    <div className="clearance-rule-actions clearance-rule-explained-actions">
     <Button className="clearance-rule-actions__default" onClick={()=>setDraft({...DEFAULT_RULES})}>默认值</Button>
-    <Button className="clearance-rule-actions__save" type="primary" disabled={Boolean(error)||same} onClick={apply}>保存并应用</Button>
+    <Button className="clearance-rule-actions__save" type="primary" disabled={Boolean(error)||readOnly||(same&&data.ruleVersion>0)} onClick={()=>{void apply();}}>保存并应用</Button>
    </div>
   </Card>
  </div>;

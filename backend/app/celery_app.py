@@ -121,13 +121,6 @@ def create_celery_app(
                 "task": "listing_evaluation.scheduler_tick",
                 "schedule": 60.0,
             },
-            "clearance-la-daily-scheduler": {
-                "task": "clearance.scheduler_tick",
-                "schedule": crontab(
-                    minute=0, hour=0,
-                    nowfun=lambda: datetime.now(ZoneInfo("America/Los_Angeles")),
-                ),
-            },
             "listing-lifecycle-scheduler": {
                 "task": "listing_lifecycle.scheduler_tick",
                 "schedule": 60.0,
@@ -150,6 +143,18 @@ def create_celery_app(
             },
         },
     )
+    # Never enqueue disabled clearance ticks; unrelated Beat entries are untouched.
+    if _is_production_env() and _env_truthy(os.getenv("SZZSBJ_CLEARANCE_AUTO_ENABLED")):
+        celery.conf.beat_schedule = {
+            **celery.conf.beat_schedule,
+            "clearance-la-daily-scheduler": {
+                "task": "clearance.scheduler_tick",
+                "schedule": crontab(
+                    minute=0, hour=0,
+                    nowfun=lambda: datetime.now(ZoneInfo("America/Los_Angeles")),
+                ),
+            },
+        }
     return celery
 
 
