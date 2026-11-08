@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
@@ -13,17 +14,33 @@ from app.db.session import get_engine
 
 from . import service
 
+AUTO_FLAG = "SZZSBJ_CLEARANCE_AUTO_ENABLED"
+
+
+def auto_enabled() -> bool:
+    return (os.getenv(AUTO_FLAG, "0").strip().lower() in {"1", "true", "on", "yes"}
+            and os.getenv("APP_ENV", "").strip().lower() == "production")
+
+
+def _disabled() -> dict:
+    return {"examined": 0, "disabled": True}
+
+
 LA = ZoneInfo("America/Los_Angeles")
 
 
 @celery_app.task(name="clearance.recalculate", ignore_result=True)
 def recalculate() -> dict:
+    if not auto_enabled():
+        return _disabled()
     with Session(get_engine()) as session:
         return service.recalculate_all(session)
 
 
 @celery_app.task(name="clearance.recalculate_scope", ignore_result=True)
 def recalculate_scope(account: str) -> dict:
+    if not auto_enabled():
+        return _disabled()
     if not account or account != account.strip():
         return {"examined": 0, "invalid_scope": True}
     with Session(get_engine()) as session:
@@ -33,6 +50,8 @@ def recalculate_scope(account: str) -> dict:
 
 
 def enqueue_scope_recalculation(account: str) -> str:
+    if not auto_enabled():
+        return "disabled"
     if get_broker_url() == "memory://":
         recalculate_scope(account)
         return "completed_inline"
@@ -41,6 +60,8 @@ def enqueue_scope_recalculation(account: str) -> str:
 
 
 def enqueue_recalculation() -> str:
+    if not auto_enabled():
+        return "disabled"
     # Brokerless development does not have a consumer for memory://; execute
     # inline instead of pretending a task was queued.
     if get_broker_url() == "memory://":
@@ -52,11 +73,18 @@ def enqueue_recalculation() -> str:
 
 @celery_app.task(name="clearance.scheduler_tick", ignore_result=True)
 def scheduler_tick() -> None:
+    if not auto_enabled():
+        return
+    run_daily(retry_failed=False)
+
+
+def run_daily(*, retry_failed: bool = False) -> dict:
+    """Once per Los Angeles date, with explicit retry only for failed runs."""
     today = datetime.now(UTC).astimezone(LA).date()
     engine = get_engine()
     with engine.connect() as lock:
         if not lock.scalar(text("SELECT pg_try_advisory_lock(2406251078)")):
-            return
+            return {"status": "already_running", "date": str(today)}
         try:
             with Session(engine) as session:
                 old = session.execute(
@@ -67,7 +95,14 @@ def scheduler_tick() -> None:
                     {"date": today},
                 ).first()
                 if old is not None:
-                    return
+                    if old.status == 'succeeded' or not (retry_failed and old.status == 'failed'):
+                        return {"status": old.status, "date": str(today)}
+                    session.execute(text("""
+                        UPDATE biz_clearance_daily_runs
+                        SET status='running',started_at=now(),finished_at=NULL,
+                            error_code=NULL,examined=0
+                        WHERE business_date_la=:date AND status='failed'
+                    """), {"date": today})
                 version, _ = service.rule_version(session)
                 session.execute(
                     text("""
@@ -91,15 +126,16 @@ def scheduler_tick() -> None:
                         {"date": today, "examined": result["examined"]},
                     )
                     session.commit()
-                except Exception:
+                    return {"status": "succeeded", "date": str(today), **result}
+                except Exception as exc:
                     session.rollback()
                     session.execute(
                         text("""
                         UPDATE biz_clearance_daily_runs
-                        SET status='failed',error_code='CLEARANCE_RECALC_FAILED',finished_at=now()
+                        SET status='failed',error_code=:error_code,finished_at=now()
                         WHERE business_date_la=:date AND status='running'
                     """),
-                        {"date": today},
+                        {"date": today, "error_code": ("CLEARANCE_RECALC_" + type(exc).__name__.upper())[:128]},
                     )
                     session.commit()
                     raise
