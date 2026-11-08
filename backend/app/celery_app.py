@@ -25,6 +25,7 @@ TASK_IMPORTS = (
     "app.modules.operation_logs.tasks",
     "app.modules.business_connectors.tasks",
     "app.modules.listing_rule_config.tasks",
+    "app.modules.clearance.tasks",
     "app.modules.ai_runtime.tasks",
 )
 
@@ -34,6 +35,7 @@ TASK_ROUTES = {
     "business_connectors.*": {"queue": NOTIFICATION_QUEUE, "routing_key": NOTIFICATION_QUEUE},
     "listing_evaluation.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "listing_lifecycle.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
+    "clearance.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "ai_runtime.*": {"queue": AI_QUEUE, "routing_key": AI_QUEUE},
     "walmart_scf.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "walmart_remote.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
@@ -115,6 +117,10 @@ def create_celery_app(
             },
             "listing-evaluation-scheduler": {
                 "task": "listing_evaluation.scheduler_tick",
+                "schedule": 60.0,
+            },
+            "clearance-la-daily-scheduler": {
+                "task": "clearance.scheduler_tick",
                 "schedule": 60.0,
             },
             "listing-lifecycle-scheduler": {

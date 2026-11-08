@@ -29,9 +29,9 @@ export const MANAGEMENT_FIELDS = [
   ["action", "操作", 104],
 ] as const;
 export const PERIODS:PeriodDays[]=[7,14,30];
-export const money=(n:number|null|undefined)=>n==null?"—":(n<0?"−":"")+"$"+Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
-export const integer=(n:number)=>n.toLocaleString("en-US",{maximumFractionDigits:0});
-export const percent=(n:number|null|undefined)=>n==null?"—":n.toFixed(1)+"%";
+export const money=(n:number|null|undefined)=>(n==null||!Number.isFinite(n))?"—":(n<0?"−":"")+"$"+Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+export const integer=(n:number)=>Number.isFinite(n)?n.toLocaleString("en-US",{maximumFractionDigits:0}):"—";
+export const percent=(n:number|null|undefined)=>(n==null||!Number.isFinite(n))?"—":n.toFixed(1)+"%";
 
 /** Display period does not change the fixed-window WFS risk calculations. */
 export function getClearancePeriodMetrics(product:ClearanceProduct,period:PeriodDays){

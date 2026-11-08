@@ -67,7 +67,7 @@ const quantity = (value: number | undefined) => value == null ? "—" : `${value
 const percent = (n: number | undefined) => n == null ? "—" : `${n.toFixed(1)}%`;
 const delta = (p: DemoBusinessProfile) => p.oldPrice && p.newPrice != null ? (p.newPrice - p.oldPrice) / p.oldPrice * 100 : null;
 const titleByStatus: Record<string, string> = { submitted: "待审批", approved: "已审批", rejected: "驳回记录" };
-const riskNames: Record<string, string> = { low: "低风险", medium: "中风险", high: "高风险" };
+const riskNames: Record<string, string> = { low: "低风险", medium: "中风险", high: "高风险", unknown: "待评估" };
 
 function col(key: string, title: string, width: number, cell: (r: ApprovalItem) => ReactNode): ProColumns<ApprovalItem> {
   return { key, title, width, render: (_value, row) => cell(row) };
@@ -98,55 +98,82 @@ export function demoColumnsForBusiness(
     common.risk, common.applicant, common.status, common.action,
   ];
   if (business === "clearance") {
+    // V33: keep the original 12-column layout/labels/widths. Real values
+    // come from clearance_details; demo records keep the original profile.
+    type Live = {
+      item_id?: string | null; sku?: string | null; msku?: string | null;
+      store_name?: string | null; owner_ref?: string | null;
+      methods?: string[] | null; requested_qty?: number | null;
+      wfs_available_quantity?: string | number | null;
+      listing_days?: number | null; inventory_cost_usd?: number | null;
+    };
+    const live = (row: ApprovalItem): Live | undefined =>
+      (row as ApprovalItem & { clearance_details?: Live }).clearance_details;
     const clearanceSku = primaryClearanceSku;
+    const actual = (row: ApprovalItem) => clearanceSku(row);
+    const asNumber = (value: unknown): number | undefined => {
+      if (value === null || value === undefined || value === "") return undefined;
+      const n=Number(value);return Number.isFinite(n)?n:undefined;
+    };
+    const taskQuantity = (row: ApprovalItem) =>
+      actual(row)?.target ?? asNumber(live(row)?.requested_qty);
+    const available = (row: ApprovalItem) =>
+      actual(row)?.available ?? asNumber(live(row)?.wfs_available_quantity);
+    const riskLabel = (row: ApprovalItem) =>
+      riskNames[row.risk_level] ?? (row.risk_level === "unknown" ? "待评估" : "无风险");
     return [
       col("title", "商品 ID / 品名", 205, (row) => {
-        const item = clearanceSku(row);
+        const item=actual(row), extra=live(row);
         return <div className="approval-clearance-cell approval-clearance-cell--product">
           <strong>{item?.name ?? row.title}</strong>
-          <small>{item?.item ?? "—"}</small>
+          <small>{item?.item ?? extra?.item_id ?? "—"}</small>
         </div>;
       }),
       col("sku", "SKU / MSKU", 155, (row) => {
-        const item = clearanceSku(row);
+        const item=actual(row), extra=live(row);
         return <div className="approval-clearance-cell">
-          <strong>{item?.sku ?? "—"}</strong>
-          <small>{item?.msku ?? "—"}</small>
+          <strong>{item?.sku ?? extra?.sku ?? "—"}</strong>
+          <small>{item?.msku ?? extra?.msku ?? "—"}</small>
         </div>;
       }),
       col("storeOwner", "店铺 / 负责人", 135, (row) => {
-        const owner = profile(row)?.owner ?? row.applicant_id ?? "—";
+        const extra=live(row);
         return <div className="approval-clearance-cell">
-          <strong>{row.source_account_ref || "—"}</strong>
-          <small>{owner}</small>
+          <strong>{extra?.store_name ?? row.source_account_ref ?? "—"}</strong>
+          <small>{extra?.owner_ref ?? profile(row)?.owner ?? "—"}</small>
         </div>;
       }),
-      col("risk", "风险等级", 90, (row) => <Tag color={row.risk_level === "high" ? "red" : row.risk_level === "medium" ? "orange" : "green"}>{riskNames[row.risk_level]}</Tag>),
+      col("risk", "风险等级", 90, (row) =>
+        <Tag color={row.risk_level === "high" ? "red" : row.risk_level === "medium" ? "orange" : "default"}>{riskLabel(row)}</Tag>),
       col("submitted", "申请时间", 135, (row) => row.submitted_at
-        ? new Date(row.submitted_at).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
-        : "—"),
-      col("reason", "清货原因", 165, (row) => <span className="approval-clearance-cell__reason" title={row.reason}>{row.reason || "—"}</span>),
-      col("methods", "清货方式", 135, (row) => profile(row)?.methods?.join("、") ?? "—"),
-      col("targetQty", "目标清货量", 105, (row) => {
-        const item = clearanceSku(row);
-        return item ? `${quantity(item.target)}` : "—";
-      }),
+        ? new Date(row.submitted_at).toLocaleString("zh-CN", {month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"),
+      col("reason", "清货原因", 165, (row) =>
+        <span className="approval-clearance-cell__reason" title={row.reason}>{row.reason || "—"}</span>),
+      col("methods", "清货方式", 135, (row) =>
+        live(row)?.methods?.join("、") ?? profile(row)?.methods?.join("、") ?? "—"),
+      col("targetQty", "目标清货量", 105, (row) => quantity(taskQuantity(row))),
       col("stockListing", "WFS 可售 / 上架天数", 135, (row) => {
-        const item = clearanceSku(row);
+        const item=actual(row), extra=live(row);
+        const days=item?.listingDays ?? asNumber(extra?.listing_days);
         return <div className="approval-clearance-cell">
-          <strong>{item ? quantity(item.available) : "—"}</strong>
-          <small>上架天数：{item?.listingDays == null ? "—" : `${item.listingDays.toLocaleString("zh-CN")} 天`}</small>
+          <strong>{quantity(available(row))}</strong>
+          <small>上架天数：{days == null ? "—" : `${days.toLocaleString("zh-CN")} 天`}</small>
         </div>;
       }),
       col("inventoryCost", "库存成本", 115, (row) => {
-        const item = clearanceSku(row);
-        return item ? money(item.available * item.cost) : "—";
+        const item=actual(row), extra=live(row);
+        return item ? money(item.available * item.cost) : money(extra?.inventory_cost_usd);
       }),
-      col("status", "审批状态", 105, (row) => <Tag color={row.status === "approved" ? "success" : row.status === "rejected" ? "error" : "processing"}>{titleByStatus[row.status] || row.status}</Tag>),
+      col("status", "审批状态", 105, (row) =>
+        <Tag color={row.status === "approved" ? "success" : row.status === "rejected" ? "error" : "processing"}>
+          {titleByStatus[row.status] ?? row.status}
+        </Tag>),
       col("action", "操作", 172, (row) => <div className="approval-clearance-actions">
         <Button type="link" size="small" onClick={() => onDetail(row)}>详情</Button>
-        <Button type="link" size="small" disabled={row.status !== "submitted" || !onAction} onClick={() => onAction?.(row, "approve")}>通过</Button>
-        <Button type="link" size="small" danger disabled={row.status !== "submitted" || !onAction} onClick={() => onAction?.(row, "reject")}>驳回</Button>
+        <Button type="link" size="small" disabled={row.status !== "submitted" || !row.can_review || !onAction}
+          onClick={() => onAction?.(row,"approve")}>通过</Button>
+        <Button type="link" size="small" danger disabled={row.status !== "submitted" || !row.can_review || !onAction}
+          onClick={() => onAction?.(row,"reject")}>驳回</Button>
       </div>),
     ];
   }

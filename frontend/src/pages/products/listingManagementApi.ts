@@ -287,6 +287,7 @@ const normalizeBuyBoxStatus = (value: string | null): string => {
 export const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   id: item.id,
   sourceAccountRef: item.source_account_ref,
+  storeId: item.store_id,
   image: item.picture_url ?? "▤",
   msku: item.msku ?? "-",
   productId: item.item_id,

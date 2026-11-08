@@ -5,13 +5,15 @@ import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import { useState, type ReactNode } from "react";
 import ReportTableShell from "@/components/report-table/ReportTableShell";
 import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
+import { ClearanceRiskPopover, type RiskDetailPayload } from "./ClearanceRiskPopover";
+import { WalmartItemLink } from "@/components/report-table/cells";
 import { REPORT_TABLE_PAGE_SIZE_OPTIONS } from "@/components/report-table/pagination";
 import {
   activeTaskFor, coverage, evaluateProduct, findProduct, latestTaskFor, RISK_NAMES, STATUS_NAMES, type ClearanceProduct, type ClearanceRules, type ClearanceTask, type RiskLevel, type PeriodDays
 } from "./clearanceModel";
 
 import { ANALYSIS_FIELDS, MANAGEMENT_FIELDS, getClearancePeriodMetrics, money, integer, percent } from "./clearanceUiConfig";
-const riskColor:Record<RiskLevel,string>={high:"error",medium:"warning",low:"default"};
+const riskColor:Record<RiskLevel,string>={high:"error",medium:"warning",low:"default",unknown:"default",none:"default"};
 export function RiskTag({level}:{level:RiskLevel}){return <Tag color={riskColor[level]}>{RISK_NAMES[level]}</Tag>;}
 export function StatusTag({status}:{status:ClearanceTask["status"]}){
   const color:Record<ClearanceTask["status"],string>={pending:"gold",supplement:"orange",ready:"processing",running:"blue",paused:"default",done:"success",rejected:"error",cancelled:"default"};
@@ -19,7 +21,7 @@ export function StatusTag({status}:{status:ClearanceTask["status"]}){
 }
 export interface TableState {page:number;pageSize:number;columns:string[]}
 interface TableCommon {
-  state:TableState; onPage:(page:number,pageSize:number)=>void;
+  state:TableState; onPage:(page:number,pageSize:number)=>void; total?:number;
 }
 function makeColumn<T>(
   key:string,label:string,initialWidth:number,widths:Record<string,number>,
@@ -47,7 +49,7 @@ function metricTone(key:string):"sales"|"ads"|"profit"|null {
 }
 
 
-export function ClearanceAnalysisTable({rows,rules,tasks,manual,period,state,onPage,onInspect,onApply,onTask}:TableCommon&{
+export function ClearanceAnalysisTable({rows,rules,tasks,manual,period,state,total,onPage,onInspect,onApply,onTask}:TableCommon&{
   rows:ClearanceProduct[];rules:ClearanceRules;tasks:ClearanceTask[];manual:string[];period:PeriodDays;
   onInspect:(id:string)=>void;onApply:(id:string)=>void;onTask:(id:string)=>void;
 }){
@@ -56,19 +58,19 @@ export function ClearanceAnalysisTable({rows,rules,tasks,manual,period,state,onP
   const cell=(x:ClearanceProduct,key:string):ReactNode=>{
     const risk=evaluateProduct(x,rules),active=activeTaskFor(tasks,x.id),recent=latestTaskFor(tasks,x.id);
     switch(key){
-    case "identity":return <><Button type="link" className="clearance-table-link" onClick={()=>onInspect(x.id)}>{x.name}</Button><Typography.Text className="clearance-subline" type="secondary">{x.item}</Typography.Text></>;
+    case "identity":return <><WalmartItemLink itemId={x.item} className="clearance-table-link"/><Typography.Text className="clearance-subline" type="secondary">{x.name}</Typography.Text></>;
     case "sku":return <><strong>{x.sku}</strong><Typography.Text className="clearance-subline" type="secondary">{x.msku}</Typography.Text></>;
     case "store":return <>{x.store}<Typography.Text className="clearance-subline" type="secondary">{x.owner}</Typography.Text></>;
-    case "risk":return <><RiskTag level={risk.level}/><Typography.Text type="secondary" className="clearance-subline">{risk.business.length?"含经营异常":"库存条件触发"}</Typography.Text></>;
-    case "source":return <Tag color={manual.includes(x.id)?"purple":"blue"}>{manual.includes(x.id)?(risk.auto?"人工申请 + 风险":"运营主动申请"):"系统识别"}</Tag>;
+    case "risk":return <><ClearanceRiskPopover itemId={x.item} payload={x.riskDetailPayload as RiskDetailPayload | undefined} fallbackLevel={risk.level} productName={x.name} sku={x.sku} storeName={x.store}/><Typography.Text type="secondary" className="clearance-subline">{risk.level==="unknown"?"资料不足待评估":risk.business.length?"含经营异常":"库存条件触发"}</Typography.Text></>;
+    case "source":return <Tag color={manual.includes(x.id)?"purple":"blue"}>{x.liveRisk?(risk.level==="unknown"?"待评估":"规则计算"):manual.includes(x.id)?(risk.auto?"人工申请 + 风险":"运营主动申请"):"系统识别"}</Tag>;
     case "wfs":return <strong>{integer(x.avail)} 件</strong>;
-    case "age":return x.age+"天";
+    case "age":return Number.isFinite(x.age)?x.age+"天":"—";
     case "coverage":return coverage(x)==null?"无法估算":integer(coverage(x)??0)+"天";
-    case "stockCost":return <strong>{money(x.avail*x.cost)}</strong>;
+    case "stockCost":return <strong>{money(x.liveRisk ? (x.liveCapitalAtCostUsd ?? Number.NaN) : x.avail*x.cost)}</strong>;
     case "price":return money(x.price);
     case "daily":case "revenue":case "ads":case "adRate":case "profit":case "profitRate":case "units":{
       const m=getClearancePeriodMetrics(x,period);
-      const value=key==="daily"?m.daily.toFixed(2)
+      const value=key==="daily"?(Number.isFinite(m.daily)?m.daily.toFixed(2):"—")
         :key==="revenue"?money(m.revenue)
         :key==="ads"?money(m.ads)
         :key==="adRate"?percent(m.adRate)
@@ -83,10 +85,16 @@ export function ClearanceAnalysisTable({rows,rules,tasks,manual,period,state,onP
       </div>;
 
     }
-    case "returns":return <><strong>{percent(x.per[30].units>0?x.returns/x.per[30].units*100:null)}</strong><Typography.Text type="secondary" className="clearance-subline">{x.returns} 次 / {x.per[30].units} 单</Typography.Text></>;
-    case "rating":return <><span className="clearance-star">★</span> <strong>{x.rating.toFixed(1)}</strong><Typography.Text type="secondary" className="clearance-subline">{x.reviewCount} 条评价</Typography.Text></>;
+    case "returns":return <><strong>{percent(x.per[30].units>0?x.returns/x.per[30].units*100:null)}</strong><Typography.Text type="secondary" className="clearance-subline">{integer(x.returns)} 次 / {integer(x.per[30].units)} 单</Typography.Text></>;
+    case "rating":return <><span className="clearance-star">★</span> <strong>{Number.isFinite(x.rating)?x.rating.toFixed(1):"—"}</strong><Typography.Text type="secondary" className="clearance-subline">{integer(x.reviewCount)} 条评价</Typography.Text></>;
     case "status":return active?<StatusTag status={active.status}/>:recent?.status==="done"?<StatusTag status="done"/>:<Tag>待评估</Tag>;
-    case "action":return <Space size={3}><Button type="link" onClick={()=>onInspect(x.id)}>详情</Button>{active?<Button type="link" onClick={()=>onTask(active.id)}>任务</Button>:<Button type="link" onClick={()=>onApply(x.id)}>申请清货</Button>}</Space>;
+    case "action":return <Space size={3}>
+      <Button type="link" onClick={()=>onInspect(x.id)}>详情</Button>
+      {active
+        ? <Button type="link" onClick={()=>onTask(active.id)}>任务</Button>
+        : <Button type="link" onClick={()=>onApply(x.id)}>申请清货</Button>}
+    </Space>;
+
     default:return "—";
     }
   };
@@ -135,7 +143,7 @@ export function ClearanceAnalysisTable({rows,rules,tasks,manual,period,state,onP
   return <ReportTableShell label="清货分析表格"><ProTable<ClearanceProduct>
     rowKey="id" search={false} options={false} toolBarRender={false} columns={columns} dataSource={rows}
     scroll={{x:fields.reduce((n,[key,,w])=>n+(widths["analysis:"+key]??w),0),y:"100%"}}
-    pagination={{current:state.page,pageSize:state.pageSize,total:rows.length,size:"small",showSizeChanger:true,showQuickJumper:true,pageSizeOptions:REPORT_TABLE_PAGE_SIZE_OPTIONS,onChange:onPage}}
+    pagination={{current:state.page,pageSize:state.pageSize,total:total??rows.length,size:"small",showSizeChanger:true,showQuickJumper:true,pageSizeOptions:REPORT_TABLE_PAGE_SIZE_OPTIONS,onChange:onPage}}
     locale={{emptyText:"暂无符合条件的清货商品，正常 SKU 可以通过申请 SKU 搜索"}}/>
   </ReportTableShell>;
 }

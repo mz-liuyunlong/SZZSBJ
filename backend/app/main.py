@@ -14,6 +14,7 @@ from app.modules.ai_runtime.general_routes import router as ai_runtime_router
 from app.modules.ai_runtime.listing_routes import router as ai_listing_router
 from app.modules.ai_runtime.skill_library_routes import router as skill_library_router
 from app.modules.approvals.router import router as approvals_router
+from app.modules.clearance.router import router as clearance_router
 from app.modules.business_connectors.router import router as business_connectors_router
 from app.modules.business_rules.router import router as business_rules_router
 from app.modules.data_pages.router import router as data_pages_router
@@ -81,6 +82,7 @@ def create_app() -> FastAPI:
     application.include_router(skill_library_router)
     application.include_router(ai_listing_router)
     application.include_router(approvals_router)
+    application.include_router(clearance_router)
     application.include_router(business_rules_router)
     application.include_router(notification_rules_router)
     application.include_router(business_connectors_router)

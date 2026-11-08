@@ -24,6 +24,7 @@ export interface ListingGradePreviewDiagnostic {
 export interface ListingManagementRow {
   id: string;
   sourceAccountRef?: string;
+  storeId?: string;
   image: string;
   msku: string;
   productId: string;

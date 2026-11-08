@@ -512,5 +512,14 @@ const PLAIN_RULE_COPY: Record<string, {label:string;help:string;example:string;a
   }
 };
 // PR285_PLAIN_RULE_COPY_V2_END
-export const CLEARANCE_RULE_SPECS: ClearanceRuleSpec[] = ORIGINAL_CLEARANCE_RULE_SPECS.map(rule => ({...rule, ...PLAIN_RULE_COPY[rule.key]}));
+// Legacy old/new stock lot, aged ratio and near-fee rules are permanently
+// removed from config because the business source cannot distinguish batches.
+const REMOVED_AGE_RULE_KEYS = new Set<string>([
+  "mediumAge", "agedLotDays", "agedLotMin", "feeAgeDays", "feeWarningDays",
+  "agedRatioPercent", "enableAged", "enableAverageAge", "enableNearFee",
+  "enableAgedRatio", "enableRepeatBacklog",
+]);
+export const CLEARANCE_RULE_SPECS: ClearanceRuleSpec[] = ORIGINAL_CLEARANCE_RULE_SPECS
+  .filter(rule => !REMOVED_AGE_RULE_KEYS.has(rule.key))
+  .map(rule => ({...rule, ...PLAIN_RULE_COPY[rule.key]}));
 export const CLEARANCE_RULE_SPEC_BY_KEY = new Map(CLEARANCE_RULE_SPECS.map(s=>[s.key,s]));

@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from app.modules.clearance.lifecycle import can_resume_lifecycle
 from app.modules.data_pages.models import (
     DailySalesItemDayMart,
     ListingArchiveState,
@@ -317,7 +318,8 @@ def evaluate_listing(
     # Even if today's stock is zero, a previously positive WFS series must
     # remain eligible for stockout and recovery evaluation.
     if listing.lifecycle_status in PROTECTED:
-        return LifecycleDecision(None, "WORKFLOW_STAGE_PROTECTED")
+        if listing.lifecycle_status != "清货期" or not can_resume_lifecycle(session, listing):
+            return LifecycleDecision(None, "WORKFLOW_STAGE_PROTECTED")
     if _manual_override_exists(session, listing):
         return LifecycleDecision(None, "MANUAL_STAGE_PROTECTED")
     archived = session.scalar(
@@ -467,7 +469,7 @@ def evaluate_listing(
                     and day.sales_qty is not None
                 )
     return decide_lifecycle(
-        previous_stage=listing.lifecycle_status,
+        previous_stage=(None if listing.lifecycle_status == "清货期" and can_resume_lifecycle(session, listing) else listing.lifecycle_status),
         first_positive=first_positive,
         cutoff=cutoff,
         days=days,

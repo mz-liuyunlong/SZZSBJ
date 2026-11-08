@@ -39,6 +39,7 @@ FINANCE_JOURNAL_EDIT_REVISION = "20261105_0078_finance_journal_edit_split"
 LINGXING_FX_REVISION = "20261105_0079_lingxing_fx_rate"
 FINANCE_JOURNAL_ROUND3_REVISION = "20261105_0080_finance_journal_round3"
 FINANCE_PAYONEER_REVISION = "20261105_0081_finance_payoneer_statement"
+CLEARANCE_0082_REVISION = "20261108_0082_clearance_center"
 WFS_DETECTION_HEAD_REVISION = "20261026_0061_wfs_fee_detection_evidence"
 SYNC_ANOMALY_HEAD_REVISION = "20261027_0062_sync_anomaly_center"
 AI_RUNTIME_PREVIOUS_REVISION = "20261027_0063_ai_runtime"
@@ -85,7 +86,8 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20261026_0055_purchase_board_draft_no",
         LISTING_INTEGRATION_HEAD_REVISION,
     }
-    assert script.get_heads() == [FINANCE_PAYONEER_REVISION]
+    assert script.get_heads() == [CLEARANCE_0082_REVISION]
+    assert script.get_revision(CLEARANCE_0082_REVISION).down_revision == FINANCE_PAYONEER_REVISION
     assert (
         script.get_revision(FINANCE_PAYONEER_REVISION).down_revision
         == FINANCE_JOURNAL_ROUND3_REVISION
@@ -383,6 +385,6 @@ def test_revision_files_have_unique_ids_and_form_one_connected_graph() -> None:
                     revisions.append(ast.literal_eval(node.value))
     assert len(revisions) == len(set(revisions)), "duplicate full Alembic revision ID"
     script = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
-    assert script.get_heads() == [FINANCE_PAYONEER_REVISION]
+    assert script.get_heads() == [CLEARANCE_0082_REVISION]
     assert len(script.get_bases()) == 1
     assert {item.revision for item in script.walk_revisions()} == set(revisions)
