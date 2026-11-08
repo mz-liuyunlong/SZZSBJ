@@ -23,6 +23,7 @@ from app.modules.finance_cashflow.service import (
 
 UID = "0123456789abcdef"
 IMPORT_ID = "00000000-0000-0000-0000-0000000000a1"
+ACCOUNT_KEY = "manual_CNY_0000"
 ENDPOINTS = [
     ("POST", "/api/finance/cashflow/imports"),
     ("GET", "/api/finance/cashflow/imports"),
@@ -40,6 +41,10 @@ ENDPOINTS = [
     ("POST", "/api/finance/cashflow/approvals/sync"),
     ("POST", f"/api/finance/cashflow/lines/{UID}/events"),
     ("POST", "/api/finance/cashflow/lines/pair-events"),
+    ("GET", "/api/finance/cashflow/accounts/admin"),
+    ("POST", "/api/finance/cashflow/accounts"),
+    ("PATCH", f"/api/finance/cashflow/accounts/{ACCOUNT_KEY}"),
+    ("POST", "/api/finance/cashflow/manual-lines"),
 ]
 
 
