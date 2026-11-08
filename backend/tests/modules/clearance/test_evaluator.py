@@ -38,7 +38,8 @@ def test_rule_defaults_reflect_confirmed_decisions():
     assert r.enableNewProductProtection and r.newProductProtectionDays == 60
     assert r.minListingDays == 30 and r.minBusinessSignals == 1
     assert not hasattr(r, "mediumAge")
-    assert r.enableRepeatBacklog is False  # Existing reminder flag is retained, not a stock-age rule.
+    # Existing reminder flag is retained; it is not a stock-age admission rule.
+    assert r.enableRepeatBacklog is False
 
 
 def test_zero_sales_high_overrides_new_product_protection():
