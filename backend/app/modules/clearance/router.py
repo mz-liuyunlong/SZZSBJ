@@ -128,12 +128,16 @@ def rules_save(request: Request, payload: RuleUpdate, session: db_session, princ
 
 @router.post("/recalculate", response_model=SuccessEnvelope[dict[str, Any], None])
 def recalculate(request: Request, session: db_session, principal: manage):
-    # Do not write new clearance risk rows to the read-only 15432 business tunnel.
+    # Explicitly authorized manual recalculation; never dispatch an automatic task.
+    # In local mode the source Session reads 15432 and the storage Session writes 55433.
     if is_local():
-        raise ApiError(code="CLEARANCE_LOCAL_RECALC_NOT_READY", status_code=409,
-                       message="本地跨数据库风险重算尚未通过隔离验证")
-    from .tasks import run_daily
-    return success_response(request, data=run_daily(retry_failed=True), meta=None)
+        with storage_session(session, writable=True) as write:
+            result = service.recalculate_all(session, risk_session=write)
+    else:
+        from .tasks import run_daily
+
+        result = run_daily(retry_failed=True)
+    return success_response(request, data=result, meta=None)
 
 
 @router.get("/filter-options", response_model=SuccessEnvelope[dict[str, Any], None])

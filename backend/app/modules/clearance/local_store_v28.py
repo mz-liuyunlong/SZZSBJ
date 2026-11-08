@@ -24,6 +24,7 @@ _LOCAL_WRITE_ROUTES = frozenset(
     {
         ("POST", "/api/clearance/applications"),
         ("PUT", "/api/clearance/rules"),
+        ("POST", "/api/clearance/recalculate"),
     }
 )
 _UUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
@@ -102,6 +103,7 @@ def storage_session(read_session: Session, *, writable: bool = False) -> Iterato
             "biz_clearance_applications",
             "biz_clearance_events",
             "biz_clearance_rule_versions",
+            "biz_clearance_risk_current",
             "app_approval_requests",
             "app_approval_events",
             "app_approval_step_decisions",

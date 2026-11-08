@@ -212,7 +212,7 @@ def _approval_event(
     )
 
 
-def rule_version(session: Session) -> tuple[int, ClearanceRules]:
+def rule_version(session: Session, *, require_persisted: bool = False) -> tuple[int, ClearanceRules]:
     row = (
         session.execute(
             text("""
@@ -225,6 +225,11 @@ def rule_version(session: Session) -> tuple[int, ClearanceRules]:
     )
     if row:
         return int(row["version"]), ClearanceRules.model_validate(row["config_json"])
+    if require_persisted:
+        raise ApiError(
+            code="CLEARANCE_RULES_NOT_PERSISTED", status_code=409,
+            message="清货规则尚未保存到数据库，无法作为已生效规则读取",
+        )
     return 1, ClearanceRules()
 
 
@@ -242,16 +247,6 @@ def rules_history(session: Session, offset: int, limit: int) -> list[dict]:
         .all()
     )
     result = [dict(row) for row in rows]
-    if offset == 0 and not result:
-        result.append(
-            {
-                "version": 1,
-                "config_json": ClearanceRules().model_dump(),
-                "changed_by": "system",
-                "change_reason": "默认规则",
-                "changed_at": None,
-            }
-        )
     return result
 
 
@@ -307,10 +302,12 @@ def _snapshot_row(
 
 
 def evaluate_and_store(
-    session: Session, listing: ListingManagementCurrentMart, version: int, rules: ClearanceRules
+    session: Session, listing: ListingManagementCurrentMart, version: int, rules: ClearanceRules,
+    *, risk_session: Session | None = None,
 ) -> str:
     snapshot = _snapshot_row(session, listing, version, rules)
-    session.execute(
+    target = risk_session if risk_session is not None else session
+    target.execute(
         text("""
         INSERT INTO biz_clearance_risk_current
             (source_account_ref,store_id,item_id,level,reasons_json,signals_json,
@@ -340,10 +337,12 @@ def evaluate_and_store(
 
 
 def recalculate_all(
-    session: Session, *, batch_size: int = 100, accounts: frozenset[str] | None = None
+    session: Session, *, batch_size: int = 100, accounts: frozenset[str] | None = None,
+    risk_session: Session | None = None,
 ) -> dict:
-    """Re-evaluate database facts only; no Walmart/SSM/SCF call, no approval write."""
-    version, rules = rule_version(session)
+    """Read legacy Listing facts from session; write clearance risks only to risk_session."""
+    target = risk_session if risk_session is not None else session
+    version, rules = rule_version(target, require_persisted=(target is not session))
     examined = 0
     cursor = None
     while True:
@@ -360,13 +359,13 @@ def recalculate_all(
         if not rows:
             break
         for listing in rows:
-            evaluate_and_store(session, listing, version, rules)
+            evaluate_and_store(session, listing, version, rules, risk_session=target)
             examined += 1
         cursor = rows[-1].id
-        session.commit()
+        target.commit()
         # If an admin saved newer rules mid-run, the old job stops rather than
         # replacing new-version results in later batches.
-        latest, _ = rule_version(session)
+        latest, _ = rule_version(target)
         if latest != version:
             return {"examined": examined, "rule_version": version, "superseded": True}
     return {"examined": examined, "rule_version": version, "superseded": False}
