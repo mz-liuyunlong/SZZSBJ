@@ -298,11 +298,16 @@ def save_rules(
 
 
 def _snapshot_row(
-    session: Session, listing: ListingManagementCurrentMart, version: int, rules: ClearanceRules
+    session: Session,
+    listing: ListingManagementCurrentMart,
+    version: int,
+    rules: ClearanceRules,
+    *,
+    include_details: bool = False,
 ) -> dict:
     facts = facts_for_listing(session, listing)
     risk = evaluate(facts, rules)
-    return {
+    snapshot = {
         "source_account_ref": listing.source_account_ref,
         "store_id": listing.store_id,
         "item_id": listing.item_id,
@@ -319,6 +324,42 @@ def _snapshot_row(
         "data_gaps": risk.gaps,
         "metrics": risk.metrics,
     }
+    if include_details:
+        # Presentation evidence is only produced for reads. No risk pool
+        # updates, schema changes, or persistent risk writes are involved.
+        from datetime import timedelta
+
+        from .read_only_listings import _listing_age_days
+        from .risk_evidence_v20 import evidence_for_snapshot
+
+        as_of = la_today()
+        first = (
+            as_of - timedelta(days=facts.first_wfs_days - 1)
+            if facts.first_wfs_days is not None and facts.first_wfs_days > 0
+            else None
+        )
+        detail_metrics = {
+            **risk.metrics,
+            "listing_days": _listing_age_days(listing, as_of),
+            "first_wfs_days": facts.first_wfs_days,
+        }
+        for days in (7, 14, 30):
+            window = facts.windows.get(days)
+            detail_metrics[f"complete_{days}d_window"] = bool(window and window.complete)
+            detail_metrics[f"observed_days_{days}d"] = (
+                window.observed_days if window is not None else 0
+            )
+        details = evidence_for_snapshot(
+            {**snapshot, "metrics": detail_metrics},
+            rules,
+            listing=listing,
+            first_wfs_date=first,
+            as_of=as_of,
+        )
+        # The risk evaluator is authoritative. Evidence may describe a
+        # missing metric, but it must never overwrite the calculated grade.
+        snapshot.update({key: value for key, value in details.items() if key != "risk"})
+    return snapshot
 
 
 def evaluate_and_store(
@@ -410,7 +451,7 @@ def one_listing(
     if not risk_read_model_ready(session):
         return read_business_snapshot(session, listing)
     version, rules = rule_version(session)
-    snap = _snapshot_row(session, listing, version, rules)
+    snap = _snapshot_row(session, listing, version, rules, include_details=True)
     snap["available"] = current_available(session, listing)
     snap["listing_id"] = str(listing.id)
     snap["price_amount"] = (
@@ -506,7 +547,9 @@ def search_listings(
                 available = current_available(session, listing)
                 if available is None or available <= 0:
                     continue
-                snapshot = _snapshot_row(session, listing, version, rules)
+                snapshot = _snapshot_row(
+                    session, listing, version, rules, include_details=True
+                )
                 snapshot.update(
                     {
                         "available": available,
@@ -591,7 +634,9 @@ def search_listings(
             available = current_available(session, listing)
             if available is None or available <= 0:
                 continue
-            snapshot = _snapshot_row(session, listing, version, rules)
+            snapshot = _snapshot_row(
+                session, listing, version, rules, include_details=True
+            )
             if risk_only and snapshot["risk"] not in ("medium", "high"):
                 continue
             snapshot.update(
