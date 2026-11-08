@@ -118,13 +118,12 @@ ID_CARD = re.compile(
     r"(?<![0-9])[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?![0-9A-Za-z])"
 )
 LONG_DIGITS = re.compile(r"(?<!\d)\d{16,}(?!\d)")
-EMAIL = re.compile(r"([A-Za-z0-9._%+-]{1,3})[A-Za-z0-9._%+-]*@([A-Za-z0-9.-]+)")
 
 
 def mask_text(s: str) -> str:
+    """证件号去掉、16 位以上长数字只留尾 4 位。邮箱不再打码：派安盈子账号靠完整邮箱区分（rocky 11-05）。"""
     s = ID_CARD.sub("[证件号已剔除]", s or "")
-    s = LONG_DIGITS.sub(lambda m: "…" + m.group(0)[-4:], s)
-    return EMAIL.sub(r"\1…@\2", s)
+    return LONG_DIGITS.sub(lambda m: "…" + m.group(0)[-4:], s)
 
 
 def last4(s: str) -> str:

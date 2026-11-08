@@ -25,7 +25,9 @@ from app.modules.finance_cashflow.models import (
 )
 from app.modules.fx_rates.models import LingxingFxRate
 
-PROVIDERS = frozenset({"boc", "shenzhen_rural_bank", "payoneer", "worldfirst", "pingpong"})
+PROVIDERS = frozenset(
+    {"boc", "shenzhen_rural_bank", "payoneer", "worldfirst", "pingpong", "cmb", "manual"}
+)
 CURRENCIES = frozenset({"CNY", "USD", "CNH"})
 RULE_TYPES = frozenset({"party", "text"})
 ACCOUNT_REQUIRED = ("account_key", "display_name", "entity", "currency_code", "kind", "provider")

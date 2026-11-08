@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
-import { buildLiveSnapshot, syncErrorText, syncFailedText, toFsDetail, type ApiApproval, cashErrorText, cashViewSource, nextImportNode, postLineEvent, resolveCashSource, toCashLine, type ApiAccount, type ApiAnomaly, type ApiCategory, type ApiLine } from "@/pages/finance/cash-flow/journalApi";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildLiveSnapshot, syncErrorText, syncFailedText, toFsDetail, type ApiApproval, cashErrorText, cashViewSource, fxNote, nextImportNode, postLineEvent, resolveCashSource, toCashLine, type ApiAccount, type ApiAnomaly, type ApiCategory, type ApiLine } from "@/pages/finance/cash-flow/journalApi";
+import { pairLines } from "@/pages/finance/cash-flow/journalPair";
 import { backendRequest, BackendRequestError } from "@/api/backendApi";
 
 vi.mock("@/api/backendApi", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/api/backendApi")>()), backendRequest: vi.fn() }));
@@ -32,6 +33,33 @@ describe("cashViewSource", () => {
     expect(cashViewSource("journal", false, false)).toBe("building");
     expect(cashViewSource("accounts", true, true)).toBe("demo");
     expect(cashViewSource("journal", true, false)).toBe("demo");
+  });
+});
+
+describe("pairLines", () => {
+  const out = toCashLine(line({ line_uid: "aaaaaaaaaaaaaaaa", version: 3 }));
+  const into = toCashLine(line({ line_uid: "bbbbbbbbbbbbbbbb", account_key: "A2", amount: "12.5000", version: 5 }));
+  afterEach(() => vi.mocked(backendRequest).mockReset());
+
+  it("sends all lines in one request, each with its own version", async () => {
+    vi.mocked(backendRequest).mockResolvedValue({ data: { pair_id: "M1", lines: [] } } as never);
+    expect(await pairLines([out, into], "unpair", "配错了")).toEqual([]);
+    expect(vi.mocked(backendRequest)).toHaveBeenCalledTimes(1);
+    const [url, init] = vi.mocked(backendRequest).mock.calls[0];
+    expect(url).toBe("/api/finance/cashflow/lines/pair-events");
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    expect(body.kind).toBe("unpair");
+    expect(body.reason).toBe("配错了");
+    expect(body.lines).toEqual([{ line_uid: "aaaaaaaaaaaaaaaa", expected_version: 3 }, { line_uid: "bbbbbbbbbbbbbbbb", expected_version: 5 }]);
+    expect(typeof body.idempotency_key).toBe("string");
+  });
+
+  it("says nothing changed when the backend refuses", async () => {
+    vi.mocked(backendRequest).mockRejectedValue(new BackendRequestError(409, "CASHFLOW_VERSION_CONFLICT"));
+    const failed = await pairLines([out, into], "pair");
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toContain("这 2 笔都没有改动");
+    expect(vi.mocked(backendRequest)).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -155,5 +183,14 @@ describe("sync messages", () => {
   it("carries the provider code in the failure text", () => {
     expect(syncFailedText("FEISHU_APPROVAL_LIST_HTTP_400_CODE_1")).toContain("FEISHU_APPROVAL_LIST_HTTP_400_CODE_1");
     expect(syncFailedText(null)).toContain("同步失败");
+  });
+});
+
+describe("fxNote", () => {
+  it("labels Payoneer's own rate and the blank withdrawals waiting for the month-end statement", () => {
+    expect(fxNote(toCashLine(line({ amount_cny: "-19500.0000", fx_rate: "6.5000", fx_source: "payoneer" })))).toBe("派安盈实际汇率 6.5000");
+    expect(fxNote(toCashLine(line({ fx_source: "pending" })))).toBe("等派安盈月结单");
+    expect(fxNote(toCashLine(line({ amount_cny: "-88.7500", fx_rate: "7.1", fx_source: "lingxing" })))).toBeUndefined();
+    expect(fxNote(toCashLine(line()))).toBeUndefined();
   });
 });

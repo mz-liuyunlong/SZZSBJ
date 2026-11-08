@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { foldProductDetailDependencyRows } from "@/pages/data-center/integrationSyncTaskApi";
+import { foldProductDetailDependencyRows, moduleForInterface } from "@/pages/data-center/integrationSyncTaskApi";
 import { buildSyncScheduleViews } from "@/pages/data-center/syncTaskScheduleViews";
 import type { SyncTaskRow } from "@/pages/data-center/syncTaskTypes";
 
@@ -104,5 +104,12 @@ describe("Cron preview safety", () => {
     const result = buildSyncScheduleViews([task], new Date("2026-10-26T08:00:00Z"));
     expect(result.week).toHaveLength(1);
     expect(result.weekly).toHaveLength(1);
+  });
+});
+
+describe("moduleForInterface", () => {
+  it("puts the Lingxing FX sync under the finance group", () => {
+    expect(moduleForInterface({ interface_key: "lingxingFxRate" })).toBe("财务");
+    expect(moduleForInterface({ interface_key: "productList" })).toBe("商品");
   });
 });

@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import os
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -31,8 +31,9 @@ from app.modules.finance_cashflow.models import (
     FinanceCashLineOccurrence,
     FinanceCashLineState,
     FinanceCashRawFile,
+    FinancePayoneerStatementRow,
 )
-from app.modules.finance_cashflow.parsing import PARSER_VERSION, readers
+from app.modules.finance_cashflow.parsing import PARSER_VERSION, payoneer_statement, readers
 from app.modules.finance_cashflow.parsing.model import Line, RejectFile
 from app.modules.finance_cashflow.parsing.pipeline import ParsedFile, parse_file
 from app.modules.finance_cashflow.parsing.seed import Seed, SeedAccount
@@ -48,6 +49,8 @@ from app.modules.finance_cashflow.schemas import (
     CashflowLineListData,
     CashflowLinePartRead,
     CashflowLineRead,
+    CashflowPairEventData,
+    CashflowPairEventRequest,
     CashflowUploadData,
     CashflowVoidData,
 )
@@ -181,6 +184,14 @@ class CashflowService:
         batch = self._import_for_upload(import_id, actor, request_id)
         duplicate = self._active_duplicate(sha256)
         if duplicate is not None:
+            if duplicate.parser_version != PARSER_VERSION:
+                # 同一个文件用新版解析再导一次：已有流水只刷新显示文字（如邮箱不再打码），不新增。
+                try:
+                    self._refresh_texts(parse_file(content, self._seed()).lines)
+                except RejectFile:
+                    pass
+                else:
+                    duplicate.parser_version = PARSER_VERSION
             result = self._file_result(duplicate)
             result.duplicate_of_file = True
             result.file_name = file_name
@@ -190,6 +201,8 @@ class CashflowService:
             self.session.commit()
             return CashflowUploadData(import_id=batch.import_id, file=result)
         storage_path = store_original(Path(root), sha256, readers.kind_of(content), content)
+        if payoneer_statement.is_statement(content):
+            return self._upload_statement(batch, file_name, sha256, content, storage_path)
         try:
             parsed = parse_file(content, self._seed())
         except RejectFile as exc:
@@ -207,6 +220,117 @@ class CashflowService:
         self._refresh_batch_status(batch, result.status == STATUS_PARSED)
         self.session.commit()
         return CashflowUploadData(import_id=batch.import_id, file=result)
+
+    def _upload_statement(
+        self,
+        batch: FinanceCashImport,
+        file_name: str,
+        sha256: str,
+        content: bytes,
+        storage_path: str,
+    ) -> CashflowUploadData:
+        """派安盈月结明细：只存明细行，读取时补到已有提现上，不新增流水。"""
+        try:
+            parsed = payoneer_statement.parse_statement(content, self._seed())
+        except RejectFile as exc:
+            result = self._save_rejected(batch, file_name, sha256, content, storage_path, str(exc))
+            self._refresh_batch_status(batch, False)
+            self.session.commit()
+            return CashflowUploadData(import_id=batch.import_id, file=result)
+        except payoneer_statement.UNEXPECTED_ERRORS:
+            result = self._save_rejected(
+                batch,
+                file_name,
+                sha256,
+                content,
+                storage_path,
+                "文件内容解析失败，请确认是派安盈的原始导出",
+            )
+            self._refresh_batch_status(batch, False)
+            self.session.commit()
+            return CashflowUploadData(import_id=batch.import_id, file=result)
+        seen = set(
+            self.session.scalars(
+                select(FinancePayoneerStatementRow.txn_id)
+                .join(
+                    FinanceCashImport,
+                    FinanceCashImport.import_id == FinancePayoneerStatementRow.import_id,
+                )
+                .where(
+                    FinancePayoneerStatementRow.account_key == parsed.account_key,
+                    FinanceCashImport.status != STATUS_VOIDED,
+                )
+            )
+        )
+        raw = FinanceCashRawFile(
+            import_id=batch.import_id,
+            file_name=file_name,
+            sha256=sha256,
+            size_bytes=len(content),
+            storage_path=storage_path,
+            provider=payoneer_statement.PROVIDER,
+            account_keys=[parsed.account_key],
+            parser_version=PARSER_VERSION,
+            status=STATUS_PARSED,
+        )
+        self.session.add(raw)
+        self.session.flush()
+        self.session.add_all(
+            FinancePayoneerStatementRow(
+                raw_file_id=raw.file_id,
+                import_id=batch.import_id,
+                account_key=parsed.account_key,
+                row_no=row.row_no,
+                txn_id=row.txn_id,
+                txn_time=row.txn_time_utc,
+                business_date=row.business_date,
+                description=row.description,
+                amount=row.amount,
+                currency_code=row.currency_code,
+                transfer_amount=row.transfer_amount,
+                transfer_currency=row.transfer_currency,
+            )
+            for row in parsed.rows
+        )
+        rows_new = sum(1 for row in parsed.rows if not row.txn_id or row.txn_id not in seen)
+        withdrawals = [
+            row
+            for row in parsed.rows
+            if row.amount < 0 and journal.PAYONEER_WITHDRAWAL.match(row.description)
+        ]
+        in_cny = sum(1 for row in withdrawals if row.transfer_currency == "CNY")
+        # 页面把 rows_new 显示成「新增 N 行」：月结补充不新增流水，所以填 0，读到多少写在说明里。
+        warnings = [
+            f"派安盈月结补充，不新增流水：读到 {len(parsed.rows)} 行"
+            f"（其中 {rows_new} 行以前没导过），"
+            f"提现 {len(withdrawals)} 笔，到账人民币 {in_cny} 笔"
+        ]
+        self.session.add(
+            FinanceCashImportQuality(
+                file_id=raw.file_id,
+                rows_parsed=len(parsed.rows),
+                rows_new=0,
+                rows_duplicate=0,
+                balance_chain_ok=None,
+                warnings=warnings,
+            )
+        )
+        self._refresh_batch_status(batch, True)
+        self.session.commit()
+        return CashflowUploadData(
+            import_id=batch.import_id,
+            file=CashflowFileResult(
+                file_id=raw.file_id,
+                file_name=file_name,
+                sha256=sha256,
+                size=len(content),
+                status=STATUS_PARSED,
+                account_keys=[parsed.account_key],
+                detected_note=parsed.note,
+                rows_parsed=len(parsed.rows),
+                warnings=warnings,
+            ),
+        )
 
     def _refresh_batch_status(self, batch: FinanceCashImport, parsed: bool) -> None:
         if parsed:
@@ -277,6 +401,7 @@ class CashflowService:
             )
         )
         new_rows = [line for line in parsed.lines if line.line_uid not in existing]
+        self._refresh_texts([line for line in parsed.lines if line.line_uid in existing])
         self.session.add_all(
             self._line_row(line, batch.import_id, raw.file_id) for line in new_rows
         )
@@ -322,6 +447,20 @@ class CashflowService:
             balance_chain_ok=parsed.balance_chain_ok,
             warnings=parsed.warnings,
         )
+
+    def _refresh_texts(self, lines: Iterable[Line]) -> None:
+        """已有流水按这次解析刷新对方 / 摘要 / 备注。
+        line_uid 按原文算，不受影响；人工改的摘要 / 备注另存，不覆盖。"""
+        by_uid = {line.line_uid: line for line in lines}
+        if not by_uid:
+            return
+        for row in self.session.scalars(
+            select(FinanceCashLine).where(FinanceCashLine.line_uid.in_(list(by_uid)))
+        ):
+            fresh = by_uid[row.line_uid]
+            row.counterparty_name = fresh.counterparty_name
+            row.description = fresh.description
+            row.memo = fresh.memo
 
     @staticmethod
     def _line_row(line: Line, import_id: UUID, file_id: UUID) -> FinanceCashLine:
@@ -534,7 +673,9 @@ class CashflowService:
         self,
     ) -> tuple[journal.JournalResult, dict[str, FinanceCashLine], dict[str, FinanceCashLineState]]:
         rows = self.session.execute(
-            select(FinanceCashLine, FinanceCashAccount.provider)
+            select(
+                FinanceCashLine, FinanceCashAccount.provider, FinanceCashAccount.account_no_last4
+            )
             .join(
                 FinanceCashAccount,
                 FinanceCashAccount.account_key == FinanceCashLine.account_key,
@@ -552,7 +693,7 @@ class CashflowService:
         approval_cats = self._approval_categories(classifier)
         inputs: list[journal.LineInput] = []
         by_uid: dict[str, FinanceCashLine] = {}
-        for line, provider in rows:
+        for line, provider, account_last4 in rows:
             state = states.get(line.line_uid)
             by_uid[line.line_uid] = line
             refs = list(state.refs or []) if state else []
@@ -575,6 +716,11 @@ class CashflowService:
                     exclude_amount=state.exclude_amount if state else None,
                     approval_category=approval_rules.single_value(c[0] for c in from_refs),
                     approval_rule_category=approval_rules.single_value(c[1] for c in from_refs),
+                    parts=list(state.parts) if state and state.parts else None,
+                    manual_pair=state.manual_pair if state else None,
+                    counterparty_last4=line.counterparty_account_last4 or "",
+                    account_last4=account_last4 or "",
+                    source_time=line.source_time,
                 )
             )
         internal = frozenset(
@@ -606,9 +752,38 @@ class CashflowService:
             internal,
             self._usd_rate_lookup(),
             exclusions,
+            self._statement_rows(),
+            datetime.now(SHANGHAI).date(),
         )
         self._flag_auto_attached(result)
         return result, by_uid, states
+
+    def _statement_rows(self) -> list[journal.StatementRow]:
+        """未作废批次里的派安盈月结明细行。"""
+        rows = self.session.scalars(
+            select(FinancePayoneerStatementRow)
+            .join(
+                FinanceCashImport,
+                FinanceCashImport.import_id == FinancePayoneerStatementRow.import_id,
+            )
+            .where(FinanceCashImport.status != STATUS_VOIDED)
+            .order_by(FinancePayoneerStatementRow.id)
+        ).all()
+        return [
+            journal.StatementRow(
+                row_key=f"{row.raw_file_id}:{row.row_no}",
+                account_key=row.account_key,
+                txn_id=row.txn_id,
+                txn_time=row.txn_time,
+                business_date=row.business_date,
+                description=row.description,
+                amount=row.amount,
+                currency_code=row.currency_code,
+                transfer_amount=row.transfer_amount,
+                transfer_currency=row.transfer_currency,
+            )
+            for row in rows
+        ]
 
     def approval_rows(self) -> list[FinanceCashApproval]:
         """进日记账报销闭环的审批单：排除配置里不走这边账的部门。"""
@@ -745,6 +920,8 @@ class CashflowService:
             currency_code=line.currency_code,
             amount=line.amount,
             amount_cny=item.amount_cny,
+            fx_rate=item.fx_rate,
+            fx_source=item.fx_source,
             balance_after=line.balance_after,
             description=line.description,
             memo=line.memo,
@@ -768,6 +945,8 @@ class CashflowService:
             parts=[CashflowLinePartRead(**part) for part in state.parts]
             if state and state.parts
             else None,
+            manual_pair=state.manual_pair if state else None,
+            auto_exclude_reason=item.auto_exclude_reason,
             version=state.version if state else 0,
             approval_candidates=candidates or [],
         )
@@ -886,6 +1065,9 @@ class CashflowService:
     ) -> CashflowLineEventData:
         if request.kind == journal.KIND_AUTO_RESET:
             raise journal.EventRejectedError(422, "不支持的操作")
+        if request.kind in {journal.KIND_PAIR, journal.KIND_UNPAIR}:
+            # 只留批量接口一条路，否则一笔一笔发又可能只成功一半。
+            raise journal.EventRejectedError(422, "配对和取消配对要走 /lines/pair-events")
         line = self.session.get(FinanceCashLine, line_uid, with_for_update=True)
         if line is None or line.voided_at is not None:
             raise LineNotFoundError
@@ -908,6 +1090,7 @@ class CashflowService:
             manual_description=state.manual_description,
             manual_memo=state.manual_memo,
             parts=[dict(part) for part in state.parts] if state.parts else None,
+            manual_pair=state.manual_pair,
         )
         auto_reset = journal.apply_event(
             draft,
@@ -927,6 +1110,7 @@ class CashflowService:
         state.manual_description = draft.manual_description
         state.manual_memo = draft.manual_memo
         state.parts = draft.parts
+        state.manual_pair = draft.manual_pair
         state.version += 1
         state.updated_at = datetime.now(UTC)
         self._add_events(line_uid, request, auto_reset, actor, request_id)
@@ -947,6 +1131,175 @@ class CashflowService:
                 raise
             return replayed
         return data
+
+    def post_pair_event(
+        self,
+        request: CashflowPairEventRequest,
+        *,
+        actor: str,
+        request_id: str | None,
+    ) -> CashflowPairEventData:
+        """配对 / 取消配对：几笔在同一个事务里，有一笔不行就全部回滚，什么都不改。"""
+        try:
+            return self._apply_pair_event(request, actor=actor, request_id=request_id)
+        except (journal.EventRejectedError, LineNotFoundError):
+            self.session.rollback()
+            raise
+
+    def _apply_pair_event(
+        self,
+        request: CashflowPairEventRequest,
+        *,
+        actor: str,
+        request_id: str | None,
+    ) -> CashflowPairEventData:
+        expected = {item.line_uid: item.expected_version for item in request.lines}
+        if len(expected) != len(request.lines):
+            raise journal.EventRejectedError(422, "同一笔不能写两次")
+        # 按流水号排序加锁，两个请求同时配到同一笔也不会互相等死。
+        uids = sorted(expected)
+        lines: list[FinanceCashLine] = []
+        for uid in uids:
+            line = self.session.get(FinanceCashLine, uid, with_for_update=True)
+            if line is None or line.voided_at is not None:
+                raise LineNotFoundError
+            lines.append(line)
+        states = {uid: self._state_for_update(uid) for uid in uids}
+        replayed = self._replay_pair_if_seen(request, uids)
+        if replayed is not None:
+            return replayed
+        if any(states[uid].version != expected[uid] for uid in uids):
+            raise journal.EventRejectedError(
+                409, "有一笔已被别人改过，请刷新后再操作", journal.ERR_VERSION_CONFLICT
+            )
+        if request.kind == journal.KIND_PAIR:
+            pair_id = self._new_pair_id(lines, states)
+        else:
+            pair_id = self._whole_pair_id(uids, states)
+        payload = {"pair_id": pair_id, "line_uids": uids}
+        now = datetime.now(UTC)
+        for line in lines:
+            state = states[line.line_uid]
+            draft = journal.ReviewState(stage=state.stage, manual_pair=state.manual_pair)
+            journal.apply_event(
+                draft,
+                kind=request.kind,
+                payload=payload,
+                reason=request.reason,
+                line_amount=line.amount,
+                valid_categories=frozenset(),
+            )
+            state.manual_pair = draft.manual_pair
+            state.version += 1
+            state.updated_at = now
+            self.session.add(
+                FinanceCashLineEvent(
+                    line_uid=line.line_uid,
+                    kind=request.kind,
+                    payload=payload,
+                    reason=(request.reason or "").strip() or None,
+                    actor=actor,
+                    request_id=request_id,
+                    idempotency_key=(
+                        f"{request.idempotency_key}:{line.line_uid}"
+                        if request.idempotency_key
+                        else None
+                    ),
+                )
+            )
+        data = CashflowPairEventData(
+            kind=request.kind,
+            pair_id=pair_id,
+            lines=[
+                CashflowLineEventData(
+                    line_uid=uid,
+                    stage=states[uid].stage,
+                    stage_reason=states[uid].stage_reason,
+                    version=states[uid].version,
+                )
+                for uid in uids
+            ],
+        )
+        try:
+            self.session.commit()
+        except IntegrityError:
+            # 并发的同一个幂等键，后到的撞唯一索引，整个事务回滚后按重放处理。
+            self.session.rollback()
+            replayed = self._replay_pair_if_seen(request, uids)
+            if replayed is None:
+                raise
+            return replayed
+        return data
+
+    @staticmethod
+    def _new_pair_id(
+        lines: Sequence[FinanceCashLine], states: Mapping[str, FinanceCashLineState]
+    ) -> str:
+        if len(lines) < 2:
+            raise journal.EventRejectedError(422, "配对至少要两笔")
+        if len({line.account_key for line in lines}) < 2:
+            raise journal.EventRejectedError(422, "配对要选不同账户的流水")
+        amounts = [line.amount for line in lines]
+        if not (any(amount < 0 for amount in amounts) and any(amount > 0 for amount in amounts)):
+            raise journal.EventRejectedError(422, "配对要一出一进")
+        if any(state.manual_pair for state in states.values()):
+            raise journal.EventRejectedError(
+                409, "有一笔已经配对，先取消原来的配对", journal.ERR_PAIR_CONFLICT
+            )
+        return f"M{uuid4().hex[:20].upper()}"
+
+    def _whole_pair_id(
+        self, uids: Sequence[str], states: Mapping[str, FinanceCashLineState]
+    ) -> str:
+        """取消配对必须一次取消整组，不然剩下的那笔会变成落单的配对。"""
+        pair_ids = {states[uid].manual_pair for uid in uids}
+        if None in pair_ids:
+            raise journal.EventRejectedError(409, "有一笔没有人工配对", journal.ERR_PAIR_CONFLICT)
+        if len(pair_ids) != 1:
+            raise journal.EventRejectedError(409, "这几笔不是同一组配对", journal.ERR_PAIR_CONFLICT)
+        pair_id = str(pair_ids.pop())
+        members = self.session.scalars(
+            select(FinanceCashLineState.line_uid)
+            .join(FinanceCashLine, FinanceCashLine.line_uid == FinanceCashLineState.line_uid)
+            .where(
+                FinanceCashLineState.manual_pair == pair_id,
+                FinanceCashLine.voided_at.is_(None),
+            )
+        ).all()
+        if set(members) != set(uids):
+            raise journal.EventRejectedError(
+                409, "这组配对的笔数变了，请刷新后再操作", journal.ERR_PAIR_CONFLICT
+            )
+        return pair_id
+
+    def _replay_pair_if_seen(
+        self, request: CashflowPairEventRequest, uids: Sequence[str]
+    ) -> CashflowPairEventData | None:
+        if not request.idempotency_key:
+            return None
+        seen = self.session.scalars(
+            select(FinanceCashLineEvent).where(
+                FinanceCashLineEvent.idempotency_key.startswith(
+                    f"{request.idempotency_key}:", autoescape=True
+                )
+            )
+        ).all()
+        if not seen:
+            return None
+        if {item.kind for item in seen} != {request.kind} or {
+            item.line_uid for item in seen
+        } != set(uids):
+            raise journal.EventRejectedError(
+                409, "这个幂等键已经用在别的操作上", journal.ERR_IDEMPOTENCY_KEY_REUSED
+            )
+        pair_id = str(seen[0].payload.get("pair_id") or "")
+        self.session.rollback()
+        return CashflowPairEventData(
+            kind=request.kind,
+            pair_id=pair_id,
+            lines=[self._event_data(uid, replayed=True) for uid in uids],
+            replayed=True,
+        )
 
     def _find_event_by_key(self, key: str) -> FinanceCashLineEvent | None:
         return self.session.scalars(
