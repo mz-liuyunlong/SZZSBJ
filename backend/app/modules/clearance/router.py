@@ -102,7 +102,9 @@ def listings(request: Request, session: db_session, principal: view, accounts: a
              exact_total: bool = False,
              store_refs: list[str] = Query(default=[], max_length=200),  # noqa: B008
              owner_names: list[str] = Query(default=[], max_length=200),  # noqa: B008
-             risk_levels: list[Literal["high", "medium", "low", "none", "unknown"]] = Query(default=[], max_length=5),  # noqa: B008
+             risk_levels: list[Literal["high", "medium", "low", "none", "unknown"]] = Query(  # noqa: B008
+                 default=[], max_length=5
+             ),
              page: int = Query(default=1, ge=1), page_size: int = Query(default=50, ge=1, le=100)):
     return success_response(request, data=service.search_listings(session, accounts, keyword, page, page_size,
         risk_only=risk_only, exact_total=exact_total, store_refs=tuple(store_refs),

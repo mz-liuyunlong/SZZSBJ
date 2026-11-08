@@ -24,7 +24,8 @@ jobs:
           mapfile -t PYFILES < <(git diff --name-only "$BASE" HEAD -- backend | grep -E '^backend/.*\.py$' | sed 's#^backend/##')
           test "${#PYFILES[@]}" -gt 20
           cd backend
-          pip install ruff==0.16.5
+          pip install ruff==0.16.5 autopep8==2.3.2
+          autopep8 --in-place --aggressive --aggressive --max-line-length 100 "${PYFILES[@]}"
           ruff check --fix "${PYFILES[@]}" || true
           ruff format "${PYFILES[@]}"
           ruff check .
