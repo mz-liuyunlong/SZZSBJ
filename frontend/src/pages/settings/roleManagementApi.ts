@@ -1,4 +1,5 @@
 import { backendRequest } from "@/api/backendApi";
+import { navigation } from "@/config/navigation";
 import type {
   PermissionGroup,
   RoleAuditEvent,
@@ -75,6 +76,14 @@ interface BackendAuditEvent {
   created_at: string;
 }
 
+// Use navigation titles for display; only backend-registered keys are grantable.
+const navigationPageNames = new Map(
+  navigation.flatMap((group) => group.children.map((page) => [page.key, page.title] as const)),
+);
+const navigationModuleNames = new Map(
+  navigation.map((group) => [group.key, group.title] as const),
+);
+
 export interface RolePermissionCatalog {
   pagePermissionGroups: PermissionGroup[];
   actionPermissionGroups: PermissionGroup[];
@@ -141,12 +150,14 @@ export function buildRolePermissionCatalog(
   const fieldPermissionGroups: PermissionGroup[] = [];
 
   backendCatalog.modules.forEach((module) => {
+    const moduleName = navigationModuleNames.get(module.module_key) ?? module.name;
     const pageItems: string[] = [];
 
     module.pages.forEach((page) => {
+      const pageName = navigationPageNames.get(page.page_key) ?? page.name;
       pageItems.push(page.permission_key);
-      permissionLabels[page.permission_key] = page.name;
-      permissionDescriptions[page.permission_key] = `允许进入并查看「${page.name}」页面`;
+      permissionLabels[page.permission_key] = pageName;
+      permissionDescriptions[page.permission_key] = `允许进入并查看「${pageName}」页面`;
 
       if (page.actions.length > 0) {
         const items = page.actions.map((action) => {
@@ -159,7 +170,7 @@ export function buildRolePermissionCatalog(
           return action.permission_key;
         });
         actionPermissionGroups.push({
-          title: `${module.name} / ${page.name}`,
+          title: `${moduleName} / ${pageName}`,
           items,
         });
       }
@@ -175,14 +186,14 @@ export function buildRolePermissionCatalog(
           return field.permission_key;
         });
         fieldPermissionGroups.push({
-          title: `${module.name} / ${page.name}`,
+          title: `${moduleName} / ${pageName}`,
           items,
         });
       }
     });
 
     if (pageItems.length > 0) {
-      pagePermissionGroups.push({ title: module.name, items: pageItems });
+      pagePermissionGroups.push({ title: moduleName, items: pageItems });
     }
   });
 

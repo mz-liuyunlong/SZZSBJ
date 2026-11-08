@@ -159,11 +159,17 @@ MODULES: tuple[ModuleDefinition, ...] = (
         (
             _page("finance", "profit_center", "利润中心", 10),
             _page("finance", "sku_cash_profit", "单品现金利润", 20),
+            _page("finance", "settlement_profit", "结算利润", 25),
             _page("finance", "walmart_settlement", "沃尔玛返还明细", 30),
             _page("finance", "settlement_reconciliation", "结算对账", 40),
             _page("finance", "ad_cost", "广告费用", 50),
             _page("finance", "ad_bill", "广告账单", 60),
             _page("finance", "performance_report", "业绩报表", 70),
+            _page("finance", "balance_sheet", "资产负债表", 75),
+            _page("finance", "cash_flow", "资金流水（四个菜单共用）", 80),
+            _page("finance", "cost_exception", "成本异常处理", 90),
+            _page("finance", "settings", "口径与设置", 100),
+            _page("finance", "data_import", "数据导入", 110),
         ),
     ),
     ModuleDefinition(
@@ -193,6 +199,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
         100,
         (
             _page("pmc", "purchase_board", "采购看板", 10),
+            _page("pmc", "logistics", "物流", 15),
             _page("pmc", "domestic_warehouse_board", "国内仓看板", 20),
         ),
     ),
@@ -221,6 +228,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
             _page("data_center", "alert_center", "预警中心", 30),
             _page("data_center", "data_import", "数据导入", 40),
             _page("data_center", "data_export", "数据导出", 50),
+            _page("data_center", "walmart_remote", "沃尔玛采集", 55),
             _page("data_center", "task_center", "任务中心", 60),
             _page("data_center", "api_docs", "API文档", 70),
         ),
