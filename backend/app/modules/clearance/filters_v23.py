@@ -258,11 +258,13 @@ def search_risk_filtered(
             row["owner_name"] = owner
         matched.append(row)
     rank = {"high": 0, "medium": 1, "low": 2, "none": 3, "unknown": 4}
-    matched.sort(key=lambda row: (
-        rank.get(row.get("risk", "unknown"), 4),
-        row.get("store_id") or "",
-        row.get("item_id") or "",
-    ))
+    matched.sort(
+        key=lambda row: (
+            rank.get(row.get("risk", "unknown"), 4),
+            row.get("store_id") or "",
+            row.get("item_id") or "",
+        )
+    )
     start = (page - 1) * page_size
     return {
         "items": matched[start : start + page_size],
@@ -279,9 +281,7 @@ def search_risk_filtered(
         "rule_version": rule_version,
         "risk_summary": {
             "counts": counts,
-            "risk_inventory_cost_usd": (
-                None if missing_capital else round(risk_capital, 2)
-            ),
+            "risk_inventory_cost_usd": (None if missing_capital else round(risk_capital, 2)),
             "risk_cost_missing": missing_capital,
         },
         "risk_model_ready": False,
