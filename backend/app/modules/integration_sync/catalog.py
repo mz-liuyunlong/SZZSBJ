@@ -28,6 +28,10 @@ from app.modules.integration_sync.pmc_purchase_catalog import (
     PMC_PURCHASE_SYNC_INTERFACE_SPECS,
 )
 from app.modules.integration_sync.repository import IntegrationSyncRepository
+from app.modules.integration_sync.walmart_bill_catalog import (
+    WALMART_BILL_SCHEDULE_CRON,
+    WALMART_BILL_SYNC_SPEC,
+)
 from app.modules.integration_sync.wfs_catalog import WFS_SETTLEMENT_SYNC_SPEC
 
 BootstrapStatus = Literal["created", "updated", "unchanged"]
@@ -604,6 +608,68 @@ class IntegrationCatalogService:
         config.is_enabled = True
         config.schedule_enabled = True
         config.schedule_cron = config.schedule_cron or FX_RATE_SCHEDULE_CRON
+        config.schedule_timezone = "UTC"
+        config.next_run_at = config.next_run_at or next_cron_instant(
+            config.schedule_cron, datetime.now(UTC)
+        )
+        self.session.commit()
+        return True
+
+    def bootstrap_walmart_bill_governance(
+        self,
+        source_account_ref: str,
+    ) -> WfsGovernanceBootstrapResult:
+        """Create the Walmart bill catalog/config with outbound and schedule disabled."""
+
+        source_account_ref = validate_data_pages_source_account_ref(source_account_ref)
+        spec = WALMART_BILL_SYNC_SPEC
+        try:
+            interface, interface_status = self._bootstrap_data_pages_interface(spec)
+            policy, policy_status = self._bootstrap_data_pages_retention_policy(spec)
+            config_status = self._bootstrap_data_pages_sync_config(
+                interface,
+                policy,
+                spec,
+                source_account_ref,
+            )
+            self.session.commit()
+            return WfsGovernanceBootstrapResult(
+                interface_statuses=(interface_status,),
+                retention_policy_statuses=(policy_status,),
+                sync_config_statuses=(config_status,),
+            )
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def enable_walmart_bill_sync(self, source_account_ref: str) -> bool:
+        """Turn on the Walmart bill sync: manual runs and the weekly schedule.
+
+        Safe to repeat: a cron or next run already set in the task centre is kept.
+        """
+        from app.modules.integration_sync.scheduler import next_cron_instant
+
+        source_account_ref = validate_data_pages_source_account_ref(source_account_ref)
+        interface = self.session.scalars(
+            select(IntegrationInterface).where(
+                IntegrationInterface.provider == "lingxing",
+                IntegrationInterface.interface_key == WALMART_BILL_SYNC_SPEC.interface_key,
+            )
+        ).one_or_none()
+        if interface is None:
+            return False
+        config = self.session.scalars(
+            select(IntegrationSyncConfig).where(
+                IntegrationSyncConfig.interface_id == interface.id,
+                IntegrationSyncConfig.source_account_ref == source_account_ref,
+            )
+        ).one_or_none()
+        if config is None:
+            return False
+        interface.outbound_enabled = True
+        config.is_enabled = True
+        config.schedule_enabled = True
+        config.schedule_cron = config.schedule_cron or WALMART_BILL_SCHEDULE_CRON
         config.schedule_timezone = "UTC"
         config.next_run_at = config.next_run_at or next_cron_instant(
             config.schedule_cron, datetime.now(UTC)

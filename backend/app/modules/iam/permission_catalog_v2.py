@@ -262,6 +262,7 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ActionDefinition("ai_center_keyword_rules", "publish", "发布关键词规则", 30, "high"),
     ActionDefinition("pmc_domestic_warehouse_board", "packing-approve", "通过打包审批", 10),
     ActionDefinition("pmc_domestic_warehouse_board", "packing-reject", "驳回打包审批", 20),
+    ActionDefinition("finance_settlement_reconciliation", "sync", "手动同步沃尔玛账单", 10),
     ActionDefinition("products_product_management", "view-sync-history", "查看同步历史", 8),
     ActionDefinition("products_product_management", "view-raw-lineage", "查看数据血缘", 9, "high"),
     ActionDefinition("products_product_management", "view-operation-logs", "查看操作日志", 10),

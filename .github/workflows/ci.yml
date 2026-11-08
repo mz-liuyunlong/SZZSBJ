@@ -711,4 +711,4 @@ jobs:
         run: |
           uv sync --frozen
           uv run alembic upgrade head
-          uv run pytest -v -rs tests/modules/finance_cashflow tests/db/test_alembic_scaffold.py
+          uv run pytest -v -rs tests/modules/finance_cashflow tests/modules/walmart_bills tests/db/test_alembic_scaffold.py

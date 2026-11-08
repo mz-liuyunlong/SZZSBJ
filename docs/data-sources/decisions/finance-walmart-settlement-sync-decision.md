@@ -1,4 +1,23 @@
-# 财务 · 领星 Walmart 结算账单 / 回款明细同步 数据源决策
+# 财务 · 沃尔玛账单同步（领星 statement/list）数据源决策
+
+> **2026-11-08 变更（以本节为准，下文 10-31 原文保留作调查记录）**
+>
+> Rocky 2026-11-08 23:09 ~ 23:34 定：
+> 1. 统一叫「沃尔玛账单」，不再叫「结算账单」。
+> 2. **只用一个领星接口 `statement/list`**。`payout/list`（`walmartBillPayoutList`）不登记、不建表；下文 §2 C、§3.2、§6 里关于回款明细的内容作废。
+> 3. 表做两层：明细表 `ods_lingxing_walmart_bill_lines` + 按店铺按期汇总表 `mart_walmart_bill_periods`（取代下文的 ODS 两张 + FACT + MART 四张）；原始响应仍进系统共用的原始层。回款对账、现金利润、结算利润三个板块共用这一层，只拉一次。
+> 4. 领星「账单总额」（`totalPayable`）在 10-26 本地数据里全是空的 → **每期应付金额 = 有效明细合计**；以后领星给了一致的总额就用总额。应付 ≤ 0 标「本期不打款」；整期明细都被删除标「作废」。负数账单和几期合并打款时沃尔玛都不单独出账单，不另做处理。
+> 5. 日期口径已确认：`startDate / endDate` 按**交易日期**（`transactionPostedTimestamp`）筛 —— 10-26 本地数据里每月请求返回的行数 = 按交易日期分月的行数。领星只在账单生成后才给出该期明细。
+> 6. 店铺参数用 `sids`（数组，一次一个店）—— 10-26 拉取时自动探测确认（`sid` 不按店过滤，`sids` 按店过滤）。
+> 7. 每周三上海 03:00 自动拉（重拉最近 35 天，长账单自动往前补），另加「手动同步」（回款对账页面按钮；动作权限 `action:finance:settlement-reconciliation:sync`，有权限的人都能点）。同步开关默认关闭，上线后由部署 AI 按票据打开。
+> 8. 读取接口改为 `GET /api/finance/walmart-bills/periods`；手动同步 `GET` / `POST /api/finance/walmart-bills/sync`。
+>
+> 实现见 `PRPs/finance-walmart-settlement-sync-v1.md`（2026-11-08 改写）与 `docs/api/finance-walmart-bills.md`。
+
+---
+
+（以下为 2026-10-31 原文）
+
 
 - 调查日期：2026-10-31
 - 调查人：Rocky 侧代码 AI（财务板块）

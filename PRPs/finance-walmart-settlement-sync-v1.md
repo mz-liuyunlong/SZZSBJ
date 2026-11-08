@@ -1,156 +1,155 @@
-# PRP: 财务 · 领星 Walmart 结算账单 / 回款明细同步 V1
+# PRP: 财务 · 沃尔玛账单同步（领星 statement/list）V1
 
-- Status: Draft
-- Owner Approval Required: Yes
-- Implementation authorization state: Not authorized（PRP 获批后另发执行 Prompt；生产 outbound / 回填 / schedule 三项另需书面授权）
-- Main execution role: Backend Engineer（Integration Sync handler + migration；无前端）
-- Source Decision: `docs/data-sources/decisions/finance-walmart-settlement-sync-decision.md`（READY_FOR_PRP，负责人批准待确认）
-- Related: `PRPs/finance-cashflow-statement-import-v1.md`（PR-A，到账侧）；结算对账页另立 PRP（PR-C）
-- Branch（实现时）: `feat/finance-walmart-settlement-sync`
+- Status: Ready for review（2026-11-08 按 Rocky 新口径改写；代码与本 PRP 同一 PR 审核，Rocky 2026-11-08 23:34 同意）
+- Owner Approval Required: Yes（财务板块 PRP / PR 负责人：Rocky；合并、上线：刘云龙）
+- Implementation authorization state: 本 PR 内实现；生产开启同步开关、定时、历史回填三项另需书面授权
+- Main execution role: Backend Engineer（Integration Sync handler + migration + 读取 / 手动同步接口；本 PR 无前端页面）
+- Source Decision: `docs/data-sources/decisions/finance-walmart-settlement-sync-decision.md`
+- Related: `PRPs/finance-cashflow-statement-import-v1.md`（日记账，到账侧）；回款对账页面另提 PR-2
+- Branch: `fin/walmart-bill-sync`
 - Production execution authorized: No
-- 出票：Rocky 侧代码 AI，2026-10-31；Rocky 22:36 / 22:44 定：账单直拉领星不走 Walmart API、历史从 2026-03-01 起、回款明细一起登记、上线后自动拉。
+- 口径来源：Rocky 2026-10-31 22:36 / 22:44（账单直拉领星、历史从 2026-03-01）；2026-11-08 23:09 ~ 23:34（统一叫「沃尔玛账单」、只用一个接口、两层表、每周拉 + 手动同步、有权限的人都能点）
+
+## 0. 和 10-31 版的区别（2026-11-08）
+
+| 项 | 10-31 版 | 本版 |
+|---|---|---|
+| 接口 | 领星 statement/list + payout/list 两个 | **只用 statement/list**；payout/list 不登记、不建表 |
+| 叫法 | 结算账单 / 结算单 | 统一叫「沃尔玛账单」 |
+| 表 | ODS 明细、ODS 回款、FACT、MART 四张 | **明细表 + 每期汇总表两张**（原始响应仍进系统共用的原始层） |
+| 应付金额 | payout 的 totalPayable | 领星「账单总额」目前全是空的 → **每期应付 = 有效明细合计**；以后领星给了一致的总额就用总额 |
+| 频率 | 每周三 03:00 | 同（每周三上海 03:00），**另加「手动同步」接口**（回款对账页面的按钮，PR-2 接上） |
+| 页面 | 无 | 本 PR 仍无页面；新增只读接口和手动同步接口给 PR-2 用 |
 
 ## 1. Goal
 
-在既有 Integration Sync 上新增两个领星只读接口 `walmartBillStatementList`、`walmartBillPayoutList`：每页先落 RAW，再解析进 ODS，规范化成结算事实表，并刷新「店铺 × 账单」期次读模型。完成态：负责人授权后，一次回填 9 店 2026-03-01 起全部账单，之后每周三 03:00 自动增量；任务中心能看到运行 / 异常；`mart_walmart_settlement_periods` 可供结算对账页读取。不含任何前端业务页面。
+把领星「沃尔玛账单」（Walmart 结算报告明细）按店同步进新系统，供回款对账、现金利润、结算利润三个板块共用，只拉一次。完成态：负责人授权后，一次回填 2026-03-01 起全部账单，之后每周三自动重拉最近 35 天，财务也可以在回款对账页面点「手动同步」；任务中心能看到每次运行；`mart_walmart_bill_periods` 给出每个店每一期的应付金额。
 
 ## 2. Why
 
-- 结算账单是财务板块 ③④⑤ 的唯一底数；现在靠 Rocky 逐期批单、部署 AI 手跑，不可持续。
-- 领星数据已与 Walmart 原始结算单逐期核平，直接拉领星省掉 Walmart 官方 API 那条仍被阻塞的路。
-- 回款明细给结算对账提供「平台说打了多少」，与 PR-A 的流水对号。
+- 沃尔玛账单是回款对账、结算利润、现金利润的底数；现在靠 Rocky 逐次批单、部署 AI 手跑，不可持续。
+- 领星数据已与 Walmart 原始结算单逐期核平，直接拉领星，不走 Walmart 官方 API。
 
 ## 3. Scope
 
 ### In scope
 
-- [ ] catalog 登记两个接口（provider lingxing、request_kind offset_page、handler_key `lingxing.walmart_bill_statement.v1` / `lingxing.walmart_bill_payout.v1`、contract_version 引契约快照），默认 `outbound_enabled=false`；bootstrap 脚本把两条 sync_config 写成 `is_enabled=false` / `schedule_enabled=false`。
-- [ ] handler：一店一 run、按月（回填）/ 35 天（增量）窗口、offset/length ≤ 200 翻页、totalCount 完整性、`totalSum.amount` control total、RAW blob + request ref、ODS **按店铺 × reportKey 整期快照替换**（行身份 = 复合键 + id + 同键序号的 `source_row_hash`；消失的行标 `missing_in_snapshot_at` 不删；见决策 §3.1）。金额 JSON 按字符串转 `Decimal`、落库 `numeric(18,4)`，不经 float。
-- [ ] Alembic migration（接当时最新 head）：`ods_lingxing_walmart_bill_statement_items`、`ods_lingxing_walmart_bill_payouts`、`fact_walmart_settlement_lines`、`mart_walmart_settlement_periods`；金额列 `numeric(18,4)`；索引：store_id + report_key、report_date、source_row_hash 唯一。
-- [ ] 规范化与 MART 刷新任务（run 成功后同事务内或独立 Celery 任务刷新受影响的 store × report_key）。
-- [ ] 受控只读探测脚本：一店一月窗口，dry-run → 1 页，输出脱敏字段清单；默认禁用、需环境变量显式打开。**门禁**：`startDate` / `endDate` 的日期语义（账单日 vs 交易日）与 payout/list 的字段 / 分页，必须在该探测确认并记录后，对应 handler 才允许进入实现；探测前只能写契约驱动的 parser 骨架与合成测试。
-- [ ] 回填 runner（manual、一店一次、按月窗口、幂等、可续跑）+ runbook `docs/runbooks/production-finance-settlement-backfill.md`（prepared，execution prohibited until Owner log）。
-- [ ] 任务中心：复用既有同步任务页面与异常中心，无新页面。
-- [ ] 文档：`docs/api/finance-settlement-sync.md`（handler / 表契约 / 字段映射）、`DATA_INTERFACE_REGISTRY.md` 更新、`CODEX_HANDOFF.md`。
-- [ ] 测试：fixture 用合成 JSON（结构照契约，金额 / 订单号 / 店铺为假值）覆盖分页完整性、control total、行 hash、枚举未知值、deleteFlag、单店失败隔离、MART 刷新、禁用开关 fail-closed；PostgreSQL migration up/down。
+- [x] 领星客户端登记 `POST /basicOpen/multiplatformFinance/walmart/bill/statement/list`（契约 `LX-727003CFF7B4`）：请求体只允许 `offset / length / sids / startDate / endDate`，每页最多 200，一次只查一个店。
+- [x] catalog：interface_key `walmartBillStatementList`，handler `lingxing.walmart_bill_statement.v1`，默认 `outbound_enabled=false`、`is_enabled=false`、`schedule_enabled=false`；bootstrap / enable 两个脚本（都要显式授权环境变量）。
+- [x] handler（见 §10 规则）：按店、按交易日期时间段、offset 翻页；原始响应先落 `ods_api_raw_blobs` / `ods_api_raw_request_refs`；解析写明细表；每店拉完重算该店涉及的各期汇总。
+- [x] 迁移 `20261108_0085_finance_walmart_bills`：`ods_lingxing_walmart_bill_lines`、`mart_walmart_bill_periods`；登记动作权限 `action:finance:settlement-reconciliation:sync`（页面权限 `page:finance:settlement-reconciliation:view` 已有则不动）。
+- [x] 接口：`GET /api/finance/walmart-bills/periods`、`GET /api/finance/walmart-bills/sync`、`POST /api/finance/walmart-bills/sync`。
+- [x] 测试：合成数据；解析、翻页、条数变化、时间段外的行、对半切、往前补拉、重拉后消失标记、回填时间段、开关、定时、手动同步、权限；迁移头。
+- [x] 文档：本 PRP、数据源决策、`docs/api/finance-walmart-bills.md`、`DATA_INTERFACE_REGISTRY.md`、`BACKEND_MODULE_CATALOG.md`。
 
 ### Out of scope
 
-- [ ] 结算利润 / 分摊 / WFS 费用明细（③）；对账页与人工确认（PR-C）。
-- [ ] Walmart 官方 Reconciliation / Reports API。
-- [ ] Demo 已拉 JSONL 的导入（只用于 control totals）。
-- [ ] 生产 outbound 开启、回填执行、schedule 开启、部署（各需单独授权与 runbook 执行记录）。
-- [ ] 任何前端业务页面。
+- [ ] 回款对账页面、店铺 ↔ 收款账户匹配表、和日记账自动配对、初审终审（PR-2）。
+- [ ] 结算利润 / 现金利润的计算（之后改读本层）。
+- [ ] 领星 payout/list、Walmart 官方 API。
+- [ ] 10-26 本地已拉的 JSONL 导入（只用来核对字段和总数，不进仓库）。
+- [ ] 生产开启 outbound / schedule、回填执行、部署（各需单独授权）。
 
 ## 4. Navigation / Page
 
-```text
-一级导航：数据中心
-二级导航：任务中心（既有；本 PRP 不新增页面）
-页面路径：/data-center/task-center
-页面状态：不变
-```
+本 PR 无新页面。任务中心沿用既有页面（`/data-center/task-center`）。回款对账页面（`/finance/settlement-reconciliation`）在 PR-2。
 
 ## 5. Permissions
 
 ```text
-page permissionKey: 既有 page:data-center:task-center:view
-action permissionKeys: 既有 integrations:execute（手动触发 / 回填），integrations:update（配置）
-data scope resource: source_account_ref + store（既有同步治理边界）
-field permissions: 不适用（无新前端字段）；D/E 表的读取接口在 PR-C 定义字段权限（页面 key `page:finance:settlement-reconciliation:view`）
-high-risk actions: 开启 outbound / schedule、回填 —— 仅负责人授权后由 runbook 执行
+page permissionKey: page:finance:settlement-reconciliation:view（看每期汇总、看同步状态）
+action permissionKeys: action:finance:settlement-reconciliation:sync（手动同步；Rocky：有权限的人都能点，由角色分配）
+task centre: 既有 page:data-center:task-center:view / action:data-center:task-center:execute（回填走任务中心）
+data scope resource: source_account_ref（同步治理既有边界）
+field permissions: 读取接口不返回订单号、买家信息；收货地址字段不进业务层
+high-risk actions: 开启 outbound / schedule、回填 —— 负责人授权后由部署 AI 按票据执行
 ```
 
 ## 6. Data Source
 
 ```text
 data source decision file: docs/data-sources/decisions/finance-walmart-settlement-sync-decision.md
-decision status: READY_FOR_PRP
-dataset classifications: A RAW REBUILD_SYNC（既有 ods_api_raw_blobs）；B/C ODS REBUILD_SYNC；D FACT REBUILD_SYNC；E MART REBUILD_SYNC
+dataset classifications: RAW REBUILD_SYNC（既有原始层）；ODS 明细 REBUILD_SYNC；MART 每期汇总 REBUILD_SYNC
 contains NEED_OWNER_DECISION: no
-owner approval status: 待确认
-short-term strategy: REBUILD_SYNC via Integration Sync，默认关闭
-long-term strategy: 同上
-legacy exit criteria: 不适用
-old-system reference: no
-legacy MySQL readonly tables: 无
-new PostgreSQL tables: ods_lingxing_walmart_bill_statement_items, ods_lingxing_walmart_bill_payouts, fact_walmart_settlement_lines, mart_walmart_settlement_periods
-cache / mart tables: mart_walmart_settlement_periods
-sensitive or critical domains: 财务 / 结算（订单号、买家地址不进业务层）
+owner approval status: Rocky 2026-11-08 已定口径；生产开启另批
+new PostgreSQL tables: ods_lingxing_walmart_bill_lines, mart_walmart_bill_periods
+sensitive or critical domains: 财务 / 结算（订单号只在明细表；收货地址不进业务层）
 ```
 
 ## 7. API Contract
 
-本 PRP 不新增前端业务 API。外部契约与字段映射见决策 §3；内部任务 / 配置接口复用 Integration Sync 既有路由（`/api/integrations/...`），仅新增两个 interface_key。读取接口（`GET /api/finance/settlements/periods|lines`）在 PR-C 定义。
+见 `docs/api/finance-walmart-bills.md`。
 
 ```text
-meta.source: integration_sync / lingxing
-meta.source_tables: ods_lingxing_walmart_bill_statement_items, ods_lingxing_walmart_bill_payouts, fact_walmart_settlement_lines, mart_walmart_settlement_periods
-request_id: 统一 envelope（既有）
+GET  /api/finance/walmart-bills/periods?store_id&report_date_from&report_date_to   每期汇总，新到旧，最多 2000 行
+GET  /api/finance/walmart-bills/sync                                               最近一次同步状态
+POST /api/finance/walmart-bills/sync                                               手动同步（202；已在跑就返回那一次）
+errors: 401 / 403；409 WALMART_BILL_SYNC_NOT_CONFIGURED；503 WALMART_BILL_SYNC_UNAVAILABLE；422 WALMART_BILL_RANGE_INVALID
 ```
 
 ## 8. UI Requirements
 
-不适用（复用任务中心与异常中心展示 run / work item / anomaly）。
+本 PR 无。PR-2 回款对账页面：顶部显示「最后同步时间」+「手动同步」按钮（无动作权限的人看不到按钮）。
 
 ## 9. SOP / API Docs
 
-- [x] Markdown API doc required（handler / 表契约）
-- [ ] OpenAPI metadata required（无新路由）
-- [x] SOP help page required（runbook：回填与定时开启）
-- [ ] PageShell help entry required（无新页面）
+- [x] Markdown API doc：`docs/api/finance-walmart-bills.md`（含同步规则和上线步骤）
+- [ ] PageShell help：PR-2
 
-## 10. Implementation Plan
+## 10. 同步规则（实现要点）
+
+1. 店铺：系统里的领星沃尔玛店铺（`dim_lingxing_stores`，与 WFS 结算同一个发现函数），一店一次请求，`sids` 只放这一个店。
+2. 时间段：手动 / 定时 = 最近 35 天（上海日期，含当天）；回填 = 任务里给的时间段，最早到 2026-03-01。按自然月切开；某段总条数超过翻页上限（默认 500 页 × 200 条）就对半切再拉。
+3. 筛选口径：领星 `startDate / endDate` 按**交易日期**（`transactionPostedTimestamp`）筛 —— 用 10-26 本地数据核对过（每月请求的行数 = 按交易日期分月的行数）。程序再校验：返回的任何一行交易日期不在请求的时间段里，或店铺对不上，整店失败、已有数据不动（说明领星口径变了）。
+4. 完整性：翻页过程中总条数变了 → 整店失败；拉完行数对不上总条数 → 整店失败。同一时间段里同一个领星行号出现两次且内容不同 → 整店失败。
+5. 写入：按（店铺, 领星行号）去重更新；金额按字符串转 Decimal，`numeric(18,4)`；收货城市 / 州 / 邮编 / 国家不落业务层；其余字段原样放 `extra_fields` 给结算利润用。
+6. 重拉后消失：某个时间段完整拉完后，这段时间里以前有、这次没再出现的明细标 `missing_since`（不删），汇总时不算；以后又出现就清掉。
+7. 往前补拉：领星只在账单生成后才给出明细，一期账单可能横跨 35 天以上（几期合并打款）。某期账单最早一笔明细落在窗口开头 7 天内，就往前补拉 31 天；补到这期不再靠前为止，最多 12 次，最早到 2026-03-01。
+8. 每期汇总（一期 = 一个 reportKey = 一次打款）：有效明细 = 没删除（deleteFlag=0）且没消失；应付金额 = 领星账单总额（全期一致地给了一个值时）否则 = 有效明细合计；状态：没有有效明细 = `voided`（作废），应付 ≤ 0 = `not_payable`（本期不打款），其余 `normal`；同时给出按金额类型的小计、账期起止（领星没给就用最早 / 最晚交易日期）。
+9. 失败隔离：一个店失败不影响其他店；有店失败整次任务记为失败（`SYNC_WALMART_BILL_STORE_PARTIAL` / `SYNC_WALMART_BILL_ALL_STORES_FAILED`），任务中心能看到。
+
+## 11. Implementation Plan
 
 ```text
-Task 1: migration 四张表 + model registry + scaffold 测试
-Task 2: catalog / bootstrap 登记两个接口（默认关）；request planner（一店一窗口、offset 分页、totalCount 完整性）
-Task 3: statement handler：RAW → ODS upsert（source_row_hash）→ FACT 规范化 → control total → MART 刷新
-Task 4: payout 受控探测脚本 + payout handler（字段以探测结果为准）
-Task 5: 回填 runner + runbook；单店隔离、续跑、幂等测试
-Task 6: 文档 / registry / CODEX_HANDOFF；完成报告八段
+Task 1: 客户端登记接口 + catalog / bootstrap / enable（默认关）
+Task 2: 迁移两张表 + 动作权限；model registry；迁移头测试
+Task 3: handler（翻页、校验、写入、消失标记、对半切、往前补拉、每期汇总）
+Task 4: 读取 / 手动同步接口 + 权限
+Task 5: 测试、文档、registry
 ```
 
-## 11. Validation Gates
+## 12. Validation Gates
 
 ```bash
-uv run ruff check . && uv run ruff format --check .
-uv run pytest backend/tests/modules/integration_sync -k "walmart_bill" -q
-uv run pytest tests/db -q
+cd backend
+uv run ruff format --check . && uv run ruff check .
+APP_ENV=test TEST_DATABASE_URL=... uv run alembic upgrade head
+APP_ENV=test TEST_DATABASE_URL=... uv run pytest tests/modules/walmart_bills tests/db/test_alembic_scaffold.py tests/modules/fx_rates tests/modules/finance_cashflow tests/core -q
 uv run alembic check
-bash scripts/ci-preflight.sh
-# control totals（授权回填后）：按 Demo 归档的 control totals 核对（每店行数 / 账单数，保存在 Rocky 侧工作区，不进仓库）；Σamount 与 totalSum.amount 对平
+uv run python -c "import app.main"
 ```
 
-## 12. Forbidden Actions
+授权回填后（不进仓库）：用 10-26 本地数据按店、按期核对行数和每期合计。
+
+## 13. Forbidden Actions
 
 ```text
-不修改 old-system；不连接生产数据库；不修改 .env；不调用真实领星接口（除显式授权的受控探测）；不部署；不重启服务
-不改既有四个 DATA_PAGES 接口的 handler / 配置；不翻转任何 is_enabled / outbound_enabled / schedule_enabled 默认值
-不把真实 JSON、订单号、金额明细写进测试 / 文档 / PR
+不连接生产数据库；不修改 .env；不调用真实领星接口；不部署；不重启服务
+不改其他同步接口的 handler / 配置；不翻转任何 is_enabled / outbound_enabled / schedule_enabled 默认值
+不把真实 JSON、订单号、金额明细、店铺名写进测试 / 文档 / PR
 ```
 
-## 13. Rollback Plan
+## 14. Rollback Plan
 
-- 代码：revert PR；两个接口在 catalog 中移除后，sync_config 行由 bootstrap 标记 disabled（不删 RAW）。
-- 数据库：migration down（四张新表均新建）；RAW blobs 按既有保留策略处理。
-- 运行：`is_enabled=false` 立即停；MART 可由 FACT 全量重刷。
+- 运行：`is_enabled=false` 立即停。
+- 代码：revert PR。
+- 数据库：迁移 down —— 明细表有数据时拒绝；动作权限已分配给角色时拒绝（先收回权限）。
+- 每期汇总可以随时由明细表重算。
 
-## 14. Acceptance Checklist
+## 15. 上线步骤（负责人授权后由部署 AI 按票据执行）
 
-- [ ] 两接口登记、默认关闭、bootstrap 幂等
-- [ ] 分页完整性与 control total 失败时 run 标 failed、不发布
-- [ ] 行身份（复合键 + id + 同键序号）在最大店 CN2601 真实 JSON 上零碰撞（授权探测记录只写是否零碰撞，贴 PR）
-- [ ] startDate / endDate 日期语义与 payout 字段已由受控探测确认并记录，之后才实现对应 handler
-- [ ] 单店失败隔离测试通过
-- [ ] migration up/down 通过；`alembic check` 干净
-- [ ] runbook 已写、状态 prepared
-- [ ] registry / CODEX_HANDOFF 更新
-
-## 15. Open items for owner
-
-以下各项**待负责人批准**，本 PRP 不作最终决定；批准前不得开启任何生产同步、定时或回填。
-
-1. 定时频率：每周三 03:00（建议）还是每日。
-2. 回填时点：PR 合并后立即、还是等 PR-C 页面一起。
-3. Demo 拉法停用时点（Rocky 定）。
+1. 合并上线后跑 `scripts/bootstrap_walmart_bill_governance.py`（登记，全关）。
+2. 首次手动同步 = 受控探测：确认生产环境对这个接口的鉴权、`sids` 用店铺编号可用、条数与 10-26 本地数据一致。
+3. 跑 `scripts/enable_walmart_bill_sync.py`（打开同步 + 每周三定时）。
+4. 任务中心发起回填：2026-03-01 至今（按店按月串行，约 1 小时）。
+5. 用 10-26 本地数据按店按期核对（只回报是否一致）。

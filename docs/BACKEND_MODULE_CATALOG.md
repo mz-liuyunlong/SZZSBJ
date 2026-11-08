@@ -28,6 +28,22 @@
 
 新增通用后端模块后，AI 必须更新本文件。
 
+## Finance Walmart Bills V1
+
+| 项目 | 内容 |
+|---|---|
+| Module name | Finance Walmart Bills V1（沃尔玛账单同步） |
+| Module key | `finance-walmart-bills-v1` |
+| Status | `in_review`；Rocky 2026-11-08 定口径；未上线，同步默认关闭 |
+| Purpose | 领星沃尔玛账单（statement/list）同步：明细表 + 每期汇总表，回款对账 / 现金利润 / 结算利润共用 |
+| Backend files | `backend/app/modules/walmart_bills/`；`backend/app/modules/integration_sync/walmart_bill_catalog.py`、`handlers/lingxing_walmart_bill_sync.py`；`backend/scripts/bootstrap_walmart_bill_governance.py`、`enable_walmart_bill_sync.py`；Alembic `20261108_0085_finance_walmart_bills` |
+| Permission | 看：`page:finance:settlement-reconciliation:view`；手动同步：`action:finance:settlement-reconciliation:sync`（新增） |
+| Documentation | `docs/api/finance-walmart-bills.md`；契约 `docs/integrations/lingxing/contracts/finance-lx-727003cff7b4.md` |
+| PRP / Decision | `PRPs/finance-walmart-settlement-sync-v1.md`；`docs/data-sources/decisions/finance-walmart-settlement-sync-decision.md` |
+| PR | TBD |
+| Frontend | 回款对账页面另提 PR-2（含「手动同步」按钮） |
+| Not in scope | 领星 payout/list；对账匹配、配对、审核；利润计算 |
+
 ## Lingxing FX Rate V1
 
 | 项目 | 内容 |

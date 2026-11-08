@@ -38,6 +38,7 @@ type LingxingEndpoint = Literal[
     "/basicOpen/multiplatform/profit/report/order",
     "/erp/sc/routing/data/local_inventory/productList",
     "/erp/sc/routing/finance/currency/currencyMonth",
+    "/basicOpen/multiplatformFinance/walmart/bill/statement/list",
     "/pb/mp/order/v2/list",
     "/basicOpen/openapi/multiplatform/walmart/returnOrder/list",
     "/basicOpen/adReport/advertiser/list",
@@ -291,6 +292,19 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
         store_field=None,
         page_size_field=None,
         auth_strategy="query_sign",
+    ),
+    # Walmart bill (settlement) lines. Read-only; one store per request, offset/length paging,
+    # startDate / endDate filter on the transaction posted date (confirmed on 2026-10-26 data).
+    "/basicOpen/multiplatformFinance/walmart/bill/statement/list": LingxingEndpointContract(
+        method="POST",
+        outbound_enabled=True,
+        allow_query_parameters=False,
+        require_json_body=True,
+        allowed_body_fields=frozenset({"offset", "length", "sids", "startDate", "endDate"}),
+        required_body_fields=frozenset({"offset", "length", "sids", "startDate", "endDate"}),
+        store_field="sids",
+        page_size_field="length",
+        offset_field="offset",
     ),
     "/erp/sc/routing/data/local_inventory/productList": LingxingEndpointContract(
         method="POST",
@@ -604,6 +618,66 @@ class LingxingReadonlyClient:
             contract,
             page_size_limit=1,
             first_page_only=True,
+        )
+        return self._fetch_page(capture, page, contract)
+
+    def fetch_walmart_bill_page(
+        self,
+        *,
+        store_id: str,
+        offset: int,
+        length: int,
+        page_no: int,
+        start_date: date,
+        end_date: date,
+        source_account_ref: str,
+        run_id: str,
+        work_item_id: str,
+    ) -> LingxingRawEnvelope:
+        """Fetch one governed page of Walmart bill lines for a single store and date window."""
+        if not self._settings.lingxing_enable_real_calls:
+            raise LingxingClientError("Lingxing calls are disabled")
+        if (
+            not source_account_ref
+            or source_account_ref != source_account_ref.strip()
+            or not store_id.isdigit()
+            or start_date > end_date
+        ):
+            raise LingxingClientError("Lingxing Walmart bill scope is invalid")
+        _required_integer(offset, minimum=0)
+        _required_integer(page_no, minimum=1)
+        if _required_integer(length, minimum=1) > 200:
+            raise LingxingClientError("Lingxing Walmart bill page size is invalid")
+        page = LingxingPageRequest.model_construct(
+            page_no=page_no,
+            page_size=length,
+            params=None,
+            body={
+                "offset": offset,
+                "length": length,
+                "sids": [store_id],
+                "startDate": start_date.isoformat(),
+                "endDate": end_date.isoformat(),
+            },
+        )
+        capture = LingxingCaptureRequest(
+            api_path="/basicOpen/multiplatformFinance/walmart/bill/statement/list",
+            pages=(page,),
+            store_ids=(store_id,),
+            object_type="lingxing_walmart_bill_statement",
+            trace_id=run_id,
+            run_id=run_id,
+            batch_id=work_item_id,
+            data_date=end_date,
+            extra={"source_account_ref": source_account_ref},
+        )
+        contract = _ENDPOINT_CONTRACTS[capture.api_path]
+        self._validate_outbound_contract(
+            capture,
+            page,
+            contract,
+            page_size_limit=200,
+            first_page_only=False,
         )
         return self._fetch_page(capture, page, contract)
 

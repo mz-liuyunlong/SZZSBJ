@@ -60,6 +60,7 @@ from app.modules.integration_sync.schemas import (
     WorkItemListQuery,
     WorkItemRead,
 )
+from app.modules.integration_sync.walmart_bill_catalog import WALMART_BILL_SYNC_SPEC
 
 SYNC_INTERFACE_DISABLED = "SYNC_INTERFACE_DISABLED"
 SYNC_RUN_NOT_RETRYABLE = "SYNC_RUN_NOT_RETRYABLE"
@@ -606,6 +607,13 @@ class IntegrationSyncService:
             and interface.endpoint_path == FX_RATE_SYNC_SPEC.endpoint_path
             and interface.handler_key == FX_RATE_SYNC_SPEC.handler_key
         )
+        is_walmart_bill = (
+            interface.provider == "lingxing"
+            and interface.interface_key == WALMART_BILL_SYNC_SPEC.interface_key
+            and interface.method == "POST"
+            and interface.endpoint_path == WALMART_BILL_SYNC_SPEC.endpoint_path
+            and interface.handler_key == WALMART_BILL_SYNC_SPEC.handler_key
+        )
         if productlist_only and not (
             is_productlist
             or is_productinfo
@@ -613,6 +621,7 @@ class IntegrationSyncService:
             or is_data_pages
             or is_finance_approval
             or is_fx
+            or is_walmart_bill
         ):
             raise ApiError(code=SYNC_PRODUCTLIST_ONLY, status_code=409)
         if is_pmc_purchase and (trigger is not TriggerType.MANUAL or config.schedule_enabled):
