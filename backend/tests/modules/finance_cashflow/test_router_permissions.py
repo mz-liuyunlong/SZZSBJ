@@ -1,4 +1,4 @@
-"""权限和上传限制：只有超级管理员能用；不需要数据库。"""
+"""Finance routes require RBAC grants; no real database needed."""
 
 from __future__ import annotations
 
@@ -71,12 +71,57 @@ def test_anonymous_gets_401(client_for, method, path):
     assert client_for(None).request(method, path).status_code == 401
 
 
-@pytest.mark.parametrize(("method", "path"), ENDPOINTS)
-def test_other_users_get_403_even_with_finance_page_permission(client_for, method, path):
-    finance_user = Principal(
-        user_id="u1", permissions=frozenset({"page:finance:cash-flow:view", "finance:read"})
+@pytest.mark.parametrize(
+    ("method", "path", "grant"),
+    [
+        ("POST", "/api/finance/cashflow/imports", "action:finance:cash-flow:import"),
+        ("POST", f"/api/finance/cashflow/imports/{IMPORT_ID}/void",
+         "action:finance:cash-flow:void-import"),
+        ("POST", f"/api/finance/cashflow/lines/{UID}/events",
+         "action:finance:cash-flow:edit-journal"),
+        ("POST", "/api/finance/cashflow/approvals/sync",
+         "action:finance:cash-flow:sync-approvals"),
+        ("POST", "/api/finance/cashflow/accounts",
+         "action:finance:cash-flow:manage-accounts"),
+        ("POST", "/api/finance/cashflow/fx-rates/sync",
+         "action:finance:fx-rates:sync"),
+    ],
+)
+def test_page_view_does_not_grant_write(client_for, method, path, grant):
+    reader = Principal(
+        user_id="u1",
+        permissions=frozenset({"page:finance:cash-flow:view", "page:finance:fx-rates:view"}),
     )
-    assert client_for(finance_user).request(method, path).status_code == 403
+    assert client_for(reader).request(method, path).status_code == 403
+
+
+@pytest.mark.parametrize(
+    ("path", "grant"),
+    [
+        ("/api/finance/cashflow/lines", "page:finance:cash-flow:view"),
+        ("/api/finance/cashflow/fx-rates", "page:finance:fx-rates:view"),
+    ],
+)
+def test_read_access_is_role_granted_not_super_admin(client_for, path, grant):
+    other = Principal(user_id="u1", permissions=frozenset({grant}))
+    assert client_for(other).get(path).status_code != 403
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "grant"),
+    [
+        ("POST", "/api/finance/cashflow/imports", "action:finance:cash-flow:import"),
+        ("POST", f"/api/finance/cashflow/lines/{UID}/events",
+         "action:finance:cash-flow:edit-journal"),
+        ("POST", "/api/finance/cashflow/approvals/sync",
+         "action:finance:cash-flow:sync-approvals"),
+        ("POST", "/api/finance/cashflow/fx-rates/sync",
+         "action:finance:fx-rates:sync"),
+    ],
+)
+def test_action_grant_allows_passing_permission_gate(client_for, method, path, grant):
+    other = Principal(user_id="u1", permissions=frozenset({grant}))
+    assert client_for(other).request(method, path).status_code != 403
 
 
 def test_undo_first_review_needs_the_review_permission(client_for):

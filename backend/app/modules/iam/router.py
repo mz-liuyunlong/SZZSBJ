@@ -10,7 +10,6 @@ from app.core.auth import Principal, require_principal
 from app.core.permissions import (
     has_permission,
     require_any_permission,
-    require_super_admin,
 )
 from app.db.session import get_db_session
 from app.modules.iam.field_access import (
@@ -270,7 +269,7 @@ def reset_password(
 def delete_user(
     request: Request,
     user_id: int,
-    principal: Annotated[Principal, Depends(require_super_admin)],
+    principal: Annotated[Principal, Depends(require_permission("action:settings:user-management:delete"))],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> SuccessEnvelope[UserRead, None]:
     deleted = RbacService(session).hard_delete_user(

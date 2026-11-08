@@ -124,7 +124,7 @@ function UserManagementPage({ page }: UserManagementPageProps) {
       || permitted(currentUser, "action:operations:log:edit")
     )
   );
-  const canHardDelete = Boolean(currentUser?.isSuperAdmin);
+  const canHardDelete = permitted(currentUser, "action:settings:user-management:delete");
   const canConfigureDataScope = permitted(
     currentUser,
     "action:settings:user-management:configure-data-scope",

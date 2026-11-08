@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query, Request
 
 from app.core.api import ApiError, SuccessEnvelope, success_response
 from app.core.auth import Principal, require_principal
-from app.core.permissions import has_permission, require_permission, require_super_admin
+from app.core.permissions import has_permission, require_permission
 from app.modules.decodo import local_test
 from app.modules.decodo.parse import amazon_document, walmart_document
 from app.modules.decodo.schemas import (
@@ -33,7 +33,7 @@ from app.modules.decodo.service import (
 settings_router = APIRouter(prefix="/api/business-rules/decodo", tags=["Decodo Configuration"])
 research_router = APIRouter(prefix="/api/keyword-planning", tags=["Keyword Research"])
 read_perm = Annotated[Principal, Depends(require_permission("business-rules:read"))]
-write_perm = Annotated[Principal, Depends(require_super_admin)]
+write_perm = Annotated[Principal, Depends(require_permission("action:settings:business-config:manage-decodo"))]
 
 
 def require_decodo_research_access(

@@ -8,12 +8,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { backendRequest } from "@/api/backendApi";
 import { fetchCurrentUser } from "@/pages/auth/authApi";
+import { hasPermission } from "@/shared/permissions/mockAccess";
 import PageShell from "@/components/page/PageShell";
 import type { NavigationPage } from "@/config/navigation";
 import FinanceBoardFrame, { LOCKED_TIP } from "@/pages/finance/FinanceBoardFrame";
 import { BoardTable } from "@/pages/finance/cash-flow/BoardTable";
 import HelpButton from "@/pages/finance/cash-flow/HelpButton";
-import { diffFxRates, fxAdjacentYear, FX_PAIR_LABEL, fxReadDenied, FX_SOURCE_LABEL, FX_SYNC_SUPER_ADMIN_ONLY, fxRateText, fxSyncDoneText, fxSyncErrorText, fxSyncFailedText, fxYearRows, fxYears, type FxRateRow, type FxSyncState } from "@/pages/finance/cash-flow/fxRates";
+import { diffFxRates, fxAdjacentYear, FX_PAIR_LABEL, fxReadDenied, FX_SOURCE_LABEL, FX_SYNC_PERMISSION_REQUIRED, fxRateText, fxSyncDoneText, fxSyncErrorText, fxSyncFailedText, fxYearRows, fxYears, type FxRateRow, type FxSyncState } from "@/pages/finance/cash-flow/fxRates";
 import { cashErrorText, isCashLive } from "@/pages/finance/cash-flow/journalApi";
 import { useCashSnapshot } from "@/pages/finance/localFinData";
 import "@/pages/finance/cash-flow/cash-flow.css";
@@ -99,11 +100,11 @@ function FxRatesPage({ page }: { page: NavigationPage }) {
   const failure = isCashLive && live.error ? cashErrorText(live.error) : null;
   const years = fxYears(rows, currentYear);
   const busy = start.isPending || isActive(status);
-  const isSuperAdmin = currentUser.data?.isSuperAdmin === true;
+  const canSync = hasPermission(currentUser.data?.permissions, "action:finance:fx-rates:sync");
   /* 还没查到身份时先置灰但不提示；查到不是超管（或查询失败）才提示。真正的权限在后端，返回 403 时提示同一句话。 */
-  const syncTip = !isCashLive ? LOCKED_TIP : !currentUser.isPending && !isSuperAdmin ? FX_SYNC_SUPER_ADMIN_ONLY : null;
+  const syncTip = !isCashLive ? LOCKED_TIP : !currentUser.isPending && !canSync ? FX_SYNC_PERMISSION_REQUIRED : null;
   const syncButton = (
-    <Button type="primary" loading={busy} disabled={!isCashLive || !isSuperAdmin || busy} onClick={() => start.mutate()}>
+    <Button type="primary" loading={busy} disabled={!isCashLive || !canSync || busy} onClick={() => start.mutate()}>
       {busy ? "同步中" : "手动同步"}
     </Button>
   );
@@ -133,7 +134,7 @@ function FxRatesPage({ page }: { page: NavigationPage }) {
         )}
       >
         {failure ? (
-          <BoardTable<FxRateRow> label="资金 汇率" rowKey="month" rows={[]} columns={COLUMNS} emptyTitle={fxReadDenied(live.error) ? "没有权限" : "汇率读取失败"} emptyText={fxReadDenied(live.error) ? "只有超级管理员能查看汇率" : failure} />
+          <BoardTable<FxRateRow> label="资金 汇率" rowKey="month" rows={[]} columns={COLUMNS} emptyTitle={fxReadDenied(live.error) ? "没有权限" : "汇率读取失败"} emptyText={fxReadDenied(live.error) ? "当前角色没有汇率查看权限" : failure} />
         ) : (
           <BoardTable<FxRateRow> label="资金 汇率" rowKey="month" rows={fxYearRows(rows, year)} columns={COLUMNS} emptyTitle="还没有汇率" emptyText="点「手动同步」从领星拉取" />
         )}

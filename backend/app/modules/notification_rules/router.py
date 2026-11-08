@@ -19,7 +19,7 @@ from sqlalchemy import text
 
 from app.core.api import ApiError, SuccessEnvelope, success_response
 from app.core.auth import Principal
-from app.core.permissions import require_permission, require_super_admin
+from app.core.permissions import require_permission
 from app.db.session import get_session_factory
 from app.modules.business_connectors.encryption_key import (
     EncryptionKeyUnavailable,
@@ -31,7 +31,7 @@ from .live_targets import FeishuTargetsError, fetch_live_targets
 
 router = APIRouter(prefix="/api/business-rules/notification-rules", tags=["Notification rules"])
 read_perm = Annotated[Principal, Depends(require_permission("business-rules:read"))]
-write_perm = Annotated[Principal, Depends(require_super_admin)]
+write_perm = Annotated[Principal, Depends(require_permission("action:settings:business-config:manage-notifications"))]
 RULE_PREFIX = "nr2_"
 PERSON_PREFIX = "nc2_"
 FORMAT = "SZZSBJ_NO_DDL_NOTIFICATION_RULE_V2"
