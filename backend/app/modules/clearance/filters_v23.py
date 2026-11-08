@@ -39,7 +39,8 @@ def scoped_parts(session: Session, accounts: frozenset[str], keyword: str = "",
     parts = ["l.source_account_ref = ANY(:accounts)", WFS_PREDICATE]
     params: dict[str, object] = {"accounts": sorted(accounts)}
     if keyword.strip():
-        parts.append("(l.item_id ILIKE :keyword OR l.msku ILIKE :keyword OR l.local_sku ILIKE :keyword OR l.title ILIKE :keyword)")
+        parts.append("(l.item_id ILIKE :keyword OR l.msku ILIKE :keyword "
+            "OR l.local_sku ILIKE :keyword OR l.title ILIKE :keyword)")
         params["keyword"] = "%" + keyword.strip() + "%"
     if store_refs:
         parts.append("(l.source_account_ref || '::' || l.store_id) = ANY(:store_refs)")

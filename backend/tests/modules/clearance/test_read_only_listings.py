@@ -78,7 +78,7 @@ def test_scoped_keyword_pagination_uses_select_only_and_source_rows(monkeypatch)
     item.wfs_available_quantity = 13
     session = ReadSession(ids=[item.id], rows=[item])
     monkeypatch.setattr(fallback, "current_available", lambda _s, _l: 13)
-    monkeypatch.setattr(fallback, "read_business_snapshot", lambda _s, l: {"item_id": l.item_id, "available": 13})
+    monkeypatch.setattr(fallback, "read_business_snapshot", lambda _s, listing: {"item_id": listing.item_id, "available": 13})
     result = fallback.search_unassessed_listings(
         session, frozenset({"HK2613"}), "SKU-1", 2, 50
     )

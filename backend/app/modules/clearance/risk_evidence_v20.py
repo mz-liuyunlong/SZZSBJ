@@ -39,7 +39,8 @@ def evidence_for_snapshot(snapshot: dict, rules: Any, *, listing: Any = None,
     metrics = snapshot.get("metrics") or {}
     gaps = set(snapshot.get("data_gaps") or [])
     as_of = as_of or date.today()
-    m = lambda key: num(metrics.get(key))
+    def m(key):
+        return num(metrics.get(key))
     entries: list[dict] = []
 
     def add(code: str, name: str, enabled: bool, *, actual: Any,
@@ -65,8 +66,6 @@ def evidence_for_snapshot(snapshot: dict, rules: Any, *, listing: Any = None,
     sales30 = m("sales_30d")
     sales14 = m("sales_14d")
     sales7 = m("sales_7d")
-    sellout = m("sellout_days")
-    observed30 = m("observed_days_30d")
     complete30 = metrics.get("complete_30d_window")
     if complete30 is None:
         complete30 = metrics.get("incomplete_30d") is False
@@ -138,7 +137,7 @@ def evidence_for_snapshot(snapshot: dict, rules: Any, *, listing: Any = None,
         missing=[k for k, v in (("zero_sales", zero_sales), ("first_wfs_days", first_days)) if v is None])
 
     # Independent profit rules; no double-counting of the same profit abnormality.
-    profit7, profit14, profit30 = m("profit_7d_usd"), m("profit_14d_usd"), m("profit_30d_usd")
+    profit7, profit14 = m("profit_7d_usd"), m("profit_14d_usd")
     add("loss_7d_14d", "近7天/14天持续亏损", bool(val(rules, "enableProfit", True)),
         actual={"profit_7d_usd": profit7, "profit_14d_usd": profit14},
         threshold={"profit_7d_usd": "< 0", "profit_14d_usd": "< 0"},

@@ -24,7 +24,8 @@ def execute_sync_run(run_id: str) -> None:
         # Only a successful relevant source sync may request a scoped
         # recalculation. A clearance failure cannot make sync fail.
         run = session.execute(text(
-            "SELECT status,interface_key,source_account_ref FROM gov_integration_sync_runs WHERE id=:id"
+            "SELECT status,interface_key,source_account_ref "
+            "FROM gov_integration_sync_runs WHERE id=:id"
         ), {"id": parsed_run_id}).mappings().first()
         if run and run["status"] == "succeeded" and any(
             term in str(run["interface_key"]).lower() for term in

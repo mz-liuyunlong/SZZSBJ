@@ -15,6 +15,8 @@ describe("approval original clearance UI contract", () => {
   it("does not submit fake decisions for real clearance records", () => {
     expect(originalDrawer).toContain("if (isLive) return;");
     expect(originalDrawer).toContain("disabled={isLive || clearanceStatus");
-    expect(originalColumns).toContain('!row.id.startsWith("DEMO-")');
+    expect(originalWorkspace).toContain('item.approval_type === "clearance_request" && !isDemoApproval(item)');
+    expect(originalWorkspace).toContain("setClearanceTableAction");
+    expect(originalColumns).toContain('onAction?.(row,"approve")');
   });
 });

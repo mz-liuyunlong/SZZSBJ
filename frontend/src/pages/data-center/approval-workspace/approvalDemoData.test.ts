@@ -18,6 +18,13 @@ vi.mock("./approvalApi", () => ({
   })),
 }));
 
+vi.mock("@/pages/products/clearance/clearanceApi", () => ({
+  fetchClearanceApprovals: vi.fn(async (filters: ApprovalFilters) => ({
+    data: { items: [] },
+    meta: { page: filters.page, page_size: filters.page_size, total: 0 },
+  })),
+}));
+
 import { fetchApprovals } from "./approvalApi";
 import {
   demoSeeds,

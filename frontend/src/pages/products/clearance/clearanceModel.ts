@@ -224,7 +224,7 @@ export function businessSignals(x:ClearanceProduct,r:ClearanceRules):string[]{
   return [...signals,...newerBusinessSignals(x,r)];
 }
 export function evaluateProduct(x:ClearanceProduct,r:ClearanceRules):RiskEvaluation{
-  r={...r,enableAged:false,enableAverageAge:false,enableAgedRatio:false,enableNearFee:false,enableRepeatBacklog:false};
+  r={...r,enableAged:false,enableAverageAge:false,enableAgedRatio:false,enableRepeatBacklog:false};
   if(x.liveRisk)return {level:x.liveRisk.level,auto:x.liveRisk.level==="high"||x.liveRisk.level==="medium",reasons:x.liveRisk.reasons,business:x.liveRisk.business};
   const cov=coverage(x),business=businessSignals(x,r),reasons:string[]=[];
   let level:RiskLevel="low";

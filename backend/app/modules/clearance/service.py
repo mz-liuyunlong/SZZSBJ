@@ -207,7 +207,7 @@ def _snapshot_row(session: Session, listing: ListingManagementCurrentMart, versi
 
 def evaluate_and_store(session: Session, listing: ListingManagementCurrentMart, version: int, rules: ClearanceRules) -> str:
     snapshot = _snapshot_row(session, listing, version, rules)
-    result = session.execute(text("""
+    session.execute(text("""
         INSERT INTO biz_clearance_risk_current
             (source_account_ref,store_id,item_id,level,reasons_json,signals_json,
              metrics_json,data_gaps_json,rule_version,calculated_at)
@@ -292,17 +292,22 @@ def search_listings(session: Session, accounts: frozenset[str], keyword: str, pa
         from .filters_v23 import scoped_parts
         scoped_sql, scoped_params = scoped_parts(session, accounts, keyword, store_refs, owner_names)
         join_risk = """LEFT JOIN biz_clearance_risk_current AS r
-          ON r.source_account_ref=l.source_account_ref AND r.store_id=l.store_id AND r.item_id=l.item_id"""
+          ON r.source_account_ref=l.source_account_ref AND r.store_id=l.store_id
+             AND r.item_id=l.item_id"""
         prefix, separator, predicate = scoped_sql.rpartition(" WHERE ")
         if not separator:
             raise RuntimeError("Missing outer WFS filter predicate")
         scoped_sql = f"{prefix} {join_risk} WHERE {predicate}"
         if risk_levels:
-            scoped_sql += " AND COALESCE(CASE WHEN r.rule_version=:version THEN r.level ELSE NULL END, 'unknown') = ANY(:levels)"
+            scoped_sql += (
+                " AND COALESCE(CASE WHEN r.rule_version=:version THEN r.level"
+                " ELSE NULL END, 'unknown') = ANY(:levels)"
+            )
             scoped_params.update({"levels": list(risk_levels), "version": version})
         total = int(session.scalar(text("SELECT COUNT(*) " + scoped_sql), scoped_params) or 0)
         ids = session.execute(text("SELECT l.id " + scoped_sql +
-             " ORDER BY l.store_id, l.item_id, l.source_account_ref, l.id LIMIT :limit OFFSET :offset"),
+             (" ORDER BY l.store_id, l.item_id, l.source_account_ref, l.id"
+              " LIMIT :limit OFFSET :offset")),
              {**scoped_params, "limit": page_size + 1, "offset": (page - 1) * page_size}).scalars().all()
         has_more = len(ids) > page_size
         selected = ids[:page_size]
@@ -335,14 +340,16 @@ def search_listings(session: Session, accounts: frozenset[str], keyword: str, pa
         where.append("r.level IN ('medium','high') AND r.rule_version=:version")
         params["version"] = version
     if keyword.strip():
-        where.append("(l.item_id ILIKE :keyword OR l.msku ILIKE :keyword OR l.local_sku ILIKE :keyword OR l.title ILIKE :keyword)")
+        where.append("(l.item_id ILIKE :keyword OR l.msku ILIKE :keyword "
+            "OR l.local_sku ILIKE :keyword OR l.title ILIKE :keyword)")
         params["keyword"] = '%' + keyword.strip() + '%'
     clause = ' AND '.join(where)
     ordering = "CASE r.level WHEN 'high' THEN 0 ELSE 1 END," if risk_only else ""
     ids = session.execute(text(f"""
         SELECT l.id FROM mart_listing_management_current l
         {'JOIN' if risk_only else 'LEFT JOIN'} biz_clearance_risk_current r
-          ON r.source_account_ref=l.source_account_ref AND r.store_id=l.store_id AND r.item_id=l.item_id
+          ON r.source_account_ref=l.source_account_ref AND r.store_id=l.store_id
+             AND r.item_id=l.item_id
         WHERE {clause}
         ORDER BY {ordering}
                  l.store_id,l.item_id
@@ -542,7 +549,8 @@ def review_application(session: Session, app_id: UUID, accounts: frozenset[str],
     """), {"id": row["approval_id"], "status": approval_status, "actor": actor, "note": note.strip() or None})
     if decision in {"approved", "rejected"} and status != "stock_closed":
         session.execute(text("""
-            INSERT INTO app_approval_step_decisions (id,approval_id,step_number,reviewer_id,decision,note)
+            INSERT INTO app_approval_step_decisions
+                (id,approval_id,step_number,reviewer_id,decision,note)
             VALUES (:id,:approval,1,:actor,:decision,:note)
         """), {"id": uuid4(), "approval": row["approval_id"], "actor": actor,
                 "decision": decision, "note": note.strip() or None})
@@ -569,7 +577,7 @@ def _sales_since_approval(session: Session, row: dict) -> float | None:
     for r in sales_rows:
         groups[r["business_date_la"]].append(r)
     total = Decimal("0")
-    for day, records in groups.items():
+    for _day, records in groups.items():
         if len(records) > 1:
             msuks = [str(v["msku"] or '').strip() for v in records]
             if not all(msuks) or len(msuks) != len(set(msuks)):
@@ -660,9 +668,11 @@ def list_applications(session: Session, accounts: frozenset[str], actor: str, *,
                l.wfs_available_quantity, r.level AS current_risk
         FROM biz_clearance_applications a
         LEFT JOIN mart_listing_management_current l
-          ON l.source_account_ref=a.source_account_ref AND l.store_id=a.store_id AND l.item_id=a.item_id
+          ON l.source_account_ref=a.source_account_ref AND l.store_id=a.store_id
+             AND l.item_id=a.item_id
         LEFT JOIN biz_clearance_risk_current r
-          ON r.source_account_ref=a.source_account_ref AND r.store_id=a.store_id AND r.item_id=a.item_id
+          ON r.source_account_ref=a.source_account_ref AND r.store_id=a.store_id
+             AND r.item_id=a.item_id
         WHERE {where} ORDER BY a.submitted_at DESC, a.id DESC
         LIMIT :limit OFFSET :offset
     """), params).mappings().all()
@@ -685,9 +695,15 @@ def application_detail(session: Session, app_id: UUID, accounts: frozenset[str],
 
 def batch_reconcile_running(session: Session, accounts: frozenset[str] | None = None) -> dict:
     params = {}
-    q = "SELECT id,source_account_ref FROM biz_clearance_applications WHERE status='running' ORDER BY id"
+    q = (
+        "SELECT id,source_account_ref FROM biz_clearance_applications "
+        "WHERE status='running' ORDER BY id"
+    )
     if accounts is not None:
-        q = "SELECT id,source_account_ref FROM biz_clearance_applications WHERE status='running' AND source_account_ref=ANY(:accounts) ORDER BY id"
+        q = (
+            "SELECT id,source_account_ref FROM biz_clearance_applications "
+            "WHERE status='running' AND source_account_ref=ANY(:accounts) ORDER BY id"
+        )
         params["accounts"] = list(accounts)
     rows = session.execute(text(q), params).mappings().all()
     finished = 0

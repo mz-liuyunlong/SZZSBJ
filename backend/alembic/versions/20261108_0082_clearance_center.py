@@ -1,7 +1,7 @@
 """WFS Clearance Center: versioned rules, per-Listing risks and manual approvals.
 
 Revision ID: 20261108_0082_clearance_center
-Revises: 20261105_0076_listing_product_tags
+Revises: 20261105_0081_finance_payoneer_statement
 
 No production migration is run by the local patch installer. All business
 history and approvals are durable; destructive downgrade is prohibited.

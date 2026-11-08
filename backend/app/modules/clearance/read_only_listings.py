@@ -530,7 +530,8 @@ def search_unassessed_listings(
     }
     where = ["l.source_account_ref = ANY(:accounts)"]
     if keyword.strip():
-        where.append("(l.item_id ILIKE :keyword OR l.msku ILIKE :keyword OR l.local_sku ILIKE :keyword OR l.title ILIKE :keyword)")
+        where.append("(l.item_id ILIKE :keyword OR l.msku ILIKE :keyword "
+            "OR l.local_sku ILIKE :keyword OR l.title ILIKE :keyword)")
         params["keyword"] = "%" + keyword.strip() + "%"
     where.append(f"({_LATEST_WFS}) > 0")
     where.append(f"({_LATEST_WFS}) = trunc(({_LATEST_WFS}))")

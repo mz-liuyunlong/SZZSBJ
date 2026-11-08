@@ -193,8 +193,8 @@ def list_applications(read: Session, write: Session, accounts: frozenset[str], a
             read, account, store, item, lock=False
         )
 
-        def current(field):
-            return getattr(listing, field, None) if listing else None
+        def current(field, row=listing):
+            return getattr(row, field, None) if row else None
 
         def first(*values):
             for value in values:
