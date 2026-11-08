@@ -1,13 +1,10 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { navigation } from "@/config/navigation";
 import { getPagePermissionKey } from "@/shared/permissions/mockAccess";
+import backendCatalogSource from "../../../backend/app/modules/iam/permission_catalog_v2.py?raw";
 
 // Backend deploys separately. Reject new menu pages without a registered grant.
-const catalogSource = readFileSync(
-  new URL("../../../backend/app/modules/iam/permission_catalog_v2.py", import.meta.url),
-  "utf8",
-);
+const catalogSource = backendCatalogSource;
 const registeredPages = new Set(
   Array.from(
     catalogSource.matchAll(/_page\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,/g),
