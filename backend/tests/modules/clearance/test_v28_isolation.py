@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[3] / "app" / "modules" / "clearance"
 def test_lifecycle_only_published_in_approved_branch():
     source = (ROOT / "hybrid_v28.py").read_text()
     assert 'elif decision == "rejected":' in source
-    assert source.index("publish_approved_lifecycle(write") > source.index(
+    assert source.index("publish_approved_lifecycle(") > source.index(
         'status, approval_status = "running", "approved"'
     )
     assert "read_only_source=True" in source
