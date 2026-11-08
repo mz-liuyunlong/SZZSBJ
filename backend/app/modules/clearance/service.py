@@ -359,7 +359,7 @@ def recalculate_all(
 ) -> dict:
     """Read legacy Listing facts from session; write clearance risks only to risk_session."""
     target = risk_session if risk_session is not None else session
-    version, rules = rule_version(target, require_persisted=(target is not session))
+    version, rules = rule_version(target, require_persisted=True)
     examined = 0
     cursor = None
     while True:
@@ -382,7 +382,7 @@ def recalculate_all(
         target.commit()
         # If an admin saved newer rules mid-run, the old job stops rather than
         # replacing new-version results in later batches.
-        latest, _ = rule_version(target)
+        latest, _ = rule_version(target, require_persisted=True)
         if latest != version:
             return {"examined": examined, "rule_version": version, "superseded": True}
     return {"examined": examined, "rule_version": version, "superseded": False}

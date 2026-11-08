@@ -103,7 +103,7 @@ def run_daily(*, retry_failed: bool = False) -> dict:
                             error_code=NULL,examined=0
                         WHERE business_date_la=:date AND status='failed'
                     """), {"date": today})
-                version, _ = service.rule_version(session)
+                version, _ = service.rule_version(session, require_persisted=True)
                 session.execute(
                     text("""
                     INSERT INTO biz_clearance_daily_runs
