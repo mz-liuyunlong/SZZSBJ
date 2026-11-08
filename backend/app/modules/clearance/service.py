@@ -328,6 +328,7 @@ def _snapshot_row(
 
     if include_details:
         from datetime import timedelta
+
         from .read_only_listings import _listing_age_days
         from .risk_evidence_v20 import evidence_for_snapshot
 
