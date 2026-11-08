@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from celery import Celery
 from celery.schedules import crontab
@@ -121,7 +123,10 @@ def create_celery_app(
             },
             "clearance-la-daily-scheduler": {
                 "task": "clearance.scheduler_tick",
-                "schedule": 60.0,
+                "schedule": crontab(
+                    minute=0, hour=0,
+                    nowfun=lambda: datetime.now(ZoneInfo("America/Los_Angeles")),
+                ),
             },
             "listing-lifecycle-scheduler": {
                 "task": "listing_lifecycle.scheduler_tick",
