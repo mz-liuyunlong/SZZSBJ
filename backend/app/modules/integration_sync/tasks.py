@@ -1,8 +1,6 @@
 import logging
 from uuid import UUID
 
-from sqlalchemy import text
-
 import app.modules.media_assets.tasks  # noqa: F401
 from app.celery_app import INTEGRATION_QUEUE, celery_app
 from app.db.session import get_session_factory

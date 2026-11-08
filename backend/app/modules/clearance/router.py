@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app.core.api import ApiError, SuccessEnvelope, success_response
+from app.core.api import SuccessEnvelope, success_response
 from app.core.auth import Principal, require_principal
 from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
