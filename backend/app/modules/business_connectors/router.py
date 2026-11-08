@@ -29,7 +29,7 @@ from app.integrations.llm.openai_provider import failed_call_reservation, genera
 from .encryption_key import EncryptionKeyUnavailable, get_business_fernet
 
 router = APIRouter(prefix="/api/business-rules/connectors", tags=["Business connectors"])
-read_perm = Annotated[Principal, Depends(require_permission("business-rules:read"))]
+read_perm = Annotated[Principal, Depends(require_permission("page:settings:business-config:view"))]
 admin_perm = Annotated[
     Principal, Depends(require_permission("action:settings:business-config:manage-connectors"))
 ]

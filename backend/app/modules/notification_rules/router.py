@@ -30,7 +30,7 @@ from .engine import FIELDS, RuleSpec, simulate
 from .live_targets import FeishuTargetsError, fetch_live_targets
 
 router = APIRouter(prefix="/api/business-rules/notification-rules", tags=["Notification rules"])
-read_perm = Annotated[Principal, Depends(require_permission("business-rules:read"))]
+read_perm = Annotated[Principal, Depends(require_permission("page:settings:business-config:view"))]
 write_perm = Annotated[
     Principal, Depends(require_permission("action:settings:business-config:manage-notifications"))
 ]
