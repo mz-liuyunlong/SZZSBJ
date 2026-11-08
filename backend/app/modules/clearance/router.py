@@ -10,14 +10,14 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app.core.api import SuccessEnvelope, success_response
+from app.core.api import ApiError, SuccessEnvelope, success_response
 from app.core.auth import Principal, require_principal
 from app.core.permissions import has_permission, require_any_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
 
 from . import hybrid_v28, service
-from .local_store_v28 import storage_session
+from .local_store_v28 import is_local, storage_session
 from .rules import CLEARANCE_RULE_CATALOG, ClearanceRules
 
 router = APIRouter(prefix="/api/clearance", tags=["WFS Clearance Center"])
@@ -73,7 +73,8 @@ class NoteWrite(Strict):
 
 @router.get("/rules", response_model=SuccessEnvelope[dict[str, Any], None])
 def rules_get(request: Request, session: db_session, principal: view):
-    version, config = service.rule_version(session)
+    with storage_session(session) as store:
+        version, config = service.rule_version(store, require_persisted=True)
     return success_response(
         request,
         data={
@@ -89,6 +90,11 @@ def rules_get(request: Request, session: db_session, principal: view):
     )
 
 
+def rules_history_from_store(read: Session, offset: int, limit: int) -> list[dict]:
+    with storage_session(read) as store:
+        return service.rules_history(store, offset, limit)
+
+
 @router.get("/rules/history", response_model=SuccessEnvelope[dict[str, Any], None])
 def rules_history(
     request: Request,
@@ -100,7 +106,7 @@ def rules_history(
     return success_response(
         request,
         data={
-            "items": service.rules_history(session, (page - 1) * page_size, page_size),
+            "items": rules_history_from_store(session, (page - 1) * page_size, page_size),
             "page": page,
             "page_size": page_size,
         },
@@ -110,20 +116,24 @@ def rules_history(
 
 @router.put("/rules", response_model=SuccessEnvelope[dict[str, Any], None])
 def rules_save(request: Request, payload: RuleUpdate, session: db_session, principal: manage):
-    version = service.save_rules(
-        session, payload.config, payload.expected_version, payload.reason, principal.user_id
-    )
-    from app.modules.clearance.tasks import enqueue_recalculation
-
-    dispatched = enqueue_recalculation()
+    with storage_session(session, writable=True) as store:
+        version = service.save_rules(
+            store, payload.config, payload.expected_version, payload.reason, principal.user_id
+        )
+    # Rule saves never bypass owner authorization by dispatching production recalculation.
     return success_response(
-        request, data={"version": version, "recalculation": dispatched}, meta=None
+        request, data={"version": version, "recalculation": "not_dispatched"}, meta=None
     )
 
 
 @router.post("/recalculate", response_model=SuccessEnvelope[dict[str, Any], None])
 def recalculate(request: Request, session: db_session, principal: manage):
-    return success_response(request, data=service.recalculate_all(session), meta=None)
+    # Do not write new clearance risk rows to the read-only 15432 business tunnel.
+    if is_local():
+        raise ApiError(code="CLEARANCE_LOCAL_RECALC_NOT_READY", status_code=409,
+                       message="本地跨数据库风险重算尚未通过隔离验证")
+    from .tasks import run_daily
+    return success_response(request, data=run_daily(retry_failed=True), meta=None)
 
 
 @router.get("/filter-options", response_model=SuccessEnvelope[dict[str, Any], None])
