@@ -335,8 +335,7 @@ def _snapshot_row(
 
         first = (
             as_of - timedelta(days=facts.first_wfs_days - 1)
-            if facts.first_wfs_days is not None
-            and facts.first_wfs_days > 0
+            if facts.first_wfs_days is not None and facts.first_wfs_days > 0
             else None
         )
 
@@ -348,13 +347,9 @@ def _snapshot_row(
 
         for days in (7, 14, 30):
             window = facts.windows.get(days)
-            detail_metrics[f"complete_{days}d_window"] = bool(
-                window and window.complete
-            )
+            detail_metrics[f"complete_{days}d_window"] = bool(window and window.complete)
             detail_metrics[f"observed_days_{days}d"] = (
-                window.observed_days
-                if window is not None
-                else 0
+                window.observed_days if window is not None else 0
             )
 
         details = evidence_for_snapshot(
@@ -367,11 +362,7 @@ def _snapshot_row(
 
         # Existing evaluator remains the authoritative grade.
         # Detail generation cannot overwrite it.
-        snapshot.update({
-            key: value
-            for key, value in details.items()
-            if key != "risk"
-        })
+        snapshot.update({key: value for key, value in details.items() if key != "risk"})
 
     return snapshot
 
@@ -466,9 +457,7 @@ def one_listing(
         return read_business_snapshot(session, listing)
     saved = persisted_rule_version(session)
     version, rules = saved if saved is not None else (0, ClearanceRules())
-    return read_business_snapshot(
-        session, listing, rules=rules, rule_version=version
-    )
+    return read_business_snapshot(session, listing, rules=rules, rule_version=version)
 
 
 def search_listings(
@@ -496,13 +485,18 @@ def search_listings(
         from .filters_v23 import search_risk_filtered
 
         saved = persisted_rule_version(session)
-        read_version, read_rules = (
-            saved if saved is not None else (0, ClearanceRules())
-        )
+        read_version, read_rules = saved if saved is not None else (0, ClearanceRules())
         return search_risk_filtered(
-            session, accounts, keyword, page, page_size,
-            store_refs, owner_names, risk_levels,
-            rules=read_rules, rule_version=read_version,
+            session,
+            accounts,
+            keyword,
+            page,
+            page_size,
+            store_refs,
+            owner_names,
+            risk_levels,
+            rules=read_rules,
+            rule_version=read_version,
         )
 
     if not risk_read_model_ready(session):
@@ -613,16 +607,11 @@ def search_listings(
     total = None
     if exact_total and not risk_only:
         count_params = {
-            key: value
-            for key, value in params.items()
-            if key not in ("limit", "offset")
+            key: value for key, value in params.items() if key not in ("limit", "offset")
         }
         total = int(
             session.scalar(
-                text(
-                    "SELECT COUNT(*) FROM mart_listing_management_current l "
-                    f"WHERE {clause}"
-                ),
+                text(f"SELECT COUNT(*) FROM mart_listing_management_current l WHERE {clause}"),
                 count_params,
             )
             or 0
@@ -684,11 +673,7 @@ def search_listings(
         "page_size": page_size,
         "has_more": has_more,
         "total": total,
-        "total_scope": (
-            "all_wfs_stock_eligible"
-            if total is not None
-            else "not_calculated"
-        ),
+        "total_scope": ("all_wfs_stock_eligible" if total is not None else "not_calculated"),
         "risk_filter_applied": bool(risk_only),
         "rule_version": version,
     }
