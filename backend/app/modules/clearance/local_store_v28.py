@@ -23,6 +23,7 @@ from app.core.config import get_database_url, get_settings
 _LOCAL_WRITE_ROUTES = frozenset(
     {
         ("POST", "/api/clearance/applications"),
+        ("PUT", "/api/clearance/rules"),
     }
 )
 _UUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
