@@ -33,7 +33,9 @@ from app.modules.decodo.service import (
 settings_router = APIRouter(prefix="/api/business-rules/decodo", tags=["Decodo Configuration"])
 research_router = APIRouter(prefix="/api/keyword-planning", tags=["Keyword Research"])
 read_perm = Annotated[Principal, Depends(require_permission("business-rules:read"))]
-write_perm = Annotated[Principal, Depends(require_permission("action:settings:business-config:manage-decodo"))]
+write_perm = Annotated[
+    Principal, Depends(require_permission("action:settings:business-config:manage-decodo"))
+]
 
 
 def require_decodo_research_access(

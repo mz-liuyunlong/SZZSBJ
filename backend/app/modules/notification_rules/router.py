@@ -31,7 +31,9 @@ from .live_targets import FeishuTargetsError, fetch_live_targets
 
 router = APIRouter(prefix="/api/business-rules/notification-rules", tags=["Notification rules"])
 read_perm = Annotated[Principal, Depends(require_permission("business-rules:read"))]
-write_perm = Annotated[Principal, Depends(require_permission("action:settings:business-config:manage-notifications"))]
+write_perm = Annotated[
+    Principal, Depends(require_permission("action:settings:business-config:manage-notifications"))
+]
 RULE_PREFIX = "nr2_"
 PERSON_PREFIX = "nc2_"
 FORMAT = "SZZSBJ_NO_DDL_NOTIFICATION_RULE_V2"

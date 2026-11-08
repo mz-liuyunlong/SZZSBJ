@@ -269,7 +269,9 @@ def reset_password(
 def delete_user(
     request: Request,
     user_id: int,
-    principal: Annotated[Principal, Depends(require_permission("action:settings:user-management:delete"))],
+    principal: Annotated[
+        Principal, Depends(require_permission("action:settings:user-management:delete"))
+    ],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> SuccessEnvelope[UserRead, None]:
     deleted = RbacService(session).hard_delete_user(

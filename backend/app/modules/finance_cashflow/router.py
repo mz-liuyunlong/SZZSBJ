@@ -81,10 +81,18 @@ db_session = Annotated[Session, Depends(get_db_session)]
 # Access decisions use assigned RBAC roles, not fixed administrator identities.
 cash_read = Annotated[Principal, Depends(require_permission("page:finance:cash-flow:view"))]
 cash_import = Annotated[Principal, Depends(require_permission("action:finance:cash-flow:import"))]
-cash_void = Annotated[Principal, Depends(require_permission("action:finance:cash-flow:void-import"))]
-cash_edit = Annotated[Principal, Depends(require_permission("action:finance:cash-flow:edit-journal"))]
-cash_sync = Annotated[Principal, Depends(require_permission("action:finance:cash-flow:sync-approvals"))]
-cash_accounts = Annotated[Principal, Depends(require_permission("action:finance:cash-flow:manage-accounts"))]
+cash_void = Annotated[
+    Principal, Depends(require_permission("action:finance:cash-flow:void-import"))
+]
+cash_edit = Annotated[
+    Principal, Depends(require_permission("action:finance:cash-flow:edit-journal"))
+]
+cash_sync = Annotated[
+    Principal, Depends(require_permission("action:finance:cash-flow:sync-approvals"))
+]
+cash_accounts = Annotated[
+    Principal, Depends(require_permission("action:finance:cash-flow:manage-accounts"))
+]
 fx_read = Annotated[Principal, Depends(require_permission("page:finance:fx-rates:view"))]
 fx_sync = Annotated[Principal, Depends(require_permission("action:finance:fx-rates:sync"))]
 

@@ -30,7 +30,9 @@ from .encryption_key import EncryptionKeyUnavailable, get_business_fernet
 
 router = APIRouter(prefix="/api/business-rules/connectors", tags=["Business connectors"])
 read_perm = Annotated[Principal, Depends(require_permission("business-rules:read"))]
-admin_perm = Annotated[Principal, Depends(require_permission("action:settings:business-config:manage-connectors"))]
+admin_perm = Annotated[
+    Principal, Depends(require_permission("action:settings:business-config:manage-connectors"))
+]
 EVENT_KEYS = frozenset(
     {
         "inventory_alert",

@@ -75,16 +75,19 @@ def test_anonymous_gets_401(client_for, method, path):
     ("method", "path", "grant"),
     [
         ("POST", "/api/finance/cashflow/imports", "action:finance:cash-flow:import"),
-        ("POST", f"/api/finance/cashflow/imports/{IMPORT_ID}/void",
-         "action:finance:cash-flow:void-import"),
-        ("POST", f"/api/finance/cashflow/lines/{UID}/events",
-         "action:finance:cash-flow:edit-journal"),
-        ("POST", "/api/finance/cashflow/approvals/sync",
-         "action:finance:cash-flow:sync-approvals"),
-        ("POST", "/api/finance/cashflow/accounts",
-         "action:finance:cash-flow:manage-accounts"),
-        ("POST", "/api/finance/cashflow/fx-rates/sync",
-         "action:finance:fx-rates:sync"),
+        (
+            "POST",
+            f"/api/finance/cashflow/imports/{IMPORT_ID}/void",
+            "action:finance:cash-flow:void-import",
+        ),
+        (
+            "POST",
+            f"/api/finance/cashflow/lines/{UID}/events",
+            "action:finance:cash-flow:edit-journal",
+        ),
+        ("POST", "/api/finance/cashflow/approvals/sync", "action:finance:cash-flow:sync-approvals"),
+        ("POST", "/api/finance/cashflow/accounts", "action:finance:cash-flow:manage-accounts"),
+        ("POST", "/api/finance/cashflow/fx-rates/sync", "action:finance:fx-rates:sync"),
     ],
 )
 def test_page_view_does_not_grant_write(client_for, method, path, grant):
@@ -111,12 +114,13 @@ def test_read_access_is_role_granted_not_super_admin(client_for, path, grant):
     ("method", "path", "grant"),
     [
         ("POST", "/api/finance/cashflow/imports", "action:finance:cash-flow:import"),
-        ("POST", f"/api/finance/cashflow/lines/{UID}/events",
-         "action:finance:cash-flow:edit-journal"),
-        ("POST", "/api/finance/cashflow/approvals/sync",
-         "action:finance:cash-flow:sync-approvals"),
-        ("POST", "/api/finance/cashflow/fx-rates/sync",
-         "action:finance:fx-rates:sync"),
+        (
+            "POST",
+            f"/api/finance/cashflow/lines/{UID}/events",
+            "action:finance:cash-flow:edit-journal",
+        ),
+        ("POST", "/api/finance/cashflow/approvals/sync", "action:finance:cash-flow:sync-approvals"),
+        ("POST", "/api/finance/cashflow/fx-rates/sync", "action:finance:fx-rates:sync"),
     ],
 )
 def test_action_grant_allows_passing_permission_gate(client_for, method, path, grant):
