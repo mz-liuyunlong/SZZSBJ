@@ -62,6 +62,11 @@ export interface ClearanceApplication {
   store_name: string | null;
   owner_ref: string | null;
   v44_current_target_cost_usd?: number;
+  display_product_name?: string | null;
+  display_owner_name?: string | null;
+  listing_days?: number | null;
+  inventory_cost_usd?: number | null;
+  wfs_available_quantity?: number | string | null;
   /** Submission snapshot, only when confirmed purchase + first-leg costs exist. */
   target_inventory_cost_usd?: number | null;
   requested_qty: number;
@@ -238,10 +243,80 @@ async function v44EnrichApplications(items: ClearanceApplication[]):Promise<Clea
         v50ReadCompletionDate(row),
       ]);
       const cost = v50CurrentTargetCost(row, live);
+
+      const productName = live?.product_name?.trim() || "";
+      const localName = live?.local_name?.trim() || "";
+      const englishTitle = live?.title?.trim() || "";
+
+      const displayName = productName ||
+        (localName && localName !== englishTitle ? localName : "");
+
+      const displayOwner = live?.owner_name?.trim() || "";
+
+      const stock = v50FiniteNumber(live?.available);
+
+      const days = v50FiniteNumber(
+        live?.metrics?.["listing_days"]
+      );
+
+      const unitCost =
+        v50FiniteNumber(
+          live?.metrics?.["inventory_unit_cost_usd"]
+        ) ??
+        v50FiniteNumber(
+          live?.metrics?.["unit_inventory_cost_usd"]
+        );
+
+      const recordedCapital = v50FiniteNumber(
+        live?.metrics?.["capital_purchase_first_leg_usd"]
+      );
+
+      const inventoryCapital =
+        recordedCapital !== null && recordedCapital >= 0
+          ? recordedCapital
+          : unitCost !== null &&
+            unitCost >= 0 &&
+            stock !== null &&
+            stock >= 0
+            ? Math.round(
+                (unitCost * stock + Number.EPSILON) * 100
+              ) / 100
+            : null;
+
       result[index] = {
         ...row,
-        ...(cost !== null ? {v44_current_target_cost_usd: cost} : {}),
-        ...(deadline ? {planned_completion_date: deadline} : {}),
+
+        ...(displayName
+          ? {display_product_name: displayName}
+          : {}),
+
+        ...(displayOwner
+          ? {display_owner_name: displayOwner}
+          : {}),
+
+        ...(live
+          ? {current_risk: live.risk}
+          : {}),
+
+        ...(stock !== null && stock >= 0
+          ? {wfs_available_quantity: stock}
+          : {}),
+
+        ...(days !== null && days >= 0
+          ? {listing_days: days}
+          : {}),
+
+        ...(inventoryCapital !== null
+          ? {inventory_cost_usd: inventoryCapital}
+          : {}),
+
+        ...(cost !== null
+          ? {v44_current_target_cost_usd: cost}
+          : {}),
+
+        ...(deadline
+          ? {planned_completion_date: deadline}
+          : {}),
       };
     }
   };
@@ -287,7 +362,8 @@ export async function fetchClearanceApprovals(filters: ApprovalFilters): Promise
     .map(row => ({
       id: row.id, version: row.version, approval_type: "clearance_request",
       business_ref: `${row.store_id}/${row.item_id}`,
-      title: row.title || row.item_id, source_account_ref: row.source_account_ref,
+      title: row.display_product_name || row.title || row.item_id,
+      source_account_ref: row.source_account_ref,
       applicant_id: row.applicant_ref,
       status: row.status === "pending" ? "submitted" : row.status === "rejected" ? "rejected" : row.status === "running" || row.status === "done" ? "approved" : "withdrawn",
       risk_level: row.risk_at_submission,
@@ -296,11 +372,12 @@ export async function fetchClearanceApprovals(filters: ApprovalFilters): Promise
       can_review: Boolean(row.can_review), requires_verification: false, case_review: false,
       clearance_details: {
         sku: row.local_sku, msku: row.msku, item_id: row.item_id,
-        store_id: row.store_id, store_name: row.store_name, owner_ref: row.owner_ref,
+        store_id: row.store_id, store_name: row.store_name,
+        owner_ref: row.display_owner_name || row.owner_ref,
         requested_qty: row.requested_qty, methods: row.methods_json,
-        wfs_available_quantity: (row as ClearanceApplication & {
-          wfs_available_quantity?: string | number | null
-        }).wfs_available_quantity ?? null,
+        wfs_available_quantity: row.wfs_available_quantity ?? null,
+        listing_days: row.listing_days ?? null,
+        inventory_cost_usd: row.inventory_cost_usd ?? null,
       },
     }));
   return { data: { items: mapped }, meta: { total: data.total, page: data.page, page_size: data.page_size } };

@@ -168,9 +168,10 @@ def _assess_read_only(
     windows: dict[int, dict],
     first_days: int | None,
     unit_cost: Decimal | None,
+    rules: ClearanceRules | None = None,
 ) -> tuple[str, list[str], list[dict], list[str], dict]:
     """Run the original pure rule engine without reading or writing clearance state tables."""
-    rules = ClearanceRules()  # Code defaults, NOT an imaginary persisted rule version.
+    rules = rules if rules is not None else ClearanceRules()
     # No reliable new/old WFS inventory lot identification: old-stock rules
     # are retired even if an older saved configuration enabled them.
     retired_flags = {
@@ -432,6 +433,8 @@ def read_business_snapshot(
     first_date_for_page: date | None = None,
     first_dates_batched: bool = False,
     page_cost: object | None = None,
+    rules: ClearanceRules | None = None,
+    rule_version: int = 0,
 ) -> dict:
     """Real Item-ID facts, all read-only. Optional batch inputs avoid per-row queries."""
     available = (
@@ -537,6 +540,7 @@ def read_business_snapshot(
         w,
         first_days,
         unit_cost,
+        rules,
     )
     display_sellout = assessed["sellout_days"]
     sellout_source = "verified_daily_sales" if display_sellout is not None else None
@@ -623,7 +627,7 @@ def read_business_snapshot(
         "owner_name": owner_name,
         "owner": owner_name or listing.owner_ref,
         "currency_code": listing.sale_price_currency_code,
-        "rule_version": 0,
+        "rule_version": rule_version,
         "risk": level,
         "reasons": reasons,
         "signals": signals,
@@ -641,12 +645,12 @@ def read_business_snapshot(
 
     report = evidence_for_snapshot(
         snapshot,
-        ClearanceRules(),
+        rules if rules is not None else ClearanceRules(),
         listing=listing,
         first_wfs_date=first,
         as_of=cutoff,
     )
-    snapshot.update(report)
+    snapshot.update({k: v for k, v in report.items() if k != "risk"})
     return snapshot
 
 

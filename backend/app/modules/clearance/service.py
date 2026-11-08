@@ -298,11 +298,17 @@ def save_rules(
 
 
 def _snapshot_row(
-    session: Session, listing: ListingManagementCurrentMart, version: int, rules: ClearanceRules
+    session: Session,
+    listing: ListingManagementCurrentMart,
+    version: int,
+    rules: ClearanceRules,
+    *,
+    include_details: bool = False,
 ) -> dict:
     facts = facts_for_listing(session, listing)
     risk = evaluate(facts, rules)
-    return {
+
+    snapshot = {
         "source_account_ref": listing.source_account_ref,
         "store_id": listing.store_id,
         "item_id": listing.item_id,
@@ -319,6 +325,47 @@ def _snapshot_row(
         "data_gaps": risk.gaps,
         "metrics": risk.metrics,
     }
+
+    if include_details:
+        from datetime import timedelta
+
+        from .read_only_listings import _listing_age_days
+        from .risk_evidence_v20 import evidence_for_snapshot
+
+        as_of = la_today()
+
+        first = (
+            as_of - timedelta(days=facts.first_wfs_days - 1)
+            if facts.first_wfs_days is not None and facts.first_wfs_days > 0
+            else None
+        )
+
+        detail_metrics = {
+            **risk.metrics,
+            "listing_days": _listing_age_days(listing, as_of),
+            "first_wfs_days": facts.first_wfs_days,
+        }
+
+        for days in (7, 14, 30):
+            window = facts.windows.get(days)
+            detail_metrics[f"complete_{days}d_window"] = bool(window and window.complete)
+            detail_metrics[f"observed_days_{days}d"] = (
+                window.observed_days if window is not None else 0
+            )
+
+        details = evidence_for_snapshot(
+            {**snapshot, "metrics": detail_metrics},
+            rules,
+            listing=listing,
+            first_wfs_date=first,
+            as_of=as_of,
+        )
+
+        # Existing evaluator remains the authoritative grade.
+        # Detail generation cannot overwrite it.
+        snapshot.update({key: value for key, value in details.items() if key != "risk"})
+
+    return snapshot
 
 
 def evaluate_and_store(
@@ -409,15 +456,9 @@ def one_listing(
     # Unrelated SQL errors still propagate; no fallback on database errors.
     if not risk_read_model_ready(session):
         return read_business_snapshot(session, listing)
-    version, rules = rule_version(session)
-    snap = _snapshot_row(session, listing, version, rules)
-    snap["available"] = current_available(session, listing)
-    snap["listing_id"] = str(listing.id)
-    snap["price_amount"] = (
-        str(listing.sale_price_amount) if listing.sale_price_amount is not None else None
-    )
-    snap["picture_url"] = listing.picture_url
-    return snap
+    saved = persisted_rule_version(session)
+    version, rules = saved if saved is not None else (0, ClearanceRules())
+    return read_business_snapshot(session, listing, rules=rules, rule_version=version)
 
 
 def search_listings(
@@ -440,6 +481,25 @@ def search_listings(
     """
     # Server DB may legitimately be at 0076 while the UI is newer.
     # The fallback reads only existing MARTs and does not generate risk claims.
+    # All stocked Listings remain visible, regardless of pool admission.
+    if not risk_only:
+        from .filters_v23 import search_risk_filtered
+
+        saved = persisted_rule_version(session)
+        read_version, read_rules = saved if saved is not None else (0, ClearanceRules())
+        return search_risk_filtered(
+            session,
+            accounts,
+            keyword,
+            page,
+            page_size,
+            store_refs,
+            owner_names,
+            risk_levels,
+            rules=read_rules,
+            rule_version=read_version,
+        )
+
     if not risk_read_model_ready(session):
         return search_unassessed_listings(
             session,
@@ -506,7 +566,7 @@ def search_listings(
                 available = current_available(session, listing)
                 if available is None or available <= 0:
                     continue
-                snapshot = _snapshot_row(session, listing, version, rules)
+                snapshot = _snapshot_row(session, listing, version, rules, include_details=True)
                 snapshot.update(
                     {
                         "available": available,
@@ -530,7 +590,11 @@ def search_listings(
         }
 
     params = {"accounts": list(accounts), "limit": page_size + 1, "offset": (page - 1) * page_size}
-    where = ["l.source_account_ref=ANY(:accounts)"]
+    where = [
+        "l.source_account_ref=ANY(:accounts)",
+        "l.wfs_available_quantity > 0",
+        "l.wfs_available_quantity = trunc(l.wfs_available_quantity)",
+    ]
     if risk_only:
         where.append("r.level IN ('medium','high') AND r.rule_version=:version")
         params["version"] = version
@@ -541,6 +605,18 @@ def search_listings(
         )
         params["keyword"] = "%" + keyword.strip() + "%"
     clause = " AND ".join(where)
+    total = None
+    if exact_total and not risk_only:
+        count_params = {
+            key: value for key, value in params.items() if key not in ("limit", "offset")
+        }
+        total = int(
+            session.scalar(
+                text(f"SELECT COUNT(*) FROM mart_listing_management_current l WHERE {clause}"),
+                count_params,
+            )
+            or 0
+        )
     ordering = "CASE r.level WHEN 'high' THEN 0 ELSE 1 END," if risk_only else ""
     ids = (
         session.execute(
@@ -578,7 +654,7 @@ def search_listings(
             available = current_available(session, listing)
             if available is None or available <= 0:
                 continue
-            snapshot = _snapshot_row(session, listing, version, rules)
+            snapshot = _snapshot_row(session, listing, version, rules, include_details=True)
             if risk_only and snapshot["risk"] not in ("medium", "high"):
                 continue
             snapshot.update(
@@ -597,8 +673,8 @@ def search_listings(
         "page": page,
         "page_size": page_size,
         "has_more": has_more,
-        "total": None,
-        "total_scope": "not_calculated",
+        "total": total,
+        "total_scope": ("all_wfs_stock_eligible" if total is not None else "not_calculated"),
         "risk_filter_applied": bool(risk_only),
         "rule_version": version,
     }
