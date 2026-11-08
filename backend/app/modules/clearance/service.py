@@ -530,8 +530,20 @@ def search_listings(
         }
 
     params = {"accounts": list(accounts), "limit": page_size + 1, "offset": (page - 1) * page_size}
-    where = ["l.source_account_ref=ANY(:accounts)"]
+    # WFS eligibility must be checked in SQL BEFORE pagination, independent of
+    # clearance risk rules or whether a risk evaluation job has been run.
+    where = [
+        "l.source_account_ref=ANY(:accounts)",
+        "l.wfs_available_quantity > 0",
+        "l.wfs_available_quantity = trunc(l.wfs_available_quantity)",
+    ]
+    risk_join = ""
     if risk_only:
+        risk_join = """
+        JOIN biz_clearance_risk_current r
+          ON r.source_account_ref=l.source_account_ref AND r.store_id=l.store_id
+             AND r.item_id=l.item_id
+        """
         where.append("r.level IN ('medium','high') AND r.rule_version=:version")
         params["version"] = version
     if keyword.strip():
@@ -541,17 +553,18 @@ def search_listings(
         )
         params["keyword"] = "%" + keyword.strip() + "%"
     clause = " AND ".join(where)
+    from_and_where = f"FROM mart_listing_management_current l {risk_join} WHERE {clause}"
+    total = None
+    if exact_total and not risk_only:
+        count_params = {key: value for key, value in params.items() if key not in ("limit", "offset")}
+        total = int(session.scalar(text("SELECT COUNT(*) " + from_and_where), count_params) or 0)
     ordering = "CASE r.level WHEN 'high' THEN 0 ELSE 1 END," if risk_only else ""
     ids = (
         session.execute(
             text(f"""
-        SELECT l.id FROM mart_listing_management_current l
-        {"JOIN" if risk_only else "LEFT JOIN"} biz_clearance_risk_current r
-          ON r.source_account_ref=l.source_account_ref AND r.store_id=l.store_id
-             AND r.item_id=l.item_id
-        WHERE {clause}
+        SELECT l.id {from_and_where}
         ORDER BY {ordering}
-                 l.store_id,l.item_id
+                 l.store_id,l.item_id,l.source_account_ref,l.id
         LIMIT :limit OFFSET :offset
     """),
             params,
@@ -597,8 +610,8 @@ def search_listings(
         "page": page,
         "page_size": page_size,
         "has_more": has_more,
-        "total": None,
-        "total_scope": "not_calculated",
+        "total": total,
+        "total_scope": "all_wfs_stock_eligible" if total is not None else "not_calculated",
         "risk_filter_applied": bool(risk_only),
         "rule_version": version,
     }
