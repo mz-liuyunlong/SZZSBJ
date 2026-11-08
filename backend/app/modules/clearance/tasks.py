@@ -18,8 +18,10 @@ AUTO_FLAG = "SZZSBJ_CLEARANCE_AUTO_ENABLED"
 
 
 def auto_enabled() -> bool:
-    return (os.getenv(AUTO_FLAG, "0").strip().lower() in {"1", "true", "on", "yes"}
-            and os.getenv("APP_ENV", "").strip().lower() == "production")
+    return (
+        os.getenv(AUTO_FLAG, "0").strip().lower() in {"1", "true", "on", "yes"}
+        and os.getenv("APP_ENV", "").strip().lower() == "production"
+    )
 
 
 def _disabled() -> dict:
@@ -95,14 +97,17 @@ def run_daily(*, retry_failed: bool = False) -> dict:
                     {"date": today},
                 ).first()
                 if old is not None:
-                    if old.status == 'succeeded' or not (retry_failed and old.status == 'failed'):
+                    if old.status == "succeeded" or not (retry_failed and old.status == "failed"):
                         return {"status": old.status, "date": str(today)}
-                    session.execute(text("""
+                    session.execute(
+                        text("""
                         UPDATE biz_clearance_daily_runs
                         SET status='running',started_at=now(),finished_at=NULL,
                             error_code=NULL,examined=0
                         WHERE business_date_la=:date AND status='failed'
-                    """), {"date": today})
+                    """),
+                        {"date": today},
+                    )
                 version, _ = service.rule_version(session, require_persisted=True)
                 session.execute(
                     text("""
@@ -135,7 +140,10 @@ def run_daily(*, retry_failed: bool = False) -> dict:
                         SET status='failed',error_code=:error_code,finished_at=now()
                         WHERE business_date_la=:date AND status='running'
                     """),
-                        {"date": today, "error_code": ("CLEARANCE_RECALC_" + type(exc).__name__.upper())[:128]},
+                        {
+                            "date": today,
+                            "error_code": ("CLEARANCE_RECALC_" + type(exc).__name__.upper())[:128],
+                        },
                     )
                     session.commit()
                     raise

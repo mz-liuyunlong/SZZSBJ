@@ -68,13 +68,16 @@ def test_separate_read_and_risk_write_session_never_commits_business_source(monk
     written = []
     monkeypatch.setattr(service, "select", lambda model: Query())
     monkeypatch.setattr(
-        service, "rule_version",
+        service,
+        "rule_version",
         lambda session, *, require_persisted=False: (
-            checked.append((session, require_persisted)) or 2, object()
+            checked.append((session, require_persisted)) or 2,
+            object(),
         ),
     )
     monkeypatch.setattr(
-        service, "evaluate_and_store",
+        service,
+        "evaluate_and_store",
         lambda read, listing, version, rules, *, risk_session=None: written.append(
             (read, listing.id, version, risk_session)
         ),

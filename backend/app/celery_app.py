@@ -150,7 +150,8 @@ def create_celery_app(
             "clearance-la-daily-scheduler": {
                 "task": "clearance.scheduler_tick",
                 "schedule": crontab(
-                    minute=0, hour=0,
+                    minute=0,
+                    hour=0,
                     nowfun=lambda: datetime.now(ZoneInfo("America/Los_Angeles")),
                 ),
             },

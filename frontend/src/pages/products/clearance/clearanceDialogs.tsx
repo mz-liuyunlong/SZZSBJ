@@ -34,7 +34,6 @@ import { integer, money, percent } from "./clearanceUiConfig";
 interface Props {data:StoredClearance;onChange:(data:StoredClearance)=>void;role:string;readOnly?:boolean;onSaveRule?:(rules:ClearanceRules)=>Promise<void>}
 export function ClearanceRulesPanel({data,readOnly=false,onSaveRule}:Props){
  const [draft,setDraft]=useState<ClearanceRules>(()=>({...DEFAULT_RULES,...data.rules}));
- useEffect(()=>{setDraft({...DEFAULT_RULES,...data.rules});},[data.rules]);
  const error=validateRules(draft);
  const same=JSON.stringify(draft)===JSON.stringify(data.rules);
  const apply=async()=>{

@@ -23,7 +23,6 @@ def execute_sync_run(run_id: str) -> None:
         SyncRunExecutionService(session).execute(parsed_run_id)
 
 
-
 @celery_app.task(name="integration_sync.scheduler_tick", ignore_result=True)  # type: ignore[misc]
 def scheduler_tick() -> None:
     with get_session_factory()() as session:

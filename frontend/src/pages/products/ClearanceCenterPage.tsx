@@ -176,7 +176,6 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
  useEffect(()=>{
   if(!rulesOpen)return;
   let active=true;
-  setRulesReady(false);
   void getClearanceRules().then(server=>{
    const rules=rulesFromServer(server);
    if(!active)return;
@@ -314,7 +313,7 @@ const metrics=useMemo(():ManagementStatCardItem<string>[]=>{
  return <PageShell page={page}>
   <div className="clearance-center">
    <div className="clearance-heading"><div><Typography.Title level={4}>WFS 清货中心</Typography.Title><Typography.Text type="secondary">WFS 库存风险识别与主动清货申请 · 申请通过统一审批工作台审核</Typography.Text></div></div><Card size="small" className="clearance-main-card">
-    <div className="clearance-tabs"><Tabs activeKey={tab} onChange={selectTab} items={[{key:"analysis",label:"清货分析 " + (remoteTotal ?? candidates.length)},{key:"management",label:"清货管理 "+realTasks.reduce((n,t)=>n+t.lines.length,0)}]} tabBarExtraContent={<Space><Button type="text" size="small" icon={showStats?<EyeInvisibleOutlined/>:<EyeOutlined/>} onClick={()=>setShowStats(x=>!x)}>{showStats?"隐藏统计":"显示统计"}</Button><Button type={rulesOpen?"primary":"text"} icon={<SettingOutlined/>} onClick={()=>setRulesOpen(true)}>规则配置</Button></Space>}/></div>
+    <div className="clearance-tabs"><Tabs activeKey={tab} onChange={selectTab} items={[{key:"analysis",label:"清货分析 " + (remoteTotal ?? candidates.length)},{key:"management",label:"清货管理 "+realTasks.reduce((n,t)=>n+t.lines.length,0)}]} tabBarExtraContent={<Space><Button type="text" size="small" icon={showStats?<EyeInvisibleOutlined/>:<EyeOutlined/>} onClick={()=>setShowStats(x=>!x)}>{showStats?"隐藏统计":"显示统计"}</Button><Button type={rulesOpen?"primary":"text"} icon={<SettingOutlined/>} onClick={()=>{if(!rulesOpen){setRulesReady(false);setRulesOpen(true);}}}>规则配置</Button></Space>}/></div>
     <>
      {showStats&&<ManagementStatCards ariaLabel={tab==="analysis"?"清货分析统计":"清货管理统计"} cards={metrics} activeKey={activeStat} onCardClick={onStat}/>}
      <div className="clearance-toolbar">
@@ -346,6 +345,7 @@ const metrics=useMemo(():ManagementStatCardItem<string>[]=>{
     destroyOnHidden
   >
     <ClearanceRulesPanel
+      key={data.ruleVersion}
       data={data}
       onChange={update}
       role={role}

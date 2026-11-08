@@ -229,13 +229,16 @@ def persisted_rule_version(session: Session) -> tuple[int, ClearanceRules] | Non
     return int(row["version"]), ClearanceRules.model_validate(row["config_json"])
 
 
-def rule_version(session: Session, *, require_persisted: bool = False) -> tuple[int, ClearanceRules]:
+def rule_version(
+    session: Session, *, require_persisted: bool = False
+) -> tuple[int, ClearanceRules]:
     saved = persisted_rule_version(session)
     if saved is not None:
         return saved
     if require_persisted:
         raise ApiError(
-            code="CLEARANCE_RULES_NOT_PERSISTED", status_code=409,
+            code="CLEARANCE_RULES_NOT_PERSISTED",
+            status_code=409,
             message="清货规则尚未保存到数据库，无法作为已生效规则读取",
         )
     # Legacy risk preview may still use in-memory fallback; GET /rules
@@ -319,8 +322,12 @@ def _snapshot_row(
 
 
 def evaluate_and_store(
-    session: Session, listing: ListingManagementCurrentMart, version: int, rules: ClearanceRules,
-    *, risk_session: Session | None = None,
+    session: Session,
+    listing: ListingManagementCurrentMart,
+    version: int,
+    rules: ClearanceRules,
+    *,
+    risk_session: Session | None = None,
 ) -> str:
     snapshot = _snapshot_row(session, listing, version, rules)
     target = risk_session if risk_session is not None else session
@@ -354,7 +361,10 @@ def evaluate_and_store(
 
 
 def recalculate_all(
-    session: Session, *, batch_size: int = 100, accounts: frozenset[str] | None = None,
+    session: Session,
+    *,
+    batch_size: int = 100,
+    accounts: frozenset[str] | None = None,
     risk_session: Session | None = None,
 ) -> dict:
     """Read legacy Listing facts from session; write clearance risks only to risk_session."""

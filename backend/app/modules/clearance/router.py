@@ -124,9 +124,7 @@ def rules_save(request: Request, payload: RuleUpdate, session: db_session, princ
 
 
 @router.post("/recalculate", response_model=SuccessEnvelope[dict[str, Any], None])
-def recalculate(
-    request: Request, session: db_session, principal: manage, accounts: account_scope
-):
+def recalculate(request: Request, session: db_session, principal: manage, accounts: account_scope):
     # Explicitly authorized manual recalculation; never dispatch an automatic task.
     # In local mode the source Session reads 15432 and the storage Session writes 55433.
     if is_local():
