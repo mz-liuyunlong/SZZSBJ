@@ -51,11 +51,7 @@ def test_role_catalog_exposes_missing_permissions_without_database_write(monkeyp
     service.repository = MagicMock()
     service.repository.list_permission_catalog_rows.return_value = []
     catalog = service.permission_catalog()
-    actual = {
-        page.permission_key
-        for module in catalog.modules
-        for page in module.pages
-    }
+    actual = {page.permission_key for module in catalog.modules for page in module.pages}
     assert "page:finance:fx-rates:view" in actual
     assert "page:finance:cash-flow:view" in actual
     service.repository.register_permission_definitions.assert_not_called()
@@ -70,11 +66,10 @@ def test_role_save_registers_only_requested_known_permissions() -> None:
     service.repository = MagicMock()
     # The key does not yet exist, then appears after registration.
     service.repository.existing_permission_keys.side_effect = [
-        set(), {"page:finance:fx-rates:view"}
+        set(),
+        {"page:finance:fx-rates:view"},
     ]
     result = service._validated_permission_keys(["page:finance:fx-rates:view"])
     assert result == ("page:finance:fx-rates:view",)
     definitions = service.repository.register_permission_definitions.call_args.args[0]
-    assert [entry.permission_key for entry in definitions] == [
-        "page:finance:fx-rates:view"
-    ]
+    assert [entry.permission_key for entry in definitions] == ["page:finance:fx-rates:view"]

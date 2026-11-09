@@ -183,9 +183,7 @@ class RbacRepository:
         ).all()
         return {(str(scope_type), str(scope_value)) for scope_type, scope_value in rows}
 
-    def register_permission_definitions(
-        self, definitions: Iterable[PermissionDefinition]
-    ) -> None:
+    def register_permission_definitions(self, definitions: Iterable[PermissionDefinition]) -> None:
         """Only register known permission metadata. Never grant role permissions."""
         for definition in definitions:
             self.session.execute(

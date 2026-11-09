@@ -555,7 +555,9 @@ class RbacService:
         # Register only requested, known keys when a role is explicitly saved.
         # No roles receive grants as a side effect of registration.
         definitions = {entry.permission_key: entry for entry in PERMISSION_DEFINITIONS}
-        to_register = [definitions[key] for key in normalized if key not in existing and key in definitions]
+        to_register = [
+            definitions[key] for key in normalized if key not in existing and key in definitions
+        ]
         if to_register:
             self.repository.register_permission_definitions(to_register)
             existing = self.repository.existing_permission_keys(normalized)
