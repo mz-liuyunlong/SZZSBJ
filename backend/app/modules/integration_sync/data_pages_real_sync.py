@@ -1743,6 +1743,9 @@ def _rows_for(parser_key: DataPagesParserKey, payload: JsonValue) -> list[dict[s
         "sale_stat_page_list",
         "order_v2_list",
         "walmart_return_order_list",
+        "walmart_sp_campaign_list",
+        "walmart_sp_search_term_list",
+        "walmart_sp_keyword_list",
     }:
         if isinstance(data, dict):
             return _dict_rows(data.get("list") or data.get("rows") or data.get("data"))
@@ -1976,6 +1979,20 @@ def _unique(values: Iterable[str | None]) -> list[str]:
             result.append(value)
             seen.add(value)
     return result
+
+
+
+def _campaign_targeting_type(row: Mapping[str, Any]) -> str | None:
+    for field_name in ("targetingType", "campaignType", "campaignAndTargetingType"):
+        value = row.get(field_name)
+        if not isinstance(value, str):
+            continue
+        normalized = value.strip().casefold()
+        if "auto" in normalized:
+            return "auto"
+        if "manual" in normalized:
+            return "manual"
+    return None
 
 
 def _normalize_name(value: object) -> str:
