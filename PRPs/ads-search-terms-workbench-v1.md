@@ -1,9 +1,9 @@
 # PRP — 广告 / 搜索词工作台 V1
 
-Status: Draft — 等待项目负责人确认；未批准实现。
+Status: Approved for implementation — Owner confirmed 2026-11-09: external add/negative write APIs may be incomplete; all other V1 capabilities must be completed.
 Base main SHA: cfb28285e9b57a32f9d3d66950466151a4f644c3
 Planning branch: feat/ads-search-terms-workbench
-Owner request: 2026-11-09；按已确认业务讨论开发，完成后提供 PR 供本地验收。
+Owner request: 2026-11-09；GitHub Issue #329；implementation may proceed on this scope.
 
 ## 1. Goal
 
@@ -114,7 +114,7 @@ Current decision status: BLOCKED_BY_OWNER_DECISION（读取来源已确定；加
 - POST /api/ads/search-terms/actions/batch
 - PATCH /api/ads/search-terms/actions/{action_id}
 
-These APIs would create/update internal ADD_KEYWORD / ADD_NEGATIVE_KEYWORD tasks, record target campaign/scope, manual execution confirmation, operator, timestamps and post-action observations. They MUST NOT call Lingxing or claim that the ad was changed.
+These APIs create/update internal ADD_KEYWORD / ADD_NEGATIVE_KEYWORD tasks, record target campaign/scope, manual execution confirmation, operator, timestamps and post-action observations. They MUST NOT call Lingxing or claim that the ad was changed. Owner approved this V1 fallback in GitHub Issue #329.
 
 ### Refresh
 

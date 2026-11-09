@@ -1,6 +1,6 @@
 # 数据源决策 — Walmart SP 搜索词工作台
 
-Status: BLOCKED_BY_OWNER_DECISION
+Status: READY_FOR_PRP
 Owner decision date: 2026-11-09
 PRP: PRPs/ads-search-terms-workbench-v1.md
 Planning branch: feat/ads-search-terms-workbench
@@ -93,14 +93,14 @@ Proposed safe fallback:
 - subsequent persisted search-term data is compared to show post-action observations;
 - UI must say “待人工执行 / 已手动完成”, never “领星添加成功 / 领星否词成功”.
 
-Owner decision required: approve this internal task workflow as the V1 substitute for direct provider writes, or provide a verified Walmart-specific Lingxing write contract. Until resolved, source decision remains BLOCKED_BY_OWNER_DECISION and implementation must not proceed.
+Owner decision recorded in Issue #329 (2026-11-09): V1 may use this internal task workflow; external write API may remain incomplete. UI must clearly distinguish internal task creation from actual provider-side execution. This decision does not authorize calling unverified or DELETED/NOT_WALMART endpoints.
 
 ## 8. Trend and refresh strategy
 
 - Owner confirmed automatic sync + manual refresh.
 - Use existing Integration Sync / Celery / RAW lineage; no route-time provider requests.
 - Schedule config and outbound default disabled; production schedule enablement/first run requires separate authorization.
-- Search-term response has no per-row reportDate. Daily trend requires a validated date grain. Proposed approach: request one-day date windows with day=14 and persist business_date_la; this exact one-day behavior has not yet been verified. If provider rejects one-day windows, use explicitly labelled rolling-window snapshots; never infer row date from response_time.
+- Search-term response has no per-row reportDate. Daily trend requires a validated date grain. V1 should contract-test one-day date windows with day=14. If the provider cannot provide a reliable daily grain, publish explicitly labelled rolling-window snapshots instead; never infer row date from response_time.
 - Default attribution window 14 days matches the owner-run probes. Other day values require explicit business decision before adding UI choices.
 - Paginate every advertiser and every page; validate row advertiser membership, source identity and data.total. Partial failures remain partial, never full success.
 
@@ -128,8 +128,8 @@ Owner decision required: approve this internal task workflow as the V1 substitut
 - [x] Search-term source contract identified.
 - [x] Auto/manual SP search-term read probes completed on one advertiser.
 - [x] Legacy system surveyed read-only; no legacy runtime source selected.
-- [ ] Approve internal action queue fallback because Walmart-specific Lingxing write API is not verified.
+- [x] Internal action queue fallback approved in Issue #329; provider-side write remains deferred.
 - [ ] Approve daily trend date-grain strategy after one-day contract probe or rolling-window alternative.
 - [ ] Confirm all operators who need global view have source_account=* IAM data scope.
 
-Until the blocking action decision is resolved, this document remains BLOCKED_BY_OWNER_DECISION.
+The action-write gap no longer blocks V1 implementation. Date-grain behavior remains a validation risk; daily trends must only be published from confirmed date slices or explicitly labelled rolling-window snapshots.
