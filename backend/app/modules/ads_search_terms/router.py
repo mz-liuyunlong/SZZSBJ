@@ -151,9 +151,7 @@ def create_action(
     principal: actor,
     accounts: scope,
 ) -> SuccessEnvelope[ActionRead, dict]:
-    data = AdsSearchTermsService(session).create_action(
-        payload, str(principal.user_id), accounts
-    )
+    data = AdsSearchTermsService(session).create_action(payload, str(principal.user_id), accounts)
     return success_response(
         request,
         data=data,
