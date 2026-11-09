@@ -35,15 +35,11 @@ def _scope(query: SearchTermQuery, accounts: frozenset[str]):
 
     statement = select(WalmartAdSearchTermDailyFact).where(
         WalmartAdSearchTermDailyFact.source_account_ref.in_(accounts),
-        WalmartAdSearchTermDailyFact.business_date_la.between(
-            query.start_date, query.end_date
-        ),
+        WalmartAdSearchTermDailyFact.business_date_la.between(query.start_date, query.end_date),
         WalmartAdSearchTermDailyFact.attribution_days == 14,
     )
     if query.store_ids:
-        statement = statement.where(
-            WalmartAdSearchTermDailyFact.store_id.in_(query.store_ids)
-        )
+        statement = statement.where(WalmartAdSearchTermDailyFact.store_id.in_(query.store_ids))
     if query.advertiser_ids:
         statement = statement.where(
             WalmartAdSearchTermDailyFact.advertiser_id.in_(query.advertiser_ids)
@@ -61,13 +57,9 @@ def _scope(query: SearchTermQuery, accounts: frozenset[str]):
             WalmartAdSearchTermDailyFact.searched_keyword.ilike(f"%{query.query}%")
         )
     if query.conversion_state == "orders":
-        statement = statement.where(
-            WalmartAdSearchTermDailyFact.attributed_orders > 0
-        )
+        statement = statement.where(WalmartAdSearchTermDailyFact.attributed_orders > 0)
     if query.conversion_state == "no_orders":
-        statement = statement.where(
-            WalmartAdSearchTermDailyFact.attributed_orders == 0
-        )
+        statement = statement.where(WalmartAdSearchTermDailyFact.attributed_orders == 0)
     return statement
 
 
@@ -82,10 +74,7 @@ class AdsSearchTermsService:
     ) -> SearchTermListData:
         statement = _scope(query, accounts)
         total = int(
-            self.session.scalar(
-                select(func.count()).select_from(statement.subquery())
-            )
-            or 0
+            self.session.scalar(select(func.count()).select_from(statement.subquery())) or 0
         )
         rows = self.session.scalars(
             statement.order_by(
@@ -112,10 +101,8 @@ class AdsSearchTermsService:
         manual_keyword_exists = (
             select(WalmartManualKeywordDailyFact.id)
             .where(
-                WalmartManualKeywordDailyFact.source_account_ref
-                == subquery.c.source_account_ref,
-                WalmartManualKeywordDailyFact.advertiser_id
-                == subquery.c.advertiser_id,
+                WalmartManualKeywordDailyFact.source_account_ref == subquery.c.source_account_ref,
+                WalmartManualKeywordDailyFact.advertiser_id == subquery.c.advertiser_id,
                 WalmartManualKeywordDailyFact.normalized_keyword
                 == subquery.c.normalized_search_term,
                 WalmartManualKeywordDailyFact.attribution_days == 14,
@@ -183,8 +170,7 @@ class AdsSearchTermsService:
             )
             .where(
                 WalmartAdSearchTermDailyFact.source_account_ref.in_(accounts),
-                WalmartAdSearchTermDailyFact.normalized_search_term
-                == normalize_term(term),
+                WalmartAdSearchTermDailyFact.normalized_search_term == normalize_term(term),
                 WalmartAdSearchTermDailyFact.business_date_la.between(start, end),
                 WalmartAdSearchTermDailyFact.attribution_days == 14,
             )
@@ -215,9 +201,7 @@ class AdsSearchTermsService:
         if payload.source_account_ref not in accounts:
             raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
         if payload.source_fact_id is not None:
-            fact = self.session.get(
-                WalmartAdSearchTermDailyFact, payload.source_fact_id
-            )
+            fact = self.session.get(WalmartAdSearchTermDailyFact, payload.source_fact_id)
             if (
                 fact is None
                 or fact.source_account_ref != payload.source_account_ref
