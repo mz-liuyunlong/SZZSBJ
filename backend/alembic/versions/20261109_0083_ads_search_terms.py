@@ -356,6 +356,94 @@ def upgrade() -> None:
     )
 
 
+    # Governed child interfaces used only by the existing walmartAdItemSpList
+    # execution. Their configs remain disabled and unscheduled; the parent run
+    # owns execution and its DATA_PAGES_REAL_SYNC_AUTHORIZED guard.
+    op.execute(
+        sa.text(
+            """
+            INSERT INTO gov_integration_interfaces
+                (id, provider, interface_key, display_name, method, endpoint_path,
+                 request_kind, handler_key, contract_version, outbound_enabled,
+                 created_at, updated_at)
+            VALUES
+                (gen_random_uuid(), 'lingxing', 'walmartSpCampaignList',
+                 'SP 广告活动来源同步', 'POST',
+                 '/basicOpen/multiplatform/ads/queryCampaignSpList',
+                 'offset_page', 'lingxing.data_pages.walmart_sp_search_terms.v1',
+                 'v1', true, now(), now()),
+                (gen_random_uuid(), 'lingxing', 'walmartSpSearchTermList',
+                 'SP 搜索词报表同步', 'POST',
+                 '/basicOpen/multiplatform/ads/reportSearchImpressionSpList',
+                 'offset_page', 'lingxing.data_pages.walmart_sp_search_terms.v1',
+                 'v1', true, now(), now()),
+                (gen_random_uuid(), 'lingxing', 'walmartSpKeywordList',
+                 'SP 手动关键词来源同步', 'POST',
+                 '/basicOpen/multiplatform/ads/reportKeywordSpList',
+                 'offset_page', 'lingxing.data_pages.walmart_sp_search_terms.v1',
+                 'v1', true, now(), now())
+            ON CONFLICT (provider, interface_key) DO NOTHING
+            """
+        )
+    )
+    op.execute(
+        sa.text(
+            """
+            INSERT INTO gov_raw_retention_policies
+                (id, policy_key, provider, interface_key, hot_retention_days,
+                 archive_after_days, delete_after_days, archive_required,
+                 legal_hold, is_active, created_at, updated_at)
+            VALUES
+                (gen_random_uuid(), 'lingxing-data-pages-walmart-sp-campaign-list-v1',
+                 'lingxing', 'walmartSpCampaignList', 365, NULL, NULL, false,
+                 false, true, now(), now()),
+                (gen_random_uuid(), 'lingxing-data-pages-walmart-sp-search-term-list-v1',
+                 'lingxing', 'walmartSpSearchTermList', 365, NULL, NULL, false,
+                 false, true, now(), now()),
+                (gen_random_uuid(), 'lingxing-data-pages-walmart-sp-keyword-list-v1',
+                 'lingxing', 'walmartSpKeywordList', 365, NULL, NULL, false,
+                 false, true, now(), now())
+            ON CONFLICT (policy_key) DO NOTHING
+            """
+        )
+    )
+    op.execute(
+        sa.text(
+            """
+            INSERT INTO gov_integration_sync_configs
+                (id, interface_id, source_account_ref, is_enabled,
+                 schedule_enabled, schedule_cron, schedule_timezone, page_size,
+                 batch_size, max_pages, max_attempts, retention_policy_id,
+                 next_run_at, last_scheduled_at, created_at, updated_at)
+            SELECT gen_random_uuid(), child.id, parent_config.source_account_ref,
+                   false, false, NULL, 'UTC',
+                   CASE child.interface_key
+                       WHEN 'walmartSpCampaignList' THEN 100
+                       ELSE 200
+                   END,
+                   NULL, 1000, 1, policy.id, NULL, NULL, now(), now()
+            FROM gov_integration_sync_configs parent_config
+            JOIN gov_integration_interfaces parent_interface
+              ON parent_interface.id = parent_config.interface_id
+             AND parent_interface.provider = 'lingxing'
+             AND parent_interface.interface_key = 'walmartAdItemSpList'
+            JOIN gov_integration_interfaces child
+              ON child.provider = 'lingxing'
+             AND child.interface_key IN (
+                 'walmartSpCampaignList',
+                 'walmartSpSearchTermList',
+                 'walmartSpKeywordList'
+             )
+            JOIN gov_raw_retention_policies policy
+              ON policy.interface_key = child.interface_key
+             AND policy.provider = 'lingxing'
+            ON CONFLICT (interface_id, source_account_ref) DO NOTHING
+            """
+        )
+    )
+
+
+
 def downgrade() -> None:
     connection = op.get_bind()
     for table_name in (
