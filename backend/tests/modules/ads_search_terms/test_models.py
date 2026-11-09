@@ -14,14 +14,11 @@ def test_search_term_models_register_expected_tables() -> None:
 
 
 def test_action_model_has_no_provider_write_success_state() -> None:
-    allowed = {
-        item.strip().strip("'")
-        for item in next(
-            constraint.sqltext
-            for constraint in AdsSearchTermAction.__table__.constraints
-            if getattr(constraint, "name", "") == "effect_status"
-        ).split("IN", 1)[1].strip(" ()")
-        .split(",")
-    }
-    assert "provider_success" not in allowed
-    assert "pending" in allowed
+    constraint = next(
+        item
+        for item in AdsSearchTermAction.__table__.constraints
+        if getattr(item, "name", "") == "ck_ops_ads_search_term_actions_effect_status"
+    )
+    sql = str(constraint.sqltext)
+    assert "provider_success" not in sql
+    assert "pending" in sql
