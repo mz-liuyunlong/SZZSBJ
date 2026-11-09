@@ -42,6 +42,9 @@ type LingxingEndpoint = Literal[
     "/basicOpen/openapi/multiplatform/walmart/returnOrder/list",
     "/basicOpen/adReport/advertiser/list",
     "/basicOpen/multiplatform/ads/reportAdItemSpList",
+    "/basicOpen/multiplatform/ads/queryCampaignSpList",
+    "/basicOpen/multiplatform/ads/reportSearchImpressionSpList",
+    "/basicOpen/multiplatform/ads/reportKeywordSpList",
     "/erp/sc/routing/data/local_inventory/getPurchasePlans",
     "/erp/sc/routing/data/local_inventory/purchaseOrderList",
     "/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/getOrderList",
@@ -269,6 +272,118 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
         page_size_field="pageSize",
         page_field="pageNum",
     ),
+
+    "/basicOpen/multiplatform/ads/queryCampaignSpList": LingxingEndpointContract(
+        method="POST",
+        outbound_enabled=True,
+        allow_query_parameters=False,
+        require_json_body=True,
+        allowed_body_fields=frozenset(
+            {
+                "advertiserIds",
+                "campaignType",
+                "startDate",
+                "endDate",
+                "day",
+                "operationSourceType",
+                "pageNum",
+                "pageSize",
+                "paging",
+                "orderField",
+                "orderType",
+                "searchText",
+                "status",
+            }
+        ),
+        required_body_fields=frozenset(
+            {
+                "advertiserIds",
+                "campaignType",
+                "startDate",
+                "endDate",
+                "pageNum",
+                "pageSize",
+            }
+        ),
+        store_field=None,
+        page_size_field="pageSize",
+        page_field="pageNum",
+        auth_strategy="query_sign",
+    ),
+    "/basicOpen/multiplatform/ads/reportSearchImpressionSpList": LingxingEndpointContract(
+        method="POST",
+        outbound_enabled=True,
+        allow_query_parameters=False,
+        require_json_body=True,
+        allowed_body_fields=frozenset(
+            {
+                "advertiserIds",
+                "campaignIds",
+                "startDate",
+                "endDate",
+                "pageNum",
+                "pageSize",
+                "day",
+                "reportFieldFilter",
+                "orderField",
+                "orderType",
+                "operationSourceType",
+            }
+        ),
+        required_body_fields=frozenset(
+            {
+                "advertiserIds",
+                "campaignIds",
+                "startDate",
+                "endDate",
+                "pageNum",
+                "pageSize",
+            }
+        ),
+        store_field=None,
+        page_size_field="pageSize",
+        page_field="pageNum",
+        auth_strategy="query_sign",
+    ),
+    "/basicOpen/multiplatform/ads/reportKeywordSpList": LingxingEndpointContract(
+        method="POST",
+        outbound_enabled=True,
+        allow_query_parameters=False,
+        require_json_body=True,
+        allowed_body_fields=frozenset(
+            {
+                "advertiserIds",
+                "campaignType",
+                "startDate",
+                "endDate",
+                "adGroupIds",
+                "campaignIds",
+                "day",
+                "orderField",
+                "orderType",
+                "pageNum",
+                "pageSize",
+                "paging",
+                "searchText",
+                "status",
+            }
+        ),
+        required_body_fields=frozenset(
+            {
+                "advertiserIds",
+                "campaignType",
+                "startDate",
+                "endDate",
+                "pageNum",
+                "pageSize",
+            }
+        ),
+        store_field=None,
+        page_size_field="pageSize",
+        page_field="pageNum",
+        auth_strategy="query_sign",
+    ),
+
     "/erp/sc/routing/data/local_inventory/batchGetProductInfo": LingxingEndpointContract(
         method="POST",
         outbound_enabled=True,
