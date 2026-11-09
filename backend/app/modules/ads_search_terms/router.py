@@ -14,6 +14,7 @@ from app.modules.ads_search_terms.schemas import (
     ActionCreate,
     ActionListData,
     ActionRead,
+    SearchTermAggregateListData,
     SearchTermListData,
     SearchTermQuery,
     SearchTermSummaryData,
@@ -90,6 +91,28 @@ def summary(
             "fact_walmart_keyword_sp_daily",
             freshness_at=data.freshness_at,
         ),
+    )
+
+
+
+@router.get(
+    "/aggregates",
+    response_model=SuccessEnvelope[SearchTermAggregateListData, dict],
+    responses=ERRORS,
+)
+def aggregates(
+    request: Request,
+    query: Annotated[SearchTermQuery, Query()],
+    session: db,
+    principal: reader,
+    accounts: scope,
+) -> SuccessEnvelope[SearchTermAggregateListData, dict]:
+    del principal
+    data = AdsSearchTermsService(session).list_aggregates(query, accounts)
+    return success_response(
+        request,
+        data=data,
+        meta=meta("fact_walmart_ad_search_term_daily", total=data.total),
     )
 
 
