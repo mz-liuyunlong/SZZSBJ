@@ -123,6 +123,7 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
         retention_policy_key="lingxing-data-pages-walmart-sp-campaign-list-v1",
         default_page_size=100,
         default_max_pages=1000,
+        initial_outbound_enabled=True,
         notes=("Campaign IDs and targeting types are verified before search-term rows are accepted.",),
     ),
     DataPagesSyncInterfaceSpec(
@@ -136,6 +137,7 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
         retention_policy_key="lingxing-data-pages-walmart-sp-search-term-list-v1",
         default_page_size=200,
         default_max_pages=1000,
+        initial_outbound_enabled=True,
         notes=("Daily 14-day-attribution snapshots include zero-order rows; only verified campaign IDs are accepted.",),
     ),
     DataPagesSyncInterfaceSpec(
@@ -149,6 +151,7 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
         retention_policy_key="lingxing-data-pages-walmart-sp-keyword-list-v1",
         default_page_size=200,
         default_max_pages=1000,
+        initial_outbound_enabled=True,
         notes=("Manual keyword inventory is captured for automatic-search-term coverage checks.",),
     ),
 
