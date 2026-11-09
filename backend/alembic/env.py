@@ -8,6 +8,7 @@ from sqlalchemy.engine import URL, Connection
 import app.models.raw_lingxing_api  # noqa: F401  # Register approved RAW metadata.
 import app.modules.data_pages.business_models  # noqa: F401  # Register sample/refund business models.
 import app.modules.data_pages.models  # noqa: F401  # Register DATA-PAGES DIM/FACT/MART.
+import app.modules.ads_search_terms.models  # noqa: F401  # Register Walmart SP search-term facts/actions.
 import app.modules.finance_cashflow.models  # noqa: F401  # Register finance cashflow.
 import app.modules.fx_rates.models  # noqa: F401  # Register Lingxing FX rates.
 import app.modules.integration_sync.models  # noqa: F401  # Register sync governance/ODS.
