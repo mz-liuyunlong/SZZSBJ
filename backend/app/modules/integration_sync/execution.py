@@ -709,10 +709,22 @@ class SyncRunExecutionService:
             ad_rows = []
             for advertiser_id in runner.advertiser_ids[: runner.max_advertisers]:
                 ad_rows.extend(runner._fetch_ads_all(advertiser_id))
+            campaign_map, search_term_rows, manual_keyword_rows = (
+                runner._fetch_sp_search_terms_bundle(
+                    runner.advertiser_ids[: runner.max_advertisers]
+                )
+            )
             heartbeat()
             runner.summary.advertiser_rows = runner._write_advertisers(advertisers)
             heartbeat()
             runner.summary.ad_rows = runner._write_ads(ad_rows)
+            runner.summary.sp_campaign_rows = len(campaign_map)
+            runner.summary.search_term_rows = runner._write_search_terms(
+                search_term_rows, campaign_map
+            )
+            runner.summary.manual_keyword_rows = runner._write_manual_keywords(
+                manual_keyword_rows, campaign_map
+            )
             heartbeat()
             runner._resolve_ads(ad_rows)
 
