@@ -21,6 +21,9 @@ ORDER_ENDPOINT = "/pb/mp/order/v2/list"
 RETURN_ENDPOINT = "/basicOpen/openapi/multiplatform/walmart/returnOrder/list"
 ADVERTISER_ENDPOINT = "/basicOpen/adReport/advertiser/list"
 AD_ITEM_SP_ENDPOINT = "/basicOpen/multiplatform/ads/reportAdItemSpList"
+SP_CAMPAIGN_ENDPOINT = "/basicOpen/multiplatform/ads/queryCampaignSpList"
+SP_SEARCH_TERM_ENDPOINT = "/basicOpen/multiplatform/ads/reportSearchImpressionSpList"
+SP_KEYWORD_ENDPOINT = "/basicOpen/multiplatform/ads/reportKeywordSpList"
 
 DATA_PAGES_ENDPOINTS = frozenset(
     {
@@ -31,6 +34,9 @@ DATA_PAGES_ENDPOINTS = frozenset(
         RETURN_ENDPOINT,
         ADVERTISER_ENDPOINT,
         AD_ITEM_SP_ENDPOINT,
+        SP_CAMPAIGN_ENDPOINT,
+        SP_SEARCH_TERM_ENDPOINT,
+        SP_KEYWORD_ENDPOINT,
     }
 )
 
@@ -56,6 +62,9 @@ DATA_PAGES_PROVIDER_PAGE_CONTRACTS: dict[str, DataPagesProviderPageContract] = {
     RETURN_ENDPOINT: DataPagesProviderPageContract(1, 3),
     ADVERTISER_ENDPOINT: DataPagesProviderPageContract(1, 3, observed_response_floor=10),
     AD_ITEM_SP_ENDPOINT: DataPagesProviderPageContract(1, 3),
+    SP_CAMPAIGN_ENDPOINT: DataPagesProviderPageContract(1, 3),
+    SP_SEARCH_TERM_ENDPOINT: DataPagesProviderPageContract(1, 3),
+    SP_KEYWORD_ENDPOINT: DataPagesProviderPageContract(1, 3),
 }
 
 DATA_PAGES_PAGE_SIZE_FIELDS: dict[str, str] = {
@@ -66,6 +75,9 @@ DATA_PAGES_PAGE_SIZE_FIELDS: dict[str, str] = {
     RETURN_ENDPOINT: "pageSize",
     ADVERTISER_ENDPOINT: "limit",
     AD_ITEM_SP_ENDPOINT: "pageSize",
+    SP_CAMPAIGN_ENDPOINT: "pageSize",
+    SP_SEARCH_TERM_ENDPOINT: "pageSize",
+    SP_KEYWORD_ENDPOINT: "pageSize",
 }
 
 
