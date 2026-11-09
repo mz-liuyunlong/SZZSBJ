@@ -44,28 +44,47 @@ class WalmartAdSearchTermDailyFact(Base):
         CheckConstraint("char_length(source_identity_hash) = 64", name="source_identity_sha256"),
         CheckConstraint("char_length(source_line_hash) = 64", name="source_line_sha256"),
         CheckConstraint("attribution_days IN (3, 14, 30)", name="attribution_days"),
-        CheckConstraint("num_ads_shown IS NULL OR num_ads_shown >= 0", name="impressions_nonnegative"),
+        CheckConstraint(
+            "num_ads_shown IS NULL OR num_ads_shown >= 0", name="impressions_nonnegative"
+        ),
         CheckConstraint("num_ads_clicks IS NULL OR num_ads_clicks >= 0", name="clicks_nonnegative"),
-        CheckConstraint("ad_spend_amount IS NULL OR ad_spend_amount >= 0", name="spend_nonnegative"),
-        CheckConstraint("attributed_orders IS NULL OR attributed_orders >= 0", name="orders_nonnegative"),
+        CheckConstraint(
+            "ad_spend_amount IS NULL OR ad_spend_amount >= 0", name="spend_nonnegative"
+        ),
+        CheckConstraint(
+            "attributed_orders IS NULL OR attributed_orders >= 0", name="orders_nonnegative"
+        ),
         Index("ix_walmart_search_term_account_day", "source_account_ref", "business_date_la"),
-        Index("ix_walmart_search_term_normalized_day", "normalized_search_term", "business_date_la"),
+        Index(
+            "ix_walmart_search_term_normalized_day", "normalized_search_term", "business_date_la"
+        ),
         Index("ix_walmart_search_term_campaign_day", "campaign_id", "business_date_la"),
-        Index("ix_walmart_search_term_listing_day", "source_account_ref", "store_id", "item_id", "business_date_la"),
+        Index(
+            "ix_walmart_search_term_listing_day",
+            "source_account_ref",
+            "store_id",
+            "item_id",
+            "business_date_la",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     business_date_la: Mapped[date] = mapped_column(Date, nullable=False)
     business_timezone: Mapped[str] = mapped_column(
-        String(64), default="America/Los_Angeles",
-        server_default=text("'America/Los_Angeles'"), nullable=False,
+        String(64),
+        default="America/Los_Angeles",
+        server_default=text("'America/Los_Angeles'"),
+        nullable=False,
     )
     source_account_ref: Mapped[str] = mapped_column(String(128), nullable=False)
     advertiser_id: Mapped[str] = mapped_column(String(128), nullable=False)
     store_id: Mapped[str | None] = mapped_column(String(128))
     item_id: Mapped[str | None] = mapped_column(String(128))
     listing_mapping_status: Mapped[str] = mapped_column(
-        String(32), default="unresolved", server_default=text("'unresolved'"), nullable=False,
+        String(32),
+        default="unresolved",
+        server_default=text("'unresolved'"),
+        nullable=False,
     )
     mp_seller_name: Mapped[str | None] = mapped_column(Text)
     mp_advertiser_name: Mapped[str | None] = mapped_column(Text)
@@ -77,7 +96,9 @@ class WalmartAdSearchTermDailyFact(Base):
     targeting_type: Mapped[str] = mapped_column(String(32), nullable=False)
     searched_keyword: Mapped[str] = mapped_column(Text, nullable=False)
     normalized_search_term: Mapped[str] = mapped_column(Text, nullable=False)
-    attribution_days: Mapped[int] = mapped_column(Integer, nullable=False, default=14, server_default="14")
+    attribution_days: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=14, server_default="14"
+    )
     num_ads_shown: Mapped[int | None] = mapped_column(Integer)
     num_ads_clicks: Mapped[int | None] = mapped_column(Integer)
     ad_spend_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
@@ -105,8 +126,12 @@ class WalmartAdSearchTermDailyFact(Base):
         ForeignKey("ods_api_raw_request_refs.id", ondelete="SET NULL")
     )
     synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
+    )
 
 
 class WalmartManualKeywordDailyFact(Base):
@@ -132,7 +157,12 @@ class WalmartManualKeywordDailyFact(Base):
         CheckConstraint("ad_spend_amount IS NULL OR ad_spend_amount >= 0", name="spend_nonnegative"),
         Index("ix_walmart_manual_keyword_account_day", "source_account_ref", "business_date_la"),
         Index("ix_walmart_manual_keyword_normalized_day", "normalized_keyword", "business_date_la"),
-        Index("ix_walmart_manual_keyword_campaign_group", "advertiser_id", "campaign_id", "ad_group_id"),
+        Index(
+            "ix_walmart_manual_keyword_campaign_group",
+            "advertiser_id",
+            "campaign_id",
+            "ad_group_id",
+        ),
         Index("ix_walmart_manual_keyword_listing", "source_account_ref", "store_id", "item_id"),
     )
 
@@ -190,14 +220,23 @@ class WalmartManualKeywordDailyFact(Base):
 class AdsSearchTermAction(Base):
     __tablename__ = "ops_ads_search_term_actions"
     __table_args__ = (
-        CheckConstraint("action_type IN ('add_keyword','add_negative_keyword')", name="action_type"),
-        CheckConstraint("status IN ('pending_manual','manually_completed','cancelled')", name="status"),
+        CheckConstraint(
+            "action_type IN ('add_keyword','add_negative_keyword')", name="action_type"
+        ),
+        CheckConstraint(
+            "status IN ('pending_manual','manually_completed','cancelled')", name="status"
+        ),
         CheckConstraint(
             "effect_status IN ('pending','improved','unchanged','declined','insufficient_data')",
             name="effect_status",
         ),
         CheckConstraint("search_term <> ''", name="search_term_not_blank"),
-        Index("ix_ads_search_term_actions_account_status", "source_account_ref", "status", "created_at"),
+        Index(
+            "ix_ads_search_term_actions_account_status",
+            "source_account_ref",
+            "status",
+            "created_at",
+        ),
         Index("ix_ads_search_term_actions_term", "normalized_search_term", "created_at"),
         Index("ix_ads_search_term_actions_actor", "created_by", "created_at"),
     )
@@ -212,10 +251,16 @@ class AdsSearchTermAction(Base):
     normalized_search_term: Mapped[str] = mapped_column(Text, nullable=False)
     target_scope_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(
-        String(32), default="pending_manual", server_default=text("'pending_manual'"), nullable=False,
+        String(32),
+        default="pending_manual",
+        server_default=text("'pending_manual'"),
+        nullable=False,
     )
     effect_status: Mapped[str] = mapped_column(
-        String(32), default="pending", server_default=text("'pending'"), nullable=False,
+        String(32),
+        default="pending",
+        server_default=text("'pending'"),
+        nullable=False,
     )
     reason: Mapped[str] = mapped_column(Text, default="", server_default=text("''"), nullable=False)
     created_by: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -241,11 +286,15 @@ class AdsSearchTermActionEvent(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     action_id: Mapped[UUID] = mapped_column(
-        ForeignKey("ops_ads_search_term_actions.id", ondelete="RESTRICT"), nullable=False,
+        ForeignKey("ops_ads_search_term_actions.id", ondelete="RESTRICT"),
+        nullable=False,
     )
     event_type: Mapped[str] = mapped_column(String(40), nullable=False)
     actor_ref: Mapped[str] = mapped_column(String(128), nullable=False)
     detail_json: Mapped[dict[str, object]] = mapped_column(
-        JSONB, default=dict, server_default=text("'{}'::jsonb"), nullable=False,
+        JSONB,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+        nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
