@@ -124,3 +124,31 @@ class ActionRead(StrictSchema):
 class ActionListData(StrictSchema):
     items: list[ActionRead]
     total: int
+
+
+class SearchTermAggregateRead(StrictSchema):
+    normalized_search_term: str
+    searched_keyword: str
+    has_auto: bool
+    has_manual: bool
+    store_count: int
+    listing_count: int
+    campaign_count: int
+    impressions: int
+    clicks: int
+    spend: Decimal
+    orders: Decimal
+    direct_sales: Decimal
+    other_sales: Decimal
+    auto_orders: Decimal
+    manual_orders: Decimal
+    manual_covered_same_store: bool
+    manual_covered_other_store: bool
+    freshness_at: datetime | None
+
+
+class SearchTermAggregateListData(StrictSchema):
+    items: list[SearchTermAggregateRead]
+    total: int
+    page: int
+    page_size: int
