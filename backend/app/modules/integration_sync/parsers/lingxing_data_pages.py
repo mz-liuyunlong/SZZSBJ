@@ -286,7 +286,7 @@ DATA_PAGES_PARSER_SPECS: dict[DataPagesParserKey, DataPagesParserSpec] = {
             "advertiser_id is required and must come from advertiser/list",
             "ad item reports are joined to DATA-PAGES MARTs by itemId after date-level aggregation",
         ),
-    ),,
+    ),
 
     "walmart_sp_campaign_list": DataPagesParserSpec(
         parser_key="walmart_sp_campaign_list",
