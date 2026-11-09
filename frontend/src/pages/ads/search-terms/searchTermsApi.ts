@@ -48,6 +48,34 @@ export interface SearchTermListData {
   view: "summary" | "detail";
 }
 
+export interface SearchTermAggregateRow {
+  normalized_search_term: string;
+  searched_keyword: string;
+  has_auto: boolean;
+  has_manual: boolean;
+  store_count: number;
+  listing_count: number;
+  campaign_count: number;
+  impressions: number;
+  clicks: number;
+  spend: string;
+  orders: string;
+  direct_sales: string;
+  other_sales: string;
+  auto_orders: string;
+  manual_orders: string;
+  manual_covered_same_store: boolean;
+  manual_covered_other_store: boolean;
+  freshness_at: string | null;
+}
+
+export interface SearchTermAggregateListData {
+  items: SearchTermAggregateRow[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface SearchTermSummary {
   total_terms: number;
   converting_terms: number;
@@ -106,6 +134,14 @@ export async function listSearchTerms(query: SearchTermQuery) {
   return (
     await backendRequest<SearchTermListData>(
       `/api/ads/search-terms?${params(query)}`,
+    )
+  ).data;
+}
+
+export async function getSearchTermAggregates(query: SearchTermQuery) {
+  return (
+    await backendRequest<SearchTermAggregateListData>(
+      `/api/ads/search-terms/aggregates?${params(query)}`,
     )
   ).data;
 }
