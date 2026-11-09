@@ -85,8 +85,9 @@ LINE_LINEAGE_FIELDS: dict[str, str] = {
     "store_id": "$.data[].item_list[].sid",
     "quantity_allocated": "$.data[].item_list[].quantity_real",
     "amount_allocated": "$.data[].item_list[].amount",
-    "draft_no": "$.data[].item_list[].remark",
 }
+# draft_no lineage is written per line from DwdOrderLineRow.draft_lineage: the linked plan's
+# remark (plan ODS version) when the draft came from there, otherwise the order line remark.
 
 
 class PmcPurchaseDwdPublishError(RuntimeError):
@@ -427,6 +428,7 @@ class PmcPurchaseDwdPublisher:
                         record.id, "dwd_purchase_order_line_item", LINE_LINEAGE_FIELDS, row.source
                     )
                 )
+                lineage.extend(self._draft_lineage(record.id, row))
                 continue
             # A line's allocation depends on the plans too, so compare the derived values
             # and not only the ODS version.
@@ -448,6 +450,7 @@ class PmcPurchaseDwdPublisher:
                     current.id, "dwd_purchase_order_line_item", LINE_LINEAGE_FIELDS, row.source
                 )
             )
+            lineage.extend(self._draft_lineage(current.id, row))
         if rows:
             for line_key, stale in existing.items():
                 if line_key not in current_keys:
@@ -565,6 +568,12 @@ class PmcPurchaseDwdPublisher:
             )
             for field_name, path in fields.items()
         ]
+
+    def _draft_lineage(self, record_id: UUID, row: DwdOrderLineRow) -> list[DataLineage]:
+        if row.draft_lineage is None:
+            return []
+        path, source = row.draft_lineage
+        return self._lineage(record_id, "dwd_purchase_order_line_item", {"draft_no": path}, source)
 
     def _raw_blob_id(self, raw_request_ref_id: UUID) -> UUID:
         cache = self._blob_cache

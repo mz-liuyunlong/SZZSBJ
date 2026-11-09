@@ -44,7 +44,14 @@ def seeded(session: Session) -> Session:  # noqa: F811
     _plan(session, "P2", sku="SKU-B", remark=None, remark_item_id=None)
     # pending plans: P3 approved 10 days ago (overdue), P4 2 days ago, P5 sid=0
     _plan(session, "P3", status=2, create_date=TODAY - timedelta(days=10), sku="SKU-C")
-    _plan(session, "P4", status=2, create_date=TODAY - timedelta(days=2), sku="SKU-D")
+    _plan(
+        session,
+        "P4",
+        status=2,
+        create_date=TODAY - timedelta(days=2),
+        sku="SKU-D",
+        remark="ITEMID:20540519308 | 草稿:CG261102-087",
+    )
     _plan(
         session,
         "P5",
@@ -103,6 +110,17 @@ def test_board_filters_sorting_and_scope(seeded: Session) -> None:
         BoardListQuery(search_type="sku", search_values=["SKU-A SKU-B", "nope"]), SCOPE
     )
     assert {i.sku for i in data.items} == {"SKU-A", "SKU-B"}
+
+    # 8088「草稿号 / 计划号」search: a draft number or any linked plan number.
+    data, total, *_ = svc.list_board(
+        BoardListQuery(search_type="draft_plan", search_values=["CG261017-039"]), SCOPE
+    )
+    assert {i.purchase_order_sn for i in data.items} == {"PO1"}
+    data, total, *_ = svc.list_board(
+        BoardListQuery(search_type="draft_plan", search_values=["P1"]), SCOPE
+    )
+    found = {i.purchase_order_sn for i in data.items}
+    assert "PO1" in found and "PO3" not in found  # PO3 has no plan
 
     data, total, *_ = svc.list_board(BoardListQuery(item_id_source=["pending_packing_slip"]), SCOPE)
     # PO3 has no plan remark but matches the single Listing for store + SKU-A.
@@ -239,6 +257,7 @@ def test_pending_plans_drill_down(seeded: Session) -> None:
     assert by_sn["P4"].overdue_days == 0
     assert by_sn["P5"].overdue_days == 0 and by_sn["P5"].store.attributed is False
     assert by_sn["P3"].store.name == "Store A"
+    assert by_sn["P4"].draft_no == "CG261102-087"  # 8088: pending drill-down shows the draft
 
     data, total, _ = svc.pending_plans(PendingPlanQuery(overdue_only=True), SCOPE)
     assert [i.plan_sn for i in data.items] == ["P3"]
@@ -246,3 +265,18 @@ def test_pending_plans_drill_down(seeded: Session) -> None:
     assert total == 2 and len(data.items) == 1
     data, total, _ = svc.pending_plans(PendingPlanQuery(search_values=["SKU-D"]), SCOPE)
     assert [i.plan_sn for i in data.items] == ["P4"]
+
+
+def test_hidden_owner_names_default_and_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.modules.pmc_purchase.service import _owner_ref, hidden_owner_names
+
+    monkeypatch.delenv("PMC_PURCHASE_HIDDEN_OWNER_NAMES", raising=False)
+    assert hidden_owner_names() == ("小罗",)
+    assert _owner_ref("10885607", "小罗").name is None  # 8088 hides the API operator account
+    assert _owner_ref("10885607", "小罗").uid is None
+    assert _owner_ref("u-1", "田心怡").name == "田心怡"
+    monkeypatch.setenv("PMC_PURCHASE_HIDDEN_OWNER_NAMES", "小罗, 测试账号 ,")
+    assert hidden_owner_names() == ("小罗", "测试账号")
+    monkeypatch.setenv("PMC_PURCHASE_HIDDEN_OWNER_NAMES", "")
+    assert hidden_owner_names() == ()
+    assert _owner_ref("10885607", "小罗").name == "小罗"

@@ -113,6 +113,12 @@ function PurchaseBoardPage({ page, preferenceScope = "anonymous" }: PurchaseBoar
   const listQuery = usePurchaseBoardListQuery(filters, currentPage, pageSize, activeCard, cardRequest);
   const summaryQuery = usePurchaseBoardSummaryQuery(filters);
   const ownersQuery = usePurchaseBoardOwnerOptionsQuery();
+  const hiddenOwnerNames = summaryQuery.data?.meta.hiddenOwnerNames;
+  // 8088 同款：名单里的负责人（如 API 操作人「小罗」）不进负责人筛选项。
+  const visibleOwners = useMemo(
+    () => (ownersQuery.data ?? []).filter((owner) => !(hiddenOwnerNames ?? []).includes(owner.name.trim())),
+    [hiddenOwnerNames, ownersQuery.data],
+  );
   const detailQuery = usePurchaseOrderDetailQuery(detailOrderSn);
   const pendingQuery = usePendingPurchasePlansQuery(
     { page: pendingPage, pageSize: pendingPageSize, overdueOnly: pendingOverdueOnly },
@@ -183,7 +189,7 @@ function PurchaseBoardPage({ page, preferenceScope = "anonymous" }: PurchaseBoar
           <Card size="small" className="purchase-board__toolbar-card">
             <PurchaseBoardToolbar
               filters={filters}
-              owners={ownersQuery.data ?? []}
+              owners={visibleOwners}
               ownersLoading={ownersQuery.isPending}
               moreFilterCount={countMoreFilters(moreFilters)}
               onChange={(next) => commitFilters(next)}

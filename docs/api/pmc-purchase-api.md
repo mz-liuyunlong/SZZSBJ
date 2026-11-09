@@ -21,9 +21,16 @@ All responses use:
 { "success": true, "data": {}, "error": null, "meta": {}, "request_id": "..." }
 ```
 
-`meta` = `{ source: "new_system_postgresql", source_objects: [...], freshness_at, rule_version, page, page_size, total }`
+`meta` = `{ source: "new_system_postgresql", source_objects: [...], freshness_at, rule_version, page, page_size, total, hidden_owner_names }`
 where `freshness_at` is the newest `calculated_at` among the returned DWS rows and
 `rule_version` the `rule_purchase_thresholds` version those rows were calculated with.
+`hidden_owner_names` lists owner names the page must not show or offer as a filter option
+(8088 parity: the Lingxing API operator account 「小罗」). Configured by the
+`PMC_PURCHASE_HIDDEN_OWNER_NAMES` environment variable (comma separated; unset = `小罗`, empty = none);
+rows whose owner name is on the list come back with `owner = { uid: null, name: null }`.
+Filtering by `owner_uid[]` still matches on the stored owner, so when a hidden owner's uid is
+used as a filter those rows are still returned, only with the owner shown empty
+（按负责人 uid 筛选时，被隐藏者的行仍会出现，只是负责人显示为空）.
 
 ## 2. Authentication, permissions, and scope
 
@@ -50,7 +57,8 @@ One row per purchase-order line × plan (merged lines already split by plan quan
 Query: `page` (≥1), `page_size` (1–200), `sort` (`order_date_desc` default | `order_date_asc` |
 `overdue_days_desc` | `arrival_date_desc` | `amount_desc`), `owner_uid[]`, `store_id[]`,
 `status[]` (`s2` 待下单 | `s3` 已下单未到货 | `s4` 部分到货 | `overdue` 任一逾期 | `s9` 已到货 |
-`s0` 作废 | `unattributed` 未归属店铺), `search_type` (`sku|item_id|gtin|msku|order_sn`) +
+`s0` 作废 | `unattributed` 未归属店铺), `search_type` (`sku|item_id|gtin|msku|order_sn|draft_plan`; `draft_plan` = 8088「草稿号 / 计划号」, matches
+`draft_no` or any linked plan number) +
 `search_values[]` (batch; comma / whitespace separated values are split),
 `item_id_source[]` (`from_system_plan` | `from_plan_remark` | `from_listing` |
 `from_packing_slip` | `pending_packing_slip` | `unresolved`), `order_date_from/to`,
@@ -64,7 +72,7 @@ The list total counts detail rows; order cards on the summary count distinct ord
 未转单计划 are not board rows — `purchase_overdue` lists the overdue S2 orders only.
 Unknown parameters and inconsistent ranges are `422 VALIDATION_ERROR`.
 
-Row fields: `purchase_order_sn, draft_no (parsed from purchase order line 采购备注, e.g. ``草稿:CG261017-039``),
+Row fields: `purchase_order_sn, draft_no (8088 rule: parsed from the linked plan's remark first, then the purchase order line 采购备注, e.g. ``草稿:CG261017-039``; `gov_data_lineage` records the path and document version actually used — the plan's `$.data[].remark` / `plan_remark` / `item_purchase_remark` or the line's `$.data[].item_list[].remark` / `item_purchase_remark`),
 order_item_id, plan_sn, plan_sns[], order_status,
 stage{stage_code, stage_start, stage_start_estimated, threshold_days, due_date, overdue_days,
 overdue_kind(purchase|arrival|null), alert_due_since}, store{id,name,attributed}, sku,
@@ -114,7 +122,7 @@ appear on any purchase-order line. Query: `page`, `page_size`, `store_id[]`, `ov
 `search_values[]` (plan_sn or SKU). Fields: `plan_sn, plan_status, plan_create_date,
 pending_since, pending_since_estimated (true until the incremental sync has observed the
 pending state), pending_days, overdue_days (vs `s2_pending_days`; 0 for unattributed
-stores), store, sku, product_name, quantity_plan, remark_item_id`; `data.threshold_days`
+stores), store, sku, product_name, quantity_plan, remark_item_id, draft_no` (parsed from the plan remark); `data.threshold_days`
 echoes the rule value. Plans in 待审批 (status 121) are never listed.
 
 ### `GET /api/pmc/purchase/sku-cycles/{sku}/overrides` — 修正记录

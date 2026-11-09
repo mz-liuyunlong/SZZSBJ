@@ -7,6 +7,7 @@ summary cards need (Demo v1.4: 待到货 / 逾期未到货 / 待采购超时 / �
 
 from __future__ import annotations
 
+import os
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
@@ -15,7 +16,11 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
-from app.modules.pmc_purchase.calculations import AVERAGE_CYCLE_WINDOW_DAYS, median_days
+from app.modules.pmc_purchase.calculations import (
+    AVERAGE_CYCLE_WINDOW_DAYS,
+    median_days,
+    parse_draft_remark,
+)
 from app.modules.pmc_purchase.gate3_models import (
     DwdPurchasePlan,
     DwsPurchaseBoard,
@@ -48,6 +53,24 @@ from app.modules.pmc_purchase.schemas import (
 
 FOUR_PLACES = Decimal("0.0001")
 DEFAULT_S2_PENDING_DAYS = 7
+
+
+# 8088 采购看板把「小罗」（领星 API 操作人账号）从负责人里隐藏（Rocky 2026-11-02 定：照搬 8088）。
+# 名单可配置：环境变量 PMC_PURCHASE_HIDDEN_OWNER_NAMES，逗号分隔；未设置时默认「小罗」。
+DEFAULT_HIDDEN_OWNER_NAMES: tuple[str, ...] = ("小罗",)
+
+
+def hidden_owner_names() -> tuple[str, ...]:
+    raw = os.environ.get("PMC_PURCHASE_HIDDEN_OWNER_NAMES")
+    if raw is None:
+        return DEFAULT_HIDDEN_OWNER_NAMES
+    return tuple(name for piece in raw.split(",") if (name := piece.strip()))
+
+
+def _owner_ref(uid: str | None, name: str | None) -> OwnerRef:
+    if name is not None and name.strip() in hidden_owner_names():
+        return OwnerRef(uid=None, name=None)
+    return OwnerRef(uid=uid, name=name)
 
 
 class PmcPurchaseReadService:
@@ -279,7 +302,7 @@ def _board_row(row: DwsPurchaseBoard) -> BoardRowRead:
             fulfillment_type=row.fulfillment_type,
             wfs_not_ready=row.wfs_not_ready,
         ),
-        owner=OwnerRef(uid=row.owner_uid, name=row.owner_name),
+        owner=_owner_ref(row.owner_uid, row.owner_name),
         quantity_total=row.quantity_total,
         quantity_allocated=row.quantity_allocated,
         quantity_received=row.quantity_received,
@@ -359,4 +382,5 @@ def _pending_plan(
         product_name=plan.product_name,
         quantity_plan=plan.quantity_plan,
         remark_item_id=plan.remark_item_id,
+        draft_no=parse_draft_remark(plan.remark),
     )
