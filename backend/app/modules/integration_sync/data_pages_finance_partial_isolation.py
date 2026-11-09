@@ -157,3 +157,65 @@ def reserve_unallocated_sem_lines(
         params,
     ).scalar_one()
     return Decimal(str(amount))
+
+
+def reset_sample_dispute_current(
+    session: Session,
+    *,
+    source_account_ref: str,
+    business_date: date,
+) -> None:
+    """Retain old evidence, but mark it historical before rebuilding the day."""
+    session.execute(
+        text(
+            "update biz_finance_sample_disputes set is_current=false "
+            "where source_account_ref=:account and business_date_la=:day "
+            "and is_current=true"
+        ),
+        {"account": source_account_ref, "day": business_date},
+    )
+
+
+def record_sample_dispute(
+    session: Session,
+    *,
+    source_account_ref: str,
+    business_date: date,
+    store_id: str,
+    item_id: str,
+    msku: str,
+    sample_qty: Decimal,
+    sales_qty: Decimal,
+    sample_amount: Decimal,
+    sales_amount: Decimal,
+) -> None:
+    """Keep the exact disputed item/day identity without guessing bad orders."""
+    session.execute(
+        text(
+            "insert into biz_finance_sample_disputes "
+            "(id,source_account_ref,business_date_la,store_id,item_id,msku,"
+            "sample_qty,sales_qty,sample_amount,sales_amount,status,is_current,"
+            "created_at,last_seen_at) "
+            "values (gen_random_uuid(),:account,:day,:store,:item,:msku,"
+            ":sample_qty,:sales_qty,:sample_amount,:sales_amount,'pending',true,"
+            "now(),now()) "
+            "on conflict (source_account_ref,business_date_la,store_id,item_id,msku) "
+            "do update set sample_qty=excluded.sample_qty,"
+            "sales_qty=excluded.sales_qty,sample_amount=excluded.sample_amount,"
+            "sales_amount=excluded.sales_amount,is_current=true,last_seen_at=now(),"
+            "status=case when biz_finance_sample_disputes.status "
+            "in ('resolved','dismissed') then 'pending' "
+            "else biz_finance_sample_disputes.status end"
+        ),
+        {
+            "account": source_account_ref,
+            "day": business_date,
+            "store": store_id,
+            "item": item_id,
+            "msku": msku,
+            "sample_qty": sample_qty,
+            "sales_qty": sales_qty,
+            "sample_amount": sample_amount,
+            "sales_amount": sales_amount,
+        },
+    )
