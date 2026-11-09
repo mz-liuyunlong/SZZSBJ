@@ -328,6 +328,7 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
                 "orderField",
                 "orderType",
                 "operationSourceType",
+                "paging",
             }
         ),
         required_body_fields=frozenset(
