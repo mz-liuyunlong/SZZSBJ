@@ -185,6 +185,12 @@ class DataPagesRealSyncSummary:
     ad_mapped_rows: int = 0
     ad_unresolved_rows: int = 0
     ad_unresolved_positive_spend: Decimal = Decimal("0")
+    sp_campaign_rows: int = 0
+    sp_campaign_unverified_rows: int = 0
+    search_term_rows: int = 0
+    search_term_unverified_rows: int = 0
+    manual_keyword_rows: int = 0
+    manual_keyword_unverified_rows: int = 0
     mart_daily_sales_rows: int = 0
     mart_order_profit_rows: int = 0
     mart_listing_rows: int = 0
