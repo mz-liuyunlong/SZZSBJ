@@ -66,7 +66,10 @@ interface ComparisonRow {
 }
 
 const money = (value: string | number | null | undefined) =>
-  value == null ? "—" : `$${Number(value).toFixed(2)}`;
+  value == null ? "—" : `${Number(value).toFixed(2)}`;
+
+const ratio = (value: string | null | undefined) =>
+  value == null ? "—" : `${Number(value).toFixed(2)}%`;
 
 const number = (value: number | null | undefined) =>
   value == null ? "—" : new Intl.NumberFormat("en-US").format(value);
@@ -205,6 +208,7 @@ export default function SearchTermsPage({ page }: { page: NavigationPage }) {
         ...query,
         targeting_type: "all",
         query: term,
+        conversion_state: "all",
         page: 1,
         page_size: 200,
       });
@@ -347,7 +351,7 @@ export default function SearchTermsPage({ page }: { page: NavigationPage }) {
       dataIndex: "ctr",
       align: "right" as const,
       width: 90,
-      render: (value: string | null) => money(value),
+      render: (value: string | null) => ratio(value),
     },
     {
       title: "CVR",
