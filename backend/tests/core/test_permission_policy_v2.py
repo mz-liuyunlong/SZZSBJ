@@ -172,7 +172,10 @@ def test_business_settings_routes_keep_their_declared_high_risk_permissions() ->
     cases = (
         ("/api/business-rules/connectors", "action:settings:business-config:manage-connectors"),
         ("/api/business-rules/decodo", "action:settings:business-config:manage-decodo"),
-        ("/api/business-rules/notification-rules", "action:settings:business-config:manage-notifications"),
+        (
+            "/api/business-rules/notification-rules",
+            "action:settings:business-config:manage-notifications",
+        ),
     )
     for path, permission in cases:
         for method in ("GET", "POST", "PATCH", "PUT", "DELETE"):

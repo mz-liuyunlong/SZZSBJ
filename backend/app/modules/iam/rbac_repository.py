@@ -8,6 +8,7 @@ from uuid import uuid4
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.modules.iam.permission_catalog_v2 import PermissionDefinition
 from app.modules.iam.security import now_utc
 
 
@@ -181,6 +182,42 @@ class RbacRepository:
             {"role_keys": list(values)},
         ).all()
         return {(str(scope_type), str(scope_value)) for scope_type, scope_value in rows}
+
+    def register_permission_definitions(
+        self, definitions: Iterable[PermissionDefinition]
+    ) -> None:
+        """Only register known permission metadata. Never grant role permissions."""
+        for definition in definitions:
+            self.session.execute(
+                text(
+                    """
+                    insert into app_permissions (
+                        permission_key, name, group_key, description, permission_type,
+                        module_key, page_key, action_key, field_key, risk_level,
+                        sort_order, is_active, created_at, updated_at
+                    )
+                    values (
+                        :permission_key, :name, :group_key, :description, :permission_type,
+                        :module_key, :page_key, :action_key, :field_key, :risk_level,
+                        :sort_order, true, now(), now()
+                    )
+                    on conflict (permission_key) do nothing
+                    """
+                ),
+                {
+                    "permission_key": definition.permission_key,
+                    "name": definition.name,
+                    "group_key": definition.module_key,
+                    "description": definition.description,
+                    "permission_type": definition.permission_type,
+                    "module_key": definition.module_key,
+                    "page_key": definition.page_key,
+                    "action_key": definition.action_key,
+                    "field_key": definition.field_key,
+                    "risk_level": definition.risk_level,
+                    "sort_order": definition.sort_order,
+                },
+            )
 
     def existing_permission_keys(self, permission_keys: Iterable[str]) -> set[str]:
         values = tuple(dict.fromkeys(permission_keys))
