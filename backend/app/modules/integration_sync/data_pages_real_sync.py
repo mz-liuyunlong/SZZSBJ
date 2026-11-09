@@ -215,6 +215,12 @@ class DataPagesRealSyncSummary:
             f"ad_mapped_rows={self.ad_mapped_rows}",
             f"ad_unresolved_rows={self.ad_unresolved_rows}",
             f"ad_unresolved_positive_spend={self.ad_unresolved_positive_spend}",
+            f"sp_campaign_rows={self.sp_campaign_rows}",
+            f"sp_campaign_unverified_rows={self.sp_campaign_unverified_rows}",
+            f"search_term_rows={self.search_term_rows}",
+            f"search_term_unverified_rows={self.search_term_unverified_rows}",
+            f"manual_keyword_rows={self.manual_keyword_rows}",
+            f"manual_keyword_unverified_rows={self.manual_keyword_unverified_rows}",
             f"mart_daily_sales_rows={self.mart_daily_sales_rows}",
             f"mart_order_profit_rows={self.mart_order_profit_rows}",
             f"mart_listing_rows={self.mart_listing_rows}",
@@ -432,6 +438,9 @@ class DataPagesRealSyncRunner:
         self._listing_capture_by_identity: dict[tuple[str, str, str], datetime] = {}
         self.store_ids: tuple[str, ...] = ()
         self.advertiser_ids: tuple[str, ...] = ()
+        self._advertiser_context_cache: dict[
+            str, tuple[str | None, str | None, str | None]
+        ] = {}
 
     def execute(self) -> DataPagesRealSyncSummary:
         if self.client is None:
@@ -477,6 +486,11 @@ class DataPagesRealSyncRunner:
             ad_rows: list[dict[str, Any]] = []
             for advertiser_id in self.advertiser_ids[: self.max_advertisers]:
                 ad_rows.extend(self._fetch_ads_all(advertiser_id))
+            campaign_map, search_term_rows, manual_keyword_rows = (
+                self._fetch_sp_search_terms_bundle(
+                    self.advertiser_ids[: self.max_advertisers]
+                )
+            )
 
             self.summary.store_rows = self._write_stores(stores)
             self.summary.advertiser_rows = self._write_advertisers(advertisers)
@@ -485,6 +499,13 @@ class DataPagesRealSyncRunner:
             self.summary.order_rows = self._write_orders(orders)
             self.summary.refund_rows = self._write_refunds(refunds)
             self.summary.ad_rows = self._write_ads(ad_rows)
+            self.summary.sp_campaign_rows = len(campaign_map)
+            self.summary.search_term_rows = self._write_search_terms(
+                search_term_rows, campaign_map
+            )
+            self.summary.manual_keyword_rows = self._write_manual_keywords(
+                manual_keyword_rows, campaign_map
+            )
 
             self.summary.order_unresolved_rows = self._resolve_order_items()
             self.summary.refund_unresolved_rows = self._resolve_refund_items()
@@ -596,9 +617,10 @@ class DataPagesRealSyncRunner:
         body_builder: Any,
         *,
         body_suffix: str | None = None,
+        page_size: int | None = None,
     ) -> list[dict[str, Any]]:
         spec = DATA_PAGES_SYNC_INTERFACE_SPECS_BY_KEY[parser_key]
-        size = self.page_size
+        size = page_size or self.page_size
         page_no = 1
         rows: list[dict[str, Any]] = []
         previous_signature: str | None = None
