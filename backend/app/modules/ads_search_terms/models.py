@@ -299,9 +299,7 @@ class AdsSearchTermAction(Base):
 
 class AdsSearchTermActionEvent(Base):
     __tablename__ = "ops_ads_search_term_action_events"
-    __table_args__ = (
-        Index("ix_ads_search_term_action_events_history", "action_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_ads_search_term_action_events_history", "action_id", "created_at"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     action_id: Mapped[UUID] = mapped_column(
