@@ -27,7 +27,11 @@ def summary(request:Request,query:Annotated[SearchTermQuery,Query()],session:db,
  data=AdsSearchTermsService(session).summary(query,accounts)
  return success_response(request,data=data,meta=meta("fact_walmart_ad_search_term_daily","fact_walmart_keyword_sp_daily",freshness_at=data.freshness_at))
 @router.get("/trends",response_model=SuccessEnvelope[SearchTermTrendData,dict],responses=ERR)
-def trends(request:Request,term:str=Query(min_length=1,max_length=256),start_date:date=Query(),end_date:date=Query(),session:db,principal:reader,accounts:scope):
+def trends(
+ request:Request,session:db,principal:reader,accounts:scope,
+ term:str=Query(min_length=1,max_length=256),
+ start_date:date=Query(),end_date:date=Query(),
+):
  data=AdsSearchTermsService(session).trends(term,start_date,end_date,accounts)
  return success_response(request,data=data,meta=meta("fact_walmart_ad_search_term_daily"))
 @router.get("/actions",response_model=SuccessEnvelope[ActionListData,dict],responses=ERR)
