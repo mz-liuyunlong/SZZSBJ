@@ -11,6 +11,9 @@ type DataPagesParserKey = Literal[
     "walmart_return_order_list",
     "walmart_advertiser_list",
     "walmart_ad_item_sp_list",
+    "walmart_sp_campaign_list",
+    "walmart_sp_search_term_list",
+    "walmart_sp_keyword_list",
 ]
 
 
@@ -282,6 +285,71 @@ DATA_PAGES_PARSER_SPECS: dict[DataPagesParserKey, DataPagesParserSpec] = {
         skip_rules=(
             "advertiser_id is required and must come from advertiser/list",
             "ad item reports are joined to DATA-PAGES MARTs by itemId after date-level aggregation",
+        ),
+    ),,
+
+    "walmart_sp_campaign_list": DataPagesParserSpec(
+        parser_key="walmart_sp_campaign_list",
+        api_path="/basicOpen/multiplatform/ads/queryCampaignSpList",
+        record_path="data.list[]",
+        target_table="ods_api_raw_blobs",
+        unique_key_candidates=(("source_account_ref", "advertiser_id", "campaign_id"),),
+        fields=(
+            ParserFieldSpec("advertiser_id", "data.list[].advertiserId", required=True),
+            ParserFieldSpec("campaign_id", "data.list[].campaignId", required=True),
+            ParserFieldSpec("campaign_name", "data.list[].campaignName"),
+            ParserFieldSpec("campaign_type", "data.list[].campaignType"),
+            ParserFieldSpec("targeting_type", "data.list[].targetingType"),
+            ParserFieldSpec("campaign_status", "data.list[].campaignStatus"),
+        ),
+        skip_rules=("campaignId and advertiserId are required for verified campaign scope",),
+    ),
+    "walmart_sp_search_term_list": DataPagesParserSpec(
+        parser_key="walmart_sp_search_term_list",
+        api_path="/basicOpen/multiplatform/ads/reportSearchImpressionSpList",
+        record_path="data.list[]",
+        target_table="fact_walmart_ad_search_term_daily",
+        unique_key_candidates=(
+            ("business_date_la", "source_account_ref", "advertiser_id", "source_identity_hash"),
+        ),
+        fields=(
+            ParserFieldSpec("advertiser_id", "data.list[].advertiserId", required=True),
+            ParserFieldSpec("campaign_id", "data.list[].campaignId", required=True),
+            ParserFieldSpec("searched_keyword", "data.list[].searchedKeyword", required=True),
+            ParserFieldSpec("targeting_type", "data.list[].targetingType"),
+            ParserFieldSpec("num_ads_shown", "data.list[].numAdsShown"),
+            ParserFieldSpec("num_ads_clicks", "data.list[].numAdsClicks"),
+            ParserFieldSpec("ad_spend_amount", "data.list[].adSpend"),
+            ParserFieldSpec("attributed_orders", "data.list[].attributedOrders"),
+            ParserFieldSpec("advertised_sku_sales_amount", "data.list[].advertisedSkuSales"),
+            ParserFieldSpec("other_sku_sales_amount", "data.list[].otherSkuSales"),
+        ),
+        skip_rules=(
+            "Search term rows are retained only when advertiserId and campaignId match the verified campaign inventory.",
+            "No attributedOrders filter is applied so zero-order spend rows remain visible.",
+        ),
+    ),
+    "walmart_sp_keyword_list": DataPagesParserSpec(
+        parser_key="walmart_sp_keyword_list",
+        api_path="/basicOpen/multiplatform/ads/reportKeywordSpList",
+        record_path="data.list[]",
+        target_table="fact_walmart_keyword_sp_daily",
+        unique_key_candidates=(
+            ("business_date_la", "source_account_ref", "advertiser_id", "source_identity_hash"),
+        ),
+        fields=(
+            ParserFieldSpec("advertiser_id", "data.list[].advertiserId", required=True),
+            ParserFieldSpec("campaign_id", "data.list[].campaignId", required=True),
+            ParserFieldSpec("ad_group_id", "data.list[].adGroupId", required=True),
+            ParserFieldSpec("keyword_id", "data.list[].keywordId"),
+            ParserFieldSpec("keyword_name", "data.list[].keywordName", required=True),
+            ParserFieldSpec("targeting_type", "data.list[].targetingType"),
+            ParserFieldSpec("keyword_status", "data.list[].keywordStatus"),
+            ParserFieldSpec("keyword_bid_amount", "data.list[].keywordBid"),
+        ),
+        skip_rules=(
+            "Only keywords in campaign IDs verified as sponsoredProducts-manual are retained.",
+            "Both SP campaign types are included in the request campaignType array per the Lingxing contract.",
         ),
     ),
 }
