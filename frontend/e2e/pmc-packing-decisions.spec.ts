@@ -33,12 +33,11 @@ test("list hides decisions, saves edits and reads existing approval audit", asyn
         "action:pmc:domestic-warehouse-board:packing-approve", "action:pmc:domestic-warehouse-board:packing-reject"] };
     else if (path.endsWith("/filter-options")) data = { stores: [], owners: [] };
     else if (path.endsWith("/pending/summary")) data = { pending: pending.length, approved: orders.filter(o => o.status === "approved").length, rejected: orders.filter(o => o.status === "rejected").length, blocked: 0, overdue: 0 };
-    else if (path.endsWith("/edit-options")) data = { cross_store_proof_available: false,
-      listings: [{ store_id: "S1", store_name: "测试店铺", item_id: base.item_id, gtin: base.gtin,
-        msku: base.msku, listing_version: "b".repeat(64), cross_store: false }] };
+    else if (path.endsWith("/listing-search")) data = { items: [{ store_id: "S1", store_name: "测试店铺", item_id: base.item_id, gtin: base.gtin,
+        msku: base.msku, local_sku: base.sku, listing_version: "b".repeat(64), cross_store: false, wfs_converted: true, usable: true, blocked_reasons: [] }] };
     else if (path.endsWith("/draft") && request.method() === "PUT") {
       const row = pending.find(row => path.includes(row.id))!;
-      row.default_quantity = request.postDataJSON().qty;
+      row.default_quantity = (request.postDataJSON().lines as { qty: number }[]).reduce((sum, line) => sum + line.qty, 0);
       row.edit_draft_pending = true;
       data = { candidate_id: row.id, edit_draft_pending: true, snapshot: row };
     }
@@ -53,8 +52,9 @@ test("list hides decisions, saves edits and reads existing approval audit", asyn
   await expect(page.getByRole("button", { name: /^驳\s*回$/ })).toHaveCount(0);
   await page.getByRole("button", { name: /^修\s*改$/ }).first().click();
   const edit = page.getByRole("dialog", { name: "修改打包单", exact: true });
-  await expect(edit.getByText("测试店铺 / 11111111111", { exact: true })).toBeVisible();
+  await expect(edit.getByText("测试店铺 / 11111111111 / SYN-MSKU / SYN-SKU", { exact: true })).toBeVisible();
   await edit.getByRole("spinbutton").fill("25");
+  await edit.getByPlaceholder("例：客户要求分两批 / 换店铺发").fill("按实际到货调整");
   await edit.getByRole("button", { name: /^保\s*存$/ }).click();
   await expect(page.getByText("已修改未审批", { exact: true })).toBeVisible();
   expect(writes).toHaveLength(1);

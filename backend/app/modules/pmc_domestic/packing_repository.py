@@ -136,7 +136,10 @@ class PackingRepository:
             return []
         board_ids = {b.id for b, _ in sources}
         skus = {b.sku for b, _ in sources}
-        listing_by_item: dict[tuple[str, str, str, str], Listing] = {}
+        # Listings keyed by (account, store, item_id); the local-SKU index feeds the
+        # plan-weight helper. Listings whose local SKU is blank are picked up below by the
+        # item ids the resolver attributed (owner decision 2026-10-31).
+        listing_by_item: dict[tuple[str, str, str], Listing] = {}
         store_listing_ids = defaultdict(set)
         if skus:
             for listing in s.scalars(
@@ -148,19 +151,37 @@ class PackingRepository:
                 store_listing_ids[
                     (listing.source_account_ref, listing.store_id, listing.local_sku)
                 ].add(listing.item_id)
-                listing_by_item[
-                    (
-                        listing.source_account_ref,
-                        listing.store_id,
-                        listing.local_sku,
-                        listing.item_id,
-                    )
-                ] = listing
+                listing_by_item[(listing.source_account_ref, listing.store_id, listing.item_id)] = (
+                    listing
+                )
         board_rows = [_PackingBoardRow(b) for b, _ in sources]
         attach_board_item_ids(s, board_rows, frozenset(accounts))
         identities_by_board = {
             str(b.id): row for (b, _), row in zip(sources, board_rows, strict=True)
         }
+        attributed_ids = {
+            identity.item_id for row in board_rows for identity in row.item_identities
+        }
+        if attributed_ids:
+            for listing in s.scalars(
+                select(Listing).where(
+                    Listing.source_account_ref.in_(accounts),
+                    Listing.item_id.in_(attributed_ids),
+                )
+            ):
+                listing_by_item.setdefault(
+                    (listing.source_account_ref, listing.store_id, listing.item_id), listing
+                )
+            for b, _ in sources:
+                for identity in identities_by_board[str(b.id)].item_identities:
+                    if (
+                        b.source_account_ref,
+                        b.store_id or "",
+                        identity.item_id,
+                    ) in listing_by_item:
+                        store_listing_ids[(b.source_account_ref, b.store_id, b.sku)].add(
+                            identity.item_id
+                        )
         used = {
             (a, w, str(b)): q
             for a, w, b, q in s.execute(
@@ -353,7 +374,7 @@ class PackingRepository:
                 options: list[tuple[ItemIdentity | None, Listing | None]] = []
                 for identity in board_identities:
                     listing = listing_by_item.get(
-                        (b.source_account_ref, b.store_id or "", b.sku, identity.item_id)
+                        (b.source_account_ref, b.store_id or "", identity.item_id)
                     )
                     options.append((identity, listing))
             else:

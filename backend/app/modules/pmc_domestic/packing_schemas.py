@@ -42,6 +42,18 @@ class QuantitySuggestion(Strict):
     source_refs: list[str] = Field(default_factory=list)
 
 
+class SplitLine(Strict):
+    """One target of a split packing draft: approval creates one packing order per line."""
+
+    store_id: str
+    store_name: str | None = None
+    item_id: str
+    gtin: str | None = None
+    msku: str | None = None
+    listing_version: str
+    qty: int = Field(strict=True, ge=1, le=1000000)
+
+
 class Candidate(Strict):
     id: UUID
     candidate_version: str
@@ -88,6 +100,7 @@ class Candidate(Strict):
     default_quantity: int | None
     can_approve: bool
     blocked_reasons: list[str]
+    split_lines: list[SplitLine] = Field(default_factory=list)
     source_observed_at: datetime
     edit_draft_pending: bool = False
     edit_draft_stale: bool = False
@@ -156,6 +169,7 @@ class OrderRead(Strict):
     source_snapshot: Candidate | None = None
     voided_at: datetime | None = None
     void_note: str | None = None
+    split_pks: list[str] = Field(default_factory=list)
 
 
 class OrderList(Strict):
@@ -195,6 +209,37 @@ class ListingChoice(Strict):
     msku: str | None
     listing_version: str
     cross_store: bool
+    # Listing found through the attributed ItemID whose own local SKU is set and differs
+    # from the row SKU (rule v2, 2026-10-31): offered, but flagged for the approver.
+    local_sku: str | None = None
+    sku_mismatch: bool = False
+
+
+class ListingHit(Strict):
+    """ItemID search hit from Listing 管理; unusable hits are returned with reasons."""
+
+    store_id: str
+    store_name: str | None
+    item_id: str
+    gtin: str | None
+    msku: str | None
+    local_sku: str | None
+    listing_version: str
+    cross_store: bool
+    wfs_converted: bool
+    usable: bool
+    blocked_reasons: list[str]
+
+
+class ListingSearch(Strict):
+    items: list[ListingHit]
+
+
+class EditLine(Strict):
+    target_store_id: str = Field(min_length=1, max_length=64)
+    target_item_id: str = Field(min_length=1, max_length=64)
+    listing_version: str = Field(pattern=r"^[a-f0-9]{64}$")
+    qty: int = Field(strict=True, ge=1, le=1000000)
 
 
 class EditOptions(Strict):
@@ -204,21 +249,42 @@ class EditOptions(Strict):
 
 
 class EditDraftCommand(Strict):
+    """Modify form. ``lines`` (1-10) splits the candidate into several target Listings;
+    the legacy single-target fields are still accepted when ``lines`` is absent."""
+
     source_account_ref: str = Field(min_length=1, max_length=128)
     warehouse_id: Literal["16168"] = "16168"
     candidate_version: str = Field(pattern=r"^[a-f0-9]{64}$")
-    target_store_id: str = Field(min_length=1, max_length=64)
-    target_item_id: str = Field(min_length=1, max_length=64)
-    listing_version: str = Field(pattern=r"^[a-f0-9]{64}$")
-    qty: int = Field(strict=True, ge=1, le=1000000)
+    lines: list[EditLine] | None = Field(default=None, min_length=1, max_length=10)
+    target_store_id: str | None = Field(default=None, min_length=1, max_length=64)
+    target_item_id: str | None = Field(default=None, min_length=1, max_length=64)
+    listing_version: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    qty: int | None = Field(default=None, strict=True, ge=1, le=1000000)
     customs: Literal["default", "declare", "skip"] = "default"
-    edit_reason: str | None = Field(default=None, min_length=2, max_length=500)
+    edit_reason: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")
-    def trim_reason(self):
+    def normalize(self):
         if self.edit_reason is not None:
             self.edit_reason = self.edit_reason.strip() or None
+        if self.lines is None:
+            if not (self.target_store_id and self.target_item_id and self.listing_version):
+                raise ValueError("lines or a single target are required")
+            if self.qty is None:
+                raise ValueError("qty required")
+            self.lines = [
+                EditLine(
+                    target_store_id=self.target_store_id,
+                    target_item_id=self.target_item_id,
+                    listing_version=self.listing_version,
+                    qty=self.qty,
+                )
+            ]
         return self
+
+    @property
+    def total_qty(self) -> int:
+        return sum(line.qty for line in self.lines or [])
 
 
 class EditDraftSaved(Strict):

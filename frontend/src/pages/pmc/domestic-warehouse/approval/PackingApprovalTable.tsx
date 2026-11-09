@@ -34,23 +34,28 @@ interface Props {
   onApprove: (row: ApprovalCandidate) => void;
   onPagination: (page: number, pageSize: number) => void; onResize: (key: string, width: number) => void;
   onSort: (sort: PackingApprovalSort) => void;
+  /** Batch approval selection (checkbox column shown only when approving is allowed). */
+  selectedIds?: string[];
+  onSelect?: (ids: string[]) => void;
 }
 export default function PackingApprovalTable(p: Props) {
   const [customs, setCustoms] = useState<Record<string, CustomsChoice>>({});
   const choiceOf = (row: ApprovalCandidate) => customs[`${row.id}|${row.candidate_version}`] ?? row.manual_customs ?? "default";
   const withChoice = (row: ApprovalCandidate): ApprovalCandidate => ({ ...row, manual_customs: choiceOf(row) });
   const show = (key: string, row: ApprovalCandidate) => {
-    const values: Record<string, string | number | null> = { msku: row.msku, store: row.store_name ?? row.store_id, qty: row.available_quantity };
+    const lines = row.split_lines ?? [];
+    const more = lines.length > 1 ? `等${lines.length}个` : "";
+    const values: Record<string, string | number | null> = { msku: row.msku, store: `${row.store_name ?? row.store_id ?? "—"}${more}`, qty: row.available_quantity };
     if (key === "number") return <Space direction="vertical" size={0}><Typography.Text type="secondary">{row.origin === "manual" ? "手工待审批（未发PK）" : "待审批（未发PK）"}</Typography.Text>{row.edit_draft_pending && <Tag color="gold">已修改未审批</Tag>}<small>{row.candidate_created_on ?? "日期未知"}</small></Space>;
     if (key === "draft") return purchaseCopies(row.draft_nos ?? [], "草稿号");
     if (key === "inbound") return copyOrDash(row.inbound_order_sn, "入库单号");
     if (key === "purchase") return purchaseCopies(row.purchase_order_sns);
     if (key === "sku") return copyOrDash(row.sku, "SKU");
     if (key === "gtin") return copyOrDash(row.gtin, "GTIN");
-    if (key === "item") return <WalmartItemLink itemId={row.item_id} />;
+    if (key === "item") return more ? <Space size={4}><WalmartItemLink itemId={row.item_id} /><Typography.Text type="secondary">{more}</Typography.Text></Space> : <WalmartItemLink itemId={row.item_id} />;
     if (key === "arrival") return <Space direction="vertical" size={0}><Tooltip title="采购单明细累计数量；跨 ItemID 重复展示，不可累加；当前可打包库存另列">{row.arrival_purchased ?? "—"} / {row.arrival_received ?? "—"} / {row.arrival_pending ?? "—"}</Tooltip><Tag>{({ full: "已全部到货", partial: "部分到货", none: "未到货", unknown: "到货明细未知" })[row.arrival_status]}</Tag></Space>;
     if (key === "batches") return <Tooltip title="仅按当前发布入库单识别；不代表完整历史"><Space direction="vertical" size={0}><Tag>{row.split_arrival === true ? "已观测分批" : row.split_arrival === false ? "单批已到齐" : "分批情况未知"}</Tag>{row.arrival_batch_count ? <small>{row.arrival_batch_index ? `第 ${row.arrival_batch_index} 批 / ` : "已观测 "}{row.arrival_batch_count} 批</small> : null}</Space></Tooltip>;
-    if (key === "qty") return <Tooltip title={[row.quantity_suggestion?.rule === "plan_ratio" ? "按采购计划比例预填，可人工修改" : "人工确认数量后审批", ...(row.quantity_suggestion?.notes ?? [])].join("；")}><Space direction="vertical" size={0}><span>{row.default_quantity ?? "待填写"} / {row.available_quantity ?? "—"}</span><small>{row.quantity_suggestion?.rule === "plan_ratio" ? "计划比例建议" : "人工确认"}</small></Space></Tooltip>;
+    if (key === "qty") return <Tooltip title={[row.quantity_suggestion?.rule === "plan_ratio" ? "按采购计划比例预填，可人工修改" : "人工确认数量后审批", ...(row.quantity_suggestion?.notes ?? [])].join("；")}><Space direction="vertical" size={0}><span>{row.default_quantity ?? "待填写"} / {row.available_quantity ?? "—"}</span>{lines.length > 1 && <Tag color="blue">拆 {lines.length} 单</Tag>}<small>{row.quantity_suggestion?.rule === "plan_ratio" ? "计划比例建议" : "人工确认"}</small></Space></Tooltip>;
     if (key === "customs") {
       const choice = choiceOf(row);
       return <Space className="domestic-approval__customs-cell" direction="vertical" size={0}><PackingCustomsSelect row={row} size="small" aria-label={`是否报关 ${row.inbound_order_sn} ${row.item_id ?? row.id}`} value={choice} disabled={!p.canApprove || p.busy}
@@ -75,6 +80,7 @@ export default function PackingApprovalTable(p: Props) {
   }));
   return <ReportTableShell label="打包单审批表格"><ProTable<ApprovalCandidate> rowKey="id" search={false} options={false} toolBarRender={false}
     tableAlertRender={false} size="small" bordered columns={columns} dataSource={p.rows} loading={false}
+    rowSelection={p.canApprove && p.onSelect ? { fixed: true, columnWidth: 48, selectedRowKeys: p.selectedIds ?? [], onChange: (keys) => p.onSelect?.(keys.map(String)), getCheckboxProps: () => ({ disabled: p.busy }) } : undefined}
     scroll={{ x: 2210, y: "100%" }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前条件下暂无待审批单据" /> }}
     onChange={(_, __, sorter, extra) => { if (extra.action === "sort" && !Array.isArray(sorter)) p.onSort(sorter.order === "ascend" ? "created_asc" : "created_desc"); }} pagination={false} />
     <Pagination className="ant-table-pagination" size="small" current={p.pagination.page} pageSize={p.pagination.pageSize} total={p.total} showSizeChanger showQuickJumper pageSizeOptions={[20, 50, 100, 200]} showTotal={(n) => `共 ${n} 条`} onChange={(page, size) => p.onPagination(size !== p.pagination.pageSize ? 1 : page, size)} />

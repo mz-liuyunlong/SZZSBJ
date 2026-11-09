@@ -23,6 +23,7 @@ from app.modules.pmc_domestic.packing_schemas import (
     EditOptions,
     EventList,
     EventRead,
+    ListingSearch,
     ManualCommand,
     ManualSubmitted,
     OrderList,
@@ -225,6 +226,30 @@ def edit_options(
     return success_response(
         request,
         data=PackingService(session).edit_options(candidate_id, source_account_ref, accounts),
+        meta={"local_verification_only": True},
+    )
+
+
+@router.get(
+    "/pending/{candidate_id}/listing-search",
+    response_model=SuccessEnvelope[ListingSearch, dict],
+    responses=ERRORS,
+)
+def listing_search(
+    request: Request,
+    candidate_id: UUID,
+    source_account_ref: str,
+    item_id: Annotated[str, Query(min_length=1, max_length=20)],
+    session: DB,
+    _: Read,
+    accounts: Scope,
+):
+    """ItemID search over Listing 管理 for the modify form (unusable hits carry reasons)."""
+    return success_response(
+        request,
+        data=PackingService(session).listing_search(
+            candidate_id, source_account_ref, item_id, accounts
+        ),
         meta={"local_verification_only": True},
     )
 

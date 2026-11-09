@@ -140,6 +140,12 @@ class ItemIdIdentity(StrictSchema):
     msku: str | None = None
     gtin: str | None = None
     fulfillment_type: str | None = None
+    # Rule v2 (2026-10-31): the listing's local SKU and whether it differs from the line SKU.
+    local_sku: str | None = None
+    sku_mismatch: bool = False
+    # R-9 (2026-11-02): set only on a store-less line whose remark ItemID exists on several
+    # stores — each candidate names its store so the conflict can be settled by a human.
+    store_id: str | None = None
 
 
 class ItemIdRef(StrictSchema):

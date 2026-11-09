@@ -4,7 +4,6 @@ from app.modules.pmc_purchase.remark_item_ids import (
     extract_remark_item_ids,
     item_ids_plan_then_line,
     resolve_purchase_board_item_id,
-    validated_remark_item_ids,
 )
 
 
@@ -45,11 +44,3 @@ def test_extract_keeps_every_eleven_digits_and_skips_gtin() -> None:
     assert extract_remark_item_ids(
         ["ITEMID:20403609913 | 草稿:CG261017-039 20347351964", "00465313943732"]
     ) == ["20403609913", "20347351964"]
-
-
-def test_legacy_merge_validates_sku_candidates_and_keeps_source_order() -> None:
-    assert validated_remark_item_ids(
-        ["ITEMID:11111111111 99999999999"],
-        ["22222222222 00465313943732 11111111111"],
-        ["11111111111", "22222222222"],
-    ) == ["22222222222", "11111111111"]
