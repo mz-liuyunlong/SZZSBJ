@@ -252,10 +252,7 @@ class AdsSearchTermsService:
             AdsSearchTermAction.source_account_ref.in_(accounts)
         )
         total = int(
-            self.session.scalar(
-                select(func.count()).select_from(statement.subquery())
-            )
-            or 0
+            self.session.scalar(select(func.count()).select_from(statement.subquery())) or 0
         )
         rows = self.session.scalars(
             statement.order_by(AdsSearchTermAction.created_at.desc())
