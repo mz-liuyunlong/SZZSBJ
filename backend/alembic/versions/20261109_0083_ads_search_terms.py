@@ -23,12 +23,22 @@ def upgrade() -> None:
         "fact_walmart_ad_search_term_daily",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("business_date_la", sa.Date(), nullable=False),
-        sa.Column("business_timezone", sa.String(64), server_default=sa.text("'America/Los_Angeles'"), nullable=False),
+        sa.Column(
+            "business_timezone",
+            sa.String(64),
+            server_default=sa.text("'America/Los_Angeles'"),
+            nullable=False,
+        ),
         sa.Column("source_account_ref", sa.String(128), nullable=False),
         sa.Column("advertiser_id", sa.String(128), nullable=False),
         sa.Column("store_id", sa.String(128)),
         sa.Column("item_id", sa.String(128)),
-        sa.Column("listing_mapping_status", sa.String(32), server_default=sa.text("'unresolved'"), nullable=False),
+        sa.Column(
+            "listing_mapping_status",
+            sa.String(32),
+            server_default=sa.text("'unresolved'"),
+            nullable=False,
+        ),
         sa.Column("mp_seller_name", sa.Text()),
         sa.Column("mp_advertiser_name", sa.Text()),
         sa.Column("campaign_id", sa.String(128), nullable=False),
@@ -63,38 +73,104 @@ def upgrade() -> None:
         sa.Column("other_sku_units_percent", sa.Numeric(18, 6)),
         sa.Column("source_identity_hash", sa.String(64), nullable=False),
         sa.Column("source_line_hash", sa.String(64), nullable=False),
-        sa.Column("source_raw_request_ref_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("ods_api_raw_request_refs.id", ondelete="SET NULL")),
+        sa.Column(
+            "source_raw_request_ref_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ods_api_raw_request_refs.id", ondelete="SET NULL"),
+        ),
         sa.Column("synced_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.UniqueConstraint("business_date_la", "source_account_ref", "advertiser_id", "source_identity_hash", name="uq_walmart_ad_search_term_daily_identity"),
-        sa.CheckConstraint("advertiser_id <> ''", name="ck_fact_walmart_ad_search_term_daily_advertiser_id_not_blank"),
-        sa.CheckConstraint("campaign_id <> ''", name="ck_fact_walmart_ad_search_term_daily_campaign_id_not_blank"),
-        sa.CheckConstraint("searched_keyword <> ''", name="ck_fact_walmart_ad_search_term_daily_searched_keyword_not_blank"),
-        sa.CheckConstraint("normalized_search_term <> ''", name="ck_fact_walmart_ad_search_term_daily_normalized_term_not_blank"),
-        sa.CheckConstraint("char_length(source_identity_hash) = 64", name="ck_fact_walmart_ad_search_term_daily_source_identity_sha256"),
-        sa.CheckConstraint("char_length(source_line_hash) = 64", name="ck_fact_walmart_ad_search_term_daily_source_line_sha256"),
-        sa.CheckConstraint("attribution_days IN (3, 14, 30)", name="attribution_days"),
-        sa.CheckConstraint("num_ads_shown IS NULL OR num_ads_shown >= 0", name="ck_fact_walmart_ad_search_term_daily_impressions_nonnegative"),
-        sa.CheckConstraint("num_ads_clicks IS NULL OR num_ads_clicks >= 0", name="ck_fact_walmart_ad_search_term_daily_clicks_nonnegative"),
-        sa.CheckConstraint("ad_spend_amount IS NULL OR ad_spend_amount >= 0", name="ck_fact_walmart_ad_search_term_daily_spend_nonnegative"),
-        sa.CheckConstraint("attributed_orders IS NULL OR attributed_orders >= 0", name="ck_fact_walmart_ad_search_term_daily_orders_nonnegative"),
+        sa.UniqueConstraint(
+            "business_date_la",
+            "source_account_ref",
+            "advertiser_id",
+            "source_identity_hash",
+            name="uq_walmart_ad_search_term_daily_identity",
+        ),
+        sa.CheckConstraint(
+            "advertiser_id <> ''",
+            name="ck_fact_walmart_ad_search_term_daily_advertiser_id_not_blank",
+        ),
+        sa.CheckConstraint(
+            "campaign_id <> ''",
+            name="ck_fact_walmart_ad_search_term_daily_campaign_id_not_blank",
+        ),
+        sa.CheckConstraint(
+            "searched_keyword <> ''",
+            name="ck_fact_walmart_ad_search_term_daily_searched_keyword_not_blank",
+        ),
+        sa.CheckConstraint(
+            "normalized_search_term <> ''",
+            name="ck_fact_walmart_ad_search_term_daily_normalized_term_not_blank",
+        ),
+        sa.CheckConstraint(
+            "char_length(source_identity_hash) = 64",
+            name="ck_fact_walmart_ad_search_term_daily_source_identity_sha256",
+        ),
+        sa.CheckConstraint(
+            "char_length(source_line_hash) = 64",
+            name="ck_fact_walmart_ad_search_term_daily_source_line_sha256",
+        ),
+        sa.CheckConstraint("attribution_days IN (3, 14, 30)", name="ck_fact_walmart_ad_search_term_daily_attribution_days"),
+        sa.CheckConstraint(
+            "num_ads_shown IS NULL OR num_ads_shown >= 0",
+            name="ck_fact_walmart_ad_search_term_daily_impressions_nonnegative",
+        ),
+        sa.CheckConstraint(
+            "num_ads_clicks IS NULL OR num_ads_clicks >= 0",
+            name="ck_fact_walmart_ad_search_term_daily_clicks_nonnegative",
+        ),
+        sa.CheckConstraint(
+            "ad_spend_amount IS NULL OR ad_spend_amount >= 0",
+            name="ck_fact_walmart_ad_search_term_daily_spend_nonnegative",
+        ),
+        sa.CheckConstraint(
+            "attributed_orders IS NULL OR attributed_orders >= 0",
+            name="ck_fact_walmart_ad_search_term_daily_orders_nonnegative",
+        ),
     )
-    op.create_index("ix_walmart_search_term_account_day", "fact_walmart_ad_search_term_daily", ["source_account_ref", "business_date_la"])
-    op.create_index("ix_walmart_search_term_normalized_day", "fact_walmart_ad_search_term_daily", ["normalized_search_term", "business_date_la"])
-    op.create_index("ix_walmart_search_term_campaign_day", "fact_walmart_ad_search_term_daily", ["campaign_id", "business_date_la"])
-    op.create_index("ix_walmart_search_term_listing_day", "fact_walmart_ad_search_term_daily", ["source_account_ref", "store_id", "item_id", "business_date_la"])
+    op.create_index(
+        "ix_walmart_search_term_account_day",
+        "fact_walmart_ad_search_term_daily",
+        ["source_account_ref", "business_date_la"],
+    )
+    op.create_index(
+        "ix_walmart_search_term_normalized_day",
+        "fact_walmart_ad_search_term_daily",
+        ["normalized_search_term", "business_date_la"],
+    )
+    op.create_index(
+        "ix_walmart_search_term_campaign_day",
+        "fact_walmart_ad_search_term_daily",
+        ["campaign_id", "business_date_la"],
+    )
+    op.create_index(
+        "ix_walmart_search_term_listing_day",
+        "fact_walmart_ad_search_term_daily",
+        ["source_account_ref", "store_id", "item_id", "business_date_la"],
+    )
 
     op.create_table(
         "fact_walmart_keyword_sp_daily",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("business_date_la", sa.Date(), nullable=False),
-        sa.Column("business_timezone", sa.String(64), server_default=sa.text("'America/Los_Angeles'"), nullable=False),
+        sa.Column(
+            "business_timezone",
+            sa.String(64),
+            server_default=sa.text("'America/Los_Angeles'"),
+            nullable=False,
+        ),
         sa.Column("source_account_ref", sa.String(128), nullable=False),
         sa.Column("advertiser_id", sa.String(128), nullable=False),
         sa.Column("store_id", sa.String(128)),
         sa.Column("item_id", sa.String(128)),
-        sa.Column("listing_mapping_status", sa.String(32), server_default=sa.text("'unresolved'"), nullable=False),
+        sa.Column(
+            "listing_mapping_status",
+            sa.String(32),
+            server_default=sa.text("'unresolved'"),
+            nullable=False,
+        ),
         sa.Column("mp_seller_name", sa.Text()),
         sa.Column("mp_advertiser_name", sa.Text()),
         sa.Column("campaign_id", sa.String(128), nullable=False),
@@ -125,39 +201,103 @@ def upgrade() -> None:
         sa.Column("roas", sa.Numeric(18, 6)),
         sa.Column("source_identity_hash", sa.String(64), nullable=False),
         sa.Column("source_line_hash", sa.String(64), nullable=False),
-        sa.Column("source_raw_request_ref_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("ods_api_raw_request_refs.id", ondelete="SET NULL")),
+        sa.Column(
+            "source_raw_request_ref_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ods_api_raw_request_refs.id", ondelete="SET NULL"),
+        ),
         sa.Column("synced_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.UniqueConstraint("business_date_la", "source_account_ref", "advertiser_id", "source_identity_hash", name="uq_walmart_keyword_sp_daily_identity"),
-        sa.CheckConstraint("advertiser_id <> ''", name="ck_fact_walmart_keyword_sp_daily_advertiser_id_not_blank"),
-        sa.CheckConstraint("campaign_id <> ''", name="ck_fact_walmart_keyword_sp_daily_campaign_id_not_blank"),
-        sa.CheckConstraint("ad_group_id <> ''", name="ck_fact_walmart_keyword_sp_daily_ad_group_id_not_blank"),
-        sa.CheckConstraint("keyword_name <> ''", name="ck_fact_walmart_keyword_sp_daily_keyword_name_not_blank"),
-        sa.CheckConstraint("normalized_keyword <> ''", name="ck_fact_walmart_keyword_sp_daily_normalized_keyword_not_blank"),
-        sa.CheckConstraint("char_length(source_identity_hash) = 64", name="ck_fact_walmart_keyword_sp_daily_source_identity_sha256"),
-        sa.CheckConstraint("char_length(source_line_hash) = 64", name="ck_fact_walmart_keyword_sp_daily_source_line_sha256"),
-        sa.CheckConstraint("attribution_days IN (3, 14, 30)", name="attribution_days"),
-        sa.CheckConstraint("num_ads_shown IS NULL OR num_ads_shown >= 0", name="ck_fact_walmart_keyword_sp_daily_impressions_nonnegative"),
-        sa.CheckConstraint("num_ads_clicks IS NULL OR num_ads_clicks >= 0", name="ck_fact_walmart_keyword_sp_daily_clicks_nonnegative"),
-        sa.CheckConstraint("ad_spend_amount IS NULL OR ad_spend_amount >= 0", name="ck_fact_walmart_keyword_sp_daily_spend_nonnegative"),
+        sa.UniqueConstraint(
+            "business_date_la",
+            "source_account_ref",
+            "advertiser_id",
+            "source_identity_hash",
+            name="uq_walmart_keyword_sp_daily_identity",
+        ),
+        sa.CheckConstraint(
+            "advertiser_id <> ''",
+            name="ck_fact_walmart_keyword_sp_daily_advertiser_id_not_blank",
+        ),
+        sa.CheckConstraint(
+            "campaign_id <> ''",
+            name="ck_fact_walmart_keyword_sp_daily_campaign_id_not_blank",
+        ),
+        sa.CheckConstraint(
+            "ad_group_id <> ''",
+            name="ck_fact_walmart_keyword_sp_daily_ad_group_id_not_blank",
+        ),
+        sa.CheckConstraint(
+            "keyword_name <> ''",
+            name="ck_fact_walmart_keyword_sp_daily_keyword_name_not_blank",
+        ),
+        sa.CheckConstraint(
+            "normalized_keyword <> ''",
+            name="ck_fact_walmart_keyword_sp_daily_normalized_keyword_not_blank",
+        ),
+        sa.CheckConstraint(
+            "char_length(source_identity_hash) = 64",
+            name="ck_fact_walmart_keyword_sp_daily_source_identity_sha256",
+        ),
+        sa.CheckConstraint(
+            "char_length(source_line_hash) = 64",
+            name="ck_fact_walmart_keyword_sp_daily_source_line_sha256",
+        ),
+        sa.CheckConstraint("attribution_days IN (3, 14, 30)", name="ck_fact_walmart_keyword_sp_daily_attribution_days"),
+        sa.CheckConstraint(
+            "num_ads_shown IS NULL OR num_ads_shown >= 0",
+            name="ck_fact_walmart_keyword_sp_daily_impressions_nonnegative",
+        ),
+        sa.CheckConstraint(
+            "num_ads_clicks IS NULL OR num_ads_clicks >= 0",
+            name="ck_fact_walmart_keyword_sp_daily_clicks_nonnegative",
+        ),
+        sa.CheckConstraint(
+            "ad_spend_amount IS NULL OR ad_spend_amount >= 0",
+            name="ck_fact_walmart_keyword_sp_daily_spend_nonnegative",
+        ),
     )
-    op.create_index("ix_walmart_manual_keyword_account_day", "fact_walmart_keyword_sp_daily", ["source_account_ref", "business_date_la"])
-    op.create_index("ix_walmart_manual_keyword_normalized_day", "fact_walmart_keyword_sp_daily", ["normalized_keyword", "business_date_la"])
-    op.create_index("ix_walmart_manual_keyword_campaign_group", "fact_walmart_keyword_sp_daily", ["advertiser_id", "campaign_id", "ad_group_id"])
-    op.create_index("ix_walmart_manual_keyword_listing", "fact_walmart_keyword_sp_daily", ["source_account_ref", "store_id", "item_id"])
+    op.create_index(
+        "ix_walmart_manual_keyword_account_day",
+        "fact_walmart_keyword_sp_daily",
+        ["source_account_ref", "business_date_la"],
+    )
+    op.create_index(
+        "ix_walmart_manual_keyword_normalized_day",
+        "fact_walmart_keyword_sp_daily",
+        ["normalized_keyword", "business_date_la"],
+    )
+    op.create_index(
+        "ix_walmart_manual_keyword_campaign_group",
+        "fact_walmart_keyword_sp_daily",
+        ["advertiser_id", "campaign_id", "ad_group_id"],
+    )
+    op.create_index(
+        "ix_walmart_manual_keyword_listing",
+        "fact_walmart_keyword_sp_daily",
+        ["source_account_ref", "store_id", "item_id"],
+    )
 
     op.create_table(
         "ops_ads_search_term_actions",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("source_account_ref", sa.String(128), nullable=False),
-        sa.Column("source_fact_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("fact_walmart_ad_search_term_daily.id", ondelete="SET NULL")),
+        sa.Column(
+            "source_fact_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("fact_walmart_ad_search_term_daily.id", ondelete="SET NULL"),
+        )
         sa.Column("action_type", sa.String(32), nullable=False),
         sa.Column("search_term", sa.Text(), nullable=False),
         sa.Column("normalized_search_term", sa.Text(), nullable=False),
         sa.Column("target_scope_json", postgresql.JSONB(), nullable=False),
-        sa.Column("status", sa.String(32), server_default=sa.text("'pending_manual'"), nullable=False),
-        sa.Column("effect_status", sa.String(32), server_default=sa.text("'pending'"), nullable=False),
+        sa.Column(
+            "status", sa.String(32), server_default=sa.text("'pending_manual'"), nullable=False
+        ),
+        sa.Column(
+            "effect_status", sa.String(32), server_default=sa.text("'pending'"), nullable=False
+        ),
         sa.Column("reason", sa.Text(), server_default=sa.text("''"), nullable=False),
         sa.Column("created_by", sa.String(128), nullable=False),
         sa.Column("completed_by", sa.String(128)),
@@ -177,20 +317,43 @@ def upgrade() -> None:
         sa.CheckConstraint("effect_status IN ('pending','improved','unchanged','declined','insufficient_data')", name="ck_ops_ads_search_term_actions_effect_status"),
         sa.CheckConstraint("search_term <> ''", name="ck_ops_ads_search_term_actions_search_term_not_blank"),
     )
-    op.create_index("ix_ads_search_term_actions_account_status", "ops_ads_search_term_actions", ["source_account_ref", "status", "created_at"])
-    op.create_index("ix_ads_search_term_actions_term", "ops_ads_search_term_actions", ["normalized_search_term", "created_at"])
-    op.create_index("ix_ads_search_term_actions_actor", "ops_ads_search_term_actions", ["created_by", "created_at"])
+    op.create_index(
+        "ix_ads_search_term_actions_account_status",
+        "ops_ads_search_term_actions",
+        ["source_account_ref", "status", "created_at"],
+    )
+    op.create_index(
+        "ix_ads_search_term_actions_term",
+        "ops_ads_search_term_actions",
+        ["normalized_search_term", "created_at"],
+    )
+    op.create_index(
+        "ix_ads_search_term_actions_actor",
+        "ops_ads_search_term_actions",
+        ["created_by", "created_at"],
+    )
 
     op.create_table(
         "ops_ads_search_term_action_events",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("action_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("ops_ads_search_term_actions.id", ondelete="RESTRICT"), nullable=False),
+        sa.Column(
+            "action_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ops_ads_search_term_actions.id", ondelete="RESTRICT"),
+            nullable=False,
+        )
         sa.Column("event_type", sa.String(40), nullable=False),
         sa.Column("actor_ref", sa.String(128), nullable=False),
-        sa.Column("detail_json", postgresql.JSONB(), server_default=sa.text("'{}'::jsonb"), nullable=False),
+        sa.Column(
+            "detail_json", postgresql.JSONB(), server_default=sa.text("'{}'::jsonb"), nullable=False
+        )
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
-    op.create_index("ix_ads_search_term_action_events_history", "ops_ads_search_term_action_events", ["action_id", "created_at"])
+    op.create_index(
+        "ix_ads_search_term_action_events_history",
+        "ops_ads_search_term_action_events",
+        ["action_id", "created_at"],
+    )
 
 
 def downgrade() -> None:
@@ -204,19 +367,37 @@ def downgrade() -> None:
         count = connection.execute(sa.text(f"SELECT count(*) FROM {table_name}")).scalar_one()
         if count:
             raise RuntimeError("ADS_SEARCH_TERMS_DOWNGRADE_BLOCKED_BY_RETAINED_DATA")
-    op.drop_index("ix_ads_search_term_action_events_history", table_name="ops_ads_search_term_action_events")
+    op.drop_index(
+        "ix_ads_search_term_action_events_history", table_name="ops_ads_search_term_action_events"
+    )
     op.drop_table("ops_ads_search_term_action_events")
     op.drop_index("ix_ads_search_term_actions_actor", table_name="ops_ads_search_term_actions")
     op.drop_index("ix_ads_search_term_actions_term", table_name="ops_ads_search_term_actions")
-    op.drop_index("ix_ads_search_term_actions_account_status", table_name="ops_ads_search_term_actions")
+    op.drop_index(
+        "ix_ads_search_term_actions_account_status", table_name="ops_ads_search_term_actions"
+    )
     op.drop_table("ops_ads_search_term_actions")
     op.drop_index("ix_walmart_manual_keyword_listing", table_name="fact_walmart_keyword_sp_daily")
-    op.drop_index("ix_walmart_manual_keyword_campaign_group", table_name="fact_walmart_keyword_sp_daily")
-    op.drop_index("ix_walmart_manual_keyword_normalized_day", table_name="fact_walmart_keyword_sp_daily")
-    op.drop_index("ix_walmart_manual_keyword_account_day", table_name="fact_walmart_keyword_sp_daily")
+    op.drop_index(
+        "ix_walmart_manual_keyword_campaign_group", table_name="fact_walmart_keyword_sp_daily"
+    )
+    op.drop_index(
+        "ix_walmart_manual_keyword_normalized_day", table_name="fact_walmart_keyword_sp_daily"
+    )
+    op.drop_index(
+        "ix_walmart_manual_keyword_account_day", table_name="fact_walmart_keyword_sp_daily"
+    )
     op.drop_table("fact_walmart_keyword_sp_daily")
-    op.drop_index("ix_walmart_search_term_listing_day", table_name="fact_walmart_ad_search_term_daily")
-    op.drop_index("ix_walmart_search_term_campaign_day", table_name="fact_walmart_ad_search_term_daily")
-    op.drop_index("ix_walmart_search_term_normalized_day", table_name="fact_walmart_ad_search_term_daily")
-    op.drop_index("ix_walmart_search_term_account_day", table_name="fact_walmart_ad_search_term_daily")
+    op.drop_index(
+        "ix_walmart_search_term_listing_day", table_name="fact_walmart_ad_search_term_daily"
+    )
+    op.drop_index(
+        "ix_walmart_search_term_campaign_day", table_name="fact_walmart_ad_search_term_daily"
+    )
+    op.drop_index(
+        "ix_walmart_search_term_normalized_day", table_name="fact_walmart_ad_search_term_daily"
+    )
+    op.drop_index(
+        "ix_walmart_search_term_account_day", table_name="fact_walmart_ad_search_term_daily"
+    )
     op.drop_table("fact_walmart_ad_search_term_daily")
