@@ -152,9 +152,13 @@ class WalmartManualKeywordDailyFact(Base):
         CheckConstraint("char_length(source_identity_hash) = 64", name="source_identity_sha256"),
         CheckConstraint("char_length(source_line_hash) = 64", name="source_line_sha256"),
         CheckConstraint("attribution_days IN (3, 14, 30)", name="attribution_days"),
-        CheckConstraint("num_ads_shown IS NULL OR num_ads_shown >= 0", name="impressions_nonnegative"),
+        CheckConstraint(
+            "num_ads_shown IS NULL OR num_ads_shown >= 0", name="impressions_nonnegative"
+        ),
         CheckConstraint("num_ads_clicks IS NULL OR num_ads_clicks >= 0", name="clicks_nonnegative"),
-        CheckConstraint("ad_spend_amount IS NULL OR ad_spend_amount >= 0", name="spend_nonnegative"),
+        CheckConstraint(
+            "ad_spend_amount IS NULL OR ad_spend_amount >= 0", name="spend_nonnegative"
+        ),
         Index("ix_walmart_manual_keyword_account_day", "source_account_ref", "business_date_la"),
         Index("ix_walmart_manual_keyword_normalized_day", "normalized_keyword", "business_date_la"),
         Index(
@@ -169,15 +173,20 @@ class WalmartManualKeywordDailyFact(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     business_date_la: Mapped[date] = mapped_column(Date, nullable=False)
     business_timezone: Mapped[str] = mapped_column(
-        String(64), default="America/Los_Angeles",
-        server_default=text("'America/Los_Angeles'"), nullable=False,
+        String(64),
+        default="America/Los_Angeles",
+        server_default=text("'America/Los_Angeles'"),
+        nullable=False,
     )
     source_account_ref: Mapped[str] = mapped_column(String(128), nullable=False)
     advertiser_id: Mapped[str] = mapped_column(String(128), nullable=False)
     store_id: Mapped[str | None] = mapped_column(String(128))
     item_id: Mapped[str | None] = mapped_column(String(128))
     listing_mapping_status: Mapped[str] = mapped_column(
-        String(32), default="unresolved", server_default=text("'unresolved'"), nullable=False,
+        String(32),
+        default="unresolved",
+        server_default=text("'unresolved'"),
+        nullable=False,
     )
     mp_seller_name: Mapped[str | None] = mapped_column(Text)
     mp_advertiser_name: Mapped[str | None] = mapped_column(Text)
@@ -193,7 +202,9 @@ class WalmartManualKeywordDailyFact(Base):
     keyword_status: Mapped[str | None] = mapped_column(String(32))
     keyword_state: Mapped[str | None] = mapped_column(String(32))
     targeting_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    attribution_days: Mapped[int] = mapped_column(Integer, nullable=False, default=14, server_default="14")
+    attribution_days: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=14, server_default="14"
+    )
     keyword_bid_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     num_ads_shown: Mapped[int | None] = mapped_column(Integer)
     num_ads_clicks: Mapped[int | None] = mapped_column(Integer)
@@ -213,8 +224,12 @@ class WalmartManualKeywordDailyFact(Base):
         ForeignKey("ods_api_raw_request_refs.id", ondelete="SET NULL")
     )
     synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
+    )
 
 
 class AdsSearchTermAction(Base):
@@ -274,8 +289,12 @@ class AdsSearchTermAction(Base):
     before_metrics_json: Mapped[dict[str, object] | None] = mapped_column(JSONB)
     after_metrics_json: Mapped[dict[str, object] | None] = mapped_column(JSONB)
     last_followup_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
+    )
 
 
 class AdsSearchTermActionEvent(Base):
@@ -297,4 +316,6 @@ class AdsSearchTermActionEvent(Base):
         server_default=text("'{}'::jsonb"),
         nullable=False,
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
