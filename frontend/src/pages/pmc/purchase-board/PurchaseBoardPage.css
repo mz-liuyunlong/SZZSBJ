@@ -225,3 +225,22 @@
   justify-content: flex-end;
   width: 100%;
 }
+
+/* 待采购超时 (one list in the board body): hint + optional truncation notice on top,
+   the table shell takes the remaining height so its pager stays on screen. */
+.purchase-board__overdue {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.purchase-board__overdue .purchase-board__hint {
+  margin: 0;
+}
+
+.purchase-board__overdue .ant-table-pagination.ant-pagination {
+  margin: 12px 16px;
+}
