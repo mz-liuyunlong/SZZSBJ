@@ -66,6 +66,7 @@ export interface SearchTermAggregateRow {
   manual_orders: string;
   manual_covered_same_store: boolean;
   manual_covered_other_store: boolean;
+  manual_keyword_data_available: boolean;
   freshness_at: string | null;
 }
 
@@ -87,6 +88,7 @@ export interface SearchTermSummary {
   other_sales_total: string;
   freshness_at: string | null;
   mapping_unresolved_count: number;
+  manual_keyword_data_available: boolean;
 }
 
 export interface SearchTermTrendPoint {
