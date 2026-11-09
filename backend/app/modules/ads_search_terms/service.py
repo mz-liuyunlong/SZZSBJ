@@ -194,6 +194,17 @@ class AdsSearchTermsService:
             .offset((query.page - 1) * query.page_size)
             .limit(query.page_size)
         ).all()
+        manual_keyword_data_available = bool(
+            self.session.scalar(
+                select(func.count()).select_from(WalmartManualKeywordDailyFact).where(
+                    WalmartManualKeywordDailyFact.source_account_ref.in_(accounts),
+                    WalmartManualKeywordDailyFact.business_date_la.between(
+                        query.start_date, query.end_date
+                    ),
+                    WalmartManualKeywordDailyFact.attribution_days == 14,
+                )
+            )
+        )
         return SearchTermAggregateListData(
             items=[
                 SearchTermAggregateRead(
@@ -214,6 +225,7 @@ class AdsSearchTermsService:
                     manual_orders=Decimal(row[14] or 0),
                     manual_covered_same_store=bool(row[15]),
                     manual_covered_other_store=bool(row[16]),
+                    manual_keyword_data_available=manual_keyword_data_available,
                     freshness_at=row[17],
                 )
                 for row in rows
@@ -267,6 +279,17 @@ class AdsSearchTermsService:
                 func.count().filter(subquery.c.listing_mapping_status != "unique"),
             )
         ).one()
+        manual_keyword_data_available = bool(
+            self.session.scalar(
+                select(func.count()).select_from(WalmartManualKeywordDailyFact).where(
+                    WalmartManualKeywordDailyFact.source_account_ref.in_(accounts),
+                    WalmartManualKeywordDailyFact.business_date_la.between(
+                        query.start_date, query.end_date
+                    ),
+                    WalmartManualKeywordDailyFact.attribution_days == 14,
+                )
+            )
+        )
         return SearchTermSummaryData(
             total_terms=values[0] or 0,
             converting_terms=values[1] or 0,
@@ -278,6 +301,7 @@ class AdsSearchTermsService:
             other_sales_total=Decimal(values[7] or 0),
             freshness_at=values[8],
             mapping_unresolved_count=values[9] or 0,
+            manual_keyword_data_available=manual_keyword_data_available,
         )
 
     def trends(
