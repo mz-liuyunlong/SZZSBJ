@@ -642,9 +642,11 @@ class IntegrationCatalogService:
             self.session.rollback()
             raise
 
-    def enable_walmart_bill_sync(self, source_account_ref: str) -> bool:
-        """Turn on the Walmart bill sync: manual runs and the weekly schedule.
+    def enable_walmart_bill_sync(self, source_account_ref: str, *, schedule: bool = False) -> bool:
+        """Turn on the Walmart bill sync.
 
+        schedule=False（默认）只开手动：任务中心和回款对账的「手动同步」能用，定时不开；首次手动
+        同步当作受控探测。探测通过后再用 schedule=True 单独打开每周定时。
         Safe to repeat: a cron or next run already set in the task centre is kept.
         """
         from app.modules.integration_sync.scheduler import next_cron_instant
@@ -668,6 +670,9 @@ class IntegrationCatalogService:
             return False
         interface.outbound_enabled = True
         config.is_enabled = True
+        if not schedule:
+            self.session.commit()
+            return True
         config.schedule_enabled = True
         config.schedule_cron = config.schedule_cron or WALMART_BILL_SCHEDULE_CRON
         config.schedule_timezone = "UTC"

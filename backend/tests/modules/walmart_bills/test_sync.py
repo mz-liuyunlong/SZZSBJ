@@ -30,6 +30,7 @@ from app.modules.integration_sync.models import (
     IntegrationInterface,
     IntegrationSyncConfig,
     IntegrationSyncRun,
+    IntegrationSyncRunWorkItem,
 )
 from app.modules.integration_sync.scheduler import IntegrationSchedulerService
 from app.modules.integration_sync.schemas import TriggerRequest
@@ -455,11 +456,42 @@ def test_task_centre_refuses_a_disabled_config(session: Session) -> None:
     assert (run.status, run.error_code) == ("failed", "SYNC_CONFIG_DISABLED")
 
 
-def test_enable_turns_on_a_weekly_wednesday_schedule(session: Session) -> None:
+def bill_config(session: Session) -> IntegrationSyncConfig:
+    return session.scalars(
+        select(IntegrationSyncConfig)
+        .join(IntegrationInterface, IntegrationSyncConfig.interface_id == IntegrationInterface.id)
+        .where(IntegrationInterface.interface_key == WALMART_BILL_SYNC_SPEC.interface_key)
+    ).one()
+
+
+def test_enable_without_schedule_opens_manual_runs_only(session: Session) -> None:
     catalog = IntegrationCatalogService(session)
     catalog.bootstrap_walmart_bill_governance("primary")
     assert catalog.enable_walmart_bill_sync("other") is False
     assert catalog.enable_walmart_bill_sync("primary") is True
+    config = bill_config(session)
+    interface = session.get(IntegrationInterface, config.interface_id)
+    assert interface is not None and interface.outbound_enabled is True
+    assert (config.is_enabled, config.schedule_enabled) == (True, False)
+    assert config.next_run_at is None
+
+    later = NOW + timedelta(days=8)
+    run_ids = IntegrationSchedulerService(session).create_due_runs(now=later)
+    scheduled = [
+        run
+        for run in (session.get(IntegrationSyncRun, run_id) for run_id in run_ids)
+        if run is not None and run.interface_key == WALMART_BILL_SYNC_SPEC.interface_key
+    ]
+    assert scheduled == []
+
+
+def test_enable_with_schedule_turns_on_a_weekly_wednesday_schedule(session: Session) -> None:
+    catalog = IntegrationCatalogService(session)
+    catalog.bootstrap_walmart_bill_governance("primary")
+    assert catalog.enable_walmart_bill_sync("other", schedule=True) is False
+    assert catalog.enable_walmart_bill_sync("primary") is True
+    assert bill_config(session).schedule_enabled is False
+    assert catalog.enable_walmart_bill_sync("primary", schedule=True) is True
     config = session.scalars(
         select(IntegrationSyncConfig)
         .join(IntegrationInterface, IntegrationSyncConfig.interface_id == IntegrationInterface.id)
@@ -550,3 +582,123 @@ def test_page_button_reports_when_the_queue_is_down(
     catalog.enable_walmart_bill_sync("primary")
     with pytest.raises(bill_sync.WalmartBillSyncUnavailableError):
         bill_sync.start_walmart_bill_sync(session, actor="admin", request_id="r")
+
+
+def assert_periods_match_lines(session: Session, store_id: str) -> None:
+    """期汇总 = 有效明细合计（领星账单总额都是空的时候）。"""
+    for item in session.scalars(
+        select(WalmartBillPeriod).where(WalmartBillPeriod.store_id == store_id)
+    ).all():
+        total = session.scalar(
+            select(func.coalesce(func.sum(WalmartBillLine.amount), 0)).where(
+                WalmartBillLine.store_id == store_id,
+                WalmartBillLine.report_key == item.report_key,
+                WalmartBillLine.delete_flag == 0,
+                WalmartBillLine.missing_since.is_(None),
+            )
+        )
+        assert item.payable_amount == Decimal(total), item.report_key
+
+
+def test_whole_period_gone_on_rerun_becomes_voided_with_zero(session: Session) -> None:
+    add_stores(session)
+    interface = governed(session)
+    rows = base_rows()
+    run_sync(session, interface, FakeLingxing(rows))
+    assert period(session, STORE_A, "rk-a1").payable_amount == Decimal("14.0000")
+
+    without_a1 = [row for row in rows if row["reportKey"] != "rk-a1"]
+    assert run_sync(session, interface, FakeLingxing(without_a1)).status == "succeeded"
+    a1 = period(session, STORE_A, "rk-a1")
+    assert (a1.status, a1.payable_amount, a1.amount_sum) == ("voided", Decimal("0"), Decimal("0"))
+    assert (a1.line_count, a1.excluded_line_count) == (0, 3)
+    assert a1.amounts_by_type == {}
+    assert_periods_match_lines(session, STORE_A)
+
+
+def test_lines_moved_to_a_new_report_key_void_the_old_period(session: Session) -> None:
+    add_stores(session)
+    interface = governed(session)
+    rows = base_rows()
+    run_sync(session, interface, FakeLingxing(rows))
+
+    moved = [
+        dict(row, reportKey="rk-a1-new") if row["reportKey"] == "rk-a1" else row for row in rows
+    ]
+    assert run_sync(session, interface, FakeLingxing(moved)).status == "succeeded"
+    old = period(session, STORE_A, "rk-a1")
+    new = period(session, STORE_A, "rk-a1-new")
+    assert (old.status, old.payable_amount) == ("voided", Decimal("0"))
+    assert (new.status, new.payable_amount, new.line_count) == ("normal", Decimal("14.0000"), 3)
+    assert old.payable_amount + new.payable_amount == Decimal("14.0000")
+    assert_periods_match_lines(session, STORE_A)
+
+
+def test_bad_second_page_rolls_back_the_whole_store(session: Session) -> None:
+    add_stores(session)
+    interface = governed(session)
+    rows = base_rows()
+    run_sync(session, interface, FakeLingxing(rows))
+    lines_before = session.scalar(
+        select(func.count()).select_from(WalmartBillLine).where(WalmartBillLine.store_id == STORE_A)
+    )
+
+    # 每页 2 条：第 1 页 = 明细 1、2（合法），第 2 页里有一条金额不是数字。
+    bad = [*rows[:2], bill_line(7, STORE_A, "rk-a1", "2026-10-16", "not-a-number"), *rows[2:]]
+    bad[0] = dict(bad[0], amount="12")  # 第 1 页改了金额：如果没回滚，旧行会被标消失、新行写进来
+    run = run_sync(session, interface, FakeLingxing(bad))
+
+    assert (run.status, run.error_code) == ("failed", "SYNC_WALMART_BILL_STORE_PARTIAL")
+    lines_after = session.scalar(
+        select(func.count()).select_from(WalmartBillLine).where(WalmartBillLine.store_id == STORE_A)
+    )
+    assert lines_after == lines_before
+    missing = session.scalar(
+        select(func.count())
+        .select_from(WalmartBillLine)
+        .where(WalmartBillLine.missing_since.is_not(None))
+    )
+    assert missing == 0
+    assert period(session, STORE_A, "rk-a1").payable_amount == Decimal("14.0000")
+    assert_periods_match_lines(session, STORE_A)
+    assert_periods_match_lines(session, STORE_B)
+
+    failed = session.scalars(
+        select(IntegrationSyncRunWorkItem).where(
+            IntegrationSyncRunWorkItem.run_id == run.id,
+            IntegrationSyncRunWorkItem.status == "failed",
+        )
+    ).all()
+    assert [item.error_code for item in failed] == ["SYNC_WALMART_BILL_INVALID_AMOUNT"]
+    assert run.work_items_failed == 1
+    kept = session.scalar(
+        select(func.count())
+        .select_from(ApiRawRequestRef)
+        .where(ApiRawRequestRef.work_item_id == failed[0].id)
+    )
+    assert kept == 1
+
+
+def test_empty_answer_for_dates_that_had_lines_fails_the_store(session: Session) -> None:
+    add_stores(session)
+    interface = governed(session)
+    rows = base_rows()
+    run_sync(session, interface, FakeLingxing(rows))
+
+    # 11 月这段原来有 rk-a3；领星这次一条都没给 → 不当成「全被删」，整店失败、什么都不标。
+    without_november = [row for row in rows if row["id"] != 5]
+    run = run_sync(session, interface, FakeLingxing(without_november))
+    assert (run.status, run.error_code) == ("failed", "SYNC_WALMART_BILL_STORE_PARTIAL")
+    failed = session.scalars(
+        select(IntegrationSyncRunWorkItem.error_code).where(
+            IntegrationSyncRunWorkItem.run_id == run.id,
+            IntegrationSyncRunWorkItem.status == "failed",
+        )
+    ).all()
+    assert failed == ["SYNC_WALMART_BILL_EMPTY_UNEXPECTED"]
+    line_five = session.scalars(
+        select(WalmartBillLine).where(WalmartBillLine.lx_line_id == "5")
+    ).one()
+    assert line_five.missing_since is None
+    assert period(session, STORE_A, "rk-a3").status == "not_payable"
+    assert period(session, STORE_B, "rk-b1").status == "normal"

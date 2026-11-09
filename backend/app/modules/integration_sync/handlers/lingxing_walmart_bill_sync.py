@@ -3,11 +3,16 @@
 只读接口，按店、按「交易日期」时间段、每页 200 条翻页。默认关闭，手动 / 每周定时 / 回填触发。
 - 手动、定时：重拉最近 35 天（上海日期）。回填：用任务里给定的时间段，最早到 2026-03-01。
 - 一个时间段按自然月切开；某段条数超过翻页上限就对半再切。
-- 每段拉完、条数对得上，才把「这段时间里以前有、这次没有」的明细标成 missing（不删）。
+- 每段拉完、条数对得上，才把「这段时间里以前有、这次没有」的明细标成 missing（不删），
+  被标的明细所在的期也一起重算（整期都没了 → 作废、金额归 0）。
+- 某段领星返回 0 条、但库里这段日期原来有有效明细：不当作「全没了」，整店失败
+  （SYNC_WALMART_BILL_EMPTY_UNEXPECTED），什么都不标。
 - 领星只在账单生成后才给出明细；一期账单可能横跨 35 天以上，所以发现新账单的明细一直延伸到
   窗口最早几天，就自动往前补拉一个月，直到这期账单的明细不再出现（最多补 12 次）。
-- 某一页有一行不合法（店铺对不上、交易日期不在请求的时间段、金额不是数字等）整店失败，
-  已有数据不动；一个店失败不影响其他店，但整次任务记为失败。
+- 一个店的明细写入、missing 标记、期汇总重算和这个店的原始响应 / 分页记录都在一个保存点里，
+  店拉完才一起提交；某一页出错（请求失败、条数中途变化、一行不合法等）整店回滚，明细表和期汇总
+  保持这次同步前的样子，只留一条失败的分页记录（带错误码，有响应的话连同那一页的原始响应）。
+  一个店失败不影响其他店，但整次任务记为失败。
 """
 
 from __future__ import annotations
@@ -24,7 +29,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 from pydantic import JsonValue
-from sqlalchemy import and_, update
+from sqlalchemy import and_, exists, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -63,6 +68,7 @@ from app.modules.warehouse_wfs.store_discovery import (
 )
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
+logger = logging.getLogger(__name__)
 EARLIEST = date.fromisoformat(WALMART_BILL_EARLIEST_DATE)
 MAX_PAGE_SIZE = 200
 MAX_PAGES = 1000
@@ -102,6 +108,19 @@ class WalmartBillSyncResult:
     stores_total: int
     stores_failed: int
     periods_refreshed: int
+
+
+@dataclass(slots=True)
+class _Failure:
+    """店失败时要留下的那一页：保存点回滚后重新记一条失败记录。"""
+
+    code: str
+    start: date
+    end: date
+    page_no: int
+    offset: int
+    page_size: int
+    envelope: LingxingRawEnvelope | None = None
 
 
 @dataclass(slots=True)
@@ -182,6 +201,7 @@ class LingxingWalmartBillSyncHandler:
         self._client = client
         self.heartbeat = heartbeat or (lambda: None)
         self._now = now
+        self._failure: _Failure | None = None
 
     # ------------------------------------------------------------------ 入口
 
@@ -208,6 +228,9 @@ class LingxingWalmartBillSyncHandler:
         periods = 0
         with self._client_context() as client:
             for store in stores:
+                self.session.commit()
+                self._failure = None
+                savepoint = self.session.begin_nested()
                 try:
                     keys = self._sync_store(
                         run,
@@ -226,9 +249,15 @@ class LingxingWalmartBillSyncHandler:
                         store_names=names,
                         run_id=run.id,
                     )
+                    savepoint.commit()
                     self.session.commit()
-                except Exception:
-                    self.session.rollback()
+                except Exception as exc:
+                    # 整店回滚：明细、missing 标记、期汇总、这个店的分页记录都回到同步前。
+                    if savepoint.is_active:
+                        savepoint.rollback()
+                    else:
+                        self.session.rollback()
+                    self._record_store_failure(run, policy, store.store_id, exc)
                     failed += 1
 
         run.finished_at = utc_now()
@@ -343,7 +372,7 @@ class LingxingWalmartBillSyncHandler:
             touched |= segment.keys
             chasing = {
                 key
-                for key in chasing & segment.keys
+                for key in chasing & segment.first_posted.keys()
                 if segment.first_posted[key] < segment_start + timedelta(EDGE_DAYS)
             }
             cursor = segment_start
@@ -384,13 +413,19 @@ class LingxingWalmartBillSyncHandler:
                 )
                 raw_ref = self._persist_raw(run, work, policy, envelope, store_id, start, end)
             except Exception as exc:
-                self.session.rollback()
-                self._fail_work(run, work, "SYNC_WALMART_BILL_REQUEST_FAILED")
+                self._failure = _Failure(
+                    "SYNC_WALMART_BILL_REQUEST_FAILED",
+                    start,
+                    end,
+                    page_no,
+                    offset,
+                    page_size,
+                )
                 raise WalmartBillSyncError("SYNC_WALMART_BILL_REQUEST_FAILED") from exc
+            failure = _Failure("", start, end, page_no, offset, page_size, envelope)
             page = bill_page(envelope.response_json) if envelope.is_success else None
             if page is None or len(page.rows) > page_size:
-                self._fail_work(run, work, "SYNC_WALMART_BILL_RESPONSE_FAILED")
-                raise WalmartBillSyncError("SYNC_WALMART_BILL_RESPONSE_FAILED")
+                self._fail(failure, "SYNC_WALMART_BILL_RESPONSE_FAILED")
             if expected is None:
                 expected = page.total_count
                 if expected > max_pages * page_size:
@@ -420,18 +455,19 @@ class LingxingWalmartBillSyncHandler:
                     )
                     return _merge(first, second)
             elif page.total_count != expected:
-                self._fail_work(run, work, "SYNC_WALMART_BILL_TOTAL_CHANGED")
-                raise WalmartBillSyncError("SYNC_WALMART_BILL_TOTAL_CHANGED")
+                self._fail(failure, "SYNC_WALMART_BILL_TOTAL_CHANGED")
             try:
                 parsed = [
                     parse_bill_row(
-                        row, expected_store_id=store_id, window_start=start, window_end=end
+                        row,
+                        expected_store_id=store_id,
+                        window_start=start,
+                        window_end=end,
                     )
                     for row in page.rows
                 ]
             except BillRowError as exc:
-                self._fail_work(run, work, exc.code)
-                raise WalmartBillSyncError(exc.code) from exc
+                self._fail(failure, exc.code, exc)
             for line in parsed:
                 # 同一时间段里组合键撞上的（领星确实会返回完全相同的两笔），按出现顺序编号。
                 base = line.pop("identity_base")
@@ -450,8 +486,81 @@ class LingxingWalmartBillSyncHandler:
                 break
         if expected is None or offset < expected:
             raise WalmartBillSyncError("SYNC_WALMART_BILL_INCOMPLETE")
-        self._mark_missing(run, store_id, start, end, started_at)
+        if expected == 0 and self._has_valid_lines(run, store_id, start, end):
+            # 领星这段一条都没给、库里却有：多半是领星那边临时出问题，不能当成「全被删了」。
+            self._fail(failure, "SYNC_WALMART_BILL_EMPTY_UNEXPECTED")
+        segment.keys |= self._mark_missing(run, store_id, start, end, started_at)
         return segment
+
+    def _fail(self, failure: _Failure, code: str, cause: BaseException | None = None) -> None:
+        failure.code = code
+        self._failure = failure
+        raise WalmartBillSyncError(code) from cause
+
+    def _has_valid_lines(
+        self, run: IntegrationSyncRun, store_id: str, start: date, end: date
+    ) -> bool:
+        return bool(
+            self.session.scalar(
+                select(
+                    exists().where(
+                        WalmartBillLine.source_account_ref == run.source_account_ref,
+                        WalmartBillLine.store_id == store_id,
+                        WalmartBillLine.posted_date >= start,
+                        WalmartBillLine.posted_date <= end,
+                        WalmartBillLine.delete_flag == 0,
+                        WalmartBillLine.missing_since.is_(None),
+                    )
+                )
+            )
+        )
+
+    def _record_store_failure(
+        self,
+        run: IntegrationSyncRun,
+        policy: RawRetentionPolicy,
+        store_id: str,
+        exc: Exception,
+    ) -> None:
+        """保存点回滚后补一条失败的分页记录；有那一页的响应就连原始响应一起留下。"""
+        failure = self._failure
+        if failure is not None and failure.code:
+            code = failure.code
+        elif isinstance(exc, WalmartBillSyncError):
+            code = str(exc)
+        else:
+            code = "SYNC_WALMART_BILL_STORE_FAILED"
+        try:
+            if failure is None:
+                # 不是某一页出的错（如数据库出错）：记在今天、第 1 页名下；
+                # 表约束要求页大小 > 0，不能填 0。
+                today = self._now().astimezone(SHANGHAI).date()
+                failure = _Failure(code, today, today, 1, 0, 1)
+            work = self._start_work_item(
+                run,
+                store_id,
+                failure.start,
+                failure.end,
+                failure.page_no,
+                failure.offset,
+                failure.page_size,
+            )
+            if failure.envelope is not None:
+                self._persist_raw(
+                    run,
+                    work,
+                    policy,
+                    failure.envelope,
+                    store_id,
+                    failure.start,
+                    failure.end,
+                )
+            self._fail_work(run, work, code)
+            self.session.commit()
+        except Exception:
+            # 失败记录本身写不进去时不能再抛（会挡住其他店），但要留日志，不能悄悄吞掉。
+            self.session.rollback()
+            logger.exception("walmart bill store failure could not be recorded: %s", code)
 
     # ------------------------------------------------------------------ 写库
 
@@ -498,13 +607,13 @@ class LingxingWalmartBillSyncHandler:
         start: date,
         end: date,
         started_at: datetime,
-    ) -> None:
+    ) -> set[str]:
         """这段时间以前有、这次没再出现的明细标成 missing；不删除，汇总时不算。
 
         这次拉到的行在写入时 last_seen_at 已更新到 started_at 之后，所以用时间判断，
-        不用把几万个行号塞进 NOT IN。
+        不用把几万个行号塞进 NOT IN。返回被标的明细所在的期（reportKey），让调用方重算。
         """
-        self.session.execute(
+        result = self.session.execute(
             update(WalmartBillLine)
             .where(
                 and_(
@@ -517,9 +626,10 @@ class LingxingWalmartBillSyncHandler:
                 )
             )
             .values(missing_since=utc_now(), last_seen_run_id=run.id)
+            .returning(WalmartBillLine.report_key)
             .execution_options(synchronize_session=False)
         )
-        self.session.commit()
+        return {key for (key,) in result}
 
     def _start_work_item(
         self,
@@ -547,7 +657,7 @@ class LingxingWalmartBillSyncHandler:
         )
         self.repository.add_work_items([work])
         run.work_items_total += 1
-        self.session.commit()
+        self.session.flush()
         return work
 
     def _persist_raw(
@@ -598,7 +708,7 @@ class LingxingWalmartBillSyncHandler:
             )
         )
         work.attempt_count = envelope.attempt_no
-        self.session.commit()
+        self.session.flush()
         return ref
 
     def _finish_work(
@@ -608,7 +718,7 @@ class LingxingWalmartBillSyncHandler:
         work.finished_at = utc_now()
         work.response_count = rows
         run.work_items_succeeded += 1
-        self.session.commit()
+        self.session.flush()
 
     def _fail_work(
         self,
@@ -621,7 +731,7 @@ class LingxingWalmartBillSyncHandler:
         work.error_message = "沃尔玛账单请求处理失败"
         work.finished_at = utc_now()
         run.work_items_failed += 1
-        self.session.commit()
+        self.session.flush()
 
 
 def _safe_params(

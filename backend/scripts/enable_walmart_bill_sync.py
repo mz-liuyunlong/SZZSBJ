@@ -1,7 +1,9 @@
-"""Turn on the Walmart bill sync: manual runs (task centre and 回款对账) and the weekly schedule.
+"""Turn on the Walmart bill sync. The script itself sends no request.
 
-Needs the Owner's authorization for production, because the schedule then calls Lingxing every
-week on its own. The script itself sends no request.
+两步，各要负责人授权：
+1. 只开手动（默认）：WALMART_BILL_SYNC_ENABLE_AUTHORIZED=true
+   → 任务中心和回款对账的「手动同步」可用，定时不开；首次手动同步当作受控探测。
+2. 开每周定时：再加 WALMART_BILL_SYNC_SCHEDULE_AUTHORIZED=true 重跑本脚本 → 之后每周自动调领星。
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from app.modules.integration_sync.catalog import (  # noqa: E402
 
 AUTHORIZATION_ENV = "WALMART_BILL_SYNC_ENABLE_AUTHORIZED"
 SOURCE_ACCOUNT_ENV = "WALMART_BILL_SOURCE_ACCOUNT_REF"
+SCHEDULE_ENV = "WALMART_BILL_SYNC_SCHEDULE_AUTHORIZED"
 
 
 def main() -> int:
@@ -34,10 +37,11 @@ def main() -> int:
     except DataPagesGovernanceBootstrapError:
         print("WALMART_BILL_SOURCE_ACCOUNT_REF_REQUIRED")
         return 2
+    schedule = os.getenv(SCHEDULE_ENV, "").casefold() == "true"
     try:
         with get_session_factory()() as session:
             enabled = IntegrationCatalogService(session).enable_walmart_bill_sync(
-                source_account_ref
+                source_account_ref, schedule=schedule
             )
     except Exception:
         print("WALMART_BILL_SYNC_ENABLE_FAILED")
@@ -47,7 +51,7 @@ def main() -> int:
         return 1
     print("outbound_enabled=true")
     print("is_enabled=true")
-    print("schedule_enabled=true")
+    print(f"schedule_enabled={'true' if schedule else 'unchanged'}")
     return 0
 
 
