@@ -60,33 +60,23 @@ def test_old_id_only_becomes_canonical_for_all_three_salestat_metrics() -> None:
 def test_old_and_new_id_identical_values_are_not_added_together() -> None:
     rows = []
     for metric, value in ((1, "2"), (2, "2"), (3, "49.98")):
-        rows.extend(
-            (_sale("20738507814", metric, value), _sale("20769904287", metric, value))
-        )
+        rows.extend((_sale("20738507814", metric, value), _sale("20769904287", metric, value)))
     normalized = _normalize(rows)
     assert len(normalized) == 3
     assert {row["platform_product_id"] for row in normalized} == {"20769904287"}
-    total = sum(
-        Decimal(str(row["volumeTotal"]))
-        for row in normalized
-        if row["_result_type"] == 3
-    )
+    total = sum(Decimal(str(row["volumeTotal"])) for row in normalized if row["_result_type"] == 3)
     assert total == Decimal("49.98")
 
 
 @pytest.mark.parametrize("metric", [1, 2, 3])
 def test_conflicting_id_values_fail_closed(metric: int) -> None:
     rows = [_sale("20738507814", metric, "2"), _sale("20769904287", metric, "3")]
-    with pytest.raises(
-        DataPagesRealSyncError, match="DATA_PAGES_YC00489_ALIAS_METRIC_CONFLICT"
-    ):
+    with pytest.raises(DataPagesRealSyncError, match="DATA_PAGES_YC00489_ALIAS_METRIC_CONFLICT"):
         _normalize(rows)
 
 
 def test_wrong_msku_on_old_id_is_rejected() -> None:
-    with pytest.raises(
-        DataPagesRealSyncError, match="DATA_PAGES_YC00489_ALIAS_MSKU_MISMATCH"
-    ):
+    with pytest.raises(DataPagesRealSyncError, match="DATA_PAGES_YC00489_ALIAS_MSKU_MISMATCH"):
         _normalize([_sale("20738507814", 1, "2", msku="OTHER-1A")])
 
 
