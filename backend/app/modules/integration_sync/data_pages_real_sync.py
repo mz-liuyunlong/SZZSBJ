@@ -407,6 +407,81 @@ def data_pages_response_succeeded(
     return code in {None, 0, 200}
 
 
+
+# Scoped provider data correction; RAW responses remain unchanged.
+YC00489_ALIAS_STORE_ID = "110711146247224320"
+YC00489_ALIAS_MSKU = "YC00489-1A"
+YC00489_ALIAS_LOCAL_SKU = "YC00489"
+YC00489_BAD_ITEM_ID = "20738507814"
+YC00489_CANONICAL_ITEM_ID = "20769904287"
+YC00489_ALIAS_START = date(2026, 8, 24)
+
+
+def _normalize_yc00489_sale_rows(
+    rows: Iterable[dict[str, Any]],
+    *,
+    source_account_ref: str,
+    business_date: date,
+) -> list[dict[str, Any]]:
+    """Correct one Lingxing SaleStat identity before the business-fact upsert.
+
+    Do not alter provider RAW. Fail closed if conflicting old/new metric
+    observations would otherwise overwrite each other in the same day.
+    """
+    materialized = list(rows)
+    if source_account_ref != "primary" or business_date < YC00489_ALIAS_START:
+        return materialized
+
+    seen: dict[int, tuple[Decimal | None, bool]] = {}
+    canonical: dict[int, dict[str, Any]] = {}
+    target_indices: set[int] = set()
+    for index, row in enumerate(materialized):
+        stores = _scalar_candidates(row.get("sid"))
+        items = _scalar_candidates(row.get("platform_product_id"))
+        if stores != [YC00489_ALIAS_STORE_ID] or len(items) != 1:
+            continue
+        raw_item_id = items[0]
+        if raw_item_id not in {YC00489_BAD_ITEM_ID, YC00489_CANONICAL_ITEM_ID}:
+            continue
+        if raw_item_id == YC00489_BAD_ITEM_ID:
+            if _single_scalar(row.get("msku")) != YC00489_ALIAS_MSKU:
+                raise DataPagesRealSyncError("DATA_PAGES_YC00489_ALIAS_MSKU_MISMATCH")
+            local_sku = _single_scalar(row.get("sku")) or _single_scalar(
+                row.get("local_sku")
+            )
+            if local_sku not in {None, YC00489_ALIAS_LOCAL_SKU}:
+                raise DataPagesRealSyncError("DATA_PAGES_YC00489_ALIAS_SKU_MISMATCH")
+        elif _single_scalar(row.get("msku")) != YC00489_ALIAS_MSKU:
+            # An unrelated record must not be collapsed into this MSKU.
+            continue
+
+        result_type = _int(row.get("_result_type"))
+        if result_type not in (1, 2, 3):
+            raise DataPagesRealSyncError("DATA_PAGES_YC00489_ALIAS_RESULT_TYPE_INVALID")
+        value = _decimal(row.get("volumeTotal"))
+        if value is None:
+            raise DataPagesRealSyncError("DATA_PAGES_YC00489_ALIAS_METRIC_MISSING")
+        is_main = raw_item_id == YC00489_CANONICAL_ITEM_ID
+        prior = seen.get(result_type)
+        if prior is not None and prior[0] != value:
+            raise DataPagesRealSyncError("DATA_PAGES_YC00489_ALIAS_METRIC_CONFLICT")
+        if prior is None or (is_main and not prior[1]):
+            normalized = dict(row)
+            normalized["platform_product_id"] = YC00489_CANONICAL_ITEM_ID
+            canonical[result_type] = normalized
+            seen[result_type] = (value, is_main)
+        target_indices.add(index)
+
+    # Preserve non-target rows and their original order/behavior. For each
+    # SaleStat metric keep just one observation, preferring the correct ID.
+    output = [
+        row for index, row in enumerate(materialized) if index not in target_indices
+    ]
+    output.extend(canonical[k] for k in sorted(canonical))
+    return output
+
+
+
 class DataPagesRealSyncRunner:
     def __init__(
         self,
@@ -984,7 +1059,11 @@ class DataPagesRealSyncRunner:
 
     def _write_sales(self, rows: Iterable[dict[str, Any]]) -> int:
         count = 0
-        for row in rows:
+        for row in _normalize_yc00489_sale_rows(
+            rows,
+            source_account_ref=self.source_account_ref,
+            business_date=self.business_date,
+        ):
             item_candidates = _scalar_candidates(row.get("platform_product_id"))
             store_candidates = _scalar_candidates(row.get("sid"))
             if len(item_candidates) != 1 or len(store_candidates) != 1:
