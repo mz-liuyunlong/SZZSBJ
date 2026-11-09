@@ -42,7 +42,7 @@ export default function SearchTermsPage({page}:{page:NavigationPage}){
    setRows([]);setTotal(0);setSummary(null);
   }finally{setLoading(false);}
  },[query]);
- useEffect(()=>{void refresh();},[refresh]);
+ useEffect(()=>{void Promise.resolve().then(refresh);},[refresh]);
  const handleAction=async(row:SearchTermRow,actionType:"add_keyword"|"add_negative_keyword")=>{
   setActionBusy(true);
   try{
