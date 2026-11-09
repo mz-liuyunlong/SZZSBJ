@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
@@ -16,8 +16,10 @@ from app.modules.ads_search_terms.schemas import (
     ActionCreate,
     ActionListData,
     ActionRead,
+    SearchTermAggregateListData,
     SearchTermListData,
     SearchTermQuery,
+    SearchTermAggregateRead,
     SearchTermRead,
     SearchTermSummaryData,
     SearchTermTrendData,
@@ -87,6 +89,135 @@ class AdsSearchTermsService:
         ).all()
         return SearchTermListData(
             items=[SearchTermRead.model_validate(row) for row in rows],
+            total=total,
+            page=query.page,
+            page_size=query.page_size,
+        )
+
+
+    def list_aggregates(
+        self,
+        query: SearchTermQuery,
+        accounts: frozenset[str],
+    ) -> SearchTermAggregateListData:
+        subquery = _scope(query, accounts).subquery()
+        manual_same_store = (
+            select(WalmartManualKeywordDailyFact.id)
+            .where(
+                WalmartManualKeywordDailyFact.source_account_ref
+                == subquery.c.source_account_ref,
+                WalmartManualKeywordDailyFact.store_id == subquery.c.store_id,
+                WalmartManualKeywordDailyFact.normalized_keyword
+                == subquery.c.normalized_search_term,
+                WalmartManualKeywordDailyFact.attribution_days == 14,
+            )
+            .exists()
+        )
+        manual_other_store = (
+            select(WalmartManualKeywordDailyFact.id)
+            .where(
+                WalmartManualKeywordDailyFact.source_account_ref
+                == subquery.c.source_account_ref,
+                WalmartManualKeywordDailyFact.store_id
+                != subquery.c.store_id,
+                WalmartManualKeywordDailyFact.normalized_keyword
+                == subquery.c.normalized_search_term,
+                WalmartManualKeywordDailyFact.attribution_days == 14,
+            )
+            .exists()
+        )
+        grouped = (
+            select(
+                subquery.c.normalized_search_term,
+                func.min(subquery.c.searched_keyword),
+                func.bool_or(subquery.c.targeting_type == "auto"),
+                func.bool_or(subquery.c.targeting_type == "manual"),
+                func.count(func.distinct(subquery.c.store_id)),
+                func.count(
+                    func.distinct(
+                        func.concat(
+                            subquery.c.source_account_ref,
+                            ":",
+                            func.coalesce(subquery.c.store_id, ""),
+                            ":",
+                            func.coalesce(subquery.c.item_id, ""),
+                        )
+                    )
+                ).filter(subquery.c.item_id.is_not(None)),
+                func.count(func.distinct(subquery.c.campaign_id)),
+                func.coalesce(func.sum(subquery.c.num_ads_shown), 0),
+                func.coalesce(func.sum(subquery.c.num_ads_clicks), 0),
+                func.coalesce(func.sum(subquery.c.ad_spend_amount), 0),
+                func.coalesce(func.sum(subquery.c.attributed_orders), 0),
+                func.coalesce(func.sum(subquery.c.advertised_sku_sales_amount), 0),
+                func.coalesce(func.sum(subquery.c.other_sku_sales_amount), 0),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (subquery.c.targeting_type == "auto", subquery.c.attributed_orders),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (subquery.c.targeting_type == "manual", subquery.c.attributed_orders),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+                func.bool_or(manual_same_store),
+                func.bool_or(manual_other_store),
+                func.max(subquery.c.synced_at),
+            )
+            .group_by(subquery.c.normalized_search_term)
+        )
+        total = int(
+            self.session.scalar(
+                select(func.count()).select_from(
+                    select(subquery.c.normalized_search_term)
+                    .group_by(subquery.c.normalized_search_term)
+                    .subquery()
+                )
+            )
+            or 0
+        )
+        rows = self.session.execute(
+            grouped.order_by(
+                func.sum(subquery.c.attributed_orders).desc(),
+                func.sum(subquery.c.ad_spend_amount).desc(),
+                subquery.c.normalized_search_term,
+            )
+            .offset((query.page - 1) * query.page_size)
+            .limit(query.page_size)
+        ).all()
+        return SearchTermAggregateListData(
+            items=[
+                SearchTermAggregateRead(
+                    normalized_search_term=row[0],
+                    searched_keyword=row[1],
+                    has_auto=bool(row[2]),
+                    has_manual=bool(row[3]),
+                    store_count=int(row[4] or 0),
+                    listing_count=int(row[5] or 0),
+                    campaign_count=int(row[6] or 0),
+                    impressions=int(row[7] or 0),
+                    clicks=int(row[8] or 0),
+                    spend=Decimal(row[9] or 0),
+                    orders=Decimal(row[10] or 0),
+                    direct_sales=Decimal(row[11] or 0),
+                    other_sales=Decimal(row[12] or 0),
+                    auto_orders=Decimal(row[13] or 0),
+                    manual_orders=Decimal(row[14] or 0),
+                    manual_covered_same_store=bool(row[15]),
+                    manual_covered_other_store=bool(row[16]),
+                    freshness_at=row[17],
+                )
+                for row in rows
+            ],
             total=total,
             page=query.page,
             page_size=query.page_size,
