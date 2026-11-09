@@ -23,6 +23,7 @@ import DailySalesPage from "@/pages/sales/DailySalesPage";
 import OrderProfitPage from "@/pages/sales/OrderProfitPage";
 import RefundManagementPage from "@/pages/aftersales/RefundManagementPage";
 import AdsCampaignsPage from "@/pages/ads/campaigns/AdsCampaignsPage";
+import SearchTermsPage from "@/pages/ads/search-terms/SearchTermsPage";
 import KeywordLaunchPage from "@/pages/ai-center/keyword-launch/KeywordLaunchPage";
 import AIAssistantPage from "@/pages/ai-center/AIAssistantPage";
 import KeywordLibraryPage from "@/pages/ads/keyword-library/KeywordLibraryPage";
@@ -191,6 +192,8 @@ function BusinessRoute({
           <KeywordLaunchPage page={page} />
         ) : page.key === "ads_keyword_library" ? (
           <KeywordLibraryPage page={page} />
+        ) : page.key === "ads_search_terms" ? (
+          <SearchTermsPage page={page} />
         ) : page.key === "ads_campaigns" ? (
           <AdsCampaignsPage page={page} />
         ) : page.key === "aftersales_refund_management" ? (
