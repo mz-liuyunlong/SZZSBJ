@@ -20,3 +20,4 @@ PRP 不等于批准开发。PRP 与 `AGENTS.md` 冲突时，以 `AGENTS.md` 为�
 
 - `pmc-purchase-board.md`：PMC 采购看板（采购计划 / 采购单 / 收货单只读同步 + 看板）；状态 Draft，关联 `docs/data-sources/decisions/pmc-purchase-board-decision.md`（BLOCKED_BY_OWNER_DECISION，单项：收货单接口重评）。
 - `lingxing-raw-foundation.md`：领星 L2 RAW 留痕、脱敏、hash、分页和审计边界；当前状态以文件正文为准。
+- `ads-search-terms-workbench-v1.md`：广告 → 搜索词工作台（SP 自动/手动搜索词、跨店铺/Listing 比较、同步与内部处理任务）；状态 Draft，关联 `docs/data-sources/decisions/ads-search-terms-workbench-decision.md`（BLOCKED_BY_OWNER_DECISION，等待负责人确认加词/否词的内部任务队列替代方案）。
