@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 
 from app.core.api import ApiError, ErrorCode
 from app.core.config import get_settings
@@ -321,12 +321,20 @@ class PackingService:
             raise
 
     def listing_rows(self, candidate):
-        """Same eligibility as Listing 管理: published WFS rows with a product link."""
+        """Same eligibility as Listing 管理: published WFS rows with a product link.
+
+        Rows are found by local SKU or by the ItemID the resolver attributed to the
+        candidate (its listing may have no local SKU yet; owner decision 2026-10-31).
+        """
+        identity = or_(Listing.local_sku == candidate.sku)
+        attributed = getattr(candidate, "item_id", None)
+        if attributed:
+            identity = or_(Listing.local_sku == candidate.sku, Listing.item_id == attributed)
         return list(
             self.session.scalars(
                 select(Listing).where(
                     Listing.source_account_ref == candidate.source_account_ref,
-                    Listing.local_sku == candidate.sku,
+                    identity,
                     Listing.standard_status == "PUBLISHED",
                     Listing.fulfillment_type == "1",
                     Listing.item_url.isnot(None),
@@ -350,18 +358,7 @@ class PackingService:
         return EditOptions(
             candidate=candidate,
             cross_store_proof_available=candidate.available_quantity is not None,
-            listings=[
-                ListingChoice(
-                    store_id=r.store_id,
-                    store_name=stores.get(r.store_id),
-                    item_id=r.item_id,
-                    gtin=r.gtin,
-                    msku=r.msku,
-                    listing_version=listing_version(r),
-                    cross_store=r.store_id != candidate.store_id,
-                )
-                for r in self.listing_rows(candidate)
-            ],
+            listings=[listing_choice(r, candidate, stores) for r in self.listing_rows(candidate)],
         )
 
     def final_candidate(self, candidate, cmd):
@@ -382,6 +379,10 @@ class PackingService:
         listing = rows[0]
         if listing.fulfillment_type != "1":
             conflict("WFS_NOT_CONVERTED")
+        # Owner decision 2026-11-02: a Listing whose own local SKU is recorded and differs
+        # from this SKU may be shown (flagged) but never used as the target.
+        if listing_sku_mismatch(listing, candidate.sku):
+            conflict("SKU_MISMATCH")
         if (edited and not cmd.listing_version) or (
             cmd.listing_version and cmd.listing_version != listing_version(listing)
         ):
@@ -537,3 +538,33 @@ class PackingService:
 
     def all_candidates(self, accounts):
         return self._apply_pending_edits(self._base_candidates(accounts), accounts)
+
+
+def listing_choice(row, candidate, stores) -> ListingChoice:
+    """One target-Listing option for the edit dialog.
+
+    ``sku_mismatch``: the listing has its own local SKU and it is not the row SKU. Such a
+    listing only appears because its ItemID is the one attributed to the row
+    (``listing_rows`` matches local SKU *or* the attributed ItemID). It is listed
+    and the dialog shows it disabled with the reason; ``final_candidate`` refuses it with
+    ``SKU_MISMATCH`` (owner decision 2026-11-02).
+    """
+    local = (row.local_sku or "").strip() if isinstance(row.local_sku, str) else ""
+    mismatch = listing_sku_mismatch(row, candidate.sku)
+    return ListingChoice(
+        store_id=row.store_id,
+        store_name=stores.get(row.store_id),
+        item_id=row.item_id,
+        gtin=row.gtin,
+        msku=row.msku,
+        listing_version=listing_version(row),
+        cross_store=row.store_id != candidate.store_id,
+        local_sku=local or None,
+        sku_mismatch=mismatch,
+    )
+
+
+def listing_sku_mismatch(listing, sku) -> bool:
+    """The Listing records its own local SKU and it is not ``sku`` (blank = no opinion)."""
+    local = (listing.local_sku or "").strip() if isinstance(listing.local_sku, str) else ""
+    return bool(local) and local != (sku or "").strip()

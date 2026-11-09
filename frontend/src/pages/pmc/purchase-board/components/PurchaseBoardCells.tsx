@@ -92,6 +92,16 @@ export function SkuCycleBriefCell({ cycle }: { cycle: SkuCycleBrief }) {
   );
 }
 
+/** Rule v2 (2026-10-31): a remark ItemID is trusted by store; a listing whose own local SKU
+ * differs from the purchase SKU is kept but flagged (docs/sop/pmc/purchase-board.md). */
+function SkuMismatchTag({ localSku, sku }: { localSku: string | null | undefined; sku: string | null }) {
+  return (
+    <Tooltip title={`Listing 本地 SKU：${localSku ?? "—"}，采购 SKU：${sku ?? "—"}`}>
+      <Tag color="orange">SKU 不一致</Tag>
+    </Tooltip>
+  );
+}
+
 export function ItemIdCell({ row }: { row: PurchaseBoardRow }) {
   const { itemId } = row;
   if (itemId.identities && itemId.identities.length > 1) {
@@ -100,6 +110,8 @@ export function ItemIdCell({ row }: { row: PurchaseBoardRow }) {
       <Tag color={itemIdSourceColors[itemId.source]}>{itemIdSourceLabels[itemId.source]}</Tag>
       {itemId.identities.map((identity) => <span className="purchase-board__itemid-line" key={identity.itemId}>
         <WalmartItemLink itemId={identity.itemId} />{identity.msku ? <span>{identity.msku}</span> : null}
+        {identity.storeId ? <Typography.Text type="secondary">店铺 {identity.storeId}</Typography.Text> : null}
+        {identity.skuMismatch && <SkuMismatchTag localSku={identity.localSku} sku={row.sku} />}
       </span>)}
     </span>;
   }
@@ -110,11 +122,13 @@ export function ItemIdCell({ row }: { row: PurchaseBoardRow }) {
       </Tag>
     );
   }
+  const single = itemId.identities?.find((identity) => identity.itemId === itemId.itemId);
   return (
     <span className="purchase-board__itemid-cell">
       <span className="purchase-board__itemid-line">
         <WalmartItemLink itemId={itemId.itemId} />
         <Tag color={itemIdSourceColors[itemId.source]}>{itemIdSourceLabels[itemId.source]}</Tag>
+        {single?.skuMismatch && <SkuMismatchTag localSku={single.localSku} sku={row.sku} />}
       </span>
       {itemId.msku ? (
         <Typography.Text className="purchase-board__itemid-msku" ellipsis={{ tooltip: itemId.msku }}>
