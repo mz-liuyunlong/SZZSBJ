@@ -287,7 +287,7 @@ def upgrade() -> None:
             "source_fact_id",
             postgresql.UUID(as_uuid=True),
             sa.ForeignKey("fact_walmart_ad_search_term_daily.id", ondelete="SET NULL"),
-        )
+        ),
         sa.Column("action_type", sa.String(32), nullable=False),
         sa.Column("search_term", sa.Text(), nullable=False),
         sa.Column("normalized_search_term", sa.Text(), nullable=False),
