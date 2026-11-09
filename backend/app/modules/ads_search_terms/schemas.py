@@ -73,6 +73,7 @@ class SearchTermSummaryData(StrictSchema):
     other_sales_total: Decimal
     freshness_at: datetime | None
     mapping_unresolved_count: int
+    manual_keyword_data_available: bool
 
 
 class SearchTermTrendPoint(StrictSchema):
@@ -144,6 +145,7 @@ class SearchTermAggregateRead(StrictSchema):
     manual_orders: Decimal
     manual_covered_same_store: bool
     manual_covered_other_store: bool
+    manual_keyword_data_available: bool
     freshness_at: datetime | None
 
 
