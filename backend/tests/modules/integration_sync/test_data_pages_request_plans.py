@@ -68,3 +68,24 @@ def test_listing_plan_keeps_initial_no_store_filter_boundary() -> None:
 
     assert plan.store_scope_field is None
     assert plan.static_body_fields == ()
+
+def test_sp_request_plans_follow_advertiser_and_verified_campaign_dependencies() -> None:
+    campaign = request_plan_for("walmart_sp_campaign_list")
+    search_terms = request_plan_for("walmart_sp_search_term_list")
+    keywords = request_plan_for("walmart_sp_keyword_list")
+
+    assert campaign.dependency_parser_key == "walmart_advertiser_list"
+    assert campaign.runtime_required_fields == ("advertiserIds",)
+    assert campaign.static_body_dict()["day"] == 14
+    assert campaign.static_body_dict()["paging"] is True
+
+    assert search_terms.dependency_parser_key == "walmart_sp_campaign_list"
+    assert search_terms.runtime_required_fields == ("advertiserIds", "campaignIds")
+    assert search_terms.static_body_dict()["day"] == 14
+
+    assert keywords.dependency_parser_key == "walmart_sp_campaign_list"
+    assert keywords.runtime_required_fields == ("advertiserIds", "campaignIds")
+    assert keywords.static_body_dict()["campaignType"] == (
+        "sponsoredProducts-manual",
+        "sponsoredProducts-auto",
+    )
