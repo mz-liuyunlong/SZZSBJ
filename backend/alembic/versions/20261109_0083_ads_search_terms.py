@@ -112,7 +112,10 @@ def upgrade() -> None:
             "char_length(source_line_hash) = 64",
             name="ck_fact_walmart_ad_search_term_daily_source_line_sha256",
         ),
-        sa.CheckConstraint("attribution_days IN (3, 14, 30)", name="ck_fact_walmart_ad_search_term_daily_attribution_days"),
+        sa.CheckConstraint(
+            "attribution_days IN (3, 14, 30)",
+            name="ck_fact_walmart_ad_search_term_daily_attribution_days",
+        ),
         sa.CheckConstraint(
             "num_ads_shown IS NULL OR num_ads_shown >= 0",
             name="ck_fact_walmart_ad_search_term_daily_impressions_nonnegative",
@@ -244,7 +247,10 @@ def upgrade() -> None:
             "char_length(source_line_hash) = 64",
             name="ck_fact_walmart_keyword_sp_daily_source_line_sha256",
         ),
-        sa.CheckConstraint("attribution_days IN (3, 14, 30)", name="ck_fact_walmart_keyword_sp_daily_attribution_days"),
+        sa.CheckConstraint(
+            "attribution_days IN (3, 14, 30)",
+            name="ck_fact_walmart_keyword_sp_daily_attribution_days",
+        ),
         sa.CheckConstraint(
             "num_ads_shown IS NULL OR num_ads_shown >= 0",
             name="ck_fact_walmart_keyword_sp_daily_impressions_nonnegative",
@@ -312,10 +318,21 @@ def upgrade() -> None:
         sa.Column("last_followup_at", sa.DateTime(timezone=True)),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.CheckConstraint("action_type IN ('add_keyword','add_negative_keyword')", name="ck_ops_ads_search_term_actions_action_type"),
-        sa.CheckConstraint("status IN ('pending_manual','manually_completed','cancelled')", name="ck_ops_ads_search_term_actions_status"),
-        sa.CheckConstraint("effect_status IN ('pending','improved','unchanged','declined','insufficient_data')", name="ck_ops_ads_search_term_actions_effect_status"),
-        sa.CheckConstraint("search_term <> ''", name="ck_ops_ads_search_term_actions_search_term_not_blank"),
+        sa.CheckConstraint(
+            "action_type IN ('add_keyword','add_negative_keyword')",
+            name="ck_ops_ads_search_term_actions_action_type",
+        ),
+        sa.CheckConstraint(
+            "status IN ('pending_manual','manually_completed','cancelled')",
+            name="ck_ops_ads_search_term_actions_status",
+        ),
+        sa.CheckConstraint(
+            "effect_status IN ('pending','improved','unchanged','declined','insufficient_data')",
+            name="ck_ops_ads_search_term_actions_effect_status",
+        ),
+        sa.CheckConstraint(
+            "search_term <> ''", name="ck_ops_ads_search_term_actions_search_term_not_blank"
+        ),
     )
     op.create_index(
         "ix_ads_search_term_actions_account_status",
@@ -357,7 +374,6 @@ def upgrade() -> None:
         "ops_ads_search_term_action_events",
         ["action_id", "created_at"],
     )
-
 
     # Governed child interfaces used only by the existing walmartAdItemSpList
     # execution. Their configs remain disabled and unscheduled; the parent run
@@ -444,7 +460,6 @@ def upgrade() -> None:
             """
         )
     )
-
 
 
 def downgrade() -> None:

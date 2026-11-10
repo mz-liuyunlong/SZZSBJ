@@ -121,9 +121,7 @@ class AdsSearchTermsService:
                 or_(
                     WalmartManualKeywordDailyFact.source_account_ref
                     != subquery.c.source_account_ref,
-                    WalmartManualKeywordDailyFact.store_id.is_distinct_from(
-                        subquery.c.store_id
-                    ),
+                    WalmartManualKeywordDailyFact.store_id.is_distinct_from(subquery.c.store_id),
                 ),
                 WalmartManualKeywordDailyFact.normalized_keyword
                 == subquery.c.normalized_search_term,
@@ -291,7 +289,9 @@ class AdsSearchTermsService:
         ).one()
         manual_keyword_data_available = bool(
             self.session.scalar(
-                select(func.count()).select_from(WalmartManualKeywordDailyFact).where(
+                select(func.count())
+                .select_from(WalmartManualKeywordDailyFact)
+                .where(
                     WalmartManualKeywordDailyFact.source_account_ref.in_(accounts),
                     WalmartManualKeywordDailyFact.business_date_la.between(
                         query.start_date, query.end_date

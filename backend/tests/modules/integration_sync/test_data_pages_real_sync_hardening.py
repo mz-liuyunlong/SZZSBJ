@@ -684,9 +684,7 @@ def test_sp_campaign_bundle_uses_verified_campaign_ids_for_search_and_manual_key
     )
     runner = _runner(client)
 
-    campaign_map, search_terms, manual_keywords = runner._fetch_sp_search_terms_bundle(
-        ("123",)
-    )
+    campaign_map, search_terms, manual_keywords = runner._fetch_sp_search_terms_bundle(("123",))
 
     assert set(campaign_map) == {("123", "1001"), ("123", "2001")}
     assert len(search_terms) == 1
