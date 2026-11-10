@@ -1,4 +1,5 @@
 """Contract tests: financial exceptions must never suppress healthy SKU rows."""
+
 from datetime import date
 from decimal import Decimal
 from unittest.mock import MagicMock
@@ -29,9 +30,7 @@ def test_sem_unallocated_lines_reconcile_in_same_transaction() -> None:
     assert "on conflict" in str(calls[1].args[0])
     assert "sum(spend_amount_usd)" in str(calls[2].args[0])
     for call in calls:
-        assert call.args[1] == {
-            "account": "synthetic", "day": date(2026, 8, 2)
-        }
+        assert call.args[1] == {"account": "synthetic", "day": date(2026, 8, 2)}
 
 
 def test_sample_dispute_is_keyed_to_exact_item_and_msku() -> None:
@@ -63,6 +62,7 @@ def test_sample_dispute_is_keyed_to_exact_item_and_msku() -> None:
 
 def test_unallocated_ledger_preserves_exact_source_row_and_negative_credits() -> None:
     from app.modules.integration_sync import data_pages_finance_partial_isolation as module
+
     query = str(module._RESERVE_SQL)
     assert "task_id,row_index" in query
     assert "raw_hash" in query
@@ -78,11 +78,11 @@ def test_business_rule_does_not_abort_day_for_one_sample_item() -> None:
     from app.modules.integration_sync.data_pages_business_rules_v2 import DataPagesRealSyncRunner
 
     src = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
-    assert 'sample_disputed = sample_qty > gross_qty or sample_amount > gross_sales' in src
-    assert 'record_sample_dispute(' in src
-    assert 'if not sample_disputed' in src
+    assert "sample_disputed = sample_qty > gross_qty or sample_amount > gross_sales" in src
+    assert "record_sample_dispute(" in src
+    assert "if not sample_disputed" in src
     assert 'missing.append("sample_exceeds_salestat_pending_review")' in src
-    assert 'reserve_unallocated_sem_lines(' in src
-    assert 'booked_sem + reserved_sem' in src
-    assert 'DATA_PAGES_SEM_SPEND_UNATTRIBUTED' in src
-    assert 'DATA_PAGES_CONFIRMED_SAMPLE_EXCEEDS_SALESTAT' not in src
+    assert "reserve_unallocated_sem_lines(" in src
+    assert "booked_sem + reserved_sem" in src
+    assert "DATA_PAGES_SEM_SPEND_UNATTRIBUTED" in src
+    assert "DATA_PAGES_CONFIRMED_SAMPLE_EXCEEDS_SALESTAT" not in src
