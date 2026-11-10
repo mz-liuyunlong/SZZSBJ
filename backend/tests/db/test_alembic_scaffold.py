@@ -41,6 +41,7 @@ FINANCE_JOURNAL_ROUND3_REVISION = "20261105_0080_finance_journal_round3"
 FINANCE_PAYONEER_REVISION = "20261105_0081_finance_payoneer_statement"
 CLEARANCE_0082_REVISION = "20261108_0082_clearance_center"
 FINANCE_0083_REVISION = "20261109_0083_finance_sem_unallocated_lines"
+FINANCE_0083_REVISION = "20261109_0083_finance_sem_unallocated_lines"
 WFS_DETECTION_HEAD_REVISION = "20261026_0061_wfs_fee_detection_evidence"
 SYNC_ANOMALY_HEAD_REVISION = "20261027_0062_sync_anomaly_center"
 AI_RUNTIME_PREVIOUS_REVISION = "20261027_0063_ai_runtime"
@@ -88,6 +89,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         LISTING_INTEGRATION_HEAD_REVISION,
     }
     assert script.get_heads() == [FINANCE_0083_REVISION]
+    assert script.get_revision(FINANCE_0083_REVISION).down_revision == CLEARANCE_0082_REVISION
     assert script.get_revision(FINANCE_0083_REVISION).down_revision == CLEARANCE_0082_REVISION
     assert script.get_revision(CLEARANCE_0082_REVISION).down_revision == FINANCE_PAYONEER_REVISION
     assert (
