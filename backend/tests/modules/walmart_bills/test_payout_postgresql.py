@@ -29,6 +29,7 @@ from app.modules.walmart_bills.models import WalmartBillPeriod
 from app.modules.walmart_bills.payout_models import WalmartPayoutMatch
 from app.modules.walmart_bills.payout_schemas import (
     PayoutAccountCreateRequest,
+    PayoutAccountUpdateRequest,
     PayoutFollowRequest,
     PayoutManualMatchRequest,
     PayoutReviewRequest,
@@ -82,7 +83,9 @@ def svc(session: Session) -> PayoutReconService:
     return service
 
 
-def add_line(session: Session, uid: str, day: str, amount: str, account: str = ACC) -> None:
+def add_line(
+    session: Session, uid: str, day: str, amount: str, account: str = ACC, text: str = ""
+) -> None:
     batch = FinanceCashImport(uploader="tester")
     session.add(batch)
     session.flush()
@@ -106,7 +109,7 @@ def add_line(session: Session, uid: str, day: str, amount: str, account: str = A
             amount=Decimal(amount),
             currency_code="USD",
             counterparty_name="合成付款方 Z9",
-            description="合成到账 Z9",
+            description=f"合成到账 Z9 {text}".strip(),
             dup_ordinal=0,
             statement_row_no=1,
             file_row_order=1,
@@ -287,3 +290,93 @@ def test_other_store_and_september_bills_are_ignored(session: Session, svc: Payo
     add_line(session, "SYNL000000000006", "2026-10-07", "100.00")
     assert "k9" not in rows_by_key(svc)
     assert svc.auto_match(actor="t", request_id=None).matched_periods == 0
+
+
+def test_voided_arrival_is_not_counted_and_can_be_undone(session: Session, svc: PayoutReconService):
+    add_period(session, "k1", "2026-10-06", "100.00")
+    add_line(session, "SYNL000000000011", "2026-10-07", "100.00")
+    svc.auto_match(actor="t", request_id=None)
+    svc.review(
+        PayoutReviewRequest(kind="review1_pass", periods=[key("k1")]), actor="t", request_id=None
+    )
+    session.get(FinanceCashLine, "SYNL000000000011").voided_at = datetime.now(UTC)
+    session.flush()
+    row = rows_by_key(svc)["k1"]
+    assert (row.pay_state, row.anomaly, row.arrival_voided) == ("unpaid", True, True)
+    assert row.arrived_amount is None and row.match_id is not None
+    final = svc.review(
+        PayoutReviewRequest(kind="review2_pass", periods=[key("k1")]), actor="b", request_id=None
+    )
+    assert final.done == 0 and final.skipped[0].reason == "到账流水已作废，请撤销配对"
+    svc.unmatch(row.match_id, reason="流水作废", actor="t", request_id=None)
+    after = rows_by_key(svc)["k1"]
+    assert (after.match_id, after.stage, after.arrival_voided) == (None, "todo", False)
+
+
+def test_account_update_keeps_account_and_deactivate_needs_no_live_match(
+    session: Session, svc: PayoutReconService
+):
+    current = svc.list_accounts().items[0]
+    with pytest.raises(PayoutReconError) as changed:
+        svc.update_account(
+            current.id, PayoutAccountUpdateRequest(account_key=ACC_OTHER), actor="boss"
+        )
+    assert changed.value.status_code == 422
+    edited = svc.update_account(
+        current.id, PayoutAccountUpdateRequest(account_key=ACC, payee="合成公司"), actor="boss"
+    )
+    assert (edited.account_key, edited.payee) == (ACC, "合成公司")
+    add_period(session, "k1", "2026-10-06", "100.00")
+    add_line(session, "SYNL000000000012", "2026-10-07", "100.00", text="合成公司 付款")
+    svc.auto_match(actor="t", request_id=None)
+    with pytest.raises(PayoutReconError) as blocked:
+        svc.deactivate_account(current.id, reason="合成停用", actor="boss")
+    assert blocked.value.status_code == 409
+    svc.unmatch(rows_by_key(svc)["k1"].match_id, reason="合成", actor="t", request_id=None)
+    svc.deactivate_account(current.id, reason="合成停用", actor="boss")
+    assert not [row for row in svc.list_accounts().items if row.is_active]
+
+
+def test_auto_match_skips_lines_already_used_in_the_journal(
+    session: Session, svc: PayoutReconService
+):
+    uses = {
+        "SYNL000000000021": {"exclude_amount": Decimal("101"), "exclude_reason": "合成"},
+        "SYNL000000000022": {"manual_pair": "SYNPAIR1"},
+        "SYNL000000000023": {"parts": [{"amount": "103.0000", "category_code": None}]},
+        "SYNL000000000024": {"manual_category": "G01"},
+        "SYNL000000000025": {"manual_category": "T03"},
+    }
+    for index, (uid, fields) in enumerate(uses.items(), start=1):
+        amount = f"{100 + index}.00"
+        add_period(session, f"k{index}", "2026-10-06", amount)
+        add_line(session, uid, "2026-10-07", amount)
+        session.add(FinanceCashLineState(line_uid=uid, **fields))
+    session.flush()
+    result = svc.auto_match(actor="t", request_id=None)
+    assert (result.matched_lines, result.matched_periods) == (1, 1)
+    assert rows_by_key(svc)["k5"].line_uid == "SYNL000000000025"
+    hints = {line.line_uid: line.journal_hint for line in svc.candidate_lines(STORE_A).items}
+    assert hints["SYNL000000000021"] == "已剔除"
+    assert hints["SYNL000000000022"] == "已内部配对"
+    assert hints["SYNL000000000023"] == "已拆分"
+    assert hints["SYNL000000000024"].startswith("已分类 ")
+    assert hints["SYNL000000000025"] is None
+    made = svc.manual_match(
+        PayoutManualMatchRequest(line_uid="SYNL000000000024", periods=[key("k4")]),
+        actor="t",
+        request_id=None,
+    )
+    assert made.periods == 1
+
+
+def test_manual_match_rejects_bills_before_recon_start(session: Session, svc: PayoutReconService):
+    add_period(session, "k9", "2026-09-22", "100.00")
+    add_line(session, "SYNL000000000031", "2026-10-07", "100.00")
+    with pytest.raises(PayoutReconError) as early:
+        svc.manual_match(
+            PayoutManualMatchRequest(line_uid="SYNL000000000031", periods=[key("k9")]),
+            actor="t",
+            request_id=None,
+        )
+    assert (early.value.status_code, early.value.code) == (422, "PAYOUT_RECON_INVALID")

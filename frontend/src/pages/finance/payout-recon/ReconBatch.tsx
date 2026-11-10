@@ -16,7 +16,7 @@ const BATCH: Record<ReviewKind, { label: string; danger?: boolean; skipText: str
   review2_reject: { label: "批量终审驳回", danger: true, skipText: "不在待终审" },
 };
 
-const eligible = (row: ReconRow, kind: ReviewKind) => isMatched(row) && (kind === "review1_pass" ? isFirstPending(row.stage) : row.stage === "ok1");
+const eligible = (row: ReconRow, kind: ReviewKind) => isMatched(row) && !row.arrivalVoided && (kind === "review1_pass" ? isFirstPending(row.stage) : row.stage === "ok1");
 
 function ReconBatch({ rows, selected, onDone }: { rows: ReconRow[]; selected: ReconRow[]; onDone: () => void }) {
   const [messageApi, holder] = message.useMessage();

@@ -27,7 +27,11 @@ ACTIONS = (
         "review1",
         "回款对账初审（确认到账、配对）",
     ),
-    ("action:finance:settlement-reconciliation:review2", "review2", "回款对账终审（通过 / 驳回）"),
+    (
+        "action:finance:settlement-reconciliation:review2",
+        "review2",
+        "回款对账终审（通过 / 驳回、收款账户映射）",
+    ),
     ("action:finance:settlement-reconciliation:follow", "follow", "回款对账打款异常跟进"),
 )
 

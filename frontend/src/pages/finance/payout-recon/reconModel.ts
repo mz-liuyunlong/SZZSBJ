@@ -27,3 +27,5 @@ export const n2 = (value: number | null | undefined) =>
   value == null || !Number.isFinite(value) ? "—" : value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export const timeText = (iso: string | null | undefined) => (iso ? dayjs(iso).format("YYYY-MM-DD HH:mm") : "—");
+
+export const VOIDED_ARRIVAL_TEXT = "到账流水已作废，请撤销配对";

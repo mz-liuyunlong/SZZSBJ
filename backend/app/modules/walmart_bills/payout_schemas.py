@@ -40,6 +40,8 @@ class PayoutPeriodRead(BaseModel):
     period_status: str
     pay_state: str
     anomaly: bool
+    # 配上的到账流水在日记账里已作废：这一期按没到账算，请撤销配对
+    arrival_voided: bool = False
     arrived_amount: Decimal | None = None
     diff: Decimal | None = None
     arrived_date: date | None = None
@@ -106,10 +108,14 @@ class PayoutLineRead(BaseModel):
     counterparty_name: str
     description: str
     matched: bool
+    # 日记账里已另有用途（已剔除 / 已内部配对 / 已拆分 / 已分类 Xxx）：不自动配，手动配时提示
+    journal_hint: str | None = None
 
 
 class PayoutLineListData(BaseModel):
     items: list[PayoutLineRead]
+    limit: int = 2000
+    truncated: bool = False
 
 
 class PayoutAutoMatchData(BaseModel):

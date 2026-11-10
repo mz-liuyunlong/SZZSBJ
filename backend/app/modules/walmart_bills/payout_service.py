@@ -91,7 +91,7 @@ Key = tuple[str, str]  # (store_id, report_key)
 
 
 def store_code(store_name: str | None, store_id: str) -> str:
-    """店铺名形如「CN2601-xxx」，取横杠前的编号；没有店铺名就显示店铺 ID。"""
+    """店铺名形如「CN9901-xxx」，取横杠前的编号；没有店铺名就显示店铺 ID。"""
     name = (store_name or "").strip()
     return name.split("-", 1)[0].strip() or store_id if name else store_id
 
@@ -291,7 +291,36 @@ class PayoutReconService:
                 FinanceCashLine.business_date >= since,
             )
         )
-        return [row for row in rows if row.line_uid not in taken]
+        free = [row for row in rows if row.line_uid not in taken]
+        hints = self._journal_hints(row.line_uid for row in free)
+        # 日记账里已剔除 / 已内部配对 / 已拆分 / 已分到别的类别的流水不自动配（可以手动配）。
+        return [row for row in free if hints.get(row.line_uid) is None]
+
+    def _journal_hints(self, uids: Iterable[str]) -> dict[str, str | None]:
+        """这笔流水在日记账里是否已另有用途；None = 没有，可以自动配。"""
+        wanted = list(set(uids))
+        if not wanted:
+            return {}
+        names = dict(
+            self.session.execute(select(FinanceCashCategory.code, FinanceCashCategory.name)).all()
+        )
+        out: dict[str, str | None] = {}
+        for state in self.session.scalars(
+            select(FinanceCashLineState).where(FinanceCashLineState.line_uid.in_(wanted))
+        ):
+            if state.exclude_amount is not None:
+                hint: str | None = "已剔除"
+            elif state.manual_pair:
+                hint = "已内部配对"
+            elif state.parts:
+                hint = "已拆分"
+            elif state.manual_category and state.manual_category != PLATFORM_CATEGORY:
+                code = state.manual_category
+                hint = f"已分类 {names.get(code, code)}"
+            else:
+                hint = None
+            out[state.line_uid] = hint
+        return out
 
     @staticmethod
     def _line_in(row: FinanceCashLine) -> rules.LineIn:
@@ -380,15 +409,16 @@ class PayoutReconService:
         for row in rows:
             key = (row.store_id, row.report_key)
             arrived = arrivals.get(key)
-            state, diff = rules.pay_state(
-                self._period_in(row), arrived[0] if arrived else None, today
-            )
+            line = lines.get(arrived[1].line_uid) if arrived else None
+            # 到账流水已作废（日记账整批作废）：配对记录不动，这一期按没到账算，标打款异常。
+            arrival_voided = line is not None and line.voided_at is not None
+            counted = arrived[0] if arrived and not arrival_voided else None
+            state, diff = rules.pay_state(self._period_in(row), counted, today)
             events = reviews.get(key, [])
             stage = rules.stage_of(event.kind for event in events)
             reject = next(
                 (e.reason for e in reversed(events) if e.kind == rules.KIND_REVIEW2_REJECT), None
             )
-            line = lines.get(arrived[1].line_uid) if arrived else None
             mapped = rules.account_for(maps, row.store_id, row.report_date)
             account_key = line.account_key if line else (mapped.account_key if mapped else None)
             account = accounts.get(account_key) if account_key else None
@@ -406,8 +436,9 @@ class PayoutReconService:
                     payable_amount=row.payable_amount,
                     period_status=row.status,
                     pay_state=state,
-                    anomaly=state in rules.ANOMALY_STATES,
-                    arrived_amount=arrived[0] if arrived else None,
+                    anomaly=arrival_voided or state in rules.ANOMALY_STATES,
+                    arrival_voided=arrival_voided,
+                    arrived_amount=counted,
                     diff=diff,
                     arrived_date=line.business_date if line else None,
                     line_uid=line.line_uid if line else None,
@@ -488,9 +519,15 @@ class PayoutReconService:
                 FinanceCashLine.business_date >= RECON_START,
             )
             .order_by(FinanceCashLine.business_date.desc(), FinanceCashLine.line_uid)
-            .limit(MAX_ROWS)
+            .limit(MAX_ROWS + 1)
         )
+        found = list(rows)
+        truncated = len(found) > MAX_ROWS
+        found = found[:MAX_ROWS]
+        hints = self._journal_hints(row.line_uid for row in found)
         return PayoutLineListData(
+            limit=MAX_ROWS,
+            truncated=truncated,
             items=[
                 PayoutLineRead(
                     line_uid=row.line_uid,
@@ -504,9 +541,10 @@ class PayoutReconService:
                     counterparty_name=row.counterparty_name,
                     description=row.description,
                     matched=row.line_uid in taken,
+                    journal_hint=hints.get(row.line_uid),
                 )
-                for row in rows
-            ]
+                for row in found
+            ],
         )
 
     # ------------------------------------------------------------------ 写：配对
@@ -552,6 +590,10 @@ class PayoutReconService:
         stages = self._stages(keys)
         for row in found:
             label = f"{store_code(row.store_name, row.store_id)} {row.report_date}"
+            if row.report_date < RECON_START:
+                raise PayoutReconError(
+                    422, ERR_INVALID, f"{label} 早于 {RECON_START}，不在回款对账范围"
+                )
             if row.status == "voided":
                 raise PayoutReconError(409, ERR_CONFLICT, f"{label} 账单作废，不能配到账")
             if (row.store_id, row.report_key) in taken:
@@ -587,7 +629,12 @@ class PayoutReconService:
             raise PayoutReconError(404, ERR_NOT_FOUND, "没有这次配对（或已撤销）")
         keys = [(row.store_id, row.report_key) for row in rows]
         stages = self._stages(keys)
-        if any(stage not in rules.FIRST_PENDING for stage in stages.values()):
+        line = self.session.get(FinanceCashLine, rows[0].line_uid)
+        # 到账流水已作废：钱不在了，任何阶段都可以撤销（撤销后回到待初审）。
+        arrival_voided = line is not None and line.voided_at is not None
+        if not arrival_voided and any(
+            stage not in rules.FIRST_PENDING for stage in stages.values()
+        ):
             raise PayoutReconError(409, ERR_STAGE, "已初审 / 终审的期次不能撤销配对；先请终审驳回")
         now = datetime.now(UTC)
         for row in rows:
@@ -811,7 +858,14 @@ class PayoutReconService:
                 )
             )
         }
-        matched = {(row.store_id, row.report_key) for row in self._active_matches()}
+        active = self._active_matches()
+        matched = {(row.store_id, row.report_key) for row in active}
+        lines = self._lines(row.line_uid for row in active)
+        voided = {
+            (row.store_id, row.report_key)
+            for row in active
+            if row.line_uid in lines and lines[row.line_uid].voided_at is not None
+        }
         stages = self._stages(keys)
         skipped: list[PayoutReviewSkipped] = []
         done = 0
@@ -821,6 +875,8 @@ class PayoutReconService:
                 why = "没有这一期账单"
             elif key not in matched:
                 why = "还没配上到账"
+            elif key in voided:
+                why = "到账流水已作废，请撤销配对"
             elif not rules.review_allowed(request.kind, stages[key], True):
                 why = "不在这一步"
             if why:
@@ -963,14 +1019,37 @@ class PayoutReconService:
         row = self.session.get(WalmartPayoutAccount, account_id)
         if row is None or not row.is_active:
             raise PayoutReconError(404, ERR_NOT_FOUND, "没有这条收款账户")
-        self._check_account(request.account_key)
-        row.account_key = request.account_key
+        if request.account_key != row.account_key:
+            # 换入账账户会改变历史期次的归属，必须新增一条（生效日 + 原因），旧的留痕。
+            raise PayoutReconError(422, ERR_INVALID, "换账户请新增一条，写生效日和原因")
         row.payee = request.payee.strip()
         row.change_reason = (request.reason or "").strip() or row.change_reason
         row.updated_by, row.updated_at = actor, datetime.now(UTC)
         self.session.commit()
         codes = {s.store_id: s.store_code for s in self._store_options()}
         return self._account_read(row, self._accounts(), codes)
+
+    def _covered_matches(self, row: WalmartPayoutAccount) -> int:
+        """这条映射生效期间（按账单日）里，这家店还有几期生效中的配对。"""
+        query = (
+            select(func.count())
+            .select_from(WalmartPayoutMatch)
+            .join(
+                WalmartBillPeriod,
+                (WalmartBillPeriod.source_account_ref == WalmartPayoutMatch.source_account_ref)
+                & (WalmartBillPeriod.store_id == WalmartPayoutMatch.store_id)
+                & (WalmartBillPeriod.report_key == WalmartPayoutMatch.report_key),
+            )
+            .where(
+                WalmartPayoutMatch.undone_at.is_(None),
+                WalmartPayoutMatch.source_account_ref == row.source_account_ref,
+                WalmartPayoutMatch.store_id == row.store_id,
+                WalmartBillPeriod.report_date >= row.effective_from,
+            )
+        )
+        if row.effective_to is not None:
+            query = query.where(WalmartBillPeriod.report_date <= row.effective_to)
+        return int(self.session.scalar(query) or 0)
 
     def deactivate_account(self, account_id: UUID, *, reason: str, actor: str) -> None:
         self._lock()
@@ -979,6 +1058,10 @@ class PayoutReconService:
             raise PayoutReconError(404, ERR_NOT_FOUND, "没有这条收款账户")
         if not reason.strip():
             raise PayoutReconError(422, ERR_INVALID, "停用要写原因")
+        if self._covered_matches(row):
+            raise PayoutReconError(
+                409, ERR_CONFLICT, "这条收款账户覆盖的期次里还有生效中的配对，先撤销配对再停用"
+            )
         row.is_active = False
         row.change_reason = reason.strip()
         row.updated_by, row.updated_at = actor, datetime.now(UTC)

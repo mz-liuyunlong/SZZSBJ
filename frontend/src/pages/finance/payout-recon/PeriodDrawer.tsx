@@ -3,11 +3,11 @@
  * 底部终审通过 / 终审不通过。页面上不显示审核人名字。
  */
 import { CheckOutlined, CloseOutlined } from "@ant-design/icons";
-import { Button, Checkbox, Descriptions, Divider, Drawer, Empty, Input, Modal, Space, Table, Tag, Timeline, Tooltip, Typography, message } from "antd";
+import { Alert, Button, Checkbox, Descriptions, Divider, Drawer, Empty, Input, Modal, Space, Table, Tag, Timeline, Tooltip, Typography, message } from "antd";
 import { useState } from "react";
 import { MoneyCell } from "@/components/report-table/cells";
 import { createMatch, reconErrorText, undoMatch, useCandidateLines, usePeriodDetail, type ApiLine, type ReconRow } from "./reconApi";
-import { PAY_STATE, REVIEW_TAG, isFirstPending, isMatched, n2, timeText } from "./reconModel";
+import { PAY_STATE, REVIEW_TAG, VOIDED_ARRIVAL_TEXT, isFirstPending, isMatched, n2, timeText } from "./reconModel";
 
 const KIND_TEXT: Record<string, string> = {
   review1_pass: "确认到账（初审通过）",
@@ -35,7 +35,7 @@ function MatchModal({ row, openRows, onClose, onDone }: { row: ReconRow; openRow
   const [busy, setBusy] = useState(false);
   const others = openRows.filter((item) => item.sid === row.sid && item.key !== row.key);
   const chosen = [row, ...others.filter((item) => extra.includes(item.key))];
-  const picked = lines.data?.find((line) => line.line_uid === lineUid);
+  const picked = lines.data?.items.find((line) => line.line_uid === lineUid);
   const payable = chosen.reduce((total, item) => total + item.payable, 0);
   const submit = async () => {
     if (!lineUid) return;
@@ -59,7 +59,7 @@ function MatchModal({ row, openRows, onClose, onDone }: { row: ReconRow; openRow
         size="small"
         rowKey="line_uid"
         loading={lines.isPending}
-        dataSource={lines.data ?? []}
+        dataSource={lines.data?.items ?? []}
         pagination={{ pageSize: 8 }}
         rowSelection={{ type: "radio", selectedRowKeys: lineUid ? [lineUid] : [], onChange: (keys) => setLineUid(String(keys[0])), getCheckboxProps: (line) => ({ disabled: line.matched }) }}
         columns={[
@@ -67,10 +67,13 @@ function MatchModal({ row, openRows, onClose, onDone }: { row: ReconRow; openRow
           { title: "入账账户", dataIndex: "account_name", width: 180, ellipsis: true },
           { title: "金额", dataIndex: "amount", width: 120, align: "right", render: (_, line) => <MoneyCell value={Number(line.amount)} /> },
           { title: "付款方 / 摘要", key: "text", ellipsis: true, render: (_, line) => `${line.counterparty_name} ${line.description}`.trim() || "—" },
-          { title: "状态", key: "matched", width: 90, render: (_, line) => (line.matched ? <Tag bordered={false}>已配对</Tag> : <Tag color="green" bordered={false}>可配</Tag>) },
+          { title: "状态", key: "matched", width: 140, render: (_, line) => (line.matched ? <Tag bordered={false}>已配对</Tag> : line.journal_hint
+            ? <Tooltip title="日记账里这笔已另有用途，自动配对不会用它；确认是平台回款再手动配"><Tag color="orange" bordered={false}>{line.journal_hint}</Tag></Tooltip>
+            : <Tag color="green" bordered={false}>可配</Tag>) },
         ]}
         locale={{ emptyText: lines.error ? reconErrorText(lines.error) : "这家店的收款账户里没有可配的到账（先在「收款账户匹配」里设好账户）" }}
       />
+      {lines.data?.truncated && <Typography.Paragraph type="warning">只列出最近 {lines.data.limit} 笔，更早的没有显示。</Typography.Paragraph>}
       {others.length > 0 && (
         <>
           <Divider orientation="left" plain>合并打款：一起配的其他期</Divider>
@@ -97,9 +100,9 @@ function PeriodDrawer({ row, openRows, onPass, onReject, onChanged, onClose }: P
   if (!row) return null;
   const matched = isMatched(row);
   const stage = row.stage;
-  const finalTurn = matched && stage === "ok1";
-  const turnTip = !matched ? "还没配上到账，不审核" : finalTurn ? "" : stage === "ok2" ? "已终审" : "还没初审通过，轮不到终审";
-  const canChangeMatch = isFirstPending(stage);
+  const finalTurn = matched && !row.arrivalVoided && stage === "ok1";
+  const turnTip = row.arrivalVoided ? VOIDED_ARRIVAL_TEXT : !matched ? "还没配上到账，不审核" : finalTurn ? "" : stage === "ok2" ? "已终审" : "还没初审通过，轮不到终审";
+  const canChangeMatch = isFirstPending(stage) || row.arrivalVoided;
   const undo = async () => {
     try {
       await undoMatch(row.matchId, undoReason.trim());
@@ -154,6 +157,7 @@ function PeriodDrawer({ row, openRows, onPass, onReject, onChanged, onClose }: P
       <Divider orientation="left" plain>配对的到账（日记账）</Divider>
       {matched ? (
         <>
+          {row.arrivalVoided && <Alert className="fin-payout-recon__gap" type="error" showIcon message={VOIDED_ARRIVAL_TEXT} description="这笔到账所在的日记账批次已作废，这一期按没到账算。撤销配对后重新配。" />}
           <Descriptions size="small" column={2} bordered>
             <Descriptions.Item label="到账日期">{row.arrivedAt || "—"}</Descriptions.Item>
             <Descriptions.Item label="入账账户（日记账）">{row.accountName || "—"}</Descriptions.Item>

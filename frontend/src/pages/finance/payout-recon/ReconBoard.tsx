@@ -18,7 +18,7 @@ import FollowModal from "./FollowModal";
 import ReconBatch from "./ReconBatch";
 import type { PayState, ReconRow, ReviewStage } from "./reconApi";
 import { RECON_COLUMN_GROUPS, RECON_DEFAULT_KEYS, RECON_FIXED_KEYS, readReconColumns, writeReconColumns } from "./reconColumns";
-import { PAY_STATE, REVIEW_TAG, isFirstPending, isMatched, n2, timeText } from "./reconModel";
+import { PAY_STATE, REVIEW_TAG, VOIDED_ARRIVAL_TEXT, isFirstPending, isMatched, n2, timeText } from "./reconModel";
 
 type CardKey = "all" | "paid" | "anomaly" | "todo" | "ok1";
 
@@ -98,7 +98,10 @@ function ReconBoard({ actions, subtitle, rows: allRows, payDates, picked, onPick
     {
       key: "state", title: "回款状态", dataIndex: "state", width: 150,
       render: (_, row) => (
-        <Tooltip title={PAY_STATE[row.state].tip}><Tag color={PAY_STATE[row.state].color} bordered={false}>{PAY_STATE[row.state].text}</Tag></Tooltip>
+        <span className="finance-board__stack">
+          <Tooltip title={PAY_STATE[row.state].tip}><Tag color={PAY_STATE[row.state].color} bordered={false}>{PAY_STATE[row.state].text}</Tag></Tooltip>
+          {row.arrivalVoided && <Typography.Text type="danger" className="finance-board__sub">{VOIDED_ARRIVAL_TEXT}</Typography.Text>}
+        </span>
       ),
     },
     { key: "caseNo", title: "Case 编号", width: 120, render: (_, row) => row.latestFollow?.case_no || EMPTY },
@@ -128,6 +131,7 @@ function ReconBoard({ actions, subtitle, rows: allRows, payDates, picked, onPick
       tooltip: "审批流转：待初审 → 财务专员 ✓ 确认到账 → 待终审 → 财务主管 ✓ / ✗ → 已终审（按钮变灰）。初审点错了请终审驳回；终审 ✗ 须填原因，驳回到待初审。没配上到账的不审核。",
       render: (_, row) => {
         if (!isMatched(row)) return <Typography.Text type="secondary">{row.state === "no_pay" ? "不需审核" : "等配上到账"}</Typography.Text>;
+        if (row.arrivalVoided) return <Typography.Text type="danger">{VOIDED_ARRIVAL_TEXT}</Typography.Text>;
         return (
           <span className="finance-board__stack">
             <Tag color={REVIEW_TAG[row.stage].color} bordered={false}>{REVIEW_TAG[row.stage].text}</Tag>
@@ -140,7 +144,7 @@ function ReconBoard({ actions, subtitle, rows: allRows, payDates, picked, onPick
       key: "review_act", title: "审核", width: 84, fixed: "right",
       tooltip: "轮到初审时是初审（= 确认到账），轮到终审时是终审（看左边审核状态）；✓ 通过；终审还有 ✗ 驳回（须填原因）；已终审变灰",
       render: (_, row) => {
-        if (!isMatched(row)) return null;
+        if (!isMatched(row) || row.arrivalVoided) return null;
         const stage = row.stage;
         const level: 1 | 2 | undefined = isFirstPending(stage) ? 1 : stage === "ok1" ? 2 : undefined;
         const name = level === 1 ? "初审（确认到账）" : "终审";

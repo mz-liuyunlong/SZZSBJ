@@ -133,8 +133,8 @@ function AccountMapDrawer({ open, onClose, onChanged }: { open: boolean; onClose
           <Form.Item name="ident" label="收款账户" extra="派安盈填付款邮箱，PingPong 填公司名称；用来认出到账是哪个店的（不填就只按入账账户认）">
             <Input maxLength={200} />
           </Form.Item>
-          <Form.Item name="accountKey" label="入账账户（日记账）" rules={[{ required: true, message: "选入账账户" }]} extra="钱进日记账里的哪个账户；账户在「资金流水 → 账户管理」里维护">
-            <Select showSearch optionFilterProp="label" options={accounts} />
+          <Form.Item name="accountKey" label="入账账户（日记账）" rules={[{ required: true, message: "选入账账户" }]} extra={mode?.kind === "edit" ? "修改只能改收款账户；换入账账户请用「换账户」（写生效日和原因）" : "钱进日记账里的哪个账户；账户在「资金流水 → 账户管理」里维护"}>
+            <Select showSearch optionFilterProp="label" options={accounts} disabled={mode?.kind === "edit"} />
           </Form.Item>
           {mode?.kind !== "edit" && (
             <Form.Item name="effectiveFrom" label="生效日期" rules={[{ required: true, message: "选生效日期" }]} extra="从这一天起的账单按这个账户对账">
@@ -155,7 +155,7 @@ function AccountMapDrawer({ open, onClose, onChanged }: { open: boolean; onClose
 
       <Modal open={Boolean(stopping)} title={`停用 · ${stopping?.store_code ?? ""}`} okText="确定停用" okButtonProps={{ danger: true, disabled: !stopReason.trim() }} cancelText="取消"
         onOk={() => void stop()} onCancel={() => { setStopping(undefined); setStopReason(""); }} destroyOnHidden>
-        <Typography.Paragraph type="secondary">停用后这个店铺的账单不再自动配对，已配上的不受影响。</Typography.Paragraph>
+        <Typography.Paragraph type="secondary">停用后这个店铺的账单不再自动配对。这条账户期间内还有生效中的配对时不能停用，要先撤销配对。</Typography.Paragraph>
         <Input.TextArea autoFocus rows={3} maxLength={300} showCount value={stopReason} onChange={(event) => setStopReason(event.target.value)} placeholder="必填：停用原因" />
       </Modal>
     </Drawer>

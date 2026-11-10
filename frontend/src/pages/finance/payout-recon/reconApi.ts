@@ -18,7 +18,7 @@ export interface ApiFollow { content: string; case_no: string | null; next_follo
 export interface ApiPeriod {
   store_id: string; store_code: string; store_name: string | null; report_key: string; report_date: string;
   period_start_date: string | null; period_end_date: string | null; currency_code: string | null; payable_amount: string;
-  period_status: string; pay_state: PayState; anomaly: boolean; arrived_amount: string | null; diff: string | null; arrived_date: string | null;
+  period_status: string; pay_state: PayState; anomaly: boolean; arrival_voided?: boolean; arrived_amount: string | null; diff: string | null; arrived_date: string | null;
   line_uid: string | null; match_id: string | null; match_method: "auto" | "manual" | null; match_size: number;
   account_key: string | null; account_name: string | null; org: string | null; payee: string | null;
   stage: ReviewStage; stage_reason: string | null; follow_count: number; latest_follow: ApiFollow | null;
@@ -31,7 +31,10 @@ export interface ApiPeriodDetail {
   follow_ups: ApiFollow[];
   matches: { match_id: string; line_uid: string; method: string; payable_amount: string; created_by: string; created_at: string; undone_at: string | null; undone_by: string | null; undo_reason: string | null }[];
 }
-export interface ApiLine { line_uid: string; account_key: string; account_name: string; business_date: string; amount: string; currency_code: string; counterparty_name: string; description: string; matched: boolean }
+export interface ApiLine { line_uid: string; account_key: string; account_name: string; business_date: string; amount: string; currency_code: string; counterparty_name: string; description: string; matched: boolean;
+  /** 日记账里已另有用途（已剔除 / 已内部配对 / 已拆分 / 已分类 Xxx）：不自动配，手动配时提示 */
+  journal_hint?: string | null }
+export interface ApiLineList { items: ApiLine[]; limit: number; truncated: boolean }
 export interface ApiAccountRow {
   id: string; store_id: string; store_code: string; account_key: string; account_name: string; org: string; payee: string;
   effective_from: string; effective_to: string | null; is_active: boolean; change_reason: string | null; updated_by: string; updated_at: string;
@@ -59,6 +62,8 @@ export interface ReconRow {
   diff: number | null;
   state: PayState;
   anomaly: boolean;
+  /** 配上的到账流水在日记账里已作废：按没到账算，请撤销配对 */
+  arrivalVoided: boolean;
   org: string;
   payee: string;
   accountName: string;
@@ -90,6 +95,7 @@ export function toRow(item: ApiPeriod): ReconRow {
     diff: num(item.diff),
     state: item.pay_state,
     anomaly: item.anomaly,
+    arrivalVoided: Boolean(item.arrival_voided),
     org: item.org ?? "",
     payee: item.payee ?? "",
     accountName: item.account_name ?? "",
@@ -126,7 +132,7 @@ export function usePeriodDetail(row?: ReconRow) {
 export function useCandidateLines(storeId: string | undefined, enabled: boolean) {
   return useQuery({
     queryKey: ["finance-payout-recon", "lines", storeId],
-    queryFn: async () => (await backendRequest<{ items: ApiLine[] }>(`${BASE}/lines?store_id=${storeId ?? ""}`)).data.items,
+    queryFn: async () => (await backendRequest<ApiLineList>(`${BASE}/lines?store_id=${storeId ?? ""}`)).data,
     enabled: enabled && Boolean(storeId),
     retry: false,
   });
@@ -166,7 +172,7 @@ const CODE_TEXT: Record<string, string> = {
   PAYOUT_RECON_STAGE_NOT_ALLOWED: "已初审 / 终审的期次不能改配对，先请终审驳回",
   PAYOUT_RECON_CONFLICT: "这一期或这笔到账已经配过了（或账单作废），刷新后再看",
   PAYOUT_RECON_NOT_FOUND: "找不到这一期或这笔到账，刷新后再看",
-  PAYOUT_RECON_INVALID: "填写的内容不符合要求（原因必填、币种要一致、账户要有效）",
+  PAYOUT_RECON_INVALID: "填写的内容不符合要求（原因必填、币种要一致、账单日要在 10 月起；换入账账户请新增一条）",
   WALMART_BILL_SYNC_NOT_CONFIGURED: "沃尔玛账单同步任务还没打开，请联系管理员",
   WALMART_BILL_SYNC_UNAVAILABLE: "任务队列暂时不可用，请稍后再试",
 };
