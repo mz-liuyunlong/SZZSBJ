@@ -688,7 +688,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "nullif(trim(sample.local_sku),''),k.item_id),coalesce(l.local_name,s.product_name),"
                 "l.title,l.picture_url,null,coalesce(s.sales_qty,0),coalesce(s.order_count,0),coalesce(s.sales_amount,0),"
                 "coalesce(sample.sample_order_count,0),coalesce(sample.sample_qty,0),"
-                "greatest(coalesce(s.sales_qty,0)-coalesce(sample.sample_qty,0),0)+coalesce(sample.sample_qty,0),"
+                "case when coalesce(sample.sample_disputed,false) then coalesce(s.sales_qty,0) else greatest(coalesce(s.sales_qty,0)-coalesce(sample.sample_qty,0),0)+coalesce(sample.sample_qty,0) end,"
                 "case when coalesce(sample.sample_disputed,false) then coalesce(s.sales_qty,0) else greatest(coalesce(s.sales_qty,0)-coalesce(sample.sample_qty,0),0) end,"
                 "case when coalesce(sample.sample_disputed,false) then coalesce(s.order_count,0) else greatest(coalesce(s.order_count,0)-coalesce(sample.sample_order_count,0),0) end,"
                 "case when coalesce(sample.sample_disputed,false) then coalesce(s.sales_amount,0) else greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0) end,"
