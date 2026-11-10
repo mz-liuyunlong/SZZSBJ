@@ -29,6 +29,7 @@ settings.md
 - `walmart-monitor-target-source.md`（Walmart 监控目标只读来源接口）
 - `finance-cashflow-import.md`（财务日记账：流水导入、初审终审、剔除、异常）
 - `finance-walmart-bills.md`（财务沃尔玛账单：每期汇总、手动同步、同步规则）
+- `finance-payout-recon.md`（财务回款对账：到账自动 / 手动配对、初审终审、跟进、收款账户映射）
 - `wfs-fee-anomaly-auto-detection.md`（WFS 结算采集、只读检测预览与案件写入门禁）
 - `pmc-domestic-batch-board-api.md`（PMC 国内仓批次看板只读 API）
 - `keyword-planning-v11.md`（关键词 V1.1 本地开发契约；未部署、未开放正式投放）

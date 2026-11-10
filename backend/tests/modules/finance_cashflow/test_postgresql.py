@@ -432,7 +432,9 @@ def _load_migration(name: str = "20261104_0072_finance_cashflow"):
 def _downgrade(session: Session) -> None:
     context = MigrationContext.configure(session.connection())
     with Operations.context(context):
-        # 0081 的派安盈月结明细表引用了 0072 的表：先退掉它（空表才允许退）。
+        # 0086 回款对账的映射 / 配对表、0081 的派安盈月结明细表都引用了 0072 的表：
+        # 先退掉它们（空表才允许退）。
+        _load_migration("20261110_0086_finance_payout_recon").downgrade()
         _load_migration("20261105_0081_finance_payoneer_statement").downgrade()
         _load_migration().downgrade()
 

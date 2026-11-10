@@ -58,7 +58,7 @@ PRP：`PRPs/finance-walmart-settlement-sync-v1.md`；数据源决策：`docs/dat
 2. 只开手动：`WALMART_BILL_SYNC_ENABLE_AUTHORIZED=true WALMART_BILL_SOURCE_ACCOUNT_REF=<账号引用> uv run python scripts/enable_walmart_bill_sync.py`（手动同步可用，定时不开）。
 3. 首次手动同步当作受控探测：确认鉴权、按店筛选、条数与本地归档一致（只回报是否一致）。
 4. 开定时：探测通过后，同上命令再加 `WALMART_BILL_SYNC_SCHEDULE_AUTHORIZED=true` 重跑一次（打开每周三定时）。
-5. 回填：任务中心对该接口发起回填，2026-03-01 至今。
+5. 回填：任务中心对该接口发起回填，2026-10-01 至今（Rocky 2026-11-10；更早的以后要用再补，代码下限仍是 2026-03-01）。按月分批：先 10 月，再 11 月至今。
 6. 分配权限：给有关角色分配 `action:finance:settlement-reconciliation:sync`。
 
 回滚：任务中心关掉 `is_enabled` 立即停；迁移 down 在明细表有数据、或动作权限已分给角色时拒绝。

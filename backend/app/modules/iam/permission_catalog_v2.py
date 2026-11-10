@@ -263,6 +263,16 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ActionDefinition("pmc_domestic_warehouse_board", "packing-approve", "通过打包审批", 10),
     ActionDefinition("pmc_domestic_warehouse_board", "packing-reject", "驳回打包审批", 20),
     ActionDefinition("finance_settlement_reconciliation", "sync", "手动同步沃尔玛账单", 10),
+    ActionDefinition(
+        "finance_settlement_reconciliation", "review1", "回款对账初审（确认到账、配对）", 20
+    ),
+    ActionDefinition(
+        "finance_settlement_reconciliation",
+        "review2",
+        "回款对账终审（通过 / 驳回、收款账户映射）",
+        30,
+    ),
+    ActionDefinition("finance_settlement_reconciliation", "follow", "回款对账打款异常跟进", 40),
     ActionDefinition("products_product_management", "view-sync-history", "查看同步历史", 8),
     ActionDefinition("products_product_management", "view-raw-lineage", "查看数据血缘", 9, "high"),
     ActionDefinition("products_product_management", "view-operation-logs", "查看操作日志", 10),
