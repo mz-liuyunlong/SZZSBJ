@@ -1069,7 +1069,9 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     sample_amount=sample_amount,
                     sales_amount=gross_sales,
                 )
-            paid_sales = gross_sales if sample_disputed else max(gross_sales - sample_amount, Decimal("0"))
+            paid_sales = (
+                gross_sales if sample_disputed else max(gross_sales - sample_amount, Decimal("0"))
+            )
             if refund_amount is None:
                 missing.append("refund_amount_missing")
                 warnings.append("refund_amount_missing")
