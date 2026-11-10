@@ -633,6 +633,7 @@ def test_dedupe_ad_rows_for_resolution_matches_write_ads_identity_collapse() -> 
     assert deduped[0]["adSpend"] == "6.42"
     assert deduped[0]["numAdsShown"] == "2775"
 
+
 def test_sp_campaign_bundle_uses_verified_campaign_ids_for_search_and_manual_keywords() -> None:
     client = _SequenceClient(
         [
