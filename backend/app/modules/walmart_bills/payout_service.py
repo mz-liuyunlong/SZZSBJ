@@ -323,6 +323,8 @@ class PayoutReconService:
                 hint = "已内部配对"
             elif state is not None and state.parts:
                 hint = "已拆分"
+            elif state is not None and state.refs:
+                hint = "已挂审批单"
             elif state is not None and state.manual_category:
                 code = state.manual_category
                 hint = None if code == PLATFORM_CATEGORY else f"已分类 {names.get(code, code)}"
@@ -1123,22 +1125,25 @@ def memo_with_tag(current: str | None, tag: str) -> tuple[str | None, bool]:
 def memo_without_tag(
     current: str | None, memo_before: str | None, memo_set: str | None
 ) -> str | None | Literal[False]:
-    """撤销时备注怎么恢复。返回新备注（None = 清空），False = 不动。
+    """撤销时备注怎么恢复（和 memo_with_tag 一样按「；」分段）。
+
+    返回新备注（None = 清空），False = 不动。
 
     - 当前备注没被人改过（== memo_set）→ 恢复配对前的人工备注；
-    - 被人改过但当初追加的那一段还在、且只有一处 → 只删那一段；
-    - 那一段找不到了 → 不动。
+    - 被人改过：按「；」切段、去空格，和当初追加的 tag 完全相同的段恰好一处 → 只删这一段，
+      其余各段用「；」拼回（拼完为空 = 清空）；0 处或多处 → 不动。
     """
     if memo_set is None:
         return False
     if current == memo_set:
         return memo_before
-    before = (memo_before or "").strip()
-    fragment = memo_set[len(before) :] if before and memo_set.startswith(before) else memo_set
-    if not current or not fragment or current.count(fragment) != 1:
+    tag = memo_set.split(MEMO_JOINER)[-1].strip()
+    parts = [part.strip() for part in (current or "").split(MEMO_JOINER)]
+    hits = [index for index, part in enumerate(parts) if part == tag]
+    if not tag or len(hits) != 1:
         return False
-    left = current.replace(fragment, "", 1).strip().strip(MEMO_JOINER).strip()
-    return left or None
+    rest = [part for index, part in enumerate(parts) if index != hits[0] and part]
+    return MEMO_JOINER.join(rest) or None
 
 
 def _match_note(note: str | None, too_long: bool) -> str | None:

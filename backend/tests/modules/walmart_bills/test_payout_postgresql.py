@@ -428,10 +428,10 @@ def test_undo_after_user_edit_removes_only_the_appended_part(
 ):
     uid = "SYNL000000000042"
     match_id = matched_with_memo(session, svc, uid, "合成人工备注")
-    session.get(FinanceCashLineState, uid).manual_memo = f"合成人工备注；{TAG} 财务补充"
+    session.get(FinanceCashLineState, uid).manual_memo = f"合成人工备注；{TAG}；财务补充"
     session.flush()
     svc.unmatch(UUID(match_id), reason="合成", actor="t", request_id=None)
-    assert memo_of(session, uid) == "合成人工备注 财务补充"
+    assert memo_of(session, uid) == "合成人工备注；财务补充"
 
 
 def test_undo_leaves_memo_alone_when_the_tag_is_gone(session: Session, svc: PayoutReconService):
@@ -481,3 +481,13 @@ def test_rule_classified_lines_are_not_auto_matched(session: Session, svc: Payou
     assert svc.auto_match(actor="t", request_id=None).matched_periods == 0
     hint = {x.line_uid: x.journal_hint for x in svc.candidate_lines(STORE_A).items}
     assert hint["SYNL000000000051"].endswith("（规则）")
+
+
+def test_lines_with_approval_refs_are_not_auto_matched(session: Session, svc: PayoutReconService):
+    add_period(session, "k1", "2026-10-06", "100.00")
+    add_line(session, "SYNL000000000061", "2026-10-07", "100.00")
+    session.add(FinanceCashLineState(line_uid="SYNL000000000061", refs=["SYNREF0001"]))
+    session.flush()
+    assert svc.auto_match(actor="t", request_id=None).matched_periods == 0
+    hint = {x.line_uid: x.journal_hint for x in svc.candidate_lines(STORE_A).items}
+    assert hint["SYNL000000000061"] == "已挂审批单"

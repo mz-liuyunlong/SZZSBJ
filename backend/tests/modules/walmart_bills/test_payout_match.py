@@ -163,3 +163,28 @@ def test_memo_tag_is_compared_segment_by_segment():
     assert memo_with_tag(f"合成备注；{merged}", short) == (f"合成备注；{merged}；{short}", False)
     assert memo_with_tag(f"合成备注；{short}", short) == (None, False)
     assert memo_with_tag(f"合成备注；{short}", merged) == (f"合成备注；{short}；{merged}", False)
+
+
+def test_undo_removes_only_an_exact_appended_segment():
+    from app.modules.walmart_bills.payout_service import memo_with_tag, memo_without_tag
+
+    short = "平台回款 · CN9901 · 2026-10-06"
+    long_tag = f"{short}、2026-10-20"
+    before = f"A；{long_tag}"
+    memo_set, too_long = memo_with_tag(before, short)
+    assert (memo_set, too_long) == (f"A；{long_tag}；{short}", False)
+    # 财务删掉了追加的那一段：长 tag 不能被当成短 tag 删掉
+    assert memo_without_tag(before, before, memo_set) is False
+    # 财务在后面又加了一段：只删追加的短 tag
+    assert memo_without_tag(f"{memo_set}；改过", before, memo_set) == f"A；{long_tag}；改过"
+    # 没改过：恢复原值；只剩追加段：清空
+    assert memo_without_tag(memo_set, before, memo_set) == before
+    assert memo_without_tag(f" {short} ", None, short) is None
+    assert memo_without_tag(f"{short}；{short}", None, short) is False
+
+
+def test_space_joined_existing_tag_still_gets_appended():
+    from app.modules.walmart_bills.payout_service import memo_with_tag
+
+    tag = "平台回款 · CN9901 · 2026-10-06"
+    assert memo_with_tag(f"财务先写了 {tag}", tag) == (f"财务先写了 {tag}；{tag}", False)
