@@ -4,8 +4,6 @@ from datetime import date
 from decimal import Decimal
 from unittest.mock import MagicMock
 
-from sqlalchemy import text
-
 from app.modules.integration_sync.data_pages_finance_partial_isolation import (
     record_sample_dispute,
     reserve_unallocated_sem_lines,
@@ -75,6 +73,7 @@ def test_unallocated_ledger_preserves_exact_source_row_and_negative_credits() ->
 
 def test_business_rule_does_not_abort_day_for_one_sample_item() -> None:
     import inspect
+
     from app.modules.integration_sync.data_pages_business_rules_v2 import DataPagesRealSyncRunner
 
     src = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
