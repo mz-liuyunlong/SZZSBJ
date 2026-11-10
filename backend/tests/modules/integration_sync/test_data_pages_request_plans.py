@@ -69,6 +69,7 @@ def test_listing_plan_keeps_initial_no_store_filter_boundary() -> None:
     assert plan.store_scope_field is None
     assert plan.static_body_fields == ()
 
+
 def test_sp_request_plans_follow_advertiser_and_verified_campaign_dependencies() -> None:
     campaign = request_plan_for("walmart_sp_campaign_list")
     search_terms = request_plan_for("walmart_sp_search_term_list")
