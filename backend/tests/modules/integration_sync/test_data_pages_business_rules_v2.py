@@ -371,6 +371,7 @@ def test_daily_sales_sem_only_rows_are_attributed_once() -> None:
     assert "booked_sem + reserved_sem" in source
     assert "where r.csv_type='sem_daily'" in source
 
+
 def test_daily_sales_sem_fee_remains_outside_walmart_ad_spend() -> None:
     source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
     assert "coalesce(a.ad_spend,0),coalesce(sem.sem_ad_spend,0)" in source
