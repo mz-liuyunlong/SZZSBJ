@@ -7,6 +7,7 @@ import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle
 import { readUserPreference, writeUserPreference } from "@/shared/preferences/userPreferenceCache";
 import EmptyState from "@/shared/states/EmptyState";
 import { scrollX } from "@/pages/finance/cash-flow/journalShared";
+import "@/pages/finance/cash-flow/cash-flow.css";
 
 const WIDTH_PREF_VERSION = 1;
 const MIN_WIDTH = 64;
@@ -41,7 +42,7 @@ export function BoardTable<T extends object>({ label, rowKey, rows, columns, emp
 }) {
   const shown = useColumnWidths(resizeKey, columns);
   return (
-    <ReportTableShell label={label}>
+    <ReportTableShell label={label} className="fin-cash-flow__table">
       <ProTable<T>
         rowKey={rowKey}
         search={false}

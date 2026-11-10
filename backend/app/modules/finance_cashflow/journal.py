@@ -90,6 +90,9 @@ PAIR_ID_MAX = 40
 TEXT_MAX = 500
 MAX_PARTS = 20
 KIND_AUTO_RESET = "auto_reset"
+# 拆分行挂审批单（Rocky 11-10：一笔付款对多张单，拆开后各行挂自己的单，类别跟着审批单走）。
+KIND_ATTACH_PART_REF = "attach_part_ref"
+KIND_DETACH_PART_REF = "detach_part_ref"
 KIND_AUTO_ATTACH_REF = "auto_attach_ref"
 
 
@@ -678,7 +681,44 @@ def _pair_manual(lines: Sequence[ComputedLine], used: set[str]) -> list[Alert]:
             if gap is not None and gap > EXACT_TOL:
                 out, into = sorted(members, key=lambda item: item.source.amount)
                 alerts.append(_gap_alert(out, gap, into))
+        else:
+            group_alert = _group_gap_alert(members)
+            if group_alert is not None:
+                alerts.append(group_alert)
     return alerts
+
+
+def _group_gap_alert(members: Sequence[ComputedLine]) -> Alert | None:
+    """一笔对几笔（Rocky 11-10：例如两笔付出、一笔退回）。
+
+    同币种时按合计算差额（付出合计 − 收到合计）。
+    差额挂在付出最大的那笔上，可以点「确认记为手续费」。"""
+    values = [(member, *pair_value(member)) for member in members]
+    if len({currency for _member, _value, currency in values}) != 1:
+        return None
+    outs = [(member, value) for member, value, _cur in values if value < 0]
+    ins = [(member, value) for member, value, _cur in values if value > 0]
+    if not outs or not ins:
+        return None
+    paid = sum((abs(value) for _member, value in outs), ZERO)
+    received = sum((value for _member, value in ins), ZERO)
+    gap = paid - received
+    if gap <= EXACT_TOL:
+        return None
+    out = max(outs, key=lambda item: abs(item[1]))[0]
+    source = out.source
+    return Alert(
+        type=ALERT_PAIR_GAP,
+        account_key=source.account_key,
+        date=source.business_date.isoformat(),
+        message=(
+            f"一组 {len(members)} 笔：付出合计 {source.currency_code} {paid:.2f}，"
+            f"收到合计 {received:.2f}，差额 {gap:.2f}"
+        ),
+        amount=gap,
+        currency_code=source.currency_code,
+        line_uid=source.line_uid,
+    )
 
 
 def _gap_pair_ok(out: ComputedLine, into: ComputedLine, gap: Decimal) -> bool:
@@ -1079,12 +1119,36 @@ def apply_event(
     elif kind == KIND_UNSPLIT:
         if not state.parts:
             raise EventRejectedError(409, "这笔没有拆分")
+        # 拆分行挂过的审批单不丢：收回到整笔上。
+        moved = [ref for part in state.parts for ref in part.get("refs") or []]
+        state.refs = list(dict.fromkeys([*state.refs, *moved]))
         state.parts = None
     elif kind == KIND_ATTACH_REF:
         ref = _approval_ref(payload)
-        if ref in state.refs:
+        if ref in all_refs(state):
             raise EventRejectedError(409, "这笔已经挂了这个审批单号")
         state.refs = [*state.refs, ref]
+    elif kind == KIND_ATTACH_PART_REF:
+        index = _part_index(state, payload)
+        ref = _approval_ref(payload)
+        if ref in all_refs(state):
+            raise EventRejectedError(409, "这笔已经挂了这个审批单号")
+        parts = [dict(part) for part in state.parts or []]
+        parts[index]["refs"] = [*(parts[index].get("refs") or []), ref]
+        state.parts = parts
+    elif kind == KIND_DETACH_PART_REF:
+        index = _part_index(state, payload)
+        ref = _approval_ref(payload)
+        parts = [dict(part) for part in state.parts or []]
+        current = list(parts[index].get("refs") or [])
+        if ref not in current:
+            raise EventRejectedError(409, "这一行没有挂这个审批单号")
+        remaining = [item for item in current if item != ref]
+        if remaining:
+            parts[index]["refs"] = remaining
+        else:
+            parts[index].pop("refs", None)
+        state.parts = parts
     elif kind == KIND_DETACH_REF:
         ref = _approval_ref(payload)
         if ref not in state.refs:
@@ -1104,6 +1168,41 @@ def apply_event(
         state.stage, state.stage_reason = STAGE_TODO, None
         return True
     return False
+
+
+def all_refs(state: ReviewState) -> list[str]:
+    """整笔挂的审批单 + 各拆分行挂的审批单（去重、保持顺序）。"""
+    return list(
+        dict.fromkeys(
+            [*state.refs, *(ref for part in state.parts or [] for ref in part.get("refs") or [])]
+        )
+    )
+
+
+def part_refs(parts: Sequence[dict[str, Any]] | None) -> list[str]:
+    return [ref for part in parts or [] for ref in part.get("refs") or []]
+
+
+def part_cny(
+    amount_cny: Decimal | None, amount: Decimal, parts: Sequence[dict[str, Any]]
+) -> list[Decimal | None]:
+    """拆分行各自的折人民币（绝对值）：按金额比例分整笔的折人民币，精确到分，尾差落最后一行。"""
+    if amount_cny is None or not amount or not parts:
+        return [None] * len(parts)
+    total = abs(amount_cny).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    whole = abs(amount)
+    out: list[Decimal | None] = []
+    used = ZERO
+    for index, part in enumerate(parts):
+        if index == len(parts) - 1:
+            out.append(total - used)
+            continue
+        share = (total * Decimal(str(part["amount"])) / whole).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        used += share
+        out.append(share)
+    return out
 
 
 def _part_index(state: ReviewState, payload: dict[str, Any]) -> int:

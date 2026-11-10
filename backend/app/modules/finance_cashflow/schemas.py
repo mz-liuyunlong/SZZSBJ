@@ -98,6 +98,9 @@ class CashflowLinePartRead(BaseModel):
     # 拆分行自己的摘要 / 备注（set_part_text），空 = 沿用整笔的。
     description: str | None = None
     memo: str | None = None
+    # 这一行挂的审批单（attach_part_ref）；类别是跟审批单来的时写来源。
+    refs: list[str] = Field(default_factory=list)
+    category_source: str | None = None
 
 
 class CashflowLineRead(BaseModel):

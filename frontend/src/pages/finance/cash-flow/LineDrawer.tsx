@@ -2,7 +2,7 @@
 import { CheckOutlined, CloseOutlined } from "@ant-design/icons";
 import { Button, Descriptions, Divider, Drawer, Space, Tag, Tooltip, Typography } from "antd";
 import { FinMoney, LOCKED_TIP } from "@/pages/finance/FinanceBoardFrame";
-import { asLive, fxNote, type LiveCashLine } from "@/pages/finance/cash-flow/journalApi";
+import { asLive, exclNote, fxNote, type LiveCashLine } from "@/pages/finance/cash-flow/journalApi";
 import { ALERT_GUIDE, alertShort, type CashAlert, type FsDetail } from "@/pages/finance/cash-flow/data";
 import { accountLabel, type CashLine, type CashSnapshot, type FeishuApproval } from "@/pages/finance/localFinData";
 import { EMPTY, type ReviewMark, REVIEW_TAG, baseReview, PREVIEW_ACTION_TIP, type ApprovalView, amountDiff, compareRows } from "@/pages/finance/cash-flow/journalShared";
@@ -73,6 +73,7 @@ export function LineDrawer({ line, review, data, details, approvalsOf, alerts, l
         {liveLine?.parts?.length ? <Descriptions.Item label={`拆分（${liveLine.parts.length} 行）`}><SplitParts line={liveLine} data={data} /></Descriptions.Item> : <Descriptions.Item label="类别">{line.cat ? `${line.cat} ${cat?.big ?? ""}·${cat?.name ?? ""}` : <Tag color="red" bordered={false}>待分类</Tag>}<Typography.Text type="secondary">（来源：{line.cat_src || "—"}）</Typography.Text></Descriptions.Item>}
         <Descriptions.Item label="配对">{line.pair ? <Space size={6}>{line.pair}{liveLine?.manualPair && <Tag bordered={false} color="blue">人工配对</Tag>}{(() => { const others = data.lines.filter((item) => item.pair === line.pair && item.id !== line.id); return others.length ? <Typography.Text type="secondary">对方：{others.map((item) => `${item.date} ${accountLabel(data.accounts.find((acct) => acct.id === item.acct)) || item.acct} ${item.amt ?? ""}`).join("；")}</Typography.Text> : null; })()}</Space> : EMPTY}</Descriptions.Item>
         <Descriptions.Item label="标记">{line.flags.length ? line.flags.map((flag) => <Tag key={flag} bordered={false}>{flag}</Tag>) : EMPTY}</Descriptions.Item>
+        {liveLine && exclNote(liveLine) && <Descriptions.Item label="剔除金额">{exclNote(liveLine)}</Descriptions.Item>}
         {(liveLine?.excludeReason || liveLine?.autoExcludeReason) && <Descriptions.Item label="剔除原因">{liveLine.excludeReason ?? `${liveLine.autoExcludeReason}（自动剔除，改类别即可撤销）`}</Descriptions.Item>}
         <Descriptions.Item label="审核"><Tag bordered={false} color={REVIEW_TAG[mark.stage].color}>{REVIEW_TAG[mark.stage].text}</Tag>{mark.reason && <Typography.Text type="danger">原因：{mark.reason}</Typography.Text>}</Descriptions.Item>
       </Descriptions>

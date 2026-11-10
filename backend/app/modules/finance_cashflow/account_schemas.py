@@ -21,6 +21,8 @@ class CashAccountAdminRead(BaseModel):
     sort_order: int
     # 识别值（完整账号等）只写不读：这里只说有没有填、填的是哪几项。
     identity_fields: list[str] = Field(default_factory=list)
+    # 数字类识别值只给尾号和位数（如 {"inquiry_account": "12 位 · 尾号 5951"}），方便核对填没填对。
+    identity_tails: dict[str, str] = Field(default_factory=dict)
     pingpong_main: bool | None = None
     payoneer_feature: str | None = None
     line_count: int = 0

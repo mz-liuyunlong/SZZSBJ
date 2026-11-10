@@ -322,3 +322,31 @@ def test_payoneer_business_date_is_shanghai():
     assert line.business_date.isoformat() == "2026-11-01"
     assert line.source_timezone == "UTC"
     assert line.source_time_utc.isoformat().startswith("2026-10-31T20:00:00")
+
+
+# ---------------------------------------------------------------- 中行一个文件多段（Rocky 11-10）
+
+
+def test_boc_file_with_two_registered_sections_routes_each_to_its_account():
+    usd = ("来账", "20261103", "11:00:00", "USD", "5", "105", "某客户", "", "U000001", "")
+    parsed = parse_file(S.boc_multi((S.BOC_A, boc_rows("A", n=1)), (S.BOC_B, [usd])), S.seed())
+    keys = sorted((line.account_key, line.source_ref) for line in parsed.lines)
+    assert keys == [("BOC_CNY", "A000000"), ("ZSBJ_BOC_USD", "U000001")]
+
+
+def test_boc_empty_section_of_unregistered_inquiry_is_skipped():
+    parsed = parse_file(S.boc_multi((S.BOC_A, boc_rows("A", n=2)), ("769000000001", [])), S.seed())
+    assert [line.account_key for line in parsed.lines] == ["BOC_CNY", "BOC_CNY"]
+
+
+def test_boc_unregistered_section_with_rows_rejects_the_file():
+    with pytest.raises(RejectFile, match="尾号 0001"):
+        parse_file(
+            S.boc_multi((S.BOC_A, boc_rows("A", n=1)), ("769000000001", boc_rows("X", n=1))),
+            S.seed(),
+        )
+
+
+def test_boc_only_unregistered_empty_sections_still_rejects():
+    with pytest.raises(RejectFile, match="没登记"):
+        parse_file(S.boc_multi(("769000000001", [])), S.seed())

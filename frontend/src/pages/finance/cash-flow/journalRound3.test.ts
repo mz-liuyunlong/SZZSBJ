@@ -85,4 +85,24 @@ describe("split rows", () => {
       [line.acct, line.party, "到账手续费", true, "中行扣"],
     ]);
   });
+
+  it("child rows split the parent's RMB by amount, rounding difference on the last row", async () => {
+    const { partCny, withPartRows } = await import("@/pages/finance/cash-flow/journalParts");
+    const line = { ...toCashLine(api({ parts: [{ amount: "40.0000", category_code: "G08" }, { amount: "60.0000", category_code: "G02" }] })), cur: "USD", amt: -100, cny: -667.51 };
+    const cnys = partCny(line);
+    expect(cnys).toEqual([-267, -400.51]);
+    expect(withPartRows([line])[0].children?.map((child) => child.cny)).toEqual(cnys);
+    expect(partCny({ ...line, cny: null })).toEqual([null, null]);
+  });
+});
+
+describe("split by RMB", () => {
+  it("converts RMB rows back to the original currency at the line's own rate, rest on the last row", async () => {
+    const { cnyToOriginal } = await import("@/pages/finance/cash-flow/journalParts");
+    // 合成数据：付 $100.00，到账 ¥667.50（汇率 6.675），两张单 ¥100.00 + ¥567.50
+    expect(cnyToOriginal([100, 567.5], 100, 667.5)).toEqual([14.98, 85.02]);
+    const rows = cnyToOriginal([100, 100, 467.5], 100, 667.5);
+    expect(Math.round(rows.reduce((sum, value) => sum + value, 0) * 100) / 100).toBe(100);
+    expect(cnyToOriginal([], 1, 1)).toEqual([]);
+  });
 });

@@ -301,6 +301,10 @@ def test_manual_line_on_bank_account_has_no_running_balance(service, session):
     )
     assert (created.account_key, created.account_no_last4) == ("CMB_CNY_0042", "0042")
     assert created.identity_fields == ["account_no"]
+    # 修改弹窗要看得出现在填的是哪个号：只给位数和尾号，不给完整账号
+    assert list(created.identity_tails) == ["account_no"]
+    assert created.identity_tails["account_no"].endswith("尾号 0042")
+    assert CMB_NO not in created.model_dump_json()
     made = manual(session, created.account_key, "15", "out", date(2026, 10, 3), description="年费")
     row = lines_of(service, created.account_key)[0]
     assert (row.line_uid, row.balance_after, row.amount) == (made.line_uid, None, Decimal("-15"))

@@ -23,7 +23,8 @@ export const cashViewSource = (view: string, isDev: boolean, live: boolean): "li
   view === "journal" && live ? "live" : isDev ? "demo" : "building";
 
 export type LineEventKind = "review1_pass" | "review1_reject" | "review2_pass" | "review2_reject" | "set_category" | "attach_ref" | "detach_ref" | "exclude" | "unexclude"
-  | "review1_undo" | "review2_undo" | "set_text" | "split" | "set_part_category" | "set_part_text" | "unsplit" | "confirm_fee" | "pair" | "unpair";
+  | "review1_undo" | "review2_undo" | "set_text" | "split" | "set_part_category" | "set_part_text" | "unsplit" | "confirm_fee" | "pair" | "unpair"
+  | "attach_part_ref" | "detach_part_ref";
 
 export interface ApiAccount {
   account_key: string; display_name: string; entity: string; currency_code: string; kind: string; provider: string; account_no_last4: string; is_active: boolean;
@@ -39,7 +40,7 @@ export interface ApiLine {
   /** 人工改过的摘要 / 备注；null = 没改 */
   manual_description?: string | null; manual_memo?: string | null;
   /** 拆分：金额是正数（流水金额的绝对值拆开），类别拆完后逐行选 */
-  parts?: { amount: string; category_code: string | null; fee_layer?: string | null; description?: string | null; memo?: string | null }[] | null;
+  parts?: { amount: string; category_code: string | null; fee_layer?: string | null; description?: string | null; memo?: string | null; refs?: string[]; category_source?: string | null }[] | null;
   /** 人工配对号（同号的几笔是同一笔内部转账）；规则自动剔除的原因（如万里汇子账号归集行） */
   manual_pair?: string | null; auto_exclude_reason?: string | null;
   /** 折人民币的汇率和来源：payoneer = 派安盈实际到账；lingxing = 领星当月汇率；pending = 派安盈提现等月结单 */
@@ -56,7 +57,9 @@ export interface LiveCashLine extends CashLine { uid: string; version: number; s
   /** 银行原文（摘要 / 备注改过时用来对照） */
   origSum: string; origMemo: string;
   manualPair?: string; autoExcludeReason?: string;
-  fxRate?: number; fxSource?: string }
+  fxRate?: number; fxSource?: string;
+  /** 人工剔除金额（原币，正数）；剔除清单命中的人民币金额 */
+  exclAmt?: number; exclListCny?: number }
 
 export interface ApiApproval {
   serial: string; kind: string; status: string; status_text: string; state: string; started_at: string; completed_at: string; handled_at: string; applicant: string;
@@ -93,7 +96,7 @@ export function toCashLine(row: ApiLine): LiveCashLine {
     memo: row.manual_memo ?? row.memo,
     origSum: row.description,
     origMemo: row.memo,
-    parts: row.parts?.length ? row.parts.map((part) => ({ amt: Math.sign(Number(row.amount)) * Number(part.amount), cat: part.category_code ?? "", ...(part.fee_layer ? { fee: part.fee_layer } : {}), ...(part.description ? { sum: part.description } : {}), ...(part.memo ? { memo: part.memo } : {}) })) : undefined,
+    parts: row.parts?.length ? row.parts.map((part) => ({ amt: Math.sign(Number(row.amount)) * Number(part.amount), cat: part.category_code ?? "", ...(part.fee_layer ? { fee: part.fee_layer } : {}), ...(part.description ? { sum: part.description } : {}), ...(part.memo ? { memo: part.memo } : {}), ...(part.refs?.length ? { refs: part.refs } : {}) })) : undefined,
     party: row.counterparty_name,
     refs: row.refs,
     cat: row.category_code ?? "",
@@ -112,7 +115,26 @@ export function toCashLine(row: ApiLine): LiveCashLine {
     autoExcludeReason: row.auto_exclude_reason ?? undefined,
     fxRate: row.fx_rate == null ? undefined : Number(row.fx_rate),
     fxSource: row.fx_source || undefined,
+    exclAmt: row.exclude_amount == null ? undefined : Math.abs(Number(row.exclude_amount)),
+    exclListCny: Number(row.list_excluded_cny) > 0 ? Number(row.list_excluded_cny) : undefined,
   };
+}
+
+const money2 = (value: number) => value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** 金额下面的剔除说明（Rocky 11-10：剔除后要看得到剔了多少、还剩多少，不然审核无从下手）。 */
+export function exclNote(line: CashLine): string | undefined {
+  const live = asLive(line);
+  if (!live || live.amt == null) return undefined;
+  const whole = Math.abs(live.amt);
+  const sign = live.amt < 0 ? "-" : "";
+  const notes: string[] = [];
+  if (live.exclAmt != null) {
+    if (Math.abs(live.exclAmt - whole) < 0.005) notes.push("整笔剔除");
+    else notes.push(`剔除 ${sign}${money2(live.exclAmt)} · 保留 ${sign}${money2(whole - live.exclAmt)}`);
+  }
+  if (live.exclListCny != null) notes.push(`剔除清单扣 ¥${money2(live.exclListCny)}`);
+  return notes.length ? notes.join("；") : undefined;
 }
 
 /** 折人民币旁边的一句说明（rocky 11-05）：派安盈提现用派安盈自己的汇率；月结单没到之前留空。 */

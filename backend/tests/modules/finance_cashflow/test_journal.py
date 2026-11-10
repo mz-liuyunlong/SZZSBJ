@@ -672,3 +672,58 @@ def test_pair_and_unpair_keep_review_but_need_final_undone_first():
     with pytest.raises(J.EventRejectedError) as caught:
         apply(J.ReviewState(stage=J.STAGE_OK2, manual_pair="M1"), J.KIND_UNPAIR)
     assert caught.value.code == J.ERR_STAGE_NOT_ALLOWED
+
+
+# ---------------------------------------------------------------- 拆分行挂审批单（Rocky 11-10）
+
+
+def split_state():
+    state = J.ReviewState()
+    apply(state, J.KIND_SPLIT, {"amounts": ["4", "6"]})
+    return state
+
+
+def test_part_can_attach_and_detach_its_own_approval():
+    state = split_state()
+    state.stage = J.STAGE_OK1
+    assert apply(state, J.KIND_ATTACH_PART_REF, {"index": 1, "ref": "209901010001"}) is True
+    assert state.parts[1]["refs"] == ["209901010001"]
+    assert J.all_refs(state) == ["209901010001"]
+    with pytest.raises(J.EventRejectedError):
+        apply(state, J.KIND_ATTACH_REF, {"ref": "209901010001"})
+    with pytest.raises(J.EventRejectedError):
+        apply(state, J.KIND_ATTACH_PART_REF, {"index": 0, "ref": "209901010001"})
+    apply(state, J.KIND_DETACH_PART_REF, {"index": 1, "ref": "209901010001"})
+    assert "refs" not in state.parts[1]
+    with pytest.raises(J.EventRejectedError):
+        apply(state, J.KIND_DETACH_PART_REF, {"index": 1, "ref": "209901010001"})
+
+
+def test_unsplit_moves_part_approvals_back_to_the_line():
+    state = split_state()
+    apply(state, J.KIND_ATTACH_PART_REF, {"index": 0, "ref": "209901010001"})
+    apply(state, J.KIND_UNSPLIT)
+    assert (state.parts, state.refs) == (None, ["209901010001"])
+
+
+def test_part_cny_splits_by_amount_with_rest_on_last_row():
+    parts = [{"amount": "40"}, {"amount": "60"}]
+    assert J.part_cny(Decimal("-667.51"), Decimal("-100"), parts) == [
+        Decimal("267.00"),
+        Decimal("400.51"),
+    ]
+    assert J.part_cny(None, Decimal("-100"), parts) == [None, None]
+
+
+def test_manual_group_of_three_reports_the_total_gap_on_the_biggest_payment():
+    result = compute(
+        [
+            line("o1", -1000, account="A", desc="看不懂", manual_pair="M2"),
+            line("o2", -500, account="A", desc="看不懂", manual_pair="M2"),
+            line("i", 1400, account="B", desc="看不懂", manual_pair="M2"),
+        ]
+    )
+    items = by_uid(result)
+    assert items["o1"].pair_id == items["o2"].pair_id == items["i"].pair_id
+    gaps = [alert for alert in result.alerts if alert.type == J.ALERT_PAIR_GAP]
+    assert [(alert.line_uid, alert.amount) for alert in gaps] == [("o1", Decimal("100"))]

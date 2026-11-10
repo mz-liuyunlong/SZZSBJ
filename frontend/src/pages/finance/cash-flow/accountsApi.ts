@@ -30,6 +30,8 @@ export const KIND_OPTIONS = ["对公", "对私", "平台", "现金"];
 export interface AdminAccount {
   account_key: string; display_name: string; entity: string; currency_code: string; kind: string; provider: string;
   account_no_last4: string; is_active: boolean; sort_order: number; identity_fields: string[];
+  /** 数字识别值的位数和尾号（不给完整值） */
+  identity_tails?: Record<string, string>;
   pingpong_main: boolean | null; payoneer_feature: string | null; line_count: number;
 }
 export type Identity = Record<string, string | boolean>;

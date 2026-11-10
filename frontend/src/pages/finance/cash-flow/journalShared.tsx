@@ -32,9 +32,15 @@ export function mergeFeishu(data: CashSnapshot, details: Record<string, FsDetail
 }
 /* 审批单无付款流水（Rocky 11-04）：流水起始月及以后发起、飞书已同意、没有任何流水关联的单——只会是流水没导全。
    日期用飞书完成（同意）日期 end，没有时退回发起日期 start；没有账户。日记账和账户总览都用这一个函数。 */
-export function noFlowAlerts(data: CashSnapshot, approvals: FeishuApproval[]): CashAlert[] {
-  const linked = new Set(data.lines.flatMap((line) => line.refs));
-  return approvals.filter((item) => item.status === "已同意" && (item.start || "") >= `${data.meta.start}-01` && !linked.has(item.serial))
+/* Rocky 11-10：备用金核销本来就没有付款流水，不报；审批通过 15 天内也先不报，给付款留时间（超过 15 天还没对上才算异常）。 */
+export const NO_FLOW_GRACE_DAYS = 15;
+const NO_FLOW_KINDS_SKIPPED = ["备用金核销"];
+const daysBetween = (from: string, to: string) => Math.floor((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+export function noFlowAlerts(data: CashSnapshot, approvals: FeishuApproval[], today: string = new Date().toISOString().slice(0, 10)): CashAlert[] {
+  const linked = new Set(data.lines.flatMap((line) => [...line.refs, ...(line.parts ?? []).flatMap((part) => part.refs ?? [])]));
+  return approvals.filter((item) => item.status === "已同意" && (item.start || "") >= `${data.meta.start}-01` && !linked.has(item.serial)
+    && !NO_FLOW_KINDS_SKIPPED.some((kind) => item.kind.includes(kind))
+    && !((item.end || item.start) && daysBetween((item.end || item.start).slice(0, 10), today) < NO_FLOW_GRACE_DAYS))
     .sort((a, b) => a.serial.localeCompare(b.serial))
     .map((item) => {
       const agreed = item.end || item.start || "";

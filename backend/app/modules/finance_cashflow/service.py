@@ -7,6 +7,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
@@ -716,7 +717,9 @@ class CashflowService:
                     exclude_amount=state.exclude_amount if state else None,
                     approval_category=approval_rules.single_value(c[0] for c in from_refs),
                     approval_rule_category=approval_rules.single_value(c[1] for c in from_refs),
-                    parts=list(state.parts) if state and state.parts else None,
+                    parts=_parts_with_approval(state.parts, approval_cats)
+                    if state and state.parts
+                    else None,
                     manual_pair=state.manual_pair if state else None,
                     counterparty_last4=line.counterparty_account_last4 or "",
                     account_last4=account_last4 or "",
@@ -853,8 +856,10 @@ class CashflowService:
                 currency_code=item.source.currency_code,
                 counterparty_name=item.source.counterparty_name,
                 text="",
-                refs=tuple(item.source.refs),
+                refs=(*item.source.refs, *journal.part_refs(item.source.parts)),
                 stage="",
+                amount_cny=item.amount_cny,
+                cny_exact=item.fx_source == journal.FX_SOURCE_PAYONEER,
             )
             for item in result.lines
         ]
@@ -942,8 +947,8 @@ class CashflowService:
             review_note=state.review_note if state else None,
             manual_description=state.manual_description if state else None,
             manual_memo=state.manual_memo if state else None,
-            parts=[CashflowLinePartRead(**part) for part in state.parts]
-            if state and state.parts
+            parts=[CashflowLinePartRead(**part) for part in item.source.parts]
+            if item.source.parts
             else None,
             manual_pair=state.manual_pair if state else None,
             auto_exclude_reason=item.auto_exclude_reason,
@@ -1365,3 +1370,26 @@ class CashflowService:
             version=state.version,
             replayed=replayed,
         )
+
+
+def _parts_with_approval(
+    parts: list[dict[str, Any]], approval_cats: dict[str, tuple[str | None, str | None]]
+) -> list[dict[str, Any]]:
+    """拆分行挂了审批单、自己没选类别的：类别跟着审批单走（表单写明的优先，其次按事由跑规则）。"""
+    out = []
+    for raw in parts:
+        part = dict(raw)
+        refs = part.get("refs") or []
+        if refs and not part.get("category_code"):
+            cats = [approval_cats[ref] for ref in refs if ref in approval_cats]
+            form = approval_rules.single_value(c[0] for c in cats)
+            ruled = approval_rules.single_value(c[1] for c in cats)
+            if form:
+                part["category_code"], part["category_source"] = form, journal.SOURCE_APPROVAL
+            elif ruled:
+                part["category_code"], part["category_source"] = (
+                    ruled,
+                    journal.SOURCE_APPROVAL_RULE,
+                )
+        out.append(part)
+    return out

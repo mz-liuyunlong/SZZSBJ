@@ -12,13 +12,14 @@ import ImportDrawer from "@/pages/finance/cash-flow/ImportDrawer";
 import { ManualEntryButton } from "@/pages/finance/cash-flow/ManualEntry";
 import { CellText, PartCategoryCell, PartTextCell } from "@/pages/finance/cash-flow/LineActions";
 import { isPartRow, lineHasCat, splitSummary, withPartRows, type PartRow } from "@/pages/finance/cash-flow/journalParts";
-import { asLive, cashErrorText, fxNote, postLineEvent, syncErrorText, syncFailedText, useApprovalSync, useRefreshJournal, type LineEventKind, type LiveCashLine } from "@/pages/finance/cash-flow/journalApi";
+import { asLive, cashErrorText, exclNote, fxNote, postLineEvent, syncErrorText, syncFailedText, useApprovalSync, useRefreshJournal, type LineEventKind, type LiveCashLine } from "@/pages/finance/cash-flow/journalApi";
 import { ALERT_GUIDE, alertShort, toCashAlerts, useApprovals, type CashAlert, type FsDetail } from "@/pages/finance/cash-flow/data";
 import { accountLabel, fmtMoney, type CashLine, type CashSnapshot, type FeishuApproval } from "@/pages/finance/localFinData";
 import ReportFacetSelect from "@/shared/report-filters";
 import { writeUserPreference } from "@/shared/preferences/userPreferenceCache";
 import { type ReviewCard, STATE_COLOR, EMPTY, isOpenApproval, isUncat, mergeFeishu, noFlowAlerts, orphanInScope, isExcluded, type ReviewStage, type ReviewMark, REVIEW_TAG, baseReview, isFirstPending, REVIEW_STAGE_OPTIONS, PREVIEW_ACTION_TIP, viewOf, amountDiff, JOURNAL_COLUMN_PREF_KEY, JOURNAL_COLUMN_PREF_VERSION, JOURNAL_FIXED_KEYS, JOURNAL_DEFAULT_KEYS, JOURNAL_COLUMN_GROUPS, readJournalColumns, icon, HANDOFF_EVENT, readHandoff } from "@/pages/finance/cash-flow/journalShared";
 import { ApprovalDrawer } from "@/pages/finance/cash-flow/ApprovalDrawer";
+import ApprovalPicker from "@/pages/finance/cash-flow/ApprovalPicker";
 import { BoardTable } from "@/pages/finance/cash-flow/BoardTable";
 import { LineDrawer } from "@/pages/finance/cash-flow/LineDrawer";
 import { JournalBatchActions } from "@/pages/finance/cash-flow/JournalBatch";
@@ -218,6 +219,7 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
     { key: "excluded", title: "已剔除", subtitle: "X01 非本公司", value: counts.excluded, tone: "normal", icon: icon("剔") },
   ];
   const catOptions = useMemo(() => groupedCatOptions(data.cats, !live), [data, live]);
+  const openApprovals = useMemo(() => feishuAll.filter((item) => isOpenApproval(item, data)), [data, feishuAll]);
   const openApprovalOptions = useMemo(() => feishuAll.filter((item) => isOpenApproval(item, data)).sort((a, b) => b.serial.localeCompare(a.serial))
     .map((item) => ({ value: item.serial, label: `${item.serial} ${item.masked ? "****" : fmtMoney(item.amount, item.cur)} ${(item.payee || "").slice(0, 10)} ${(item.masked ? "" : item.reason || "").slice(0, 16)}` })), [data, feishuAll]);
   const columnDefs: Record<string, ProColumns<CashLine>[]> = {
@@ -226,7 +228,7 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
     sum: [{ key: "sum", title: "摘要", dataIndex: "sum", width: 180, render: (_, row) => (row.masked ? <Typography.Text type="secondary">****</Typography.Text> : <CellText line={row} field="description"><Typography.Text ellipsis={{ tooltip: row.sum }} style={{ maxWidth: 164 }}>{row.sum || EMPTY}</Typography.Text></CellText>) }],
     memo: [{ key: "memo", title: "备注", dataIndex: "memo", width: 300, render: (_, row) => (row.masked ? <Typography.Text type="secondary">****</Typography.Text> : <CellText line={row} field="memo">{row.parts?.length ? <Typography.Text className="finance-board__fulltext" style={{ display: "block" }}>{splitSummary(row)}</Typography.Text> : null}{row.memo && row.memo !== row.sum ? <Typography.Text type="secondary" className="finance-board__fulltext">{row.memo}</Typography.Text> : EMPTY}</CellText>) }],
     party: [{ key: "party", title: "对方", dataIndex: "party", width: 200, render: (_, row) => (row.party ? <Typography.Text ellipsis={{ tooltip: row.party }} style={{ maxWidth: 184 }}>{row.party}</Typography.Text> : EMPTY) }],
-    amt: [{ key: "amt", title: "金额", dataIndex: "amt", width: 130, align: "right", render: (_, row) => <FinMoney value={row.amt} cur={row.cur} masked={row.masked} /> }],
+    amt: [{ key: "amt", title: "金额", dataIndex: "amt", width: 150, align: "right", tooltip: "剔除过的在金额下面写剔除了多少、保留多少", render: (_, row) => { const note = row.masked ? undefined : exclNote(row); return note ? <span className="finance-board__stack"><FinMoney value={row.amt} cur={row.cur} masked={row.masked} /><span className="finance-board__sub fin-cash-flow__excl-note">{note}</span></span> : <FinMoney value={row.amt} cur={row.cur} masked={row.masked} />; } }],
     cny: [{ key: "cny", title: "折人民币", dataIndex: "cny", width: 130, align: "right", render: (_, row) => (row.cur === "CNY" ? EMPTY : fxNote(row) ? <span className="finance-board__stack"><FinMoney value={row.cny} masked={row.masked} /><span className="finance-board__sub">{fxNote(row)}</span></span> : <FinMoney value={row.cny} masked={row.masked} />) }],
     bal: [{ key: "bal", title: "余额", dataIndex: "bal", width: 140, align: "right", render: (_, row) => <FinMoney value={row.bal ?? null} cur={row.cur} masked={row.masked} /> }],
     cat: [{ key: "cat", title: "类别", dataIndex: "cat", width: 230, tooltip: "直接在行上选类别；人工改过的优先于审批单与规则", render: (_, row) => (row.parts ? <Typography.Text type="secondary">见下方拆分行</Typography.Text> : (
@@ -238,7 +240,7 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
       <span className="finance-board__stack">
         {row.refs.length > 0 && <Space size={4} wrap>{row.refs.map((ref) => { const item = approvals.get(ref); return <Tooltip key={ref} title={item ? `${item.kind} · ${item.state} · 点击看审批单` : "飞书里没找到"}><Tag bordered={false} className="finance-board__ref" color={item ? STATE_COLOR[item.state] ?? "blue" : "red"} closable={live} onClose={(event) => { event.preventDefault(); void send(row, "detach_ref", { payload: { ref } }); }} onClick={() => item && setApprovalOpen(item)}>{ref}</Tag></Tooltip>; })}</Space>}
         {live && !row.refs.length && (asLive(row)?.candidates.length ?? 0) > 0 && <Space size={4} wrap className="fin-cash-flow__candidates"><Typography.Text type="secondary">候选：</Typography.Text>{asLive(row)?.candidates.map((ref) => { const item = approvals.get(ref); return <Tooltip key={ref} title={item ? `点击挂上 · ${item.kind} · ${fmtMoney(item.amount, item.cur)} · 收款人 ${item.payee || EMPTY} · ${(item.reason || "").slice(0, 30)}` : "点击挂上"}><Tag bordered={false} color="gold" className="finance-board__ref" onClick={() => { void send(row, "attach_ref", { payload: { ref } }, `已挂上 ${ref}`); }}>{ref}</Tag></Tooltip>; })}</Space>}
-        {live ? <Input size="small" style={{ width: 200 }} placeholder="输入 12 位审批单号，回车" onPressEnter={(event) => { const input = event.currentTarget; const ref = input.value.trim(); if (!/^\d{12}$/.test(ref)) { void messageApi.warning("审批单号是 12 位数字"); return; } void send(row, "attach_ref", { payload: { ref } }).then((ok) => { if (ok) input.value = ""; }); }} /> : <Tooltip title={LOCKED_TIP}><AutoComplete size="small" disabled style={{ width: 200 }} placeholder="关联审批单（输入或选未付单）" options={openApprovalOptions} /></Tooltip>}
+        {live ? <ApprovalPicker approvals={openApprovals} candidates={asLive(row)?.candidates} onPreview={setApprovalOpen} onPick={(ref) => send(row, "attach_ref", { payload: { ref } }, `已挂上 ${ref}`)} /> : <Tooltip title={LOCKED_TIP}><AutoComplete size="small" disabled style={{ width: 200 }} placeholder="关联审批单（输入或选未付单）" options={openApprovalOptions} /></Tooltip>}
       </span>) }],
     alert: [{ key: "alert", title: "异常", width: 150, tooltip: "这笔流水上待处理的异常（灰色是数据提示，不算异常）；点详情看说明和处理方法", render: (_, row) => {
       const list = alertsOf(row);
@@ -274,7 +276,17 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
     }
     if (key === "date") return <span className="finance-board__stack"><span className="finance-board__sub">└ 拆分第 {row.partIndex + 1} 行</span>{row.fee && <Tag bordered={false} color="orange">手续费</Tag>}</span>;
     if (key === "amt") return <FinMoney value={row.amt} cur={row.cur} masked={row.masked} />;
+    if (key === "cny") return row.cny == null ? null : <FinMoney value={row.cny} masked={row.masked} />;
     if (key === "cat") { return parent ? <PartCategoryCell line={parent} index={row.partIndex} data={data} fee={row.fee} /> : row.cat || EMPTY; }
+    if (key === "refs") {
+      const refs = data.lines.find((line) => line.id === row.partOf)?.parts?.[row.partIndex]?.refs ?? [];
+      return (
+        <span className="finance-board__stack">
+          {refs.length > 0 && <Space size={4} wrap>{refs.map((ref) => { const item = approvals.get(ref); return <Tooltip key={ref} title={item ? `${item.kind} · ${item.state} · 点击看审批单` : "飞书里没找到"}><Tag bordered={false} className="finance-board__ref" color={item ? STATE_COLOR[item.state] ?? "blue" : "red"} closable={Boolean(parent)} onClose={(event) => { event.preventDefault(); if (parent) void send(parent, "detach_part_ref", { payload: { index: row.partIndex, ref } }); }} onClick={() => item && setApprovalOpen(item)}>{ref}</Tag></Tooltip>; })}</Space>}
+          {parent && <ApprovalPicker approvals={openApprovals} width={190} placeholder="这一行挂审批单" onPreview={setApprovalOpen} onPick={(ref) => send(parent, "attach_part_ref", { payload: { index: row.partIndex, ref } }, `第 ${row.partIndex + 1} 行已挂上 ${ref}`)} />}
+        </span>
+      );
+    }
     return null;
   };
   const tableColumns: ProColumns<CashLine>[] = lineColumns.map((column) => ({ ...column, render: (dom, row, index, action, schema) => {

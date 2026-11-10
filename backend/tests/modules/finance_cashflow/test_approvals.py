@@ -683,3 +683,41 @@ def test_allocate_one_zero_amount_gets_zero_and_the_rest_sums_up():
     )
     assert shares == {"A": Decimal("0.00"), "B": Decimal("25.00"), "C": Decimal("75.00")}
     assert sum(shares.values()) == Decimal("100")
+
+
+# ---------------------------------------------------------------- 对单口径（Rocky 11-10）
+
+
+def test_cnh_payment_is_compared_like_cny():
+    assert auto([line(cur="CNH")], [approval()]) == [("L1", SERIAL, "match")]
+    assert A.candidates_by_line([line(cur="CNH", party="")], [approval()]) == {"L1": [SERIAL]}
+
+
+def test_usd_payment_matches_only_on_the_exact_payoneer_rmb():
+    exact = A.MatchLine(
+        "L1", date(2026, 10, 2), Decimal("-15"), "USD", "某银行", "", (), "todo",
+        amount_cny=Decimal("-100.00"), cny_exact=True,
+    )  # fmt: skip
+    guessed = A.MatchLine(
+        "L2", date(2026, 10, 2), Decimal("-15"), "USD", "某银行", "", (), "todo",
+        amount_cny=Decimal("-100.00"), cny_exact=False,
+    )  # fmt: skip
+    assert A.candidates_by_line([exact, guessed], [approval()]) == {"L1": [SERIAL]}
+
+
+def test_one_payment_for_two_approvals_of_the_same_payee_is_suggested():
+    pair = [approval(amount="40"), approval(OTHER, amount="60")]
+    got = A.candidates_by_line([line(party="某银行")], pair)
+    assert sorted(got["L1"]) == sorted([SERIAL, OTHER])
+    # 收款人不同：不凑
+    mixed = [approval(amount="40"), approval(OTHER, amount="60", payee="李四")]
+    assert A.candidates_by_line([line(party="某银行")], mixed) == {}
+    # 凑法不唯一：不给
+    third = "209901010003"
+    many = [approval(amount="40"), approval(OTHER, amount="60"), approval(third, amount="60")]
+    assert A.candidates_by_line([line(party="某银行")], many) == {}
+
+
+def test_part_refs_count_as_taken():
+    taken = line("L2", refs=(SERIAL,))
+    assert A.candidates_by_line([line(), taken], [approval()]) == {}
