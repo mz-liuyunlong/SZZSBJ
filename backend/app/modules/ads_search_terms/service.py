@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
@@ -94,7 +94,6 @@ class AdsSearchTermsService:
             page_size=query.page_size,
         )
 
-
     def list_aggregates(
         self,
         query: SearchTermQuery,
@@ -104,11 +103,13 @@ class AdsSearchTermsService:
         manual_same_store = (
             select(WalmartManualKeywordDailyFact.id)
             .where(
-                WalmartManualKeywordDailyFact.source_account_ref
-                == subquery.c.source_account_ref,
+                WalmartManualKeywordDailyFact.source_account_ref == subquery.c.source_account_ref,
                 WalmartManualKeywordDailyFact.store_id == subquery.c.store_id,
                 WalmartManualKeywordDailyFact.normalized_keyword
                 == subquery.c.normalized_search_term,
+                WalmartManualKeywordDailyFact.business_date_la.between(
+                    query.start_date, query.end_date
+                ),
                 WalmartManualKeywordDailyFact.attribution_days == 14,
             )
             .exists()
@@ -116,65 +117,69 @@ class AdsSearchTermsService:
         manual_other_store = (
             select(WalmartManualKeywordDailyFact.id)
             .where(
-                WalmartManualKeywordDailyFact.source_account_ref
-                == subquery.c.source_account_ref,
-                WalmartManualKeywordDailyFact.store_id
-                != subquery.c.store_id,
+                WalmartManualKeywordDailyFact.source_account_ref.in_(accounts),
+                or_(
+                    WalmartManualKeywordDailyFact.source_account_ref
+                    != subquery.c.source_account_ref,
+                    WalmartManualKeywordDailyFact.store_id.is_distinct_from(
+                        subquery.c.store_id
+                    ),
+                ),
                 WalmartManualKeywordDailyFact.normalized_keyword
                 == subquery.c.normalized_search_term,
+                WalmartManualKeywordDailyFact.business_date_la.between(
+                    query.start_date, query.end_date
+                ),
                 WalmartManualKeywordDailyFact.attribution_days == 14,
             )
             .exists()
         )
-        grouped = (
-            select(
-                subquery.c.normalized_search_term,
-                func.min(subquery.c.searched_keyword),
-                func.bool_or(subquery.c.targeting_type == "auto"),
-                func.bool_or(subquery.c.targeting_type == "manual"),
-                func.count(func.distinct(subquery.c.store_id)),
-                func.count(
-                    func.distinct(
-                        func.concat(
-                            subquery.c.source_account_ref,
-                            ":",
-                            func.coalesce(subquery.c.store_id, ""),
-                            ":",
-                            func.coalesce(subquery.c.item_id, ""),
-                        )
+        grouped = select(
+            subquery.c.normalized_search_term,
+            func.min(subquery.c.searched_keyword),
+            func.bool_or(subquery.c.targeting_type == "auto"),
+            func.bool_or(subquery.c.targeting_type == "manual"),
+            func.count(func.distinct(subquery.c.store_id)),
+            func.count(
+                func.distinct(
+                    func.concat(
+                        subquery.c.source_account_ref,
+                        ":",
+                        func.coalesce(subquery.c.store_id, ""),
+                        ":",
+                        func.coalesce(subquery.c.item_id, ""),
                     )
-                ).filter(subquery.c.item_id.is_not(None)),
-                func.count(func.distinct(subquery.c.campaign_id)),
-                func.coalesce(func.sum(subquery.c.num_ads_shown), 0),
-                func.coalesce(func.sum(subquery.c.num_ads_clicks), 0),
-                func.coalesce(func.sum(subquery.c.ad_spend_amount), 0),
-                func.coalesce(func.sum(subquery.c.attributed_orders), 0),
-                func.coalesce(func.sum(subquery.c.advertised_sku_sales_amount), 0),
-                func.coalesce(func.sum(subquery.c.other_sku_sales_amount), 0),
-                func.coalesce(
-                    func.sum(
-                        case(
-                            (subquery.c.targeting_type == "auto", subquery.c.attributed_orders),
-                            else_=0,
-                        )
-                    ),
-                    0,
+                )
+            ).filter(subquery.c.item_id.is_not(None)),
+            func.count(func.distinct(subquery.c.campaign_id)),
+            func.coalesce(func.sum(subquery.c.num_ads_shown), 0),
+            func.coalesce(func.sum(subquery.c.num_ads_clicks), 0),
+            func.coalesce(func.sum(subquery.c.ad_spend_amount), 0),
+            func.coalesce(func.sum(subquery.c.attributed_orders), 0),
+            func.coalesce(func.sum(subquery.c.advertised_sku_sales_amount), 0),
+            func.coalesce(func.sum(subquery.c.other_sku_sales_amount), 0),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (subquery.c.targeting_type == "auto", subquery.c.attributed_orders),
+                        else_=0,
+                    )
                 ),
-                func.coalesce(
-                    func.sum(
-                        case(
-                            (subquery.c.targeting_type == "manual", subquery.c.attributed_orders),
-                            else_=0,
-                        )
-                    ),
-                    0,
+                0,
+            ),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (subquery.c.targeting_type == "manual", subquery.c.attributed_orders),
+                        else_=0,
+                    )
                 ),
-                func.bool_or(manual_same_store),
-                func.bool_or(manual_other_store),
-                func.max(subquery.c.synced_at),
-            )
-            .group_by(subquery.c.normalized_search_term)
-        )
+                0,
+            ),
+            func.bool_or(manual_same_store),
+            func.bool_or(manual_other_store),
+            func.max(subquery.c.synced_at),
+        ).group_by(subquery.c.normalized_search_term)
         total = int(
             self.session.scalar(
                 select(func.count()).select_from(
@@ -196,7 +201,9 @@ class AdsSearchTermsService:
         ).all()
         manual_keyword_data_available = bool(
             self.session.scalar(
-                select(func.count()).select_from(WalmartManualKeywordDailyFact).where(
+                select(func.count())
+                .select_from(WalmartManualKeywordDailyFact)
+                .where(
                     WalmartManualKeywordDailyFact.source_account_ref.in_(accounts),
                     WalmartManualKeywordDailyFact.business_date_la.between(
                         query.start_date, query.end_date
@@ -245,9 +252,12 @@ class AdsSearchTermsService:
             select(WalmartManualKeywordDailyFact.id)
             .where(
                 WalmartManualKeywordDailyFact.source_account_ref == subquery.c.source_account_ref,
-                WalmartManualKeywordDailyFact.advertiser_id == subquery.c.advertiser_id,
+                WalmartManualKeywordDailyFact.store_id == subquery.c.store_id,
                 WalmartManualKeywordDailyFact.normalized_keyword
                 == subquery.c.normalized_search_term,
+                WalmartManualKeywordDailyFact.business_date_la.between(
+                    query.start_date, query.end_date
+                ),
                 WalmartManualKeywordDailyFact.attribution_days == 14,
             )
             .exists()
@@ -258,14 +268,14 @@ class AdsSearchTermsService:
                 func.count(func.distinct(subquery.c.normalized_search_term)).filter(
                     subquery.c.attributed_orders > 0
                 ),
-                func.count().filter(
+                func.count(func.distinct(subquery.c.normalized_search_term)).filter(
                     and_(
                         subquery.c.targeting_type == "auto",
                         subquery.c.attributed_orders > 0,
                         ~manual_keyword_exists,
                     )
                 ),
-                func.count().filter(
+                func.count(func.distinct(subquery.c.normalized_search_term)).filter(
                     and_(
                         subquery.c.attributed_orders == 0,
                         subquery.c.ad_spend_amount > 0,
@@ -355,17 +365,20 @@ class AdsSearchTermsService:
     ) -> ActionRead:
         if payload.source_account_ref not in accounts:
             raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
+        term = payload.search_term.strip()
+        if not term:
+            raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422)
         if payload.source_fact_id is not None:
             fact = self.session.get(WalmartAdSearchTermDailyFact, payload.source_fact_id)
             if (
                 fact is None
                 or fact.source_account_ref != payload.source_account_ref
                 or fact.source_account_ref not in accounts
+                or normalize_term(fact.normalized_search_term) != normalize_term(term)
             ):
                 raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
 
         now = datetime.now(timezone.utc)
-        term = payload.search_term.strip()
         action = AdsSearchTermAction(
             id=uuid4(),
             source_account_ref=payload.source_account_ref,

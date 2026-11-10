@@ -341,12 +341,15 @@ def upgrade() -> None:
             postgresql.UUID(as_uuid=True),
             sa.ForeignKey("ops_ads_search_term_actions.id", ondelete="RESTRICT"),
             nullable=False,
-        )
+        ),
         sa.Column("event_type", sa.String(40), nullable=False),
         sa.Column("actor_ref", sa.String(128), nullable=False),
         sa.Column(
-            "detail_json", postgresql.JSONB(), server_default=sa.text("'{}'::jsonb"), nullable=False
-        )
+            "detail_json",
+            postgresql.JSONB(),
+            server_default=sa.text("'{}'::jsonb"),
+            nullable=False,
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
     op.create_index(
@@ -370,17 +373,17 @@ def upgrade() -> None:
                 (gen_random_uuid(), 'lingxing', 'walmartSpCampaignList',
                  'SP 广告活动来源同步', 'POST',
                  '/basicOpen/multiplatform/ads/queryCampaignSpList',
-                 'offset_page', 'lingxing.data_pages.walmart_sp_search_terms.v1',
+                 'offset_page', 'lingxing.data_pages.walmart_sp_campaign_list.v1',
                  'v1', true, now(), now()),
                 (gen_random_uuid(), 'lingxing', 'walmartSpSearchTermList',
                  'SP 搜索词报表同步', 'POST',
                  '/basicOpen/multiplatform/ads/reportSearchImpressionSpList',
-                 'offset_page', 'lingxing.data_pages.walmart_sp_search_terms.v1',
+                 'offset_page', 'lingxing.data_pages.walmart_sp_search_term_list.v1',
                  'v1', true, now(), now()),
                 (gen_random_uuid(), 'lingxing', 'walmartSpKeywordList',
                  'SP 手动关键词来源同步', 'POST',
                  '/basicOpen/multiplatform/ads/reportKeywordSpList',
-                 'offset_page', 'lingxing.data_pages.walmart_sp_search_terms.v1',
+                 'offset_page', 'lingxing.data_pages.walmart_sp_keyword_list.v1',
                  'v1', true, now(), now())
             ON CONFLICT (provider, interface_key) DO NOTHING
             """

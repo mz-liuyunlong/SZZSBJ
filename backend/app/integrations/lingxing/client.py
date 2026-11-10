@@ -272,7 +272,6 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
         page_size_field="pageSize",
         page_field="pageNum",
     ),
-
     "/basicOpen/multiplatform/ads/queryCampaignSpList": LingxingEndpointContract(
         method="POST",
         outbound_enabled=True,
@@ -303,6 +302,8 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
                 "endDate",
                 "pageNum",
                 "pageSize",
+                "operationSourceType",
+                "paging",
             }
         ),
         store_field=None,
@@ -384,7 +385,6 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
         page_field="pageNum",
         auth_strategy="query_sign",
     ),
-
     "/erp/sc/routing/data/local_inventory/batchGetProductInfo": LingxingEndpointContract(
         method="POST",
         outbound_enabled=True,

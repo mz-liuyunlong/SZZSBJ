@@ -574,6 +574,8 @@ class SyncRunExecutionService:
             + summary.order_rows
             + summary.refund_rows
             + summary.ad_rows
+            + summary.search_term_rows
+            + summary.manual_keyword_rows
         )
 
     def _execute_data_pages_interface(

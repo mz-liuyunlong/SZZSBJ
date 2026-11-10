@@ -94,7 +94,6 @@ def summary(
     )
 
 
-
 @router.get(
     "/aggregates",
     response_model=SuccessEnvelope[SearchTermAggregateListData, dict],

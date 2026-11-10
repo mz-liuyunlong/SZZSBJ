@@ -111,20 +111,21 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
         default_max_pages=1000,
         notes=("Advertiser IDs are prerequisites for Walmart SP ad item report requests.",),
     ),
-
     DataPagesSyncInterfaceSpec(
         parser_key="walmart_sp_campaign_list",
         interface_key="walmartSpCampaignList",
         display_name="SP 广告活动来源同步",
         endpoint_path="/basicOpen/multiplatform/ads/queryCampaignSpList",
         request_kind="offset_page",
-        handler_key="lingxing.data_pages.walmart_sp_search_terms.v1",
+        handler_key="lingxing.data_pages.walmart_sp_campaign_list.v1",
         target_table="ods_api_raw_blobs",
         retention_policy_key="lingxing-data-pages-walmart-sp-campaign-list-v1",
         default_page_size=100,
         default_max_pages=1000,
         initial_outbound_enabled=True,
-        notes=("Campaign IDs and targeting types are verified before search-term rows are accepted.",),
+        notes=(
+            "Campaign IDs and targeting types are verified before search-term rows are accepted.",
+        ),
     ),
     DataPagesSyncInterfaceSpec(
         parser_key="walmart_sp_search_term_list",
@@ -132,13 +133,15 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
         display_name="SP 搜索词报表同步",
         endpoint_path="/basicOpen/multiplatform/ads/reportSearchImpressionSpList",
         request_kind="offset_page",
-        handler_key="lingxing.data_pages.walmart_sp_search_terms.v1",
+        handler_key="lingxing.data_pages.walmart_sp_search_term_list.v1",
         target_table="fact_walmart_ad_search_term_daily",
         retention_policy_key="lingxing-data-pages-walmart-sp-search-term-list-v1",
         default_page_size=200,
         default_max_pages=1000,
         initial_outbound_enabled=True,
-        notes=("Daily 14-day-attribution snapshots include zero-order rows; only verified campaign IDs are accepted.",),
+        notes=(
+            "Daily 14-day-attribution snapshots include zero-order rows; only verified campaign IDs are accepted.",
+        ),
     ),
     DataPagesSyncInterfaceSpec(
         parser_key="walmart_sp_keyword_list",
@@ -146,7 +149,7 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
         display_name="SP 手动关键词来源同步",
         endpoint_path="/basicOpen/multiplatform/ads/reportKeywordSpList",
         request_kind="offset_page",
-        handler_key="lingxing.data_pages.walmart_sp_search_terms.v1",
+        handler_key="lingxing.data_pages.walmart_sp_keyword_list.v1",
         target_table="fact_walmart_keyword_sp_daily",
         retention_policy_key="lingxing-data-pages-walmart-sp-keyword-list-v1",
         default_page_size=200,
@@ -154,7 +157,6 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
         initial_outbound_enabled=True,
         notes=("Manual keyword inventory is captured for automatic-search-term coverage checks.",),
     ),
-
     DataPagesSyncInterfaceSpec(
         parser_key="walmart_ad_item_sp_list",
         interface_key="walmartAdItemSpList",

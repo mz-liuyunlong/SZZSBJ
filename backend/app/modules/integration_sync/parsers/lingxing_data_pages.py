@@ -287,7 +287,6 @@ DATA_PAGES_PARSER_SPECS: dict[DataPagesParserKey, DataPagesParserSpec] = {
             "ad item reports are joined to DATA-PAGES MARTs by itemId after date-level aggregation",
         ),
     ),
-
     "walmart_sp_campaign_list": DataPagesParserSpec(
         parser_key="walmart_sp_campaign_list",
         api_path="/basicOpen/multiplatform/ads/queryCampaignSpList",
@@ -310,7 +309,12 @@ DATA_PAGES_PARSER_SPECS: dict[DataPagesParserKey, DataPagesParserSpec] = {
         record_path="data.list[]",
         target_table="fact_walmart_ad_search_term_daily",
         unique_key_candidates=(
-            ("business_date_la", "source_account_ref", "advertiser_id", "source_identity_hash"),
+            (
+                "business_date_la",
+                "source_account_ref",
+                "advertiser_id",
+                "source_identity_hash",
+            ),
         ),
         fields=(
             ParserFieldSpec("advertiser_id", "data.list[].advertiserId", required=True),
@@ -335,7 +339,12 @@ DATA_PAGES_PARSER_SPECS: dict[DataPagesParserKey, DataPagesParserSpec] = {
         record_path="data.list[]",
         target_table="fact_walmart_keyword_sp_daily",
         unique_key_candidates=(
-            ("business_date_la", "source_account_ref", "advertiser_id", "source_identity_hash"),
+            (
+                "business_date_la",
+                "source_account_ref",
+                "advertiser_id",
+                "source_identity_hash",
+            ),
         ),
         fields=(
             ParserFieldSpec("advertiser_id", "data.list[].advertiserId", required=True),

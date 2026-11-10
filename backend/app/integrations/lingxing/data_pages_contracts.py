@@ -169,6 +169,12 @@ def normalize_data_pages_body(
         if isinstance(advertiser_ids, list):
             normalized["advertiserIds"] = [_decimal_id(value) for value in advertiser_ids]
 
+    elif api_path in {SP_CAMPAIGN_ENDPOINT, SP_SEARCH_TERM_ENDPOINT, SP_KEYWORD_ENDPOINT}:
+        for field_name in ("advertiserIds", "campaignIds", "adGroupIds"):
+            values = normalized.get(field_name)
+            if isinstance(values, list):
+                normalized[field_name] = [_decimal_id(value) for value in values]
+
     return cast(JsonValue, normalized)
 
 
