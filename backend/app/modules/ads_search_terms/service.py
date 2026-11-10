@@ -1,6 +1,6 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
@@ -17,9 +17,9 @@ from app.modules.ads_search_terms.schemas import (
     ActionListData,
     ActionRead,
     SearchTermAggregateListData,
+    SearchTermAggregateRead,
     SearchTermListData,
     SearchTermQuery,
-    SearchTermAggregateRead,
     SearchTermRead,
     SearchTermSummaryData,
     SearchTermTrendData,
@@ -378,7 +378,7 @@ class AdsSearchTermsService:
             ):
                 raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         action = AdsSearchTermAction(
             id=uuid4(),
             source_account_ref=payload.source_account_ref,
@@ -455,7 +455,7 @@ class AdsSearchTermsService:
                 status_code=409,
             )
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         action.status = "manually_completed"
         action.completed_by = actor
         action.completion_note = note

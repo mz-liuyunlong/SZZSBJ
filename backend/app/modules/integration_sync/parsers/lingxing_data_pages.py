@@ -329,7 +329,8 @@ DATA_PAGES_PARSER_SPECS: dict[DataPagesParserKey, DataPagesParserSpec] = {
             ParserFieldSpec("other_sku_sales_amount", "data.list[].otherSkuSales"),
         ),
         skip_rules=(
-            "Search term rows are retained only when advertiserId and campaignId match the verified campaign inventory.",
+            "Search term rows are retained only when advertiserId and campaignId "
+            "match the verified campaign inventory.",
             "No attributedOrders filter is applied so zero-order spend rows remain visible.",
         ),
     ),
@@ -358,7 +359,8 @@ DATA_PAGES_PARSER_SPECS: dict[DataPagesParserKey, DataPagesParserSpec] = {
         ),
         skip_rules=(
             "Only keywords in campaign IDs verified as sponsoredProducts-manual are retained.",
-            "Both SP campaign types are included in the request campaignType array per the Lingxing contract.",
+            "Both SP campaign types are included in the request campaignType array "
+            "per the Lingxing contract.",
         ),
     ),
 }

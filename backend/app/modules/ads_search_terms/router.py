@@ -125,9 +125,9 @@ def trends(
     session: db,
     principal: reader,
     accounts: scope,
-    term: str = Query(min_length=1, max_length=256),
-    start_date: date = Query(),
-    end_date: date = Query(),
+    term: Annotated[str, Query(min_length=1, max_length=256)],
+    start_date: Annotated[date, Query()],
+    end_date: Annotated[date, Query()],
 ) -> SuccessEnvelope[SearchTermTrendData, dict]:
     del principal
     data = AdsSearchTermsService(session).trends(term, start_date, end_date, accounts)

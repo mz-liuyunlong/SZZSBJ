@@ -8,9 +8,10 @@ Internal action rows record operator-confirmed manual work only; no provider wri
 performed by this migration or by these tables.
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "20261109_0083_ads_search_terms"
 down_revision = "20261108_0082_clearance_center"

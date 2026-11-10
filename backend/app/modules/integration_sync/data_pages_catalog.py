@@ -140,7 +140,8 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
         default_max_pages=1000,
         initial_outbound_enabled=True,
         notes=(
-            "Daily 14-day-attribution snapshots include zero-order rows; only verified campaign IDs are accepted.",
+            "Daily 14-day-attribution snapshots include zero-order rows; "
+            "only verified campaign IDs are accepted.",
         ),
     ),
     DataPagesSyncInterfaceSpec(
