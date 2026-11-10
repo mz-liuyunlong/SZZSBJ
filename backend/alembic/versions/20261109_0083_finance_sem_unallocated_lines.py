@@ -5,8 +5,9 @@ Revises: 20261108_0082_clearance_center
 """
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "20261109_0083_finance_sem_unallocated_lines"
 down_revision = "20261108_0082_clearance_center"
