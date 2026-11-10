@@ -231,7 +231,8 @@ def test_finance_sem_reserve_postgresql_replay_account_and_transaction_isolation
                     "create temporary table biz_finance_unallocated_sem_lines ("
                     "id uuid primary key,source_account_ref text not null,"
                     "business_date_la date not null,store_id text not null,task_id text not null,"
-                    "row_index integer not null,raw_hash text,campaign_id text,candidate_item_id text,"
+                    "row_index integer not null,raw_hash text,"
+                    "campaign_id text,candidate_item_id text,"
                     "spend_amount_usd numeric(18,4) not null,reason_code text not null,"
                     "status text not null,is_current boolean not null,owner_note text,"
                     "resolved_by text,resolved_at timestamptz,created_at timestamptz not null,"
@@ -262,7 +263,8 @@ def test_finance_sem_reserve_postgresql_replay_account_and_transaction_isolation
                     connection.execute(
                         text(
                             "insert into legacy_mirror.raw_walmart_sem_csv "
-                            "(id,task_id,row_index,csv_type,row_json,report_date,store_id,raw_hash,created_at) "
+                            "(id,task_id,row_index,csv_type,row_json,report_date,"
+                            "store_id,raw_hash,created_at) "
                             "values (:id,:task,:row_index,'sem_daily',cast(:raw as jsonb),"
                             ":report_day,:store,:hash,:created)"
                         ),
