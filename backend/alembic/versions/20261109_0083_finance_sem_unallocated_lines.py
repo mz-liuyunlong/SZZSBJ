@@ -3,6 +3,7 @@
 Revision ID: 20261109_0083_finance_sem_unallocated_lines
 Revises: 20261108_0082_clearance_center
 """
+
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
@@ -72,8 +73,18 @@ def upgrade() -> None:
         sa.Column("status", sa.String(24), nullable=False, server_default="pending"),
         sa.Column("is_current", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("owner_note", sa.Text()),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.Column(
+            "last_seen_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.UniqueConstraint(
             "source_account_ref",
             "business_date_la",
