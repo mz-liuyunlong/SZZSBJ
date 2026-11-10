@@ -160,7 +160,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
             _page("finance", "profit_center", "利润中心", 10),
             _page("finance", "sku_cash_profit", "单品现金利润", 20),
             _page("finance", "walmart_settlement", "沃尔玛返还明细", 30),
-            _page("finance", "settlement_reconciliation", "结算对账", 40),
+            _page("finance", "settlement_reconciliation", "回款对账", 40),
             _page("finance", "ad_cost", "广告费用", 50),
             _page("finance", "ad_bill", "广告账单", 60),
             _page("finance", "performance_report", "业绩报表", 70),
@@ -262,6 +262,17 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ActionDefinition("ai_center_keyword_rules", "publish", "发布关键词规则", 30, "high"),
     ActionDefinition("pmc_domestic_warehouse_board", "packing-approve", "通过打包审批", 10),
     ActionDefinition("pmc_domestic_warehouse_board", "packing-reject", "驳回打包审批", 20),
+    ActionDefinition("finance_settlement_reconciliation", "sync", "手动同步沃尔玛账单", 10),
+    ActionDefinition(
+        "finance_settlement_reconciliation", "review1", "回款对账初审（确认到账、配对）", 20
+    ),
+    ActionDefinition(
+        "finance_settlement_reconciliation",
+        "review2",
+        "回款对账终审（通过 / 驳回、收款账户映射）",
+        30,
+    ),
+    ActionDefinition("finance_settlement_reconciliation", "follow", "回款对账打款异常跟进", 40),
     ActionDefinition("products_product_management", "view-sync-history", "查看同步历史", 8),
     ActionDefinition("products_product_management", "view-raw-lineage", "查看数据血缘", 9, "high"),
     ActionDefinition("products_product_management", "view-operation-logs", "查看操作日志", 10),
