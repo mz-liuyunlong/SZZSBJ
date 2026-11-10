@@ -1331,9 +1331,9 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             source_account_ref=self.source_account_ref,
             business_date=self.business_date,
         )
-        if expected_sem.quantize(Decimal("0.01")) != (
-            booked_sem + reserved_sem
-        ).quantize(Decimal("0.01")):
+        if expected_sem.quantize(Decimal("0.01")) != (booked_sem + reserved_sem).quantize(
+            Decimal("0.01")
+        ):
             raise DataPagesMartInvariantError(
                 "DATA_PAGES_SEM_SPEND_UNATTRIBUTED",
                 business_date=self.business_date,
