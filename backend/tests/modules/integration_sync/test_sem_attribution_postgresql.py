@@ -239,16 +239,24 @@ def test_finance_sem_reserve_postgresql_replay_account_and_transaction_isolation
                     "unique(source_account_ref,business_date_la,store_id,task_id,row_index))"
                 )
                 connection.execute(
-                    text("insert into dim_walmart_listings values "
-                         "('account-a','store-a','12345678901','M1'),"
-                         "('account-a','store-a','12345678902','M2-A'),"
-                         "('account-a','store-a','12345678902','M2-B'),"
-                         "('account-b','store-b','12345678903','M3')")
+                    text(
+                        "insert into dim_walmart_listings values "
+                        "('account-a','store-a','12345678901','M1'),"
+                        "('account-a','store-a','12345678902','M2-A'),"
+                        "('account-a','store-a','12345678902','M2-B'),"
+                        "('account-b','store-b','12345678903','M3')"
+                    )
                 )
 
                 def add_raw(
-                    row_id: int, task: str, row_index: int, store: str,
-                    spend: str, campaign_id: str, campaign_name: str, created_hour: int,
+                    row_id: int,
+                    task: str,
+                    row_index: int,
+                    store: str,
+                    spend: str,
+                    campaign_id: str,
+                    campaign_name: str,
+                    created_hour: int,
                     report_day: date = day,
                 ) -> None:
                     connection.execute(
@@ -259,33 +267,72 @@ def test_finance_sem_reserve_postgresql_replay_account_and_transaction_isolation
                             ":report_day,:store,:hash,:created)"
                         ),
                         {
-                            "id": row_id, "task": task, "row_index": row_index,
-                            "store": store, "report_day": report_day,
+                            "id": row_id,
+                            "task": task,
+                            "row_index": row_index,
+                            "store": store,
+                            "report_day": report_day,
                             "hash": f"{row_id:064d}",
                             "created": datetime.combine(report_day, datetime.min.time()).replace(
                                 hour=created_hour
                             ),
-                            "raw": json.dumps({
-                                "Date": report_day.isoformat(),
-                                "Campaign ID": campaign_id,
-                                "Campaign Name": campaign_name,
-                                "Spend": spend,
-                            }),
+                            "raw": json.dumps(
+                                {
+                                    "Date": report_day.isoformat(),
+                                    "Campaign ID": campaign_id,
+                                    "Campaign Name": campaign_name,
+                                    "Spend": spend,
+                                }
+                            ),
                         },
                     )
 
-                add_raw(-9101, "task-old", 0, "store-a", "99.00", "old-campaign",
-                        "old 12345678901", 1)
-                add_raw(-9102, "task-latest", 0, "store-a", "4.00", "resolved",
-                        "resolved 12345678901", 2)
-                add_raw(-9103, "task-latest", 1, "store-a", "16.29", "unresolved",
-                        "campaign without an item identity", 2)
-                add_raw(-9104, "task-latest", 2, "store-a", "2.00", "ambiguous",
-                        "ambiguous 12345678902", 2)
-                add_raw(-9105, "task-latest", 3, "store-a", "-1.00", "credit",
-                        "credit 12345678901", 2)
-                add_raw(-9106, "task-other-account", 0, "store-b", "7.00", "other",
-                        "other 12345678903", 2)
+                add_raw(
+                    -9101, "task-old", 0, "store-a", "99.00", "old-campaign", "old 12345678901", 1
+                )
+                add_raw(
+                    -9102,
+                    "task-latest",
+                    0,
+                    "store-a",
+                    "4.00",
+                    "resolved",
+                    "resolved 12345678901",
+                    2,
+                )
+                add_raw(
+                    -9103,
+                    "task-latest",
+                    1,
+                    "store-a",
+                    "16.29",
+                    "unresolved",
+                    "campaign without an item identity",
+                    2,
+                )
+                add_raw(
+                    -9104,
+                    "task-latest",
+                    2,
+                    "store-a",
+                    "2.00",
+                    "ambiguous",
+                    "ambiguous 12345678902",
+                    2,
+                )
+                add_raw(
+                    -9105, "task-latest", 3, "store-a", "-1.00", "credit", "credit 12345678901", 2
+                )
+                add_raw(
+                    -9106,
+                    "task-other-account",
+                    0,
+                    "store-b",
+                    "7.00",
+                    "other",
+                    "other 12345678903",
+                    2,
+                )
 
                 with Session(bind=connection) as session:
                     reserved = reserve_unallocated_sem_lines(
@@ -302,27 +349,42 @@ def test_finance_sem_reserve_postgresql_replay_account_and_transaction_isolation
                     assert current[0] == 3
                     assert current[1] == Decimal("17.2900")
                     assert set(current[2]) == {
-                        "ITEM_ID_UNRESOLVED", "LISTING_IDENTITY_AMBIGUOUS",
+                        "ITEM_ID_UNRESOLVED",
+                        "LISTING_IDENTITY_AMBIGUOUS",
                         "NEGATIVE_CREDIT_REVIEW",
                     }
-                    assert session.execute(
-                        text(
-                            "select count(*) from biz_finance_unallocated_sem_lines "
-                            "where store_id='store-b'"
-                        )
-                    ).scalar_one() == 0
+                    assert (
+                        session.execute(
+                            text(
+                                "select count(*) from biz_finance_unallocated_sem_lines "
+                                "where store_id='store-b'"
+                            )
+                        ).scalar_one()
+                        == 0
+                    )
 
                     # Replaying the same task is idempotent.
                     assert reserve_unallocated_sem_lines(
                         session, source_account_ref="account-a", business_date=day
                     ) == Decimal("17.29")
-                    assert session.execute(
-                        text("select count(*) from biz_finance_unallocated_sem_lines")
-                    ).scalar_one() == 3
+                    assert (
+                        session.execute(
+                            text("select count(*) from biz_finance_unallocated_sem_lines")
+                        ).scalar_one()
+                        == 3
+                    )
 
                     # A newer task supersedes current rows but preserves prior evidence.
-                    add_raw(-9107, "task-newest", 0, "store-a", "5.00", "new-unresolved",
-                            "new task unresolved", 3)
+                    add_raw(
+                        -9107,
+                        "task-newest",
+                        0,
+                        "store-a",
+                        "5.00",
+                        "new-unresolved",
+                        "new task unresolved",
+                        3,
+                    )
                     assert reserve_unallocated_sem_lines(
                         session, source_account_ref="account-a", business_date=day
                     ) == Decimal("5.00")
@@ -332,26 +394,41 @@ def test_finance_sem_reserve_postgresql_replay_account_and_transaction_isolation
                             "from biz_finance_unallocated_sem_lines where is_current=true"
                         )
                     ).one() == (1, Decimal("5.0000"))
-                    assert session.execute(
-                        text("select count(*) from biz_finance_unallocated_sem_lines")
-                    ).scalar_one() == 4
+                    assert (
+                        session.execute(
+                            text("select count(*) from biz_finance_unallocated_sem_lines")
+                        ).scalar_one()
+                        == 4
+                    )
 
                     # Roll back a separate business day without affecting the prior day.
                     nested = session.begin_nested()
                     next_day = date(2026, 10, 20)
-                    add_raw(-9108, "task-next-day", 0, "store-a", "8.00", "next-day",
-                            "next day unresolved", 4, report_day=next_day)
+                    add_raw(
+                        -9108,
+                        "task-next-day",
+                        0,
+                        "store-a",
+                        "8.00",
+                        "next-day",
+                        "next day unresolved",
+                        4,
+                        report_day=next_day,
+                    )
                     assert reserve_unallocated_sem_lines(
                         session, source_account_ref="account-a", business_date=next_day
                     ) == Decimal("8.00")
                     nested.rollback()
-                    assert session.execute(
-                        text(
-                            "select count(*) from biz_finance_unallocated_sem_lines "
-                            "where business_date_la=:day"
-                        ),
-                        {"day": next_day},
-                    ).scalar_one() == 0
+                    assert (
+                        session.execute(
+                            text(
+                                "select count(*) from biz_finance_unallocated_sem_lines "
+                                "where business_date_la=:day"
+                            ),
+                            {"day": next_day},
+                        ).scalar_one()
+                        == 0
+                    )
                     assert session.execute(
                         text(
                             "select count(*),sum(spend_amount_usd) "
@@ -368,9 +445,7 @@ def test_finance_sem_reserve_postgresql_replay_account_and_transaction_isolation
 
 def test_disputed_sample_does_not_reduce_gross_mart_quantities_or_amounts() -> None:
     """MART SQL must preserve gross SaleStat facts when sample evidence conflicts."""
-    source = textwrap.dedent(
-        inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
-    )
+    source = textwrap.dedent(inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart))
     tree = ast.parse(source)
     statements = [
         call.args[0].value
@@ -383,11 +458,17 @@ def test_disputed_sample_does_not_reduce_gross_mart_quantities_or_amounts() -> N
         and isinstance(call.args[0].value, str)
     ]
     mart_sql = next(
-        statement for statement in statements
+        statement
+        for statement in statements
         if "insert into mart_daily_sales_item_day" in statement
     )
     assert "sample_checked as" in mart_sql
-    assert "case when coalesce(sample.sample_disputed,false) then coalesce(s.sales_qty,0)" in mart_sql
-    assert "case when coalesce(sample.sample_disputed,false) then coalesce(s.sales_amount,0)" in mart_sql
+    assert (
+        "case when coalesce(sample.sample_disputed,false) then coalesce(s.sales_qty,0)" in mart_sql
+    )
+    assert (
+        "case when coalesce(sample.sample_disputed,false) then coalesce(s.sales_amount,0)"
+        in mart_sql
+    )
     assert "left join sample_checked sample" in mart_sql
     assert "case when coalesce(sample.sample_disputed,false) then null" in mart_sql
