@@ -19,6 +19,7 @@ from app.core.api import ApiError
 from app.core.config import Settings, SettingsError, get_test_database_url
 from app.integrations.lingxing.client import LingxingRawEnvelope
 from app.modules.data_pages.models import LingxingStoreDimension
+from app.modules.integration_sync import execution as execution_module
 from app.modules.integration_sync.catalog import IntegrationCatalogService
 from app.modules.integration_sync.execution import SyncRunExecutionService
 from app.modules.integration_sync.handlers.lingxing_walmart_bill_sync import (
@@ -32,6 +33,7 @@ from app.modules.integration_sync.models import (
     IntegrationSyncRun,
     IntegrationSyncRunWorkItem,
 )
+from app.modules.integration_sync.product_info_runner import ProductInfoOneTimeRunError
 from app.modules.integration_sync.scheduler import IntegrationSchedulerService
 from app.modules.integration_sync.schemas import TriggerRequest
 from app.modules.integration_sync.service import IntegrationSyncService
@@ -702,3 +704,95 @@ def test_empty_answer_for_dates_that_had_lines_fails_the_store(session: Session)
     assert line_five.missing_since is None
     assert period(session, STORE_A, "rk-a3").status == "not_payable"
     assert period(session, STORE_B, "rk-b1").status == "normal"
+
+
+def store_line_count(session: Session, store_id: str) -> int:
+    return session.scalar(
+        select(func.count())
+        .select_from(WalmartBillLine)
+        .where(WalmartBillLine.store_id == store_id)
+    )
+
+
+def test_heartbeat_that_commits_the_business_session_cannot_leak_half_a_store(
+    session: Session,
+) -> None:
+    """模拟生产：心跳在同一个 session 上 commit 会把保存点提交掉；店内提交要被拒绝、整店回滚。"""
+    add_stores(session)
+    interface = governed(session)
+    rows = base_rows()
+    run_sync(session, interface, FakeLingxing(rows))
+    before = store_line_count(session, STORE_A)
+
+    bad = [*rows[:2], bill_line(7, STORE_A, "rk-a1", "2026-10-16", "not-a-number"), *rows[2:]]
+    bad[0] = dict(bad[0], amount="12")
+    run = queued_run(session, interface)
+    run.status = "running"
+    LingxingWalmartBillSyncHandler(
+        session, client=FakeLingxing(bad), now=lambda: NOW, heartbeat=session.commit
+    ).execute(run, interface)
+
+    assert run.status == "failed"
+    assert store_line_count(session, STORE_A) == before
+    missing = session.scalar(
+        select(func.count())
+        .select_from(WalmartBillLine)
+        .where(WalmartBillLine.missing_since.is_not(None))
+    )
+    assert missing == 0
+    assert period(session, STORE_A, "rk-a1").payable_amount == Decimal("14.0000")
+    assert_periods_match_lines(session, STORE_A)
+    assert_periods_match_lines(session, STORE_B)
+
+
+def test_task_centre_renews_the_lock_on_a_separate_session(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    add_stores(session)
+    run = queued_run(session, governed(session))
+    calls: list[tuple[str, UUID]] = []
+
+    class StubHandler:
+        handler_key = LingxingWalmartBillSyncHandler.handler_key
+
+        def __init__(self, _session: Session, *, heartbeat: Any) -> None:
+            self.heartbeat = heartbeat
+
+        def execute(self, _run: IntegrationSyncRun, _interface: IntegrationInterface) -> None:
+            self.heartbeat()
+
+    monkeypatch.setattr(execution_module, "LingxingWalmartBillSyncHandler", StubHandler)
+    monkeypatch.setattr(
+        SyncRunExecutionService,
+        "_heartbeat_data_pages_lock",
+        staticmethod(lambda run_id: calls.append(("separate", run_id))),
+    )
+    monkeypatch.setattr(
+        SyncRunExecutionService,
+        "_heartbeat_lock",
+        lambda _self, run_id: calls.append(("same", run_id)),
+    )
+    SyncRunExecutionService(session).execute(run.id)
+    assert ("separate", run.id) in calls
+    assert all(kind != "same" for kind, _ in calls)
+
+
+def test_lost_lock_stops_the_whole_run_before_the_next_store(session: Session) -> None:
+    add_stores(session)
+    interface = governed(session)
+    client = FakeLingxing(base_rows())
+    run = queued_run(session, interface)
+    run.status = "running"
+
+    def lost() -> None:
+        raise ProductInfoOneTimeRunError("SYNC_LOCK_LEASE_LOST")
+
+    handler = LingxingWalmartBillSyncHandler(
+        session, client=client, now=lambda: NOW, heartbeat=lost
+    )
+    with pytest.raises(ProductInfoOneTimeRunError, match="SYNC_LOCK_LEASE_LOST"):
+        handler.execute(run, interface)
+    assert client.calls == []
+    assert client.windows(STORE_B) == []
+    assert store_line_count(session, STORE_A) == 0
+    assert store_line_count(session, STORE_B) == 0

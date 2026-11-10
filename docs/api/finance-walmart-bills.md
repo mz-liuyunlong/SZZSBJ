@@ -42,7 +42,7 @@ PRP：`PRPs/finance-walmart-settlement-sync-v1.md`；数据源决策：`docs/dat
 - interface_key `walmartBillStatementList`，handler `lingxing.walmart_bill_statement.v1`；默认关闭。
 - 时间段：手动、定时 = 最近 35 天（上海日期）；回填 = 任务给定时间段，最早 2026-03-01；按自然月切，超过翻页上限对半切。`startDate / endDate` 按交易日期筛。
 - 完整性：总条数中途变化、拉完行数不足、返回的行交易日期不在请求时间段或店铺对不上 → 整店失败。
-- 整店回滚：一个店这次的明细写入、missing 标记、期汇总重算、分页记录和原始响应都在一个保存点里，店拉完才一起提交；店失败时全部回滚，明细表和期汇总保持这次同步前的样子，只补一条失败的分页记录（带错误码，有响应的话连同出错那一页的原始响应）。
+- 整店回滚：一个店这次的明细写入、missing 标记、期汇总重算、分页记录和原始响应都在一个保存点里，店拉完才一起提交；店失败时全部回滚，明细表和期汇总保持这次同步前的样子，只补一条失败的分页记录（带错误码，有响应的话连同出错那一页的原始响应）。心跳用独立 session 续锁，不提交业务事务；店内若有人提交业务 session 会被拒绝（`SYNC_WALMART_BILL_COMMIT_INSIDE_STORE`），按单店失败整店回滚；续锁失败（锁丢失）整个任务中止，不再拉下一个店。
 - 某段领星返回 0 条、而库里这段日期原来有有效明细 → 不当成「全被删」，整店失败（`SYNC_WALMART_BILL_EMPTY_UNEXPECTED`），什么都不标。
 - 重拉后消失的明细标 `missing_since`，不删；再出现就清掉。领星改了金额 = 旧行消失 + 新行插入。被标 missing 的明细所在的期一并重算：一期的明细全没了 → `voided`，金额归 0；同一批明细换了 reportKey 重新出现 → 旧期 `voided`、新期按新明细算，不重复。
 - `totalSum`（领星每段的合计，对象，含 amount / totalPayable / totalCount 等）已确认是整段合计，但 amount 与明细金额之和是否一致还没用有明细的样本核实，暂不做金额对平校验；核实后再加 `SYNC_WALMART_BILL_SUM_MISMATCH`。
@@ -50,7 +50,7 @@ PRP：`PRPs/finance-walmart-settlement-sync-v1.md`；数据源决策：`docs/dat
 - 一个店失败不影响其他店；有店失败整次记失败（`SYNC_WALMART_BILL_STORE_PARTIAL` / `SYNC_WALMART_BILL_ALL_STORES_FAILED`）。
 - 定时：每周三上海 03:00（cron `0 19 * * 2`，UTC）。
 
-同步错误码（任务中心可见）：`SYNC_WALMART_BILL_RUNTIME_NOT_AUTHORIZED`、`SYNC_WALMART_BILL_EXECUTION_NOT_AUTHORIZED`、`SYNC_WALMART_BILL_GOVERNANCE_DISABLED`、`SYNC_WALMART_BILL_NO_STORES`、`SYNC_WALMART_BILL_PAGINATION_INVALID`、`SYNC_WALMART_BILL_WINDOW_INVALID`、`SYNC_WALMART_BILL_REQUEST_FAILED`、`SYNC_WALMART_BILL_RESPONSE_FAILED`、`SYNC_WALMART_BILL_TOTAL_CHANGED`、`SYNC_WALMART_BILL_INCOMPLETE`、`SYNC_WALMART_BILL_DAY_PAGE_LIMIT`、`SYNC_WALMART_BILL_EMPTY_UNEXPECTED`（某段返回 0 条但库里原来有）、`SYNC_WALMART_BILL_STORE_FAILED`（店失败但不是上面任何一种，如数据库出错）、`SYNC_WALMART_BILL_STORE_MISMATCH`、`SYNC_WALMART_BILL_DATE_OUT_OF_WINDOW`、`SYNC_WALMART_BILL_INVALID_ROW`、`SYNC_WALMART_BILL_INVALID_DATE`、`SYNC_WALMART_BILL_INVALID_AMOUNT`。
+同步错误码（任务中心可见）：`SYNC_WALMART_BILL_RUNTIME_NOT_AUTHORIZED`、`SYNC_WALMART_BILL_EXECUTION_NOT_AUTHORIZED`、`SYNC_WALMART_BILL_GOVERNANCE_DISABLED`、`SYNC_WALMART_BILL_NO_STORES`、`SYNC_WALMART_BILL_PAGINATION_INVALID`、`SYNC_WALMART_BILL_WINDOW_INVALID`、`SYNC_WALMART_BILL_REQUEST_FAILED`、`SYNC_WALMART_BILL_RESPONSE_FAILED`、`SYNC_WALMART_BILL_TOTAL_CHANGED`、`SYNC_WALMART_BILL_INCOMPLETE`、`SYNC_WALMART_BILL_DAY_PAGE_LIMIT`、`SYNC_WALMART_BILL_EMPTY_UNEXPECTED`（某段返回 0 条但库里原来有）、`SYNC_WALMART_BILL_STORE_FAILED`（店失败但不是上面任何一种，如数据库出错）、`SYNC_WALMART_BILL_COMMIT_INSIDE_STORE`（店内提交业务事务，被拒绝）、`SYNC_WALMART_BILL_STORE_MISMATCH`、`SYNC_WALMART_BILL_DATE_OUT_OF_WINDOW`、`SYNC_WALMART_BILL_INVALID_ROW`、`SYNC_WALMART_BILL_INVALID_DATE`、`SYNC_WALMART_BILL_INVALID_AMOUNT`。
 
 ## 4. 上线步骤（负责人授权后由部署 AI 按票据执行）
 

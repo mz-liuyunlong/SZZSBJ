@@ -13,6 +13,9 @@
   店拉完才一起提交；某一页出错（请求失败、条数中途变化、一行不合法等）整店回滚，明细表和期汇总
   保持这次同步前的样子，只留一条失败的分页记录（带错误码，有响应的话连同那一页的原始响应）。
   一个店失败不影响其他店，但整次任务记为失败。
+- 心跳用独立 session 续锁（执行层传入 _heartbeat_data_pages_lock），不提交这里的业务事务；店内若有人
+  提交业务 session 会被拒绝（SYNC_WALMART_BILL_COMMIT_INSIDE_STORE），按单店失败整店回滚。续锁失败
+  （锁丢失）整个任务中止，不再拉下一个店。
 """
 
 from __future__ import annotations
@@ -29,9 +32,9 @@ from zoneinfo import ZoneInfo
 
 import httpx
 from pydantic import JsonValue
-from sqlalchemy import and_, exists, select, update
+from sqlalchemy import and_, event, exists, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, SessionTransaction
 
 from app.core.config import AppEnvironment, Settings, get_settings
 from app.integrations.lingxing.client import LingxingRawEnvelope, LingxingReadonlyClient
@@ -108,6 +111,14 @@ class WalmartBillSyncResult:
     stores_total: int
     stores_failed: int
     periods_refreshed: int
+
+
+class _LeaseLost(Exception):  # noqa: N818 - 内部信号，不对外
+    """心跳续锁失败：整个任务中止，不当成单店失败。"""
+
+    def __init__(self, original: BaseException) -> None:
+        super().__init__(str(original))
+        self.original = original
 
 
 @dataclass(slots=True)
@@ -202,6 +213,7 @@ class LingxingWalmartBillSyncHandler:
         self.heartbeat = heartbeat or (lambda: None)
         self._now = now
         self._failure: _Failure | None = None
+        self._in_store = False
 
     # ------------------------------------------------------------------ 入口
 
@@ -226,39 +238,21 @@ class LingxingWalmartBillSyncHandler:
 
         failed = 0
         periods = 0
-        with self._client_context() as client:
-            for store in stores:
-                self.session.commit()
-                self._failure = None
-                savepoint = self.session.begin_nested()
-                try:
-                    keys = self._sync_store(
-                        run,
-                        client,
-                        policy,
-                        store_id=store.store_id,
-                        start=start,
-                        end=end,
-                        page_size=page_size,
-                        max_pages=max_pages,
+        guard = self._refuse_commit_inside_store
+        event.listen(self.session, "before_commit", guard)
+        try:
+            with self._client_context() as client:
+                for store in stores:
+                    written = self._run_store(
+                        run, client, policy, store.store_id, start, end, page_size, max_pages, names
                     )
-                    periods += refresh_periods(
-                        self.session,
-                        source_account_ref=run.source_account_ref,
-                        keys={(store.store_id, key) for key in keys},
-                        store_names=names,
-                        run_id=run.id,
-                    )
-                    savepoint.commit()
-                    self.session.commit()
-                except Exception as exc:
-                    # 整店回滚：明细、missing 标记、期汇总、这个店的分页记录都回到同步前。
-                    if savepoint.is_active:
-                        savepoint.rollback()
+                    if written is None:
+                        failed += 1
                     else:
-                        self.session.rollback()
-                    self._record_store_failure(run, policy, store.store_id, exc)
-                    failed += 1
+                        periods += written
+        finally:
+            event.remove(self.session, "before_commit", guard)
+            self._in_store = False
 
         run.finished_at = utc_now()
         if failed == 0:
@@ -319,6 +313,80 @@ class LingxingWalmartBillSyncHandler:
         return start, end
 
     # ------------------------------------------------------------------ 一个店
+
+    def _run_store(
+        self,
+        run: IntegrationSyncRun,
+        client: WalmartBillPageClient,
+        policy: RawRetentionPolicy,
+        store_id: str,
+        start: date,
+        end: date,
+        page_size: int,
+        max_pages: int,
+        names: dict[str, str | None],
+    ) -> int | None:
+        """一个店一个保存点：成功返回重算的期数，失败整店回滚、返回 None。
+
+        心跳由执行层用独立 session 续锁（不提交这里的业务事务）；万一有人在店内提交业务 session，
+        _refuse_commit_inside_store 会拒绝，这个店按失败整店回滚，不会把一半的数据提交出去。
+        续锁失败（_LeaseLost）不是单店失败：回滚后把原异常往外抛，整个任务中止，不再拉下一个店。
+        """
+        self.session.commit()
+        self._failure = None
+        savepoint = self.session.begin_nested()
+        self._in_store = True
+        try:
+            keys = self._sync_store(
+                run,
+                client,
+                policy,
+                store_id=store_id,
+                start=start,
+                end=end,
+                page_size=page_size,
+                max_pages=max_pages,
+            )
+            written = refresh_periods(
+                self.session,
+                source_account_ref=run.source_account_ref,
+                keys={(store_id, key) for key in keys},
+                store_names=names,
+                run_id=run.id,
+            )
+            self._in_store = False
+            savepoint.commit()
+            self.session.commit()
+            return written
+        except _LeaseLost as lost:
+            self._in_store = False
+            self._rollback_store(savepoint)
+            raise lost.original from None
+        except Exception as exc:
+            # 整店回滚：明细、missing 标记、期汇总、这个店的分页记录都回到同步前。
+            self._in_store = False
+            self._rollback_store(savepoint)
+            self._record_store_failure(run, policy, store_id, exc)
+            return None
+
+    def _rollback_store(self, savepoint: SessionTransaction) -> None:
+        if savepoint.is_active:
+            savepoint.rollback()
+        else:
+            self.session.rollback()
+
+    def _refuse_commit_inside_store(self, _session: Session) -> None:
+        if self._in_store:
+            raise WalmartBillSyncError("SYNC_WALMART_BILL_COMMIT_INSIDE_STORE")
+
+    def _beat(self) -> None:
+        """续锁。店内不许提交业务事务（会被拒绝 → 单店失败）；续锁本身失败 → 整个任务中止。"""
+        try:
+            self.heartbeat()
+        except WalmartBillSyncError:
+            raise
+        except Exception as exc:
+            raise _LeaseLost(exc) from exc
 
     def _sync_store(
         self,
@@ -398,8 +466,8 @@ class LingxingWalmartBillSyncHandler:
         expected: int | None = None
         for page_no in range(1, max_pages + 1):
             work = self._start_work_item(run, store_id, start, end, page_no, offset, page_size)
+            self._beat()
             try:
-                self.heartbeat()
                 envelope = client.fetch_walmart_bill_page(
                     store_id=store_id,
                     offset=offset,

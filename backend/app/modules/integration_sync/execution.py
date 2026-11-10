@@ -240,9 +240,10 @@ class SyncRunExecutionService:
                 return
 
             if is_walmart_bill:
+                # 沃尔玛账单一个店一个保存点：心跳必须用独立 session 续锁，不能提交业务事务。
                 LingxingWalmartBillSyncHandler(
                     self.session,
-                    heartbeat=lambda: self._heartbeat_lock(run.id),
+                    heartbeat=lambda: self._heartbeat_data_pages_lock(run.id),
                 ).execute(run, interface)
                 return
 
