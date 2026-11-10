@@ -666,6 +666,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "select 1 from dim_walmart_listings l where l.source_account_ref=s.source_account_ref "
                 "and l.store_id=s.store_id and l.item_id=s.item_id and trim(l.msku)=trim(s.msku)) "
                 "group by 1,2,3,4,5),"
+                "sample_checked as (select sample.*,(sample.sample_qty>coalesce(s.sales_qty,0) or sample.sample_amount>coalesce(s.sales_amount,0)) sample_disputed from sample left join s on s.source_account_ref=sample.source_account_ref and s.business_date_la=sample.business_date_la and s.store_id=sample.store_id and s.item_id=sample.item_id and s.msku=sample.msku),"
                 "k as (select business_date_la,source_account_ref,store_id,item_id,msku from s union "
                 "select business_date_la,source_account_ref,store_id,item_id,msku from a union "
                 "select business_date_la,source_account_ref,store_id,item_id,msku from r union "
@@ -688,23 +689,25 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "l.title,l.picture_url,null,coalesce(s.sales_qty,0),coalesce(s.order_count,0),coalesce(s.sales_amount,0),"
                 "coalesce(sample.sample_order_count,0),coalesce(sample.sample_qty,0),"
                 "greatest(coalesce(s.sales_qty,0)-coalesce(sample.sample_qty,0),0)+coalesce(sample.sample_qty,0),"
-                "greatest(coalesce(s.sales_qty,0)-coalesce(sample.sample_qty,0),0),"
-                "greatest(coalesce(s.order_count,0)-coalesce(sample.sample_order_count,0),0),"
-                "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0),"
+                "case when coalesce(sample.sample_disputed,false) then coalesce(s.sales_qty,0) else greatest(coalesce(s.sales_qty,0)-coalesce(sample.sample_qty,0),0) end,"
+                "case when coalesce(sample.sample_disputed,false) then coalesce(s.order_count,0) else greatest(coalesce(s.order_count,0)-coalesce(sample.sample_order_count,0),0) end,"
+                "case when coalesce(sample.sample_disputed,false) then coalesce(s.sales_amount,0) else greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0) end,"
                 "coalesce(s.currency_code,'USD'),coalesce(sample.sample_amount,0),"
-                "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0),"
+                "case when coalesce(sample.sample_disputed,false) then coalesce(s.sales_amount,0) else greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0) end,"
                 "coalesce(r.return_qty,0),"
-                "case when coalesce(r.return_qty,0)>0 "
+                "case when coalesce(sample.sample_disputed,false) then null "
+                "when coalesce(r.return_qty,0)>0 "
                 "and greatest(coalesce(s.sales_qty,0)-coalesce(sample.sample_qty,0),0)>0 "
                 "then greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0)"
                 "/nullif(greatest(coalesce(s.sales_qty,0)-coalesce(sample.sample_qty,0),0),0)"
                 "*coalesce(r.return_qty,0) "
                 "when coalesce(r.return_qty,0)>0 then null else 0 end,'USD',"
                 "coalesce(a.ad_spend,0),coalesce(sem.sem_ad_spend,0),'USD',"
-                "case when greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0)>0 "
+                "case when coalesce(sample.sample_disputed,false) then null "
+                "when greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0)>0 "
                 "then (coalesce(a.ad_spend,0)+coalesce(sem.sem_ad_spend,0))/greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0) "
                 "else null end,inv.wfs_available_quantity,coalesce(commission.commission_rate,:default_commission_rate),commission.rule_id,"
-                "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0)"
+                "case when coalesce(sample.sample_disputed,false) then null else greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0) end"
                 "*coalesce(commission.commission_rate,:default_commission_rate),coalesce(s.currency_code,'USD'),"
                 "case when commission.rule_id is null then 'default_15_percent' "
                 "when commission.rule_scope='item' then 'item_commission_rule' "
@@ -733,7 +736,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "and sem.msku=k.msku "
                 "left join r on r.source_account_ref=k.source_account_ref and r.business_date_la=k.business_date_la "
                 "and r.store_id=k.store_id and r.item_id=k.item_id and r.msku=k.msku "
-                "left join sample on sample.source_account_ref=k.source_account_ref "
+                "left join sample_checked sample on sample.source_account_ref=k.source_account_ref "
                 "and sample.business_date_la=k.business_date_la and sample.store_id=k.store_id "
                 "and sample.item_id=k.item_id and sample.msku=k.msku "
                 "left join dim_walmart_listings l on l.source_account_ref=k.source_account_ref "
@@ -825,7 +828,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     text(
                         "with sales as ("
                         "select business_date_la,store_id,item_id,trim(msku) msku,"
-                        "sum(coalesce(sales_qty,0)) sales_qty "
+                        "sum(coalesce(sales_qty,0)) sales_qty,sum(coalesce(sales_amount,0)) sales_amount "
                         "from fact_walmart_sales_item_daily "
                         "where source_account_ref=:account and allocation_status='direct' "
                         "and business_date_la between :start_day and :end_day "
@@ -833,7 +836,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "and msku is not null and trim(msku)<>'' group by 1,2,3,4),"
                         "sample as ("
                         "select business_date_utc_minus_7 business_date_la,store_id,item_id,trim(msku) msku,"
-                        "sum(coalesce(quantity,0)) sample_qty "
+                        "sum(coalesce(quantity,0)) sample_qty,sum(coalesce(unit_price_amount,0)*coalesce(quantity,0)) sample_amount "
                         "from fact_walmart_sample_order_items "
                         "where source_account_ref=:account and is_valid_sample=true "
                         "and sample_rule_version in "
@@ -842,7 +845,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "and store_id is not null and item_id is not null "
                         "and msku is not null and trim(msku)<>'' group by 1,2,3,4) "
                         "select sales.business_date_la,sales.store_id,sales.item_id,sales.msku,"
-                        "greatest(sales.sales_qty-coalesce(sample.sample_qty,0),0) sales_qty "
+                        "case when coalesce(sample.sample_qty,0)>sales.sales_qty or coalesce(sample.sample_amount,0)>sales.sales_amount then sales.sales_qty else greatest(sales.sales_qty-coalesce(sample.sample_qty,0),0) end sales_qty "
                         "from sales left join sample on sample.business_date_la=sales.business_date_la "
                         "and sample.store_id=sales.store_id and sample.item_id=sales.item_id "
                         "and sample.msku=sales.msku"
@@ -875,7 +878,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     text(
                         "with sales as ("
                         "select business_date_la,store_id,item_id,trim(msku) msku,"
-                        "sum(coalesce(sales_qty,0)) sales_qty "
+                        "sum(coalesce(sales_qty,0)) sales_qty,sum(coalesce(sales_amount,0)) sales_amount "
                         "from fact_walmart_sales_item_daily "
                         "where source_account_ref=:account and allocation_status='direct' "
                         "and business_date_la between :start_day and :end_day "
@@ -883,7 +886,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "and msku is not null and trim(msku)<>'' group by 1,2,3,4),"
                         "sample as ("
                         "select business_date_utc_minus_7 business_date_la,store_id,item_id,trim(msku) msku,"
-                        "sum(coalesce(quantity,0)) sample_qty "
+                        "sum(coalesce(quantity,0)) sample_qty,sum(coalesce(unit_price_amount,0)*coalesce(quantity,0)) sample_amount "
                         "from fact_walmart_sample_order_items "
                         "where source_account_ref=:account and is_valid_sample=true "
                         "and sample_rule_version in "
@@ -892,7 +895,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "and store_id is not null and item_id is not null "
                         "and msku is not null and trim(msku)<>'' group by 1,2,3,4) "
                         "select sales.store_id,sales.item_id,sales.msku,"
-                        "sum(greatest(sales.sales_qty-coalesce(sample.sample_qty,0),0)) sales_qty "
+                        "sum(case when coalesce(sample.sample_qty,0)>sales.sales_qty or coalesce(sample.sample_amount,0)>sales.sales_amount then sales.sales_qty else greatest(sales.sales_qty-coalesce(sample.sample_qty,0),0) end) sales_qty "
                         "from sales left join sample on sample.business_date_la=sales.business_date_la "
                         "and sample.store_id=sales.store_id and sample.item_id=sales.item_id "
                         "and sample.msku=sales.msku group by 1,2,3"
@@ -1048,6 +1051,10 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 warnings.append("sample_amount_exceeds_gross_sales_amount")
             sample_disputed = sample_qty > gross_qty or sample_amount > gross_sales
             if sample_disputed:
+                # Disputed sample evidence must not reduce SaleStat quantities or amounts,
+                # nor produce a fabricated refund or commission estimate for this SKU-day.
+                refund_amount = None
+                net_commission = None
                 missing.append("sample_exceeds_salestat_pending_review")
                 warnings.append("sample_exceeds_salestat_pending_review")
                 record_sample_dispute(
@@ -1062,7 +1069,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     sample_amount=sample_amount,
                     sales_amount=gross_sales,
                 )
-            paid_sales = max(gross_sales - sample_amount, Decimal("0"))
+            paid_sales = gross_sales if sample_disputed else max(gross_sales - sample_amount, Decimal("0"))
             if refund_amount is None:
                 missing.append("refund_amount_missing")
                 warnings.append("refund_amount_missing")
