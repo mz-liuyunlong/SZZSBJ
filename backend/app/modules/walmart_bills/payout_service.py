@@ -13,7 +13,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Any, Final
+from typing import Any, Final, Literal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
@@ -660,7 +660,7 @@ class PayoutReconService:
         ordered = sorted(periods, key=lambda p: (p.report_date, p.store_id, p.report_key))
         codes = sorted({store_code(p.store_name, p.store_id) for p in ordered})
         tag = rules.journal_tag("、".join(codes), [p.report_date for p in ordered])
-        memo_before, memo_set, category_set = self._journal_tag(
+        memo_before, memo_set, category_set, too_long = self._journal_tag(
             line, tag, actor=actor, request_id=request_id
         )
         match_id = uuid4()
@@ -678,7 +678,7 @@ class PayoutReconService:
                     memo_before=memo_before,
                     memo_set=memo_set,
                     category_set=category_set,
-                    note=(note or "").strip() or None,
+                    note=_match_note(note, too_long),
                     created_by=actor,
                 )
             )
@@ -774,12 +774,21 @@ class PayoutReconService:
 
     def _journal_tag(
         self, line: FinanceCashLine, tag: str, *, actor: str, request_id: str | None
-    ) -> tuple[str | None, str, bool]:
+    ) -> tuple[str | None, str | None, bool, bool]:
+        """返回（配对前人工备注，写入后的完整备注 / None = 没改，
+        是否自动填了分类，备注是否过长没追加）。"""
         state = self._journal_state(line.line_uid)
         memo_before = state.manual_memo
-        self._journal_event(
-            line, state, journal.KIND_SET_TEXT, {"memo": tag}, actor=actor, request_id=request_id
-        )
+        memo_set, too_long = memo_with_tag(memo_before, tag)
+        if memo_set is not None:
+            self._journal_event(
+                line,
+                state,
+                journal.KIND_SET_TEXT,
+                {"memo": memo_set},
+                actor=actor,
+                request_id=request_id,
+            )
         category_set = False
         has_category = self.session.get(FinanceCashCategory, PLATFORM_CATEGORY) is not None
         if has_category and self._category_empty(line, state):
@@ -792,7 +801,7 @@ class PayoutReconService:
                 request_id=request_id,
             )
             category_set = True
-        return memo_before, tag, category_set
+        return memo_before, memo_set, category_set, too_long
 
     def _journal_untag(
         self, match: WalmartPayoutMatch, *, actor: str, request_id: str | None
@@ -801,12 +810,13 @@ class PayoutReconService:
         if line is None:  # pragma: no cover - 外键保证
             return
         state = self._journal_state(line.line_uid)
-        if match.memo_set is not None and state.manual_memo == match.memo_set:
+        restored = memo_without_tag(state.manual_memo, match.memo_before, match.memo_set)
+        if restored is not False:
             self._journal_event(
                 line,
                 state,
                 journal.KIND_SET_TEXT,
-                {"memo": match.memo_before},
+                {"memo": restored},
                 actor=actor,
                 request_id=request_id,
             )
@@ -1066,6 +1076,52 @@ class PayoutReconService:
         row.change_reason = reason.strip()
         row.updated_by, row.updated_at = actor, datetime.now(UTC)
         self.session.commit()
+
+
+MEMO_JOINER: Final = "；"
+MEMO_TOO_LONG: Final = "备注过长，未追加"
+
+
+def memo_with_tag(current: str | None, tag: str) -> tuple[str | None, bool]:
+    """配对时日记账备注怎么改（Rocky 11-10）：没有人工备注写 tag；有就「原人工备注；tag」追加，
+    已经含同样的 tag 不重复；拼完超过日记账备注上限不改。
+    返回（新备注 / None = 不改，是否因过长没改）。
+    """
+    text = (current or "").strip()
+    if not text:
+        return tag, False
+    if tag in text:
+        return None, False
+    joined = f"{text}{MEMO_JOINER}{tag}"
+    if len(joined) > journal.TEXT_MAX:
+        return None, True
+    return joined, False
+
+
+def memo_without_tag(
+    current: str | None, memo_before: str | None, memo_set: str | None
+) -> str | None | Literal[False]:
+    """撤销时备注怎么恢复。返回新备注（None = 清空），False = 不动。
+
+    - 当前备注没被人改过（== memo_set）→ 恢复配对前的人工备注；
+    - 被人改过但当初追加的那一段还在、且只有一处 → 只删那一段；
+    - 那一段找不到了 → 不动。
+    """
+    if memo_set is None:
+        return False
+    if current == memo_set:
+        return memo_before
+    before = (memo_before or "").strip()
+    fragment = memo_set[len(before) :] if before and memo_set.startswith(before) else memo_set
+    if not current or not fragment or current.count(fragment) != 1:
+        return False
+    left = current.replace(fragment, "", 1).strip().strip(MEMO_JOINER).strip()
+    return left or None
+
+
+def _match_note(note: str | None, too_long: bool) -> str | None:
+    parts = [(note or "").strip(), MEMO_TOO_LONG if too_long else ""]
+    return MEMO_JOINER.join(part for part in parts if part) or None
 
 
 def _follow_read(row: WalmartPayoutFollowUp) -> PayoutFollowRead:

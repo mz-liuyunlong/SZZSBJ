@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
@@ -380,3 +380,85 @@ def test_manual_match_rejects_bills_before_recon_start(session: Session, svc: Pa
             request_id=None,
         )
     assert (early.value.status_code, early.value.code) == (422, "PAYOUT_RECON_INVALID")
+
+
+TAG = "平台回款 · CN9901 · 2026-10-06"
+
+
+def matched_with_memo(session: Session, svc: PayoutReconService, uid: str, memo: str) -> str:
+    """建一期 + 一笔带人工备注的到账并自动配上，返回 match_id。"""
+    add_period(session, "k1", "2026-10-06", "100.00")
+    add_line(session, uid, "2026-10-07", "100.00")
+    session.add(FinanceCashLineState(line_uid=uid, manual_memo=memo))
+    session.flush()
+    svc.auto_match(actor="t", request_id=None)
+    return str(rows_by_key(svc)["k1"].match_id)
+
+
+def memo_of(session: Session, uid: str) -> str | None:
+    session.expire_all()
+    return session.get(FinanceCashLineState, uid).manual_memo
+
+
+def text_events(session: Session, uid: str) -> int:
+    return len(
+        session.scalars(
+            select(FinanceCashLineEvent).where(
+                FinanceCashLineEvent.line_uid == uid, FinanceCashLineEvent.kind == "set_text"
+            )
+        ).all()
+    )
+
+
+def test_match_appends_to_manual_memo_and_undo_removes_only_the_tag(
+    session: Session, svc: PayoutReconService
+):
+    uid = "SYNL000000000041"
+    match_id = matched_with_memo(session, svc, uid, "合成人工备注")
+    assert memo_of(session, uid) == f"合成人工备注；{TAG}"
+    svc.unmatch(UUID(match_id), reason="合成", actor="t", request_id=None)
+    assert memo_of(session, uid) == "合成人工备注"
+    assert text_events(session, uid) == 2
+
+
+def test_undo_after_user_edit_removes_only_the_appended_part(
+    session: Session, svc: PayoutReconService
+):
+    uid = "SYNL000000000042"
+    match_id = matched_with_memo(session, svc, uid, "合成人工备注")
+    session.get(FinanceCashLineState, uid).manual_memo = f"合成人工备注；{TAG} 财务补充"
+    session.flush()
+    svc.unmatch(UUID(match_id), reason="合成", actor="t", request_id=None)
+    assert memo_of(session, uid) == "合成人工备注 财务补充"
+
+
+def test_undo_leaves_memo_alone_when_the_tag_is_gone(session: Session, svc: PayoutReconService):
+    uid = "SYNL000000000043"
+    match_id = matched_with_memo(session, svc, uid, "合成人工备注")
+    session.get(FinanceCashLineState, uid).manual_memo = "财务整段重写"
+    session.flush()
+    svc.unmatch(UUID(match_id), reason="合成", actor="t", request_id=None)
+    assert memo_of(session, uid) == "财务整段重写"
+    assert text_events(session, uid) == 1
+
+
+def test_too_long_or_already_tagged_memo_is_not_changed(session: Session, svc: PayoutReconService):
+    long_memo = "合" * 490
+    uid = "SYNL000000000044"
+    match_id = matched_with_memo(session, svc, uid, long_memo)
+    assert memo_of(session, uid) == long_memo and text_events(session, uid) == 0
+    match = session.scalars(
+        select(WalmartPayoutMatch).where(WalmartPayoutMatch.line_uid == uid)
+    ).one()
+    assert match.memo_set is None and "备注过长，未追加" in (match.note or "")
+    svc.unmatch(UUID(match_id), reason="合成", actor="t", request_id=None)
+    assert memo_of(session, uid) == long_memo and text_events(session, uid) == 0
+
+    add_period(session, "k2", "2026-10-20", "50.00")
+    add_line(session, "SYNL000000000045", "2026-10-21", "50.00")
+    tagged = "财务先写了 平台回款 · CN9901 · 2026-10-20"
+    session.add(FinanceCashLineState(line_uid="SYNL000000000045", manual_memo=tagged))
+    session.flush()
+    svc.auto_match(actor="t", request_id=None)
+    assert memo_of(session, "SYNL000000000045") == tagged
+    assert text_events(session, "SYNL000000000045") == 0
