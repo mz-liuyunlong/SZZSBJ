@@ -1116,7 +1116,9 @@ def memo_with_tag(current: str | None, tag: str) -> tuple[str | None, bool]:
     # 按「；」切开逐段比：只有某一段和 tag 完全相同才算已有（合并打款的长 tag 不会挡掉短 tag）。
     if tag in (part.strip() for part in text.split(MEMO_JOINER)):
         return None, False
-    joined = f"{text}{MEMO_JOINER}{tag}"
+    # 原备注以「；」结尾时先去掉，免得拼出「；；」。
+    head = text.rstrip(MEMO_JOINER).rstrip()
+    joined = f"{head}{MEMO_JOINER}{tag}" if head else tag
     if len(joined) > journal.TEXT_MAX:
         return None, True
     return joined, False

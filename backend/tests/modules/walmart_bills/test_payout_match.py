@@ -188,3 +188,24 @@ def test_space_joined_existing_tag_still_gets_appended():
 
     tag = "平台回款 · CN9901 · 2026-10-06"
     assert memo_with_tag(f"财务先写了 {tag}", tag) == (f"财务先写了 {tag}；{tag}", False)
+
+
+def test_space_joined_text_after_appended_segment_is_left_alone():
+    from app.modules.walmart_bills.payout_service import memo_with_tag, memo_without_tag
+
+    tag = "平台回款 · CN9901 · 2026-10-06"
+    memo_set, _ = memo_with_tag("A", tag)
+    assert memo_without_tag(f"A；{tag} 财务补充", "A", memo_set) is False
+
+
+def test_memo_ending_with_separator_does_not_double_it():
+    from app.modules.walmart_bills.payout_service import memo_with_tag, memo_without_tag
+
+    tag = "平台回款 · CN9901 · 2026-10-06"
+    memo_set, too_long = memo_with_tag("A；", tag)
+    assert (memo_set, too_long) == (f"A；{tag}", False)
+    assert memo_with_tag("A ；； ", tag) == (f"A；{tag}", False)
+    assert memo_with_tag("；", tag) == (tag, False)
+    # 没改过：恢复原值（含结尾分号）；改过后撤销：只删追加段
+    assert memo_without_tag(memo_set, "A；", memo_set) == "A；"
+    assert memo_without_tag(f"{memo_set}；改过", "A；", memo_set) == "A；改过"
