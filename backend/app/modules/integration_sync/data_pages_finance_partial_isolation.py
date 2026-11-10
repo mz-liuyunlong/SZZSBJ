@@ -17,7 +17,6 @@ from decimal import Decimal
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-
 # Keep the latest-task and historical-campaign rules aligned with the
 # business-rule runner.  Do not use a Listing from an unrelated store.
 _RESERVE_SQL = text(
