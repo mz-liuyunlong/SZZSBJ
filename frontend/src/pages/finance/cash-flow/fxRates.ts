@@ -86,13 +86,13 @@ export const fxSyncFailedText = (code: string | null): string => {
   return `同步失败：${reason}。已同步的月份会保留，可以重新同步`;
 };
 
-export const FX_SYNC_SUPER_ADMIN_ONLY = "只有超级管理员能同步";
+export const FX_SYNC_PERMISSION_REQUIRED = "当前角色没有汇率同步权限";
 
 /** 后端拒绝读取（403）时说明是没有权限，不说读取失败。 */
 export const fxReadDenied = (error: unknown): boolean => error instanceof BackendRequestError && error.status === 403;
 
 export const fxSyncErrorText = (error: unknown): string => {
-  if (error instanceof BackendRequestError && error.status === 403) return FX_SYNC_SUPER_ADMIN_ONLY;
+  if (error instanceof BackendRequestError && error.status === 403) return FX_SYNC_PERMISSION_REQUIRED;
   if (error instanceof BackendRequestError && error.status === 409) return "汇率同步任务还没打开，请联系管理员";
   if (error instanceof BackendRequestError && error.status === 503) return "任务队列暂时不可用，请稍后再试";
   return cashErrorText(error);

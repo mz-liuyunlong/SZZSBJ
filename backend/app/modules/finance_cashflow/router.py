@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.api import ApiError, ErrorEnvelope, SuccessEnvelope, get_request_id, success_response
 from app.core.auth import Principal
 from app.core.config import get_settings
-from app.core.permissions import require_super_admin
+from app.core.permissions import require_permission
 from app.db.session import get_db_session
 from app.modules.finance_cashflow.account_schemas import (
     CashAccountAdminRead,
@@ -78,8 +78,23 @@ logger = logging.getLogger("app.finance_cashflow")
 router = APIRouter(prefix="/api/finance/cashflow", tags=["Finance Cashflow"])
 
 db_session = Annotated[Session, Depends(get_db_session)]
-# 这一版只有超级管理员能用，不新增权限点。
-admin_principal = Annotated[Principal, Depends(require_super_admin)]
+# Access decisions use assigned RBAC roles, not fixed administrator identities.
+cash_read = Annotated[Principal, Depends(require_permission("page:finance:cash-flow:view"))]
+cash_import = Annotated[Principal, Depends(require_permission("action:finance:cash-flow:import"))]
+cash_void = Annotated[
+    Principal, Depends(require_permission("action:finance:cash-flow:void-import"))
+]
+cash_edit = Annotated[
+    Principal, Depends(require_permission("action:finance:cash-flow:edit-journal"))
+]
+cash_sync = Annotated[
+    Principal, Depends(require_permission("action:finance:cash-flow:sync-approvals"))
+]
+cash_accounts = Annotated[
+    Principal, Depends(require_permission("action:finance:cash-flow:manage-accounts"))
+]
+fx_read = Annotated[Principal, Depends(require_permission("page:finance:fx-rates:view"))]
+fx_sync = Annotated[Principal, Depends(require_permission("action:finance:fx-rates:sync"))]
 
 # 固定错误码，前端按 code 判断，文案只给人看（docs/api/finance-cashflow-import.md 有对照表）。
 ERR_IMPORT_NOT_FOUND = "CASHFLOW_IMPORT_NOT_FOUND"
@@ -144,7 +159,7 @@ async def _read_limited_body(request: Request, limit: int) -> bytes:
 async def upload_file(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: cash_import,
     file_name: Annotated[str | None, Header(alias="X-File-Name")] = None,
     import_id: Annotated[UUID | None, Header(alias="X-Import-Id")] = None,
 ) -> SuccessEnvelope[CashflowUploadData, None]:
@@ -189,7 +204,7 @@ def _auto_match_quietly(session: Session, request_id: str) -> None:
 def list_imports(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: cash_read,
     status: Annotated[str | None, Query(max_length=16)] = None,
     from_date: Annotated[date | None, Query(alias="from")] = None,
     to_date: Annotated[date | None, Query(alias="to")] = None,
@@ -211,7 +226,7 @@ def list_imports(
 def get_import(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: cash_read,
     import_id: UUID,
 ) -> SuccessEnvelope[CashflowImportRead, None]:
     try:
@@ -230,7 +245,7 @@ def get_import(
 def void_import(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: cash_void,
     import_id: UUID,
     payload: CashflowVoidRequest,
 ) -> SuccessEnvelope[CashflowVoidData, None]:
@@ -263,7 +278,7 @@ def void_import(
 def list_accounts(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: cash_read,
 ) -> SuccessEnvelope[list[CashflowAccountRead], None]:
     return success_response(request, data=CashflowService(session).list_accounts())
 
@@ -277,7 +292,7 @@ def list_accounts(
 def list_categories(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: cash_read,
 ) -> SuccessEnvelope[list[CashflowCategoryRead], None]:
     return success_response(request, data=CashflowService(session).list_categories())
 
@@ -291,7 +306,7 @@ def list_categories(
 def list_fx_rates(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: fx_read,
 ) -> SuccessEnvelope[list[CashflowFxRateRead], None]:
     rows = list_usd_cny_rates(session)
     return success_response(
@@ -314,7 +329,7 @@ def list_fx_rates(
 def get_fx_sync(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: fx_read,
 ) -> SuccessEnvelope[CashflowApprovalSyncData, None]:
     return success_response(request, data=latest_fx_sync(session))
 
@@ -329,7 +344,7 @@ def get_fx_sync(
 def post_fx_sync(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: fx_sync,
 ) -> SuccessEnvelope[CashflowApprovalSyncData, None]:
     try:
         data = start_fx_sync(session, actor=principal.user_id, request_id=get_request_id(request))
@@ -357,7 +372,7 @@ def post_fx_sync(
 def list_lines(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: cash_read,
     account_key: Annotated[str | None, Query(max_length=64)] = None,
     from_date: Annotated[date | None, Query(alias="from")] = None,
     to_date: Annotated[date | None, Query(alias="to")] = None,
@@ -385,7 +400,7 @@ def list_lines(
 def list_anomalies(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: cash_read,
 ) -> SuccessEnvelope[list[CashflowAnomalyRead], None]:
     return success_response(request, data=CashflowService(session).list_anomalies())
 
@@ -399,7 +414,7 @@ def list_anomalies(
 def list_approvals(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: cash_read,
 ) -> SuccessEnvelope[list[CashflowApprovalRead], None]:
     return success_response(request, data=ApprovalService(session).list_approvals())
 
@@ -413,7 +428,7 @@ def list_approvals(
 def get_approval_sync(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: cash_read,
 ) -> SuccessEnvelope[CashflowApprovalSyncData, None]:
     return success_response(request, data=latest_sync(session))
 
@@ -428,7 +443,7 @@ def get_approval_sync(
 def post_approval_sync(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: cash_sync,
 ) -> SuccessEnvelope[CashflowApprovalSyncData, None]:
     try:
         data = start_sync(session, actor=principal.user_id, request_id=get_request_id(request))
@@ -456,7 +471,7 @@ def post_approval_sync(
 def post_line_event(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: cash_edit,
     line_uid: str,
     payload: CashflowLineEventRequest,
 ) -> SuccessEnvelope[CashflowLineEventData, None]:
@@ -485,7 +500,7 @@ def post_line_event(
 def post_pair_event(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: cash_edit,
     payload: CashflowPairEventRequest,
 ) -> SuccessEnvelope[CashflowPairEventData, None]:
     try:
@@ -513,7 +528,7 @@ def post_pair_event(
 def list_accounts_admin(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: cash_accounts,
 ) -> SuccessEnvelope[list[CashAccountAdminRead], None]:
     return success_response(request, data=AccountAdminService(session).list_accounts())
 
@@ -532,7 +547,7 @@ def _account_error(exc: AccountRejectedError) -> ApiError:
 def create_account(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: cash_accounts,
     payload: CashAccountCreate,
 ) -> SuccessEnvelope[CashAccountAdminRead, None]:
     try:
@@ -553,7 +568,7 @@ def create_account(
 def update_account(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: cash_accounts,
     account_key: str,
     payload: CashAccountUpdate,
 ) -> SuccessEnvelope[CashAccountAdminRead, None]:
@@ -579,7 +594,7 @@ def update_account(
 def post_manual_line(
     request: Request,
     session: db_session,
-    principal: admin_principal,
+    principal: cash_edit,
     payload: ManualLineCreate,
 ) -> SuccessEnvelope[ManualLineCreated, None]:
     try:

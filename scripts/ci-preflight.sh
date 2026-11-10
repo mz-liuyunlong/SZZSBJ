@@ -25,6 +25,7 @@ frontend() {
   cd "$ROOT/frontend"
   test -f package-lock.json || { echo "Missing frontend/package-lock.json" >&2; exit 1; }
   npm ci
+  node scripts/export-rbac-navigation.mjs --check
   npm run lint --if-present
   npm run typecheck --if-present
   npm run test --if-present -- --run

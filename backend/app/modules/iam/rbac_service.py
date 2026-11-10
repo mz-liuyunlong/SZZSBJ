@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
 from app.core.auth import Principal
-from app.modules.iam.permission_catalog_v2 import MODULE_NAMES
+from app.modules.iam.permission_catalog_v2 import MODULE_NAMES, PERMISSION_DEFINITIONS
 from app.modules.iam.rbac_repository import RbacRepository
 from app.modules.iam.rbac_schemas import (
     AuditEventRead,
@@ -60,7 +60,27 @@ class RbacService:
         self.iam_service = IamService(session)
 
     def permission_catalog(self) -> PermissionCatalogRead:
-        rows = self.repository.list_permission_catalog_rows()
+        rows = list(self.repository.list_permission_catalog_rows())
+        # Expose new navigation permissions without writing during a GET.
+        # Registration is deferred until an authorized role edit selects a key.
+        registered = {str(row["permission_key"]) for row in rows}
+        for definition in PERMISSION_DEFINITIONS:
+            if definition.permission_key in registered:
+                continue
+            rows.append(
+                {
+                    "permission_key": definition.permission_key,
+                    "name": definition.name,
+                    "description": definition.description,
+                    "permission_type": definition.permission_type,
+                    "module_key": definition.module_key,
+                    "page_key": definition.page_key,
+                    "action_key": definition.action_key,
+                    "field_key": definition.field_key,
+                    "risk_level": definition.risk_level,
+                    "sort_order": definition.sort_order,
+                }
+            )
         page_rows = {str(row["page_key"]): row for row in rows if row["permission_type"] == "page"}
         child_rows: dict[str, dict[str, list[dict[str, Any]]]] = {}
         for row in rows:
@@ -529,7 +549,18 @@ class RbacService:
 
     def _validated_permission_keys(self, permission_keys: list[str]) -> tuple[str, ...]:
         normalized = tuple(dict.fromkeys(item.strip() for item in permission_keys if item.strip()))
+
         existing = self.repository.existing_permission_keys(normalized)
+        # A navigation page may be defined after the last schema migration.
+        # Register only requested, known keys when a role is explicitly saved.
+        # No roles receive grants as a side effect of registration.
+        definitions = {entry.permission_key: entry for entry in PERMISSION_DEFINITIONS}
+        to_register = [
+            definitions[key] for key in normalized if key not in existing and key in definitions
+        ]
+        if to_register:
+            self.repository.register_permission_definitions(to_register)
+            existing = self.repository.existing_permission_keys(normalized)
         invalid = sorted(set(normalized) - existing)
         if invalid:
             raise ApiError(

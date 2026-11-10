@@ -261,6 +261,18 @@ _RULES: tuple[RequestPermissionRule, ...] = (
 
 def permission_for_request(method: str, path: str, declared_permission: str) -> str:
     normalized_method = method.upper()
+    # These APIs declare precise page/action permissions in their FastAPI routes.
+    # Do not let the legacy /api/business-rules/ catch-all replace high-risk
+    # write permissions with the fee-rules *read* permission.
+    if any(
+        path == base or path.startswith(base + "/")
+        for base in (
+            "/api/business-rules/connectors",
+            "/api/business-rules/decodo",
+            "/api/business-rules/notification-rules",
+        )
+    ):
+        return declared_permission
     if normalized_method == "GET" and path.startswith("/api/products/skus/"):
         suffix_permissions = {
             "/cost-history": "field:products:product-management:purchase-cost",

@@ -1,4 +1,6 @@
 import { backendRequest } from "@/api/backendApi";
+import { navigation } from "@/config/navigation";
+import { getPagePermissionKey } from "@/shared/permissions/mockAccess";
 import type {
   PermissionGroup,
   RoleAuditEvent,
@@ -75,6 +77,19 @@ interface BackendAuditEvent {
   created_at: string;
 }
 
+// Merge menu titles by their effective page permission (including shared grants).
+const navigationPageNames = new Map<string, string[]>();
+navigation.forEach((group) => group.children.forEach((page) => {
+  if (page.status === "hidden") return;
+  const permission = getPagePermissionKey(page);
+  const names = navigationPageNames.get(permission) ?? [];
+  names.push(page.title);
+  navigationPageNames.set(permission, names);
+}));
+const navigationModuleNames = new Map(
+  navigation.map((group) => [group.key, group.title] as const),
+);
+
 export interface RolePermissionCatalog {
   pagePermissionGroups: PermissionGroup[];
   actionPermissionGroups: PermissionGroup[];
@@ -141,12 +156,14 @@ export function buildRolePermissionCatalog(
   const fieldPermissionGroups: PermissionGroup[] = [];
 
   backendCatalog.modules.forEach((module) => {
+    const moduleName = navigationModuleNames.get(module.module_key) ?? module.name;
     const pageItems: string[] = [];
 
     module.pages.forEach((page) => {
+      const pageName = navigationPageNames.get(page.permission_key)?.join(" / ") ?? page.name;
       pageItems.push(page.permission_key);
-      permissionLabels[page.permission_key] = page.name;
-      permissionDescriptions[page.permission_key] = `允许进入并查看「${page.name}」页面`;
+      permissionLabels[page.permission_key] = pageName;
+      permissionDescriptions[page.permission_key] = `允许进入并查看「${pageName}」页面`;
 
       if (page.actions.length > 0) {
         const items = page.actions.map((action) => {
@@ -159,7 +176,7 @@ export function buildRolePermissionCatalog(
           return action.permission_key;
         });
         actionPermissionGroups.push({
-          title: `${module.name} / ${page.name}`,
+          title: `${moduleName} / ${pageName}`,
           items,
         });
       }
@@ -175,14 +192,14 @@ export function buildRolePermissionCatalog(
           return field.permission_key;
         });
         fieldPermissionGroups.push({
-          title: `${module.name} / ${page.name}`,
+          title: `${moduleName} / ${pageName}`,
           items,
         });
       }
     });
 
     if (pageItems.length > 0) {
-      pagePermissionGroups.push({ title: module.name, items: pageItems });
+      pagePermissionGroups.push({ title: moduleName, items: pageItems });
     }
   });
 
@@ -281,6 +298,20 @@ export async function createRole(values: RoleFormValues): Promise<RoleManagement
   return toRow(response.data);
 }
 
+// Preserve assigned historical grants not represented in the current catalog.
+// Saving an unrelated permission group must never silently revoke legacy grants.
+export function permissionKeysForRoleSave(
+  role: Pick<RoleManagementRow, "permissionKeys">,
+  permissions: RolePermissionState,
+  catalog: RolePermissionCatalog,
+): string[] {
+  const known = catalogPermissionKeys(catalog);
+  return [...new Set([
+    ...stateToPermissionKeys(permissions, catalog),
+    ...role.permissionKeys.filter((key) => !known.has(key)),
+  ])].sort();
+}
+
 export async function saveRolePermissions(
   role: RoleManagementRow,
   permissions: RolePermissionState,
@@ -291,7 +322,7 @@ export async function saveRolePermissions(
     {
       method: "PATCH",
       body: JSON.stringify({
-        permission_keys: stateToPermissionKeys(permissions, catalog),
+        permission_keys: permissionKeysForRoleSave(role, permissions, catalog),
         expected_version: role.version,
       }),
     },

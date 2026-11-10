@@ -166,3 +166,39 @@ def test_require_permission_uses_request_specific_permission() -> None:
         _request("GET", "/api/listings/walmart"),
     )
     assert resolved is principal
+
+
+def test_business_settings_routes_keep_their_declared_high_risk_permissions() -> None:
+    cases = (
+        ("/api/business-rules/connectors", "action:settings:business-config:manage-connectors"),
+        ("/api/business-rules/decodo", "action:settings:business-config:manage-decodo"),
+        (
+            "/api/business-rules/notification-rules",
+            "action:settings:business-config:manage-notifications",
+        ),
+    )
+    for path, permission in cases:
+        for method in ("GET", "POST", "PATCH", "PUT", "DELETE"):
+            assert permission_for_request(method, path, permission) == permission
+            assert permission_for_request(method, path + "/identifier", permission) == permission
+
+
+def test_fee_rules_view_cannot_authorize_business_connector_write() -> None:
+    from app.core.api import ApiError
+
+    principal = Principal(
+        user_id="viewer",
+        permissions=frozenset({"page:settings:fee-rules:view"}),
+    )
+    guard = require_permission("action:settings:business-config:manage-connectors")
+    import pytest
+
+    with pytest.raises(ApiError) as exc:
+        guard(principal, _request("POST", "/api/business-rules/connectors"))
+    assert exc.value.status_code == 403
+
+    granted = Principal(
+        user_id="connector-admin",
+        permissions=frozenset({"action:settings:business-config:manage-connectors"}),
+    )
+    assert guard(granted, _request("POST", "/api/business-rules/connectors")) is granted

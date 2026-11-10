@@ -89,7 +89,7 @@ jobs:
           uv run alembic upgrade head
           uv run pytest -q -rs tests/modules/ai_runtime/test_postgresql_acceptance.py
           clearance_before="$(uv run python -c "$read_head")"
-          test "$clearance_before" = "20261108_0082_clearance_center"
+          test "$clearance_before" = "20261109_0083_rbac_nav"
           if uv run alembic downgrade 20261105_0081_finance_payoneer_statement > /tmp/clearance-rollback-check.log 2>&1; then
             echo "ERROR: clearance history downgrade was allowed"
             exit 1

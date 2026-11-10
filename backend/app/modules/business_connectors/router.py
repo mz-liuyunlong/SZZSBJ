@@ -22,15 +22,17 @@ from sqlalchemy import text
 
 from app.core.api import ApiError, SuccessEnvelope, success_response
 from app.core.auth import Principal
-from app.core.permissions import require_permission, require_super_admin
+from app.core.permissions import require_permission
 from app.db.session import get_session_factory
 from app.integrations.llm.openai_provider import failed_call_reservation, generate_text
 
 from .encryption_key import EncryptionKeyUnavailable, get_business_fernet
 
 router = APIRouter(prefix="/api/business-rules/connectors", tags=["Business connectors"])
-read_perm = Annotated[Principal, Depends(require_permission("business-rules:read"))]
-admin_perm = Annotated[Principal, Depends(require_super_admin)]
+read_perm = Annotated[Principal, Depends(require_permission("page:settings:business-config:view"))]
+admin_perm = Annotated[
+    Principal, Depends(require_permission("action:settings:business-config:manage-connectors"))
+]
 EVENT_KEYS = frozenset(
     {
         "inventory_alert",
