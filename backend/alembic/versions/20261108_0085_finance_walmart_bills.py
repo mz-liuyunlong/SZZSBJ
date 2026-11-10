@@ -1,8 +1,9 @@
 """Finance: Walmart bill lines (Lingxing statement/list) and per-store, per-bill periods.
 
 Also registers the action permission for the "手动同步" button on 回款对账.
-Numbered 0085 so it does not clash with the PMC revisions 0082–0084 still in review;
-whichever merges second re-points its down_revision.
+Chained after main's 0083 (finance_sem_unallocated_lines). PR #326's 0083_rbac_nav is
+also based on 0082: whichever merges second re-points its down_revision and updates
+the head assertion in tests/db/test_alembic_scaffold.py.
 """
 
 from collections.abc import Sequence
@@ -13,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision: str = "20261108_0085_finance_walmart_bills"
-down_revision: str | Sequence[str] | None = "20261108_0082_clearance_center"
+down_revision: str | Sequence[str] | None = "20261109_0083_finance_sem_unallocated_lines"
 branch_labels = None
 depends_on = None
 

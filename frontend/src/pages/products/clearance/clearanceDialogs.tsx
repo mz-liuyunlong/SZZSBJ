@@ -45,6 +45,7 @@ export function ClearanceRulesPanel({data,readOnly=false,onSaveRule}:Props){
  const renderSpec=(f:ClearanceRuleSpec)=>{
   const title=<Tooltip
    overlayClassName="clearance-rule-plain-tooltip"
+   styles={{ root: { pointerEvents: "none" } }}
    mouseEnterDelay={0.1}
    placement="top"
    title={<div className="clearance-rule-plain-content">

@@ -121,6 +121,9 @@ def search_risk_filtered(
     store_refs: tuple[str, ...],
     owner_names: tuple[str, ...],
     risk_levels: tuple[str, ...],
+    *,
+    rules=None,
+    rule_version: int = 0,
 ) -> dict:
     """Evaluate the whole scoped population with one set of batched source reads.
 
@@ -170,7 +173,12 @@ def search_risk_filtered(
             "total": 0,
             "total_scope": "filtered_wfs_stock_eligible",
             "risk_filter_applied": True,
-            "rule_version": 0,
+            "rule_version": rule_version,
+            "risk_summary": {
+                "counts": {k: 0 for k in ("high", "medium", "low", "none", "unknown")},
+                "risk_inventory_cost_usd": 0.0,
+                "risk_cost_missing": False,
+            },
             "risk_model_ready": False,
             "risk_calculated_in_memory": True,
         }
@@ -210,6 +218,9 @@ def search_risk_filtered(
             daily[(fact.source_account_ref, fact.store_id, fact.item_id)].append(fact)
 
     matched = []
+    counts = {k: 0 for k in ("high", "medium", "low", "none", "unknown")}
+    risk_capital = 0.0
+    missing_capital = False
     for listing in listings:
         available = listing.wfs_available_quantity
         if available is None or available <= 0:
@@ -226,14 +237,34 @@ def search_risk_filtered(
             page_cost=costs_by_key.get((listing.source_account_ref, listing.local_sku)),
             product_data=product_map,
             store_commissions=commission_map,
+            rules=rules,
+            rule_version=rule_version,
         )
-        if row.get("risk") not in risk_levels:
+        level = row.get("risk", "unknown")
+        if level not in counts:
+            level = "unknown"
+        counts[level] += 1
+        if level in ("high", "medium"):
+            capital = row.get("metrics", {}).get("capital_purchase_first_leg_usd")
+            if capital is None:
+                missing_capital = True
+            else:
+                risk_capital += float(capital)
+        if risk_levels and level not in risk_levels:
             continue
         owner = owner_map.get((listing.source_account_ref, listing.local_sku))
         if owner:
             row["owner"] = owner
             row["owner_name"] = owner
         matched.append(row)
+    rank = {"high": 0, "medium": 1, "low": 2, "none": 3, "unknown": 4}
+    matched.sort(
+        key=lambda row: (
+            rank.get(row.get("risk", "unknown"), 4),
+            row.get("store_id") or "",
+            row.get("item_id") or "",
+        )
+    )
     start = (page - 1) * page_size
     return {
         "items": matched[start : start + page_size],
@@ -241,9 +272,18 @@ def search_risk_filtered(
         "page_size": page_size,
         "has_more": start + page_size < len(matched),
         "total": len(matched),
-        "total_scope": "filtered_wfs_stock_eligible",
-        "risk_filter_applied": True,
-        "rule_version": 0,
+        "total_scope": (
+            "filtered_wfs_stock_eligible"
+            if (store_refs or owner_names or risk_levels or keyword.strip())
+            else "all_wfs_stock_eligible"
+        ),
+        "risk_filter_applied": bool(risk_levels),
+        "rule_version": rule_version,
+        "risk_summary": {
+            "counts": counts,
+            "risk_inventory_cost_usd": (None if missing_capital else round(risk_capital, 2)),
+            "risk_cost_missing": missing_capital,
+        },
         "risk_model_ready": False,
         "risk_calculated_in_memory": True,
     }

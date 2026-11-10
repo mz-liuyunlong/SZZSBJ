@@ -153,9 +153,9 @@ export function ClearanceLiveManagementTable({rows,state,onPage,total,onTask}:Ba
     const sold=number(row.sold_qty);
     const progress=sold!==null&&target>0?Math.max(0,Math.min(100,Math.floor(sold*100/target))):null;
     switch(key){
-      case "identity":return <><strong>{row.title||row.item_id}</strong><Typography.Text className="clearance-subline" type="secondary">{row.item_id}</Typography.Text></>;
+      case "identity":return <><strong>{row.display_product_name||row.title||row.item_id}</strong><Typography.Text className="clearance-subline" type="secondary">{row.item_id}</Typography.Text></>;
       case "sku":return <><strong>{row.local_sku||"—"}</strong><Typography.Text className="clearance-subline" type="secondary">{row.msku||"—"}</Typography.Text></>;
-      case "store":return <>{row.store_name||row.store_id}<Typography.Text className="clearance-subline" type="secondary">{row.owner_ref||"—"}</Typography.Text></>;
+      case "store":return <>{row.store_name||row.store_id}<Typography.Text className="clearance-subline" type="secondary">{row.display_owner_name||row.owner_ref||"—"}</Typography.Text></>;
       case "source":return <Tag color="purple">运营主动申请</Tag>;
       case "reason":return row.reason;
       case "method":return row.methods_json.join(" / ");
