@@ -89,7 +89,7 @@ jobs:
           uv run alembic upgrade head
           uv run pytest -q -rs tests/modules/ai_runtime/test_postgresql_acceptance.py
           clearance_before="$(uv run python -c "$read_head")"
-          test "$clearance_before" = "20261108_0082_clearance_center"
+          test "$clearance_before" = "20261109_0083_finance_sem_unallocated_lines"
           if uv run alembic downgrade 20261105_0081_finance_payoneer_statement > /tmp/clearance-rollback-check.log 2>&1; then
             echo "ERROR: clearance history downgrade was allowed"
             exit 1
@@ -362,26 +362,27 @@ jobs:
           uv sync --frozen
           uv run alembic upgrade 20261019_0046_operation_logs
           uv run alembic upgrade 20261020_0047_walmart_order_identity_guard
+          # Prove the historical order-identity downgrade before installing
+          # irreversible finance audit migrations.
+          uv run pytest -q -s \
+            tests/modules/integration_sync/test_walmart_order_identity_downgrade_postgresql.py
+          uv run alembic upgrade head
           uv run pytest -q -s \
             tests/modules/integration_sync/test_walmart_order_identity_postgresql.py
           uv run pytest -q -s \
             tests/modules/integration_sync/test_sem_attribution_postgresql.py
-          uv run pytest -q -s \
-            tests/modules/integration_sync/test_walmart_order_identity_downgrade_postgresql.py
-          uv run alembic downgrade 20261019_0046_operation_logs
           uv run python - <<'PY'
           from sqlalchemy import create_engine, inspect, text
           from app.core.config import Settings, get_test_database_url
 
           engine = create_engine(get_test_database_url(Settings()))
           with engine.connect() as connection:
-              assert connection.scalar(text("select version_num from alembic_version")) == "20261019_0046_operation_logs"
-              assert connection.scalar(text("select to_regclass('audit_walmart_order_item_conflicts')")) is None
+              assert connection.scalar(text("select version_num from alembic_version")) == "20261109_0083_finance_sem_unallocated_lines"
+              assert connection.scalar(text("select to_regclass('public.audit_walmart_order_item_conflicts')")) is not None
+              assert connection.scalar(text("select to_regclass('public.biz_finance_sample_disputes')")) is not None
+              assert connection.scalar(text("select to_regclass('public.biz_finance_unallocated_sem_lines')")) is not None
           columns = {column["name"] for column in inspect(engine).get_columns("fact_walmart_order_items")}
-          assert "canonical_identity_hash" not in columns
-          assert "is_identity_current" not in columns
-          assert "provider_item_id" not in columns
-          assert "item_id_resolution_source" not in columns
+          assert {"canonical_identity_hash","is_identity_current","provider_item_id","item_id_resolution_source"} <= columns
           engine.dispose()
           PY
 
