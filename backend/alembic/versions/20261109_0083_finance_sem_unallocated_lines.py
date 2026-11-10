@@ -32,10 +32,24 @@ def upgrade() -> None:
         sa.Column("owner_note", sa.Text()),
         sa.Column("resolved_by", sa.String(128)),
         sa.Column("resolved_at", sa.DateTime(timezone=True)),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.Column(
+            "last_seen_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.UniqueConstraint(
-            "source_account_ref", "business_date_la", "store_id", "task_id", "row_index",
+            "source_account_ref",
+            "business_date_la",
+            "store_id",
+            "task_id",
+            "row_index",
             name="uq_finance_sem_unallocated_source_line",
         ),
         sa.CheckConstraint(
@@ -61,7 +75,11 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.UniqueConstraint(
-            "source_account_ref", "business_date_la", "store_id", "item_id", "msku",
+            "source_account_ref",
+            "business_date_la",
+            "store_id",
+            "item_id",
+            "msku",
             name="uq_finance_sample_dispute_listing_day",
         ),
         sa.CheckConstraint(
