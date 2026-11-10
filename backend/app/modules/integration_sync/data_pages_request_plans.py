@@ -139,7 +139,8 @@ DATA_PAGES_REQUEST_PLAN_SPECS: Final[tuple[DataPagesRequestPlanSpec, ...]] = (
         runtime_required_fields=("advertiserIds",),
         boundary_notes=(
             "Only verified advertiser IDs are used to discover SP campaigns.",
-            "Campaign targeting type is verified before downstream search-term and keyword requests.",
+            "Campaign targeting type is verified before downstream search-term "
+            "and keyword requests.",
         ),
     ),
     DataPagesRequestPlanSpec(
