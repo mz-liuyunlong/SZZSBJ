@@ -90,7 +90,6 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     }
     assert script.get_heads() == [FINANCE_0083_REVISION]
     assert script.get_revision(FINANCE_0083_REVISION).down_revision == CLEARANCE_0082_REVISION
-    assert script.get_revision(FINANCE_0083_REVISION).down_revision == CLEARANCE_0082_REVISION
     assert script.get_revision(CLEARANCE_0082_REVISION).down_revision == FINANCE_PAYONEER_REVISION
     assert (
         script.get_revision(FINANCE_PAYONEER_REVISION).down_revision
