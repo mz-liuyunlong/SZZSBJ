@@ -37,7 +37,7 @@
 
 错误码：`PAYOUT_RECON_NOT_FOUND`（404）、`PAYOUT_RECON_CONFLICT`（409，已配对 / 作废 / 重复）、`PAYOUT_RECON_STAGE_NOT_ALLOWED`（409，已审核不能改配对）、`PAYOUT_RECON_INVALID`（422，缺原因、币种不符、账户无效）、`PAYOUT_RECON_RANGE_INVALID`（422）。
 
-## 3. 数据表（迁移 `20261110_0086_finance_payout_recon`）
+## 3. 数据表（迁移 `20261110_0085_finance_payout_recon`）
 
 | 表 | 一行 | 说明 |
 |---|---|---|

@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision: str = "20261108_0085_finance_walmart_bills"
+revision: str = "20261108_0084_finance_walmart_bills"
 down_revision: str | Sequence[str] | None = "20261109_0083_finance_sem_unallocated_lines"
 branch_labels = None
 depends_on = None

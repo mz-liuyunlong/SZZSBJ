@@ -37,7 +37,7 @@
 - [x] 领星客户端登记 `POST /basicOpen/multiplatformFinance/walmart/bill/statement/list`（契约 `LX-727003CFF7B4`）：请求体只允许 `offset / length / sids / startDate / endDate`，每页最多 200，一次只查一个店。
 - [x] catalog：interface_key `walmartBillStatementList`，handler `lingxing.walmart_bill_statement.v1`，默认 `outbound_enabled=false`、`is_enabled=false`、`schedule_enabled=false`；bootstrap / enable 两个脚本（都要显式授权环境变量）。
 - [x] handler（见 §10 规则）：按店、按交易日期时间段、offset 翻页；原始响应先落 `ods_api_raw_blobs` / `ods_api_raw_request_refs`；解析写明细表；每店拉完重算该店涉及的各期汇总。
-- [x] 迁移 `20261108_0085_finance_walmart_bills`：`ods_lingxing_walmart_bill_lines`、`mart_walmart_bill_periods`；登记动作权限 `action:finance:settlement-reconciliation:sync`（页面权限 `page:finance:settlement-reconciliation:view` 已有则不动）。
+- [x] 迁移 `20261108_0084_finance_walmart_bills`：`ods_lingxing_walmart_bill_lines`、`mart_walmart_bill_periods`；登记动作权限 `action:finance:settlement-reconciliation:sync`（页面权限 `page:finance:settlement-reconciliation:view` 已有则不动）。
 - [x] 接口：`GET /api/finance/walmart-bills/periods`、`GET /api/finance/walmart-bills/sync`、`POST /api/finance/walmart-bills/sync`。
 - [x] 测试：合成数据；解析、翻页、条数变化、时间段外的行、对半切、往前补拉、重拉后消失标记、回填时间段、开关、定时、手动同步、权限；迁移头。
 - [x] 文档：本 PRP、数据源决策、`docs/api/finance-walmart-bills.md`、`DATA_INTERFACE_REGISTRY.md`、`BACKEND_MODULE_CATALOG.md`。
@@ -168,6 +168,6 @@ uv run python -c "import app.main"
 - **跟进**：打款异常每期可追加跟进（内容必填，Case 编号、下次跟进日期），保留全部历史。
 - **收款账户映射**：店铺 → 入账账户 + 收款账户识别 + 生效日期；换账户写原因、旧记录自动截止。真实数据不进仓库，上线后由部署 AI 录入生产库。
 - **页面**：照 5174 预览：店铺列固定左侧、账单日多选（含全选）、列配置、导出 Excel、勾选、合计行、批量初审 / 终审、映射抽屉、期次详情（配对、审核、跟进记录）。
-- **数据表**：迁移 `20261110_0086_finance_payout_recon` 新建 4 张表（映射、配对、审核记录、跟进记录）+ 3 个动作权限；down 在有数据或权限已分配时拒绝。
+- **数据表**：迁移 `20261110_0085_finance_payout_recon` 新建 4 张表（映射、配对、审核记录、跟进记录）+ 3 个动作权限；down 在有数据或权限已分配时拒绝。
 - **验证**：纯规则单测（窗口、账户、识别、容差、合并、争抢、状态、阶段）；接口权限测试；隔离库测试（自动 / 合并 / 手动配对、日记账联动与撤销恢复、审核流、换账户、跟进）。
 - **上线追加步骤**（接在第 15 节后）：6. 部署 AI 按 Rocky 给的对照把各店收款账户录入 `cfg_walmart_payout_accounts`（只在生产库）；7. 给财务角色分配 review1 / review2 / follow；8. 页面点「自动配对」，回报配上的期数和打款异常期数（只报数量）。

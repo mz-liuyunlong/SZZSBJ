@@ -1,5 +1,5 @@
 """Finance: payout reconciliation (回款对账) — payout account map, arrival matches,
-review events and follow-ups on top of 0085's Walmart bill periods.
+review events and follow-ups on top of 0084's Walmart bill periods.
 
 Also registers the review1 / review2 / follow action permissions on 回款对账.
 Tables start empty; real payout accounts are entered in production after launch.
@@ -12,8 +12,8 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision: str = "20261110_0086_finance_payout_recon"
-down_revision: str | Sequence[str] | None = "20261108_0085_finance_walmart_bills"
+revision: str = "20261110_0085_finance_payout_recon"
+down_revision: str | Sequence[str] | None = "20261108_0084_finance_walmart_bills"
 branch_labels = None
 depends_on = None
 

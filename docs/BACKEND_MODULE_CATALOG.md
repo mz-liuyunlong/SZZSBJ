@@ -36,7 +36,7 @@
 | Module key | `finance-walmart-bills-v1` |
 | Status | `in_review`；Rocky 2026-11-08 定口径；未上线，同步默认关闭 |
 | Purpose | 领星沃尔玛账单（statement/list）同步：明细表 + 每期汇总表，回款对账 / 现金利润 / 结算利润共用 |
-| Backend files | `backend/app/modules/walmart_bills/`；`backend/app/modules/integration_sync/walmart_bill_catalog.py`、`handlers/lingxing_walmart_bill_sync.py`；`backend/scripts/bootstrap_walmart_bill_governance.py`、`enable_walmart_bill_sync.py`；Alembic `20261108_0085_finance_walmart_bills`；回款对账 `payout_*.py` + Alembic `20261110_0086_finance_payout_recon` |
+| Backend files | `backend/app/modules/walmart_bills/`；`backend/app/modules/integration_sync/walmart_bill_catalog.py`、`handlers/lingxing_walmart_bill_sync.py`；`backend/scripts/bootstrap_walmart_bill_governance.py`、`enable_walmart_bill_sync.py`；Alembic `20261108_0084_finance_walmart_bills`；回款对账 `payout_*.py` + Alembic `20261110_0085_finance_payout_recon` |
 | Permission | 看：`page:finance:settlement-reconciliation:view`；手动同步：`action:finance:settlement-reconciliation:sync`（新增） |
 | Documentation | `docs/api/finance-walmart-bills.md`、`docs/api/finance-payout-recon.md`；契约 `docs/integrations/lingxing/contracts/finance-lx-727003cff7b4.md` |
 | PRP / Decision | `PRPs/finance-walmart-settlement-sync-v1.md`；`docs/data-sources/decisions/finance-walmart-settlement-sync-decision.md` |
