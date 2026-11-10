@@ -295,6 +295,7 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
     ),
     # Walmart bill (settlement) lines. Read-only; one store per request, offset/length paging,
     # startDate / endDate filter on the transaction posted date (confirmed on 2026-10-26 data).
+    # Auth: query sign (the provider rejects the Authorization header on this path).
     "/basicOpen/multiplatformFinance/walmart/bill/statement/list": LingxingEndpointContract(
         method="POST",
         outbound_enabled=True,
@@ -305,6 +306,7 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
         store_field="sids",
         page_size_field="length",
         offset_field="offset",
+        auth_strategy="query_sign",
     ),
     "/erp/sc/routing/data/local_inventory/productList": LingxingEndpointContract(
         method="POST",
