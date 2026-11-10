@@ -304,23 +304,44 @@ class PayoutReconService:
         names = dict(
             self.session.execute(select(FinanceCashCategory.code, FinanceCashCategory.name)).all()
         )
+        states = {
+            state.line_uid: state
+            for state in self.session.scalars(
+                select(FinanceCashLineState).where(FinanceCashLineState.line_uid.in_(wanted))
+            )
+        }
+        classifier = self._classifier()
         out: dict[str, str | None] = {}
-        for state in self.session.scalars(
-            select(FinanceCashLineState).where(FinanceCashLineState.line_uid.in_(wanted))
+        for line in self.session.scalars(
+            select(FinanceCashLine).where(FinanceCashLine.line_uid.in_(wanted))
         ):
-            if state.exclude_amount is not None:
-                hint: str | None = "已剔除"
-            elif state.manual_pair:
+            state = states.get(line.line_uid)
+            hint: str | None = None
+            if state is not None and state.exclude_amount is not None:
+                hint = "已剔除"
+            elif state is not None and state.manual_pair:
                 hint = "已内部配对"
-            elif state.parts:
+            elif state is not None and state.parts:
                 hint = "已拆分"
-            elif state.manual_category and state.manual_category != PLATFORM_CATEGORY:
+            elif state is not None and state.manual_category:
                 code = state.manual_category
-                hint = f"已分类 {names.get(code, code)}"
+                hint = None if code == PLATFORM_CATEGORY else f"已分类 {names.get(code, code)}"
             else:
-                hint = None
-            out[state.line_uid] = hint
+                # 没人工分类：日记账规则分出了「平台回款」以外的类别（如内部转账），也不自动配。
+                code = classifier.classify(
+                    f"{line.description} {line.memo}", line.counterparty_name
+                )
+                if code and code != PLATFORM_CATEGORY:
+                    hint = f"已分类 {names.get(code, code)}（规则）"
+            out[line.line_uid] = hint
         return out
+
+    def _classifier(self) -> journal.Classifier:
+        """日记账同一套分类规则（cfg_finance_cash_classify_rules）。"""
+        return journal.Classifier(
+            journal.Rule(rule.rule_type, rule.pattern, rule.category_code, rule.sort_order)
+            for rule in self.session.scalars(select(FinanceCashClassifyRule))
+        )
 
     @staticmethod
     def _line_in(row: FinanceCashLine) -> rules.LineIn:
@@ -764,10 +785,7 @@ class PayoutReconService:
             return False
         if state.stage not in journal.FIRST_PENDING:
             return False
-        classifier = journal.Classifier(
-            journal.Rule(rule.rule_type, rule.pattern, rule.category_code, rule.sort_order)
-            for rule in self.session.scalars(select(FinanceCashClassifyRule))
-        )
+        classifier = self._classifier()
         return (
             classifier.classify(f"{line.description} {line.memo}", line.counterparty_name) is None
         )
@@ -1032,8 +1050,11 @@ class PayoutReconService:
         if request.account_key != row.account_key:
             # 换入账账户会改变历史期次的归属，必须新增一条（生效日 + 原因），旧的留痕。
             raise PayoutReconError(422, ERR_INVALID, "换账户请新增一条，写生效日和原因")
+        reason = (request.reason or "").strip()
+        if not reason:
+            raise PayoutReconError(422, ERR_INVALID, "改收款账户识别要写原因")
         row.payee = request.payee.strip()
-        row.change_reason = (request.reason or "").strip() or row.change_reason
+        row.change_reason = reason
         row.updated_by, row.updated_at = actor, datetime.now(UTC)
         self.session.commit()
         codes = {s.store_id: s.store_code for s in self._store_options()}
@@ -1084,13 +1105,14 @@ MEMO_TOO_LONG: Final = "备注过长，未追加"
 
 def memo_with_tag(current: str | None, tag: str) -> tuple[str | None, bool]:
     """配对时日记账备注怎么改（Rocky 11-10）：没有人工备注写 tag；有就「原人工备注；tag」追加，
-    已经含同样的 tag 不重复；拼完超过日记账备注上限不改。
+    已有一段和 tag 完全相同就不重复；拼完超过日记账备注上限不改。
     返回（新备注 / None = 不改，是否因过长没改）。
     """
     text = (current or "").strip()
     if not text:
         return tag, False
-    if tag in text:
+    # 按「；」切开逐段比：只有某一段和 tag 完全相同才算已有（合并打款的长 tag 不会挡掉短 tag）。
+    if tag in (part.strip() for part in text.split(MEMO_JOINER)):
         return None, False
     joined = f"{text}{MEMO_JOINER}{tag}"
     if len(joined) > journal.TEXT_MAX:

@@ -323,7 +323,9 @@ def test_account_update_keeps_account_and_deactivate_needs_no_live_match(
         )
     assert changed.value.status_code == 422
     edited = svc.update_account(
-        current.id, PayoutAccountUpdateRequest(account_key=ACC, payee="合成公司"), actor="boss"
+        current.id,
+        PayoutAccountUpdateRequest(account_key=ACC, payee="合成公司", reason="合成改识别"),
+        actor="boss",
     )
     assert (edited.account_key, edited.payee) == (ACC, "合成公司")
     add_period(session, "k1", "2026-10-06", "100.00")
@@ -456,9 +458,26 @@ def test_too_long_or_already_tagged_memo_is_not_changed(session: Session, svc: P
 
     add_period(session, "k2", "2026-10-20", "50.00")
     add_line(session, "SYNL000000000045", "2026-10-21", "50.00")
-    tagged = "财务先写了 平台回款 · CN9901 · 2026-10-20"
+    tagged = "财务先写了；平台回款 · CN9901 · 2026-10-20"
     session.add(FinanceCashLineState(line_uid="SYNL000000000045", manual_memo=tagged))
     session.flush()
     svc.auto_match(actor="t", request_id=None)
     assert memo_of(session, "SYNL000000000045") == tagged
     assert text_events(session, "SYNL000000000045") == 0
+
+
+def test_payee_edit_needs_reason(session: Session, svc: PayoutReconService):
+    current = svc.list_accounts().items[0]
+    with pytest.raises(PayoutReconError) as missing:
+        svc.update_account(
+            current.id, PayoutAccountUpdateRequest(account_key=ACC, payee="合成公司"), actor="b"
+        )
+    assert (missing.value.status_code, missing.value.code) == (422, "PAYOUT_RECON_INVALID")
+
+
+def test_rule_classified_lines_are_not_auto_matched(session: Session, svc: PayoutReconService):
+    add_period(session, "k1", "2026-10-06", "100.00")
+    add_line(session, "SYNL000000000051", "2026-10-07", "100.00", text="提现转入")
+    assert svc.auto_match(actor="t", request_id=None).matched_periods == 0
+    hint = {x.line_uid: x.journal_hint for x in svc.candidate_lines(STORE_A).items}
+    assert hint["SYNL000000000051"].endswith("（规则）")

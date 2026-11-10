@@ -153,3 +153,13 @@ def test_stage_replay_and_allowed_steps():
 def test_journal_tag_lists_store_and_bill_dates():
     tag = rules.journal_tag("CN9901", [date(2026, 10, 20), date(2026, 10, 6)])
     assert tag == "平台回款 · CN9901 · 2026-10-06、2026-10-20"
+
+
+def test_memo_tag_is_compared_segment_by_segment():
+    from app.modules.walmart_bills.payout_service import memo_with_tag
+
+    short = "平台回款 · CN9901 · 2026-10-06"
+    merged = f"{short}、2026-10-20"
+    assert memo_with_tag(f"合成备注；{merged}", short) == (f"合成备注；{merged}；{short}", False)
+    assert memo_with_tag(f"合成备注；{short}", short) == (None, False)
+    assert memo_with_tag(f"合成备注；{short}", merged) == (f"合成备注；{short}；{merged}", False)

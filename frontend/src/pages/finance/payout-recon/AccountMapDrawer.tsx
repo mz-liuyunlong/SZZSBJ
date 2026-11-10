@@ -142,7 +142,7 @@ function AccountMapDrawer({ open, onClose, onChanged }: { open: boolean; onClose
             </Form.Item>
           )}
           {mode?.kind !== "new" && (
-            <Form.Item name="reason" label={mode?.kind === "replace" ? "换账户原因" : "修改原因"} rules={mode?.kind === "replace" ? [{ required: true, whitespace: true, message: "换账户要写原因" }] : []}>
+            <Form.Item name="reason" label={mode?.kind === "replace" ? "换账户原因" : "修改原因"} rules={[{ required: true, whitespace: true, message: mode?.kind === "replace" ? "换账户要写原因" : "修改要写原因" }]}>
               <Input.TextArea rows={2} maxLength={200} />
             </Form.Item>
           )}
