@@ -11,7 +11,7 @@ from app.modules.integration_sync.parsers.lingxing_data_pages import (
 )
 
 WriteMode = Literal["upsert"]
-TargetLayer = Literal["DIM", "FACT"]
+TargetLayer = Literal["DIM", "FACT", "RAW"]
 
 SOURCE_METADATA_FIELDS: Final = (
     "source_account_ref",
@@ -49,6 +49,9 @@ _REFRESH_MARTS_BY_PARSER_KEY: Final[dict[DataPagesParserKey, tuple[str, ...]]] =
         "mart_order_profit_sku_day",
         "mart_listing_management_current",
     ),
+    "walmart_sp_campaign_list": (),
+    "walmart_sp_search_term_list": (),
+    "walmart_sp_keyword_list": (),
     "walmart_ad_item_sp_list": (
         "mart_daily_sales_item_day",
         "mart_order_profit_sku_day",
@@ -82,6 +85,8 @@ class DataPagesWriterSpec:
 
 
 def _target_layer_for_table(target_table: str) -> TargetLayer:
+    if target_table == "ods_api_raw_blobs":
+        return "RAW"
     if target_table.startswith("dim_"):
         return "DIM"
     if target_table.startswith("fact_"):
