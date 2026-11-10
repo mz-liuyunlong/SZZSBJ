@@ -17,6 +17,10 @@ from app.modules.walmart_bills.models import WalmartBillLine, WalmartBillPeriod
 ZERO = Decimal("0")
 
 
+class PeriodRefreshError(RuntimeError):
+    """期汇总算不下去（如同一期明细有多个币种）。args[0] 是错误码，调用方按店失败处理。"""
+
+
 def _valid() -> object:
     return and_(WalmartBillLine.delete_flag == 0, WalmartBillLine.missing_since.is_(None))
 
@@ -73,6 +77,7 @@ def refresh_periods(
                     and_(valid, WalmartBillLine.total_payable.is_not(None))
                 ),
                 func.max(WalmartBillLine.total_payable).filter(valid),
+                func.count(func.distinct(WalmartBillLine.currency_code)).filter(valid),
             )
             .where(scope)
             .group_by(WalmartBillLine.store_id, WalmartBillLine.report_key)
@@ -106,7 +111,11 @@ def refresh_periods(
             amount_sum,
             payable_kinds,
             total_payable,
+            currency_kinds,
         ) in totals:
+            if currency_kinds > 1:
+                # 一期只能是一个币种；混了说明领星数据或口径变了，不能把美元和别的币种加在一起。
+                raise PeriodRefreshError("SYNC_WALMART_BILL_MIXED_CURRENCY")
             # 领星「账单总额」目前都是空的；只有全期一致地给了一个值才用它，否则用明细合计。
             stated = total_payable if payable_kinds == 1 else None
             payable = stated if stated is not None else amount_sum

@@ -17,7 +17,7 @@ from app.core.api import ApiError, ErrorEnvelope, SuccessEnvelope, get_request_i
 from app.core.auth import Principal
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
-from app.modules.walmart_bills.reader import list_periods
+from app.modules.walmart_bills.reader import MAX_ROWS, list_periods_page
 from app.modules.walmart_bills.schemas import (
     WalmartBillPeriodListData,
     WalmartBillPeriodRead,
@@ -69,7 +69,7 @@ def get_periods(
     del principal
     if report_date_from and report_date_to and report_date_from > report_date_to:
         raise ApiError(code=ERR_RANGE_INVALID, status_code=422, message="开始日期晚于结束日期")
-    rows = list_periods(
+    rows, truncated = list_periods_page(
         session,
         store_id=store_id,
         report_date_from=report_date_from,
@@ -78,7 +78,9 @@ def get_periods(
     return success_response(
         request,
         data=WalmartBillPeriodListData(
-            items=[WalmartBillPeriodRead.model_validate(row, from_attributes=True) for row in rows]
+            items=[WalmartBillPeriodRead.model_validate(row, from_attributes=True) for row in rows],
+            limit=MAX_ROWS,
+            truncated=truncated,
         ),
     )
 

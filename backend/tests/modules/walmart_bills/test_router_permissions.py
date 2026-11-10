@@ -60,14 +60,14 @@ def test_users_without_finance_permissions_get_403(client_for, method: str, path
 
 
 def test_page_permission_can_read_but_not_sync(client_for, monkeypatch) -> None:
-    monkeypatch.setattr(bills_router, "list_periods", lambda *args, **kwargs: [])
+    monkeypatch.setattr(bills_router, "list_periods_page", lambda *args, **kwargs: ([], False))
     monkeypatch.setattr(
         bills_router, "latest_walmart_bill_sync", lambda session: WalmartBillSyncData()
     )
     client = client_for(user(READ))
     periods = client.get("/api/finance/walmart-bills/periods")
     assert periods.status_code == 200
-    assert periods.json()["data"] == {"items": []}
+    assert periods.json()["data"] == {"items": [], "limit": 2000, "truncated": False}
     assert client.get("/api/finance/walmart-bills/sync").json()["data"]["status"] == "never"
     assert client.post("/api/finance/walmart-bills/sync").status_code == 403
 
@@ -104,7 +104,7 @@ def test_sync_permission_starts_a_run_and_maps_errors(client_for, monkeypatch) -
 
 
 def test_super_admin_wildcard_can_do_everything(client_for, monkeypatch) -> None:
-    monkeypatch.setattr(bills_router, "list_periods", lambda *args, **kwargs: [])
+    monkeypatch.setattr(bills_router, "list_periods_page", lambda *args, **kwargs: ([], False))
     assert client_for(user("*")).get("/api/finance/walmart-bills/periods").status_code == 200
 
 

@@ -64,7 +64,7 @@ from app.modules.walmart_bills.parsing import (
     parse_bill_row,
     provider_code,
 )
-from app.modules.walmart_bills.periods import refresh_periods
+from app.modules.walmart_bills.periods import PeriodRefreshError, refresh_periods
 from app.modules.warehouse_wfs.store_discovery import (
     WfsStoreDiscoveryError,
     discover_walmart_stores,
@@ -594,7 +594,7 @@ class LingxingWalmartBillSyncHandler:
         failure = self._failure
         if failure is not None and failure.code:
             code = failure.code
-        elif isinstance(exc, WalmartBillSyncError):
+        elif isinstance(exc, WalmartBillSyncError | PeriodRefreshError):
             code = str(exc)
         else:
             code = "SYNC_WALMART_BILL_STORE_FAILED"

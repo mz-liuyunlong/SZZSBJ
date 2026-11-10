@@ -733,6 +733,13 @@ def test_heartbeat_that_commits_the_business_session_cannot_leak_half_a_store(
     ).execute(run, interface)
 
     assert run.status == "failed"
+    failed_codes = session.scalars(
+        select(IntegrationSyncRunWorkItem.error_code).where(
+            IntegrationSyncRunWorkItem.run_id == run.id,
+            IntegrationSyncRunWorkItem.status == "failed",
+        )
+    ).all()
+    assert failed_codes and set(failed_codes) == {"SYNC_WALMART_BILL_COMMIT_INSIDE_STORE"}
     assert store_line_count(session, STORE_A) == before
     missing = session.scalar(
         select(func.count())
@@ -796,3 +803,21 @@ def test_lost_lock_stops_the_whole_run_before_the_next_store(session: Session) -
     assert client.windows(STORE_B) == []
     assert store_line_count(session, STORE_A) == 0
     assert store_line_count(session, STORE_B) == 0
+
+
+def test_a_period_with_two_currencies_fails_the_store(session: Session) -> None:
+    add_stores(session)
+    interface = governed(session)
+    rows = base_rows()
+    rows[1] = dict(rows[1], currency="CAD")
+    run = run_sync(session, interface, FakeLingxing(rows))
+    assert (run.status, run.error_code) == ("failed", "SYNC_WALMART_BILL_STORE_PARTIAL")
+    failed = session.scalars(
+        select(IntegrationSyncRunWorkItem.error_code).where(
+            IntegrationSyncRunWorkItem.run_id == run.id,
+            IntegrationSyncRunWorkItem.status == "failed",
+        )
+    ).all()
+    assert failed == ["SYNC_WALMART_BILL_MIXED_CURRENCY"]
+    assert session.get(WalmartBillPeriod, ("primary", STORE_A, "rk-a1")) is None
+    assert period(session, STORE_B, "rk-b1").status == "normal"

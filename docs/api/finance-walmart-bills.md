@@ -9,7 +9,7 @@ PRP：`PRPs/finance-walmart-settlement-sync-v1.md`；数据源决策：`docs/dat
 
 | 方法 | 路径 | 权限 | 说明 |
 |---|---|---|---|
-| GET | `/api/finance/walmart-bills/periods` | `page:finance:settlement-reconciliation:view` | 每期汇总（店铺 × 一期），新到旧，最多 2000 行 |
+| GET | `/api/finance/walmart-bills/periods` | `page:finance:settlement-reconciliation:view` | 每期汇总（店铺 × 一期），新到旧，最多 2000 行；返回 `limit`（2000）和 `truncated`（还有更早的期没返回时为 true，请缩小日期范围或按店查） |
 | GET | `/api/finance/walmart-bills/sync` | `page:finance:settlement-reconciliation:view` | 最近一次同步状态 |
 | POST | `/api/finance/walmart-bills/sync` | `action:finance:settlement-reconciliation:sync` | 手动同步：在任务中心建一条运行记录交给队列；已经有一次在跑（手动、定时或回填）就直接返回那一次 |
 
@@ -50,7 +50,7 @@ PRP：`PRPs/finance-walmart-settlement-sync-v1.md`；数据源决策：`docs/dat
 - 一个店失败不影响其他店；有店失败整次记失败（`SYNC_WALMART_BILL_STORE_PARTIAL` / `SYNC_WALMART_BILL_ALL_STORES_FAILED`）。
 - 定时：每周三上海 03:00（cron `0 19 * * 2`，UTC）。
 
-同步错误码（任务中心可见）：`SYNC_WALMART_BILL_RUNTIME_NOT_AUTHORIZED`、`SYNC_WALMART_BILL_EXECUTION_NOT_AUTHORIZED`、`SYNC_WALMART_BILL_GOVERNANCE_DISABLED`、`SYNC_WALMART_BILL_NO_STORES`、`SYNC_WALMART_BILL_PAGINATION_INVALID`、`SYNC_WALMART_BILL_WINDOW_INVALID`、`SYNC_WALMART_BILL_REQUEST_FAILED`、`SYNC_WALMART_BILL_RESPONSE_FAILED`、`SYNC_WALMART_BILL_TOTAL_CHANGED`、`SYNC_WALMART_BILL_INCOMPLETE`、`SYNC_WALMART_BILL_DAY_PAGE_LIMIT`、`SYNC_WALMART_BILL_EMPTY_UNEXPECTED`（某段返回 0 条但库里原来有）、`SYNC_WALMART_BILL_STORE_FAILED`（店失败但不是上面任何一种，如数据库出错）、`SYNC_WALMART_BILL_COMMIT_INSIDE_STORE`（店内提交业务事务，被拒绝）、`SYNC_WALMART_BILL_STORE_MISMATCH`、`SYNC_WALMART_BILL_DATE_OUT_OF_WINDOW`、`SYNC_WALMART_BILL_INVALID_ROW`、`SYNC_WALMART_BILL_INVALID_DATE`、`SYNC_WALMART_BILL_INVALID_AMOUNT`。
+同步错误码（任务中心可见）：`SYNC_WALMART_BILL_RUNTIME_NOT_AUTHORIZED`、`SYNC_WALMART_BILL_EXECUTION_NOT_AUTHORIZED`、`SYNC_WALMART_BILL_GOVERNANCE_DISABLED`、`SYNC_WALMART_BILL_NO_STORES`、`SYNC_WALMART_BILL_PAGINATION_INVALID`、`SYNC_WALMART_BILL_WINDOW_INVALID`、`SYNC_WALMART_BILL_REQUEST_FAILED`、`SYNC_WALMART_BILL_RESPONSE_FAILED`、`SYNC_WALMART_BILL_TOTAL_CHANGED`、`SYNC_WALMART_BILL_INCOMPLETE`、`SYNC_WALMART_BILL_DAY_PAGE_LIMIT`、`SYNC_WALMART_BILL_EMPTY_UNEXPECTED`（某段返回 0 条但库里原来有）、`SYNC_WALMART_BILL_STORE_FAILED`（店失败但不是上面任何一种，如数据库出错）、`SYNC_WALMART_BILL_COMMIT_INSIDE_STORE`（店内提交业务事务，被拒绝）、`SYNC_WALMART_BILL_MIXED_CURRENCY`（同一期明细有多个币种）、`SYNC_WALMART_BILL_STORE_MISMATCH`、`SYNC_WALMART_BILL_DATE_OUT_OF_WINDOW`、`SYNC_WALMART_BILL_INVALID_ROW`、`SYNC_WALMART_BILL_INVALID_DATE`、`SYNC_WALMART_BILL_INVALID_AMOUNT`。
 
 ## 4. 上线步骤（负责人授权后由部署 AI 按票据执行）
 

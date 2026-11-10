@@ -43,3 +43,6 @@ class WalmartBillPeriodRead(BaseModel):
 
 class WalmartBillPeriodListData(BaseModel):
     items: list[WalmartBillPeriodRead]
+    # 一次最多返回 limit 行；truncated=true 表示还有更早的期没返回，请缩小日期范围或按店查。
+    limit: int = 2000
+    truncated: bool = False

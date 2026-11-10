@@ -160,7 +160,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
             _page("finance", "profit_center", "利润中心", 10),
             _page("finance", "sku_cash_profit", "单品现金利润", 20),
             _page("finance", "walmart_settlement", "沃尔玛返还明细", 30),
-            _page("finance", "settlement_reconciliation", "结算对账", 40),
+            _page("finance", "settlement_reconciliation", "回款对账", 40),
             _page("finance", "ad_cost", "广告费用", 50),
             _page("finance", "ad_bill", "广告账单", 60),
             _page("finance", "performance_report", "业绩报表", 70),
