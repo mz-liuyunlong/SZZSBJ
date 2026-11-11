@@ -21,6 +21,7 @@ from app.modules.finance_cashflow import approvals as approval_rules
 from app.modules.finance_cashflow import journal
 from app.modules.finance_cashflow.models import (
     FinanceCashAccount,
+    FinanceCashAlertClosure,
     FinanceCashApproval,
     FinanceCashCategory,
     FinanceCashClassifyRule,
@@ -40,6 +41,9 @@ from app.modules.finance_cashflow.parsing.pipeline import ParsedFile, parse_file
 from app.modules.finance_cashflow.parsing.seed import Seed, SeedAccount
 from app.modules.finance_cashflow.schemas import (
     CashflowAccountRead,
+    CashflowAlertCloseRequest,
+    CashflowAlertClosureRead,
+    CashflowAlertReopenRequest,
     CashflowAnomalyRead,
     CashflowCategoryRead,
     CashflowFileResult,
@@ -81,6 +85,15 @@ class ImportVoidedError(Exception):
 
 class LineNotFoundError(Exception):
     pass
+
+
+class AlertClosureError(Exception):
+    """关闭 / 重新打开异常被拒：重复关闭、没有关闭记录、原因为空。"""
+
+    def __init__(self, status_code: int, message: str) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.message = message
 
 
 class ImportHasReviewedLinesError(Exception):
@@ -724,6 +737,7 @@ class CashflowService:
                     counterparty_last4=line.counterparty_account_last4 or "",
                     account_last4=account_last4 or "",
                     source_time=line.source_time,
+                    manual_amount_cny=state.manual_amount_cny if state else None,
                 )
             )
         internal = frozenset(
@@ -859,7 +873,7 @@ class CashflowService:
                 refs=(*item.source.refs, *journal.part_refs(item.source.parts)),
                 stage="",
                 amount_cny=item.amount_cny,
-                cny_exact=item.fx_source == journal.FX_SOURCE_PAYONEER,
+                cny_exact=item.fx_source in journal.FX_EXACT_SOURCES,
             )
             for item in result.lines
         ]
@@ -951,10 +965,70 @@ class CashflowService:
             if item.source.parts
             else None,
             manual_pair=state.manual_pair if state else None,
+            manual_cny_reason=state.manual_cny_reason if state else None,
             auto_exclude_reason=item.auto_exclude_reason,
             version=state.version if state else 0,
             approval_candidates=candidates or [],
         )
+
+    # ------------------------------------------------------------ 关闭异常（Rocky 11-10）
+
+    def list_alert_closures(self) -> list[CashflowAlertClosureRead]:
+        rows = self.session.scalars(
+            select(FinanceCashAlertClosure)
+            .where(FinanceCashAlertClosure.reopened_at.is_(None))
+            .order_by(FinanceCashAlertClosure.closed_at.desc())
+        )
+        return [
+            CashflowAlertClosureRead(
+                alert_key=row.alert_key,
+                alert_type=row.alert_type,
+                reason=row.reason,
+                closed_by=row.closed_by,
+                closed_at=row.closed_at,
+            )
+            for row in rows
+        ]
+
+    def _open_closure(self, key: str) -> FinanceCashAlertClosure | None:
+        return self.session.scalars(
+            select(FinanceCashAlertClosure)
+            .where(
+                FinanceCashAlertClosure.alert_key == key,
+                FinanceCashAlertClosure.reopened_at.is_(None),
+            )
+            .with_for_update()
+        ).first()
+
+    def close_alert(self, request: CashflowAlertCloseRequest, *, actor: str) -> None:
+        reason = request.reason.strip()
+        if not reason:
+            raise AlertClosureError(422, "关闭异常要写原因")
+        if self._open_closure(request.alert_key) is not None:
+            raise AlertClosureError(409, "这条异常已经关闭了")
+        self.session.add(
+            FinanceCashAlertClosure(
+                alert_key=request.alert_key,
+                alert_type=request.alert_type,
+                reason=reason,
+                closed_by=actor,
+            )
+        )
+        try:
+            self.session.commit()
+        except IntegrityError as exc:
+            self.session.rollback()
+            raise AlertClosureError(409, "这条异常已经关闭了") from exc
+
+    def reopen_alert(self, request: CashflowAlertReopenRequest, *, actor: str) -> None:
+        reason = request.reason.strip()
+        if not reason:
+            raise AlertClosureError(422, "重新打开要写原因")
+        row = self._open_closure(request.alert_key)
+        if row is None:
+            raise AlertClosureError(404, "这条异常没有关闭记录")
+        row.reopened_at, row.reopened_by, row.reopen_reason = datetime.now(UTC), actor, reason
+        self.session.commit()
 
     def list_anomalies(self) -> list[CashflowAnomalyRead]:
         result, _, _ = self._compute()
@@ -1096,7 +1170,11 @@ class CashflowService:
             manual_memo=state.manual_memo,
             parts=[dict(part) for part in state.parts] if state.parts else None,
             manual_pair=state.manual_pair,
+            manual_amount_cny=state.manual_amount_cny,
+            manual_cny_reason=state.manual_cny_reason,
         )
+        if request.kind == journal.KIND_SET_CNY and line.currency_code in {"CNY", "CNH"}:
+            raise journal.EventRejectedError(422, "人民币流水不用改折人民币")
         auto_reset = journal.apply_event(
             draft,
             kind=request.kind,
@@ -1116,6 +1194,8 @@ class CashflowService:
         state.manual_memo = draft.manual_memo
         state.parts = draft.parts
         state.manual_pair = draft.manual_pair
+        state.manual_amount_cny = draft.manual_amount_cny
+        state.manual_cny_reason = draft.manual_cny_reason
         state.version += 1
         state.updated_at = datetime.now(UTC)
         self._add_events(line_uid, request, auto_reset, actor, request_id)

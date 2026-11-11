@@ -142,7 +142,7 @@ class ApprovalService:
                 text=f"{item.source.description} {item.source.memo}",
                 refs=(*item.source.refs, *journal.part_refs(item.source.parts)),
                 amount_cny=item.amount_cny,
-                cny_exact=item.fx_source == journal.FX_SOURCE_PAYONEER,
+                cny_exact=item.fx_source in journal.FX_EXACT_SOURCES,
                 stage=states[item.source.line_uid].stage
                 if item.source.line_uid in states
                 else journal.STAGE_TODO,

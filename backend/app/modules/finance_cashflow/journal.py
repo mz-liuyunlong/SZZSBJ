@@ -39,12 +39,20 @@ HINT_NOT_IN_JOURNAL = "对方账户不在日记账"
 ALERT_PAYONEER_FEE = "派安盈提现到账差额"
 ALERT_PAYONEER_MISSING = "缺派安盈实际汇率"
 ALERT_STATEMENT_UNMATCHED = "月结单有、流水没有"
+# PingPong 付款的出账金额含手续费（Rocky 11-10）：导入时写进备注，提示一键拆成手续费行（F01）。
+ALERT_PINGPONG_FEE = "PingPong 付款手续费"
+FEE_LAYER_PINGPONG = "pingpong"
+PINGPONG_FEE_IN_MEMO = re.compile(r"PingPong 手续费 (\d+(?:\.\d+)?)")
 ALERT_STATEMENT_AMBIGUOUS = "月结单匹配到多笔"
 ALERT_STATEMENT_CONFLICT = "月结单前后不一致"
 FEE_LAYER_PAYONEER = "payoneer"
 FX_SOURCE_PAYONEER = "payoneer"
 FX_SOURCE_LINGXING = "lingxing"
 FX_SOURCE_PENDING = "pending"
+# 人工改的折人民币（Rocky 11-10：约定汇率每笔不同，财务写原因直接改）。
+FX_SOURCE_MANUAL = "manual"
+# 对单时可以按分比的人民币来源：派安盈实际到账、人工改过的。
+FX_EXACT_SOURCES = frozenset({"payoneer", "manual"})
 PAYONEER_WITHDRAWAL = re.compile(r"^Payment to\b")
 STATEMENT_TIME_TOL_SECONDS = 120
 STATEMENT_DAY_TOL = 1
@@ -93,6 +101,7 @@ KIND_AUTO_RESET = "auto_reset"
 # 拆分行挂审批单（Rocky 11-10：一笔付款对多张单，拆开后各行挂自己的单，类别跟着审批单走）。
 KIND_ATTACH_PART_REF = "attach_part_ref"
 KIND_DETACH_PART_REF = "detach_part_ref"
+KIND_SET_CNY = "set_cny"
 KIND_AUTO_ATTACH_REF = "auto_attach_ref"
 
 
@@ -157,6 +166,8 @@ class LineInput:
     account_last4: str = ""
     # 交易时间（UTC）：派安盈月结补充按它和金额对到这笔。
     source_time: datetime | None = None
+    # 人工改的折人民币（正数）；有值就用它。
+    manual_amount_cny: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -256,6 +267,7 @@ def compute_journal(
     ]
     alerts.extend(_balance_alerts(lines))
     alerts.extend(_payoneer_fee_alerts(computed))
+    alerts.extend(_pingpong_fee_alerts(computed))
     alerts.extend(_pair_lines(computed, internal_categories))
     alerts.extend(_apply_exclusions(computed, exclusions))
     for item in computed:
@@ -298,6 +310,11 @@ def _classify_line(
     match: StatementMatch | None = None,
 ) -> ComputedLine:
     amount_cny, fx_rate, fx_source = _fx(line, usd_rate_of, match)
+    if line.manual_amount_cny is not None and line.amount:
+        manual = abs(line.manual_amount_cny)
+        amount_cny = manual if line.amount > 0 else -manual
+        fx_rate = (manual / abs(line.amount)).quantize(Q4, rounding=ROUND_HALF_UP)
+        fx_source = FX_SOURCE_MANUAL
     code: str | None
     if line.exclude_amount is not None and line.exclude_amount == abs(line.amount):
         code, source = EXCLUDE_CATEGORY, SOURCE_MANUAL
@@ -526,6 +543,40 @@ def _payoneer_fee_alerts(lines: Sequence[ComputedLine]) -> list[Alert]:
                     f"差 {gap:.2f} {cur}（疑似派安盈手续费），交易号 {line.statement.txn_id}"
                 ),
                 amount=gap,
+                currency_code=cur,
+                line_uid=source.line_uid,
+            )
+        )
+    return alerts
+
+
+def _pingpong_fee_alerts(lines: Sequence[ComputedLine]) -> list[Alert]:
+    """PingPong 付款备注里带「PingPong 手续费 x」、还没拆出这层手续费的：提示确认。"""
+    alerts: list[Alert] = []
+    for line in lines:
+        source = line.source
+        if source.provider != "pingpong" or source.amount >= 0:
+            continue
+        hit = PINGPONG_FEE_IN_MEMO.search(source.memo or "")
+        if hit is None:
+            continue
+        fee = Decimal(hit.group(1))
+        if fee <= 0 or fee >= abs(source.amount):
+            continue
+        if any(part.get("fee_layer") == FEE_LAYER_PINGPONG for part in source.parts or []):
+            continue
+        cur = source.currency_code
+        line.flags.append("PingPong 手续费待拆")
+        alerts.append(
+            Alert(
+                type=ALERT_PINGPONG_FEE,
+                account_key=source.account_key,
+                date=source.business_date.isoformat(),
+                message=(
+                    f"出账 {abs(source.amount):.2f} {cur} 里含 PingPong 手续费 {fee:.2f} {cur}，"
+                    f"实际汇出 {abs(source.amount) - fee:.2f} {cur}"
+                ),
+                amount=fee,
                 currency_code=cur,
                 line_uid=source.line_uid,
             )
@@ -1001,6 +1052,8 @@ class ReviewState:
     # 拆分：[{"amount": "100.0000", "category_code": "G02" 或 None}]，金额合计 = 流水金额绝对值。
     parts: list[dict[str, Any]] | None = None
     manual_pair: str | None = None
+    manual_amount_cny: Decimal | None = None
+    manual_cny_reason: str | None = None
 
 
 def _required_reason(reason: str | None, label: str) -> str:
@@ -1154,6 +1207,22 @@ def apply_event(
         if ref not in state.refs:
             raise EventRejectedError(409, "这笔没有挂这个审批单号")
         state.refs = [item for item in state.refs if item != ref]
+    elif kind == KIND_SET_CNY:
+        # 改折人民币：填正数金额 + 原因；amount_cny 为空 = 恢复系统折算。改了退回待初审。
+        raw = payload.get("amount_cny")
+        if raw is None or raw == "":
+            if state.manual_amount_cny is None:
+                raise EventRejectedError(409, "这笔没有人工改过折人民币")
+            state.manual_amount_cny, state.manual_cny_reason = None, None
+        else:
+            try:
+                value = Decimal(str(raw))
+            except InvalidOperation as exc:
+                raise EventRejectedError(422, "折人民币金额无效") from exc
+            if not value.is_finite() or value <= 0:
+                raise EventRejectedError(422, "折人民币要填大于 0 的金额")
+            state.manual_cny_reason = _required_reason(reason, "改折人民币")
+            state.manual_amount_cny = value.quantize(Q4, rounding=ROUND_HALF_UP)
     elif kind == KIND_EXCLUDE:
         state.exclude_reason = _required_reason(reason, "剔除")
         state.exclude_amount = _exclude_amount(payload, line_amount)

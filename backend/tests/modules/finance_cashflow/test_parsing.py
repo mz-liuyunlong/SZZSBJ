@@ -350,3 +350,17 @@ def test_boc_unregistered_section_with_rows_rejects_the_file():
 def test_boc_only_unregistered_empty_sections_still_rejects():
     with pytest.raises(RejectFile, match="没登记"):
         parse_file(S.boc_multi(("769000000001", [])), S.seed())
+
+
+def test_pingpong_payment_fee_is_written_into_the_memo_without_changing_the_line():
+    row = (
+        "2026-10-08 09:00:00", "PF1", "OF1", "出账", "供应商付款", "USD", "1010.00",
+        S.PP_USER + "01", "合成供应商", "500.00", S.PP_USER,
+    )  # fmt: skip
+    plain = parse_file(S.pingpong([row]), S.seed()).lines
+    with_fee = parse_file(S.pingpong([(*row, "10.00")]), S.seed()).lines
+    assert [line.memo for line in with_fee] == ["PingPong 手续费 10.00"]
+    # 手续费只写进备注：金额、流水号不变，重复导入照样去重
+    assert [(line.amount, line.line_uid) for line in with_fee] == [
+        (line.amount, line.line_uid) for line in plain
+    ]

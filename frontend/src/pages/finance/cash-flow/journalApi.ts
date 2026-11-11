@@ -24,7 +24,7 @@ export const cashViewSource = (view: string, isDev: boolean, live: boolean): "li
 
 export type LineEventKind = "review1_pass" | "review1_reject" | "review2_pass" | "review2_reject" | "set_category" | "attach_ref" | "detach_ref" | "exclude" | "unexclude"
   | "review1_undo" | "review2_undo" | "set_text" | "split" | "set_part_category" | "set_part_text" | "unsplit" | "confirm_fee" | "pair" | "unpair"
-  | "attach_part_ref" | "detach_part_ref";
+  | "attach_part_ref" | "detach_part_ref" | "set_cny";
 
 export interface ApiAccount {
   account_key: string; display_name: string; entity: string; currency_code: string; kind: string; provider: string; account_no_last4: string; is_active: boolean;
@@ -45,6 +45,8 @@ export interface ApiLine {
   manual_pair?: string | null; auto_exclude_reason?: string | null;
   /** 折人民币的汇率和来源：payoneer = 派安盈实际到账；lingxing = 领星当月汇率；pending = 派安盈提现等月结单 */
   fx_rate?: string | null; fx_source?: string;
+  /** 人工改折人民币的原因（fx_source = manual） */
+  manual_cny_reason?: string | null;
 }
 export interface ApiAnomaly { type: string; account_key: string; date: string; message: string; amount: string | null; line_uid: string | null }
 export interface ApiFileResult {
@@ -59,7 +61,8 @@ export interface LiveCashLine extends CashLine { uid: string; version: number; s
   manualPair?: string; autoExcludeReason?: string;
   fxRate?: number; fxSource?: string;
   /** 人工剔除金额（原币，正数）；剔除清单命中的人民币金额 */
-  exclAmt?: number; exclListCny?: number }
+  exclAmt?: number; exclListCny?: number;
+  cnyReason?: string }
 
 export interface ApiApproval {
   serial: string; kind: string; status: string; status_text: string; state: string; started_at: string; completed_at: string; handled_at: string; applicant: string;
@@ -117,6 +120,7 @@ export function toCashLine(row: ApiLine): LiveCashLine {
     fxSource: row.fx_source || undefined,
     exclAmt: row.exclude_amount == null ? undefined : Math.abs(Number(row.exclude_amount)),
     exclListCny: Number(row.list_excluded_cny) > 0 ? Number(row.list_excluded_cny) : undefined,
+    cnyReason: row.manual_cny_reason ?? undefined,
   };
 }
 
@@ -143,6 +147,7 @@ export function fxNote(line: CashLine): string | undefined {
   if (!live?.fxSource) return undefined;
   if (live.fxSource === "payoneer") return `派安盈实际汇率 ${live.fxRate?.toFixed(4) ?? ""}`;
   if (live.fxSource === "pending") return "等派安盈月结单";
+  if (live.fxSource === "manual") return `人工改（汇率 ${live.fxRate?.toFixed(4) ?? ""}）：${live.cnyReason ?? ""}`;
   return undefined;
 }
 
@@ -298,4 +303,25 @@ export function nextImportNode(now: Date): string {
   next.setDate(now.getDate() + (days === 0 && now > next ? 7 : days));
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${next.getFullYear()}-${pad(next.getMonth() + 1)}-${pad(next.getDate())} 15:00`;
+}
+
+/* ------------------------------------------------------------ 关闭异常（Rocky 11-10） */
+
+export interface AlertClosure { alert_key: string; alert_type: string; reason: string; closed_by: string; closed_at: string }
+const CLOSURES_KEY = ["finance-cashflow", "alert-closures"];
+
+/** 已关闭的异常（只在接口版用）：页面按异常编号把它们从异常列表里拿掉。 */
+export function useAlertClosures(enabled: boolean) {
+  return useQuery({ queryKey: CLOSURES_KEY, enabled, retry: false,
+    queryFn: async () => (await backendRequest<AlertClosure[]>(`${BASE}/alert-closures`)).data });
+}
+
+export function useAlertClosureActions() {
+  const client = useQueryClient();
+  const done = () => client.invalidateQueries({ queryKey: CLOSURES_KEY });
+  const close = useMutation({ onSuccess: done, mutationFn: (body: { alert_key: string; alert_type: string; reason: string }) =>
+    backendRequest<null>(`${BASE}/alert-closures`, { method: "POST", body: JSON.stringify(body) }) });
+  const reopen = useMutation({ onSuccess: done, mutationFn: (body: { alert_key: string; reason: string }) =>
+    backendRequest<null>(`${BASE}/alert-closures/reopen`, { method: "POST", body: JSON.stringify(body) }) });
+  return { close, reopen };
 }

@@ -12,7 +12,7 @@ import ImportDrawer from "@/pages/finance/cash-flow/ImportDrawer";
 import { ManualEntryButton } from "@/pages/finance/cash-flow/ManualEntry";
 import { CellText, PartCategoryCell, PartTextCell } from "@/pages/finance/cash-flow/LineActions";
 import { isPartRow, lineHasCat, splitSummary, withPartRows, type PartRow } from "@/pages/finance/cash-flow/journalParts";
-import { asLive, cashErrorText, exclNote, fxNote, postLineEvent, syncErrorText, syncFailedText, useApprovalSync, useRefreshJournal, type LineEventKind, type LiveCashLine } from "@/pages/finance/cash-flow/journalApi";
+import { asLive, cashErrorText, exclNote, fxNote, useAlertClosures, postLineEvent, syncErrorText, syncFailedText, useApprovalSync, useRefreshJournal, type LineEventKind, type LiveCashLine } from "@/pages/finance/cash-flow/journalApi";
 import { ALERT_GUIDE, alertShort, toCashAlerts, useApprovals, type CashAlert, type FsDetail } from "@/pages/finance/cash-flow/data";
 import { accountLabel, fmtMoney, type CashLine, type CashSnapshot, type FeishuApproval } from "@/pages/finance/localFinData";
 import ReportFacetSelect from "@/shared/report-filters";
@@ -20,6 +20,7 @@ import { writeUserPreference } from "@/shared/preferences/userPreferenceCache";
 import { type ReviewCard, STATE_COLOR, EMPTY, isOpenApproval, isUncat, mergeFeishu, noFlowAlerts, orphanInScope, isExcluded, type ReviewStage, type ReviewMark, REVIEW_TAG, baseReview, isFirstPending, REVIEW_STAGE_OPTIONS, PREVIEW_ACTION_TIP, viewOf, amountDiff, JOURNAL_COLUMN_PREF_KEY, JOURNAL_COLUMN_PREF_VERSION, JOURNAL_FIXED_KEYS, JOURNAL_DEFAULT_KEYS, JOURNAL_COLUMN_GROUPS, readJournalColumns, icon, HANDOFF_EVENT, readHandoff } from "@/pages/finance/cash-flow/journalShared";
 import { ApprovalDrawer } from "@/pages/finance/cash-flow/ApprovalDrawer";
 import ApprovalPicker from "@/pages/finance/cash-flow/ApprovalPicker";
+import { AlertCloseButton, ClosedAlertsButton } from "@/pages/finance/cash-flow/LineExtraActions";
 import { BoardTable } from "@/pages/finance/cash-flow/BoardTable";
 import { LineDrawer } from "@/pages/finance/cash-flow/LineDrawer";
 import { JournalBatchActions } from "@/pages/finance/cash-flow/JournalBatch";
@@ -66,6 +67,10 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
   const approvalsFile = useApprovals(!live);
   const details = useMemo(() => (live ? liveDetails : approvalsFile.data?.items) ?? {}, [live, liveDetails, approvalsFile.data]);
   const approvalSync = useApprovalSync(live);
+  /* 关闭过的异常（Rocky 11-10）：不再算异常，也不在列表里出现；在「已关闭的异常」里能重新打开。 */
+  const closuresQuery = useAlertClosures(live);
+  const closures = useMemo(() => closuresQuery.data ?? [], [closuresQuery.data]);
+  const closedKeys = useMemo(() => new Set(closures.map((item) => item.alert_key)), [closures]);
   const syncStatus = approvalSync.state?.status;
   const lastSyncStatus = useRef(syncStatus);
   const [columnKeys, setColumnKeys] = useState<string[]>(readJournalColumns);
@@ -184,8 +189,8 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
     return { byLine, orphans };
   }, [data, feishuAll]);
   const alertsOf = (line: CashLine) => alertIndex.byLine.get(line.id) ?? [];
-  const realAlertsOf = (line: CashLine) => alertsOf(line).filter((item) => !item.hint);
-  const realOrphans = alertIndex.orphans.filter((item) => !item.hint && orphanInScope(item, accounts, month));
+  const realAlertsOf = (line: CashLine) => alertsOf(line).filter((item) => !item.hint && !closedKeys.has(item.id));
+  const realOrphans = alertIndex.orphans.filter((item) => !item.hint && !closedKeys.has(item.id) && orphanInScope(item, accounts, month));
   const alertTypeOptions = Array.from(new Set([...data.lines.flatMap((line) => realAlertsOf(line).map((item) => item.type)), ...realOrphans.map((item) => item.type)]))
     .map((value) => ({ value, label: alertShort(value), count: data.lines.filter((line) => realAlertsOf(line).some((item) => item.type === value)).length + realOrphans.filter((item) => item.type === value).length }));
   /* 找不到流水的异常（Rocky 11-04）：平时不展示，只算进「异常」卡数字；在「异常」筛选里选中这些类型时，才在表格上方列出来。 */
@@ -329,8 +334,10 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
             <li key={item.id}><Tag bordered={false} color="red">{alertShort(item.type)}</Tag>
               {item.acct ? `${item.date} · ${accountMap.get(item.acct)?.name ?? item.acct} · ` : item.serial ? "" : `${item.date} · ${EMPTY} · `}{item.msg}
               {approval ? <Button type="link" size="small" onClick={() => setApprovalOpen(approval)}>看审批单</Button> : null}
-              {ALERT_GUIDE[item.type] ? <Typography.Text type="secondary">（处理：{ALERT_GUIDE[item.type].guide}）</Typography.Text> : null}</li>); })}</ul>} />
+              {ALERT_GUIDE[item.type] ? <Typography.Text type="secondary">（处理：{ALERT_GUIDE[item.type].guide}）</Typography.Text> : null}
+              {live && <> <AlertCloseButton alert={item} /></>}</li>); })}</ul>} />
       )}
+      {live && closures.length > 0 && <div className="fin-cash-flow__closed"><ClosedAlertsButton closures={closures} /></div>}
       <BoardTable<CashLine> label="日记账表格" resizeKey="finance-cash-journal" rowKey="id" rows={withPartRows(rows)} columns={tableColumns} rowSelection={journalRowSelection(selectedKeys, setSelectedKeys)}
         expandable={{ expandedRowKeys: rows.filter((line) => line.parts?.length && !collapsed.includes(line.id)).map((line) => line.id), onExpand: (open, row) => setCollapsed((current) => (open ? current.filter((key) => key !== row.id) : [...current, row.id])) }} emptyTitle={refHint ? "没有对应的流水" : "暂无流水"} emptyText={refHint || (alertTypes.length && shownOrphans.length ? "选中的异常没有对应流水，见上方提示条" : "当前筛选下没有流水")} />
       {messageHolder}
@@ -351,7 +358,7 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
         </Space>
       </Modal>
       <LineDrawer line={freshLine} review={freshLine ? reviewOf(freshLine) : undefined} data={data} details={details} approvalsOf={approvalsOf} alerts={freshLine ? alertsOf(freshLine) : []} live={live} stageOf={(line) => reviewOf(line).stage} onClose={() => setLineOpen(undefined)} onOpenApproval={setApprovalOpen}
-        onPass={(line) => pass(line, 2)} onReject={(line) => setRejecting({ line, level: 2 })} onExclude={setExcluding} onUnexclude={(line) => void send(line, "unexclude", {}, "已撤销剔除")} />
+        closedKeys={closedKeys} onPass={(line) => pass(line, 2)} onReject={(line) => setRejecting({ line, level: 2 })} onExclude={setExcluding} onUnexclude={(line) => void send(line, "unexclude", {}, "已撤销剔除")} />
       <ApprovalDrawer item={approvalOpen} data={data} details={details} onClose={() => setApprovalOpen(undefined)} />
       <ImportDrawer open={importOpen} live={live} onClose={() => setImportOpen(false)} />
     </FinanceBoardFrame>

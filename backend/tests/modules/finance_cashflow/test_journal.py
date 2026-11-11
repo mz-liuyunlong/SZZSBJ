@@ -727,3 +727,53 @@ def test_manual_group_of_three_reports_the_total_gap_on_the_biggest_payment():
     assert items["o1"].pair_id == items["o2"].pair_id == items["i"].pair_id
     gaps = [alert for alert in result.alerts if alert.type == J.ALERT_PAIR_GAP]
     assert [(alert.line_uid, alert.amount) for alert in gaps] == [("o1", Decimal("100"))]
+
+
+# ---------------------------------------------------------------- 人工改折人民币（Rocky 11-10）
+
+
+def test_set_cny_needs_reason_and_resets_review():
+    state = J.ReviewState(stage=J.STAGE_OK1)
+    with pytest.raises(J.EventRejectedError):
+        apply(state, J.KIND_SET_CNY, {"amount_cny": "667.5"})
+    with pytest.raises(J.EventRejectedError):
+        apply(state, J.KIND_SET_CNY, {"amount_cny": "-1"}, reason="约定汇率")
+    assert apply(state, J.KIND_SET_CNY, {"amount_cny": "667.5"}, reason="约定汇率") is True
+    assert (state.manual_amount_cny, state.manual_cny_reason) == (Decimal("667.5000"), "约定汇率")
+    apply(state, J.KIND_SET_CNY, {"amount_cny": None})
+    assert (state.manual_amount_cny, state.manual_cny_reason) == (None, None)
+    with pytest.raises(J.EventRejectedError):
+        apply(state, J.KIND_SET_CNY, {})
+
+
+def test_manual_cny_wins_over_the_monthly_rate():
+    item = J.compute_journal(
+        [line("u", "-100", cur="USD", manual_amount_cny=Decimal("667.50"))],
+        J.Classifier([]),
+        INTERNAL,
+        lambda _day: Decimal("7"),
+    ).lines[0]
+    assert (item.amount_cny, item.fx_rate, item.fx_source) == (
+        Decimal("-667.50"),
+        Decimal("6.6750"),
+        J.FX_SOURCE_MANUAL,
+    )
+
+
+def test_pingpong_fee_in_memo_asks_to_split_until_confirmed():
+    def pp(**extra):
+        return line("p", "-1010", cur="USD", provider="pingpong", **extra)
+
+    payment = J.LineInput(**{**pp().__dict__, "memo": "PingPong 手续费 10.00"})
+    alerts = [a for a in compute([payment]).alerts if a.type == J.ALERT_PINGPONG_FEE]
+    assert [(a.line_uid, a.amount) for a in alerts] == [("p", Decimal("10.00"))]
+    done = J.LineInput(
+        **{
+            **payment.__dict__,
+            "parts": [
+                {"amount": "1000", "category_code": None},
+                {"amount": "10", "category_code": "F01", "fee_layer": J.FEE_LAYER_PINGPONG},
+            ],
+        }
+    )
+    assert not [a for a in compute([done]).alerts if a.type == J.ALERT_PINGPONG_FEE]

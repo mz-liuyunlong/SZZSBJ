@@ -52,7 +52,7 @@ export function noFlowAlerts(data: CashSnapshot, approvals: FeishuApproval[], to
 export const orphanInScope = (item: CashAlert, accounts: string[], month: string) =>
   (accounts.length === 0 || (Boolean(item.acct) && accounts.includes(item.acct))) && (!month || item.date.slice(0, 7) === month);
 /** 能点「确认记为手续费」的异常类型 → 切出来的手续费层（fee_layer）。派安盈提现到账差额以后在这里加一条。 */
-export const FEE_ALERT_TYPES: Record<string, string> = { "转账到账差额": "fee", "派安盈提现到账差额": "payoneer" };
+export const FEE_ALERT_TYPES: Record<string, string> = { "转账到账差额": "fee", "派安盈提现到账差额": "payoneer", "PingPong 付款手续费": "pingpong" };
 export const isExcluded = (line: CashLine) => line.cat === "X01" || Boolean(line.excl) || Boolean(line.parts?.some((part) => part.cat === "X01"));
 /* 审核：初审（财务专员）→ 终审（财务主管）。初审不通过留在专员处；终审不通过驳回到待初审，都必须填原因。 */
 export type ReviewStage = "todo" | "rej1" | "ok1" | "rej2" | "ok2";

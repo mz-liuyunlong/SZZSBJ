@@ -8,10 +8,11 @@ import { accountLabel, type CashLine, type CashSnapshot, type FeishuApproval } f
 import { EMPTY, type ReviewMark, REVIEW_TAG, baseReview, PREVIEW_ACTION_TIP, type ApprovalView, amountDiff, compareRows } from "@/pages/finance/cash-flow/journalShared";
 import { CompareTable, ApprovalPanel } from "@/pages/finance/cash-flow/ApprovalDrawer";
 import { EditableText, FeeConfirm, PairButton, ReviewUndo, SplitButton, SplitParts } from "@/pages/finance/cash-flow/LineActions";
+import { AlertCloseButton, CnyEditButton } from "@/pages/finance/cash-flow/LineExtraActions";
 import type { ReviewStage } from "@/pages/finance/cash-flow/journalShared";
 
 /* ======================================================= 异常（并入日记账；不分等级，所有异常都要处理） */
-export function AlertSection({ alerts, line }: { alerts: CashAlert[]; line?: LiveCashLine }) {
+export function AlertSection({ alerts, line, closedKeys }: { alerts: CashAlert[]; line?: LiveCashLine; closedKeys?: Set<string> }) {
   const real = alerts.filter((item) => !item.hint);
   const hints = alerts.filter((item) => item.hint);
   if (!alerts.length) return null;
@@ -24,7 +25,7 @@ export function AlertSection({ alerts, line }: { alerts: CashAlert[]; line?: Liv
             <Space size={8} wrap><Tag color="red" bordered={false}>{alertShort(item.type)}</Tag><Typography.Text type="secondary">编号 {item.ref}</Typography.Text></Space>
             <Typography.Paragraph className="fin-cash-flow__alert-msg">{item.msg}</Typography.Paragraph>
             {ALERT_GUIDE[item.type] && <Typography.Text type="secondary">处理：{ALERT_GUIDE[item.type].guide}</Typography.Text>}
-            {line && <div><FeeConfirm key={`${line.id}-${item.id}`} line={line} alert={item} /></div>}
+            {line && <Space size={8}><FeeConfirm key={`${line.id}-${item.id}`} line={line} alert={item} />{closedKeys?.has(item.id) ? <Tag bordered={false}>已关闭</Tag> : <AlertCloseButton alert={item} />}</Space>}
           </div>
         ))}
         {hints.map((item) => (
@@ -40,9 +41,11 @@ export function AlertSection({ alerts, line }: { alerts: CashAlert[]; line?: Liv
 
 /* ======================================================= 流水详情抽屉
  * 顺序（Rocky 11-03）：流水字段 → 关联审批单（比对 + 字段 + 凭证）→ 底部终审按钮。终审一笔一笔点；终审不通过必填原因，驳回到待初审。 */
-export function LineDrawer({ line, review, data, details, approvalsOf, alerts, live, stageOf, onClose, onOpenApproval, onPass, onReject, onExclude, onUnexclude }: {
+export function LineDrawer({ line, review, data, details, approvalsOf, alerts, live, stageOf, onClose, onOpenApproval, onPass, onReject, onExclude, onUnexclude, closedKeys }: {
   line?: CashLine; review?: ReviewMark; data: CashSnapshot; alerts: CashAlert[]; details: Record<string, FsDetail>; approvalsOf: (line: CashLine) => ApprovalView[];
   live?: boolean; stageOf?: (line: CashLine) => ReviewStage; onClose: () => void; onOpenApproval: (item: FeishuApproval) => void; onPass: (line: CashLine) => void; onReject: (line: CashLine) => void; onExclude?: (line: LiveCashLine) => void; onUnexclude?: (line: LiveCashLine) => void;
+  /** 已关闭的异常编号（关闭了的在异常段落里标「已关闭」） */
+  closedKeys?: Set<string>;
 }) {
   if (!line) return null;
   const account = data.accounts.find((item) => item.id === line.acct);
@@ -65,7 +68,7 @@ export function LineDrawer({ line, review, data, details, approvalsOf, alerts, l
         <Descriptions.Item label="流水 id">{line.id}</Descriptions.Item>
         <Descriptions.Item label="日期 / 时间">{line.date} {line.time ?? ""}</Descriptions.Item>
         <Descriptions.Item label="金额"><FinMoney value={line.amt} cur={line.cur} masked={line.masked} /></Descriptions.Item>
-        {line.cur !== "CNY" && <Descriptions.Item label="折人民币"><FinMoney value={line.cny} masked={line.masked} />{fxNote(line) && <Typography.Text type="secondary">（{fxNote(line)}）</Typography.Text>}</Descriptions.Item>}
+        {line.cur !== "CNY" && <Descriptions.Item label="折人民币"><FinMoney value={line.cny} masked={line.masked} />{fxNote(line) && <Typography.Text type="secondary">（{fxNote(line)}）</Typography.Text>}{liveLine && <CnyEditButton key={`${liveLine.id}-cny`} line={liveLine} />}</Descriptions.Item>}
         <Descriptions.Item label="余额"><FinMoney value={line.bal ?? null} cur={line.cur} masked={line.masked} /></Descriptions.Item>
         <Descriptions.Item label="摘要">{line.masked ? "****" : liveLine ? <EditableText key={`${liveLine.id}-sum`} line={liveLine} field="description" /> : line.sum || EMPTY}</Descriptions.Item>
         <Descriptions.Item label="备注">{line.masked ? "****" : liveLine ? <EditableText key={`${liveLine.id}-memo`} line={liveLine} field="memo" /> : line.memo || EMPTY}</Descriptions.Item>
@@ -77,7 +80,7 @@ export function LineDrawer({ line, review, data, details, approvalsOf, alerts, l
         {(liveLine?.excludeReason || liveLine?.autoExcludeReason) && <Descriptions.Item label="剔除原因">{liveLine.excludeReason ?? `${liveLine.autoExcludeReason}（自动剔除，改类别即可撤销）`}</Descriptions.Item>}
         <Descriptions.Item label="审核"><Tag bordered={false} color={REVIEW_TAG[mark.stage].color}>{REVIEW_TAG[mark.stage].text}</Tag>{mark.reason && <Typography.Text type="danger">原因：{mark.reason}</Typography.Text>}</Descriptions.Item>
       </Descriptions>
-      <AlertSection alerts={alerts} line={liveLine} />
+      <AlertSection alerts={alerts} line={liveLine} closedKeys={closedKeys} />
       <Divider orientation="left">关联审批单（{line.refs.length}）</Divider>
       {views.length === 0 ? <Typography.Text type="secondary">无审批单。日记账不强制匹配审批单，照样可以初审、终审。</Typography.Text> : <>
         <CompareTable rows={compareRows(line, views)} />

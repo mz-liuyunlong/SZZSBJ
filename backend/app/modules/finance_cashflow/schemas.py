@@ -140,6 +140,8 @@ class CashflowLineRead(BaseModel):
     parts: list[CashflowLinePartRead] | None = None
     manual_pair: str | None = None
     auto_exclude_reason: str | None = None
+    # 人工改折人民币的原因（fx_source = manual 时有值）
+    manual_cny_reason: str | None = None
     version: int = 0
     # 还没挂单的流水：金额和日期对得上的审批单号，等财务选。
     approval_candidates: list[str] = Field(default_factory=list)
@@ -275,3 +277,24 @@ class CashflowApprovalSyncData(BaseModel):
     records_seen: int = 0
     records_written: int = 0
     last_success_at: datetime | None = None
+
+
+class CashflowAlertCloseRequest(BaseModel):
+    """关闭异常：key 用页面上这条异常的编号（类型|流水号 / 审批单号 …），原因必填。"""
+
+    alert_key: str = Field(min_length=1, max_length=200)
+    alert_type: str = Field(min_length=1, max_length=64)
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class CashflowAlertReopenRequest(BaseModel):
+    alert_key: str = Field(min_length=1, max_length=200)
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class CashflowAlertClosureRead(BaseModel):
+    alert_key: str
+    alert_type: str
+    reason: str
+    closed_by: str
+    closed_at: datetime

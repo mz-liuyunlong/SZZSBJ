@@ -35,6 +35,9 @@
 | `GET /anomalies` | 异常 | 读时计算；有流水的带 `line_uid`，找不到流水的 `line_uid=null` |
 | `POST /lines/{line_uid}/events` | 人工动作 | 见下 |
 | `POST /lines/pair-events` | 配对 / 取消配对 | 几笔放在一个事务里，全部成功或者都不变，见下 |
+| `GET /alert-closures` | 已关闭的异常 | `[{alert_key, alert_type, reason, closed_by, closed_at}]`；页面按 `alert_key`（页面上异常的编号，如 `审批单无付款流水\|单号`）把它们从异常里拿掉 |
+| `POST /alert-closures` | 关闭一条异常 | `{alert_key, alert_type, reason}`，原因必填；已关闭的再关 409（Rocky 2026-11-10；现在只有管理员可用） |
+| `POST /alert-closures/reopen` | 重新打开 | `{alert_key, reason}`，原因必填；没有关闭记录 404；关闭 / 重开都留历史 |
 
 ### 人工动作
 
@@ -47,7 +50,9 @@ body：`{kind, payload, reason, expected_version, idempotency_key}`。`expected_
 | `review2_pass` | | ok1 → ok2 |
 | `review2_reject` | `reason` 必填 | ok1 → rej2 |
 | `set_category` | `payload.category_code`，空值表示退回规则 | X01 不能走这里 |
-| `attach_ref` / `detach_ref` | `payload.ref`，12 位数字 | 手填审批单号 |
+| `attach_ref` / `detach_ref` | `payload.ref`，12 位数字 | 手填审批单号；整笔和拆分行合起来同一个单号只能挂一次 |
+| `attach_part_ref` / `detach_part_ref` | `payload.index`（从 0 起）、`payload.ref` | 拆分行挂自己的审批单（Rocky 2026-11-10）；这一行没选类别时类别跟审批单（表单写明的优先，其次按事由跑规则）；取消拆分时行上的单收回到整笔上 |
+| `set_cny` | `payload.amount_cny`（正数，人民币）+ `reason` 必填；`amount_cny` 为空 = 恢复系统折算 | 人工改折人民币（约定汇率每笔不同，Rocky 2026-11-10）；人民币 / CNH 流水 422；`fx_source = manual`，`manual_cny_reason` 带原因；已审过的退回 todo |
 | `exclude` | `reason` 必填；`payload.amount` 可选（原币），不填即整笔 | 整笔剔除后生效类别为 X01 |
 | `unexclude` | | 撤销剔除 |
 | `review1_undo` | | 撤销初审：ok1 / rej1 → todo。有初审权限的人都可以撤，不限当时做初审的人（rocky 2026-11-06）；事件表记下撤销人 |
@@ -114,14 +119,16 @@ body：`{kind, payload, reason, expected_version, idempotency_key}`。`expected_
 每次同步结束、以及流水导入后各跑一次；可重复执行。
 
 1. 流水摘要或备注里写了审批单号（`20` 开头的 12 位数字，且是系统里有的、没取消的单）：直接挂。
-2. 金额相等（差不超过 0.011）、都是人民币、流水日期在审批通过前 3 天到通过后 45 天内、收款人对得上，并且这笔流水只对得上这一张已同意的单、这张单也只对得上这一笔：自动挂，事件 `auto_attach_ref`（actor=system），流水带「自动匹配」标记。单子没写收款人时，唯一也算。
-3. 其余放在流水的 `approval_candidates`，由财务选。审批中的单只进候选，不自动挂。
+2. 金额相等（差不超过 0.011）、按人民币比（CNY、CNH 直接比；美元只认派安盈实际到账或人工改过的折人民币，按月汇率估的不比）、流水日期在审批通过前 3 天到通过后 45 天内、收款人对得上，并且这笔流水只对得上这一张已同意的单、这张单也只对得上这一笔：自动挂，事件 `auto_attach_ref`（actor=system），流水带「自动匹配」标记。单子没写收款人时，唯一也算。
+3. 其余放在流水的 `approval_candidates`，由财务选。审批中的单只进候选，不自动挂。一笔对不上单张时，再找同一收款人的 2–4 张单合计等于这笔的组合，恰好一种才放进候选（Rocky 2026-11-10）。拆分行挂的单也算已挂。
 4. 已初审或终审的流水不动；财务手动摘掉过的「流水 + 单号」组合不再自动挂回去。
 
 ## 读时计算的口径
 
 - 类别：整笔剔除 → X01；人工 > 规则 > 待分类。
-- 人工配对优先：同一 `manual_pair` 的几笔直接配上（不看类别），一出一进且同币种有差额的出「转账到账差额」异常。
+- 人工配对优先：同一 `manual_pair` 的几笔直接配上（不看类别），一出一进且同币种有差额的出「转账到账差额」异常；三笔以上的按付出合计 − 收到合计算差额，挂在付出最大的那笔上。
+- PingPong 付款账单带「费用」的，导入时在备注写「PingPong 手续费 x」（金额和流水号不变）；读时出「PingPong 付款手续费」异常，`confirm_fee`（`fee_layer=pingpong`）拆出手续费行后不再提示。
+- 折人民币：人工改过的（`set_cny`）优先，其次派安盈实际到账，再次领星月汇率。
 - 配对：T02 类；15 天内、方向相反、不同账户；同币种差不超过 1 元，或跨币种按备注 USD 金额；再试一出多入（最多 3 笔）；同一平台多笔 USD 换一笔 CNH 按汇率 6.3~7.6 配，标「汇率区间配对待核」。还没配上的再按带差额配：付出那笔的对方尾号 = 收到那笔账户的尾号（或反过来），5 天内，同币种，到账 ≤ 扣款，差额不超过 0.5% 且不超过 50 USD / 300 CNY（CNH 同 CNY）；配上后差额大于 0.01 的在付出那笔上出「转账到账差额」异常（`amount` = 差额）。比较用的金额：拆过手续费的按非手续费行合计，所以确认手续费后不再提示。
 - 规则剔除：规则命中 X01（目前是「归集-万里汇主账号」，即万里汇子账号归集到主账号那笔）视为整笔剔除，`auto_exclude_reason`=「已在主账号记录」，标「已剔除」；人工选别的类别就撤销。主账号那笔「归集-万里汇子账号」按规则记 T03。
 - 折人民币：CNY 原值；USD 用领星月汇率 `fact_lingxing_fx_rate.my_rate` 业务日所在月的值；当月没有才为空，不兜底；CNH 按 1:1（rocky 2026-11-05）。

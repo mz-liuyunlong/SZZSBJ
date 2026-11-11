@@ -32,3 +32,4 @@
 .fin-cash-flow__picker-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fin-cash-flow__picker-view { flex: none; }
 .fin-cash-flow__skip-list { margin: 0 0 var(--ant-margin-xs, 8px); padding-left: var(--ant-padding-lg, 24px); }
+.fin-cash-flow__closed { display: flex; justify-content: flex-end; margin-bottom: var(--ant-margin-xxs, 4px); }

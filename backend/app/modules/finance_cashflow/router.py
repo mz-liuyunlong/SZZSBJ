@@ -47,6 +47,9 @@ from app.modules.finance_cashflow.manual_lines import (
 )
 from app.modules.finance_cashflow.schemas import (
     CashflowAccountRead,
+    CashflowAlertCloseRequest,
+    CashflowAlertClosureRead,
+    CashflowAlertReopenRequest,
     CashflowAnomalyRead,
     CashflowApprovalRead,
     CashflowApprovalSyncData,
@@ -64,6 +67,7 @@ from app.modules.finance_cashflow.schemas import (
     CashflowVoidRequest,
 )
 from app.modules.finance_cashflow.service import (
+    AlertClosureError,
     CashflowService,
     ImportHasReviewedLinesError,
     ImportNotFoundError,
@@ -85,6 +89,7 @@ admin_principal = Annotated[Principal, Depends(require_super_admin)]
 ERR_IMPORT_NOT_FOUND = "CASHFLOW_IMPORT_NOT_FOUND"
 ERR_IMPORT_VOIDED = "CASHFLOW_IMPORT_VOIDED"
 ERR_LINE_NOT_FOUND = "CASHFLOW_LINE_NOT_FOUND"
+ERR_ALERT_CLOSURE = "CASHFLOW_ALERT_CLOSURE_INVALID"
 ERR_STORAGE_NOT_CONFIGURED = "CASHFLOW_STORAGE_NOT_CONFIGURED"
 ERR_UPLOAD_TOO_LARGE = "CASHFLOW_UPLOAD_TOO_LARGE"
 ERR_EMPTY_UPLOAD = "CASHFLOW_EMPTY_UPLOAD"
@@ -388,6 +393,64 @@ def list_anomalies(
     principal: admin_principal,
 ) -> SuccessEnvelope[list[CashflowAnomalyRead], None]:
     return success_response(request, data=CashflowService(session).list_anomalies())
+
+
+@router.get(
+    "/alert-closures",
+    responses=ERRORS,
+    operation_id="listFinanceCashflowAlertClosures",
+    summary="已关闭的日记账异常",
+)
+def list_alert_closures(
+    request: Request,
+    session: db_session,
+    principal: admin_principal,
+) -> SuccessEnvelope[list[CashflowAlertClosureRead], None]:
+    return success_response(request, data=CashflowService(session).list_alert_closures())
+
+
+@router.post(
+    "/alert-closures",
+    responses=ERRORS,
+    operation_id="closeFinanceCashflowAlert",
+    summary="关闭一条日记账异常（写原因）",
+)
+def close_alert(
+    request: Request,
+    session: db_session,
+    principal: admin_principal,
+    payload: CashflowAlertCloseRequest,
+) -> SuccessEnvelope[None, None]:
+    try:
+        CashflowService(session).close_alert(payload, actor=principal.user_id)
+    except AlertClosureError as exc:
+        session.rollback()
+        raise ApiError(
+            code=ERR_ALERT_CLOSURE, status_code=exc.status_code, message=exc.message
+        ) from exc
+    return success_response(request, data=None)
+
+
+@router.post(
+    "/alert-closures/reopen",
+    responses=ERRORS,
+    operation_id="reopenFinanceCashflowAlert",
+    summary="重新打开一条关闭过的日记账异常（写原因）",
+)
+def reopen_alert(
+    request: Request,
+    session: db_session,
+    principal: admin_principal,
+    payload: CashflowAlertReopenRequest,
+) -> SuccessEnvelope[None, None]:
+    try:
+        CashflowService(session).reopen_alert(payload, actor=principal.user_id)
+    except AlertClosureError as exc:
+        session.rollback()
+        raise ApiError(
+            code=ERR_ALERT_CLOSURE, status_code=exc.status_code, message=exc.message
+        ) from exc
+    return success_response(request, data=None)
 
 
 @router.get(

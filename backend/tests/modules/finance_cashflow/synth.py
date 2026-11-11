@@ -327,7 +327,8 @@ def pingpong(data):
     for (
         d
     ) in data:  # (时间, 流水号, 订单号, 方向, 业务类型, 币种, 金额, 账号Id, 对手方, 余额, 用户编号)
-        t, ref, order, direction, typ, cur, amt, acc, party, bal, user = d
+        t, ref, order, direction, typ, cur, amt, acc, party, bal, user, *rest = d
+        fee = rest[0] if rest else ""  # 「费用」列（付款带的 PingPong 手续费）
         rows.append(
             [
                 t,
@@ -346,7 +347,7 @@ def pingpong(data):
                 "",
                 "",
                 "",
-                "",
+                fee,
                 "",
                 bal,
                 "",
