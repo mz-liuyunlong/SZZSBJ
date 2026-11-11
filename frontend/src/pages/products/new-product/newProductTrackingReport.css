@@ -1,0 +1,311 @@
+/* PR337_TRACKING_COMPONENTS_V1 — scoped to the tracking list only. */
+.np-original-v4:has(.np-tracking-report) .content {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - 120px);
+  max-width: none;
+}
+.np-original-v4:has(.np-tracking-report) .np-workspace-panel,
+.np-original-v4:has(.np-tracking-report) .np-workspace-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+.np-original-v4 .np-tracking-report {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+}
+.np-original-v4 .np-tracking-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0 0 12px;
+}
+.np-original-v4 .np-tracking-summary .management-stat-card { height: 100px; }
+.np-original-v4 .np-tracking-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 10px 0;
+  border-bottom: 1px solid #e5eaf3;
+}
+.np-original-v4 .np-tracking-toolbar > .ant-btn { flex: 0 0 auto; }
+.np-original-v4 .np-tracking-hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: #75839a;
+}
+.np-original-v4 .np-tracking-table-title {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid #dce3ed;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  font-weight: 650;
+  background: #fff;
+  color: #1d2939;
+}
+.np-original-v4 .np-tracking-table-title span { font-size: 11px; color: #8290a5; font-weight: 400; }
+.np-original-v4 .np-tracking-shell-viewport {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 380px;
+  min-width: 0;
+}
+.np-original-v4 .np-tracking-report-shell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 360px;
+  overflow: hidden;
+  border-radius: 0 0 6px 6px;
+}
+.np-original-v4 .np-tracking-protable { width: 100%; min-width: 0; }
+.np-original-v4 .np-tracking-protable .ant-table-thead > tr > th {
+  background: #f5f7fa;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 9px 10px;
+}
+.np-original-v4 .np-tracking-protable .ant-table-tbody > tr > td {
+  color: #1d2939;
+  font-size: 12px;
+  padding: 9px 10px;
+  border-bottom: 1px solid #e5eaf3;
+}
+.np-original-v4 .np-tracking-cell-main { color: #1d2939; font-weight: 650; }
+.np-original-v4 .np-tracking-cell-sub { margin-top: 3px; color: #8290a5; font-size: 11px; line-height: 1.5; }
+.np-original-v4 .np-tracking-grade { font-weight: 700; }
+.np-original-v4 .np-tracking-grade--s { color: #6941c6; }
+.np-original-v4 .np-tracking-grade--a { color: #027a48; }
+.np-original-v4 .np-tracking-grade--b { color: #175cd3; }
+.np-original-v4 .np-tracking-grade--c { color: #b54708; }
+.np-original-v4 .np-tracking-grade--d { color: #b42318; }
+.np-original-v4 .np-tracking-protable .ant-tag {
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 5px;
+  font-weight: 600;
+}
+@media (max-width: 1200px) {
+  .np-original-v4 .np-tracking-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .np-original-v4 .np-tracking-hint { flex-basis: 100%; margin-left: 0; }
+}
+@media (max-width: 600px) {
+  .np-original-v4 .np-tracking-summary { grid-template-columns: 1fr; }
+}
+
+
+/* PR337 TRACKING PERIOD SEGMENTED V2 */
+
+.np-original-v4 .np-tracking-period {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 12px;
+}
+
+.np-original-v4 .np-tracking-period-label {
+  color: #344054;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.np-original-v4 .np-tracking-period-control {
+  padding: 3px;
+  background: #f5f8fd;
+  border: 1px solid #d5e3f5;
+  border-radius: 10px;
+}
+
+.np-original-v4 .np-tracking-period-control
+.ant-segmented-item {
+  min-width: 66px;
+  color: #344054;
+  text-align: center;
+}
+
+.np-original-v4 .np-tracking-period-control
+.ant-segmented-thumb,
+.np-original-v4 .np-tracking-period-control
+.ant-segmented-item-selected {
+  background: #1677ff;
+}
+
+.np-original-v4 .np-tracking-period-control
+.ant-segmented-item-selected
+.ant-segmented-item-label {
+  color: #fff;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .np-original-v4 .np-tracking-period {
+    flex-basis: 100%;
+  }
+}
+
+
+/* PR337 PERIOD RIGHT V3 */
+.np-original-v4 .np-tracking-toolbar .np-tracking-period {
+  margin-left: auto;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .np-original-v4 .np-tracking-toolbar .np-tracking-period {
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
+}
+
+
+/* PR337_TRACKING_LAYOUT_V4 */
+.np-original-v4:has(.np-tracking-report) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.np-original-v4:has(.np-tracking-report) > .content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  height: 100%;
+  min-height: 0;
+  max-width: none;
+  padding-bottom: 8px;
+  overflow: hidden;
+}
+.np-original-v4:has(.np-tracking-report) .np-native-tabs,
+.np-original-v4:has(.np-tracking-report) .page-head {
+  flex: 0 0 auto;
+}
+.np-original-v4 .np-tracking-report {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.np-original-v4 .np-tracking-shell-viewport {
+  flex: 1 1 0;
+  height: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.np-original-v4 .np-tracking-report-shell {
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+}
+.np-original-v4 .np-tracking-protable,
+.np-original-v4 .np-tracking-protable .ant-pro-card,
+.np-original-v4 .np-tracking-protable .ant-pro-card-body {
+  min-height: 0;
+  height: 100%;
+}
+.np-original-v4 .np-tracking-protable .ant-table-body {
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+}
+
+
+/* PR337_TRACKING_ACTION_STYLE_V1 */
+
+/* 仅调整打品跟踪表格的操作按钮 */
+.np-original-v4 .np-tracking-report-shell
+.np-tracking-review-action.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 86px;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  border-radius: 6px;
+  box-shadow: none;
+  transition:
+    background-color 0.2s,
+    border-color 0.2s,
+    color 0.2s;
+}
+
+/* 可编辑：系统蓝 */
+.np-original-v4 .np-tracking-report-shell
+.np-tracking-review-action--edit.ant-btn {
+  color: #fff;
+  background: #1677ff;
+  border: 1px solid #1677ff;
+}
+
+.np-original-v4 .np-tracking-report-shell
+.np-tracking-review-action--edit.ant-btn:hover {
+  color: #fff;
+  background: #4096ff;
+  border-color: #4096ff;
+}
+
+/* 只读查看：浅色次按钮 */
+.np-original-v4 .np-tracking-report-shell
+.np-tracking-review-action--view.ant-btn {
+  color: #344054;
+  background: #fff;
+  border: 1px solid #d0d5dd;
+}
+
+.np-original-v4 .np-tracking-report-shell
+.np-tracking-review-action--view.ant-btn:hover {
+  color: #1677ff;
+  background: #f5f9ff;
+  border-color: #91caff;
+}
+
+.np-original-v4 .np-tracking-report-shell
+.np-tracking-review-action.ant-btn:focus-visible {
+  outline: 2px solid #91caff;
+  outline-offset: 2px;
+}
+
+
+/* PR337_TRACKING_SIX_CARDS_SINGLE_ROW */
+
+/* 六张统计卡始终保持一行 */
+.np-original-v4 .np-tracking-report .np-tracking-summary {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* 窄屏允许横向滚动，不换行 */
+@media (max-width: 1020px) {
+  .np-original-v4 .np-tracking-report .np-tracking-summary {
+    grid-template-columns: repeat(6, minmax(150px, 1fr));
+    overflow-x: auto;
+  }
+}
+
+/* PR337_BOARD_TO_DETAIL_V5 - scoped filter sizing */
+.np-original-v4 .np-tracking-toolbar .np-tracking-item-search{width:235px;max-width:100%;flex:0 1 235px}
+.np-original-v4 .np-tracking-board-scope{display:flex;align-items:center;gap:8px;padding:7px 0 3px;flex:0 0 auto}
+.np-original-v4 .np-tracking-board-scope .ant-tag{font-size:12px;white-space:normal;line-height:1.6}
+@media(max-width:780px){.np-original-v4 .np-tracking-toolbar .np-tracking-item-search{flex:1 1 190px}}

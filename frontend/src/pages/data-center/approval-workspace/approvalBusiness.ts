@@ -9,7 +9,7 @@ export interface ApprovalBusiness {
 }
 export const approvalBusinesses: readonly ApprovalBusiness[] = [
  {key:"all",label:"全部业务",live:true,columns:["approval_type","title","risk_level","amount","applicant_id","submitted_at","status","action"]},
- {key:"purchase",label:"采购审批",type:"purchase_exception",live:true,columns:["approval_type","title","business_ref","amount","risk_level","applicant_id","submitted_at","status","action"]},
+ {key:"purchase",label:"采购审批",type:"purchase_exception",live:true,columns:["product", "kindSource", "storeOwner", "assessment", "quantity", "amount", "risk", "applicant", "submitted", "status", "action"]},
  {key:"wfs",label:"WFS异常费用",type:"wfs_case_abandon",live:true,columns:["approval_type","title","follow_log","case_opened_at","follow_count","risk_level","amount","applicant_id","submitted_at","status","action"]},
  {key:"clearance",label:"清货审批",type:"clearance_request",live:true,columns:["approval_type","title","business_ref","risk_level","applicant_id","submitted_at","status","action"]},
  {key:"listing",label:"Listing归档",type:"listing_archive",live:false,columns:["approval_type","title","business_ref","risk_level","applicant_id","submitted_at","status","action"]},

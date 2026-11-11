@@ -6,7 +6,13 @@ clicks:number;orders:number;qty7:number;sales30:number;spend:number;unitCost:num
 suggested:number|null;requestQty:number|null;requestReason:string;tracking:string;sales60:number;sales90:number;margin60:number;acos60:number;
 launch:string;arrival:string;sold30:number;sold60:number;sold90:number;actualQty:number;reasonFailure:string;
 category?:string;developer?:string;operator?:string;overrides?:Partial<Record<"speed"|"ad"|"profit"|"trust",number>>};
-export type Config={weights:{market:number;speed:number;ad:number;profit:number;trust:number};remindDays:number;successDays:30|60|90;successQty:number;successProfit:number;successAcos:number};
+export type Config={weights:{market:number;speed:number;ad:number;profit:number;trust:number};remindDays:number;successDays:30|60|90;successQty:number;successProfit:number;successAcos:number;
+ gradeBands?:Partial<Record<"S"|"A"|"B"|"C"|"D",[number,number]>>;
+ quantities?:Partial<Record<Grade,[number,number]>>;
+ quantityStrategy?:"min"|"mid"|"max";
+ penaltyRules?:Array<{name:string;condition:string;deduct:number;enabled:boolean}>;
+ vetoRules?:Array<{name:string;condition:string;action:"Pass"|"最多 B 级"|"最多 C 级";enabled:boolean}>;
+};
 export const defaultConfig:Config={weights:{market:15,speed:30,ad:20,profit:25,trust:10},remindDays:30,successDays:60,successQty:200,successProfit:0,successAcos:35};
 const original=[
 {id:'NP-1001',sku:'YC00738',name:'双层隔热膜',item:'18420933001',owner:'王宁',days:16,market:10,marketReason:'同款链接少，核心竞对售价 $16.99，产品有差异化空间。',scores:{speed:10,ad:10,profit:3,trust:6},penalties:0,penaltyFlags:[],roi:.5,margin:15.3,acos:16.57,clicks:176,orders:18,qty7:13,sales30:42,spend:86,unitCost:9,price:13.99,inventory:124,risk:'ROI 较低',status:'待采购确认',suggested:null,requestQty:null,requestReason:'',tracking:'继续观察',sales60:76,sales90:105,margin60:16.8,acos60:28.4,launch:'2026-10-10',arrival:'2026-10-18',sold30:42,sold60:76,sold90:105,actualQty:350,reasonFailure:''},
@@ -30,12 +36,39 @@ export const categoryStats=[
 export const developerStats=[{name:'王宁',tested:26,passed:14,rate:53.8,avg:7.8},{name:'林晓',tested:24,passed:13,rate:54.2,avg:7.6},{name:'陈佳',tested:21,passed:9,rate:42.9,avg:7.2},{name:'赵敏',tested:19,passed:7,rate:36.8,avg:6.9}];
 export const operatorStats=[{name:'陈佳',tracked:18,success:7,rate:38.9,avgProfit:2380},{name:'王宁',tracked:16,success:6,rate:37.5,avgProfit:1940},{name:'李倩',tracked:14,success:5,rate:35.7,avgProfit:1620},{name:'赵敏',tracked:12,success:3,rate:25,avgProfit:980}];
 export const bands:Record<Grade,[number,number]>={S:[400,600],A:[300,500],B:[200,400],C:[150,250],D:[0,0],Pass:[0,0]};
-export function score(p:Product,c:Config){if(p.market===null)return null;const w=c.weights,o=p.overrides||{};
-return Math.round(((p.market*w.market+(o.speed??p.scores.speed)*w.speed+(o.ad??p.scores.ad)*w.ad+
-(o.profit??p.scores.profit)*w.profit+(o.trust??p.scores.trust)*w.trust)/100-p.penalties)*100)/100}
-export function grade(p:Product,c:Config):Grade|null{const s=score(p,c);if(s===null)return null;if(p.roi<.5)return"Pass";
-let g:Grade=s>=9?"S":s>=8?"A":s>=7?"B":s>=6?"C":"D";
-if(p.roi<.8&&(g==="S"||g==="A"))g="B";return g}
-export function suggestion(p:Product,c:Config){const g=grade(p,c);if(g===null||g==="Pass"||g==="D")return 0;
-const [lo,hi]=bands[g];return Math.max(lo,Math.min(hi,Math.round((p.qty7/7*30)/10)*10))}
+function effectivePenalty(p:Product,c:Config){
+  if(!c.penaltyRules)return p.penalties;
+  return c.penaltyRules.reduce((sum,rule)=>sum+(rule.enabled&&p.penaltyFlags.includes(rule.name)?rule.deduct:0),0);
+}
+export function score(p:Product,c:Config){
+  if(p.market===null)return null;
+  const w=c.weights,o=p.overrides||{};
+  return Math.round(((p.market*w.market+(o.speed??p.scores.speed)*w.speed+(o.ad??p.scores.ad)*w.ad+
+  (o.profit??p.scores.profit)*w.profit+(o.trust??p.scores.trust)*w.trust)/100-effectivePenalty(p,c))*100)/100;
+}
+export function grade(p:Product,c:Config):Grade|null{
+  const s=score(p,c);if(s===null)return null;
+  const levels:["S","A","B","C","D"]=["S","A","B","C","D"];
+  let g:Grade="D";
+  for(const level of levels){
+    const bounds=c.gradeBands?.[level];
+    if(bounds?(s>=bounds[0]&&s<=bounds[1]):(level==="S"?s>=9:level==="A"?s>=8:level==="B"?s>=7:level==="C"?s>=6:s<6)){g=level;break;}
+  }
+  const pass=c.vetoRules?.find(x=>x.name==="ROI 低（Pass）"&&x.enabled);
+  const cap=c.vetoRules?.find(x=>x.name==="ROI 低（评级上限）"&&x.enabled);
+  if(p.roi<.5&&(c.vetoRules===undefined||pass?.action==="Pass"))return "Pass";
+  if(p.roi>=.5&&p.roi<.8&&(c.vetoRules===undefined||cap)){
+    const max=cap?.action==="最多 C 级"?"C":"B";
+    const rank={S:0,A:1,B:2,C:3,D:4,Pass:5};
+    if(rank[g]<rank[max])g=max;
+  }
+  return g;
+}
+export function suggestion(p:Product,c:Config){
+  const g=grade(p,c);if(!g||g==="Pass"||g==="D")return 0;
+  const [lo,hi]=c.quantities?.[g]??bands[g];
+  if(c.quantityStrategy==="min")return lo;
+  if(c.quantityStrategy==="max")return hi;
+  return Math.max(lo,Math.min(hi,Math.round((p.qty7/7*30)/10)*10));
+}
 export const percent=(n:number,d:number)=>d?(100*n/d).toFixed(1)+"%":"—";

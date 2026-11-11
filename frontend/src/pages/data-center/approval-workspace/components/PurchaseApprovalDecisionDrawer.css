@@ -1,0 +1,456 @@
+/* PR337_PURCHASE_ONE_SCREEN_V37
+ * Procurement drawer only. Replaces all earlier purchase-specific styles.
+ * Matches the user's large blue-on-white decision reference at 100% zoom.
+ * No CSS zoom or transform, no hidden data, no changes to other approvals.
+ */
+/* Remove extra white inset/frame belonging to purchase drawer only. */
+.ant-drawer-content:has(.approval-demo--purchase) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: #f7f9fe !important;
+}
+.ant-drawer-body:has(> .approval-demo--purchase) {
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden;
+  background: #f7f9fe;
+}
+.approval-demo.approval-demo--purchase {
+  display: block; width: 100%; height: 100%; min-height: 0;
+  margin: 0 !important; padding: 0 !important;
+  background: #f7f9fe;
+  border: 0 !important;
+}
+.approval-demo--purchase .purchase-decision,
+.approval-demo--purchase .purchase-decision * {
+  box-sizing: border-box;
+}
+.approval-demo--purchase .purchase-decision {
+  display: flex; flex-direction: column; height: 100%; min-height: 0;
+  width: 100%; margin: 0; background: #f7f9fe;
+  font-family: inherit; font-size: 14px; line-height: 1.38;
+  color: #0b244b; -webkit-font-smoothing: antialiased;
+}
+/* Header: zero phantom banner, strong title and clean status pills. */
+.approval-demo--purchase .purchase-decision__header {
+  display: flex; flex: none; justify-content: space-between;
+  align-items: center; gap: 14px;
+  padding: 6px 18px 5px; margin: 0; min-height: 66px;
+  background: #fff; border-bottom: 1px solid #d5e4fa;
+}
+.approval-demo--purchase .purchase-decision__header-title { min-width: 0; }
+.approval-demo--purchase .purchase-decision__header h2 {
+  display: flex; align-items: center; gap: 14px;
+  margin: 0 0 4px; padding: 0;
+  font-size: 22px; line-height: 30px; font-weight: 700;
+  letter-spacing: 0; color: #071d42;
+}
+.approval-demo--purchase .purchase-decision__brand-icon {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 25px; color: #0669ff;
+}
+.approval-demo--purchase .purchase-decision__header-tags {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 5px 8px;
+  font-size: 12px; color: #152b4e; font-weight: 500;
+}
+.approval-demo--purchase .purchase-decision__header-tags .ant-tag {
+  margin: 0; padding: 1px 6px; font-size: 12px;
+  font-weight: 500; line-height: 18px; border-radius: 6px;
+}
+/* Main: use all available width; visually compact without shrinking fonts. */
+.approval-demo--purchase .purchase-decision__scroll {
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overflow-x: hidden; scrollbar-width: thin;
+  padding: 6px 13px 6px;
+ overscroll-behavior: contain; scrollbar-gutter: auto;}
+.approval-demo--purchase .purchase-decision__metrics {
+  display: grid; grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 8px; margin: 0 0 6px;
+}
+.approval-demo--purchase .purchase-decision__metric {
+  display: flex; flex-direction: column; justify-content: center;
+  gap: 0; min-width: 0; min-height: 74px; padding: 4px 11px;
+  border: 1px solid #cee0ff; border-radius: 13px; background: #fff;
+  box-shadow: 0 1px 3px rgba(28,100,217,.025);
+}
+.approval-demo--purchase .purchase-decision__metric-label {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 12px; line-height: 18px; font-weight: 500; color: #112a52;
+}
+.approval-demo--purchase .purchase-decision__metric-icon,
+.approval-demo--purchase .purchase-decision__panel-icon {
+  display: inline-flex; justify-content: center; align-items: center;
+  color: #0669ff; flex: none; font-size: 16px;
+}
+.approval-demo--purchase .purchase-decision__metric > strong {
+  display: block; margin: 0; font-size: 25px; line-height: 30px;
+  color: #071f47; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.approval-demo--purchase .purchase-decision__metric > small {
+  font-size: 12px; color: #617a9f; line-height: 18px;
+}
+.approval-demo--purchase .purchase-decision__metric.is-attention > strong { color: #e46b0d; }
+.approval-demo--purchase .purchase-decision__layout,
+.approval-demo--purchase .purchase-decision__main,
+.approval-demo--purchase .purchase-decision__aside {
+  display: flex; flex-direction: column; width: 100%; min-width: 0; gap: 6px;
+}
+.approval-demo--purchase .purchase-decision__main > .purchase-decision__panel,
+.approval-demo--purchase .purchase-decision__main--initial > .purchase-decision__panel:nth-child(2),
+.approval-demo--purchase .purchase-decision__main--replenishment > .purchase-decision__panel:nth-child(2) {
+  display: block; width: 100%; flex: none; grid-column: auto; order: initial;
+}
+.approval-demo--purchase .purchase-decision__two-panels,
+.approval-demo--purchase .purchase-decision__main--initial > .purchase-decision__two-panels,
+.approval-demo--purchase .purchase-decision__main--replenishment > .purchase-decision__two-panels {
+  display: grid; grid-template-columns: repeat(2,minmax(0,1fr));
+  width: 100%; gap: 8px; grid-column: auto; order: initial;
+}
+.approval-demo--purchase .purchase-decision__panel {
+  min-width: 0; overflow: hidden; background: #fff;
+  border: 1px solid #cee0ff; border-radius: 10px;
+}
+.approval-demo--purchase .purchase-decision__panel-head {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 10px; min-height: 30px; padding: 3px 10px;
+  border-bottom: 1px solid #e0ebfb;
+}
+.approval-demo--purchase .purchase-decision__panel-head strong {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 16px; line-height: 24px; font-weight: 600; color: #092652;
+}
+.approval-demo--purchase .purchase-decision__panel-icon { font-size: 21px; }
+.approval-demo--purchase .purchase-decision__panel-head > span {
+  font-size: 12px; font-weight: 550; color: #7189af; text-align: right;
+}
+.approval-demo--purchase .purchase-decision__panel-body { padding: 3px 10px 4px; }
+/* Decision panel: equal 4 blocks, separated by hairlines. */
+.approval-demo--purchase .purchase-decision__decision-grid {
+  display: grid; grid-template-columns: repeat(4,minmax(0,1fr));
+  padding: 1px 0 3px; gap: 0;
+}
+.approval-demo--purchase .purchase-decision__decision-grid .purchase-decision__fact {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 1px; min-width: 0;
+  padding: 0px 8px 0px; border: 0;
+  border-right: 1px solid #cfdef8;
+}
+.approval-demo--purchase .purchase-decision__decision-grid .purchase-decision__fact:last-child { border-right: 0; }
+.approval-demo--purchase .purchase-decision__decision-grid .purchase-decision__fact > span {
+  width: 100%; max-width: none; flex: none;
+  font-size: 12px; line-height: 18px; font-weight: 500;
+  color: #6980a3; text-align: center;
+}
+.approval-demo--purchase .purchase-decision__decision-grid .purchase-decision__fact > b {
+  width: 100%; flex: none; color: #0b2a58;
+  font-size: 22px; font-weight: 700; text-align: center;
+  font-variant-numeric: tabular-nums; line-height: 28px;
+}
+.approval-demo--purchase .purchase-decision__decision-grid .purchase-decision__fact > b.is-emphasized { color: #0669ff; }
+.approval-demo--purchase .purchase-decision__decision-grid .purchase-decision__fact:nth-child(3) > b { color: #ed7105; }
+.approval-demo--purchase .purchase-decision__reason {
+  display: flex; align-items: baseline; gap: 10px; min-height: 23px;
+  margin-top: 2px; padding: 2px 8px;
+  border-radius: 7px; background: #eaf2ff;
+}
+.approval-demo--purchase .purchase-decision__reason > strong {
+  flex: none; color: #123b78; font-size: 12px; font-weight: 600;
+ line-height: 18px;}
+.approval-demo--purchase .purchase-decision__reason > p {
+  margin: 0; font-size: 12px; color: #49658f; line-height: 18px;
+  overflow-wrap: anywhere;
+}
+/* Five dimension chart: ample numerical contrast; 5 consistent rows. */
+.approval-demo--purchase .purchase-decision__dimensions {
+  display: flex; flex-direction: column; gap: 0;
+  padding: 0 4px;
+}
+.approval-demo--purchase .purchase-decision__dimension {
+  display: grid; grid-template-columns: 125px minmax(0,1fr) 55px 44px;
+  gap: 8px; align-items: center; min-height: 26px;
+  color: #213f6d;
+}
+.approval-demo--purchase .purchase-decision__dimension > span {
+  font-size: 12px; font-weight: 500;
+ line-height: 18px;}
+.approval-demo--purchase .purchase-decision__track {
+  overflow: hidden; width: 100%; height: 8px;
+  border-radius: 10px; background: #e2ebfa;
+}
+.approval-demo--purchase .purchase-decision__track > i {
+  display: block; height: 100%; background: #0669ff;
+  border-radius: 10px;
+}
+.approval-demo--purchase .purchase-decision__dimension > b {
+  font-size: 21px; font-weight: 700; line-height: 26px;
+  text-align: right; color: #0669ff; font-variant-numeric: tabular-nums;
+}
+.approval-demo--purchase .purchase-decision__dimension > small {
+  font-size: 12px; text-align: right; color: #6e84a8;
+ font-weight: 400; line-height: 18px;}
+.approval-demo--purchase .purchase-decision__hint {
+  margin-top: 1px; padding: 0 7px;
+  font-size: 12px; line-height: 18px; color: #677fa2;
+}
+/* Data rows: clear labels and strong figures, not 11px compressed text. */
+.approval-demo--purchase .purchase-decision__fact {
+  display: flex; align-items: center; justify-content: space-between;
+  min-width: 0; gap: 7px; min-height: 24px; padding: 2px 0;
+  border-bottom: 1px solid #e0e9f7;
+}
+.approval-demo--purchase .purchase-decision__fact:last-child { border-bottom: 0; }
+.approval-demo--purchase .purchase-decision__fact > span {
+  flex: 0 1 auto; max-width: 58%; font-size: 12px;
+  line-height: 18px; color: #536c93; font-weight: 400;
+}
+.approval-demo--purchase .purchase-decision__fact > b {
+  min-width: 0; flex: 1; text-align: right;
+  font-size: 14px; line-height: 20px; color: #092348;
+  font-weight: 600; font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.approval-demo--purchase .purchase-decision__fact > b.is-emphasized { color: #0669ff; }
+.approval-demo--purchase .purchase-decision__notice {
+  padding: 8px 10px; margin: 4px 0; border-radius: 7px;
+  background: #eff5ff; font-size: 13px; color: #4a719f;
+}
+.approval-demo--purchase .purchase-decision__notice.is-warning {
+  background: #fff3e2; color: #b96809;
+}
+/* Application info is three horizontal columns; history is a separate row. */
+.approval-demo--purchase .purchase-decision__aside { width: 100%; margin: 0; gap: 6px; }
+.approval-demo--purchase .purchase-decision__aside > .purchase-decision__panel { width: 100%; }
+.approval-demo--purchase .purchase-decision__aside > .purchase-decision__panel:first-child .purchase-decision__panel-body {
+  display: grid; grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 0; padding: 4px 9px 5px;
+}
+.approval-demo--purchase .purchase-decision__aside > .purchase-decision__panel:first-child .purchase-decision__fact {
+  display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+  border: 0; border-right: 1px solid #d7e4fa;
+  padding: 0 12px; gap: 2px; min-width: 0;
+}
+.approval-demo--purchase .purchase-decision__aside > .purchase-decision__panel:first-child .purchase-decision__fact:last-child { border-right: 0; }
+.approval-demo--purchase .purchase-decision__aside > .purchase-decision__panel:first-child .purchase-decision__fact > span {
+  font-size: 12px; font-weight: 400; color: #6f85a5;
+  width: 100%; max-width: none;
+ line-height: 18px;}
+.approval-demo--purchase .purchase-decision__aside > .purchase-decision__panel:first-child .purchase-decision__fact > b {
+  flex: none; width: 100%; text-align: left;
+  font-size: 14px; font-weight: 600; color: #0a2a56;
+ line-height: 20px;}
+.approval-demo--purchase .purchase-decision__timeline {
+  position: relative; display: flex; flex-direction: column; gap: 0;
+  padding: 0 0 0 15px; margin: 1px 0 1px 8px;
+  border-left: 2px solid #acd1ff;
+}
+.approval-demo--purchase .purchase-decision__timeline::before {
+  content: ''; position: absolute; top: 3px; left: -6px;
+  width: 10px; height: 10px; background: #0669ff;
+  border-radius: 50%;
+}
+.approval-demo--purchase .purchase-decision__timeline > b {
+  font-size: 16px; font-weight: 600; color: #0a2a56;
+ line-height: 22px;}
+.approval-demo--purchase .purchase-decision__timeline > small,
+.approval-demo--purchase .purchase-decision__timeline > span {
+  font-size: 12px; line-height: 18px; color: #6b85aa;
+ font-weight: 400;}
+/* Replenishment chart remains complete, same blue daily bars. */
+.approval-demo--purchase .purchase-decision__sales-bars {
+  display: grid; grid-template-columns: repeat(90,minmax(0,1fr));
+  align-items: end; height: 110px; gap: 2px;
+  border-bottom: 1px solid #d9e6f7;
+}
+.approval-demo--purchase .purchase-decision__sales-column {
+  display: flex; align-items: flex-end; height: 100%; min-width: 0;
+}
+.approval-demo--purchase .purchase-decision__sales-column span {
+  display: block; width: 100%; min-height: 2px;
+  background: #0669ff; border-radius: 2px 2px 0 0;
+}
+.approval-demo--purchase .purchase-decision__axis {
+  display: flex; justify-content: space-between; padding-top: 5px;
+  color: #8094b3; font-size: 12px;
+}
+.approval-demo--purchase .purchase-decision__empty {
+  text-align: center; padding: 16px; color: #667f9f; font-size: 14px;
+}
+/* Footer: normal-size visible labels, strong primary blue with white text. */
+.approval-demo--purchase .purchase-decision__footer {
+  flex: none; display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; min-height: 50px; padding: 5px 15px;
+  border-top: 1px solid #d7e3f5; background: #fff;
+}
+.approval-demo--purchase .purchase-decision__footer > span {
+  color: #7286a5; font-size: 12px;
+ line-height: 18px;}
+.approval-demo--purchase .purchase-decision__footer-actions {
+  display: flex; align-items: center; justify-content: flex-end; gap: 9px;
+}
+.approval-demo--purchase .purchase-decision__footer-actions .ant-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 36px; min-width: 82px; padding: 0 16px;
+  font-size: 14px !important; line-height: 20px !important;
+  font-weight: 500 !important; border-radius: 7px;
+  opacity: 1; box-shadow: none;
+}
+.approval-demo--purchase .purchase-decision__footer-actions .ant-btn > span {
+  font-size: inherit !important; font-weight: inherit !important;
+}
+.approval-demo--purchase .purchase-decision__footer-actions .ant-btn-default:not(:disabled) {
+  background: #fff; border-color: #cbdcf4; color: #112d53;
+  -webkit-text-fill-color: #112d53;
+}
+.approval-demo--purchase .purchase-decision__footer-actions .ant-btn-dangerous:not(:disabled) {
+  background: #fff; border: 1px solid #ff9da8;
+  color: #df304b !important; -webkit-text-fill-color: #df304b !important;
+}
+.approval-demo--purchase .purchase-decision__footer-actions .ant-btn-primary:not(:disabled) {
+  min-width: 145px; background: #0669ff !important; border-color: #0669ff !important;
+  color: #fff !important; -webkit-text-fill-color: #fff !important;
+  box-shadow: 0 4px 12px rgba(4,100,255,.16);
+}
+.approval-demo--purchase .purchase-decision__footer-actions .ant-btn-primary:not(:disabled) * {
+  color: #fff !important; -webkit-text-fill-color: #fff !important;
+}
+.approval-demo--purchase .purchase-decision__footer-actions .ant-btn-primary:not(:disabled):hover {
+  background: #0958d9 !important; border-color: #0958d9 !important;
+}
+.approval-demo--purchase .purchase-decision__footer-actions .ant-btn:disabled {
+  color: #9eaec3 !important; background: #f4f6fa !important;
+  -webkit-text-fill-color: #9eaec3 !important;
+  border-color: #dce4ee !important; cursor: not-allowed;
+}
+@media (max-width: 790px) {
+  .approval-demo--purchase .purchase-decision__metrics,
+  .approval-demo--purchase .purchase-decision__decision-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .approval-demo--purchase .purchase-decision__two-panels { grid-template-columns: 1fr; }
+  .approval-demo--purchase .purchase-decision__aside > .purchase-decision__panel:first-child .purchase-decision__panel-body { grid-template-columns: 1fr; gap: 8px; }
+  .approval-demo--purchase .purchase-decision__aside > .purchase-decision__panel:first-child .purchase-decision__fact { border-right: 0; }
+  .approval-demo--purchase .purchase-decision__dimension { grid-template-columns: 83px minmax(0,1fr) 43px 32px; gap: 7px; }
+  .approval-demo--purchase .purchase-decision__footer { flex-wrap: wrap; }
+  .approval-demo--purchase .purchase-decision__footer-actions { margin-left: auto; }
+}
+
+/* PR337_PURCHASE_VERTICAL_FIX_V38
+ * Correct V3.7's accidental two-column split. The three structural regions
+ * must share one full-width vertical flex column: header / content / footer.
+ * Preserve every approved font, business field, chart, and action handler.
+ */
+.ant-drawer:has(.approval-demo--purchase) .ant-drawer-body {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 !important;
+  overflow: hidden;
+}
+.ant-drawer:has(.approval-demo--purchase) .ant-drawer-content {
+  min-height: 0;
+}
+.approval-demo.approval-demo--purchase {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  flex: 1 1 auto;
+  width: 100% !important;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+.approval-demo--purchase .purchase-decision {
+  display: flex !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  width: 100% !important;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  margin: 0;
+}
+.approval-demo--purchase .purchase-decision__header {
+  flex: 0 0 auto;
+  align-self: stretch;
+  order: 0;
+  width: 100%;
+  min-width: 0;
+}
+.approval-demo--purchase .purchase-decision__scroll {
+  flex: 1 1 auto;
+  align-self: stretch;
+  order: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.approval-demo--purchase .purchase-decision__footer {
+  flex: 0 0 auto;
+  align-self: stretch;
+  order: 2;
+  width: 100%;
+  min-width: 0;
+  position: relative;
+  inset: auto;
+  z-index: 2;
+}
+
+/* PR337_PURCHASE_TYPOGRAPHY_CASCADE_V39
+ * EXACT OWNER-APPROVED SCALE. No font-size guessing, scaling, layout changes.
+ * specificity + !important ensure computed font properties win the cascade.
+ */
+.approval-demo.approval-demo--purchase .purchase-decision__header h2 {
+  font-size: 22px !important; font-weight: 700 !important; line-height: 30px !important;
+}
+.approval-demo.approval-demo--purchase .purchase-decision__panel-head > strong {
+  font-size: 16px !important; font-weight: 600 !important; line-height: 24px !important;
+}
+.approval-demo.approval-demo--purchase .purchase-decision__metric-label {
+  font-size: 12px !important; font-weight: 500 !important; line-height: 18px !important;
+}
+.approval-demo.approval-demo--purchase .purchase-decision__metric > strong {
+  font-size: 25px !important; font-weight: 700 !important; line-height: 30px !important;
+}
+.approval-demo.approval-demo--purchase .purchase-decision__decision-grid .purchase-decision__fact > b {
+  font-size: 22px !important; font-weight: 700 !important; line-height: 28px !important;
+}
+.approval-demo.approval-demo--purchase .purchase-decision__dimension > span {
+  font-size: 12px !important; font-weight: 500 !important; line-height: 18px !important;
+}
+.approval-demo.approval-demo--purchase .purchase-decision__dimension > b {
+  font-size: 21px !important; font-weight: 700 !important; line-height: 26px !important;
+}
+.approval-demo.approval-demo--purchase .purchase-decision__dimension > small {
+  font-size: 12px !important; font-weight: 400 !important; line-height: 18px !important;
+}
+.approval-demo.approval-demo--purchase .purchase-decision__two-panels .purchase-decision__fact > span {
+  font-size: 12px !important; font-weight: 400 !important; line-height: 18px !important;
+}
+.approval-demo.approval-demo--purchase .purchase-decision__two-panels .purchase-decision__fact > b {
+  font-size: 14px !important; font-weight: 600 !important; line-height: 20px !important;
+}
+.approval-demo.approval-demo--purchase .purchase-decision__aside > .purchase-decision__panel:first-child .purchase-decision__fact > span {
+  font-size: 12px !important; font-weight: 400 !important; line-height: 18px !important;
+}
+.approval-demo.approval-demo--purchase .purchase-decision__aside > .purchase-decision__panel:first-child .purchase-decision__fact > b {
+  font-size: 14px !important; font-weight: 600 !important; line-height: 20px !important;
+}
+.approval-demo.approval-demo--purchase .purchase-decision__timeline > b {
+  font-size: 16px !important; font-weight: 600 !important; line-height: 22px !important;
+}
+.approval-demo.approval-demo--purchase .purchase-decision__timeline > small,
+.approval-demo.approval-demo--purchase .purchase-decision__timeline > span {
+  font-size: 12px !important; font-weight: 400 !important; line-height: 18px !important;
+}
+.approval-demo.approval-demo--purchase .purchase-decision__footer-actions .ant-btn,
+.approval-demo.approval-demo--purchase .purchase-decision__footer-actions .ant-btn > span {
+  font-size: 14px !important; font-weight: 500 !important; line-height: 20px !important;
+}

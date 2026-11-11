@@ -4,9 +4,10 @@ import { useState, type ReactNode } from "react";
 import type { ApprovalItem } from "../approvalTypes";
 import { getDemoSeed, type DemoSeed } from "../approvalDemoData";
 import { demoProfiles, type ClearanceSku, type DemoBusinessProfile } from "../approvalDemoPresentation";
+import PurchaseApprovalDecisionDrawer from "./PurchaseApprovalDecisionDrawer";
 import "./DemoApprovalDrawer.css";
 
-interface Props { selected?: ApprovalItem; onClose(): void; initialAction?: "approve" | "reject"; }
+interface Props { selected?: ApprovalItem; onClose(): void; initialAction?: "approve" | "reject"; onAction?: (item: ApprovalItem, action: "approve" | "reject") => void; }
 const usd = (n: number | string | null | undefined) => n == null ? "—" : `$${Number(n).toFixed(2)}`;
 const num = (n: number | undefined) => n == null ? "—" : n.toLocaleString("zh-CN");
 const pct = (n: number | null | undefined) => n == null || !Number.isFinite(n) ? "—" : `${n.toFixed(1)}%`;
@@ -27,18 +28,6 @@ function Section({heading,note,children}:{heading:string;note?:string;children:R
 }
 function Safety({children}:{children:ReactNode}) {
   return <Alert type="warning" showIcon message="审批与实际业务执行分离" description={children} />;
-}
-function PurchaseDetail({seed,p}:{seed:DemoSeed;p:DemoBusinessProfile}) {
-  return <>
-    <StatTiles items={[["采购申请金额",usd(seed.amount),"USD · 演示申请"],["采购件数",`${num(p.quantity)} 件`,"拟采购数量"],["要求交期",p.delivery ?? "—","供应商计划交付"]]} />
-    <Section heading="01 / 采购业务信息"><Descriptions bordered size="small" column={2} items={[
-      info("采购单号",seed.business_ref),info("供应商",p.supplier),info("店铺",seed.store),info("SKU",p.sku),
-      info("产品负责人",p.owner),info("预计交期",p.delivery),info("采购金额",usd(seed.amount)),info("采购数量",`${num(p.quantity)} 件`),
-    ]}/></Section>
-    <Section heading="02 / 采购决策说明"><p className="approval-demo__copy">{seed.reason}</p>
-      <Safety>请核对断货风险、采购数量、资金占用及供应商交期。通过审批不代表已经向供应商下单或付款。</Safety>
-    </Section>
-  </>;
 }
 function BusinessMatrix({sku}:{sku:ClearanceSku}) {
   const windows=[7,14,30] as const;
@@ -258,7 +247,7 @@ function Side({seed}:{seed:DemoSeed}) {
     <Section heading="安全边界"><p className="approval-demo__copy">演示记录不调用审批 API。申请人不能审批自己的正式申请，真实业务须由后端校验授权和业务快照。</p></Section>
   </aside>;
 }
-function DemoApprovalDrawerContent({selected,onClose,initialAction}:Props) {
+function DemoApprovalDrawerContent({selected,onClose,initialAction,onAction}:Props) {
   const live = selected && selected.approval_type === "clearance_request" && !selected.id.startsWith("DEMO-") ? selected : undefined;
   const isLive = Boolean(live);
   const seed: DemoSeed | undefined = selected ? getDemoSeed(selected.id) ?? (live ? {
@@ -313,13 +302,17 @@ function DemoApprovalDrawerContent({selected,onClose,initialAction}:Props) {
     title={null}
     closable={false}
     open={Boolean(seed)}
-    width={isClearance ? 1000 : 1040}
+    width={isClearance ? 1000 : p?.kind === "purchase" ? "min(1120px, 96vw)" : 1040}
     destroyOnHidden
     onClose={onClose}
     styles={{body:{padding:0}}}
   >
-    {seed && p ? <div className={`approval-demo ${isClearance ? "approval-demo--clearance" : ""}`}>
-      {isClearance ? <>
+    {seed && p ? <div className={`approval-demo ${isClearance ? "approval-demo--clearance" : p.kind === "purchase" ? "approval-demo--purchase" : ""}`}>
+      {/* PR337_PURCHASE_DECISION_DETAIL_V3: purchase-specific decision, other drawers unchanged. */}
+      {p.kind === "purchase" && selected
+        ? <PurchaseApprovalDecisionDrawer record={selected} seed={seed} profile={p}
+            onClose={onClose} onAction={onAction} />
+        : isClearance ? <>
         <header className="approval-demo__clearance-header">
           <div className="approval-demo__clearance-header-top">
             <div className="approval-demo__clearance-title-wrap">
@@ -388,7 +381,7 @@ function DemoApprovalDrawerContent({selected,onClose,initialAction}:Props) {
           <span className="approval-demo__header-id">审批单 {seed.id}</span>
         </div><Button onClick={onClose}>关闭</Button></header>
         <div className="approval-demo__layout"><main className="approval-demo__main">
-          {p.kind==="purchase"?<PurchaseDetail seed={seed} p={p}/>:null}
+
           {p.kind==="listing"?<ListingDetail seed={seed} p={p}/>:null}
           {p.kind==="price"?<PriceDetail seed={seed} p={p}/>:null}
         </main><Side seed={seed}/></div>

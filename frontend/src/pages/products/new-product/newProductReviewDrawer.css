@@ -1,0 +1,61 @@
+/* PR337_TRACKING_REVIEW_DRAWER_V1 - only the tracking outcome drawer */
+.np-tracking-review-root .ant-drawer-content { background: #f6f8fc; }
+.np-tracking-review-root .ant-drawer-header {
+  min-height: 68px; padding: 15px 22px;
+  background: #fff; border-bottom: 1px solid #e5eaf2;
+}
+.np-tracking-review-root .ant-drawer-body {
+  padding: 18px 20px 24px; overflow-y: auto;
+}
+.np-tracking-review-root .ant-drawer-footer {
+  padding: 12px 20px; background: #fff; border-top: 1px solid #e5eaf2;
+}
+.np-review-heading { display: flex; flex-direction: column; gap: 3px; }
+.np-review-heading strong { font-size: 17px; line-height: 24px; color: #182230; font-weight: 650; }
+.np-review-heading span { font-size: 12px; color: #8290a5; font-weight: 400; }
+.np-review-product, .np-review-card {
+  background: #fff; border: 1px solid #e0e6f0; border-radius: 10px;
+  margin-bottom: 14px; padding: 16px 18px;
+}
+.np-review-product { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.np-review-product-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.np-review-product-main strong { font-size: 14px; font-weight: 650; color: #1d2939; }
+.np-review-product-main span { font-size: 12px; line-height: 1.5; color: #718096; }
+.np-review-product .ant-tag { flex-shrink: 0; margin: 0; }
+.np-review-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.np-review-section-heading h3 { margin: 0; color: #1d2939; font-size: 14px; font-weight: 650; }
+.np-review-section-heading > span { color: #8b99ab; font-size: 12px; }
+.np-review-required { color: #d92d20; }
+.np-tracking-review-root .np-review-card .ant-descriptions-view { border-color: #e5eaf2; }
+.np-tracking-review-root .np-review-card .ant-descriptions-item-label {
+  width: 128px; background: #f8fafc; color: #64748b; font-size: 12px;
+}
+.np-tracking-review-root .np-review-card .ant-descriptions-item-content { color: #1d2939; font-size: 12px; font-weight: 600; }
+.np-review-decision { border-color: #bdd4ff; box-shadow: 0 0 0 1px #eff5ff inset; }
+.np-review-help { margin: 0 0 12px; color: #75839a; font-size: 12px; line-height: 1.6; }
+.np-tracking-review-root .np-review-result-group {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;
+}
+.np-tracking-review-root .np-review-result-group .ant-radio-button-wrapper {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; min-width: 0; height: 40px; padding: 0 4px;
+  text-align: center; color: #344054; font-size: 12px; font-weight: 600;
+  border: 1px solid #d5dce8 !important; border-radius: 7px !important; box-shadow: none !important;
+}
+.np-tracking-review-root .np-review-result-group .ant-radio-button-wrapper::before { display: none; }
+.np-tracking-review-root .np-review-result-group .ant-radio-button-wrapper-checked {
+  color: #fff !important; background: #1677ff !important; border-color: #1677ff !important;
+}
+.np-review-hint { margin-top: 10px; color: #667085; font-size: 12px; line-height: 1.6; }
+.np-tracking-review-root .np-review-card .ant-input { font-size: 13px; }
+.np-review-footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.np-review-footer-note { color: #8b99ab; font-size: 12px; }
+.np-review-footer-actions { display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 700px) {
+  .np-tracking-review-root .ant-drawer-body { padding: 12px; }
+  .np-review-product, .np-review-card { padding: 13px; }
+  .np-tracking-review-root .np-review-result-group { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .np-review-footer-note { display: none; }
+  .np-review-footer { justify-content: flex-end; }
+  .np-review-section-heading { flex-wrap: wrap; }
+}

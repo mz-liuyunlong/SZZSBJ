@@ -8,7 +8,27 @@ export const approvalTabs: { label: string; value: ApprovalTab }[] = [
 export type ApprovalRisk = "low" | "medium" | "high" | "unknown" | "none";
 export type ApprovalStatus = "submitted" | "info_required" | "approved" | "rejected" | "withdrawn" | "legacy_unverified";
 export type Decision = "approved" | "rejected" | "info_required";
+/** 采购审批专用字段，当前后端未提供时保留空值，禁止模拟为真实数据。 */
+export interface PurchaseApprovalDetails {
+  purchase_kind?: "initial" | "replenishment" | null;
+  application_source?: "system" | "operator" | null;
+  product_name?: string | null;
+  sku?: string | null;
+  store_name?: string | null;
+  owner_name?: string | null;
+  supplier_name?: string | null;
+  required_delivery_date?: string | null;
+  score_total?: number | null;
+  initial_grade?: "S" | "A" | "B" | "C" | "D" | "Pass" | null;
+  estimated_sellable_days?: number | null;
+  sales_30d?: number | null;
+  suggested_qty?: number | null;
+  requested_qty?: number | null;
+  amount?: number | string | null;
+  currency_code?: string | null;
+}
 export interface ApprovalItem {
+  purchase_details?: PurchaseApprovalDetails | null;
  /** Live clearance data supplied by the existing API, never by demo profiles. */
  clearance_details?: {
   sku: string | null; msku: string | null; item_id: string;

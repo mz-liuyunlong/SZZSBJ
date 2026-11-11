@@ -1,76 +1,515 @@
-import {useState,type ReactNode} from "react";
-import {useNavigate} from "react-router-dom";
+import {useLocation} from "react-router-dom";
+// PR337_TRACKING_EDITABLE_PENDING_V4
+// PR337_TRACKING_OUTCOME_LOCK_V3
+/* PR337_APPROVED_CARD_FILTER_V53 */
+/* PR337_MANAGEMENT_STAT_FILTER_V51 */
+// PR337_FLOW_ACCEPTANCE_20261111
+import {useMemo, useState,type ReactNode, useCallback} from "react";
+import { Drawer as AntdDrawer } from "antd";
+import ManagementStatCards from "@/components/report-table/ManagementStatCards";
+import NewProductPerformanceReport from "./NewProductPerformanceReport";
 import PageShell from "@/components/page/PageShell";
 import type {NavigationPage} from "@/config/navigation";
-import NativeBoard from "./NativeBoard";
-import {samples,defaultConfig,bands,score,grade,suggestion,type Product,type Config,type Grade} from "./nativeData";
+import NativeBoard from "./TrackingBoardSwitch";
+import dayjs from "dayjs";
+import {withTrackingVisualSamples} from "./trackingBoardVisualSamples";
+import type {TrackingDrillFilter} from "./trackingBoardDrilldown";
+import NewProductTrackingReport from "./NewProductTrackingReport";
+import {samples,defaultConfig,bands,score,grade,suggestion,type Product,type Config} from "./nativeData";
+import { makeNewProductDevMockRows } from "./newProductDevelopmentFixtures";
+import NewProductRulesPanel from "./NewProductRulesPanel";
+import { createInitialRuleDraft, cloneRuleDraft, validateRuleDraft, validateTrackingRuleDraft, type RuleDraft } from "./NewProductRulesModel";
+import TrackingRuleConfigPanel from "./components/TrackingRuleConfigPanel";
 import "./nativeWorkflow.css";
+import "./newProductReviewDrawer.css";
+import { Button as ReviewButton, Descriptions as ReviewDescriptions, Drawer as ReviewDrawer, Input as ReviewInput, Radio as ReviewRadio, Tag as ReviewTag } from "antd";
 type Mode="performance"|"tracking";
 type Props={page:NavigationPage;mode:Mode;username?:string;canManage?:boolean;canConfigure?:boolean;canScore?:boolean;canRequest?:boolean;canReview?:boolean;canViewCost?:boolean};
 type ModalType="detail"|"market"|"purchase"|"approval"|"review"|"config"|"correction"|null;
 type Correction={id:number;sku:string;dimension:"speed"|"ad"|"profit"|"trust";from:number;to:number;reason:string;status:"待审核"|"已通过"|"已驳回"};
-const grades:Grade[]=["S","A","B","C","D","Pass"];
 function Status({text}:{text:string}){return <span className={"badge "+(text.includes("审核")?"b-purple":text.includes("批准")||text.includes("成功")?"b-green":text.includes("失败")||text.includes("驳回")?"b-red":text.includes("待")?"b-orange":"b-blue")}>{text}</span>}
-function Stat({label,value,foot,icon}:{label:string;value:string|number;foot:string;icon:string}){return <div className="stat-card"><div><div className="stat-label">{label}</div><div className="stat-value">{value}</div><div className="stat-foot">{foot}</div></div><div className="stat-symbol">{icon}</div></div>}
-function Insight({symbol,title,desc}:{symbol:string;title:string;desc:string}){return <div className="insight"><div className="insight-mark">{symbol}</div><div><div className="insight-title">{title}</div><div className="insight-text">{desc}</div></div></div>}
-function Table({title,desc,head,children,foot}:{title:string;desc:string;head:string[];children:ReactNode;foot?:ReactNode}){return <div className="card table-card"><div className="table-head"><span><span className="table-title">{title}</span> <span className="table-caption">{desc}</span></span></div><div className="table-wrap"><table><thead><tr>{head.map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{children}</tbody></table></div>{foot&&<div className="pagination">{foot}</div>}</div>}
-function Drawer({title,sub,close,children,footer,wide}:{title:string;sub:string;close:()=>void;children:ReactNode;footer:ReactNode;wide?:boolean}){return <div className="drawer-mask open" onMouseDown={e=>{if(e.target===e.currentTarget)close()}}><div className={"drawer "+(wide?"wide":"")} role="dialog" aria-modal="true"><div className="drawer-head"><div><h2>{title}</h2><p>{sub}</p></div><button className="close" onClick={close}>×</button></div><div className="drawer-body">{children}</div><div className="drawer-foot"><button className="btn" onClick={close}>取消</button><div className="right">{footer}</div></div></div></div>}
+function LegacyDrawer({title,sub,close,children,footer,wide}:{title:string;sub:string;close:()=>void;children:ReactNode;footer:ReactNode;wide?:boolean}){return <div className="drawer-mask open" onMouseDown={e=>{if(e.target===e.currentTarget)close()}}><div className={"drawer "+(wide?"wide":"")} role="dialog" aria-modal="true"><div className="drawer-head"><div><h2>{title}</h2><p>{sub}</p></div><button className="close" onClick={close}>×</button></div><div className="drawer-body">{children}</div><div className="drawer-foot"><button className="btn" onClick={close}>取消</button><div className="right">{footer}</div></div></div></div>}
+
+type AcceptanceDrawerProps = {
+  title: string;
+  sub: string;
+  close: () => void;
+  children: ReactNode;
+  footer: ReactNode;
+  wide?: boolean;
+};
+
+function Drawer(props: AcceptanceDrawerProps) {
+  const isDetail = props.title === "新品测评详情";
+  const isPurchase = props.title === "确认采购数量";
+  const isConfig = props.title === "新品表现配置" || props.title === "新品分析配置" || props.title === "打品成功标准" || props.title === "打品辅助规则配置";
+
+  if (!isDetail && !isPurchase && !isConfig) {
+    return <LegacyDrawer {...props} />;
+  }
+
+  return (
+    <AntdDrawer
+      open
+      placement="right"
+      width={isConfig ? "min(900px, 96vw)" : isDetail ? "min(920px, 94vw)" : "min(840px, 94vw)"}
+      rootClassName={isConfig ? "np-acceptance-drawer np-rules-topmost" : "np-acceptance-drawer"}
+      zIndex={isConfig ? 10000 : 1000}
+      onClose={props.close}
+      title={
+        <div className="np-acceptance-title">
+          <strong>{props.title}</strong>
+          <span>{props.sub}</span>
+        </div>
+      }
+      footer={isConfig ? (
+        <div className="np-original-v4 np-acceptance-footer">{props.footer}</div>
+      ) : (
+        <div className="np-original-v4 np-acceptance-footer">
+          <button
+            type="button"
+            className="btn"
+            onClick={props.close}
+          >
+            取消
+          </button>
+          <div className="np-acceptance-footer-actions">
+            {props.footer}
+          </div>
+        </div>
+      )}
+    >
+      <div className="np-original-v4 np-acceptance-content">
+        {props.children}
+      </div>
+    </AntdDrawer>
+  );
+}
+
 export default function NewProductPages({page,mode}:Props){
- const navigate=useNavigate();
- const [items,setItems]=useState<Product[]>(()=>samples.map(p=>({...p,scores:{...p.scores}}))),[cfg,setCfg]=useState<Config>(defaultConfig);
- const [tab,setTab]=useState<"list"|"board">("list"),[phase,setPhase]=useState("all"),[searchType,setSearchType]=useState("sku"),[search,setSearch]=useState(""),[owner,setOwner]=useState(""),[rating,setRating]=useState(""),[risk,setRisk]=useState("");
- const [period,setPeriod]=useState<30|60|90>(30),[result,setResult]=useState(""),[trackGrade,setTrackGrade]=useState("");
+ const [items,setItems]=useState<Product[]>(()=>([...samples, ...(import.meta.env.DEV && mode === "performance" ? makeNewProductDevMockRows(samples) : [])].map(p=>({...p,scores:{...p.scores}})))),[cfg,setCfg]=useState<Config>(defaultConfig);
+ const [savedRuleDraft,setSavedRuleDraft]=useState<RuleDraft>(()=>createInitialRuleDraft(defaultConfig));
+ const [ruleDraft,setRuleDraft]=useState<RuleDraft>(()=>createInitialRuleDraft(defaultConfig));
+ const pr337BoardLocation=useLocation();
+ const pr337NavKey=`${mode}:${pr337BoardLocation.pathname}:${pr337BoardLocation.key}`;
+ const [pr337BoardTabState,setPr337BoardTabState]=useState<{navKey:string;view:"list"|"board"}>(()=>({navKey:pr337NavKey,view:"board"}));
+ const tab=pr337BoardTabState.navKey===pr337NavKey?pr337BoardTabState.view:"board";
+ const setTab=useCallback((view:"list"|"board")=>setPr337BoardTabState({navKey:pr337NavKey,view}),[pr337NavKey]);
+ const [phase,setPhase]=useState("all"),[reportRevision,setReportRevision]=useState(0);
  const [modal,setModal]=useState<ModalType>(null),[selected,setSelected]=useState<string|null>(null),[scoreValue,setScoreValue]=useState<number|null>(null),[qty,setQty]=useState(0),[note,setNote]=useState(""),[review,setReview]=useState("继续观察");
- const [correctionDim,setCorrectionDim]=useState<Correction["dimension"]>("speed"),[corrections,setCorrections]=useState<Correction[]>([]),[cfgTab,setCfgTab]=useState("weights"),[version,setVersion]=useState(1),[notice,setNotice]=useState("");
- const [pageNum,setPageNum]=useState(1),[pageSize,setPageSize]=useState(20),[columnsOpen,setColumnsOpen]=useState(false),[visibleCols,setVisibleCols]=useState<string[]>(["商品信息","测品进度","自动评分","市场竞争","总分 / 评级","系统建议采购量","流程状态","操作"]);
+ const [correctionDim,setCorrectionDim]=useState<Correction["dimension"]>("speed"),[,setCorrections]=useState<Correction[]>([]),[cfgTab,setCfgTab]=useState("weights"),[version,setVersion]=useState(1),[notice,setNotice]=useState("");
+ const [approvalFocus,setApprovalFocus]=useState<string|null>(null);
+ const [trackingDrill,setTrackingDrill]=useState<TrackingDrillFilter|null>(null);
+ const [trackingSampleAnchor]=useState(()=>dayjs().format('YYYY-MM-DD'));
+ const trackingProducts=useMemo(()=>mode==='tracking'
+   ?withTrackingVisualSamples(items,trackingSampleAnchor):items,[items,mode,trackingSampleAnchor]);
  const p=items.find(x=>x.id===selected);
+ const reviewFinal = p?.tracking === "打品成功" || p?.tracking === "打品失败";
+ // PR337 local Mock only: launch date + arrival date act as the tracking-start proxy.
+ // Production must use an explicit "Listing is sellable" field instead.
+ const reviewWaiting = Boolean(p &&
+   (p.tracking === "等待开售" || p.tracking === "未判定") &&
+   !(p.launch?.trim() && p.arrival?.trim()));
+ const reviewReadOnly = reviewFinal || reviewWaiting;
  const msg=(s:string)=>{setNotice(s);window.setTimeout(()=>setNotice(""),2600)};
  const patch=(id:string,change:Partial<Product>)=>setItems(prev=>prev.map(x=>x.id===id?{...x,...change}:x));
- const show=(kind:ModalType,id?:string)=>{setModal(kind);if(id){const item=items.find(x=>x.id===id);setSelected(id);setScoreValue(item?.market??null);setQty(item?.requestQty??(item?suggestion(item,cfg):0));setNote(item?.marketReason||"");setReview(item?.tracking||"继续观察")}};
+ const show=(kind:ModalType,id?:string)=>{
+   const item=id?items.find(x=>x.id===id):undefined;
+   if(kind==="approval"&&item){
+     if(item.status!=="审核中"){msg("仅审核中的商品可以查看申请");return}
+     setModal(null);
+     setSelected(null);
+     setTab("list");
+     setPhase("approval");
+     setApprovalFocus(item.item);
+     setReportRevision(n=>n+1);
+     return;
+   }
+   if(kind==="purchase"&&item){
+     if(item.status!=="待采购确认"){
+       msg("当前状态不能确认采购");return;
+     }
+     const finalGrade=grade(item,cfg);
+     if(item.market===null||item.marketReason.trim().length<5||!finalGrade||
+        finalGrade==="D"||finalGrade==="Pass"||suggestion(item,cfg)<1){
+       msg("未完成有效测评或不符合采购条件，不能申请采购");return;
+     }
+   }
+   setModal(kind==="market"?"detail":kind);
+   if(item){
+     setSelected(item.id);
+     setScoreValue(item.market);
+     setQty(item.requestQty??suggestion(item,cfg));
+     setNote(kind==="purchase"?(item.requestReason||""):(item.marketReason||""));
+     setReview(item.tracking||"继续观察");
+   }
+ };
  const close=()=>{setModal(null);setNote("")};
- const reset=()=>{setSearch("");setOwner("");setRating("");setRisk("");setPhase("all");setPageNum(1)};
+ const reset=()=>{setPhase("all");setReportRevision(n=>n+1)};
+
+ const openConfigPanel=()=>{
+   setRuleDraft(cloneRuleDraft(savedRuleDraft));
+   setModal("config");
+ };
+ const saveRuleConfiguration=()=>{
+   if(mode==="tracking"){
+     const validation=validateTrackingRuleDraft(ruleDraft.success);
+     if(validation){msg(validation);return;}
+     setSavedRuleDraft(previous=>({...previous,success:{...ruleDraft.success}}));
+     setCfg(current=>({...current,
+       successQty:ruleDraft.success.sales30,
+       successProfit:ruleDraft.success.margin,
+       successAcos:ruleDraft.success.acos,
+     }));
+     setVersion(v=>v+1);
+     close();
+     msg("打品成功标准草稿已保存（Demo）");
+     return;
+   }
+   const validation=validateRuleDraft(ruleDraft);
+   if(validation){msg(validation);return;}
+   const saved=cloneRuleDraft(ruleDraft);
+   setSavedRuleDraft(previous=>({...saved,success:previous.success}));
+   setCfg(current=>({
+     ...current,
+     weights:{...saved.weights},
+     remindDays:saved.remindDays,
+     gradeBands:saved.gradeBands,
+     quantities:saved.quantities,
+     quantityStrategy:saved.quantityStrategy,
+     penaltyRules:saved.penalties,
+     vetoRules:saved.vetoes,
+   }));
+   setVersion(v=>v+1);
+   close();
+   msg("配置草稿已保存（Demo）");
+ };
  const exportRows=()=>{const csv=["SKU,Item ID,品名,负责人,综合分,评级,建议量,状态",...items.map(x=>[x.sku,x.item,x.name,x.owner,score(x,cfg)??"",grade(x,cfg)??"",suggestion(x,cfg),x.status].join(","))].join("\n");const url=URL.createObjectURL(new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"}));const a=document.createElement("a");a.href=url;a.download="新品表现Mock.csv";a.click();URL.revokeObjectURL(url)};
  const pending=items.filter(x=>x.status==="待市场评分").length,purchase=items.filter(x=>x.status==="待采购确认").length,approval=items.filter(x=>x.status==="审核中").length;
- const filtered=items.filter(x=>(phase==="all"||phase==="market"&&x.status==="待市场评分"||phase==="purchase"&&x.status==="待采购确认"||phase==="approval"&&x.status==="审核中")&&(!owner||x.owner===owner)&&(!rating||grade(x,cfg)===rating)&&(!risk||(risk==="risk"?! !x.risk:!x.risk))&&(!search||String(searchType==="item"?x.item:searchType==="name"?x.name:searchType==="owner"?x.owner:x.sku).toLowerCase().includes(search.toLowerCase())));
- const paged=filtered.slice((pageNum-1)*pageSize,pageNum*pageSize);
- const tracking=items.filter(x=>x.actualQty>0||x.tracking==="打品成功"||x.tracking==="继续观察").filter(x=>(!result||x.tracking===result)&&(!trackGrade||grade(x,cfg)===trackGrade));
- const saveMarket=()=>{if(!p||scoreValue===null||scoreValue<0||scoreValue>10||note.trim().length<5){msg("市场评分及至少5字依据为必填");return}patch(p.id,{market:scoreValue,marketReason:note,status:"待采购确认",risk:""});close();msg("模拟市场评分已保存")};
- const sendPurchase=()=>{if(!p||!Number.isInteger(qty)||qty<1){msg("请填写有效数量");return}if(qty!==suggestion(p,cfg)&&note.trim().length<5){msg("调整数量必须填写原因");return}patch(p.id,{status:"审核中",requestQty:qty,requestReason:note});close();msg("模拟采购申请已提交")};
+ const saveMarket=()=>{
+   if(!p||p.status!=="待市场评分"){
+     msg("当前商品不是待市场评分状态");return;
+   }
+   if(scoreValue===null||!Number.isInteger(scoreValue)||scoreValue<0||scoreValue>10||note.trim().length<5){
+     msg("市场竞争分数与至少5个字符的评价依据均为必填");return;
+   }
+   const evaluated={...p,market:scoreValue,marketReason:note.trim()};
+   const finalGrade=grade(evaluated,cfg);
+   const nextStatus=finalGrade==="D"||finalGrade==="Pass"?"测评停止":"待采购确认";
+   patch(p.id,{market:scoreValue,marketReason:note.trim(),status:nextStatus,
+     risk:p.risk==="待人工评分"?"":p.risk});
+   setNote(note.trim());
+   msg(nextStatus==="测评停止"?"评分已保存，当前评级不进入采购流程":"评分已保存，已生成评级与采购建议");
+   // Keep the detail drawer open; saved evaluation is rendered below, read-only.
+ };
+ const sendPurchase=()=>{
+   if(!p||p.status!=="待采购确认"){
+     msg("当前状态不能提交采购申请");return;
+   }
+   const finalGrade=grade(p,cfg);
+   if(p.market===null||p.marketReason.trim().length<5||!finalGrade||
+      finalGrade==="D"||finalGrade==="Pass"||suggestion(p,cfg)<1){
+     msg("请先完成有效市场评分并生成采购建议");return;
+   }
+   if(!Number.isInteger(qty)||qty<1){msg("请填写有效采购数量");return;}
+   if(qty!==suggestion(p,cfg)&&note.trim().length<5){
+     msg("调整采购数量必须填写至少5个字符的原因");return;
+   }
+   patch(p.id,{status:"审核中",requestQty:qty,
+     requestReason:qty===suggestion(p,cfg)?"":note.trim()});
+   close();
+   msg("模拟采购申请已提交，正在等待审核");
+ };
  const decide=(pass:boolean)=>{if(!p)return;patch(p.id,{status:pass?"已批准":"已驳回",actualQty:pass?qty:p.actualQty,tracking:pass?"等待开售":p.tracking});close();msg(pass?"模拟审批通过":"模拟申请被驳回")};
- const saveReview=()=>{if(!p)return;if(["需要优化","打品失败"].includes(review)&&note.trim().length<5){msg("请填写复盘说明");return}patch(p.id,{tracking:review,reasonFailure:note});close();msg("模拟复盘已保存")};
+ const saveReview=()=>{
+    if (!p) return;
+
+    if (p.tracking === "打品成功" ||
+        p.tracking === "打品失败") {
+      msg("最终打品结果已锁定，不可再次修改");
+      return;
+    }
+
+    if ((p.tracking === "等待开售" || p.tracking === "未判定") &&
+        !(p.launch?.trim() && p.arrival?.trim())) {
+      msg("商品尚未达到开售且到货的追踪起点，不能判定打品结果");
+      return;
+    }
+
+    if (!["继续观察", "需要优化",
+          "打品成功", "打品失败"].includes(review)) {
+      msg("请选择有效的打品结果");
+      return;
+    }
+    if(!p)return;if(["需要优化","打品失败"].includes(review)&&note.trim().length<5){msg("请填写复盘说明");return}patch(p.id,{tracking:review,reasonFailure:note});close();msg("模拟复盘已保存")};
  const correct=()=>{if(!p||scoreValue===null||note.trim().length<5){msg("请填写分数和原因");return}setCorrections(s=>[...s,{id:s.length+1,sku:p.sku,dimension:correctionDim,from:p.scores[correctionDim],to:scoreValue,reason:note,status:"待审核"}]);close();msg("评分修正申请已提交")};
- const decideCorrection=(item:Correction,pass:boolean)=>{if(pass)setItems(s=>s.map(x=>x.sku===item.sku?{...x,overrides:{...x.overrides,[item.dimension]:item.to}}:x));setCorrections(s=>s.map(c=>c.id===item.id?{...c,status:pass?"已通过":"已驳回"}:c));msg("修正申请已处理")};
- const header=["商品信息","测品进度","自动评分","市场竞争","总分 / 评级","系统建议采购量","流程状态","操作"];
- const tag=(x:Product)=><span className={"grade "+(grade(x,cfg)==="S"?"grade-s":grade(x,cfg)==="A"?"grade-a":grade(x,cfg)==="B"?"grade-b":grade(x,cfg)==="C"?"grade-c":"grade-d")}>{grade(x,cfg)||"待评分"}</span>;
  return <PageShell page={page}><div className="np-original-v4"><div className="content">
- <div className="np-native-tabs"><button className={tab==="list"?"active":""} onClick={()=>setTab("list")}>{mode==="performance"?"新品表现":"打品跟踪"}</button><button className={tab==="board"?"active":""} onClick={()=>setTab("board")}>{mode==="performance"?"新品表现看板":"打品跟踪看板"}</button></div>
- {tab==="board"?<NativeBoard mode={mode} products={items} config={cfg} detail={()=>setTab("list")} open={(key,id)=>key==="export"?exportRows():show(key as ModalType,id)}/>:
+
+<header className="np-workspace-title">
+  <strong>{mode==="performance"?"新品表现":"打品跟踪"}</strong>
+  <span className="np-workspace-divider" aria-hidden="true"/>
+  <span className="np-workspace-desc">
+    {mode==="performance"
+      ?"测品表现 · 自动评分 · 采购建议 · 运营确认 · 审核流转"
+      :"测评通过不代表打品成功；按首批到货且 Listing 可售日期追踪经营结果"}
+  </span>
+</header>
+<section className="np-workspace-panel">
+  <div className="np-workspace-bar">
+    <div className="np-native-tabs" role="tablist" aria-label="页面视图">
+      <button type="button" role="tab"
+        aria-selected={tab==="board"}
+        className={tab==="board"?"active":""}
+        onClick={()=>setTab("board")}>
+        {mode==="performance"?"新品看板":"打品看板"}
+      </button>
+      <button type="button" role="tab"
+        aria-selected={tab==="list"}
+        className={tab==="list"?"active":""}
+        onClick={()=>{if(mode==="tracking")setTrackingDrill(null);setTab("list");}}>
+        {mode==="performance"?"新品详情":"打品详情"}
+      </button>
+    </div>
+    <div className="np-workspace-actions">
+      {tab==="list"&&
+        <button className="btn" onClick={()=>{
+          if(mode==="performance")reset();
+          msg("已刷新示例数据");
+        }}>↻ 刷新</button>}
+
+      {tab!=="board" && (<button className="btn" onClick={()=>{
+        setCfgTab(mode==="performance"?"weights":"success");
+        openConfigPanel();
+      }}>
+        ⚙ {mode==="performance"?"规则配置":"规则配置"}
+      </button>)}
+    </div>
+  </div>
+
+ <div className="np-workspace-body">
+ {tab==="board"?<NativeBoard mode={mode} products={mode==="tracking"?trackingProducts:items} config={cfg} detail={()=>setTab("list")} onTrackingDrill={filter=>{setTrackingDrill(filter);setTab("list");}} open={(key,id)=>key==="export"?exportRows():show(key as ModalType,id)}/>:
  mode==="performance"?<>
- <div className="page-head"><div className="title-wrap"><h1>新品表现</h1><div className="subtitle">测品表现 · 自动评分 · 采购建议 · 运营确认 · 审核流转</div></div><div className="actions"><button className="btn" onClick={()=>{reset();msg("已刷新示例数据")}}>↻ 刷新</button><button className="btn" onClick={exportRows}>⇩ 导出</button><button className="btn primary" onClick={()=>{setCfgTab("weights");show("config")}}>⚙ 新品表现配置</button></div></div>
- <div className="stats"><Stat label="待市场评分" value={pending} foot="自动评分完成，等待运营判断" icon="✎"/><Stat label="待确认采购" value={purchase} foot="已评级，等待确认采购数量" icon="▤"/><Stat label="领导审核中" value={approval} foot="包含数量调整申请" icon="◷"/><Stat label="打品追踪中" value="46" foot="采购后持续跟踪 30 / 60 / 90 天" icon="↗"/></div>
- <div className="filter-tabs">{[["all","全部新品",items.length],["market","待市场评分",pending],["purchase","待确认采购",purchase],["approval","审核中",approval]].map(([k,title,count])=><button key={k} className={"filter-tab "+(phase===k?"active":"")} onClick={()=>{setPhase(String(k));setPageNum(1)}}>{title}<span className="count">{count}</span></button>)}<button className="filter-tab" onClick={()=>navigate("/products/launch-tracking")}>打品追踪</button></div>
- <div className="toolbar"><div className="searchbox"><select className="control" value={searchType} onChange={e=>setSearchType(e.target.value)}><option value="sku">SKU</option><option value="item">Item ID</option><option value="name">品名</option><option value="owner">负责人</option></select><input value={search} onChange={e=>{setSearch(e.target.value);setPageNum(1)}} placeholder="搜索 SKU、Item ID、品名"/></div><select className="control" value={owner} onChange={e=>setOwner(e.target.value)}><option value="">全部负责人</option>{[...new Set(items.map(p=>p.owner))].map(x=><option key={x}>{x}</option>)}</select><select className="control" value={rating} onChange={e=>setRating(e.target.value)}><option value="">全部评级</option>{grades.map(g=><option key={g}>{g}</option>)}</select><select className="control" value={risk} onChange={e=>setRisk(e.target.value)}><option value="">全部风险</option><option value="risk">有异常</option><option value="clear">无异常</option></select><div className="spacer"/><button className="btn" onClick={reset}>重置</button><button className="btn iconbtn" title="列配置" onClick={()=>setColumnsOpen(x=>!x)}>☷</button></div>
- {columnsOpen&&<div className="np-columns">{header.map(h=><label key={h}><input type="checkbox" checked={visibleCols.includes(h)} onChange={e=>setVisibleCols(s=>e.target.checked?[...s,h]:s.filter(t=>t!==h))}/>{h}</label>)}</div>}
- <Table title="测品结果" desc="按单个测品 Listing 展示 · 评分与打品结果独立" head={header.filter(h=>visibleCols.includes(h))} foot={<><span>显示 {filtered.length?(pageNum-1)*pageSize+1:0}–{Math.min(pageNum*pageSize,filtered.length)} 条，共 {filtered.length} 条</span><div className="page-nums"><button className="page-num" onClick={()=>setPageNum(n=>Math.max(1,n-1))}>‹</button><button className="page-num active">{pageNum}</button><button className="page-num" onClick={()=>setPageNum(n=>Math.min(Math.ceil(filtered.length/pageSize),n+1))}>›</button><select className="control" value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setPageNum(1)}}><option value={20}>20 条/页</option><option value={50}>50 条/页</option></select></div></>}>
- {paged.map(x=><tr key={x.id}>{visibleCols.includes("商品信息")&&<td><div className="product-cell"><div className="thumb">▤</div><div><div className="product-name">{x.name}</div><div className="product-meta">{x.sku} · {x.item}</div><div className="product-meta">{x.owner} · 上架 {x.days} 天</div></div></div></td>}{visibleCols.includes("测品进度")&&<td><div className="strong">{x.days} 天</div><div className="cell-sub">首单已记录 · 近7天 {x.qty7} 单</div></td>}{visibleCols.includes("自动评分")&&<td><div className="score-main">{((x.scores.speed*30+x.scores.ad*20+x.scores.profit*25+x.scores.trust*10)/85).toFixed(1)}<span className="muted"> /10</span></div><div className="cell-sub">出单 {x.scores.speed} · 广告 {x.scores.ad}</div><div className="cell-sub">利润 {x.scores.profit} · 可信 {x.scores.trust}</div></td>}{visibleCols.includes("市场竞争")&&<td>{x.market===null?<span className="badge b-orange">待人工评分</span>:<><div className="score-main">{x.market} /10</div><div className="cell-sub">已填写依据</div></>}</td>}{visibleCols.includes("总分 / 评级")&&<td>{score(x,cfg)===null?"待评分":<><div className="score-main">{score(x,cfg)?.toFixed(2)}</div><div className="cell-sub">{tag(x)} 级</div></>}</td>}{visibleCols.includes("系统建议采购量")&&<td>{suggestion(x,cfg)?<><div className="qty">{suggestion(x,cfg)} 件</div><div className="qty-sub">范围 {bands[grade(x,cfg)||"D"].join("–")} 件</div></>:<span className="muted">不生成采购建议</span>}</td>}{visibleCols.includes("流程状态")&&<td><Status text={x.status}/><div className="cell-sub">{x.risk}</div></td>}{visibleCols.includes("操作")&&<td><div className="row-buttons"><button className="btn small" onClick={()=>show("detail",x.id)}>查看</button><button className="btn small primary" onClick={()=>show(x.market===null?"market":x.status==="审核中"?"approval":"purchase",x.id)}>{x.market===null?"去评分":x.status==="审核中"?"查看申请":"确认采购"}</button></div></td>}</tr>)}</Table>
- <div className="two-col"><div className="card"><div className="panel-head"><h3>评级分布</h3><span className="subline">当前测评样本 · 示例统计</span></div><div className="panel-body"><div className="bar-list">{grades.map((g,i)=>{const n=items.filter(p=>grade(p,cfg)===g).length;return <div className="bar-row" key={g}><span className="bar-label">{g} 级</span><div className="bar-bg"><div className="bar-fill" style={{width:n*100/Math.max(1,items.length)+"%",background:["#722ed1","#12b76a","#1677ff","#f79009","#f04438","#98a2b3"][i]}}/></div><span className="bar-val">{n} 个</span></div>})}</div></div></div><div className="card"><div className="panel-head"><h3>待处理事项</h3><span className="subline">按优先级排序</span></div><div className="panel-body"><Insight symbol="!" title="市场竞争评分待完成" desc="市场分填写后，系统才能生成最终评级与采购建议。"/><Insight symbol="↗" title="有采购数量超出等级范围" desc="运营允许调整数量，审核时显示越界风险。"/><Insight symbol="✓" title="打品结果持续追踪" desc="以到货且 Listing 可售后开始观察。"/></div></div></div>
- <Table title="评分修正申请" desc="审批后才修改分数，不覆盖原始测评分数" head={["申请编号","商品","评分维度","原分","申请分","申请原因","状态","操作"]}>{corrections.map(c=><tr key={c.id}><td>SC-{c.id}</td><td>{c.sku}</td><td>{c.dimension}</td><td>{c.from}</td><td>{c.to}</td><td>{c.reason}</td><td>{c.status}</td><td><button className="btn small" onClick={()=>decideCorrection(c,true)}>通过</button><button className="btn small" onClick={()=>decideCorrection(c,false)}>驳回</button></td></tr>)}{!corrections.length&&<tr><td className="empty" colSpan={8}>暂无评分修正申请</td></tr>}</Table>
+ <ManagementStatCards ariaLabel="新品表现统计" className="np-performance-stats"
+   activeKey={phase}
+   cards={[
+     {key:"all",title:"全部新品",subtitle:"当前全部测评商品",value:items.length,tone:"normal",icon:<span>▦</span>},
+     {key:"market",title:"待市场评分",subtitle:"自动评分完成，等待运营判断",value:pending,tone:"normal",icon:<span>✎</span>},
+     {key:"purchase",title:"待确认采购",subtitle:"已评级，等待确认采购数量",value:purchase,tone:"normal",icon:<span>▤</span>},
+     {key:"approval",title:"审核中",subtitle:"包含数量调整申请",value:approval,tone:"warning",icon:<span>◷</span>},
+     {key:"approved",title:"已通过",subtitle:"审批已通过的商品",value:items.filter(x=>["已批准","已通过","审批通过"].includes(x.status)).length,tone:"success",icon:<span>✓</span>},
+   ]}
+   onCardClick={(key)=>{setPhase(key);setApprovalFocus(null);setReportRevision(n=>n+1);}}/>
+
+ <NewProductPerformanceReport key={reportRevision} items={items} config={cfg} phase={phase} focusItemId={approvalFocus} onOpen={(kind,id)=>show(kind,id)}
+      onResetPhase={()=>{setApprovalFocus(null);setPhase(current=>current==="approval"||current==="approved"?current:"all")}}/>
  </>:<>
- <div className="page-head"><div className="title-wrap"><h1>打品跟踪</h1><div className="subtitle">测评通过不代表打品成功；按首批到货且 Listing 可售日期追踪经营结果</div></div><div className="actions"><button className="btn" onClick={()=>msg("已刷新示例数据")}>↻ 刷新</button><button className="btn primary" onClick={()=>{setCfgTab("success");show("config")}}>⚙ 打品成功标准</button></div></div>
- <div className="tracking-cards">{[["追踪中新品","46","已有正式采购计划"],["达到 30 天观察点","28","可进行阶段性复盘"],["打品成功","14","按当前示例标准判定"],["数据不足 / 继续观察","11","不因数据不足判定失败"]].map(([title,value,foot])=><div className="card tracking-card" key={title}><div className="label">{title}</div><div className="value">{value}</div><div className="foot">{foot}</div></div>)}</div><div className="toolbar"><select className="control" value={period} onChange={e=>setPeriod(Number(e.target.value) as 30|60|90)}>{[30,60,90].map(x=><option key={x} value={x}>观察 {x} 天</option>)}</select><select className="control" value={result} onChange={e=>setResult(e.target.value)}><option value="">全部结果</option>{["打品成功","继续观察","需要优化","打品失败","等待开售"].map(x=><option key={x}>{x}</option>)}</select><select className="control" value={trackGrade} onChange={e=>setTrackGrade(e.target.value)}><option value="">全部初始评级</option>{["S","A","B","C"].map(x=><option key={x}>{x}</option>)}</select><div className="spacer"/><span className="subline">初始测评评级与打品结果分别保存</span></div>
- <Table title="采购后经营表现" desc="销售、利润、广告和库存共同判断" head={["商品 / 初始评级","建议量 / 批准量","追踪起点",period+"天销量","利润率","ACOS","当前库存","打品结果","操作"]} foot={<><span>观察期未结束或数据不足时，不自动判定失败。</span><span>观察窗口：30 / 60 / 90 天</span></>}>{tracking.map(x=><tr key={x.id}><td><div className="product-name">{x.name}</div><div className="product-meta">{x.sku} · 初始评级 {tag(x)}</div></td><td>{suggestion(x,cfg)} / {x.actualQty} 件</td><td>{x.arrival||"等待到货 / 可售"}</td><td><b>{period===30?x.sold30:period===60?x.sold60:x.sold90}</b><div className="cell-sub">近7天 {x.qty7} 单</div></td><td>{x.margin60||x.margin}%</td><td>{x.acos60||x.acos}%</td><td>{x.inventory} 件</td><td><Status text={x.tracking}/></td><td><button className="btn small" onClick={()=>show("review",x.id)}>复盘</button></td></tr>)}</Table>
- <div className="two-col"><div className="card"><div className="panel-head"><h3>不同初始评级的打品成功率</h3><span className="subline">验证测评评分是否具有预测价值</span></div><div className="panel-body">{(["S","A","B","C"] as Grade[]).map(g=>{const grp=items.filter(x=>grade(x,cfg)===g&&x.actualQty>0),rate=grp.length?grp.filter(x=>x.tracking==="打品成功").length/grp.length*100:0;return <div className="rate-row" key={g}><b>{g}级</b><div className="rate-bar"><span style={{width:rate+"%"}}/></div><span>{grp.length?Math.round(rate)+"%":"暂无样本"}</span></div>})}</div></div><div className="card"><div className="panel-head"><h3>采购建议复盘</h3><span className="subline">为后续规则优化积累依据</span></div><div className="panel-body"><Insight symbol="↔" title="对比系统建议与实际采购" desc="记录建议量、申请量、批准量、实际量及观察期销量。"/><Insight symbol="!" title="打品失败需记录原因" desc="广告、利润、库存、Listing、售后原因由运营复盘选择。"/></div></div></div>
+  <NewProductTrackingReport key={trackingDrill?JSON.stringify(trackingDrill):'manual'}
+    products={trackingProducts} config={cfg} drill={trackingDrill}
+    onClearDrill={()=>setTrackingDrill(null)} onReview={(id, sourceRow) => {
+      const selectedRow = items.find(item => item.id === id) ?? sourceRow;
+      if (!selectedRow) return;
+      if (!items.some(item => item.id === id)) {
+        if (!id.startsWith("PR337_PREVIEW_") && !id.startsWith("TRACK-LAYOUT-")) return;
+        // Preview is local in-memory data: never calls the backend or writes to DB.
+        setItems(previous => {
+          const existing = new Set(previous.map(item => item.id));
+          const missing = trackingProducts.filter(
+            item => !existing.has(item.id)
+          );
+          return missing.length
+            ? [...previous, ...missing]
+            : previous;
+        });
+      }
+      setSelected(id);
+      setReview(selectedRow.tracking);
+      setNote(selectedRow.reasonFailure || "");
+      setModal("review");
+    }}/>
  </>}
- {modal&&<Drawer title={{detail:"新品测评详情",market:"市场竞争评分",purchase:"确认采购数量",approval:"新品采购审核",review:"打品结果复盘",config:"新品表现配置",correction:"评分修正申请"}[modal]} sub={p?p.sku+" · "+p.name:"规则草稿 · 仅影响 Mock"} close={close} wide={modal==="config"} footer={modal==="detail"?<button className="btn primary" onClick={()=>p&&show(p.market===null?"market":"purchase",p.id)}>下一步</button>:modal==="market"?<button className="btn primary" onClick={saveMarket}>保存市场评分</button>:modal==="purchase"?<button className="btn primary" onClick={sendPurchase}>提交领导审核</button>:modal==="approval"?<><button className="btn" onClick={()=>decide(false)}>驳回</button><button className="btn primary" onClick={()=>decide(true)}>审核通过</button></>:modal==="review"?<button className="btn primary" onClick={saveReview}>保存复盘</button>:modal==="correction"?<button className="btn primary" onClick={correct}>提交申请</button>:<button className="btn primary" onClick={()=>{setVersion(v=>v+1);close();msg("Mock配置已保存")}}>保存配置草稿</button>}>
- {p&&<div className="product-summary"><div className="thumb">▤</div><div><div className="summary-name">{p.name}</div><div className="summary-meta">{p.sku} · Item ID {p.item} · 负责人 {p.owner}</div><Status text={p.status}/></div><div className="summary-right"><div className="score-main">{score(p,cfg)?.toFixed(2)||"—"}</div><div className="cell-sub">{grade(p,cfg)||"待评分"} 级</div></div></div>}
- {modal==="detail"&&p&&<><div className="section-title">自动评分明细</div><div className="score-grid">{(["speed","ad","profit","trust"] as const).map((d,i)=><div className="score-item" key={d}><div className="score-item-top"><span className="score-item-name">{["出单速度","广告有效性","利润空间","数据可信度"][i]}</span><span className="score-item-value">{p.overrides?.[d]??p.scores[d]} /10</span></div><p>源于业务经营数据 · 权重 {cfg.weights[d]}%</p><button className="btn small" onClick={()=>{setCorrectionDim(d);setScoreValue(p.scores[d]);setNote("");setModal("correction")}}>申请修正</button></div>)}</div><div className="section-title">市场竞争评分</div><div className="score-item"><div className="score-item-top"><b>市场竞争（人工）</b><b>{p.market===null?"待评分":p.market+" /10"}</b></div><p>{p.marketReason||"尚未填写"}</p><button className="btn primary" onClick={()=>show("market",p.id)}>填写市场评分</button></div><div className="section-title">测品数据</div><div className="kv-list">{[["近7天销量",p.qty7],["订单",p.orders],["广告费",p.spend],["ACOS",p.acos+"%"],["ROI",p.roi]].map(([k,v])=><div className="kv-row" key={k}><span className="kv-key">{k}</span><span className="kv-val">{v}</span></div>)}</div></>}
+ </div>
+</section>
+{modal&&modal!=="review"&&<Drawer title={{detail:"新品测评详情",market:"市场竞争评分",purchase:"确认采购数量",approval:"新品采购审核",review:"打品结果复盘",config:mode==="tracking"?"打品辅助规则配置":"新品表现配置",correction:"评分修正申请"}[modal]} sub={p?p.sku+" · "+p.name:"规则草稿 · 仅影响 Mock"} close={close} wide={modal==="config"} footer={modal==="detail"?null:modal==="market"?<button className="btn primary" onClick={saveMarket}>保存市场评分</button>:modal==="purchase"?<button className="btn primary" onClick={sendPurchase}>提交领导审核</button>:modal==="approval"?<><button className="btn" onClick={()=>decide(false)}>驳回</button><button className="btn primary" onClick={()=>decide(true)}>审核通过</button></>:modal==="correction"?<button className="btn primary" onClick={correct}>提交申请</button>:mode==="tracking"?<span className="muted">请在面板右上角保存浏览器本地草稿</span>:<button className="btn primary" onClick={saveRuleConfiguration}>保存配置草稿</button>}>
+ {p&&modal!=="config"&&<div className="product-summary"><div className="thumb">▤</div><div><div className="summary-name">{p.name}</div><div className="summary-meta">{p.sku} · Item ID {p.item} · 负责人 {p.owner}</div><Status text={p.status}/></div><div className="summary-right"><div className="score-main">{score(p,cfg)?.toFixed(2)||"—"}</div><div className="cell-sub">{grade(p,cfg)||"待评分"} 级</div></div></div>}
+ {modal==="detail"&&p&&<><div className="section-title">自动评分明细</div><div className="score-grid">{(["speed","ad","profit","trust"] as const).map((d,i)=><div className="score-item" key={d}><div className="score-item-top"><span className="score-item-name">{["出单速度","广告有效性","利润空间","数据可信度"][i]}</span><span className="score-item-value">{p.overrides?.[d]??p.scores[d]} /10</span></div><p>源于业务经营数据 · 权重 {cfg.weights[d]}%</p><button className="btn small" onClick={()=>{setCorrectionDim(d);setScoreValue(p.scores[d]);setNote("");setModal("correction")}}>申请修正</button></div>)}</div>
+<div className="section-title">市场竞争评分
+      <span className="cell-sub">{p.status==="待市场评分"?"必填":"已保存"}</span>
+    </div>
+    {p.status==="待市场评分"?(
+      <div className="score-item">
+        <div className="score-item-top"><b>市场竞争分数（必填）</b>
+          <b>{scoreValue===null?"未评分":`${scoreValue} /10`}</b>
+        </div>
+        <div className="market-scale">{Array.from({length:11},(_,i)=>(
+          <button type="button" key={i}
+            className={"market-score-btn "+(scoreValue===i?"active":"")}
+            onClick={()=>setScoreValue(i)}>{i}</button>
+        ))}</div>
+        <div className="form-field"><label className="form-label">
+          市场竞争评价依据（必填，至少5个字符）
+        </label><textarea className="textarea" rows={3} style={{resize:"none"}}
+          aria-label="市场竞争评价依据" value={note}
+          onChange={e=>setNote(e.target.value)}
+          placeholder="填写竞品数量、价格、评价和差异化依据" /></div>
+        <div className="row-buttons"><button type="button" className="btn primary"
+          onClick={saveMarket}>保存市场评分并计算</button>
+          <span className="cell-sub">保存后显示评级与采购建议，无需下一步</span></div>
+      </div>
+    ):(
+      <div className="score-item">
+        <div className="score-item-top"><b>市场竞争分数（已保存）</b>
+          <b>{p.market===null?"未评分":`${p.market} /10`}</b></div>
+        <p>评价依据：{p.marketReason||"—"}</p>
+      </div>
+    )}
+    <div className="section-title">测品数据</div>
+    <div className="kv-list">
+      <div className="kv-row"><span className="kv-key">首单与订单</span>
+        <span className="kv-val">首单时间待接入 · 近7天 {p.qty7} 单 · 累计订单 {p.orders}</span></div>
+      <div className="kv-row"><span className="kv-key">广告表现</span>
+        <span className="kv-val">花费 ${p.spend} · 点击 {p.clicks} · ACOS {p.acos}%</span></div>
+      <div className="kv-row"><span className="kv-key">盈利能力</span>
+        <span className="kv-val">ROI {p.roi} · 毛利率 {p.margin}%</span></div>
+      <div className="kv-row"><span className="kv-key">数据扣分</span>
+        <span className="kv-val">{p.penalties>0?`当前示例扣 ${p.penalties} 分`:"当前示例未触发通用扣分"}</span></div>
+    </div>
+    {p.market!==null&&p.marketReason.trim().length>=5&&score(p,cfg)!==null?(
+      <>
+        <div className="section-title">评分结果与采购建议</div>
+        <div className="qty-hero">
+          <div><div className="subline">最终得分 / 评级</div>
+            <div className="big">{score(p,cfg)?.toFixed(2)}
+              <span className="grade">{grade(p,cfg)}</span></div>
+            <div className="delta">评级采购范围 {(cfg.quantities?.[grade(p,cfg)||"D"]??bands[grade(p,cfg)||"D"]).join("–")} 件</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div className="subline">系统建议采购量</div>
+            <div className="big">{suggestion(p,cfg)>0?`${suggestion(p,cfg)} 件`:"不建议采购"}</div>
+            <div className="delta">{suggestion(p,cfg)>0?
+              "严格限制在评级配置范围内":"当前评级不进入采购申请"}</div>
+          </div>
+        </div>
+      </>
+    ):<div className="info-box">市场竞争评分未保存前，不生成最终评级和采购建议。</div>}
+    </>}
  {modal==="market"&&<><div className="section-title">市场竞争评分（0–10 分）</div><div className="market-scale">{Array.from({length:11},(_,i)=><button key={i} className={"market-score-btn "+(scoreValue===i?"active":"")} onClick={()=>setScoreValue(i)}>{i}</button>)}</div><div className="form-field"><label className="form-label">市场竞争评价依据</label><textarea className="textarea" rows={4} value={note} onChange={e=>setNote(e.target.value)} placeholder="竞品数量、售价、Review、差异化空间等"/></div></>}
- {modal==="purchase"&&p&&<><div className="kv-list"><div className="kv-row"><span className="kv-key">系统建议采购量</span><b>{suggestion(p,cfg)} 件</b></div><div className="kv-row"><span className="kv-key">当前评级范围</span><span>{bands[grade(p,cfg)||"D"].join("–")} 件</span></div></div><div className="form-field"><label className="form-label">运营申请采购数量</label><input className="input" type="number" min={1} value={qty} onChange={e=>setQty(Number(e.target.value))}/></div>{qty>bands[grade(p,cfg)||"D"][1]&&<div className="warning-box">超过当前等级采购范围，需要说明原因。</div>}<div className="form-field"><label className="form-label">调整原因</label><textarea className="textarea" rows={4} value={note} onChange={e=>setNote(e.target.value)}/></div></>}
+ {modal==="purchase"&&p&&<><div className="kv-list"><div className="kv-row"><span className="kv-key">系统建议采购量</span><b>{suggestion(p,cfg)} 件</b></div><div className="kv-row"><span className="kv-key">当前评级范围</span><span>{(cfg.quantities?.[grade(p,cfg)||"D"]??bands[grade(p,cfg)||"D"]).join("–")} 件</span></div></div><div className="form-field"><label className="form-label">运营申请采购数量</label><input className="input" type="number" min={1} value={qty} onChange={e=>setQty(Number(e.target.value))}/></div>{qty>(cfg.quantities?.[grade(p,cfg)||"D"]??bands[grade(p,cfg)||"D"])[1]&&<div className="warning-box">超过当前等级采购范围，需要说明原因。</div>}<div className="form-field"><label className="form-label">调整原因</label><textarea className="textarea" rows={4} value={note} onChange={e=>setNote(e.target.value)}/></div></>}
  {modal==="approval"&&p&&<><div className="kv-list">{[["系统建议",suggestion(p,cfg)+" 件"],["申请数量",(p.requestQty||qty)+" 件"],["申请原因",p.requestReason||"按建议提交"]].map(([k,v])=><div className="kv-row" key={k}><span className="kv-key">{k}</span><span className="kv-val">{v}</span></div>)}</div><div className="info-box">Mock 审批不会生成正式采购单或实际业务记录。</div></>}
- {modal==="review"&&p&&<><div className="kv-list">{[["系统建议量",suggestion(p,cfg)+" 件"],["实际采购量",p.actualQty+" 件"],["30天销量",p.sold30],["利润率",p.margin+"%"],["ACOS",p.acos+"%"]].map(([k,v])=><div className="kv-row" key={k}><span className="kv-key">{k}</span><span className="kv-val">{v}</span></div>)}</div><div className="form-field"><label className="form-label">打品结果</label><select className="select" value={review} onChange={e=>setReview(e.target.value)}>{["等待开售","继续观察","打品成功","需要优化","打品失败"].map(x=><option key={x}>{x}</option>)}</select></div><div className="form-field"><label className="form-label">复盘说明 / 失败原因</label><textarea className="textarea" rows={4} value={note} onChange={e=>setNote(e.target.value)}/></div></>}
  {modal==="correction"&&p&&<><div className="form-field"><label className="form-label">评分维度</label><select className="select" value={correctionDim} onChange={e=>setCorrectionDim(e.target.value as Correction["dimension"])}>{[["speed","出单速度"],["ad","广告有效性"],["profit","利润空间"],["trust","数据可信度"]].map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></div><div className="form-field"><label className="form-label">申请分数</label><input className="input" type="number" min={0} max={10} value={scoreValue??""} onChange={e=>setScoreValue(Number(e.target.value))}/></div><div className="form-field"><label className="form-label">修正依据</label><textarea className="textarea" rows={4} value={note} onChange={e=>setNote(e.target.value)}/></div></>}
- {modal==="config"&&<div className="config-shell"><div className="card config-nav">{[["weights","评分权重"],["criteria","评分标准"],["grades","评级与采购数量"],["penalties","扣分与否决"],["success","打品成功标准"],["version","规则版本"]].map(([k,t])=><button className={cfgTab===k?"active":""} key={k} onClick={()=>setCfgTab(k)}>{t}</button>)}</div><div className="card config-panel"><div className="section-title">{cfgTab==="weights"?"五维评分权重":cfgTab==="grades"?"等级与采购数量":cfgTab==="success"?"打品成功标准":"Mock规则配置"}</div>{cfgTab==="weights"&&(Object.entries(cfg.weights) as Array<[keyof Config["weights"],number]>).map(([key,value])=><div className="kv-row" key={key}><span className="kv-key">{key}</span><input type="number" className="input" value={value} onChange={e=>setCfg(c=>({...c,weights:{...c.weights,[key]:Number(e.target.value)}}))}/></div>)}{cfgTab==="grades"&&grades.map(g=><div className="kv-row" key={g}><span className="kv-key">{g} 级</span><b>{bands[g].join("–")} 件</b></div>)}{cfgTab==="success"&&([["successDays","观察周期"],["successQty","最低销量"],["successProfit","最低利润率"],["successAcos","最高ACOS"]] as const).map(([key,label])=><div className="kv-row" key={key}><span className="kv-key">{label}</span><input className="input" type="number" value={cfg[key]} onChange={e=>setCfg(c=>({...c,[key]:Number(e.target.value)}))}/></div>)}{["criteria","penalties","version"].includes(cfgTab)&&<p>草稿规则 v{version}。只用于模拟，未获得正式评分和采购执行批准。</p>}</div></div>}
+ {modal==="config"&&(mode==="tracking"?<TrackingRuleConfigPanel />:<div className="np-rules-config"><div className="config-shell">
+      {mode==="performance"&&<div className="card config-nav">{[["weights","评分权重"],["criteria","评分标准"],["grades","评级与采购数量"],["penalties","扣分与否决"],["version","规则版本"]].map(([key,name])=><button type="button" key={key} className={cfgTab===key?"active":""} onClick={()=>setCfgTab(key)}>{name}</button>)}</div>}
+      <div className="card config-panel"><NewProductRulesPanel tab={cfgTab} draft={ruleDraft} onChange={setRuleDraft} version={version} products={items}/></div>
+    </div></div>)}
  </Drawer>}
- {notice&&<div className="np-native-toast">{notice}</div>}
+   {/* PR337_TRACKING_REVIEW_DRAWER_V1: portal-based, above top and side navigation */}
+  {modal === "review" && p && (
+    <ReviewDrawer
+      open
+      placement="right"
+      width={660}
+      zIndex={9999}
+      getContainer={document.body}
+      rootClassName="np-tracking-review-root"
+      title={
+        <div className="np-review-heading">
+          <strong>{reviewFinal ? "查看打品结果" : reviewWaiting ? "查看跟踪阶段" : "人工判定打品结果"}</strong>
+          <span>{p.sku} · {p.name}</span>
+        </div>
+      }
+      onClose={close}
+      footer={
+        <div className="np-review-footer">
+          <span className="np-review-footer-note">{reviewFinal ? "成功与失败为最终判定，已锁定" : reviewWaiting ? "尚未开售，不产生打品结果" : "保存后更新当前商品的打品结果"}</span>
+          <div className="np-review-footer-actions">
+            <ReviewButton onClick={close}>{reviewReadOnly ? "关闭" : "取消"}</ReviewButton>
+            {!reviewReadOnly && <ReviewButton type="primary" onClick={saveReview}>保存打品结果</ReviewButton>}
+          </div>
+        </div>
+      }
+    >
+      <section className="np-review-product">
+        <div className="np-review-product-main">
+          <strong>{p.name}</strong>
+          <span>商品ID：{p.item} · SKU：{p.sku} · 负责人：{p.owner}</span>
+        </div>
+        <ReviewTag color={p.tracking === "打品成功" ? "green" :
+          p.tracking === "打品失败" ? "red" :
+          p.tracking === "需要优化" ? "orange" :
+          p.tracking === "继续观察" ? "blue" : "default"}>
+          {reviewWaiting ? "跟踪阶段：等待开售" :
+           (p.tracking === "等待开售" || p.tracking === "未判定")
+             ? "当前结果：未判定（已开售）" : `当前结果：${p.tracking}`}
+        </ReviewTag>
+      </section>
+
+      <section className="np-review-card">
+        <div className="np-review-section-heading">
+          <h3>经营数据参考</h3><span>仅供人工判断，不自动定义结果</span>
+        </div>
+        <ReviewDescriptions bordered size="small" column={2} items={[
+          {key:"sold", label:"30天销量", children:`${p.sold30} 件`},
+          {key:"profit", label:"利润率", children:`${p.margin}%`},
+          {key:"acos", label:"ACOS", children:`${p.acos}%`},
+          {key:"stock", label:"当前库存", children:`${p.inventory} 件`},
+          {key:"suggest", label:"系统建议量", children:`${suggestion(p,cfg)} 件`},
+          {key:"approved", label:"已有采购数量", children:p.actualQty > 0 ? `${p.actualQty} 件` : "—"},
+          {key:"start", label:"追踪起点", children:p.arrival || "等待到货 / 可售", span:2},
+        ]}/>
+      </section>
+
+      <section className="np-review-card np-review-decision">
+        <div className="np-review-section-heading">
+          <h3>打品结果 <span className="np-review-required">*</span></h3>
+          <span>{reviewReadOnly ? "仅供查看" : "运营人工判定"}</span>
+        </div>
+        <p className="np-review-help">结合销量、利润、广告和库存表现，选择当前商品的经营结果。</p>
+        <ReviewRadio.Group
+          className="np-review-result-group"
+          aria-label="人工选择打品结果"
+          optionType="button"
+          buttonStyle="solid"
+          value={reviewWaiting ? undefined : review}
+          disabled={reviewReadOnly}
+          onChange={(event) => setReview(event.target.value)}
+          options={[
+            {label:"打品成功", value:"打品成功"},
+            {label:"继续观察", value:"继续观察"},
+            {label:"需要优化", value:"需要优化"},
+            {label:"打品失败", value:"打品失败"},
+          ]}
+        />
+        <div className="np-review-hint">
+          {review === "打品成功" ? "已达成当前打品目标，可记录成功依据。" :
+            review === "继续观察" ? "暂不作成功或失败判定，继续跟踪经营数据。" :
+            review === "需要优化" ? "记录需要优化的具体原因和处理方向。" :
+            review === "打品失败" ? "记录失败原因，便于后续复盘。" :
+            "等待开售属于跟踪阶段，不是打品结果；开售后才能人工判定。"}
+        </div>
+      </section>
+
+      <section className="np-review-card">
+        <div className="np-review-section-heading">
+          <h3>复盘说明 / 判定依据
+            {(["需要优化", "打品失败"].includes(review)) &&
+              <span className="np-review-required"> *</span>}
+          </h3>
+          <span>{["需要优化", "打品失败"].includes(review) ? "至少5个字符" : "选填"}</span>
+        </div>
+        <ReviewInput.TextArea
+          aria-label="复盘说明与判定依据"
+          value={note}
+          readOnly={reviewReadOnly}
+          onChange={(event) => setNote(event.target.value)}
+          placeholder={review === "打品失败" ? "填写导致打品失败的经营原因" :
+            review === "需要优化" ? "填写需优化的问题及后续建议" :
+            "可补充判断依据、观察结论或下一步跟进情况"}
+          autoSize={{ minRows: 4, maxRows: 7 }}
+          style={{ resize: "none" }}
+        />
+      </section>
+    </ReviewDrawer>
+  )}
+
+  {notice&&<div className="np-native-toast">{notice}</div>}
  </div></div></PageShell>;
 }

@@ -187,6 +187,16 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
       return;
     }
 
+   // PR337_PURCHASE_APPROVAL_ACTIONS_V2: formal purchase requests must use
+   // the standard audited drawer/API, never the demo-only local decision modal.
+   if (item.approval_type === "purchase_exception" && !isDemoApproval(item)) {
+     setDemoActionTarget(undefined);
+     setDemoActionIntent(undefined);
+     setSelected(item);
+     setDirectReviewAction(action === "approve" ? "approved" : "rejected");
+     setReviewOnly(true);
+     return;
+   }
    setDemoActionTarget(item);
    setDemoActionIntent(action);
    setDemoActionNote("");
@@ -359,6 +369,15 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   <DemoApprovalDrawer
     selected={selected && (isDemoApproval(selected) || selected.approval_type === "clearance_request") ? selected : undefined}
     onClose={() => setSelected(undefined)}
+     // PR337_PURCHASE_DECISION_DETAIL_V3_PARENT: reuse existing mock confirmation modal.
+     onAction={(item, action) => {
+       if (item.approval_type !== "purchase_exception" || !isDemoApproval(item)) return;
+       setSelected(undefined);
+       setDemoActionTarget(item);
+       setDemoActionIntent(action);
+       setDemoActionNote("");
+       setDemoActionError(false);
+     }}
    />
  <Modal
     className="approval-workspace__clearance-action-modal"
