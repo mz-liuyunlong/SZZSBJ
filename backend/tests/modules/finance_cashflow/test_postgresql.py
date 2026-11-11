@@ -31,6 +31,7 @@ from app.modules.finance_cashflow import journal as J
 from app.modules.finance_cashflow.deploy_load import DeployFileError, load_deploy_data
 from app.modules.finance_cashflow.models import (
     FinanceCashAccount,
+    FinanceCashAlertClosure,
     FinanceCashCategory,
     FinanceCashClassifyRule,
     FinanceCashExclusion,
@@ -40,8 +41,14 @@ from app.modules.finance_cashflow.models import (
     FinanceCashRawFile,
 )
 from app.modules.finance_cashflow.parsing import PARSER_VERSION
-from app.modules.finance_cashflow.schemas import CashflowLineEventRequest, CashflowPairEventRequest
+from app.modules.finance_cashflow.schemas import (
+    CashflowAlertCloseRequest,
+    CashflowAlertReopenRequest,
+    CashflowLineEventRequest,
+    CashflowPairEventRequest,
+)
 from app.modules.finance_cashflow.service import (
+    AlertClosureError,
     CashflowService,
     ImportHasReviewedLinesError,
     ImportVoidedError,
@@ -1418,3 +1425,119 @@ def result_import(session: Session, name: str) -> UUID:
     return session.scalars(
         select(FinanceCashRawFile.import_id).where(FinanceCashRawFile.file_name == name)
     ).one()
+
+
+# ---------------------------------------------------- 关闭异常 / 改折人民币（Rocky 11-10）
+
+ALERT_KEY = "审批单无付款流水|209901010001"
+
+
+def _close(service: CashflowService, reason: str = "合成原因", key: str = ALERT_KEY) -> None:
+    service.close_alert(
+        CashflowAlertCloseRequest(alert_key=key, alert_type="审批单无付款流水", reason=reason),
+        actor="admin",
+    )
+
+
+def _reopen(service: CashflowService, reason: str = "合成原因", key: str = ALERT_KEY) -> None:
+    service.reopen_alert(CashflowAlertReopenRequest(alert_key=key, reason=reason), actor="admin")
+
+
+def test_alert_close_is_listed_and_closing_twice_is_409(service):
+    _close(service)
+    assert [item.alert_key for item in service.list_alert_closures()] == [ALERT_KEY]
+    with pytest.raises(AlertClosureError) as raised:
+        _close(service)
+    assert raised.value.status_code == 409
+
+
+def test_alert_close_race_hits_the_unique_index_and_returns_409(service, monkeypatch):
+    _close(service)
+    # 模拟并发：第二个请求查的时候还没看到第一条，提交时撞部分唯一索引。
+    monkeypatch.setattr(service, "_open_closure", lambda _key: None)
+    with pytest.raises(AlertClosureError) as raised:
+        _close(service)
+    assert raised.value.status_code == 409
+    monkeypatch.undo()
+    assert [item.alert_key for item in service.list_alert_closures()] == [ALERT_KEY]
+
+
+def test_reopen_without_closure_is_404(service):
+    with pytest.raises(AlertClosureError) as raised:
+        _reopen(service)
+    assert raised.value.status_code == 404
+
+
+def test_close_reopen_close_keeps_history(service, session):
+    _close(service, "第一次")
+    _reopen(service, "要再看")
+    _close(service, "第二次")
+    rows = session.scalars(
+        select(FinanceCashAlertClosure)
+        .where(FinanceCashAlertClosure.alert_key == ALERT_KEY)
+        .order_by(FinanceCashAlertClosure.id)
+    ).all()
+    assert [(row.reason, row.reopen_reason) for row in rows] == [
+        ("第一次", "要再看"),
+        ("第二次", None),
+    ]
+    assert rows[0].reopened_at is not None and rows[0].reopened_by == "admin"
+    assert rows[1].reopened_at is None
+    assert [item.reason for item in service.list_alert_closures()] == ["第二次"]
+
+
+@pytest.mark.parametrize("reason", ["", "   "])
+def test_close_and_reopen_need_a_reason(service, reason):
+    for call in (_close, _reopen):
+        if not reason:
+            with pytest.raises(ValidationError):
+                call(service, reason)
+            continue
+        with pytest.raises(AlertClosureError) as raised:
+            call(service, reason)
+        assert raised.value.status_code == 422
+
+
+@pytest.mark.parametrize("currency", ["CNY", "CNH"])
+def test_set_cny_is_refused_on_rmb_lines(service, session, currency):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    uid = active(service, "BOC_CNY")[0].line_uid
+    session.execute(
+        update(FinanceCashLine)
+        .where(FinanceCashLine.line_uid == uid)
+        .values(currency_code=currency)
+    )
+    session.flush()
+    with pytest.raises(J.EventRejectedError) as raised:
+        event(
+            service,
+            uid,
+            J.KIND_SET_CNY,
+            payload={"amount_cny": "100"},
+            reason="约定汇率",
+            expected_version=0,
+        )
+    assert (raised.value.status_code, raised.value.message) == (422, "人民币流水不用改折人民币")
+
+
+def test_set_cny_on_usd_line_overrides_the_month_rate(service, session):
+    usd = ("来账", "20261010", "10:00:00", "USD", "10", "10", "X", "", "U1", "")
+    upload(service, S.boc(S.BOC_A, [usd]))
+    uid = active(service, "BOC_USD")[0].line_uid
+    session.add(_fx_rate("2026-10", my_rate="7.2"))
+    session.flush()
+    done = event(
+        service,
+        uid,
+        J.KIND_SET_CNY,
+        payload={"amount_cny": "69.5"},
+        reason="约定汇率",
+        expected_version=0,
+    )
+    assert done.version == 1
+    line = active(service, "BOC_USD")[0]
+    assert (line.amount_cny, line.fx_source, line.manual_cny_reason) == (
+        Decimal("69.5000"),
+        J.FX_SOURCE_MANUAL,
+        "约定汇率",
+    )

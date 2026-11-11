@@ -1161,6 +1161,9 @@ def apply_event(
             raise EventRejectedError(409, "这笔已拆分，请在拆分行上选类别")
         state.manual_category = _category(payload, valid_categories)
     elif kind == KIND_SPLIT:
+        # 已拆分的不能直接再拆：会把拆分行上挂的审批单、选好的类别、确认过的手续费一起丢掉。
+        if state.parts:
+            raise EventRejectedError(409, "这笔已拆分，请先取消拆分")
         state.parts = _split_parts(payload, line_amount)
     elif kind == KIND_CONFIRM_FEE:
         state.parts = _fee_parts(state.parts, payload, line_amount, valid_categories)

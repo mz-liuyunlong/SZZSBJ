@@ -777,3 +777,18 @@ def test_pingpong_fee_in_memo_asks_to_split_until_confirmed():
         }
     )
     assert not [a for a in compute([done]).alerts if a.type == J.ALERT_PINGPONG_FEE]
+
+
+def test_split_again_is_refused_and_part_approvals_stay():
+    state = split_state()
+    apply(state, J.KIND_ATTACH_PART_REF, {"index": 0, "ref": "209901010001"})
+    with pytest.raises(J.EventRejectedError) as raised:
+        apply(state, J.KIND_SPLIT, {"amounts": ["5", "5"]})
+    assert raised.value.status_code == 409
+    assert state.parts[0]["refs"] == ["209901010001"]
+
+
+def test_part_cny_rounds_half_up_on_the_absolute_value():
+    # 和前端 partCny 同一个用例：-1.01 按 1:1 分两行 → -0.51、-0.50
+    parts = [{"amount": "1"}, {"amount": "1"}]
+    assert J.part_cny(Decimal("-1.01"), Decimal("-2"), parts) == [Decimal("0.51"), Decimal("0.50")]

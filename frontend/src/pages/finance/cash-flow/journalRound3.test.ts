@@ -93,6 +93,9 @@ describe("split rows", () => {
     expect(cnys).toEqual([-267, -400.51]);
     expect(withPartRows([line])[0].children?.map((child) => child.cny)).toEqual(cnys);
     expect(partCny({ ...line, cny: null })).toEqual([null, null]);
+    // 和后端 part_cny 一致：按绝对值算、.5 分进位，再还原符号（负数也是 -0.51 / -0.50，不是 -0.50 / -0.51）
+    const half = { ...toCashLine(api({ parts: [{ amount: "1.0000", category_code: null }, { amount: "1.0000", category_code: null }] })), cur: "USD", amt: -2, cny: -1.01 };
+    expect(partCny(half)).toEqual([-0.51, -0.5]);
   });
 });
 

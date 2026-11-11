@@ -7,18 +7,20 @@ export type JournalRow = CashLine & { children?: PartRow[] };
 
 export const isPartRow = (row: CashLine): row is PartRow => "partOf" in row;
 
-/** 拆分行的折人民币（Rocky 11-10：拆分后要看到每行折多少人民币）：按金额比例分原行的折人民币，尾差落在最后一行，合计等于原行。 */
+/** 拆分行的折人民币（Rocky 11-10：拆分后要看到每行折多少人民币）：和后端 journal.part_cny 同一算法——
+ * 先按绝对值、以分为单位按金额比例四舍五入（.5 进位），尾差落在最后一行，最后按原行符号还原；合计等于原行。 */
 export function partCny(line: CashLine): (number | null)[] {
   const parts = line.parts ?? [];
   if (line.cny == null || !line.amt || !parts.length) return parts.map(() => null);
   if (line.cur === "CNY") return parts.map((part) => part.amt);
-  const total = Math.round(line.cny * 100);
+  const sign = line.cny < 0 ? -1 : 1;
+  const total = Math.round(Math.abs(line.cny) * 100);
+  const whole = Math.abs(line.amt);
   let used = 0;
   return parts.map((part, index) => {
-    if (index === parts.length - 1) return (total - used) / 100;
-    const cents = Math.round((total * part.amt) / (line.amt as number));
+    const cents = index === parts.length - 1 ? total - used : Math.round((total * Math.abs(part.amt)) / whole);
     used += cents;
-    return cents / 100;
+    return (sign * cents) / 100;
   });
 }
 

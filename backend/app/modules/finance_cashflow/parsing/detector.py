@@ -35,6 +35,7 @@ class Detection:
     boc_sections: list = field(default_factory=list)
 
 
+BOC_INFO_HEADS = ("总笔数", "借方发生", "贷方发生", "查询时间范围", "查询账号")
 BOC_DATA_DATE = re.compile(r"^\s*(\d{4}[-/.年]?\d{1,2}[-/.月]?\d{1,2}|\d{5}(\.0+)?)")
 
 
@@ -69,6 +70,14 @@ def _boc_sections(rows, seed) -> list:
                     and BOC_DATA_DATE.match(get(r, "交易日期"))
                 ):
                     data += 1
+        else:
+            # 没有「交易类型」表头：除了表头信息行（总笔数、借贷合计、查询时间范围），
+            # 还有别的内容就当有数据，不能当空段跳过。
+            data = sum(
+                1
+                for r in rows[start + 1 : end]
+                if not blank(r) and not norm_head(r[0]).startswith(BOC_INFO_HEADS)
+            )
         if not seed.boc_known_inquiry(acc):
             if data:
                 raise RejectFile("中行交易明细，但查询账号没登记（尾号 %s）" % acc[-4:])

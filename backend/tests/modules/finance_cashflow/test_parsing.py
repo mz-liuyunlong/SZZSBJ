@@ -364,3 +364,15 @@ def test_pingpong_payment_fee_is_written_into_the_memo_without_changing_the_line
     assert [(line.amount, line.line_uid) for line in with_fee] == [
         (line.amount, line.line_uid) for line in plain
     ]
+
+
+def test_boc_unregistered_section_without_header_but_with_rows_rejects_the_file():
+    rows = [
+        *S.boc_section(S.BOC_A, boc_rows("A", n=1), ("20261101", "20261108")),
+        [],
+        ["查询账号[ Inquirer account]", "769000000001"],
+        ["总笔数[ Total number]", "1"],
+        ["往账", "转账", "x", "本公司", "y", "某人", "20261103", "10:00:00", "CNY", "5"],
+    ]
+    with pytest.raises(RejectFile, match="尾号 0001"):
+        parse_file(S.xlsx(rows), S.seed())

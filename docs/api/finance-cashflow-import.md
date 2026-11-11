@@ -58,7 +58,7 @@ body：`{kind, payload, reason, expected_version, idempotency_key}`。`expected_
 | `review1_undo` | | 撤销初审：ok1 / rej1 → todo。有初审权限的人都可以撤，不限当时做初审的人（rocky 2026-11-06）；事件表记下撤销人 |
 | `review2_undo` | | 撤销终审：ok2 / rej2 → ok1 |
 | `set_text` | `payload.description` / `payload.memo`，至少一个；空字符串或 null 表示恢复银行原文；每项最多 500 字 | 只改显示，银行原文不动，分类规则照原文算；不退回审核 |
-| `split` | `payload.amounts`：2 到 20 个正数，合计等于流水金额绝对值 | 拆分后各行类别为空，再逐行选；再拆一次会整体替换 |
+| `split` | `payload.amounts`：2 到 20 个正数，合计等于流水金额绝对值 | 拆分后各行类别为空，再逐行选；已拆分的再拆返回 409，要先取消拆分 |
 | `set_part_category` | `payload.index`（从 0 起）、`payload.category_code`（空值表示清掉） | 给拆分行选类别；X01 不能选 |
 | `set_part_text` | `payload.index`（从 0 起）、`payload.description` / `payload.memo`，至少一个；空字符串或 null 表示清掉（沿用整笔的）；每项最多 500 字 | 改拆分行自己的摘要 / 备注；只改显示，不退回审核 |
 | `unsplit` | | 取消拆分（确认过的手续费行一起取消） |
