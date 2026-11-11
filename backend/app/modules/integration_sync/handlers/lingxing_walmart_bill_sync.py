@@ -9,6 +9,7 @@
   （SYNC_WALMART_BILL_EMPTY_UNEXPECTED），什么都不标。
 - 领星只在账单生成后才给出明细；一期账单可能横跨 35 天以上，所以发现新账单的明细一直延伸到
   窗口最早几天，就自动往前补拉一个月，直到这期账单的明细不再出现（最多补 12 次）。
+  往前补的段里新出现、账单日落在本次窗口里的账单也一起接着追；账单日在窗口之前的旧账单不追。
 - 一个店的明细写入、missing 标记、期汇总重算和这个店的原始响应 / 分页记录都在一个保存点里，
   店拉完才一起提交；某一页出错（请求失败、条数中途变化、一行不合法等）整店回滚，明细表和期汇总
   保持这次同步前的样子，只留一条失败的分页记录（带错误码，有响应的话连同那一页的原始响应）。
@@ -140,6 +141,7 @@ class _Segment:
 
     first_posted: dict[str, date] = field(default_factory=dict)  # reportKey -> 最早交易日期
     keys: set[str] = field(default_factory=set)
+    report_dates: dict[str, date] = field(default_factory=dict)  # reportKey -> 账单日
 
 
 def walmart_bill_response_succeeded(
@@ -438,10 +440,14 @@ class LingxingWalmartBillSyncHandler:
                 max_pages=max_pages,
             )
             touched |= segment.keys
+            # 往前补到的段里新冒出来的账单，账单日落在本次窗口里的也要接着追（2026-11-11：
+            # 回填从 10-01 起，10-06 那期是在往前补的段里才出现的，只追原来那批会停在 8 月 31 日，
+            # 漏掉 8 月中旬的退款 / 扣费）。账单日在窗口之前的旧账单不追，免得一直往前拉。
             chasing = {
                 key
-                for key in chasing & segment.first_posted.keys()
-                if segment.first_posted[key] < segment_start + timedelta(EDGE_DAYS)
+                for key, posted in segment.first_posted.items()
+                if (key in chasing or segment.report_dates.get(key, start) >= start)
+                and posted < segment_start + timedelta(EDGE_DAYS)
             }
             cursor = segment_start
         return touched
@@ -545,6 +551,7 @@ class LingxingWalmartBillSyncHandler:
                 segment.keys.add(key)
                 posted = line["posted_date"]
                 segment.first_posted[key] = min(posted, segment.first_posted.get(key, posted))
+                segment.report_dates[key] = line["report_date"]
             written = self._upsert(run, raw_ref, parsed)
             run.records_seen += len(page.rows)
             run.records_written += written
@@ -815,7 +822,11 @@ def _safe_params(
 
 
 def _merge(first: _Segment, second: _Segment) -> _Segment:
-    merged = _Segment(first_posted=dict(first.first_posted), keys=first.keys | second.keys)
+    merged = _Segment(
+        first_posted=dict(first.first_posted),
+        keys=first.keys | second.keys,
+        report_dates={**first.report_dates, **second.report_dates},
+    )
     for key, posted in second.first_posted.items():
         merged.first_posted[key] = min(posted, merged.first_posted.get(key, posted))
     return merged

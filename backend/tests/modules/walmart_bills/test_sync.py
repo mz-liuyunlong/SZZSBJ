@@ -342,6 +342,31 @@ def test_long_bill_is_chased_back_until_its_first_line(session: Session) -> None
     assert long_bill.payable_amount == Decimal("4.0000")
 
 
+def test_bill_first_seen_in_an_extension_is_chased_back_too(session: Session) -> None:
+    """2026-11-11 回填 10-06 期缺 8 月中旬明细：那期账单只在往前补的段里出现，也要接着往前追。"""
+    add_stores(session)
+    interface = governed(session)
+    rows = [
+        # 窗口（10-06 起）里只看得到 rk-trigger，它靠近窗口开头，触发往前补 09-05~10-05
+        bill_line(40, STORE_A, "rk-trigger", "2026-10-07", "1", report_date="2026-11-03"),
+        # rk-new 账单日在窗口里，但明细全在窗口之前：第一次往前补才出现，且靠近那段开头
+        bill_line(41, STORE_A, "rk-new", "2026-09-06", "1", report_date="2026-10-20"),
+        bill_line(42, STORE_A, "rk-new", "2026-08-20", "-5", report_date="2026-10-20"),
+        # 账单日早于窗口的旧账单：出现在补的段里也不追
+        bill_line(43, STORE_A, "rk-old", "2026-09-07", "1", report_date="2026-09-22"),
+    ]
+    client = FakeLingxing(rows)
+    assert run_sync(session, interface, client).status == "succeeded"
+
+    assert (date(2026, 9, 5), date(2026, 10, 5)) in client.windows(STORE_A)
+    assert (date(2026, 8, 5), date(2026, 9, 4)) in client.windows(STORE_A)
+    assert (date(2026, 7, 5), date(2026, 8, 4)) not in client.windows(STORE_A)
+    new_bill = period(session, STORE_A, "rk-new")
+    assert new_bill.line_count == 2
+    assert new_bill.period_start_date == date(2026, 8, 20)
+    assert new_bill.payable_amount == Decimal("-4.0000")
+
+
 def test_identical_rows_from_lingxing_are_both_kept(session: Session) -> None:
     add_stores(session)
     interface = governed(session)
