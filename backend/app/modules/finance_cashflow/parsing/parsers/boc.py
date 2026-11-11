@@ -15,21 +15,30 @@ _DATE = _re.compile(r"^\s*(\d{4}[-/.年]?\d{1,2}[-/.月]?\d{1,2}|\d{5}(\.0+)?)")
 
 
 def parse(det, seed):
+    """按段解析：一个文件里有几个查询账号就有几段，各段各认各的账户（Rocky 11-10）。"""
     _name, rows = det.sheets[0]
-    ix = header_index(rows[det.header_row])
+    sections = det.boc_sections or [(det.inquiry_account, det.header_row, len(rows))]
+    out = []
+    for inquiry, header_row, end in sections:
+        out.extend(_parse_section(det, seed, rows, inquiry, header_row, end))
+    return out
+
+
+def _parse_section(det, seed, rows, inquiry, header_row, end):
+    ix = header_index(rows[header_row])
     for need in ("交易类型", "交易日期", "交易金额", "交易货币"):
         if need not in ix:
             raise RejectFile("中行交易明细缺列：%s" % need)
     g = getter(ix)
     out = []
-    for ri, r in enumerate(rows[det.header_row + 1 :], start=det.header_row + 2):
+    for ri, r in enumerate(rows[header_row + 1 : end], start=header_row + 2):
         if blank(r) or g(r, "交易金额") == "":
             continue
         if not _DATE.match(g(r, "交易日期")):  # 重复表头 / 汇总 / 页脚：跳过，不拒文件
             det.skipped_rows += 1
             continue
         cur = g(r, "交易货币") or "CNY"
-        acct = seed.boc(det.inquiry_account, cur)
+        acct = seed.boc(inquiry, cur)
         if acct is None:
             raise RejectFile("中行导出里有未登记币种：%s" % cur)
         amt = g(r, "交易金额").replace(",", "")

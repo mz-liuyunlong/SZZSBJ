@@ -20,3 +20,16 @@
 .fin-cash-flow__cell-text { display: flex; align-items: flex-start; gap: var(--ant-margin-xxs, 4px); min-width: 0; }
 .fin-cash-flow__cell-text .fin-cash-flow__cell-body { flex: 1 1 auto; min-width: 0; }
 .fin-cash-flow__cell-text .fin-cash-flow__cell-edit { flex: none; }
+
+/* 表头固定列（Rocky 11-10）：可拖列宽的表头格带 position: relative !important，会把固定列的 sticky 顶掉；
+   勾选列表头也要钉在最左边，否则往右拉表头勾选框会被后面的表头盖住。 */
+.fin-cash-flow__table .ant-table-thead > tr > th.ant-table-cell-fix-left,
+.fin-cash-flow__table .ant-table-thead > tr > th.ant-table-cell-fix-right { position: sticky !important; z-index: 3; }
+.fin-cash-flow__table .ant-table-thead > tr > th.ant-table-selection-column { position: sticky !important; left: 0; z-index: 4; }
+.fin-cash-flow__excl-note { color: var(--ant-color-warning-text, #d46b08); white-space: normal; }
+/* 挂审批单选择框：选项右边的「看」（打开审批单，不挂上） */
+.fin-cash-flow__picker-option { display: flex; align-items: center; justify-content: space-between; gap: var(--ant-margin-xs, 8px); }
+.fin-cash-flow__picker-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fin-cash-flow__picker-view { flex: none; }
+.fin-cash-flow__skip-list { margin: 0 0 var(--ant-margin-xs, 8px); padding-left: var(--ant-padding-lg, 24px); }
+.fin-cash-flow__closed { display: flex; justify-content: flex-end; margin-bottom: var(--ant-margin-xxs, 4px); }

@@ -308,10 +308,39 @@ class FinanceCashLineState(Base):
     parts: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     # 人工配对号：同号的几笔算同一笔内部转账（rocky 11-05）。
     manual_pair: Mapped[str | None] = mapped_column(String(40))
+    # 人工改的折人民币（Rocky 11-10：约定汇率每笔不同）；有值就用它，原因必填。
+    manual_amount_cny: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    manual_cny_reason: Mapped[str | None] = mapped_column(Text)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+
+
+class FinanceCashAlertClosure(Base):
+    """关闭异常（Rocky 11-10）：确认不用处理的异常写原因关掉；可以重新打开，留历史。"""
+
+    __tablename__ = "manual_finance_cash_alert_closures"
+    __table_args__ = (
+        Index(
+            "uq_manual_finance_cash_alert_closures_open",
+            "alert_key",
+            unique=True,
+            postgresql_where=text("reopened_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    alert_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    alert_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    closed_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    closed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    reopened_by: Mapped[str | None] = mapped_column(String(255))
+    reopened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reopen_reason: Mapped[str | None] = mapped_column(Text)
 
 
 class FinanceCashExclusion(Base):

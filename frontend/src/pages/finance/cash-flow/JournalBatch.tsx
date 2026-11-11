@@ -12,7 +12,7 @@ import { asLive, cashErrorText, postLineEvent, type LineEventKind, type LiveCash
 import { pairLines } from "@/pages/finance/cash-flow/journalPair";
 import { catFilter, groupedCatOptions } from "@/pages/finance/cash-flow/journalSelection";
 import { isExcluded, isFirstPending, PREVIEW_ACTION_TIP, REVIEW_TAG, type ReviewMark } from "@/pages/finance/cash-flow/journalShared";
-import type { CashLine, CashSnapshot } from "@/pages/finance/localFinData";
+import { fmtMoney, type CashLine, type CashSnapshot } from "@/pages/finance/localFinData";
 
 type BatchKind = "pass1" | "pass2" | "reject2" | "category" | "exclude" | "pair";
 interface BatchDef { label: string; event: LineEventKind; reason: boolean; danger?: boolean; liveOnly?: boolean; done: string; skipText: string }
@@ -22,19 +22,20 @@ const BATCH: Record<BatchKind, BatchDef> = {
   reject2: { label: "批量终审驳回", event: "review2_reject", reason: true, danger: true, done: "终审驳回到待初审", skipText: "不在待终审" },
   category: { label: "批量改类别", event: "set_category", reason: false, liveOnly: true, done: "已改类别", skipText: "已剔除 / 已拆分 / 已经是这个类别" },
   exclude: { label: "批量剔除", event: "exclude", reason: true, danger: true, liveOnly: true, done: "已剔除", skipText: "已经剔除了 / 已拆分" },
-  pair: { label: "配对（勾两笔）", event: "pair", reason: false, liveOnly: true, done: "已配对", skipText: "已配对 / 已终审" },
+  pair: { label: "配对（勾几笔）", event: "pair", reason: false, liveOnly: true, done: "已配对", skipText: "已配对 / 已终审" },
 };
 
 const liveOf = (lines: CashLine[]) => lines.flatMap((line) => { const target = asLive(line); return target ? [target] : []; });
-/** 勾选配对：正好两笔、不同账户、一出一进。 */
-const pairable = (lines: LiveCashLine[]) => lines.length === 2 && lines[0].acct !== lines[1].acct && (lines[0].amt ?? 0) * (lines[1].amt ?? 0) < 0;
+/** 勾选配对：两笔或几笔（Rocky 11-10：有二对一），要有付出也有收到，不能全在同一个账户。 */
+const pairable = (lines: LiveCashLine[]) => lines.length >= 2 && lines.length <= 20 && new Set(lines.map((line) => line.acct)).size > 1
+  && lines.some((line) => (line.amt ?? 0) < 0) && lines.some((line) => (line.amt ?? 0) > 0);
 function pairHint(lines: CashLine[]) {
-  if (lines.length !== 2) return `配对要正好勾两笔（能配的有 ${lines.length} 笔）。`;
-  const [a, b] = lines;
-  if (a.acct === b.acct) return "两笔在同一个账户，不能配对。";
-  if ((a.amt ?? 0) * (b.amt ?? 0) >= 0) return "要一笔付出、一笔收到才能配对。";
-  const gap = a.cur === b.cur ? Math.abs(Math.abs(a.amt ?? 0) - Math.abs(b.amt ?? 0)) : null;
-  return `把这两笔认成同一笔内部转账（不改金额和类别，不退回审核）。${gap ? `两边差 ${gap.toFixed(2)}，配上后在异常里显示差额，可以确认记为手续费。` : ""}配错了在详情里点「取消配对」。`;
+  if (lines.length < 2) return `配对至少勾两笔（能配的有 ${lines.length} 笔）。`;
+  if (new Set(lines.map((line) => line.acct)).size < 2) return "勾的都在同一个账户，不能配对。";
+  if (!lines.some((line) => (line.amt ?? 0) < 0) || !lines.some((line) => (line.amt ?? 0) > 0)) return "要有付出、也有收到才能配对。";
+  const curs = new Set(lines.map((line) => line.cur));
+  const gap = curs.size === 1 ? Math.abs(lines.reduce((sum, line) => sum + (line.amt ?? 0), 0)) : null;
+  return `把这 ${lines.length} 笔认成同一笔内部转账（不改金额和类别，不退回审核）。${gap ? `付出和收到合计差 ${gap.toFixed(2)}，配上后在异常里显示差额，可以确认记为手续费。` : ""}配错了在详情里点「取消配对」。`;
 }
 
 interface Props {
@@ -70,6 +71,9 @@ export function JournalBatchActions({ live, data, rows, selected, reviewOf, need
     let wrongStage = 0;
     let noteNeeded = 0;
     let reviewed = 0;
+    /* 配对跳过的：写清楚已经和哪一笔配上了（Rocky 11-10：只说「已配对」不知道是被谁配走了） */
+    const pairedWith: string[] = [];
+    const accountName = (id: string) => data.accounts.find((item) => item.id === id)?.name ?? id;
     for (const line of selected) {
       const stage = reviewOf(line).stage;
       if (kind === "exclude") {
@@ -79,7 +83,14 @@ export function JournalBatchActions({ live, data, rows, selected, reviewOf, need
         continue;
       }
       if (kind === "pair") {
-        if (line.pair || stage === "ok2") { wrongStage += 1; continue; }
+        if (line.pair || stage === "ok2") {
+          wrongStage += 1;
+          if (line.pair) {
+            const others = data.lines.filter((other) => other.pair === line.pair && other.id !== line.id);
+            pairedWith.push(`${line.date} ${accountName(line.acct)} ${fmtMoney(line.amt, line.cur)} 已和 ${others.map((other) => `${other.date} ${accountName(other.acct)} ${fmtMoney(other.amt, other.cur)}`).join("、") || "另一笔"} 配对${asLive(line)?.manualPair ? "（人工）" : "（系统自动）"}，配错了在详情里「取消配对」`);
+          } else pairedWith.push(`${line.date} ${accountName(line.acct)} ${fmtMoney(line.amt, line.cur)} 已终审`);
+          continue;
+        }
         todo.push(line);
         continue;
       }
@@ -94,7 +105,7 @@ export function JournalBatchActions({ live, data, rows, selected, reviewOf, need
       if (kind === "pass1" && needsNote(line)) { noteNeeded += 1; continue; }
       todo.push(line);
     }
-    return { todo, wrongStage, noteNeeded, reviewed };
+    return { todo, wrongStage, noteNeeded, reviewed, pairedWith };
   };
   const current = pending ? plan(pending) : undefined;
   const close = () => { setPending(undefined); setReason(""); setCategory(undefined); };
@@ -207,6 +218,7 @@ export function JournalBatchActions({ live, data, rows, selected, reviewOf, need
         {current && def && <>
           <Typography.Paragraph>勾选 {selected.length} 笔，这次处理 <Typography.Text strong>{current.todo.length}</Typography.Text> 笔。</Typography.Paragraph>
           {current.wrongStage > 0 && <Typography.Paragraph type="secondary">跳过 {current.wrongStage} 笔：{def.skipText}。</Typography.Paragraph>}
+          {pending === "pair" && current.pairedWith.length > 0 && <ul className="fin-cash-flow__skip-list">{current.pairedWith.map((text) => <li key={text}><Typography.Text type="warning">{text}</Typography.Text></li>)}</ul>}
           {current.noteNeeded > 0 && <Typography.Paragraph type="warning">跳过 {current.noteNeeded} 笔：审批单金额和流水金额对不上，要逐笔点 ✓ 写差额说明。</Typography.Paragraph>}
           {pending === "category" && <Select showSearch autoFocus style={{ width: "100%" }} placeholder="选类别（可输入代码或名称模糊搜索）" value={category} onChange={setCategory} options={categoryOptions}
             filterOption={catFilter} />}

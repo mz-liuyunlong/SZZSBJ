@@ -39,12 +39,20 @@ HINT_NOT_IN_JOURNAL = "对方账户不在日记账"
 ALERT_PAYONEER_FEE = "派安盈提现到账差额"
 ALERT_PAYONEER_MISSING = "缺派安盈实际汇率"
 ALERT_STATEMENT_UNMATCHED = "月结单有、流水没有"
+# PingPong 付款的出账金额含手续费（Rocky 11-10）：导入时写进备注，提示一键拆成手续费行（F01）。
+ALERT_PINGPONG_FEE = "PingPong 付款手续费"
+FEE_LAYER_PINGPONG = "pingpong"
+PINGPONG_FEE_IN_MEMO = re.compile(r"PingPong 手续费 (\d+(?:\.\d+)?)")
 ALERT_STATEMENT_AMBIGUOUS = "月结单匹配到多笔"
 ALERT_STATEMENT_CONFLICT = "月结单前后不一致"
 FEE_LAYER_PAYONEER = "payoneer"
 FX_SOURCE_PAYONEER = "payoneer"
 FX_SOURCE_LINGXING = "lingxing"
 FX_SOURCE_PENDING = "pending"
+# 人工改的折人民币（Rocky 11-10：约定汇率每笔不同，财务写原因直接改）。
+FX_SOURCE_MANUAL = "manual"
+# 对单时可以按分比的人民币来源：派安盈实际到账、人工改过的。
+FX_EXACT_SOURCES = frozenset({"payoneer", "manual"})
 PAYONEER_WITHDRAWAL = re.compile(r"^Payment to\b")
 STATEMENT_TIME_TOL_SECONDS = 120
 STATEMENT_DAY_TOL = 1
@@ -90,6 +98,10 @@ PAIR_ID_MAX = 40
 TEXT_MAX = 500
 MAX_PARTS = 20
 KIND_AUTO_RESET = "auto_reset"
+# 拆分行挂审批单（Rocky 11-10：一笔付款对多张单，拆开后各行挂自己的单，类别跟着审批单走）。
+KIND_ATTACH_PART_REF = "attach_part_ref"
+KIND_DETACH_PART_REF = "detach_part_ref"
+KIND_SET_CNY = "set_cny"
 KIND_AUTO_ATTACH_REF = "auto_attach_ref"
 
 
@@ -154,6 +166,8 @@ class LineInput:
     account_last4: str = ""
     # 交易时间（UTC）：派安盈月结补充按它和金额对到这笔。
     source_time: datetime | None = None
+    # 人工改的折人民币（正数）；有值就用它。
+    manual_amount_cny: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -253,6 +267,7 @@ def compute_journal(
     ]
     alerts.extend(_balance_alerts(lines))
     alerts.extend(_payoneer_fee_alerts(computed))
+    alerts.extend(_pingpong_fee_alerts(computed))
     alerts.extend(_pair_lines(computed, internal_categories))
     alerts.extend(_apply_exclusions(computed, exclusions))
     for item in computed:
@@ -295,6 +310,11 @@ def _classify_line(
     match: StatementMatch | None = None,
 ) -> ComputedLine:
     amount_cny, fx_rate, fx_source = _fx(line, usd_rate_of, match)
+    if line.manual_amount_cny is not None and line.amount:
+        manual = abs(line.manual_amount_cny)
+        amount_cny = manual if line.amount > 0 else -manual
+        fx_rate = (manual / abs(line.amount)).quantize(Q4, rounding=ROUND_HALF_UP)
+        fx_source = FX_SOURCE_MANUAL
     code: str | None
     if line.exclude_amount is not None and line.exclude_amount == abs(line.amount):
         code, source = EXCLUDE_CATEGORY, SOURCE_MANUAL
@@ -530,6 +550,40 @@ def _payoneer_fee_alerts(lines: Sequence[ComputedLine]) -> list[Alert]:
     return alerts
 
 
+def _pingpong_fee_alerts(lines: Sequence[ComputedLine]) -> list[Alert]:
+    """PingPong 付款备注里带「PingPong 手续费 x」、还没拆出这层手续费的：提示确认。"""
+    alerts: list[Alert] = []
+    for line in lines:
+        source = line.source
+        if source.provider != "pingpong" or source.amount >= 0:
+            continue
+        hit = PINGPONG_FEE_IN_MEMO.search(source.memo or "")
+        if hit is None:
+            continue
+        fee = Decimal(hit.group(1))
+        if fee <= 0 or fee >= abs(source.amount):
+            continue
+        if any(part.get("fee_layer") == FEE_LAYER_PINGPONG for part in source.parts or []):
+            continue
+        cur = source.currency_code
+        line.flags.append("PingPong 手续费待拆")
+        alerts.append(
+            Alert(
+                type=ALERT_PINGPONG_FEE,
+                account_key=source.account_key,
+                date=source.business_date.isoformat(),
+                message=(
+                    f"出账 {abs(source.amount):.2f} {cur} 里含 PingPong 手续费 {fee:.2f} {cur}，"
+                    f"实际汇出 {abs(source.amount) - fee:.2f} {cur}"
+                ),
+                amount=fee,
+                currency_code=cur,
+                line_uid=source.line_uid,
+            )
+        )
+    return alerts
+
+
 def _balance_alerts(lines: Sequence[LineInput]) -> list[Alert]:
     """本笔余额 − 本笔金额，在该账户找不到相同余额就算漏行；每个账户最早一笔没有上一行，不算。"""
     by_account: dict[str, list[LineInput]] = defaultdict(list)
@@ -678,7 +732,44 @@ def _pair_manual(lines: Sequence[ComputedLine], used: set[str]) -> list[Alert]:
             if gap is not None and gap > EXACT_TOL:
                 out, into = sorted(members, key=lambda item: item.source.amount)
                 alerts.append(_gap_alert(out, gap, into))
+        else:
+            group_alert = _group_gap_alert(members)
+            if group_alert is not None:
+                alerts.append(group_alert)
     return alerts
+
+
+def _group_gap_alert(members: Sequence[ComputedLine]) -> Alert | None:
+    """一笔对几笔（Rocky 11-10：例如两笔付出、一笔退回）。
+
+    同币种时按合计算差额（付出合计 − 收到合计）。
+    差额挂在付出最大的那笔上，可以点「确认记为手续费」。"""
+    values = [(member, *pair_value(member)) for member in members]
+    if len({currency for _member, _value, currency in values}) != 1:
+        return None
+    outs = [(member, value) for member, value, _cur in values if value < 0]
+    ins = [(member, value) for member, value, _cur in values if value > 0]
+    if not outs or not ins:
+        return None
+    paid = sum((abs(value) for _member, value in outs), ZERO)
+    received = sum((value for _member, value in ins), ZERO)
+    gap = paid - received
+    if gap <= EXACT_TOL:
+        return None
+    out = max(outs, key=lambda item: abs(item[1]))[0]
+    source = out.source
+    return Alert(
+        type=ALERT_PAIR_GAP,
+        account_key=source.account_key,
+        date=source.business_date.isoformat(),
+        message=(
+            f"一组 {len(members)} 笔：付出合计 {source.currency_code} {paid:.2f}，"
+            f"收到合计 {received:.2f}，差额 {gap:.2f}"
+        ),
+        amount=gap,
+        currency_code=source.currency_code,
+        line_uid=source.line_uid,
+    )
 
 
 def _gap_pair_ok(out: ComputedLine, into: ComputedLine, gap: Decimal) -> bool:
@@ -961,6 +1052,8 @@ class ReviewState:
     # 拆分：[{"amount": "100.0000", "category_code": "G02" 或 None}]，金额合计 = 流水金额绝对值。
     parts: list[dict[str, Any]] | None = None
     manual_pair: str | None = None
+    manual_amount_cny: Decimal | None = None
+    manual_cny_reason: str | None = None
 
 
 def _required_reason(reason: str | None, label: str) -> str:
@@ -1068,6 +1161,9 @@ def apply_event(
             raise EventRejectedError(409, "这笔已拆分，请在拆分行上选类别")
         state.manual_category = _category(payload, valid_categories)
     elif kind == KIND_SPLIT:
+        # 已拆分的不能直接再拆：会把拆分行上挂的审批单、选好的类别、确认过的手续费一起丢掉。
+        if state.parts:
+            raise EventRejectedError(409, "这笔已拆分，请先取消拆分")
         state.parts = _split_parts(payload, line_amount)
     elif kind == KIND_CONFIRM_FEE:
         state.parts = _fee_parts(state.parts, payload, line_amount, valid_categories)
@@ -1079,17 +1175,57 @@ def apply_event(
     elif kind == KIND_UNSPLIT:
         if not state.parts:
             raise EventRejectedError(409, "这笔没有拆分")
+        # 拆分行挂过的审批单不丢：收回到整笔上。
+        moved = [ref for part in state.parts for ref in part.get("refs") or []]
+        state.refs = list(dict.fromkeys([*state.refs, *moved]))
         state.parts = None
     elif kind == KIND_ATTACH_REF:
         ref = _approval_ref(payload)
-        if ref in state.refs:
+        if ref in all_refs(state):
             raise EventRejectedError(409, "这笔已经挂了这个审批单号")
         state.refs = [*state.refs, ref]
+    elif kind == KIND_ATTACH_PART_REF:
+        index = _part_index(state, payload)
+        ref = _approval_ref(payload)
+        if ref in all_refs(state):
+            raise EventRejectedError(409, "这笔已经挂了这个审批单号")
+        parts = [dict(part) for part in state.parts or []]
+        parts[index]["refs"] = [*(parts[index].get("refs") or []), ref]
+        state.parts = parts
+    elif kind == KIND_DETACH_PART_REF:
+        index = _part_index(state, payload)
+        ref = _approval_ref(payload)
+        parts = [dict(part) for part in state.parts or []]
+        current = list(parts[index].get("refs") or [])
+        if ref not in current:
+            raise EventRejectedError(409, "这一行没有挂这个审批单号")
+        remaining = [item for item in current if item != ref]
+        if remaining:
+            parts[index]["refs"] = remaining
+        else:
+            parts[index].pop("refs", None)
+        state.parts = parts
     elif kind == KIND_DETACH_REF:
         ref = _approval_ref(payload)
         if ref not in state.refs:
             raise EventRejectedError(409, "这笔没有挂这个审批单号")
         state.refs = [item for item in state.refs if item != ref]
+    elif kind == KIND_SET_CNY:
+        # 改折人民币：填正数金额 + 原因；amount_cny 为空 = 恢复系统折算。改了退回待初审。
+        raw = payload.get("amount_cny")
+        if raw is None or raw == "":
+            if state.manual_amount_cny is None:
+                raise EventRejectedError(409, "这笔没有人工改过折人民币")
+            state.manual_amount_cny, state.manual_cny_reason = None, None
+        else:
+            try:
+                value = Decimal(str(raw))
+            except InvalidOperation as exc:
+                raise EventRejectedError(422, "折人民币金额无效") from exc
+            if not value.is_finite() or value <= 0:
+                raise EventRejectedError(422, "折人民币要填大于 0 的金额")
+            state.manual_cny_reason = _required_reason(reason, "改折人民币")
+            state.manual_amount_cny = value.quantize(Q4, rounding=ROUND_HALF_UP)
     elif kind == KIND_EXCLUDE:
         state.exclude_reason = _required_reason(reason, "剔除")
         state.exclude_amount = _exclude_amount(payload, line_amount)
@@ -1104,6 +1240,41 @@ def apply_event(
         state.stage, state.stage_reason = STAGE_TODO, None
         return True
     return False
+
+
+def all_refs(state: ReviewState) -> list[str]:
+    """整笔挂的审批单 + 各拆分行挂的审批单（去重、保持顺序）。"""
+    return list(
+        dict.fromkeys(
+            [*state.refs, *(ref for part in state.parts or [] for ref in part.get("refs") or [])]
+        )
+    )
+
+
+def part_refs(parts: Sequence[dict[str, Any]] | None) -> list[str]:
+    return [ref for part in parts or [] for ref in part.get("refs") or []]
+
+
+def part_cny(
+    amount_cny: Decimal | None, amount: Decimal, parts: Sequence[dict[str, Any]]
+) -> list[Decimal | None]:
+    """拆分行各自的折人民币（绝对值）：按金额比例分整笔的折人民币，精确到分，尾差落最后一行。"""
+    if amount_cny is None or not amount or not parts:
+        return [None] * len(parts)
+    total = abs(amount_cny).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    whole = abs(amount)
+    out: list[Decimal | None] = []
+    used = ZERO
+    for index, part in enumerate(parts):
+        if index == len(parts) - 1:
+            out.append(total - used)
+            continue
+        share = (total * Decimal(str(part["amount"])) / whole).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        used += share
+        out.append(share)
+    return out
 
 
 def _part_index(state: ReviewState, payload: dict[str, Any]) -> int:
