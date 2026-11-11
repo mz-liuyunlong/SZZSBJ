@@ -70,6 +70,35 @@ def allocate_payment(
     return dict(zip(serials, _split_fen(total, serials, weights, whole), strict=True))
 
 
+def _line_shares(
+    item: journal.ComputedLine,
+    approvals: Mapping[str, FinanceCashApproval],
+    usd_rate: Decimal | None,
+) -> dict[str, Decimal | None]:
+    """一笔流水付给各审批单的人民币：拆分行挂的单按这一行的折人民币分（Rocky 11-10）；
+    整笔挂的单按整笔里没挂单的那部分分（没拆分就是整笔）。"""
+    parts = item.source.parts or []
+    if not journal.part_refs(parts):
+        return allocate_payment(item.amount_cny, item.source.refs, approvals, usd_rate)
+    cnys = journal.part_cny(item.amount_cny, item.source.amount, parts)
+    out: dict[str, Decimal | None] = {}
+    rest: Decimal | None = abs(item.amount_cny) if item.amount_cny is not None else None
+    for part, cny in zip(parts, cnys, strict=True):
+        refs = part.get("refs") or []
+        if not refs:
+            continue
+        if rest is not None and cny is not None:
+            rest -= cny
+        for serial, value in allocate_payment(cny, refs, approvals, usd_rate).items():
+            known = out.get(serial, Decimal("0"))
+            out[serial] = None if value is None or known is None else known + value
+    if item.source.refs:
+        for serial, value in allocate_payment(rest, item.source.refs, approvals, usd_rate).items():
+            known = out.get(serial, Decimal("0"))
+            out[serial] = None if value is None or known is None else known + value
+    return out
+
+
 def _split_fen(
     total: Decimal, serials: Sequence[str], weights: Sequence[Decimal], whole: Decimal
 ) -> list[Decimal]:
@@ -111,7 +140,9 @@ class ApprovalService:
                 currency_code=item.source.currency_code,
                 counterparty_name=item.source.counterparty_name,
                 text=f"{item.source.description} {item.source.memo}",
-                refs=tuple(item.source.refs),
+                refs=(*item.source.refs, *journal.part_refs(item.source.parts)),
+                amount_cny=item.amount_cny,
+                cny_exact=item.fx_source in journal.FX_EXACT_SOURCES,
                 stage=states[item.source.line_uid].stage
                 if item.source.line_uid in states
                 else journal.STAGE_TODO,
@@ -160,20 +191,15 @@ class ApprovalService:
         result, _by_uid, _states = cash._compute()
         by_ref: dict[str, list[journal.ComputedLine]] = defaultdict(list)
         for item in result.lines:
-            for ref in item.source.refs:
+            for ref in dict.fromkeys([*item.source.refs, *journal.part_refs(item.source.parts)]):
                 by_ref[ref].append(item)
         rate_of = cash._usd_rate_lookup()
         rows = sorted(cash.approval_rows(), key=lambda row: row.serial_number, reverse=True)
         by_serial = {row.serial_number: row for row in rows}
         shares = {
-            item.source.line_uid: allocate_payment(
-                item.amount_cny,
-                item.source.refs,
-                by_serial,
-                rate_of(item.source.business_date),
-            )
+            item.source.line_uid: _line_shares(item, by_serial, rate_of(item.source.business_date))
             for item in result.lines
-            if item.source.refs
+            if item.source.refs or journal.part_refs(item.source.parts)
         }
         names = self.employee_names()
         return [

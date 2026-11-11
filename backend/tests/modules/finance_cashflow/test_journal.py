@@ -672,3 +672,124 @@ def test_pair_and_unpair_keep_review_but_need_final_undone_first():
     with pytest.raises(J.EventRejectedError) as caught:
         apply(J.ReviewState(stage=J.STAGE_OK2, manual_pair="M1"), J.KIND_UNPAIR)
     assert caught.value.code == J.ERR_STAGE_NOT_ALLOWED
+
+
+# ---------------------------------------------------------------- 拆分行挂审批单（Rocky 11-10）
+
+
+def split_state():
+    state = J.ReviewState()
+    apply(state, J.KIND_SPLIT, {"amounts": ["4", "6"]})
+    return state
+
+
+def test_part_can_attach_and_detach_its_own_approval():
+    state = split_state()
+    state.stage = J.STAGE_OK1
+    assert apply(state, J.KIND_ATTACH_PART_REF, {"index": 1, "ref": "209901010001"}) is True
+    assert state.parts[1]["refs"] == ["209901010001"]
+    assert J.all_refs(state) == ["209901010001"]
+    with pytest.raises(J.EventRejectedError):
+        apply(state, J.KIND_ATTACH_REF, {"ref": "209901010001"})
+    with pytest.raises(J.EventRejectedError):
+        apply(state, J.KIND_ATTACH_PART_REF, {"index": 0, "ref": "209901010001"})
+    apply(state, J.KIND_DETACH_PART_REF, {"index": 1, "ref": "209901010001"})
+    assert "refs" not in state.parts[1]
+    with pytest.raises(J.EventRejectedError):
+        apply(state, J.KIND_DETACH_PART_REF, {"index": 1, "ref": "209901010001"})
+
+
+def test_unsplit_moves_part_approvals_back_to_the_line():
+    state = split_state()
+    apply(state, J.KIND_ATTACH_PART_REF, {"index": 0, "ref": "209901010001"})
+    apply(state, J.KIND_UNSPLIT)
+    assert (state.parts, state.refs) == (None, ["209901010001"])
+
+
+def test_part_cny_splits_by_amount_with_rest_on_last_row():
+    parts = [{"amount": "40"}, {"amount": "60"}]
+    assert J.part_cny(Decimal("-667.51"), Decimal("-100"), parts) == [
+        Decimal("267.00"),
+        Decimal("400.51"),
+    ]
+    assert J.part_cny(None, Decimal("-100"), parts) == [None, None]
+
+
+def test_manual_group_of_three_reports_the_total_gap_on_the_biggest_payment():
+    result = compute(
+        [
+            line("o1", -1000, account="A", desc="看不懂", manual_pair="M2"),
+            line("o2", -500, account="A", desc="看不懂", manual_pair="M2"),
+            line("i", 1400, account="B", desc="看不懂", manual_pair="M2"),
+        ]
+    )
+    items = by_uid(result)
+    assert items["o1"].pair_id == items["o2"].pair_id == items["i"].pair_id
+    gaps = [alert for alert in result.alerts if alert.type == J.ALERT_PAIR_GAP]
+    assert [(alert.line_uid, alert.amount) for alert in gaps] == [("o1", Decimal("100"))]
+
+
+# ---------------------------------------------------------------- 人工改折人民币（Rocky 11-10）
+
+
+def test_set_cny_needs_reason_and_resets_review():
+    state = J.ReviewState(stage=J.STAGE_OK1)
+    with pytest.raises(J.EventRejectedError):
+        apply(state, J.KIND_SET_CNY, {"amount_cny": "667.5"})
+    with pytest.raises(J.EventRejectedError):
+        apply(state, J.KIND_SET_CNY, {"amount_cny": "-1"}, reason="约定汇率")
+    assert apply(state, J.KIND_SET_CNY, {"amount_cny": "667.5"}, reason="约定汇率") is True
+    assert (state.manual_amount_cny, state.manual_cny_reason) == (Decimal("667.5000"), "约定汇率")
+    apply(state, J.KIND_SET_CNY, {"amount_cny": None})
+    assert (state.manual_amount_cny, state.manual_cny_reason) == (None, None)
+    with pytest.raises(J.EventRejectedError):
+        apply(state, J.KIND_SET_CNY, {})
+
+
+def test_manual_cny_wins_over_the_monthly_rate():
+    item = J.compute_journal(
+        [line("u", "-100", cur="USD", manual_amount_cny=Decimal("667.50"))],
+        J.Classifier([]),
+        INTERNAL,
+        lambda _day: Decimal("7"),
+    ).lines[0]
+    assert (item.amount_cny, item.fx_rate, item.fx_source) == (
+        Decimal("-667.50"),
+        Decimal("6.6750"),
+        J.FX_SOURCE_MANUAL,
+    )
+
+
+def test_pingpong_fee_in_memo_asks_to_split_until_confirmed():
+    def pp(**extra):
+        return line("p", "-1010", cur="USD", provider="pingpong", **extra)
+
+    payment = J.LineInput(**{**pp().__dict__, "memo": "PingPong 手续费 10.00"})
+    alerts = [a for a in compute([payment]).alerts if a.type == J.ALERT_PINGPONG_FEE]
+    assert [(a.line_uid, a.amount) for a in alerts] == [("p", Decimal("10.00"))]
+    done = J.LineInput(
+        **{
+            **payment.__dict__,
+            "parts": [
+                {"amount": "1000", "category_code": None},
+                {"amount": "10", "category_code": "F01", "fee_layer": J.FEE_LAYER_PINGPONG},
+            ],
+        }
+    )
+    assert not [a for a in compute([done]).alerts if a.type == J.ALERT_PINGPONG_FEE]
+
+
+def test_split_again_is_refused_and_part_approvals_stay():
+    state = split_state()
+    apply(state, J.KIND_ATTACH_PART_REF, {"index": 0, "ref": "209901010001"})
+    with pytest.raises(J.EventRejectedError) as raised:
+        apply(state, J.KIND_SPLIT, {"amounts": ["5", "5"]})
+    assert raised.value.status_code == 409
+    assert state.parts[0]["refs"] == ["209901010001"]
+
+
+def test_part_cny_rounds_half_up_on_the_absolute_value():
+    # 后端 part_cny 返回绝对值：-1.01 按 1:1 分两行 → 0.51、0.50；
+    # 前端 partCny 用同一算法，显示时还原成 -0.51、-0.50
+    parts = [{"amount": "1"}, {"amount": "1"}]
+    assert J.part_cny(Decimal("-1.01"), Decimal("-2"), parts) == [Decimal("0.51"), Decimal("0.50")]

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import itertools
 import json
 import re
 from collections import defaultdict
@@ -414,6 +415,25 @@ class MatchLine:
     text: str
     refs: tuple[str, ...]
     stage: str
+    # 折人民币；cny_exact = 派安盈月结单上的实际到账人民币（不是月汇率估的），可以按分对单。
+    amount_cny: Decimal | None = None
+    cny_exact: bool = False
+
+
+# Rocky 11-10：PingPong 专用户的离岸人民币（CNH）和人民币一起比；
+# 美元付款只认派安盈实际汇率折出来的人民币。
+RMB_CODES = frozenset({"CNY", "CNH"})
+COMBO_MAX = 4
+COMBO_POOL = 12
+
+
+def line_rmb(line: MatchLine) -> Decimal | None:
+    """这笔付款按人民币算是多少（绝对值）；算不准的返回 None。"""
+    if line.currency_code in RMB_CODES:
+        return abs(line.amount)
+    if line.cny_exact and line.amount_cny is not None:
+        return abs(line.amount_cny)
+    return None
 
 
 def norm_payee(value: str) -> str:
@@ -433,17 +453,57 @@ def _in_window(line: MatchLine, approval: MatchApproval) -> bool:
     return earliest <= line.business_date <= latest
 
 
-def is_candidate(line: MatchLine, approval: MatchApproval) -> bool:
+def _approval_open(line: MatchLine, approval: MatchApproval) -> bool:
     return (
         line.amount < 0
-        and line.currency_code == "CNY"
         and approval.currency_code == "CNY"
         and approval.status not in CANCELLED_STATUSES
         and approval.amount is not None
         and approval.amount != 0
-        and abs(abs(line.amount) - abs(approval.amount)) <= AMOUNT_TOL
         and _in_window(line, approval)
     )
+
+
+def is_candidate(line: MatchLine, approval: MatchApproval) -> bool:
+    rmb = line_rmb(line)
+    return (
+        rmb is not None
+        and _approval_open(line, approval)
+        and approval.amount is not None
+        and abs(rmb - abs(approval.amount)) <= AMOUNT_TOL
+    )
+
+
+def combo_candidates(line: MatchLine, approvals: Sequence[MatchApproval]) -> list[str]:
+    """一笔付款付了几张单（Rocky 11-10，例如同一个人的两张报销一起打）：
+    同一收款人、窗口内的 2–4 张单金额加起来等于这笔（按人民币，差 ≤ 0.01）。
+    派安盈提现的对方是收款银行、不是人名，所以只要求这几张单是同一个收款人。
+    只在恰好一种组合对得上时给出这几张单；对不上或不止一种组合都不给。"""
+    rmb = line_rmb(line)
+    if rmb is None:
+        return []
+    pool = [
+        item
+        for item in approvals
+        if _approval_open(line, item)
+        and item.amount is not None
+        and abs(item.amount) < rmb
+        and norm_payee(item.payee)
+    ]
+    by_payee: dict[str, list[MatchApproval]] = defaultdict(list)
+    for item in pool:
+        by_payee[norm_payee(item.payee)].append(item)
+    found: list[tuple[str, ...]] = []
+    for group in by_payee.values():
+        group = sorted(group, key=lambda item: item.serial)[:COMBO_POOL]
+        for size in range(2, min(COMBO_MAX, len(group)) + 1):
+            for combo in itertools.combinations(group, size):
+                total = sum((abs(item.amount or 0) for item in combo), Decimal("0"))
+                if abs(total - rmb) <= AMOUNT_TOL:
+                    found.append(tuple(item.serial for item in combo))
+                    if len(found) > 1:
+                        return []
+    return list(found[0]) if found else []
 
 
 def _taken(lines: Iterable[MatchLine]) -> set[str]:
@@ -465,6 +525,10 @@ def candidates_by_line(
             hits.sort(key=lambda item: item.serial, reverse=True)
             hits.sort(key=lambda item: not payee_matches(item.payee, line.counterparty_name))
             out[line.line_uid] = [item.serial for item in hits]
+            continue
+        combo = combo_candidates(line, free)
+        if combo:
+            out[line.line_uid] = combo
     return out
 
 

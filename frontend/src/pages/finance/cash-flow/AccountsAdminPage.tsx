@@ -44,7 +44,12 @@ function AccountForm({ editing, onClose }: { editing?: AdminAccount; onClose: ()
   const main = Form.useWatch("main", form);
   const locked = Boolean(editing?.line_count);
   const providerChanged = Boolean(editing && provider !== editing.provider);
-  const identityHint = editing && !providerChanged ? "已填过；不改就留空" : undefined;
+  /* 修改时说清楚现在填的是什么（只给位数和尾号），不改就留空；要改就整串重填。 */
+  const identityHint = (field: string) => {
+    if (!editing || providerChanged) return undefined;
+    const tail = editing.identity_tails?.[field];
+    return tail ? `现在：${tail}；不改就留空，要改就整串重新填` : "已填过；不改就留空";
+  };
 
   const submit = async () => {
     const values = await form.validateFields();
@@ -103,12 +108,12 @@ function AccountForm({ editing, onClose }: { editing?: AdminAccount; onClose: ()
           <Select disabled={locked} onChange={(value: CashProvider) => { if (value === "manual") form.setFieldsValue({ currency_code: "CNY" }); }} options={(Object.keys(PROVIDER_LABEL) as CashProvider[]).map((value) => ({ value, label: PROVIDER_LABEL[value] }))} />
         </Form.Item>
         {provider === "boc" && (
-          <Form.Item name="inquiry_account" label="查询账号" extra={identityHint ?? "中行「交易明细」表头里的查询账号；人民币户和外币户共用一个查询账号时，各建一个账户、币种不同"}>
+          <Form.Item name="inquiry_account" label="查询账号" extra={identityHint("inquiry_account") ?? "中行「交易明细」表头里的查询账号；人民币户和外币户共用一个查询账号时，各建一个账户、币种不同"}>
             <Input autoComplete="off" />
           </Form.Item>
         )}
         {(provider === "cmb" || provider === "shenzhen_rural_bank") && (
-          <Form.Item name="account_no" label="完整银行账号" extra={identityHint ?? (provider === "cmb" ? "招行流水 PDF 里账号只露前 4 后 4 位，系统按这 8 位 + 币种认账户" : "导入时按账号认账户")}>
+          <Form.Item name="account_no" label="完整银行账号" extra={identityHint("account_no") ?? (provider === "cmb" ? "招行流水 PDF 里账号只露前 4 后 4 位，系统按这 8 位 + 币种认账户" : "导入时按账号认账户")}>
             <Input autoComplete="off" />
           </Form.Item>
         )}
@@ -118,14 +123,14 @@ function AccountForm({ editing, onClose }: { editing?: AdminAccount; onClose: ()
           </Form.Item>
         )}
         {provider === "pingpong" && (<>
-          <Form.Item name="user_no" label="PingPong 用户编号" extra={identityHint}>
+          <Form.Item name="user_no" label="PingPong 用户编号" extra={identityHint("user_no")}>
             <Input autoComplete="off" />
           </Form.Item>
           <Form.Item name="main" valuePropName="checked">
             <Checkbox>这是主账户（不勾就是店铺子账户）</Checkbox>
           </Form.Item>
           {!main && (
-            <Form.Item name="account_id" label="店铺子账户 ID" extra={identityHint}>
+            <Form.Item name="account_id" label="店铺子账户 ID" extra={identityHint("account_id")}>
               <Input autoComplete="off" />
             </Form.Item>
           )}

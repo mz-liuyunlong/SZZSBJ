@@ -42,6 +42,7 @@ FINANCE_PAYONEER_REVISION = "20261105_0081_finance_payoneer_statement"
 CLEARANCE_0082_REVISION = "20261108_0082_clearance_center"
 FINANCE_WALMART_BILLS_REVISION = "20261108_0084_finance_walmart_bills"
 FINANCE_PAYOUT_RECON_REVISION = "20261110_0085_finance_payout_recon"
+FINANCE_JOURNAL_0086_REVISION = "20261111_0086_finance_journal_cny_alert_close"
 FINANCE_0083_REVISION = "20261109_0083_finance_sem_unallocated_lines"
 WFS_DETECTION_HEAD_REVISION = "20261026_0061_wfs_fee_detection_evidence"
 SYNC_ANOMALY_HEAD_REVISION = "20261027_0062_sync_anomaly_center"
@@ -89,7 +90,11 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20261026_0055_purchase_board_draft_no",
         LISTING_INTEGRATION_HEAD_REVISION,
     }
-    assert script.get_heads() == [FINANCE_PAYOUT_RECON_REVISION]
+    assert script.get_heads() == [FINANCE_JOURNAL_0086_REVISION]
+    assert (
+        script.get_revision(FINANCE_JOURNAL_0086_REVISION).down_revision
+        == FINANCE_PAYOUT_RECON_REVISION
+    )
     assert (
         script.get_revision(FINANCE_PAYOUT_RECON_REVISION).down_revision
         == FINANCE_WALMART_BILLS_REVISION
@@ -396,6 +401,6 @@ def test_revision_files_have_unique_ids_and_form_one_connected_graph() -> None:
                     revisions.append(ast.literal_eval(node.value))
     assert len(revisions) == len(set(revisions)), "duplicate full Alembic revision ID"
     script = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
-    assert script.get_heads() == [FINANCE_PAYOUT_RECON_REVISION]
+    assert script.get_heads() == [FINANCE_JOURNAL_0086_REVISION]
     assert len(script.get_bases()) == 1
     assert {item.revision for item in script.walk_revisions()} == set(revisions)

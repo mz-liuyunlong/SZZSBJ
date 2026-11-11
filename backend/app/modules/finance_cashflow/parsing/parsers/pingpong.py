@@ -29,7 +29,11 @@ def _local(raw: str):
 def parse(det, seed):
     _name, rows = det.sheets[0]
     hi = next(i for i, r in enumerate(rows) if any((x or "") == "出账/入账" for x in r))
-    g = getter(header_index(rows[hi]))
+    ix = header_index(rows[hi])
+    g = getter(ix)
+    # 付款带「费用」（Rocky 11-10：出账金额里含 PingPong 手续费）：
+    # 写进备注，日记账提示一键拆出手续费。
+    fee_key = next((key for key in ix if key.startswith("费用")), None)
     users = seed.pp_user_nos()
     gross = {}
     for r in rows[hi + 1 :]:
@@ -106,6 +110,10 @@ def parse(det, seed):
                 )
             )
             continue
+        memo = g(r, "附言")
+        fee_paid = to_decimal(g(r, fee_key)) if fee_key and amt < 0 else None
+        if fee_paid is not None and fee_paid > 0:
+            memo = ("%s；" % memo if memo else "") + "PingPong 手续费 %.2f" % fee_paid
         out.append(
             ParsedRow(
                 acct.account_key,
@@ -118,7 +126,7 @@ def parse(det, seed):
                 party,
                 g(r, "交易对手方账号"),
                 desc,
-                g(r, "附言"),
+                memo,
                 ref,
                 ri,
                 local_dt=local,
