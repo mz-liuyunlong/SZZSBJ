@@ -1,0 +1,23 @@
+/* 财务 · 回款对账 专属样式。只写以 .fin-payout-recon 开头的类名，避免影响其他页面；不写颜色 / 字体 / 字号。 */
+.fin-payout-recon__gap { margin-top: 10px; }
+/* 抽屉里的表格按内容高度显示（公共表格外框默认撑满剩余高度，放在抽屉里会被压成 0 高）。 */
+.fin-payout-recon__drawer .report-table-shell { flex: 0 0 auto; }
+.fin-payout-recon__drawer .report-table-shell :is(.ant-pro-table, .ant-table-wrapper, .ant-spin-nested-loading, .ant-spin-container, .ant-table, .ant-table-container) { flex: 0 0 auto; height: auto; }
+.fin-payout-recon__unclaimed { flex: 0 0 auto; margin-bottom: 12px; }
+/* 口径与设置 → 回款识别特征：说明 + 表格撑满剩余高度。 */
+.fin-payout-recon__idents { display: flex; min-height: 0; flex: 1 1 0; flex-direction: column; }
+/* 2026-11-09 回款对账新方案 */
+.fin-payout-recon__full { width: 100%; }
+.fin-payout-recon__hint { margin-top: 8px; }
+.fin-payout-recon__drawer .fin-payout-recon__footer { display: flex; justify-content: flex-end; gap: 8px; }
+.fin-payout-recon__follow-cell { display: flex; min-width: 0; align-items: center; gap: 4px; }
+.fin-payout-recon__follow-text { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
+.fin-payout-recon__follow-tip { max-height: 280px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fin-payout-recon__follow-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.fin-payout-recon__follow-summary > div { display: flex; flex-direction: column; gap: 4px; }
+.fin-payout-recon__follow-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.fin-payout-recon__follow-footer { display: flex; justify-content: flex-end; }
+
+.fin-payout-recon__range { width: 250px; }
+.fin-payout-recon__bill-day { font-weight: 600; color: var(--ant-color-primary, #1677ff); }
+.fin-payout-recon__total-row > td { background: var(--ant-color-fill-quaternary, #fafafa); font-weight: 600; }

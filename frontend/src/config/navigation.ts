@@ -239,7 +239,10 @@ export const navigation: NavigationGroup[] = [
       page('finance', 'profit_center', '经营总览', '/finance/profit-center'),
       page('finance', 'sku_cash_profit', '现金利润', '/finance/sku-cash-profit'),
       page('finance', 'settlement_profit', '结算利润', '/finance/settlement-profit'),
-      page('finance', 'settlement_reconciliation', '回款对账', '/finance/settlement-reconciliation'),
+      // 2026-11-10 Rocky：回款对账上线（沃尔玛账单同步 + 到账配对 + 初审 / 终审），读写 /api/finance/payout-recon。
+      page('finance', 'settlement_reconciliation', '回款对账', '/finance/settlement-reconciliation', {
+        status: 'building', readOnly: false, viewPermissionKey: 'page:finance:settlement-reconciliation:view',
+      }),
       page('finance', 'performance_report', '财务报表', '/finance/performance-report'),
       page('finance', 'balance_sheet', '资产负债表', '/finance/balance-sheet'),
       page('finance', 'cash_accounts', '账户总览（按月）', '/finance/cash/accounts', {

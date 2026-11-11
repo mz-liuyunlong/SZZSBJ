@@ -99,7 +99,7 @@ jobs:
           uv run alembic upgrade head
           uv run pytest -q -rs tests/modules/ai_runtime/test_postgresql_acceptance.py
           finance_before="$(uv run python -c "$read_head")"
-          test "$finance_before" = "20261109_0083_finance_sem_unallocated_lines"
+          test "$finance_before" = "20261111_0086_finance_journal_cny_alert_close"
           if uv run alembic downgrade 20261108_0082_clearance_center > /tmp/finance-rollback-check.log 2>&1; then
             echo "ERROR: finance audit downgrade was allowed"
             exit 1
@@ -386,7 +386,7 @@ jobs:
 
           engine = create_engine(get_test_database_url(Settings()))
           with engine.connect() as connection:
-              assert connection.scalar(text("select version_num from alembic_version")) == "20261109_0083_finance_sem_unallocated_lines"
+              assert connection.scalar(text("select version_num from alembic_version")) == "20261111_0086_finance_journal_cny_alert_close"
               assert connection.scalar(text("select to_regclass('public.audit_walmart_order_item_conflicts')")) is not None
               assert connection.scalar(text("select to_regclass('public.biz_finance_sample_disputes')")) is not None
               assert connection.scalar(text("select to_regclass('public.biz_finance_unallocated_sem_lines')")) is not None
@@ -721,4 +721,4 @@ jobs:
         run: |
           uv sync --frozen
           uv run alembic upgrade head
-          uv run pytest -v -rs tests/modules/finance_cashflow tests/db/test_alembic_scaffold.py
+          uv run pytest -v -rs tests/modules/finance_cashflow tests/modules/walmart_bills tests/db/test_alembic_scaffold.py

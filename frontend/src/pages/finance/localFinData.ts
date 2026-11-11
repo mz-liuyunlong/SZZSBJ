@@ -32,6 +32,8 @@ export interface CashPart {
   amt: number;
   cat: string;
   ref?: string;
+  /** 接口版：这一行挂的审批单（Rocky 11-10：拆分后各行可以挂自己的审批单） */
+  refs?: string[];
   note?: string;
   /** 手续费行（「确认记为手续费」切出来的）：手续费层，如 fee / payoneer */
   fee?: string;

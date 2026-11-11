@@ -38,6 +38,7 @@ RECOVERABLE_INTERFACE_KEYS: tuple[str, ...] = (
     "walmartAdItemSpList",
     "wfsProfitOrder",
     "lingxingFxRate",
+    "walmartBillStatementList",
 )
 
 

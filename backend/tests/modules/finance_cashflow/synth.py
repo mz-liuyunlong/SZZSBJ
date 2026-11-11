@@ -196,6 +196,18 @@ BOC_HEAD = [
 
 
 def boc(inquiry, data, range_=("20261001", "20261028")):
+    return xlsx(boc_section(inquiry, data, range_))
+
+
+def boc_multi(*sections, range_=("20261101", "20261108")):
+    """一个中行导出里有几段（每段一个查询账号）：sections = [(查询账号, 明细), ...]。"""
+    rows = []
+    for inquiry, data in sections:
+        rows.extend(boc_section(inquiry, data, range_))
+    return xlsx(rows)
+
+
+def boc_section(inquiry, data, range_=("20261001", "20261028")):
     rows = [[], ["查询账号[ Inquirer account]", inquiry], ["总笔数[ Total number]", str(len(data))]]
     if range_:
         rows.append(["查询时间范围[ Time Range]", "%s-%s" % range_])
@@ -225,7 +237,7 @@ def boc(inquiry, data, range_=("20261001", "20261028")):
                 "",
             ]
         )
-    return xlsx(rows)
+    return rows
 
 
 def yz(account_no, data, range_=("2026-10-01", "2026-10-31")):
@@ -315,7 +327,8 @@ def pingpong(data):
     for (
         d
     ) in data:  # (时间, 流水号, 订单号, 方向, 业务类型, 币种, 金额, 账号Id, 对手方, 余额, 用户编号)
-        t, ref, order, direction, typ, cur, amt, acc, party, bal, user = d
+        t, ref, order, direction, typ, cur, amt, acc, party, bal, user, *rest = d
+        fee = rest[0] if rest else ""  # 「费用」列（付款带的 PingPong 手续费）
         rows.append(
             [
                 t,
@@ -334,7 +347,7 @@ def pingpong(data):
                 "",
                 "",
                 "",
-                "",
+                fee,
                 "",
                 bal,
                 "",

@@ -123,6 +123,11 @@ class AccountAdminService:
             is_active=row.is_active,
             sort_order=row.sort_order,
             identity_fields=sorted(key for key, value in identity.items() if value),
+            identity_tails={
+                key: f"{len(value)} 位 · 尾号 {value[-4:]}"
+                for key, value in identity.items()
+                if key in DIGIT_FIELDS and isinstance(value, str) and value
+            },
             pingpong_main=bool(identity.get("main")) if row.provider == "pingpong" else None,
             payoneer_feature=identity.get("feature") if row.provider == "payoneer" else None,
             line_count=line_count,

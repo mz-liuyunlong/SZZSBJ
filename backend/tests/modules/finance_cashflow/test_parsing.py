@@ -322,3 +322,76 @@ def test_payoneer_business_date_is_shanghai():
     assert line.business_date.isoformat() == "2026-11-01"
     assert line.source_timezone == "UTC"
     assert line.source_time_utc.isoformat().startswith("2026-10-31T20:00:00")
+
+
+# ---------------------------------------------------------------- 中行一个文件多段（Rocky 11-10）
+
+
+def test_boc_file_with_two_registered_sections_routes_each_to_its_account():
+    usd = ("来账", "20261103", "11:00:00", "USD", "5", "105", "某客户", "", "U000001", "")
+    parsed = parse_file(S.boc_multi((S.BOC_A, boc_rows("A", n=1)), (S.BOC_B, [usd])), S.seed())
+    keys = sorted((line.account_key, line.source_ref) for line in parsed.lines)
+    assert keys == [("BOC_CNY", "A000000"), ("ZSBJ_BOC_USD", "U000001")]
+
+
+def test_boc_empty_section_of_unregistered_inquiry_is_skipped():
+    parsed = parse_file(S.boc_multi((S.BOC_A, boc_rows("A", n=2)), ("769000000001", [])), S.seed())
+    assert [line.account_key for line in parsed.lines] == ["BOC_CNY", "BOC_CNY"]
+
+
+def test_boc_unregistered_section_with_rows_rejects_the_file():
+    with pytest.raises(RejectFile, match="尾号 0001"):
+        parse_file(
+            S.boc_multi((S.BOC_A, boc_rows("A", n=1)), ("769000000001", boc_rows("X", n=1))),
+            S.seed(),
+        )
+
+
+def test_boc_only_unregistered_empty_sections_still_rejects():
+    with pytest.raises(RejectFile, match="没登记"):
+        parse_file(S.boc_multi(("769000000001", [])), S.seed())
+
+
+def test_pingpong_payment_fee_is_written_into_the_memo_without_changing_the_line():
+    row = (
+        "2026-10-08 09:00:00", "PF1", "OF1", "出账", "供应商付款", "USD", "1010.00",
+        S.PP_USER + "01", "合成供应商", "500.00", S.PP_USER,
+    )  # fmt: skip
+    plain = parse_file(S.pingpong([row]), S.seed()).lines
+    with_fee = parse_file(S.pingpong([(*row, "10.00")]), S.seed()).lines
+    assert [line.memo for line in with_fee] == ["PingPong 手续费 10.00"]
+    # 手续费只写进备注：金额、流水号不变，重复导入照样去重
+    assert [(line.amount, line.line_uid) for line in with_fee] == [
+        (line.amount, line.line_uid) for line in plain
+    ]
+
+
+def test_boc_unregistered_section_without_header_but_with_rows_rejects_the_file():
+    rows = [
+        *S.boc_section(S.BOC_A, boc_rows("A", n=1), ("20261101", "20261108")),
+        [],
+        ["查询账号[ Inquirer account]", "769000000001"],
+        ["总笔数[ Total number]", "1"],
+        ["往账", "转账", "x", "本公司", "y", "某人", "20261103", "10:00:00", "CNY", "5"],
+    ]
+    with pytest.raises(RejectFile, match="尾号 0001"):
+        parse_file(S.xlsx(rows), S.seed())
+
+
+def test_boc_headerless_unregistered_section_info_rows_vs_data_rows():
+    head = S.boc_section(S.BOC_A, boc_rows("A", n=1), ("20261101", "20261108"))
+    info = [
+        [],
+        ["查询账号[ Inquirer account]", "769000000001"],
+        ["总笔数[ Total number]", "0"],
+        ["借方发生额[ Debit]", "0.00"],
+        ["贷方发生额[ Credit]", "0.00"],
+        ["查询时间范围[ Time Range]", "20261101-20261108"],
+    ]
+    # 只有表头信息行：当空段跳过
+    parsed = parse_file(S.xlsx([*head, *info]), S.seed())
+    assert [line.account_key for line in parsed.lines] == ["BOC_CNY"]
+    # 信息行之外还有一行普通数据：拒收整个文件
+    data = ["往账", "转账", "x", "本公司", "y", "某人", "20261103", "10:00:00", "CNY", "5"]
+    with pytest.raises(RejectFile, match="尾号 0001"):
+        parse_file(S.xlsx([*head, *info, data]), S.seed())

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import tempfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
@@ -20,6 +22,7 @@ from app.modules.finance_cashflow import approvals as approval_rules
 from app.modules.finance_cashflow import journal
 from app.modules.finance_cashflow.models import (
     FinanceCashAccount,
+    FinanceCashAlertClosure,
     FinanceCashApproval,
     FinanceCashCategory,
     FinanceCashClassifyRule,
@@ -39,6 +42,9 @@ from app.modules.finance_cashflow.parsing.pipeline import ParsedFile, parse_file
 from app.modules.finance_cashflow.parsing.seed import Seed, SeedAccount
 from app.modules.finance_cashflow.schemas import (
     CashflowAccountRead,
+    CashflowAlertCloseRequest,
+    CashflowAlertClosureRead,
+    CashflowAlertReopenRequest,
     CashflowAnomalyRead,
     CashflowCategoryRead,
     CashflowFileResult,
@@ -80,6 +86,39 @@ class ImportVoidedError(Exception):
 
 class LineNotFoundError(Exception):
     pass
+
+
+# 能关闭的异常类型（刘云龙 #339 终审）：后端算的 + 页面算的，和前端 data.ts 的 ALERT_GUIDE 一致。
+KNOWN_ALERT_TYPES = frozenset(
+    {
+        journal.ALERT_UNPAIRED,  # 内部转账未配对
+        journal.ALERT_PAIR_GAP,  # 转账到账差额
+        "明细合计≠流水",
+        journal.ALERT_BALANCE,  # 余额不连续
+        journal.ALERT_EXCLUSION,  # 剔除未命中
+        "审批单未付",
+        "审批单部分已付",
+        "审批单无付款流水",
+        "审批单金额不符",
+        journal.ALERT_PINGPONG_FEE,  # PingPong 付款手续费
+        journal.ALERT_PAYONEER_FEE,  # 派安盈提现到账差额
+        journal.ALERT_PAYONEER_MISSING,  # 缺派安盈实际汇率
+        journal.ALERT_STATEMENT_UNMATCHED,  # 月结单有、流水没有
+        journal.ALERT_STATEMENT_AMBIGUOUS,  # 月结单匹配到多笔
+        journal.ALERT_STATEMENT_CONFLICT,  # 月结单前后不一致
+    }
+)
+APPROVAL_SERIAL = re.compile(r"\d{12}")
+LINE_TAIL = re.compile(r"[0-9a-f]{6}")
+
+
+class AlertClosureError(Exception):
+    """关闭 / 重新打开异常被拒：重复关闭、没有关闭记录、原因为空。"""
+
+    def __init__(self, status_code: int, message: str) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.message = message
 
 
 class ImportHasReviewedLinesError(Exception):
@@ -716,11 +755,14 @@ class CashflowService:
                     exclude_amount=state.exclude_amount if state else None,
                     approval_category=approval_rules.single_value(c[0] for c in from_refs),
                     approval_rule_category=approval_rules.single_value(c[1] for c in from_refs),
-                    parts=list(state.parts) if state and state.parts else None,
+                    parts=_parts_with_approval(state.parts, approval_cats)
+                    if state and state.parts
+                    else None,
                     manual_pair=state.manual_pair if state else None,
                     counterparty_last4=line.counterparty_account_last4 or "",
                     account_last4=account_last4 or "",
                     source_time=line.source_time,
+                    manual_amount_cny=state.manual_amount_cny if state else None,
                 )
             )
         internal = frozenset(
@@ -853,8 +895,10 @@ class CashflowService:
                 currency_code=item.source.currency_code,
                 counterparty_name=item.source.counterparty_name,
                 text="",
-                refs=tuple(item.source.refs),
+                refs=(*item.source.refs, *journal.part_refs(item.source.parts)),
                 stage="",
+                amount_cny=item.amount_cny,
+                cny_exact=item.fx_source in journal.FX_EXACT_SOURCES,
             )
             for item in result.lines
         ]
@@ -942,14 +986,126 @@ class CashflowService:
             review_note=state.review_note if state else None,
             manual_description=state.manual_description if state else None,
             manual_memo=state.manual_memo if state else None,
-            parts=[CashflowLinePartRead(**part) for part in state.parts]
-            if state and state.parts
+            parts=[CashflowLinePartRead(**part) for part in item.source.parts]
+            if item.source.parts
             else None,
             manual_pair=state.manual_pair if state else None,
+            manual_cny_reason=state.manual_cny_reason if state else None,
             auto_exclude_reason=item.auto_exclude_reason,
             version=state.version if state else 0,
             approval_candidates=candidates or [],
         )
+
+    # ------------------------------------------------------------ 关闭异常（Rocky 11-10）
+
+    def list_alert_closures(self) -> list[CashflowAlertClosureRead]:
+        rows = self.session.scalars(
+            select(FinanceCashAlertClosure)
+            .where(FinanceCashAlertClosure.reopened_at.is_(None))
+            .order_by(FinanceCashAlertClosure.closed_at.desc())
+        )
+        return [
+            CashflowAlertClosureRead(
+                alert_key=row.alert_key,
+                alert_type=row.alert_type,
+                reason=row.reason,
+                closed_by=row.closed_by,
+                closed_at=row.closed_at,
+            )
+            for row in rows
+        ]
+
+    def _open_closure(self, key: str) -> FinanceCashAlertClosure | None:
+        return self.session.scalars(
+            select(FinanceCashAlertClosure)
+            .where(
+                FinanceCashAlertClosure.alert_key == key,
+                FinanceCashAlertClosure.reopened_at.is_(None),
+            )
+            .with_for_update()
+        ).first()
+
+    def close_alert(self, request: CashflowAlertCloseRequest, *, actor: str) -> None:
+        reason = request.reason.strip()
+        if not reason:
+            raise AlertClosureError(422, "关闭异常要写原因")
+        self._check_alert_target(request.alert_type, request.alert_key)
+        if self._open_closure(request.alert_key) is not None:
+            raise AlertClosureError(409, "这条异常已经关闭了")
+        self.session.add(
+            FinanceCashAlertClosure(
+                alert_key=request.alert_key,
+                alert_type=request.alert_type,
+                reason=reason,
+                closed_by=actor,
+            )
+        )
+        try:
+            self.session.commit()
+        except IntegrityError as exc:
+            self.session.rollback()
+            raise AlertClosureError(409, "这条异常已经关闭了") from exc
+
+    def _check_alert_target(self, alert_type: str, alert_key: str) -> None:
+        """关闭前确认这条异常指向的东西存在（刘云龙 #339 终审，轻量版）。
+
+        编号就是页面上异常的编号「类型|编号」：编号是流水（账户:日期:流水号后 6 位）、
+        审批单号（12 位）、剔除清单（剔除:日期:第几条），或者「账户:日期:金额」。
+        只查对象存不存在，不在后端重算页面算出来的异常此刻是否成立。"""
+        if alert_type not in KNOWN_ALERT_TYPES:
+            raise AlertClosureError(422, "不认识的异常类型")
+        prefix = f"{alert_type}|"
+        if not alert_key.startswith(prefix) or len(alert_key) == len(prefix):
+            raise AlertClosureError(422, "异常编号和异常类型对不上")
+        ref = alert_key[len(prefix) :]
+        if APPROVAL_SERIAL.fullmatch(ref):
+            found = self.session.scalar(
+                select(func.count())
+                .select_from(FinanceCashApproval)
+                .where(FinanceCashApproval.serial_number == ref)
+            )
+            if not found:
+                raise AlertClosureError(404, "找不到这条异常对应的审批单")
+            return
+        if ref.startswith("剔除:"):
+            number = ref.rsplit(":", 1)[-1]
+            total = self.session.scalar(select(func.count()).select_from(FinanceCashExclusion))
+            if not number.isdigit() or not 1 <= int(number) <= (total or 0):
+                raise AlertClosureError(404, "找不到这条异常对应的剔除清单")
+            return
+        account, _sep, rest = ref.partition(":")
+        day, _sep, tail = rest.partition(":")
+        try:
+            business_date: date | None = date.fromisoformat(day)
+        except ValueError:
+            business_date = None
+        if business_date is not None and LINE_TAIL.fullmatch(tail):
+            line = self.session.scalars(
+                select(FinanceCashLine).where(
+                    FinanceCashLine.account_key == account,
+                    FinanceCashLine.business_date == business_date,
+                    FinanceCashLine.line_uid.endswith(tail),
+                )
+            ).first()
+            if line is not None:
+                if line.voided_at is not None:
+                    raise AlertClosureError(404, "找不到这条异常对应的流水（已作废）")
+                return
+            if not tail.isdigit():
+                # 带字母的 6 位只能是流水号后 6 位（金额不会有字母）：找不到就是流水不存在。
+                raise AlertClosureError(404, "找不到这条异常对应的流水")
+        if self.session.get(FinanceCashAccount, account) is None:
+            raise AlertClosureError(404, "找不到这条异常对应的流水 / 审批单 / 账户")
+
+    def reopen_alert(self, request: CashflowAlertReopenRequest, *, actor: str) -> None:
+        reason = request.reason.strip()
+        if not reason:
+            raise AlertClosureError(422, "重新打开要写原因")
+        row = self._open_closure(request.alert_key)
+        if row is None:
+            raise AlertClosureError(404, "这条异常没有关闭记录")
+        row.reopened_at, row.reopened_by, row.reopen_reason = datetime.now(UTC), actor, reason
+        self.session.commit()
 
     def list_anomalies(self) -> list[CashflowAnomalyRead]:
         result, _, _ = self._compute()
@@ -1091,7 +1247,11 @@ class CashflowService:
             manual_memo=state.manual_memo,
             parts=[dict(part) for part in state.parts] if state.parts else None,
             manual_pair=state.manual_pair,
+            manual_amount_cny=state.manual_amount_cny,
+            manual_cny_reason=state.manual_cny_reason,
         )
+        if request.kind == journal.KIND_SET_CNY and line.currency_code in {"CNY", "CNH"}:
+            raise journal.EventRejectedError(422, "人民币流水不用改折人民币")
         auto_reset = journal.apply_event(
             draft,
             kind=request.kind,
@@ -1111,6 +1271,8 @@ class CashflowService:
         state.manual_memo = draft.manual_memo
         state.parts = draft.parts
         state.manual_pair = draft.manual_pair
+        state.manual_amount_cny = draft.manual_amount_cny
+        state.manual_cny_reason = draft.manual_cny_reason
         state.version += 1
         state.updated_at = datetime.now(UTC)
         self._add_events(line_uid, request, auto_reset, actor, request_id)
@@ -1365,3 +1527,26 @@ class CashflowService:
             version=state.version,
             replayed=replayed,
         )
+
+
+def _parts_with_approval(
+    parts: list[dict[str, Any]], approval_cats: dict[str, tuple[str | None, str | None]]
+) -> list[dict[str, Any]]:
+    """拆分行挂了审批单、自己没选类别的：类别跟着审批单走（表单写明的优先，其次按事由跑规则）。"""
+    out = []
+    for raw in parts:
+        part = dict(raw)
+        refs = part.get("refs") or []
+        if refs and not part.get("category_code"):
+            cats = [approval_cats[ref] for ref in refs if ref in approval_cats]
+            form = approval_rules.single_value(c[0] for c in cats)
+            ruled = approval_rules.single_value(c[1] for c in cats)
+            if form:
+                part["category_code"], part["category_source"] = form, journal.SOURCE_APPROVAL
+            elif ruled:
+                part["category_code"], part["category_source"] = (
+                    ruled,
+                    journal.SOURCE_APPROVAL_RULE,
+                )
+        out.append(part)
+    return out

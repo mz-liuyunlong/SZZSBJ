@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 from . import readers
 from .model import RejectFile
+from .parsers._common import blank, getter, header_index
 from .readers import cell, norm_head
 
 PAYONEER_HEADER = "Currency,Payout method,Transaction date"
@@ -30,6 +31,67 @@ class Detection:
     pdf_pages: list = field(default_factory=list)  # PDF：每页的文本行
     declared_range: tuple | None = None
     skipped_rows: int = 0
+    # 中行一个文件里可能有几段（每段一个查询账号、一张表）：[(查询账号, 表头行, 段结束行)]
+    boc_sections: list = field(default_factory=list)
+
+
+BOC_INFO_HEADS = ("总笔数", "借方发生", "贷方发生", "查询时间范围", "查询账号")
+BOC_DATA_DATE = re.compile(r"^\s*(\d{4}[-/.年]?\d{1,2}[-/.月]?\d{1,2}|\d{5}(\.0+)?)")
+
+
+def _boc_sections(rows, seed) -> list:
+    """中行导出按「查询账号」分段（Rocky 11-10：一个文件里有人民币户和外汇户两段）。
+
+    每段：查询账号 → 「交易类型」表头 → 明细，到下一个「查询账号」为止。
+    没登记的查询账号：这段没有明细就跳过；有明细就拒收整个文件（不能把钱记到别的账户）。
+    返回登记过、可以解析的段；一段都没有就拒收。"""
+    starts = [
+        (i, _digits(r[1]))
+        for i, r in enumerate(rows)
+        if r and len(r) > 1 and norm_head(r[0]).startswith("查询账号")
+    ]
+    if not starts:
+        raise RejectFile("中行交易明细，但没找到查询账号")
+    out = []
+    unknown_empty = []
+    for n, (start, acc) in enumerate(starts):
+        end = starts[n + 1][0] if n + 1 < len(starts) else len(rows)
+        hi = next(
+            (i for i in range(start + 1, end) if rows[i] and norm_head(rows[i][0]) == "交易类型"),
+            -1,
+        )
+        data = 0
+        if hi >= 0:
+            get = getter(header_index(rows[hi]))
+            for r in rows[hi + 1 : end]:
+                if (
+                    not blank(r)
+                    and get(r, "交易金额") != ""
+                    and BOC_DATA_DATE.match(get(r, "交易日期"))
+                ):
+                    data += 1
+        else:
+            # 没有「交易类型」表头：除了表头信息行（总笔数、借贷合计、查询时间范围），
+            # 还有别的内容就当有数据，不能当空段跳过。
+            data = sum(
+                1
+                for r in rows[start + 1 : end]
+                if not blank(r) and not norm_head(r[0]).startswith(BOC_INFO_HEADS)
+            )
+        if not seed.boc_known_inquiry(acc):
+            if data:
+                raise RejectFile("中行交易明细，但查询账号没登记（尾号 %s）" % acc[-4:])
+            unknown_empty.append(acc)
+            continue
+        if hi < 0:
+            if data == 0 and len(starts) > 1:
+                continue
+            raise RejectFile("中行交易明细缺「交易类型[Transaction Type]」表头")
+        out.append((acc, hi, end))
+    if not out:
+        tail = unknown_empty[0][-4:] if unknown_empty else ""
+        raise RejectFile("中行交易明细，但查询账号没登记（尾号 %s）" % tail)
+    return out
 
 
 def _digits(s: str) -> str:
@@ -159,15 +221,8 @@ def detect(
         if "查询账号[Inquireraccount]" in flat_raw or (
             "查询账号" in flat and "TransactionType" in flat_raw
         ):
-            acc = ""
-            for r in rows[:12]:
-                if r and norm_head(r[0]).startswith("查询账号") and len(r) > 1:
-                    acc = _digits(r[1])
-            if not seed.boc_known_inquiry(acc):
-                raise RejectFile("中行交易明细，但查询账号没登记（尾号 %s）" % acc[-4:])
-            hi = next((i for i, r in enumerate(rows) if r and norm_head(r[0]) == "交易类型"), -1)
-            if hi < 0:
-                raise RejectFile("中行交易明细缺「交易类型[Transaction Type]」表头")
+            sections = _boc_sections(rows, seed)
+            acc, hi, _end = sections[0]
             return Detection(
                 "boc",
                 "中行交易明细",
@@ -175,6 +230,7 @@ def detect(
                 inquiry_account=acc,
                 header_row=hi,
                 declared_range=_range_in(rows[:hi], ("查询时间范围", "TimeRange", "Time Range")),
+                boc_sections=sections,
             )
     raise RejectFile(
         "表头不认识（支持：万里汇 / PingPong / 中行交易明细 / 银座交易明细 / Payoneer CSV / 招商银行流水 PDF）"
