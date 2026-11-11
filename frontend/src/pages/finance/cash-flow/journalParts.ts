@@ -8,7 +8,8 @@ export type JournalRow = CashLine & { children?: PartRow[] };
 export const isPartRow = (row: CashLine): row is PartRow => "partOf" in row;
 
 /** 拆分行的折人民币（Rocky 11-10：拆分后要看到每行折多少人民币）：和后端 journal.part_cny 同一算法——
- * 先按绝对值、以分为单位按金额比例四舍五入（.5 进位），尾差落在最后一行，最后按原行符号还原；合计等于原行。 */
+ * 先按绝对值、以分为单位按金额比例四舍五入（.5 进位），尾差落在最后一行，最后按原行符号还原；合计等于原行。
+ * 后端 journal.part_cny 返回绝对值（approval_service._line_shares 按绝对值分摊），前端最后还原符号只用于显示。 */
 export function partCny(line: CashLine): (number | null)[] {
   const parts = line.parts ?? [];
   if (line.cny == null || !line.amt || !parts.length) return parts.map(() => null);

@@ -376,3 +376,22 @@ def test_boc_unregistered_section_without_header_but_with_rows_rejects_the_file(
     ]
     with pytest.raises(RejectFile, match="尾号 0001"):
         parse_file(S.xlsx(rows), S.seed())
+
+
+def test_boc_headerless_unregistered_section_info_rows_vs_data_rows():
+    head = S.boc_section(S.BOC_A, boc_rows("A", n=1), ("20261101", "20261108"))
+    info = [
+        [],
+        ["查询账号[ Inquirer account]", "769000000001"],
+        ["总笔数[ Total number]", "0"],
+        ["借方发生额[ Debit]", "0.00"],
+        ["贷方发生额[ Credit]", "0.00"],
+        ["查询时间范围[ Time Range]", "20261101-20261108"],
+    ]
+    # 只有表头信息行：当空段跳过
+    parsed = parse_file(S.xlsx([*head, *info]), S.seed())
+    assert [line.account_key for line in parsed.lines] == ["BOC_CNY"]
+    # 信息行之外还有一行普通数据：拒收整个文件
+    data = ["往账", "转账", "x", "本公司", "y", "某人", "20261103", "10:00:00", "CNY", "5"]
+    with pytest.raises(RejectFile, match="尾号 0001"):
+        parse_file(S.xlsx([*head, *info, data]), S.seed())

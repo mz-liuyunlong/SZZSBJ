@@ -789,6 +789,7 @@ def test_split_again_is_refused_and_part_approvals_stay():
 
 
 def test_part_cny_rounds_half_up_on_the_absolute_value():
-    # 和前端 partCny 同一个用例：-1.01 按 1:1 分两行 → -0.51、-0.50
+    # 后端 part_cny 返回绝对值：-1.01 按 1:1 分两行 → 0.51、0.50；
+    # 前端 partCny 用同一算法，显示时还原成 -0.51、-0.50
     parts = [{"amount": "1"}, {"amount": "1"}]
     assert J.part_cny(Decimal("-1.01"), Decimal("-2"), parts) == [Decimal("0.51"), Decimal("0.50")]
