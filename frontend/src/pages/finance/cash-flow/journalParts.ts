@@ -54,3 +54,30 @@ export function cnyToOriginal(cnyRows: number[], total: number, totalCny: number
   const head = cnyRows.slice(0, -1).map((value) => round2(value / rate));
   return [...head, round2(total - head.reduce((sum, value) => sum + value, 0))];
 }
+
+/** 拆分行挂的审批单（刘云龙 #339 终审：整笔详情要看得到）。整笔已经挂了的不再列（不重复算）；
+ * cny = 这一行折人民币（人民币流水就是这一行金额），用来和审批单比对。 */
+export interface PartApprovalRef { ref: string; index: number; amt: number; cny: number | null }
+export function partApprovalRefs(line: CashLine): PartApprovalRef[] {
+  const parts = line.parts ?? [];
+  const cnys = line.cur === "CNY" ? parts.map((part) => part.amt) : partCny(line);
+  const seen = new Set(line.refs);
+  const out: PartApprovalRef[] = [];
+  parts.forEach((part, index) => {
+    for (const ref of part.refs ?? []) {
+      if (seen.has(ref)) continue;
+      seen.add(ref);
+      out.push({ ref, index, amt: part.amt, cny: cnys[index] });
+    }
+  });
+  return out;
+}
+
+/** 详情「关联审批单（N）」的 N：整笔挂的 + 各拆分行挂的，去重。 */
+export const approvalRefCount = (line: CashLine) => new Set([...line.refs, ...partApprovalRefs(line).map((item) => item.ref)]).size;
+
+/** 拆分行那张单比对用的「流水」：外币按这一行折人民币比，人民币按这一行金额比。 */
+export function partCompareLine(line: CashLine, item: PartApprovalRef): CashLine {
+  if (line.cur !== "CNY" && item.cny != null) return { ...line, amt: item.cny, cur: "CNY", refs: [item.ref] };
+  return { ...line, amt: item.amt, refs: [item.ref] };
+}

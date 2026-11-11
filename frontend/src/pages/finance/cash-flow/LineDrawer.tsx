@@ -9,6 +9,7 @@ import { EMPTY, type ReviewMark, REVIEW_TAG, baseReview, PREVIEW_ACTION_TIP, typ
 import { CompareTable, ApprovalPanel } from "@/pages/finance/cash-flow/ApprovalDrawer";
 import { EditableText, FeeConfirm, PairButton, ReviewUndo, SplitButton, SplitParts } from "@/pages/finance/cash-flow/LineActions";
 import { AlertCloseButton, CnyEditButton } from "@/pages/finance/cash-flow/LineExtraActions";
+import { approvalRefCount, partApprovalRefs, partCompareLine } from "@/pages/finance/cash-flow/journalParts";
 import type { ReviewStage } from "@/pages/finance/cash-flow/journalShared";
 
 /* ======================================================= 异常（并入日记账；不分等级，所有异常都要处理） */
@@ -53,6 +54,8 @@ export function LineDrawer({ line, review, data, details, approvalsOf, alerts, l
   const approvals = new Map(data.feishu.map((item) => [item.serial, item]));
   const mark = review ?? baseReview(line);
   const views = approvalsOf(line);
+  /* 拆分行挂的审批单（刘云龙 #339 终审）：按各行折人民币比对；差额说明只看整笔挂的单 */
+  const partRefs = partApprovalRefs(line);
   const finalTurn = mark.stage === "ok1";
   const turnTip = finalTurn ? "" : mark.stage === "ok2" ? "已终审" : "还没初审通过，轮不到终审";
   const liveLine = live ? asLive(line) : undefined;
@@ -81,18 +84,32 @@ export function LineDrawer({ line, review, data, details, approvalsOf, alerts, l
         <Descriptions.Item label="审核"><Tag bordered={false} color={REVIEW_TAG[mark.stage].color}>{REVIEW_TAG[mark.stage].text}</Tag>{mark.reason && <Typography.Text type="danger">原因：{mark.reason}</Typography.Text>}</Descriptions.Item>
       </Descriptions>
       <AlertSection alerts={alerts} line={liveLine} closedKeys={closedKeys} />
-      <Divider orientation="left">关联审批单（{line.refs.length}）</Divider>
-      {views.length === 0 ? <Typography.Text type="secondary">无审批单。日记账不强制匹配审批单，照样可以初审、终审。</Typography.Text> : <>
-        <CompareTable rows={compareRows(line, views)} />
-        {(amountDiff(line, views) ?? 0) !== 0 && (
+      <Divider orientation="left">关联审批单（{approvalRefCount(line)}）</Divider>
+      {views.length === 0 && partRefs.length === 0 ? <Typography.Text type="secondary">无审批单。日记账不强制匹配审批单，照样可以初审、终审。</Typography.Text> : <>
+        {views.length > 0 && <>
+          {partRefs.length > 0 && <Typography.Text strong>整笔挂的审批单</Typography.Text>}
+          <CompareTable rows={compareRows(line, views)} />
+          {(amountDiff(line, views) ?? 0) !== 0 && (
+            <div className="fin-cash-flow__section">
+              <Typography.Text strong>差额说明（初审填）：</Typography.Text>
+              {mark.note ? <Typography.Text>{mark.note}</Typography.Text> : <Typography.Text type="danger">还没填。初审通过时必须写。</Typography.Text>}
+            </div>
+          )}
           <div className="fin-cash-flow__section">
-            <Typography.Text strong>差额说明（初审填）：</Typography.Text>
-            {mark.note ? <Typography.Text>{mark.note}</Typography.Text> : <Typography.Text type="danger">还没填。初审通过时必须写。</Typography.Text>}
+            {views.map((view) => <ApprovalPanel key={view.serial} view={view} onOpen={approvals.get(view.serial) ? () => onOpenApproval(approvals.get(view.serial) as FeishuApproval) : undefined} />)}
           </div>
-        )}
-        <div className="fin-cash-flow__section">
-          {views.map((view) => <ApprovalPanel key={view.serial} view={view} onOpen={approvals.get(view.serial) ? () => onOpenApproval(approvals.get(view.serial) as FeishuApproval) : undefined} />)}
-        </div>
+        </>}
+        {partRefs.map((item) => {
+          const compareLine = partCompareLine(line, item);
+          const [view] = approvalsOf(compareLine);
+          return (
+            <div key={item.ref} className="fin-cash-flow__section">
+              <Space size={6}><Tag bordered={false} color="blue">第 {item.index + 1} 行</Tag><Typography.Text type="secondary">这一行 <FinMoney value={item.amt} cur={line.cur} />{line.cur !== "CNY" && item.cny != null ? <>（折人民币 <FinMoney value={item.cny} />）</> : null}</Typography.Text></Space>
+              <CompareTable rows={compareRows(compareLine, [view])} />
+              <ApprovalPanel view={view} onOpen={approvals.get(view.serial) ? () => onOpenApproval(approvals.get(view.serial) as FeishuApproval) : undefined} />
+            </div>
+          );
+        })}
       </>}
       <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>类别、关联审批单在表格行上直接改；初审在表格右侧点 ✓（只有通过），终审可以在这里点；初审、终审点错了可以在底部撤销。审核后再改类别 / 关联审批单 / 拆分 / 剔除会自动退回待初审；改摘要、备注不会。{live ? "审批单内容和凭证要等飞书同步上线后才有。" : Object.keys(details).length ? "" : "（审批单凭证数据没读到：先在 Mac 上运行 local_export/cash-flow.py）"}</Typography.Paragraph>
     </Drawer>

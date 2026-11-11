@@ -13,7 +13,7 @@ import { ManualEntryButton } from "@/pages/finance/cash-flow/ManualEntry";
 import { CellText, PartCategoryCell, PartTextCell } from "@/pages/finance/cash-flow/LineActions";
 import { isPartRow, lineHasCat, splitSummary, withPartRows, type PartRow } from "@/pages/finance/cash-flow/journalParts";
 import { asLive, cashErrorText, exclNote, fxNote, useAlertClosures, postLineEvent, syncErrorText, syncFailedText, useApprovalSync, useRefreshJournal, type LineEventKind, type LiveCashLine } from "@/pages/finance/cash-flow/journalApi";
-import { ALERT_GUIDE, alertShort, toCashAlerts, useApprovals, type CashAlert, type FsDetail } from "@/pages/finance/cash-flow/data";
+import { ALERT_GUIDE, alertShort, toCashAlerts, useApprovals, type CashAlert, type FsDetail, alertTagView } from "@/pages/finance/cash-flow/data";
 import { accountLabel, fmtMoney, type CashLine, type CashSnapshot, type FeishuApproval } from "@/pages/finance/localFinData";
 import ReportFacetSelect from "@/shared/report-filters";
 import { writeUserPreference } from "@/shared/preferences/userPreferenceCache";
@@ -70,7 +70,8 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
   /* 关闭过的异常（Rocky 11-10）：不再算异常，也不在列表里出现；在「已关闭的异常」里能重新打开。 */
   const closuresQuery = useAlertClosures(live);
   const closures = useMemo(() => closuresQuery.data ?? [], [closuresQuery.data]);
-  const closedKeys = useMemo(() => new Set(closures.map((item) => item.alert_key)), [closures]);
+  const closedReasons = useMemo(() => new Map(closures.map((item) => [item.alert_key, item.reason])), [closures]);
+  const closedKeys = useMemo(() => new Set(closedReasons.keys()), [closedReasons]);
   const syncStatus = approvalSync.state?.status;
   const lastSyncStatus = useRef(syncStatus);
   const [columnKeys, setColumnKeys] = useState<string[]>(readJournalColumns);
@@ -249,7 +250,7 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
       </span>) }],
     alert: [{ key: "alert", title: "异常", width: 150, tooltip: "这笔流水上待处理的异常（灰色是数据提示，不算异常）；点详情看说明和处理方法", render: (_, row) => {
       const list = alertsOf(row);
-      return list.length ? <Space size={4} wrap>{list.map((item) => <Tooltip key={item.id} title={item.msg}><Tag bordered={false} color={item.hint ? undefined : "red"}>{item.hint ? item.type : alertShort(item.type)}</Tag></Tooltip>)}</Space> : EMPTY;
+      return list.length ? <Space size={4} wrap>{list.map((item) => { const view = alertTagView(item, closedReasons.get(item.id)); return <Tooltip key={item.id} title={view.tip}><Tag bordered={false} color={view.color}>{view.text}</Tag></Tooltip>; })}</Space> : EMPTY;
     } }],
     review: [
       { key: "review_state", title: "审核状态", width: 150, fixed: "right", tooltip: "审批流转：待初审 → 财务专员 ✓ → 待终审 → 财务主管 ✓ / ✗ → 已终审（按钮变灰）。初审只有通过，点错了在详情里撤销初审；终审 ✗ 须填原因，驳回到待初审。审核后再改类别 / 关联审批单 / 拆分 / 剔除会自动退回待初审", render: (_, row) => { const mark = reviewOf(row); return (

@@ -107,3 +107,10 @@ export const ALERT_GUIDE: Record<string, { short: string; guide: string }> = {
   "月结单前后不一致": { short: "月结单前后不一致", guide: "同一个交易号前后两次导入的金额或到账不一样：核对后把导错的那一次在「数据导入」里作废。" },
 };
 export const alertShort = (type: string) => ALERT_GUIDE[type]?.short ?? type;
+
+/** 表格「异常」列的标签（刘云龙 #339 终审）：待处理的红色；数据提示灰色；已关闭的灰色「已关闭 · 类型」、提示里写关闭原因，重新打开后恢复红色。 */
+export function alertTagView(item: CashAlert, closedReason?: string): { color?: string; text: string; tip: string } {
+  if (item.hint) return { text: item.type, tip: item.msg };
+  if (closedReason !== undefined) return { text: `已关闭 · ${alertShort(item.type)}`, tip: `已关闭：${closedReason}` };
+  return { color: "red", text: alertShort(item.type), tip: item.msg };
+}
