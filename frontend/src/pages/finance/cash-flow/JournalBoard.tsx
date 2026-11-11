@@ -11,7 +11,7 @@ import FinanceBoardFrame, { FinMoney, LOCKED_TIP } from "@/pages/finance/Finance
 import ImportDrawer from "@/pages/finance/cash-flow/ImportDrawer";
 import { ManualEntryButton } from "@/pages/finance/cash-flow/ManualEntry";
 import { CellText, PartCategoryCell, PartTextCell } from "@/pages/finance/cash-flow/LineActions";
-import { isPartRow, lineHasCat, splitSummary, withPartRows, type PartRow } from "@/pages/finance/cash-flow/journalParts";
+import { isPartRow, lineHasCat, splitSummary, wholeCompareLine, withPartRows, type PartRow } from "@/pages/finance/cash-flow/journalParts";
 import { asLive, cashErrorText, exclNote, fxNote, useAlertClosures, postLineEvent, syncErrorText, syncFailedText, useApprovalSync, useRefreshJournal, type LineEventKind, type LiveCashLine } from "@/pages/finance/cash-flow/journalApi";
 import { ALERT_GUIDE, alertShort, toCashAlerts, useApprovals, type CashAlert, type FsDetail, alertTagView } from "@/pages/finance/cash-flow/data";
 import { accountLabel, fmtMoney, type CashLine, type CashSnapshot, type FeishuApproval } from "@/pages/finance/localFinData";
@@ -118,7 +118,7 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
   };
   /* 初审：审批金额和流水金额有差额 → 必须先写差额说明（不限差额大小）；终审直接通过。 */
   const pass = (line: CashLine, level: 1 | 2, note?: string) => {
-    const diff = amountDiff(line, approvalsOf(line));
+    const diff = amountDiff(wholeCompareLine(line), approvalsOf(line));
     if (level === 1 && diff != null && diff !== 0 && note === undefined) {
       setNoteText(reviews[line.id]?.note ?? "");
       setNoting(line);
@@ -324,7 +324,7 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
         <ReportFacetSelect mode="multiple" ariaLabel="异常" placeholder="异常" unit="类" triggerWidth={150} value={alertTypes} options={alertTypeOptions} onChange={(value) => setAlertTypes((value as string[] | undefined) ?? [])} />
         <CommittedSearch className="finance-board__search fin-cash-flow__search" typeAriaLabel="搜索类型" typeOptions={[{ value: "text", label: "摘要备注" }, { value: "party", label: "收款人" }, { value: "ref", label: "审批单号" }]} typeValue={search.field} inputAriaLabel="搜索流水" inputPlaceholder="输入后回车" inputValue={search.keyword} onCommit={({ searchField, keyword }) => setSearch({ field: searchField, keyword })} />
         <ResetButton onClick={() => { setAccounts([]); setMonth(""); setFlow(""); setCats([]); setStages([]); setAlertTypes([]); setSearch({ field: "text", keyword: "" }); setCard("all"); }} />
-        <Space className="finance-board__toolbar-actions" size={8}>{live && <Tooltip title={approvalSync.state?.last_success_at ? `上次同步成功：${new Date(approvalSync.state.last_success_at).toLocaleString("zh-CN", { hour12: false })}` : "还没同步过"}><Button loading={approvalSync.running} onClick={startApprovalSync}>{approvalSync.running ? "同步中" : "同步审批单"}</Button></Tooltip>}<ManualEntryButton data={data} live={live} /><Button type="primary" onClick={() => setImportOpen(true)}>流水导入</Button><JournalBatchActions live={live} data={data} rows={rows} selected={rows.filter((line) => selectedKeys.includes(line.id))} reviewOf={reviewOf} needsNote={(line) => { const diff = amountDiff(line, approvalsOf(line)); return diff != null && diff !== 0; }} alertsText={(line) => realAlertsOf(line).map((item) => alertShort(item.type)).join("、")} onLocalReview={(marks) => setReviews((current) => ({ ...current, ...marks }))} onDone={() => { setSelectedKeys([]); void refresh(); }} /><Button aria-label="列配置" icon={<SettingOutlined aria-hidden="true" />} onClick={() => setColumnConfigOpen(true)} /></Space>
+        <Space className="finance-board__toolbar-actions" size={8}>{live && <Tooltip title={approvalSync.state?.last_success_at ? `上次同步成功：${new Date(approvalSync.state.last_success_at).toLocaleString("zh-CN", { hour12: false })}` : "还没同步过"}><Button loading={approvalSync.running} onClick={startApprovalSync}>{approvalSync.running ? "同步中" : "同步审批单"}</Button></Tooltip>}<ManualEntryButton data={data} live={live} /><Button type="primary" onClick={() => setImportOpen(true)}>流水导入</Button><JournalBatchActions live={live} data={data} rows={rows} selected={rows.filter((line) => selectedKeys.includes(line.id))} reviewOf={reviewOf} needsNote={(line) => { const diff = amountDiff(wholeCompareLine(line), approvalsOf(line)); return diff != null && diff !== 0; }} alertsText={(line) => realAlertsOf(line).map((item) => alertShort(item.type)).join("、")} onLocalReview={(marks) => setReviews((current) => ({ ...current, ...marks }))} onDone={() => { setSelectedKeys([]); void refresh(); }} /><Button aria-label="列配置" icon={<SettingOutlined aria-hidden="true" />} onClick={() => setColumnConfigOpen(true)} /></Space>
       </>}
       summary={<ManagementStatCards<ReviewCard> ariaLabel="日记账统计" className="finance-board__summary finance-board__summary--5" cards={cards} activeKey={card} onCardClick={(key) => setCard(card === key ? "all" : key)} />}
     >
@@ -348,7 +348,7 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
         <Input.TextArea autoFocus rows={3} maxLength={200} showCount placeholder="必填：不通过的原因（会显示在审核状态下，财务专员据此修改）" value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} />
       </Modal>
       <Modal open={Boolean(noting)} title="初审通过 · 写差额说明" okText="初审通过" okButtonProps={{ disabled: !noteText.trim() }} cancelText="取消" onOk={confirmNote} onCancel={() => { setNoting(undefined); setNoteText(""); }} destroyOnHidden>
-        {noting && <Typography.Paragraph>审批单金额和这笔流水对不上：<Typography.Text type="danger">差额 {fmtMoney(amountDiff(noting, approvalsOf(noting)), noting.cur)}</Typography.Text>（审批单合计 − 流水金额）。写清楚原因，终审会看到。</Typography.Paragraph>}
+        {noting && <Typography.Paragraph>审批单金额和这笔流水对不上：<Typography.Text type="danger">差额 {fmtMoney(amountDiff(wholeCompareLine(noting), approvalsOf(noting)), wholeCompareLine(noting).cur)}</Typography.Text>（审批单合计 − 流水金额）。写清楚原因，终审会看到。</Typography.Paragraph>}
         <Input.TextArea autoFocus rows={3} placeholder="必填：为什么有差额（例如：手续费由我方承担、分两笔付、汇率差……）" value={noteText} onChange={(event) => setNoteText(event.target.value)} />
       </Modal>
       <Modal open={Boolean(excluding)} title="剔除这笔流水" okText="确定剔除" okButtonProps={{ danger: true, disabled: !excludeReason.trim() }} cancelText="取消" onOk={confirmExclude} onCancel={() => { setExcluding(undefined); setExcludeAmount(""); setExcludeReason(""); }} destroyOnHidden>
@@ -359,7 +359,7 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
         </Space>
       </Modal>
       <LineDrawer line={freshLine} review={freshLine ? reviewOf(freshLine) : undefined} data={data} details={details} approvalsOf={approvalsOf} alerts={freshLine ? alertsOf(freshLine) : []} live={live} stageOf={(line) => reviewOf(line).stage} onClose={() => setLineOpen(undefined)} onOpenApproval={setApprovalOpen}
-        closedKeys={closedKeys} onPass={(line) => pass(line, 2)} onReject={(line) => setRejecting({ line, level: 2 })} onExclude={setExcluding} onUnexclude={(line) => void send(line, "unexclude", {}, "已撤销剔除")} />
+        closedReasons={closedReasons} onPass={(line) => pass(line, 2)} onReject={(line) => setRejecting({ line, level: 2 })} onExclude={setExcluding} onUnexclude={(line) => void send(line, "unexclude", {}, "已撤销剔除")} />
       <ApprovalDrawer item={approvalOpen} data={data} details={details} onClose={() => setApprovalOpen(undefined)} />
       <ImportDrawer open={importOpen} live={live} onClose={() => setImportOpen(false)} />
     </FinanceBoardFrame>

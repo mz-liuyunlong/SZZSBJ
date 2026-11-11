@@ -32,6 +32,7 @@ from app.modules.finance_cashflow.deploy_load import DeployFileError, load_deplo
 from app.modules.finance_cashflow.models import (
     FinanceCashAccount,
     FinanceCashAlertClosure,
+    FinanceCashApproval,
     FinanceCashCategory,
     FinanceCashClassifyRule,
     FinanceCashExclusion,
@@ -1432,9 +1433,36 @@ def result_import(session: Session, name: str) -> UUID:
 ALERT_KEY = "审批单无付款流水|209901010001"
 
 
-def _close(service: CashflowService, reason: str = "合成原因", key: str = ALERT_KEY) -> None:
+def _synthetic_approval(service: CashflowService, serial: str = "209901010001") -> None:
+    """关闭前后端要查得到这张审批单（合成数据）。"""
+    session = service.session
+    if session.scalar(
+        select(func.count())
+        .select_from(FinanceCashApproval)
+        .where(FinanceCashApproval.serial_number == serial)
+    ):
+        return
+    session.add(
+        FinanceCashApproval(
+            instance_code=f"SYN-{serial}",
+            serial_number=serial,
+            approval_code="SYN",
+            kind="费用报销",
+            status="APPROVED",
+        )
+    )
+    session.flush()
+
+
+def _close(
+    service: CashflowService,
+    reason: str = "合成原因",
+    key: str = ALERT_KEY,
+    alert_type: str = "审批单无付款流水",
+) -> None:
+    _synthetic_approval(service)
     service.close_alert(
-        CashflowAlertCloseRequest(alert_key=key, alert_type="审批单无付款流水", reason=reason),
+        CashflowAlertCloseRequest(alert_key=key, alert_type=alert_type, reason=reason),
         actor="admin",
     )
 
@@ -1541,3 +1569,56 @@ def test_set_cny_on_usd_line_overrides_the_month_rate(service, session):
         J.FX_SOURCE_MANUAL,
         "约定汇率",
     )
+
+
+def _closure_error(service: CashflowService, **kw) -> AlertClosureError:
+    with pytest.raises(AlertClosureError) as raised:
+        _close(service, **kw)
+    return raised.value
+
+
+def test_close_refuses_unknown_type_and_mismatched_key(service):
+    unknown = _closure_error(service, alert_type="随便写的类型", key="随便写的类型|209901010001")
+    assert (unknown.status_code, unknown.message) == (422, "不认识的异常类型")
+    mismatch = _closure_error(service, alert_type="余额不连续", key=ALERT_KEY)
+    assert mismatch.status_code == 422
+    empty = _closure_error(service, key="审批单无付款流水|")
+    assert empty.status_code == 422
+
+
+def test_close_refuses_missing_targets_with_404(service):
+    assert _closure_error(service, key="审批单无付款流水|209901019999").status_code == 404
+    missing_line = "内部转账未配对|BOC_CNY:2026-10-10:abcdef"
+    assert _closure_error(service, alert_type="内部转账未配对", key=missing_line).status_code == 404
+    no_account = "余额不连续|NO_SUCH_ACCOUNT:2026-10-10:12.5"
+    assert _closure_error(service, alert_type="余额不连续", key=no_account).status_code == 404
+
+
+def test_close_line_alert_needs_a_live_line(service, session):
+    upload(service, S.boc(S.BOC_A, boc_rows()))
+    line = active(service, "BOC_CNY")[0]
+    key = f"内部转账未配对|BOC_CNY:{line.business_date.isoformat()}:{line.line_uid[-6:]}"
+    session.execute(
+        update(FinanceCashLine)
+        .where(FinanceCashLine.line_uid == line.line_uid)
+        .values(voided_at=datetime.now(UTC))
+    )
+    session.flush()
+    voided = _closure_error(service, alert_type="内部转账未配对", key=key)
+    assert voided.status_code == 404
+    session.execute(
+        update(FinanceCashLine)
+        .where(FinanceCashLine.line_uid == line.line_uid)
+        .values(voided_at=None)
+    )
+    session.flush()
+    _close(service, alert_type="内部转账未配对", key=key)
+    assert key in {item.alert_key for item in service.list_alert_closures()}
+
+
+def test_page_computed_no_flow_alert_closes_when_the_approval_exists(service):
+    # 「审批单无付款流水」是页面算的：后端只确认审批单存在，不重算这条异常此刻是否成立
+    _close(service)
+    assert [item.alert_type for item in service.list_alert_closures()] == ["审批单无付款流水"]
+    # 账户 + 日期 + 金额 这种编号：账户存在就能关
+    _close(service, alert_type="余额不连续", key="余额不连续|BOC_CNY:2026-10-10:12.5")

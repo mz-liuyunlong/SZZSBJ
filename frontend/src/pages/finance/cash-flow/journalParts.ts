@@ -81,3 +81,38 @@ export function partCompareLine(line: CashLine, item: PartApprovalRef): CashLine
   if (line.cur !== "CNY" && item.cny != null) return { ...line, amt: item.cny, cur: "CNY", refs: [item.ref] };
   return { ...line, amt: item.amt, refs: [item.ref] };
 }
+
+/** 按拆分行分组的审批单（刘云龙 #339 第二轮终审）：同一行挂几张单时，这几张合起来和这一行比，不各自和整行比。 */
+export interface PartApprovalGroup { index: number; refs: string[]; amt: number; cny: number | null }
+export function partApprovalGroups(line: CashLine): PartApprovalGroup[] {
+  const groups = new Map<number, PartApprovalGroup>();
+  for (const item of partApprovalRefs(line)) {
+    const group = groups.get(item.index) ?? { index: item.index, refs: [], amt: item.amt, cny: item.cny };
+    group.refs.push(item.ref);
+    groups.set(item.index, group);
+  }
+  return Array.from(groups.values());
+}
+
+/** 一组拆分行审批单比对用的「流水」：外币按这一行折人民币（缺汇率退回原币），人民币按这一行金额。 */
+export function partGroupCompareLine(line: CashLine, group: PartApprovalGroup): CashLine {
+  if (line.cur !== "CNY" && group.cny != null) return { ...line, amt: group.cny, cur: "CNY", refs: group.refs };
+  return { ...line, amt: group.amt, refs: group.refs };
+}
+
+/** 整笔挂的审批单比对用的「流水」（刘云龙 #339 第二轮终审）：拆分行已经挂了单的那部分金额不算，只和剩下的比，
+ * 和后端 approval_service._line_shares 的 rest 口径一致。外币按折人民币（缺汇率退回原币），人民币按原币。 */
+export function wholeCompareLine(line: CashLine): CashLine {
+  const parts = line.parts ?? [];
+  const taken = parts.map((part, index) => ({ part, index })).filter(({ part }) => (part.refs ?? []).length > 0);
+  if (!taken.length || line.amt == null) return line;
+  const sign = line.amt < 0 ? -1 : 1;
+  const cents = (value: number) => Math.round(Math.abs(value) * 100);
+  if (line.cur !== "CNY" && line.cny != null) {
+    const cnys = partCny(line);
+    const used = taken.reduce((sum, { index }) => sum + cents(cnys[index] ?? 0), 0);
+    return { ...line, amt: (sign * (cents(line.cny) - used)) / 100, cur: "CNY" };
+  }
+  const used = taken.reduce((sum, { part }) => sum + cents(part.amt), 0);
+  return { ...line, amt: (sign * (cents(line.amt) - used)) / 100 };
+}

@@ -3,30 +3,29 @@ import { CheckOutlined, CloseOutlined } from "@ant-design/icons";
 import { Button, Descriptions, Divider, Drawer, Space, Tag, Tooltip, Typography } from "antd";
 import { FinMoney, LOCKED_TIP } from "@/pages/finance/FinanceBoardFrame";
 import { asLive, exclNote, fxNote, type LiveCashLine } from "@/pages/finance/cash-flow/journalApi";
-import { ALERT_GUIDE, alertShort, type CashAlert, type FsDetail } from "@/pages/finance/cash-flow/data";
+import { ALERT_GUIDE, alertSectionView, type CashAlert, type FsDetail } from "@/pages/finance/cash-flow/data";
 import { accountLabel, type CashLine, type CashSnapshot, type FeishuApproval } from "@/pages/finance/localFinData";
 import { EMPTY, type ReviewMark, REVIEW_TAG, baseReview, PREVIEW_ACTION_TIP, type ApprovalView, amountDiff, compareRows } from "@/pages/finance/cash-flow/journalShared";
 import { CompareTable, ApprovalPanel } from "@/pages/finance/cash-flow/ApprovalDrawer";
 import { EditableText, FeeConfirm, PairButton, ReviewUndo, SplitButton, SplitParts } from "@/pages/finance/cash-flow/LineActions";
 import { AlertCloseButton, CnyEditButton } from "@/pages/finance/cash-flow/LineExtraActions";
-import { approvalRefCount, partApprovalRefs, partCompareLine } from "@/pages/finance/cash-flow/journalParts";
+import { approvalRefCount, partApprovalGroups, partGroupCompareLine, wholeCompareLine } from "@/pages/finance/cash-flow/journalParts";
 import type { ReviewStage } from "@/pages/finance/cash-flow/journalShared";
 
 /* ======================================================= 异常（并入日记账；不分等级，所有异常都要处理） */
-export function AlertSection({ alerts, line, closedKeys }: { alerts: CashAlert[]; line?: LiveCashLine; closedKeys?: Set<string> }) {
-  const real = alerts.filter((item) => !item.hint);
-  const hints = alerts.filter((item) => item.hint);
+export function AlertSection({ alerts, line, closedReasons = new Map() }: { alerts: CashAlert[]; line?: LiveCashLine; closedReasons?: Map<string, string> }) {
   if (!alerts.length) return null;
+  const { count, items, hints } = alertSectionView(alerts, closedReasons);
   return (
     <>
-      <Divider orientation="left">异常（{real.length}）</Divider>
+      <Divider orientation="left">异常（{count}）</Divider>
       <div className="fin-cash-flow__alerts">
-        {real.map((item) => (
+        {items.map(({ item, closed, view }) => (
           <div key={item.id} className="fin-cash-flow__alert">
-            <Space size={8} wrap><Tag color="red" bordered={false}>{alertShort(item.type)}</Tag><Typography.Text type="secondary">编号 {item.ref}</Typography.Text></Space>
-            <Typography.Paragraph className="fin-cash-flow__alert-msg">{item.msg}</Typography.Paragraph>
-            {ALERT_GUIDE[item.type] && <Typography.Text type="secondary">处理：{ALERT_GUIDE[item.type].guide}</Typography.Text>}
-            {line && <Space size={8}><FeeConfirm key={`${line.id}-${item.id}`} line={line} alert={item} />{closedKeys?.has(item.id) ? <Tag bordered={false}>已关闭</Tag> : <AlertCloseButton alert={item} />}</Space>}
+            <Space size={8} wrap><Tooltip title={view.tip}><Tag color={view.color} bordered={false}>{view.text}</Tag></Tooltip><Typography.Text type="secondary">编号 {item.ref}</Typography.Text></Space>
+            <Typography.Paragraph type={closed ? "secondary" : undefined} className="fin-cash-flow__alert-msg">{item.msg}</Typography.Paragraph>
+            {closed ? <Typography.Text type="secondary">{view.tip}</Typography.Text> : ALERT_GUIDE[item.type] && <Typography.Text type="secondary">处理：{ALERT_GUIDE[item.type].guide}</Typography.Text>}
+            {line && !closed && <Space size={8}><FeeConfirm key={`${line.id}-${item.id}`} line={line} alert={item} /><AlertCloseButton alert={item} /></Space>}
           </div>
         ))}
         {hints.map((item) => (
@@ -42,20 +41,22 @@ export function AlertSection({ alerts, line, closedKeys }: { alerts: CashAlert[]
 
 /* ======================================================= 流水详情抽屉
  * 顺序（Rocky 11-03）：流水字段 → 关联审批单（比对 + 字段 + 凭证）→ 底部终审按钮。终审一笔一笔点；终审不通过必填原因，驳回到待初审。 */
-export function LineDrawer({ line, review, data, details, approvalsOf, alerts, live, stageOf, onClose, onOpenApproval, onPass, onReject, onExclude, onUnexclude, closedKeys }: {
+export function LineDrawer({ line, review, data, details, approvalsOf, alerts, live, stageOf, onClose, onOpenApproval, onPass, onReject, onExclude, onUnexclude, closedReasons }: {
   line?: CashLine; review?: ReviewMark; data: CashSnapshot; alerts: CashAlert[]; details: Record<string, FsDetail>; approvalsOf: (line: CashLine) => ApprovalView[];
   live?: boolean; stageOf?: (line: CashLine) => ReviewStage; onClose: () => void; onOpenApproval: (item: FeishuApproval) => void; onPass: (line: CashLine) => void; onReject: (line: CashLine) => void; onExclude?: (line: LiveCashLine) => void; onUnexclude?: (line: LiveCashLine) => void;
-  /** 已关闭的异常编号（关闭了的在异常段落里标「已关闭」） */
-  closedKeys?: Set<string>;
+  /** 已关闭的异常：编号 → 关闭原因（详情和表格同一个显示规则） */
+  closedReasons?: Map<string, string>;
 }) {
   if (!line) return null;
   const account = data.accounts.find((item) => item.id === line.acct);
   const cat = data.cats.find((item) => item.code === line.cat);
   const approvals = new Map(data.feishu.map((item) => [item.serial, item]));
   const mark = review ?? baseReview(line);
+  /* 整笔挂的单只和没被拆分行占用的金额比（刘云龙 #339 第二轮终审，和后端分摊口径一致） */
+  const wholeLine = wholeCompareLine(line);
   const views = approvalsOf(line);
   /* 拆分行挂的审批单（刘云龙 #339 终审）：按各行折人民币比对；差额说明只看整笔挂的单 */
-  const partRefs = partApprovalRefs(line);
+  const partGroups = partApprovalGroups(line);
   const finalTurn = mark.stage === "ok1";
   const turnTip = finalTurn ? "" : mark.stage === "ok2" ? "已终审" : "还没初审通过，轮不到终审";
   const liveLine = live ? asLive(line) : undefined;
@@ -83,13 +84,13 @@ export function LineDrawer({ line, review, data, details, approvalsOf, alerts, l
         {(liveLine?.excludeReason || liveLine?.autoExcludeReason) && <Descriptions.Item label="剔除原因">{liveLine.excludeReason ?? `${liveLine.autoExcludeReason}（自动剔除，改类别即可撤销）`}</Descriptions.Item>}
         <Descriptions.Item label="审核"><Tag bordered={false} color={REVIEW_TAG[mark.stage].color}>{REVIEW_TAG[mark.stage].text}</Tag>{mark.reason && <Typography.Text type="danger">原因：{mark.reason}</Typography.Text>}</Descriptions.Item>
       </Descriptions>
-      <AlertSection alerts={alerts} line={liveLine} closedKeys={closedKeys} />
+      <AlertSection alerts={alerts} line={liveLine} closedReasons={closedReasons} />
       <Divider orientation="left">关联审批单（{approvalRefCount(line)}）</Divider>
-      {views.length === 0 && partRefs.length === 0 ? <Typography.Text type="secondary">无审批单。日记账不强制匹配审批单，照样可以初审、终审。</Typography.Text> : <>
+      {views.length === 0 && partGroups.length === 0 ? <Typography.Text type="secondary">无审批单。日记账不强制匹配审批单，照样可以初审、终审。</Typography.Text> : <>
         {views.length > 0 && <>
-          {partRefs.length > 0 && <Typography.Text strong>整笔挂的审批单</Typography.Text>}
-          <CompareTable rows={compareRows(line, views)} />
-          {(amountDiff(line, views) ?? 0) !== 0 && (
+          {partGroups.length > 0 && <Typography.Text strong>整笔挂的审批单（剩余 <FinMoney value={wholeLine.amt == null ? null : Math.abs(wholeLine.amt)} cur={wholeLine.cur} />）</Typography.Text>}
+          <CompareTable rows={compareRows(wholeLine, views)} />
+          {(amountDiff(wholeLine, views) ?? 0) !== 0 && (
             <div className="fin-cash-flow__section">
               <Typography.Text strong>差额说明（初审填）：</Typography.Text>
               {mark.note ? <Typography.Text>{mark.note}</Typography.Text> : <Typography.Text type="danger">还没填。初审通过时必须写。</Typography.Text>}
@@ -99,14 +100,14 @@ export function LineDrawer({ line, review, data, details, approvalsOf, alerts, l
             {views.map((view) => <ApprovalPanel key={view.serial} view={view} onOpen={approvals.get(view.serial) ? () => onOpenApproval(approvals.get(view.serial) as FeishuApproval) : undefined} />)}
           </div>
         </>}
-        {partRefs.map((item) => {
-          const compareLine = partCompareLine(line, item);
-          const [view] = approvalsOf(compareLine);
+        {partGroups.map((group) => {
+          const compareLine = partGroupCompareLine(line, group);
+          const groupViews = approvalsOf(compareLine);
           return (
-            <div key={item.ref} className="fin-cash-flow__section">
-              <Space size={6}><Tag bordered={false} color="blue">第 {item.index + 1} 行</Tag><Typography.Text type="secondary">这一行 <FinMoney value={item.amt} cur={line.cur} />{line.cur !== "CNY" && item.cny != null ? <>（折人民币 <FinMoney value={item.cny} />）</> : null}</Typography.Text></Space>
-              <CompareTable rows={compareRows(compareLine, [view])} />
-              <ApprovalPanel view={view} onOpen={approvals.get(view.serial) ? () => onOpenApproval(approvals.get(view.serial) as FeishuApproval) : undefined} />
+            <div key={group.index} className="fin-cash-flow__section">
+              <Space size={6}><Tag bordered={false} color="blue">第 {group.index + 1} 行</Tag><Typography.Text type="secondary">这一行 <FinMoney value={group.amt} cur={line.cur} />{line.cur !== "CNY" && group.cny != null ? <>（折人民币 <FinMoney value={group.cny} />）</> : null}</Typography.Text></Space>
+              <CompareTable rows={compareRows(compareLine, groupViews)} />
+              {groupViews.map((view) => <ApprovalPanel key={view.serial} view={view} onOpen={approvals.get(view.serial) ? () => onOpenApproval(approvals.get(view.serial) as FeishuApproval) : undefined} />)}
             </div>
           );
         })}

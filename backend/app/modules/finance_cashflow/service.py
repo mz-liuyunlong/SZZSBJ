@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import tempfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
@@ -85,6 +86,30 @@ class ImportVoidedError(Exception):
 
 class LineNotFoundError(Exception):
     pass
+
+
+# 能关闭的异常类型（刘云龙 #339 终审）：后端算的 + 页面算的，和前端 data.ts 的 ALERT_GUIDE 一致。
+KNOWN_ALERT_TYPES = frozenset(
+    {
+        journal.ALERT_UNPAIRED,  # 内部转账未配对
+        journal.ALERT_PAIR_GAP,  # 转账到账差额
+        "明细合计≠流水",
+        journal.ALERT_BALANCE,  # 余额不连续
+        journal.ALERT_EXCLUSION,  # 剔除未命中
+        "审批单未付",
+        "审批单部分已付",
+        "审批单无付款流水",
+        "审批单金额不符",
+        journal.ALERT_PINGPONG_FEE,  # PingPong 付款手续费
+        journal.ALERT_PAYONEER_FEE,  # 派安盈提现到账差额
+        journal.ALERT_PAYONEER_MISSING,  # 缺派安盈实际汇率
+        journal.ALERT_STATEMENT_UNMATCHED,  # 月结单有、流水没有
+        journal.ALERT_STATEMENT_AMBIGUOUS,  # 月结单匹配到多笔
+        journal.ALERT_STATEMENT_CONFLICT,  # 月结单前后不一致
+    }
+)
+APPROVAL_SERIAL = re.compile(r"\d{12}")
+LINE_TAIL = re.compile(r"[0-9a-f]{6}")
 
 
 class AlertClosureError(Exception):
@@ -1004,6 +1029,7 @@ class CashflowService:
         reason = request.reason.strip()
         if not reason:
             raise AlertClosureError(422, "关闭异常要写原因")
+        self._check_alert_target(request.alert_type, request.alert_key)
         if self._open_closure(request.alert_key) is not None:
             raise AlertClosureError(409, "这条异常已经关闭了")
         self.session.add(
@@ -1019,6 +1045,57 @@ class CashflowService:
         except IntegrityError as exc:
             self.session.rollback()
             raise AlertClosureError(409, "这条异常已经关闭了") from exc
+
+    def _check_alert_target(self, alert_type: str, alert_key: str) -> None:
+        """关闭前确认这条异常指向的东西存在（刘云龙 #339 终审，轻量版）。
+
+        编号就是页面上异常的编号「类型|编号」：编号是流水（账户:日期:流水号后 6 位）、
+        审批单号（12 位）、剔除清单（剔除:日期:第几条），或者「账户:日期:金额」。
+        只查对象存不存在，不在后端重算页面算出来的异常此刻是否成立。"""
+        if alert_type not in KNOWN_ALERT_TYPES:
+            raise AlertClosureError(422, "不认识的异常类型")
+        prefix = f"{alert_type}|"
+        if not alert_key.startswith(prefix) or len(alert_key) == len(prefix):
+            raise AlertClosureError(422, "异常编号和异常类型对不上")
+        ref = alert_key[len(prefix) :]
+        if APPROVAL_SERIAL.fullmatch(ref):
+            found = self.session.scalar(
+                select(func.count())
+                .select_from(FinanceCashApproval)
+                .where(FinanceCashApproval.serial_number == ref)
+            )
+            if not found:
+                raise AlertClosureError(404, "找不到这条异常对应的审批单")
+            return
+        if ref.startswith("剔除:"):
+            number = ref.rsplit(":", 1)[-1]
+            total = self.session.scalar(select(func.count()).select_from(FinanceCashExclusion))
+            if not number.isdigit() or not 1 <= int(number) <= (total or 0):
+                raise AlertClosureError(404, "找不到这条异常对应的剔除清单")
+            return
+        account, _sep, rest = ref.partition(":")
+        day, _sep, tail = rest.partition(":")
+        try:
+            business_date: date | None = date.fromisoformat(day)
+        except ValueError:
+            business_date = None
+        if business_date is not None and LINE_TAIL.fullmatch(tail):
+            line = self.session.scalars(
+                select(FinanceCashLine).where(
+                    FinanceCashLine.account_key == account,
+                    FinanceCashLine.business_date == business_date,
+                    FinanceCashLine.line_uid.endswith(tail),
+                )
+            ).first()
+            if line is not None:
+                if line.voided_at is not None:
+                    raise AlertClosureError(404, "找不到这条异常对应的流水（已作废）")
+                return
+            if not tail.isdigit():
+                # 带字母的 6 位只能是流水号后 6 位（金额不会有字母）：找不到就是流水不存在。
+                raise AlertClosureError(404, "找不到这条异常对应的流水")
+        if self.session.get(FinanceCashAccount, account) is None:
+            raise AlertClosureError(404, "找不到这条异常对应的流水 / 审批单 / 账户")
 
     def reopen_alert(self, request: CashflowAlertReopenRequest, *, actor: str) -> None:
         reason = request.reason.strip()

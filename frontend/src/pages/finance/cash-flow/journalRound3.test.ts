@@ -134,3 +134,57 @@ describe("approvals on split rows in the line detail", () => {
     expect(approvalRefCount(both)).toBe(2);
   });
 });
+
+describe("whole-line approvals on a split line compare against the rest", () => {
+  const cnyLine = (parts: NonNullable<ApiLine["parts"]>) => ({ ...toCashLine(api({ parts })), cur: "CNY", amt: -1000, cny: -1000, refs: ["209901010002"] });
+
+  it("1000 split 600 (A) + 400 (none), whole B = 400 → compare 400, no difference", async () => {
+    const { wholeCompareLine } = await import("@/pages/finance/cash-flow/journalParts");
+    const { amountDiff } = await import("@/pages/finance/cash-flow/journalShared");
+    const line = cnyLine([{ amount: "600.0000", category_code: null, refs: ["209901010001"] }, { amount: "400.0000", category_code: null }]);
+    const whole = wholeCompareLine(line);
+    expect(whole.amt).toBe(-400);
+    const view = { serial: "209901010002", amount: 400 } as Parameters<typeof amountDiff>[1][number];
+    expect(amountDiff(whole, [view])).toBe(0);
+    expect(amountDiff(line, [view])).toBe(-600);
+  });
+
+  it("one row with two approvals is compared as a group", async () => {
+    const { partApprovalGroups, partGroupCompareLine } = await import("@/pages/finance/cash-flow/journalParts");
+    const { amountDiff } = await import("@/pages/finance/cash-flow/journalShared");
+    const line = { ...cnyLine([{ amount: "600.0000", category_code: null, refs: ["209901010001", "209901010003"] }, { amount: "400.0000", category_code: null }]), refs: [] };
+    const [group] = partApprovalGroups(line);
+    expect(group.refs).toEqual(["209901010001", "209901010003"]);
+    const views = [300, 300].map((amount, at) => ({ serial: group.refs[at], amount })) as Parameters<typeof amountDiff>[1];
+    expect(amountDiff(partGroupCompareLine(line, group), views)).toBe(0);
+  });
+
+  it("RMB rows compare in the original amount; foreign without a rate falls back to the original currency", async () => {
+    const { partApprovalGroups, partGroupCompareLine, wholeCompareLine } = await import("@/pages/finance/cash-flow/journalParts");
+    const parts = [{ amount: "60.0000", category_code: null, refs: ["209901010001"] }, { amount: "40.0000", category_code: null }];
+    const rmb = { ...toCashLine(api({ parts })), cur: "CNY", amt: -100, cny: -100, refs: [] };
+    expect(partGroupCompareLine(rmb, partApprovalGroups(rmb)[0])).toMatchObject({ amt: -60, cur: "CNY" });
+    const usdNoRate = { ...toCashLine(api({ parts })), cur: "USD", amt: -100, cny: null, refs: ["209901010002"] };
+    expect(partGroupCompareLine(usdNoRate, partApprovalGroups(usdNoRate)[0])).toMatchObject({ amt: -60, cur: "USD" });
+    expect(wholeCompareLine(usdNoRate)).toMatchObject({ amt: -40, cur: "USD" });
+    const usd = { ...usdNoRate, cny: -667.51 };
+    expect(wholeCompareLine(usd)).toMatchObject({ amt: -267, cur: "CNY" });
+  });
+});
+
+describe("closed alerts in the line detail", () => {
+  it("red before closing, grey after, and the count drops by one", async () => {
+    const { alertSectionView } = await import("@/pages/finance/cash-flow/data");
+    const alert = (id: string) => ({ type: "内部转账未配对", sev: "", acct: "A", date: "2026-10-10", amt: 1, msg: "合成异常", id, ref: id, hint: false });
+    const alerts = [alert("内部转账未配对|a"), alert("内部转账未配对|b")];
+    const before = alertSectionView(alerts, new Map());
+    expect(before.count).toBe(2);
+    expect(before.items.map((row) => row.view.color)).toEqual(["red", "red"]);
+    const after = alertSectionView(alerts, new Map([["内部转账未配对|a", "合成原因"]]));
+    expect(after.count).toBe(1);
+    expect(after.items.map((row) => [row.item.id, row.view.color, row.view.text])).toEqual([
+      ["内部转账未配对|b", "red", "未配对"],
+      ["内部转账未配对|a", undefined, "已关闭 · 未配对"],
+    ]);
+  });
+});

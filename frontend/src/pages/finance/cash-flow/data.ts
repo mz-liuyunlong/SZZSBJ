@@ -114,3 +114,15 @@ export function alertTagView(item: CashAlert, closedReason?: string): { color?: 
   if (closedReason !== undefined) return { text: `已关闭 · ${alertShort(item.type)}`, tip: `已关闭：${closedReason}` };
   return { color: "red", text: alertShort(item.type), tip: item.msg };
 }
+
+/** 详情「异常」段落（刘云龙 #339 第二轮终审）：和表格同一个显示规则；计数不含已关闭的；已关闭的排在待处理后面。 */
+export function alertSectionView(alerts: CashAlert[], closedReasons: Map<string, string>) {
+  const real = alerts.filter((item) => !item.hint);
+  const open = real.filter((item) => !closedReasons.has(item.id));
+  const closed = real.filter((item) => closedReasons.has(item.id));
+  return {
+    count: open.length,
+    items: [...open, ...closed].map((item) => ({ item, closed: closedReasons.has(item.id), view: alertTagView(item, closedReasons.get(item.id)) })),
+    hints: alerts.filter((item) => item.hint),
+  };
+}
