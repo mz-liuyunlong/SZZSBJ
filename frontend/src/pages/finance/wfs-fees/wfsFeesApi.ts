@@ -37,14 +37,16 @@ export interface ApiFile {
 export interface ApiImport {
   file_id: string; file_name: string; store_id: string; fee_source: FeeSource; period_start: string | null; period_end: string | null;
   status: "parsed" | "rejected" | "empty"; rows_parsed: number; rows_new: number; rows_duplicate: number; duplicate_of_file: boolean;
-  reject_reason: string | null; warnings: string[];
+  reject_reason: string | null; warnings: string[]; needs_store: boolean;
 }
 export interface ApiBillPeriod { store_id: string; store_code: string; store_name: string | null; report_key: string | null; report_date: string | null; period_start_date: string | null; period_end_date: string | null }
 
 export interface LineFilter {
-  store_id?: string; report_key?: string; fee_type?: string; fee_source?: FeeSource; attribution?: Attribution;
+  store_id?: string; report_key?: string; fee_type?: string; fee_source?: FeeSource; attribution?: string;
   date_from?: string; date_to?: string; q?: string; include_missing?: boolean; page: number; page_size: number;
 }
+/** 归属筛选按三档传给后端（逗号分隔多个细分码） */
+export const attributionParam = (group?: AttributionGroup) => (group ? ATTRIBUTION_GROUP_CODES[group].join(",") : undefined);
 
 const qs = (params: object) => {
   const search = new URLSearchParams();
@@ -56,8 +58,18 @@ const qs = (params: object) => {
 export const num = (value: string | null | undefined) => (value == null || value === "" ? null : Number(value));
 
 export const SOURCE_TEXT: Record<FeeSource, string> = { settlement: "结算报表", storage: "仓储费报表", inbound: "入库运输报告" };
+/** 页面上归属只分三档（Rocky 11-13：不要那么复杂）；细分原因放「依据」列。 */
+export type AttributionGroup = "done" | "todo" | "company";
+export const ATTRIBUTION_GROUP: Record<Attribution, AttributionGroup> = {
+  matched: "done", allocated: "done", allocated_check: "todo", unmatched: "todo", unallocated: "todo", company: "company",
+};
+export const ATTRIBUTION_GROUP_TEXT: Record<AttributionGroup, string> = { done: "已到商品", todo: "待处理", company: "记公司" };
+export const ATTRIBUTION_GROUP_CODES: Record<AttributionGroup, Attribution[]> = {
+  done: ["matched", "allocated"], todo: ["unmatched", "unallocated", "allocated_check"], company: ["company"],
+};
+/** 细分原因（依据列 / 导出用） */
 export const ATTRIBUTION_TEXT: Record<Attribution, string> = {
-  matched: "已匹配商品", unmatched: "GTIN 未匹配", allocated: "已分摊到商品", allocated_check: "已分摊（基数待核）", unallocated: "未分摊", company: "记公司",
+  matched: "GTIN 对上商品", unmatched: "GTIN 对不上商品", allocated: "按规则分摊", allocated_check: "已分摊，基数待核", unallocated: "等货件明细，未分摊", company: "记公司",
 };
 export const CHECK_TEXT: Record<ApiCheck["status"], string> = { ok: "一致", diff: "不一致", lx_only: "报表缺", report_only: "领星缺" };
 
@@ -92,12 +104,13 @@ export function useWfsRefresh() {
 const post = async <T,>(path: string, body?: unknown) =>
   (await backendRequest<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) })).data;
 
-export async function uploadReport(file: File, options: { storeId?: string; periodStart?: string; periodEnd?: string }): Promise<ApiImport> {
+export async function uploadReport(file: File, options: { storeId?: string; periodStart?: string; periodEnd?: string }): Promise<ApiImport[]> {
   const headers: Record<string, string> = { "Content-Type": "application/octet-stream", "X-File-Name": encodeURIComponent(file.name) };
   if (options.storeId) headers["X-Store-Id"] = options.storeId;
   if (options.periodStart) headers["X-Period-Start"] = options.periodStart;
   if (options.periodEnd) headers["X-Period-End"] = options.periodEnd;
-  return (await backendRequest<ApiImport>(`${BASE}/imports`, { method: "POST", body: file, headers })).data;
+  // CSV 返回一条；卖家后台下载的 ZIP 按里面每个 CSV 各一条
+  return (await backendRequest<{ items: ApiImport[] }>(`${BASE}/imports`, { method: "POST", body: file, headers })).data.items;
 }
 export const adjustLine = (lineId: string, body: { kind: "realloc" | "company"; reason: string; payload?: Record<string, unknown> }) =>
   post<ApiLine>(`${BASE}/lines/${lineId}/adjust`, body);

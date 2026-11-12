@@ -19,9 +19,11 @@ import csv
 import hashlib
 import io
 import re
+import zipfile
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from typing import Final
 
 FEE_SOURCE_SETTLEMENT = "settlement"
 FEE_SOURCE_STORAGE = "storage"
@@ -112,7 +114,11 @@ def _rows(content: bytes) -> list[list[str]]:
     if len(content) > MAX_BYTES:
         raise ParseError("文件超过 16MB，请确认是单店铺报表")
     text = content.decode("utf-8-sig", errors="replace")
-    return [row for row in csv.reader(io.StringIO(text))]
+    # newline="" 让 csv 自己处理 \r\n / \r（卖家后台导出有旧 Mac 换行的情况）
+    try:
+        return list(csv.reader(io.StringIO(text, newline="")))
+    except csv.Error as exc:
+        raise ParseError(f"CSV 格式读不出来：{exc}") from exc
 
 
 def _header_index(header: list[str], *names: str) -> int:
@@ -153,7 +159,52 @@ def detect(content: bytes) -> str:
             "ReportingPeriod_StartDate"
         ]:
             return FEE_SOURCE_INBOUND
-    raise ParseError("认不出报表类型：不是结算报表、仓储费报表或入库运输报告的原始 CSV")
+    raise ParseError(
+        "认不出报表类型：要结算报表、仓储费报表或入库运输报告的原始 CSV（配送费报表不入这张表）"
+    )
+
+
+ZIP_MAX_MEMBERS: Final = 50
+ZIP_MAX_MEMBER_BYTES: Final = 16 * 1024 * 1024
+ZIP_MAX_TOTAL_BYTES: Final = 64 * 1024 * 1024
+
+
+def expand_upload(file_name: str, content: bytes) -> list[tuple[str, bytes]]:
+    """卖家后台下载的报表常是 ZIP：解开取里面的 CSV，每个 CSV 单独导入；不是 ZIP 原样返回。
+
+    只取 .csv，跳过目录、__MACOSX 和隐藏文件；限制个数和解压后大小，防压缩炸弹。
+    """
+    if not content.startswith(b"PK"):
+        return [(file_name, content)]
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(content))
+    except zipfile.BadZipFile as exc:
+        raise ParseError("ZIP 文件损坏，打不开") from exc
+    members = [
+        info
+        for info in archive.infolist()
+        if not info.is_dir()
+        and not info.filename.startswith("__MACOSX/")
+        and not info.filename.rsplit("/", 1)[-1].startswith(".")
+        and info.filename.lower().endswith(".csv")
+    ]
+    if not members:
+        raise ParseError("ZIP 里没有 CSV 文件")
+    if len(members) > ZIP_MAX_MEMBERS:
+        raise ParseError(f"ZIP 里的 CSV 超过 {ZIP_MAX_MEMBERS} 个，请分开上传")
+    total = 0
+    out: list[tuple[str, bytes]] = []
+    for info in members:
+        if info.file_size > ZIP_MAX_MEMBER_BYTES:
+            raise ParseError(f"ZIP 里的 {info.filename} 解压后超过 16MB")
+        data = archive.read(info)[: ZIP_MAX_MEMBER_BYTES + 1]
+        if len(data) > ZIP_MAX_MEMBER_BYTES:
+            raise ParseError(f"ZIP 里的 {info.filename} 解压后超过 16MB")
+        total += len(data)
+        if total > ZIP_MAX_TOTAL_BYTES:
+            raise ParseError("ZIP 解压后合计超过 64MB，请分开上传")
+        out.append((f"{file_name}/{info.filename.rsplit('/', 1)[-1]}", data))
+    return out
 
 
 # ---------------------------------------------------------------- 结算报表
@@ -196,15 +247,17 @@ def parse_settlement(content: bytes) -> ParsedReport:
     lines: list[ParsedLine] = []
     partner = ""
     seen: set[str] = set()
-    skipped = 0
+    skipped: dict[str, int] = {}
     for row in rows[head_at + 1 :]:
         if not any(_clean(c) for c in row):
             continue
         fee_type = cell(row, "type")
         if not fee_type:
             continue
+        # Partner ID 每行都一样；不入表的汇总行也取，只有汇总行的文件也能认店
+        partner = partner or _digits(cell(row, "partner"))
         if fee_type in SETTLEMENT_SKIP:
-            skipped += 1
+            skipped[fee_type] = skipped.get(fee_type, 0) + 1
             continue
         when = _date(cell(row, "date"))
         net = _decimal(cell(row, "net"))
@@ -251,8 +304,14 @@ def parse_settlement(content: bytes) -> ParsedReport:
         report.period_start = min(line.transaction_date for line in lines)
         report.period_end = max(line.transaction_date for line in lines)
     if skipped:
+        names = {
+            "FulfillmentFee": "配送费",
+            "StorageFee": "仓储费店铺周汇总",
+            "InboundTransportationFee": "入库运费店铺周汇总",
+        }
+        parts = "、".join(f"{names.get(k, k)} {v} 行" for k, v in sorted(skipped.items()))
         report.warnings.append(
-            f"配送费 / 仓储费 / 入库运费周汇总 {skipped} 行不入表（另有专门报表）"
+            f"{parts}不入表（仓储费、入库运费按商品要导 WFS 报告里的仓储 / 入库运输报告）"
         )
     return report
 

@@ -96,6 +96,9 @@ def test_import_permission_rejects_empty_and_oversized_bodies(client_for) -> Non
         headers={"content-length": str(20 * 1024 * 1024)},
     )
     assert too_big.status_code == 413
+    bad_zip = client.post("/api/finance/wfs-fees/imports", content=b"PK\x03\x04broken")
+    assert bad_zip.status_code == 422
+    assert bad_zip.json()["error"]["code"] == "WFS_FEE_BAD_ZIP"
 
 
 def test_adjust_validation(client_for) -> None:

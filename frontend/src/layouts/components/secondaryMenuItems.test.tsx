@@ -36,6 +36,7 @@ const expected = {
     "finance_sku_cash_profit",
     "finance_settlement_profit",
     "finance_settlement_reconciliation",
+    "finance_wfs_fees",
     "finance_performance_report",
     "finance_balance_sheet",
     "finance-cash",

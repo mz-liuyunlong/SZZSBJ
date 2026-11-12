@@ -126,6 +126,13 @@ class WfsFeeImportData(BaseModel):
     duplicate_of_file: bool
     reject_reason: str | None
     warnings: list[str]
+    needs_store: bool = False
+
+
+class WfsFeeImportListData(BaseModel):
+    """一次上传的结果：CSV 一条；ZIP 按里面每个 CSV 各一条。"""
+
+    items: list[WfsFeeImportData]
 
 
 class WfsFeeAdjustRequest(BaseModel):

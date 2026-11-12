@@ -33,12 +33,12 @@ Rocky 2026-11-12 口径：一个 tab、一张表、一列费用类型；展示�
 | 接口 | 权限 | 说明 |
 |---|---|---|
 | `GET /fee-types` | view | 费用类型中英文、来源 |
-| `GET /periods` | view | 店铺 × 账单期（领星同步的沃尔玛账单；店铺代码 = 店铺名横杠前编号），页面筛选用；只有费用行没账单的店铺也给一行 |
+| `GET /periods` | view | 店铺 × 账单期（领星同步的沃尔玛账单；店铺代码 = 店铺名横杠前编号），页面筛选用；没有账单的沃尔玛店铺（领星店铺表）和只有费用行的店铺也各给一行 |
 | `GET /lines?store_id&report_key&fee_type&fee_source&attribution&date_from&date_to&q&include_missing&page&page_size` | view | 原行分页（≤ 500），每行带 `children` 分摊子行；`q` 搜 ITEM ID / MSKU / SKU / GTIN / 货件号 / Reference |
 | `GET /summary?store_id&report_key&date_from&date_to` | view | 店铺 × 账单期 × 类型 汇总 + 合计 |
 | `GET /checks?store_id&report_key&only_problem` | view | 核对结果（默认只给没核实的问题） |
 | `GET /files?store_id&fee_source` | view | 文件记录 |
-| `POST /imports`（body = 文件；头 `X-File-Name`、`X-Store-Id`、`X-Period-Start`、`X-Period-End`） | import | 上传一份报表；结算报表按 Partner ID 认店铺（`FINANCE_WFS_PARTNER_STORE_MAP`，JSON，线上 app.env），仓储 / 入库要 `X-Store-Id`；接口下载的仓储报表要账期 |
+| `POST /imports`（body = 文件；头 `X-File-Name`、`X-Store-Id`、`X-Period-Start`、`X-Period-End`） | import | 上传一份报表（CSV，或卖家后台下载的 ZIP：只取里面的 .csv，≤50 个、每个解压后 ≤16MB、合计 ≤64MB），返回 `items`（每个 CSV 一条）；不用选店铺（Rocky 11-13）：结算报表按 Partner ID（`FINANCE_WFS_PARTNER_STORE_MAP` → 以前导入过的同一 Partner ID）认店，其余按文件里的 SKU / GTIN / Item ID 对商品表投票（唯一一家、占 80% 以上才算）；认不出才拒收并返回 `needs_store=true`，页面在那一行选店后带 `X-Store-Id` 重传——`X-Store-Id` 只补认不出的，不覆盖认出的；接口下载的仓储报表（没有汇总块）要账期头 |
 | `POST /lines/{id}/adjust` `{kind: realloc|company, reason, payload:{shares:[{gtin,item_id,msku,amount}]}}` | adjust | 分摊合计必须等于原金额 |
 | `POST /checks/verify` `{store_id, report_key, fee_type, reason}` | adjust | 标已核实；金额变了自动清掉 |
 

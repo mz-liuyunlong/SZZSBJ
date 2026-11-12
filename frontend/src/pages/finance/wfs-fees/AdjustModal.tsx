@@ -2,22 +2,21 @@
 import { Alert, Button, Input, InputNumber, Modal, Radio, Space, Table, Typography, message } from "antd";
 import { useState } from "react";
 import { FinMoney } from "@/pages/finance/FinanceBoardFrame";
-import type { Row } from "./FinanceWfsFeesPage";
-import { adjustLine, wfsErrorText } from "./wfsFeesApi";
+import { adjustLine, num, wfsErrorText, type ApiLine } from "./wfsFeesApi";
 
 interface Share { key: string; gtin: string; item_id: string; msku: string; amount: number | null }
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
 /** 每次打开都是新实例（外层按行 id 给 key），初值直接取自这一行，不用 effect 同步。 */
-function AdjustModal({ row, onClose, onDone }: { row: Row; onClose: () => void; onDone: () => void }) {
+function AdjustModal({ row, title, onClose, onDone }: { row: ApiLine; title: string; onClose: () => void; onDone: () => void }) {
   const [kind, setKind] = useState<"realloc" | "company">(row.attribution === "company" ? "company" : "realloc");
-  const [shares, setShares] = useState<Share[]>(() => (row.children ?? []).map((c, i) => ({ key: `${i}`, gtin: c.gtin, item_id: c.item_id, msku: c.msku, amount: c.amount })));
+  const [shares, setShares] = useState<Share[]>(() => row.children.map((c, i) => ({ key: `${i}`, gtin: c.gtin, item_id: c.item_id, msku: c.msku, amount: num(c.amount_usd) })));
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [messageApi, messageHolder] = message.useMessage();
   const total = round2(shares.reduce((sum, s) => sum + (s.amount ?? 0), 0));
-  const target = round2(row.amount ?? 0);
+  const target = round2(num(row.amount_usd) ?? 0);
   const balanced = kind === "company" || (shares.length > 0 && Math.abs(total - target) < 0.005);
   const submit = async () => {
     setBusy(true);
@@ -35,11 +34,11 @@ function AdjustModal({ row, onClose, onDone }: { row: Row; onClose: () => void; 
   };
   const edit = (key: string, patch: Partial<Share>) => setShares((current) => current.map((s) => (s.key === key ? { ...s, ...patch } : s)));
   return (
-    <Modal open width={760} title={`调整归属 · ${row.storeCode} · ${row.typeName} · ${row.date_charged}`} okText="确定" cancelText="取消"
+    <Modal open width={760} title={title} okText="确定" cancelText="取消"
       okButtonProps={{ disabled: !reason.trim() || !balanced, loading: busy }} onOk={() => void submit()} onCancel={onClose} destroyOnHidden>
       {messageHolder}
       <Space direction="vertical" size={12} style={{ width: "100%" }}>
-        <Typography.Text>原金额 <FinMoney value={row.amount} cur="USD" />；现在：{row.allocation_basis || row.attribution}</Typography.Text>
+        <Typography.Text>原金额 <FinMoney value={num(row.amount_usd)} cur="USD" />；现在：{row.allocation_basis || row.attribution}</Typography.Text>
         <Radio.Group value={kind} onChange={(e) => setKind(e.target.value)}>
           <Radio value="realloc">分摊到商品</Radio>
           <Radio value="company">记公司（不分到商品）</Radio>

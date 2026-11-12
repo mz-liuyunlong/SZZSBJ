@@ -11,6 +11,7 @@ from uuid import UUID
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.modules.data_pages.models import LingxingStoreDimension
 from app.modules.walmart_bills.models import WalmartBillPeriod
 from app.modules.walmart_bills.payout_service import store_code
 from app.modules.wfs_fees.models import (
@@ -126,7 +127,7 @@ def list_lines(
     if fee_source:
         query = query.where(WalmartWfsFeeLine.fee_source == fee_source)
     if attribution:
-        query = query.where(WalmartWfsFeeLine.attribution == attribution)
+        query = query.where(WalmartWfsFeeLine.attribution.in_(attribution.split(",")))
     if date_from:
         query = query.where(WalmartWfsFeeLine.date_charged >= date_from)
     if date_to:
@@ -337,18 +338,27 @@ def list_periods(session: Session, source_account_ref: str) -> list[WfsFeePeriod
         )
         for sid, name, key, report_date, start, end in rows
     ]
+    # 还没有账单的店铺也要能选（导入时选店铺）：领星店铺表里的沃尔玛店铺 + 已有费用行的店铺
     known = {item.store_id for item in items}
+    stores = session.execute(
+        select(LingxingStoreDimension.store_id, LingxingStoreDimension.store_name).where(
+            LingxingStoreDimension.source_account_ref == source_account_ref,
+            LingxingStoreDimension.platform_code == "walmart",
+        )
+    ).all()
+    names = {sid: name for sid, name in stores}
     extra = session.scalars(
         select(WalmartWfsFeeLine.store_id)
         .where(WalmartWfsFeeLine.source_account_ref == source_account_ref)
         .distinct()
     ).all()
-    for sid in sorted(set(extra) - known):
+    for sid in sorted((set(names) | set(extra)) - known):
+        name = names.get(sid)
         items.append(
             WfsFeePeriodRead(
                 store_id=sid,
-                store_code=sid,
-                store_name=None,
+                store_code=store_code(name, sid),
+                store_name=name,
                 report_key=None,
                 report_date=None,
                 period_start_date=None,

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
@@ -23,7 +24,7 @@ from pathlib import Path
 from typing import Final
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -53,6 +54,7 @@ from app.modules.wfs_fees.parsing import (
 )
 
 SOURCE_REF: Final = "primary"
+INBOUND_STORE_HINT: Final = "（入库运输报告没有商品，要等领星货件同步后才能自动认店）"
 # 领星账单里的描述 → 本表 fee_type（领星把退货两类写成带空格的英文名）
 LX_FEE_NAMES: Final = {
     "Returned Item Disposal Fee": "RC_InventoryDisposalFee",
@@ -94,6 +96,8 @@ class ImportResult:
     duplicate_of_file: bool = False
     reject_reason: str | None = None
     warnings: list[str] = field(default_factory=list)
+    # 认不出店铺被拒收：页面在这一行给出店铺下拉，选了再传同一个文件
+    needs_store: bool = False
 
 
 def utc_now() -> datetime:
@@ -152,20 +156,24 @@ class WfsFeeService:
                 request_id,
                 origin,
             )
-        resolved = self._resolve_store(report, store_id)
+        resolved = self._resolve_store(report, store_id, file_name)
         if resolved is None:
-            return self._reject(
+            result = self._reject(
                 file_name,
                 sha256,
                 content,
                 root,
                 "",
                 report.fee_source,
-                "认不出是哪家店：结算报表的 Partner ID 没有登记，或导入时没有选店铺",
+                "认不出是哪家店：文件里的商品对不上唯一一家店铺"
+                + (INBOUND_STORE_HINT if report.fee_source == FEE_SOURCE_INBOUND else "")
+                + "，请在这一行选店铺后重新导入",
                 actor,
                 request_id,
                 origin,
             )
+            result.needs_store = True
+            return result
         duplicate = self._duplicate_file(resolved, sha256)
         if duplicate is not None:
             # 同一份文件再传：按现在的规则重新解析刷新（归期、归属可能变了），不新增行
@@ -254,19 +262,106 @@ class WfsFeeService:
             reject_reason=reason,
         )
 
-    def _resolve_store(self, report: ParsedReport, store_id: str | None) -> str | None:
-        if report.fee_source == FEE_SOURCE_SETTLEMENT and report.partner_id:
-            mapped = partner_store_map(self.settings).get(report.partner_id)
-            if mapped and store_id and mapped != store_id:
-                raise WfsFeeError(
-                    "WFS_FEE_STORE_MISMATCH",
-                    f"文件里的 Partner ID 属于店铺 {mapped}，和选的店铺不一致",
-                )
-            if mapped:
-                return mapped
-        if store_id and store_id.isdecimal():
-            return store_id
-        return None
+    def _resolve_store(
+        self, report: ParsedReport, store_id: str | None, file_name: str = ""
+    ) -> str | None:
+        """认店铺，不用人选（Rocky 11-13）：
+
+        1. 结算报表的 Partner ID：配置表 → 以前导入过同一 Partner ID 的店铺（唯一才算）；
+        2. 文件里的商品（SKU / GTIN / Item ID）对商品表投票：唯一一家店匹配最多、
+           且占能匹配行的 80% 以上才算；同一商品挂在多家店、分不出来 → 认不出；
+        3. 文件里没有商品（空报告）时，看卖家后台文件名里的 Partner ID（如
+           StorageFee_<日期>_<Partner ID>.zip），必须是以前结算报表内容里出现过的 Partner ID；
+        4. 认不出时才用页面上选的店铺（store_id 只补空，不覆盖自动认出的店：
+           ZIP 里一部分认得出、一部分认不出，整包重传也不会把认出的改错）。
+        """
+        known = self._partner_store(report.partner_id) if report.partner_id else None
+        known = known or self._vote_store(report) or self._file_name_store(file_name)
+        if known:
+            return known
+        return store_id if store_id and store_id.isdecimal() else None
+
+    def _partner_store(self, partner_id: str) -> str | None:
+        mapped = partner_store_map(self.settings).get(partner_id)
+        if mapped:
+            return mapped
+        seen = self.session.scalars(
+            select(WalmartWfsFeeLine.store_id)
+            .where(
+                WalmartWfsFeeLine.source_account_ref == SOURCE_REF,
+                WalmartWfsFeeLine.partner_id == partner_id[:32],
+            )
+            .distinct()
+            .limit(2)
+        ).all()
+        return seen[0] if len(seen) == 1 else None
+
+    def _file_name_store(self, file_name: str) -> str | None:
+        """文件名里的长数字串当 Partner ID 去对；只认以前从文件内容里学到的，对不上就不认。"""
+        stores = {
+            store
+            for digits in re.findall(r"(?<!\d)\d{8,20}(?!\d)", file_name)
+            if (store := self._partner_store(digits))
+        }
+        return stores.pop() if len(stores) == 1 else None
+
+    def _vote_store(self, report: ParsedReport) -> str | None:
+        skus = {line.sku.strip() for line in report.lines if line.sku.strip()}
+        gtins = {line.gtin.strip().lstrip("0") for line in report.lines if line.gtin.strip()}
+        items = {line.item_id.strip() for line in report.lines if line.item_id.strip()}
+        if not (skus or gtins or items):
+            return None
+        conditions = []
+        if skus:
+            conditions.append(WalmartListingDimension.msku.in_(skus))
+        if items:
+            conditions.append(WalmartListingDimension.item_id.in_(items))
+        if gtins:
+            padded = {g.zfill(14) for g in gtins} | {g.zfill(12) for g in gtins} | gtins
+            conditions.append(WalmartListingDimension.gtin.in_(padded))
+            conditions.append(WalmartListingDimension.upc.in_(padded))
+        by_sku: dict[str, set[str]] = defaultdict(set)
+        by_gtin: dict[str, set[str]] = defaultdict(set)
+        by_item: dict[str, set[str]] = defaultdict(set)
+        for row in self.session.execute(
+            select(
+                WalmartListingDimension.store_id,
+                WalmartListingDimension.msku,
+                WalmartListingDimension.gtin,
+                WalmartListingDimension.upc,
+                WalmartListingDimension.item_id,
+            ).where(
+                WalmartListingDimension.source_account_ref == SOURCE_REF, or_(*conditions)
+            )
+        ):
+            if row.msku:
+                by_sku[row.msku.strip()].add(row.store_id)
+            for code in (row.gtin, row.upc):
+                if code and code.strip():
+                    by_gtin[code.strip().lstrip("0")].add(row.store_id)
+            if row.item_id:
+                by_item[row.item_id.strip()].add(row.store_id)
+        votes: dict[str, int] = defaultdict(int)
+        matched = 0
+        for line in report.lines:
+            # SKU 是店铺自己的编码，最准；没有 SKU 再看 GTIN、Item ID
+            stores = (
+                by_sku.get(line.sku.strip())
+                or by_gtin.get(line.gtin.strip().lstrip("0"))
+                or by_item.get(line.item_id.strip())
+            )
+            if not stores:
+                continue
+            matched += 1
+            for store in stores:
+                votes[store] += 1
+        if not votes:
+            return None
+        ranked = sorted(votes.items(), key=lambda kv: kv[1], reverse=True)
+        best, count = ranked[0]
+        if len(ranked) > 1 and ranked[1][1] == count:
+            return None
+        return best if count >= 0.8 * matched else None
 
     def _duplicate_file(self, store_id: str, sha256: str) -> WalmartWfsFeeFile | None:
         return self.session.scalars(

@@ -31,11 +31,16 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-from app.core.config import get_settings
-from app.db.session import get_session_factory
-from app.modules.wfs_fees import attribution as rules
-from app.modules.wfs_fees.models import WalmartWfsFeeLine
-from app.modules.wfs_fees.service import WfsFeeService
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from app.core.config import get_settings  # noqa: E402
+from app.db.session import get_session_factory  # noqa: E402
+from app.modules.wfs_fees import attribution as rules  # noqa: E402
+from app.modules.wfs_fees.models import WalmartWfsFeeLine  # noqa: E402
+from app.modules.wfs_fees.parsing import ParseError, expand_upload  # noqa: E402
+from app.modules.wfs_fees.service import WfsFeeService  # noqa: E402
 
 ACTOR = "history-load"
 
@@ -57,22 +62,31 @@ def _report(result) -> None:
 def load_settlement(
     service: WfsFeeService, root: Path, stores: dict[str, str], dry_run: bool
 ) -> None:
-    for path in sorted(root.rglob("*.csv")):
+    paths = sorted(p for p in root.rglob("*") if p.suffix.lower() in {".csv", ".zip"})
+    for path in paths:
+        if "_original" in path.relative_to(root).parts[:-1]:
+            continue  # 原件备份目录，和已转换的 CSV 重复
         top = path.relative_to(root).parts[0]
         store_id = stores.get(top, top if top.isdecimal() else None)
         if dry_run:
             print(f"[dry-run] settlement {store_id or '?'} {path.name}")
             continue
-        _report(
-            service.upload(
-                file_name=path.name,
-                content=path.read_bytes(),
-                actor=ACTOR,
-                request_id=None,
-                store_id=store_id,
-                origin="history",
+        try:
+            parts = expand_upload(path.name, path.read_bytes())
+        except ParseError as exc:
+            print(f"{store_id or '?'} {path.name} 跳过：{exc}")
+            continue
+        for name, content in parts:
+            _report(
+                service.upload(
+                    file_name=name,
+                    content=content,
+                    actor=ACTOR,
+                    request_id=None,
+                    store_id=store_id,
+                    origin="history",
+                )
             )
-        )
 
 
 STORAGE_HEAD = [

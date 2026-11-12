@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import io
+import zipfile
 from datetime import date
 from decimal import Decimal
 
@@ -14,6 +16,7 @@ from app.modules.wfs_fees.parsing import (
     FEE_SOURCE_STORAGE,
     ParseError,
     detect,
+    expand_upload,
     friday_of,
     parse,
 )
@@ -171,3 +174,42 @@ def test_friday_of_walmart_bill_week():
     assert friday_of(date(2026, 10, 3)) == date(2026, 10, 9)  # 周六 → 下周五
     assert friday_of(date(2026, 10, 9)) == date(2026, 10, 9)  # 周五
     assert friday_of(date(2026, 10, 8)) == date(2026, 10, 9)
+
+
+def _zip(files: dict[str, bytes]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, data in files.items():
+            archive.writestr(name, data)
+    return buffer.getvalue()
+
+
+def test_zip_upload_expands_to_csv_members_only():
+    csv_a = S.settlement([S.fee("LostInventory", "2026-10-07", "-1.00", gtin=S.GTIN_1)])
+    csv_b = S.storage([(S.GTIN_1, "SKU-1", "1.00", "1.10", "0.10")])
+    content = _zip({
+        "dir/a.csv": csv_a,
+        "b.CSV": csv_b,
+        "__MACOSX/dir/._a.csv": b"junk",
+        ".hidden.csv": b"junk",
+        "readme.txt": b"x",
+    })
+    parts = expand_upload("bundle.zip", content)
+    assert parts == [("bundle.zip/a.csv", csv_a), ("bundle.zip/b.CSV", csv_b)]
+    plain = b"Transaction Type,Net Payable"
+    assert expand_upload("x.csv", plain) == [("x.csv", plain)]
+
+
+def test_zip_without_csv_or_broken_is_rejected():
+    with pytest.raises(ParseError, match="没有 CSV"):
+        expand_upload("a.zip", _zip({"readme.txt": b"x"}))
+    with pytest.raises(ParseError, match="损坏"):
+        expand_upload("a.zip", b"PK\x03\x04broken")
+
+
+def test_summary_only_settlement_keeps_partner_and_explains_skip():
+    """卖家后台「服务费 → StorageFee」下载的只有店铺周汇总行：不入表，但要能认店、说清原因。"""
+    report = parse(S.settlement([S.fee("StorageFee", "2026-10-09", "100.00", ref="S1")]))
+    assert report.lines == []
+    assert report.partner_id == S.PARTNER_A
+    assert any("仓储费店铺周汇总 1 行" in w for w in report.warnings)

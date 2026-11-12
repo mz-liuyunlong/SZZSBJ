@@ -45,12 +45,14 @@ def session() -> Iterator[Session]:
     engine.dispose()
 
 
-def _listing(session: Session, gtin: str, item_id: str, msku: str) -> None:
+def _listing(
+    session: Session, gtin: str, item_id: str, msku: str, store_id: str = S.STORE_A
+) -> None:
     session.add(
         WalmartListingDimension(
             id=uuid4(),
             source_account_ref="primary",
-            store_id=S.STORE_A,
+            store_id=store_id,
             item_id=item_id,
             msku=msku,
             local_sku=msku.split("-")[0],
@@ -208,15 +210,75 @@ def test_settlement_upload_matches_items_bills_periods_and_checks(service, sessi
     )
 
 
-def test_settlement_store_comes_from_partner_map_or_is_rejected(service, session, monkeypatch):
-    content = S.settlement([S.fee("LostInventory", "2026-10-07", "-1.00", gtin=S.GTIN_1, ref="R9")])
-    rejected = _upload(service, content)
-    assert rejected.status == "rejected" and "认不出是哪家店" in (rejected.reject_reason or "")
-    service.settings.finance_wfs_partner_store_map = f'{{"{S.PARTNER_A}": "{S.STORE_A}"}}'
-    ok = _upload(service, content)
-    assert ok.status == "parsed" and ok.store_id == S.STORE_A
-    with pytest.raises(WfsFeeError, match="不一致"):
-        _upload(service, content, store_id=S.STORE_B)
+def test_store_is_recognised_without_choosing(service, session):
+    """不用选店铺：Partner ID 配置 / 以前导入过 / 商品投票；认不出才拒收并让页面选店。"""
+    unknown = S.settlement(
+        [S.fee("LostInventory", "2026-10-07", "-1.00", gtin=S.GTIN_3, ref="R9", partner="P-Y")]
+    )
+    rejected = _upload(service, unknown)
+    assert rejected.status == "rejected" and rejected.needs_store
+    assert "认不出是哪家店" in (rejected.reject_reason or "")
+
+    # 商品投票：GTIN 只在 A 店 → A 店
+    voted = _upload(
+        service, S.settlement([S.fee("LostInventory", "2026-10-07", "-1.00", gtin=S.GTIN_1, ref="R1")])
+    )
+    assert voted.status == "parsed" and voted.store_id == S.STORE_A
+
+    # 同一个 Partner ID 以前导入过 → 没有 GTIN 的行也能认
+    learned = _upload(
+        service,
+        S.settlement([S.fee("Refund", "2026-10-08", "-3.00", reason="StorageFeeDispute", ref="R2")]),
+    )
+    assert learned.status == "parsed" and learned.store_id == S.STORE_A
+
+    # 空的仓储费报表没有商品：看卖家后台文件名里的 Partner ID（以前从内容里学到过的）
+    empty = _upload(
+        service,
+        S.storage([], period=("2026-10-17", "2026-10-30"), total="0"),
+        name=f"StorageFee_2026-10-17_{S.PARTNER_A}.zip/StorageFee.csv",
+    )
+    assert empty.status == "empty" and empty.store_id == S.STORE_A
+    # 文件名里的数字没学到过 → 不认
+    stranger = _upload(
+        service,
+        S.storage([], period=("2026-10-31", "2026-11-13"), total="0"),
+        name="StorageFee_2026-10-31_99999999999.zip/StorageFee.csv",
+    )
+    assert stranger.status == "rejected" and stranger.needs_store
+
+    # 页面选的店只补认不出的；认得出的不被覆盖
+    kept = _upload(
+        service,
+        S.settlement([S.fee("LostInventory", "2026-10-21", "-2.00", gtin=S.GTIN_1, ref="R5")]),
+        store_id=S.STORE_B,
+    )
+    assert kept.store_id == S.STORE_A
+    filled = _upload(service, unknown, store_id=S.STORE_B)
+    assert filled.status == "parsed" and filled.store_id == S.STORE_B
+
+
+def test_store_vote_uses_sku_and_refuses_ambiguous_products(service, session):
+    _listing(session, S.GTIN_2, "30000000002", "B-MSKU-2", store_id=S.STORE_B)
+    session.flush()
+    # 同一 GTIN 两家店都有、没有 SKU → 分不出来
+    ambiguous = _upload(
+        service,
+        S.settlement(
+            [S.fee("LostInventory", "2026-10-07", "-1.00", gtin=S.GTIN_2, ref="R7", partner="P-X")]
+        ),
+    )
+    assert ambiguous.status == "rejected" and ambiguous.needs_store
+    # 仓储费报表带 SKU（店铺自己的编码）→ 能分开
+    storage = _upload(
+        service,
+        S.storage(
+            [(S.GTIN_2, "B-MSKU-2", "1.00", "1.00", "0")],
+            period=("2026-10-03", "2026-10-16"),
+            total="1.00",
+        ),
+    )
+    assert storage.status == "parsed" and storage.store_id == S.STORE_B
 
 
 def test_storage_period_overlap_is_rejected_and_same_period_replaces(service, session):

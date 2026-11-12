@@ -29,6 +29,7 @@ from app.modules.wfs_fees.schemas import (
     WfsFeeCheckRead,
     WfsFeeFileListData,
     WfsFeeImportData,
+    WfsFeeImportListData,
     WfsFeeLineListData,
     WfsFeeLineRead,
     WfsFeePeriodListData,
@@ -36,6 +37,7 @@ from app.modules.wfs_fees.schemas import (
     WfsFeeTypeRead,
     WfsFeeVerifyRequest,
 )
+from app.modules.wfs_fees.parsing import ParseError, expand_upload
 from app.modules.wfs_fees.service import SOURCE_REF, WfsFeeError, WfsFeeService
 
 READ_PERMISSION: Final = "page:finance:wfs-fees:view"
@@ -43,6 +45,7 @@ IMPORT_PERMISSION: Final = "action:finance:wfs-fees:import"
 ADJUST_PERMISSION: Final = "action:finance:wfs-fees:adjust"
 ERR_EMPTY_UPLOAD: Final = "WFS_FEE_EMPTY_UPLOAD"
 ERR_TOO_LARGE: Final = "WFS_FEE_UPLOAD_TOO_LARGE"
+ERR_BAD_ZIP: Final = "WFS_FEE_BAD_ZIP"
 MAX_UPLOAD_BYTES: Final = 16 * 1024 * 1024
 
 router = APIRouter(prefix="/api/finance/wfs-fees", tags=["Finance WFS Fees"])
@@ -118,7 +121,9 @@ def list_lines(
     report_key: Annotated[str | None, Query(max_length=64)] = None,
     fee_type: Annotated[str | None, Query(max_length=64)] = None,
     fee_source: Annotated[str | None, Query(pattern=r"^(settlement|storage|inbound)$")] = None,
-    attribution: Annotated[str | None, Query(max_length=24)] = None,
+    attribution: Annotated[
+        str | None, Query(max_length=120, pattern=r"^[a-z_]+(,[a-z_]+)*$")
+    ] = None,  # 逗号分隔多个（页面按三档筛）
     date_from: date | None = None,
     date_to: date | None = None,
     q: Annotated[str | None, Query(max_length=64)] = None,
@@ -217,7 +222,7 @@ def list_files(
     "/imports",
     responses=ERRORS,
     operation_id="uploadFinanceWfsFeeReport",
-    summary="上传一份报表（结算 / 仓储 / 入库运输原始 CSV）；多文件 = 多次调用",
+    summary="上传一份报表（结算 / 仓储 / 入库运输原始 CSV，或卖家后台下载的 ZIP）；多文件 = 多次调用",
 )
 async def upload_report(
     request: Request,
@@ -227,23 +232,32 @@ async def upload_report(
     store_id: Annotated[str | None, Header(alias="X-Store-Id", pattern=r"^[0-9]+$")] = None,
     period_start: Annotated[date | None, Header(alias="X-Period-Start")] = None,
     period_end: Annotated[date | None, Header(alias="X-Period-End")] = None,
-) -> SuccessEnvelope[WfsFeeImportData, None]:
+) -> SuccessEnvelope[WfsFeeImportListData, None]:
     content = await _read_limited_body(request)
     if not content:
         raise ApiError(code=ERR_EMPTY_UPLOAD, status_code=422, message="文件不能为空")
+    name = unquote(file_name or "未命名文件")[:200]
     try:
-        result = WfsFeeService(session, get_settings()).upload(
-            file_name=unquote(file_name or "未命名文件")[:255],
-            content=content,
-            actor=principal.user_id,
-            request_id=get_request_id(request),
-            store_id=store_id,
-            period_start=period_start,
-            period_end=period_end,
-        )
+        parts = expand_upload(name, content)
+    except ParseError as exc:
+        raise ApiError(code=ERR_BAD_ZIP, status_code=422, message=str(exc)) from exc
+    service = WfsFeeService(session, get_settings())
+    items: list[WfsFeeImportData] = []
+    try:
+        for part_name, part in parts:
+            result = service.upload(
+                file_name=part_name[:255],
+                content=part,
+                actor=principal.user_id,
+                request_id=get_request_id(request),
+                store_id=store_id,
+                period_start=period_start,
+                period_end=period_end,
+            )
+            items.append(WfsFeeImportData(**result.__dict__))
     except WfsFeeError as exc:
         raise _api_error(exc) from exc
-    return success_response(request, data=WfsFeeImportData(**result.__dict__))
+    return success_response(request, data=WfsFeeImportListData(items=items))
 
 
 @router.post(
