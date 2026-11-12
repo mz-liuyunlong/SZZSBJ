@@ -5,6 +5,7 @@
  */
 import { AutoComplete, Typography } from "antd";
 import { useMemo, useState } from "react";
+import { maskCards } from "@/pages/finance/cash-flow/cardMask";
 import { fmtMoney, type FeishuApproval } from "@/pages/finance/localFinData";
 
 const SERIAL = /^\d{12}$/;
@@ -37,7 +38,7 @@ function ApprovalPicker({ approvals, candidates = [], onPick, onPreview, width =
         <span className="fin-cash-flow__picker-option">
           <span className="fin-cash-flow__picker-text">
             {first.has(item.serial) && <Typography.Text type="warning">候选 </Typography.Text>}
-            {item.serial} · {item.masked ? "****" : fmtMoney(item.amount, item.cur)} · {(item.payee || "—").slice(0, 10)} · {(item.masked ? "" : item.reason || "").slice(0, 16)}
+            {item.serial} · {item.masked ? "****" : fmtMoney(item.amount, item.cur)} · {(item.payee || "—").slice(0, 10)} · {maskCards(item.masked ? "" : item.reason || "").slice(0, 16)}
           </span>
           <Typography.Link className="fin-cash-flow__picker-view" onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); }}
             onClick={(event) => { event.preventDefault(); event.stopPropagation(); onPreview(item); }}>看</Typography.Link>

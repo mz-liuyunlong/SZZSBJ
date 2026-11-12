@@ -5,6 +5,7 @@ import { FinMoney } from "@/pages/finance/FinanceBoardFrame";
 import { fsFileUrl, type FsDetail, type FsRecord } from "@/pages/finance/cash-flow/data";
 import { type CashSnapshot, type FeishuApproval } from "@/pages/finance/localFinData";
 import { STATE_COLOR, EMPTY, type ApprovalView, viewOf, type CompareRow } from "@/pages/finance/cash-flow/journalShared";
+import { CardText } from "@/pages/finance/cash-flow/CardText";
 
 export function CompareTable({ rows }: { rows: CompareRow[] }) {
   const cell = (row: CompareRow, text: string) => (row.ok === false ? <Typography.Text type="danger">{text}</Typography.Text> : text);
@@ -20,7 +21,7 @@ export function CompareTable({ rows }: { rows: CompareRow[] }) {
 
 /** 一张审批单：字段 + 明细 + 凭证（截图 / 付款凭证 / 附件）。 */
 export function ApprovalPanel({ view, onOpen }: { view: ApprovalView; onOpen?: () => void }) {
-  const hide = (value: string) => (view.masked ? "****" : value || EMPTY);
+  const hide = (value: string) => (view.masked ? "****" : value ? <CardText text={value} /> : EMPTY);
   const files = view.detail?.files ?? [];
   /* 接口版附件只存了元数据（name 为空），只列文件名，原件到飞书看。 */
   const images = files.filter((file) => file.img && file.name);
@@ -88,7 +89,7 @@ export function ApprovalDrawer({ item, data, details, onClose }: { item?: Feishu
   if (!item) return null;
   const lines = new Map(data.lines.map((line) => [line.id, line]));
   const accounts = new Map(data.accounts.map((account) => [account.id, account.name]));
-  const hide = (value: string) => (item.masked ? "****" : value || EMPTY);
+  const hide = (value: string) => (item.masked ? "****" : value ? <CardText text={value} /> : EMPTY);
   return (
     <Drawer open width={640} rootClassName="fin-cash-flow__drawer" onClose={onClose} title={<Space>飞书审批单 {item.serial}<Tag bordered={false} color={STATE_COLOR[item.state]}>{item.state}</Tag></Space>}>
       {details[item.serial] ? <ApprovalPanel view={viewOf(item.serial, item, details[item.serial])} /> : <>

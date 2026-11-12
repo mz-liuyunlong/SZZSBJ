@@ -111,7 +111,13 @@ def parse(det, seed):
             )
             continue
         memo = g(r, "附言")
-        fee_paid = to_decimal(g(r, fee_key)) if fee_key and amt < 0 else None
+        # 店铺户归集出账的「费用」不再记：这笔手续费已经在专用户入账那边拆成「PingPong 归集手续费」，
+        # 两边都记会重复（Rocky 11-12）。
+        fee_paid = (
+            to_decimal(g(r, fee_key))
+            if fee_key and amt < 0 and ptype != "资金归集至专用账户"
+            else None
+        )
         if fee_paid is not None and fee_paid > 0:
             memo = ("%s；" % memo if memo else "") + "PingPong 手续费 %.2f" % fee_paid
         out.append(

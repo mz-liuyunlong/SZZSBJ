@@ -17,8 +17,9 @@ import { ALERT_GUIDE, alertShort, toCashAlerts, useApprovals, type CashAlert, ty
 import { accountLabel, fmtMoney, type CashLine, type CashSnapshot, type FeishuApproval } from "@/pages/finance/localFinData";
 import ReportFacetSelect from "@/shared/report-filters";
 import { writeUserPreference } from "@/shared/preferences/userPreferenceCache";
-import { type ReviewCard, STATE_COLOR, EMPTY, isOpenApproval, isUncat, mergeFeishu, noFlowAlerts, orphanInScope, isExcluded, type ReviewStage, type ReviewMark, REVIEW_TAG, baseReview, isFirstPending, REVIEW_STAGE_OPTIONS, PREVIEW_ACTION_TIP, viewOf, amountDiff, JOURNAL_COLUMN_PREF_KEY, JOURNAL_COLUMN_PREF_VERSION, JOURNAL_FIXED_KEYS, JOURNAL_DEFAULT_KEYS, JOURNAL_COLUMN_GROUPS, readJournalColumns, icon, HANDOFF_EVENT, readHandoff } from "@/pages/finance/cash-flow/journalShared";
+import { type ReviewCard, STATE_COLOR, EMPTY, isOpenApproval, isUncat, mergeFeishu, noFlowAlerts, orphanInScope, isExcluded, type ReviewStage, type ReviewMark, REVIEW_TAG, baseReview, isFirstPending, REVIEW_STAGE_OPTIONS, PREVIEW_ACTION_TIP, viewOf, amountDiff, compareAmount, JOURNAL_COLUMN_PREF_KEY, JOURNAL_COLUMN_PREF_VERSION, JOURNAL_FIXED_KEYS, JOURNAL_DEFAULT_KEYS, JOURNAL_COLUMN_GROUPS, readJournalColumns, icon, HANDOFF_EVENT, readHandoff } from "@/pages/finance/cash-flow/journalShared";
 import { ApprovalDrawer } from "@/pages/finance/cash-flow/ApprovalDrawer";
+import { maskCards } from "@/pages/finance/cash-flow/cardMask";
 import ApprovalPicker from "@/pages/finance/cash-flow/ApprovalPicker";
 import { AlertCloseButton, ClosedAlertsButton } from "@/pages/finance/cash-flow/LineExtraActions";
 import { BoardTable } from "@/pages/finance/cash-flow/BoardTable";
@@ -227,7 +228,7 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
   const catOptions = useMemo(() => groupedCatOptions(data.cats, !live), [data, live]);
   const openApprovals = useMemo(() => feishuAll.filter((item) => isOpenApproval(item, data)), [data, feishuAll]);
   const openApprovalOptions = useMemo(() => feishuAll.filter((item) => isOpenApproval(item, data)).sort((a, b) => b.serial.localeCompare(a.serial))
-    .map((item) => ({ value: item.serial, label: `${item.serial} ${item.masked ? "****" : fmtMoney(item.amount, item.cur)} ${(item.payee || "").slice(0, 10)} ${(item.masked ? "" : item.reason || "").slice(0, 16)}` })), [data, feishuAll]);
+    .map((item) => ({ value: item.serial, label: `${item.serial} ${item.masked ? "****" : fmtMoney(item.amount, item.cur)} ${(item.payee || "").slice(0, 10)} ${maskCards(item.masked ? "" : item.reason || "").slice(0, 16)}` })), [data, feishuAll]);
   const columnDefs: Record<string, ProColumns<CashLine>[]> = {
     date: [{ key: "date", title: "日期", dataIndex: "date", width: 116, fixed: "left", }],
     acct: [{ key: "acct", title: "账户", dataIndex: "acct", width: 200, render: (_, row) => accountMap.get(row.acct)?.name ?? row.acct }],
@@ -245,7 +246,7 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
     refs: [{ key: "refs", title: "审批单", dataIndex: "refs", width: 230, tooltip: "这笔付款对应哪张飞书审批单。自动：备注里有单号直接关联；金额 + 收款人 + 45 天内唯一候选自动关联。对不上的在这里输入或选未付审批单", render: (_, row) => (
       <span className="finance-board__stack">
         {row.refs.length > 0 && <Space size={4} wrap>{row.refs.map((ref) => { const item = approvals.get(ref); return <Tooltip key={ref} title={item ? `${item.kind} · ${item.state} · 点击看审批单` : "飞书里没找到"}><Tag bordered={false} className="finance-board__ref" color={item ? STATE_COLOR[item.state] ?? "blue" : "red"} closable={live} onClose={(event) => { event.preventDefault(); void send(row, "detach_ref", { payload: { ref } }); }} onClick={() => item && setApprovalOpen(item)}>{ref}</Tag></Tooltip>; })}</Space>}
-        {live && !row.refs.length && (asLive(row)?.candidates.length ?? 0) > 0 && <Space size={4} wrap className="fin-cash-flow__candidates"><Typography.Text type="secondary">候选：</Typography.Text>{asLive(row)?.candidates.map((ref) => { const item = approvals.get(ref); return <Tooltip key={ref} title={item ? `点击挂上 · ${item.kind} · ${fmtMoney(item.amount, item.cur)} · 收款人 ${item.payee || EMPTY} · ${(item.reason || "").slice(0, 30)}` : "点击挂上"}><Tag bordered={false} color="gold" className="finance-board__ref" onClick={() => { void send(row, "attach_ref", { payload: { ref } }, `已挂上 ${ref}`); }}>{ref}</Tag></Tooltip>; })}</Space>}
+        {live && !row.refs.length && (asLive(row)?.candidates.length ?? 0) > 0 && <Space size={4} wrap className="fin-cash-flow__candidates"><Typography.Text type="secondary">候选：</Typography.Text>{asLive(row)?.candidates.map((ref) => { const item = approvals.get(ref); return <Tooltip key={ref} title={item ? `点击挂上 · ${item.kind} · ${fmtMoney(item.amount, item.cur)} · 收款人 ${item.payee || EMPTY} · ${maskCards(item.reason || "").slice(0, 30)}` : "点击挂上"}><Tag bordered={false} color="gold" className="finance-board__ref" onClick={() => { void send(row, "attach_ref", { payload: { ref } }, `已挂上 ${ref}`); }}>{ref}</Tag></Tooltip>; })}</Space>}
         {live ? <ApprovalPicker approvals={openApprovals} candidates={asLive(row)?.candidates} onPreview={setApprovalOpen} onPick={(ref) => send(row, "attach_ref", { payload: { ref } }, `已挂上 ${ref}`)} /> : <Tooltip title={LOCKED_TIP}><AutoComplete size="small" disabled style={{ width: 200 }} placeholder="关联审批单（输入或选未付单）" options={openApprovalOptions} /></Tooltip>}
       </span>) }],
     alert: [{ key: "alert", title: "异常", width: 150, tooltip: "这笔流水上待处理的异常（灰色是数据提示，不算异常）；点详情看说明和处理方法", render: (_, row) => {
@@ -348,7 +349,7 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
         <Input.TextArea autoFocus rows={3} maxLength={200} showCount placeholder="必填：不通过的原因（会显示在审核状态下，财务专员据此修改）" value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} />
       </Modal>
       <Modal open={Boolean(noting)} title="初审通过 · 写差额说明" okText="初审通过" okButtonProps={{ disabled: !noteText.trim() }} cancelText="取消" onOk={confirmNote} onCancel={() => { setNoting(undefined); setNoteText(""); }} destroyOnHidden>
-        {noting && <Typography.Paragraph>审批单金额和这笔流水对不上：<Typography.Text type="danger">差额 {fmtMoney(amountDiff(wholeCompareLine(noting), approvalsOf(noting)), wholeCompareLine(noting).cur)}</Typography.Text>（审批单合计 − 流水金额）。写清楚原因，终审会看到。</Typography.Paragraph>}
+        {noting && <Typography.Paragraph>审批单金额和这笔流水对不上：<Typography.Text type="danger">差额 {fmtMoney(amountDiff(wholeCompareLine(noting), approvalsOf(noting)), compareAmount(wholeCompareLine(noting), approvalsOf(noting))?.cur ?? wholeCompareLine(noting).cur)}</Typography.Text>（审批单合计 − 流水金额）。写清楚原因，终审会看到。</Typography.Paragraph>}
         <Input.TextArea autoFocus rows={3} placeholder="必填：为什么有差额（例如：手续费由我方承担、分两笔付、汇率差……）" value={noteText} onChange={(event) => setNoteText(event.target.value)} />
       </Modal>
       <Modal open={Boolean(excluding)} title="剔除这笔流水" okText="确定剔除" okButtonProps={{ danger: true, disabled: !excludeReason.trim() }} cancelText="取消" onOk={confirmExclude} onCancel={() => { setExcluding(undefined); setExcludeAmount(""); setExcludeReason(""); }} destroyOnHidden>
