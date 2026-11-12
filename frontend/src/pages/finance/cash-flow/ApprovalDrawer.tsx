@@ -48,14 +48,14 @@ export function ApprovalPanel({ view, onOpen }: { view: ApprovalView; onOpen?: (
               { title: "处理人", dataIndex: "who", width: 130, render: (_, row) => row.who || EMPTY },
               { title: "结果", dataIndex: "act", width: 80, render: (_, row) => <Tag bordered={false} color={row.act === "拒绝" || row.act === "退回" ? "red" : row.act === "撤回" ? "default" : row.act === "通过" || row.act === "自动通过" ? "green" : "blue"}>{row.act}</Tag> },
               { title: "时间", dataIndex: "time", width: 140 },
-              { title: "意见 / 上传", dataIndex: "note", render: (_, row) => <>{row.note || ""}{row.files ? <Typography.Text type="secondary">{row.note ? "；" : ""}上传 {row.files} 个文件（见下方凭证）</Typography.Text> : row.note ? null : EMPTY}</> },
+              { title: "意见 / 上传", dataIndex: "note", render: (_, row) => <>{row.note ? <CardText text={row.note} /> : ""}{row.files ? <Typography.Text type="secondary">{row.note ? "；" : ""}上传 {row.files} 个文件（见下方凭证）</Typography.Text> : row.note ? null : EMPTY}</> },
             ]} />
         </div>
       )}
       {(view.detail?.comments?.length ?? 0) > 0 && (
         <div className="fin-cash-flow__section">
           <Typography.Text strong>评论</Typography.Text>
-          {view.detail?.comments?.map((row, index) => <div key={`${row.time}-${index}`}><Typography.Text type="secondary">{row.time} {row.who || "—"}：</Typography.Text>{row.note || "（只有附件）"}</div>)}
+          {view.detail?.comments?.map((row, index) => <div key={`${row.time}-${index}`}><Typography.Text type="secondary">{row.time} {row.who || "—"}：</Typography.Text>{row.note ? <CardText text={row.note} /> : "（只有附件）"}</div>)}
         </div>
       )}
       <div className="fin-cash-flow__section">
