@@ -180,6 +180,10 @@ def rolling_window(now: datetime, days: int = WALMART_BILL_ROLLING_DAYS) -> tupl
     return max(EARLIEST, end - timedelta(days=days - 1)), end
 
 
+def _in_window(report_date: date | None, start: date, end: date) -> bool:
+    return report_date is not None and start <= report_date <= end
+
+
 def month_segments(start: date, end: date) -> list[tuple[date, date]]:
     """按自然月切开，旧到新。"""
     segments: list[tuple[date, date]] = []
@@ -440,13 +444,14 @@ class LingxingWalmartBillSyncHandler:
                 max_pages=max_pages,
             )
             touched |= segment.keys
-            # 往前补到的段里新冒出来的账单，账单日落在本次窗口里的也要接着追（2026-11-11：
-            # 回填从 10-01 起，10-06 那期是在往前补的段里才出现的，只追原来那批会停在 8 月 31 日，
-            # 漏掉 8 月中旬的退款 / 扣费）。账单日在窗口之前的旧账单不追，免得一直往前拉。
+            # 往前补到的段里新冒出来的账单，账单日落在本次窗口 [start, end] 里的也要接着追
+            # （2026-11-11：回填从 10-01 起，10-06 那期是在往前补的段里才出现的，只追原来那批
+            # 会停在 8 月 31 日，漏掉 8 月中旬的退款 / 扣费）。账单日在窗口之前或之后的不追，
+            # 免得去拉本次范围以外的账单；已经在追的照旧追，不受这条限制。
             chasing = {
                 key
                 for key, posted in segment.first_posted.items()
-                if (key in chasing or segment.report_dates.get(key, start) >= start)
+                if (key in chasing or _in_window(segment.report_dates.get(key), start, end))
                 and posted < segment_start + timedelta(EDGE_DAYS)
             }
             cursor = segment_start
