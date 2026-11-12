@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { toCashLine, type ApiLine } from "@/pages/finance/cash-flow/journalApi";
 import { hasCard, luhnOk, maskCards } from "@/pages/finance/cash-flow/cardMask";
 import { amountDiff, compareAmount, compareRows, type ApprovalView } from "@/pages/finance/cash-flow/journalShared";
-import { wholeCompareLine } from "@/pages/finance/cash-flow/journalParts";
+import { partApprovalGroups, partGroupCompareLine, wholeCompareLine } from "@/pages/finance/cash-flow/journalParts";
 
 vi.mock("@/api/backendApi", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/api/backendApi")>()), backendRequest: vi.fn() }));
 
@@ -47,12 +47,54 @@ describe("RMB approval against a foreign-currency line (Rocky 11-12)", () => {
   });
 });
 
+describe("split foreign lines keep the rate source (刘云龙 #341 P2)", () => {
+  const split = (source: string) => toCashLine(api({
+    amount: "-100.0000", amount_cny: "-712.8000", fx_source: source, fx_rate: "7.1280", refs: ["209901010002"],
+    parts: [{ amount: "60.0000", category_code: null, refs: ["209901010001"] }, { amount: "40.0000", category_code: null }],
+  }));
+
+  it("the rest after split parts, converted by the system rate, is still flagged as an estimate", () => {
+    const whole = wholeCompareLine(split("lingxing"));
+    expect(whole).toMatchObject({ amt: -285.12, cur: "CNY", cnyFrom: { cur: "USD", amt: -40 } });
+    expect(compareAmount(whole, [view(300, "CNY")])).toMatchObject({ converted: true, exact: false, original: { cur: "USD", amt: -40 } });
+    const [amount] = compareRows(whole, [view(300, "CNY")]);
+    expect(amount.result).toContain("按系统汇率");
+    expect(amount.line).toContain("40.00");
+    expect(amount.line).toContain("285.12");
+  });
+
+  it("Payoneer or manual CNY on a split line is exact", () => {
+    const whole = wholeCompareLine(split("payoneer"));
+    expect(compareAmount(whole, [view(300, "CNY")])).toMatchObject({ converted: true, exact: true });
+    expect(compareRows(whole, [view(300, "CNY")])[0].result).toBe("差额 ¥14.88");
+  });
+
+  it("a split row compared with a USD approval uses the original USD amount", () => {
+    const line = split("lingxing");
+    const group = partGroupCompareLine(line, partApprovalGroups(line)[0]);
+    expect(amountDiff(group, [view(60, "USD")])).toBe(0);
+    expect(compareAmount(group, [view(400, "CNY")])).toMatchObject({ converted: true, exact: false });
+  });
+});
+
 describe("card numbers in approval text (Rocky 11-12)", () => {
   const card = "4111 1111 1111 1111";
   it("keeps only the last 4 digits and the spacing", () => {
     expect(maskCards(`卡号：${card}，待还款`)).toBe("卡号：**** **** **** 1111，待还款");
     expect(maskCards("4111-1111-1111-1111")).toBe("****-****-****-1111");
     expect(hasCard(card)).toBe(true);
+  });
+
+  it("keeps amounts and dates next to the card visible and the card hidden (刘云龙 #341 P1)", () => {
+    expect(maskCards(`银行卡号 ${card} 10元`)).toBe("银行卡号 **** **** **** 1111 10元");
+    expect(maskCards(`10 ${card}`)).toBe("10 **** **** **** 1111");
+    expect(maskCards(`2026-10-30 ${card} 金额 10 20`)).toBe("2026-10-30 **** **** **** 1111 金额 10 20");
+    expect(maskCards("4111111111111111 10")).toBe("************1111 10");
+  });
+
+  it("after 卡号 / 银行卡 / 账号 a card is hidden even without a Luhn check digit", () => {
+    expect(maskCards("卡号 1234 5678 9012 3456 10")).toBe("卡号 **** **** **** 3456 10");
+    expect(maskCards("1234 5678 9012 3456 10")).toBe("1234 5678 9012 3456 10");
   });
 
   it("leaves 12-digit approval serials, short numbers and non-Luhn strings alone", () => {

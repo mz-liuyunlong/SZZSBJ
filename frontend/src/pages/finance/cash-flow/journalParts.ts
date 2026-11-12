@@ -76,9 +76,13 @@ export function partApprovalRefs(line: CashLine): PartApprovalRef[] {
 /** 详情「关联审批单（N）」的 N：整笔挂的 + 各拆分行挂的，去重。 */
 export const approvalRefCount = (line: CashLine) => new Set([...line.refs, ...partApprovalRefs(line).map((item) => item.ref)]).size;
 
+/** 比对用的「流水」：外币换成折人民币时，cnyFrom 记下换算前的币种和金额（刘云龙 #341：换算后还要知道
+ * 是外币折过来的，汇率来源才不会丢——系统汇率折的不能当精确金额比）。 */
+export type CompareLine = CashLine & { cnyFrom?: { cur: string; amt: number } };
+
 /** 拆分行那张单比对用的「流水」：外币按这一行折人民币比，人民币按这一行金额比。 */
-export function partCompareLine(line: CashLine, item: PartApprovalRef): CashLine {
-  if (line.cur !== "CNY" && item.cny != null) return { ...line, amt: item.cny, cur: "CNY", refs: [item.ref] };
+export function partCompareLine(line: CashLine, item: PartApprovalRef): CompareLine {
+  if (line.cur !== "CNY" && item.cny != null) return { ...line, amt: item.cny, cur: "CNY", refs: [item.ref], cnyFrom: { cur: line.cur, amt: item.amt } };
   return { ...line, amt: item.amt, refs: [item.ref] };
 }
 
@@ -95,14 +99,14 @@ export function partApprovalGroups(line: CashLine): PartApprovalGroup[] {
 }
 
 /** 一组拆分行审批单比对用的「流水」：外币按这一行折人民币（缺汇率退回原币），人民币按这一行金额。 */
-export function partGroupCompareLine(line: CashLine, group: PartApprovalGroup): CashLine {
-  if (line.cur !== "CNY" && group.cny != null) return { ...line, amt: group.cny, cur: "CNY", refs: group.refs };
+export function partGroupCompareLine(line: CashLine, group: PartApprovalGroup): CompareLine {
+  if (line.cur !== "CNY" && group.cny != null) return { ...line, amt: group.cny, cur: "CNY", refs: group.refs, cnyFrom: { cur: line.cur, amt: group.amt } };
   return { ...line, amt: group.amt, refs: group.refs };
 }
 
 /** 整笔挂的审批单比对用的「流水」（刘云龙 #339 第二轮终审）：拆分行已经挂了单的那部分金额不算，只和剩下的比，
  * 和后端 approval_service._line_shares 的 rest 口径一致。外币按折人民币（缺汇率退回原币），人民币按原币。 */
-export function wholeCompareLine(line: CashLine): CashLine {
+export function wholeCompareLine(line: CashLine): CompareLine {
   const parts = line.parts ?? [];
   const taken = parts.map((part, index) => ({ part, index })).filter(({ part }) => (part.refs ?? []).length > 0);
   if (!taken.length || line.amt == null) return line;
@@ -111,7 +115,8 @@ export function wholeCompareLine(line: CashLine): CashLine {
   if (line.cur !== "CNY" && line.cny != null) {
     const cnys = partCny(line);
     const used = taken.reduce((sum, { index }) => sum + cents(cnys[index] ?? 0), 0);
-    return { ...line, amt: (sign * (cents(line.cny) - used)) / 100, cur: "CNY" };
+    const usedOriginal = taken.reduce((sum, { part }) => sum + cents(part.amt), 0);
+    return { ...line, amt: (sign * (cents(line.cny) - used)) / 100, cur: "CNY", cnyFrom: { cur: line.cur, amt: (sign * (cents(line.amt) - usedOriginal)) / 100 } };
   }
   const used = taken.reduce((sum, { part }) => sum + cents(part.amt), 0);
   return { ...line, amt: (sign * (cents(line.amt) - used)) / 100 };

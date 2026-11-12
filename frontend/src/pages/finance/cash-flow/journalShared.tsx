@@ -2,6 +2,7 @@
 import { type ProColumns } from "@ant-design/pro-components";
 import { type RuntimeColumnGroup } from "@/components/report-table/RuntimeColumnConfigDrawer";
 import { asLive } from "@/pages/finance/cash-flow/journalApi";
+import { type CompareLine } from "@/pages/finance/cash-flow/journalParts";
 import { type CashAlert, type FsDetail } from "@/pages/finance/cash-flow/data";
 import { fmtMoney, type CashLine, type CashSnapshot, type FeishuApproval } from "@/pages/finance/localFinData";
 import { readUserPreference } from "@/shared/preferences/userPreferenceCache";
@@ -111,31 +112,38 @@ const EXACT_FX = new Set(["payoneer", "manual"]);
 /** 和审批单比的流水金额（Rocky 11-12：人民币审批单对美元流水，以前直接拿原币相减，差额没意义）。
  * 币种相同（CNY / CNH 算同一种；审批单没写币种按同币种）→ 原币；审批单都是人民币、流水是外币 → 流水折人民币；
  * 别的（币种不同又没折人民币、几张单币种混着）→ null，没法比。exact = 折人民币用的是精确来源。 */
-export interface CompareAmount { amt: number; cur: string; converted: boolean; exact: boolean }
-export function compareAmount(line: CashLine, views: ApprovalView[]): CompareAmount | null {
+export interface CompareAmount { amt: number; cur: string; converted: boolean; exact: boolean; original: { cur: string; amt: number } }
+/** 拆分行 / 整笔扣拆分行已经换成人民币的（cnyFrom 有值）也算「折过来的」：exact 照样看这笔的汇率来源
+ * （刘云龙 #341：拆分后用领星月汇率折的，不能当精确金额）；审批单是原币的，按换算前的原币比。 */
+export function compareAmount(line: CompareLine, views: ApprovalView[]): CompareAmount | null {
   if (line.amt == null) return null;
   const curs = views.filter((view) => view.amount != null).map((view) => view.cur);
+  const exact = EXACT_FX.has(asLive(line)?.fxSource ?? "");
+  const from = line.cnyFrom;
+  if (from && curs.length && curs.every((cur) => cur === from.cur)) {
+    return { amt: Math.abs(from.amt), cur: from.cur, converted: false, exact: true, original: from };
+  }
+  const original = from ?? { cur: line.cur, amt: line.amt };
   const lineRmb = RMB_CODES.has(line.cur);
   const same = curs.every((cur) => !cur || cur === line.cur || (lineRmb && RMB_CODES.has(cur)));
-  if (same) return { amt: Math.abs(line.amt), cur: line.cur, converted: false, exact: true };
+  if (same) return { amt: Math.abs(line.amt), cur: line.cur, converted: Boolean(from), exact: from ? exact : true, original };
   if (!lineRmb && line.cny != null && curs.every((cur) => RMB_CODES.has(cur))) {
-    const source = asLive(line)?.fxSource ?? "";
-    return { amt: Math.abs(line.cny), cur: "CNY", converted: true, exact: EXACT_FX.has(source) };
+    return { amt: Math.abs(line.cny), cur: "CNY", converted: true, exact, original };
   }
   return null;
 }
 /** 审批金额合计 − 流水金额（取绝对值，币种按 compareAmount）；没有审批单、审批单没金额、币种没法比时为 null。 */
-export const amountDiff = (line: CashLine, views: ApprovalView[]) => {
+export const amountDiff = (line: CompareLine, views: ApprovalView[]) => {
   const amounts = views.map((view) => view.amount).filter((value): value is number => value != null);
   const base = compareAmount(line, views);
   if (!views.length || !amounts.length || base == null) return null;
   return Math.round((amounts.reduce((sum, value) => sum + value, 0) - base.amt) * 100) / 100;
 };
 export interface CompareRow { key: string; item: string; approval: string; line: string; ok: boolean | null; result: string }
-export const compareRows = (line: CashLine, views: ApprovalView[]): CompareRow[] => {
+export const compareRows = (line: CompareLine, views: ApprovalView[]): CompareRow[] => {
   const diff = amountDiff(line, views);
   const base = compareAmount(line, views);
-  const original = fmtMoney(line.amt == null ? null : Math.abs(line.amt), line.cur);
+  const original = base ? fmtMoney(Math.abs(base.original.amt), base.original.cur) : fmtMoney(line.amt == null ? null : Math.abs(line.amt), line.cur);
   const hasAmount = views.some((view) => view.amount != null);
   const amountResult = !hasAmount ? "审批单没金额"
     : diff == null ? "币种不同、流水还没折人民币，看凭证"
