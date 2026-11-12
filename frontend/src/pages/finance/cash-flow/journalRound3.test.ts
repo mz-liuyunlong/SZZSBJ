@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { toCashLine, type ApiLine } from "@/pages/finance/cash-flow/journalApi";
 import { pairCandidates } from "@/pages/finance/cash-flow/journalPair";
 import { catFilter, groupedCatOptions } from "@/pages/finance/cash-flow/journalSelection";
+// journalShared 连带加载 antd / ProTable，第一次加载在本机要十几秒：放在文件顶部，算在收集阶段，
+// 不占单个用例的 15 秒超时（11-12 本机跑到 19.6 秒超时）。
+import { amountDiff } from "@/pages/finance/cash-flow/journalShared";
 
 vi.mock("@/api/backendApi", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/api/backendApi")>()), backendRequest: vi.fn() }));
 
@@ -140,7 +143,6 @@ describe("whole-line approvals on a split line compare against the rest", () => 
 
   it("1000 split 600 (A) + 400 (none), whole B = 400 → compare 400, no difference", async () => {
     const { wholeCompareLine } = await import("@/pages/finance/cash-flow/journalParts");
-    const { amountDiff } = await import("@/pages/finance/cash-flow/journalShared");
     const line = cnyLine([{ amount: "600.0000", category_code: null, refs: ["209901010001"] }, { amount: "400.0000", category_code: null }]);
     const whole = wholeCompareLine(line);
     expect(whole.amt).toBe(-400);
@@ -151,7 +153,6 @@ describe("whole-line approvals on a split line compare against the rest", () => 
 
   it("one row with two approvals is compared as a group", async () => {
     const { partApprovalGroups, partGroupCompareLine } = await import("@/pages/finance/cash-flow/journalParts");
-    const { amountDiff } = await import("@/pages/finance/cash-flow/journalShared");
     const line = { ...cnyLine([{ amount: "600.0000", category_code: null, refs: ["209901010001", "209901010003"] }, { amount: "400.0000", category_code: null }]), refs: [] };
     const [group] = partApprovalGroups(line);
     expect(group.refs).toEqual(["209901010001", "209901010003"]);

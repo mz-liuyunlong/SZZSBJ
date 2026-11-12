@@ -21,11 +21,8 @@
 .fin-cash-flow__cell-text .fin-cash-flow__cell-body { flex: 1 1 auto; min-width: 0; }
 .fin-cash-flow__cell-text .fin-cash-flow__cell-edit { flex: none; }
 
-/* 表头固定列（Rocky 11-10）：可拖列宽的表头格带 position: relative !important，会把固定列的 sticky 顶掉；
-   勾选列表头也要钉在最左边，否则往右拉表头勾选框会被后面的表头盖住。 */
-.fin-cash-flow__table .ant-table-thead > tr > th.ant-table-cell-fix-left,
-.fin-cash-flow__table .ant-table-thead > tr > th.ant-table-cell-fix-right { position: sticky !important; z-index: 3; }
-.fin-cash-flow__table .ant-table-thead > tr > th.ant-table-selection-column { position: sticky !important; left: 0; z-index: 4; }
+/* 表头固定列、勾选列：统一用 ReportTableShell 的全局规则（reportTable.css「Global report table fixed header」），
+   这里不再单独写 z-index——以前写的 3 / 4 比普通可拖表头的 10 还低，往右拉时「账户」等表头会盖住勾选框（Rocky 11-12）。 */
 .fin-cash-flow__excl-note { color: var(--ant-color-warning-text, #d46b08); white-space: normal; }
 /* 挂审批单选择框：选项右边的「看」（打开审批单，不挂上） */
 .fin-cash-flow__picker-option { display: flex; align-items: center; justify-content: space-between; gap: var(--ant-margin-xs, 8px); }

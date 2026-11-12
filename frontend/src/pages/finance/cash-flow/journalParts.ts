@@ -13,7 +13,7 @@ export const isPartRow = (row: CashLine): row is PartRow => "partOf" in row;
 export function partCny(line: CashLine): (number | null)[] {
   const parts = line.parts ?? [];
   if (line.cny == null || !line.amt || !parts.length) return parts.map(() => null);
-  if (line.cur === "CNY") return parts.map((part) => part.amt);
+  if (isRmb(line.cur)) return parts.map((part) => part.amt);
   const sign = line.cny < 0 ? -1 : 1;
   const total = Math.round(Math.abs(line.cny) * 100);
   const whole = Math.abs(line.amt);
@@ -29,7 +29,7 @@ export function partCny(line: CashLine): (number | null)[] {
 export function withPartRows(rows: CashLine[]): JournalRow[] {
   return rows.map((line) => {
     if (!line.parts?.length) return line;
-    const cnys = line.cur === "CNY" ? line.parts.map(() => null) : partCny(line);
+    const cnys = isRmb(line.cur) ? line.parts.map(() => null) : partCny(line);
     return { ...line, children: line.parts.map((part, index): PartRow => ({ ...line, id: `${line.id}#p${index + 1}`, amt: part.amt, cny: cnys[index], bal: null, cat: part.cat, parts: undefined, flags: [], partOf: line.id, partIndex: index, fee: part.fee, sum: part.sum ?? line.sum, memo: part.memo ?? "", parentSum: line.sum, ownSum: Boolean(part.sum) })) };
   });
 }
@@ -57,10 +57,14 @@ export function cnyToOriginal(cnyRows: number[], total: number, totalCny: number
 
 /** 拆分行挂的审批单（刘云龙 #339 终审：整笔详情要看得到）。整笔已经挂了的不再列（不重复算）；
  * cny = 这一行折人民币（人民币流水就是这一行金额），用来和审批单比对。 */
+/** 人民币 = CNY / CNH，两者视为同币种（刘云龙 #341：CNH 拆分后不能走外币换算）。 */
+export const RMB_CODES = new Set(["CNY", "CNH"]);
+export const isRmb = (cur: string) => RMB_CODES.has(cur);
+
 export interface PartApprovalRef { ref: string; index: number; amt: number; cny: number | null }
 export function partApprovalRefs(line: CashLine): PartApprovalRef[] {
   const parts = line.parts ?? [];
-  const cnys = line.cur === "CNY" ? parts.map((part) => part.amt) : partCny(line);
+  const cnys = isRmb(line.cur) ? parts.map((part) => part.amt) : partCny(line);
   const seen = new Set(line.refs);
   const out: PartApprovalRef[] = [];
   parts.forEach((part, index) => {
@@ -76,9 +80,13 @@ export function partApprovalRefs(line: CashLine): PartApprovalRef[] {
 /** 详情「关联审批单（N）」的 N：整笔挂的 + 各拆分行挂的，去重。 */
 export const approvalRefCount = (line: CashLine) => new Set([...line.refs, ...partApprovalRefs(line).map((item) => item.ref)]).size;
 
+/** 比对用的「流水」：外币换成折人民币时，cnyFrom 记下换算前的币种和金额（刘云龙 #341：换算后还要知道
+ * 是外币折过来的，汇率来源才不会丢——系统汇率折的不能当精确金额比）。 */
+export type CompareLine = CashLine & { cnyFrom?: { cur: string; amt: number } };
+
 /** 拆分行那张单比对用的「流水」：外币按这一行折人民币比，人民币按这一行金额比。 */
-export function partCompareLine(line: CashLine, item: PartApprovalRef): CashLine {
-  if (line.cur !== "CNY" && item.cny != null) return { ...line, amt: item.cny, cur: "CNY", refs: [item.ref] };
+export function partCompareLine(line: CashLine, item: PartApprovalRef): CompareLine {
+  if (!isRmb(line.cur) && item.cny != null) return { ...line, amt: item.cny, cur: "CNY", refs: [item.ref], cnyFrom: { cur: line.cur, amt: item.amt } };
   return { ...line, amt: item.amt, refs: [item.ref] };
 }
 
@@ -95,23 +103,24 @@ export function partApprovalGroups(line: CashLine): PartApprovalGroup[] {
 }
 
 /** 一组拆分行审批单比对用的「流水」：外币按这一行折人民币（缺汇率退回原币），人民币按这一行金额。 */
-export function partGroupCompareLine(line: CashLine, group: PartApprovalGroup): CashLine {
-  if (line.cur !== "CNY" && group.cny != null) return { ...line, amt: group.cny, cur: "CNY", refs: group.refs };
+export function partGroupCompareLine(line: CashLine, group: PartApprovalGroup): CompareLine {
+  if (!isRmb(line.cur) && group.cny != null) return { ...line, amt: group.cny, cur: "CNY", refs: group.refs, cnyFrom: { cur: line.cur, amt: group.amt } };
   return { ...line, amt: group.amt, refs: group.refs };
 }
 
 /** 整笔挂的审批单比对用的「流水」（刘云龙 #339 第二轮终审）：拆分行已经挂了单的那部分金额不算，只和剩下的比，
  * 和后端 approval_service._line_shares 的 rest 口径一致。外币按折人民币（缺汇率退回原币），人民币按原币。 */
-export function wholeCompareLine(line: CashLine): CashLine {
+export function wholeCompareLine(line: CashLine): CompareLine {
   const parts = line.parts ?? [];
   const taken = parts.map((part, index) => ({ part, index })).filter(({ part }) => (part.refs ?? []).length > 0);
   if (!taken.length || line.amt == null) return line;
   const sign = line.amt < 0 ? -1 : 1;
   const cents = (value: number) => Math.round(Math.abs(value) * 100);
-  if (line.cur !== "CNY" && line.cny != null) {
+  if (!isRmb(line.cur) && line.cny != null) {
     const cnys = partCny(line);
     const used = taken.reduce((sum, { index }) => sum + cents(cnys[index] ?? 0), 0);
-    return { ...line, amt: (sign * (cents(line.cny) - used)) / 100, cur: "CNY" };
+    const usedOriginal = taken.reduce((sum, { part }) => sum + cents(part.amt), 0);
+    return { ...line, amt: (sign * (cents(line.cny) - used)) / 100, cur: "CNY", cnyFrom: { cur: line.cur, amt: (sign * (cents(line.amt) - usedOriginal)) / 100 } };
   }
   const used = taken.reduce((sum, { part }) => sum + cents(part.amt), 0);
   return { ...line, amt: (sign * (cents(line.amt) - used)) / 100 };

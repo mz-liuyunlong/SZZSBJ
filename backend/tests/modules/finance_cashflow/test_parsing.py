@@ -366,6 +366,23 @@ def test_pingpong_payment_fee_is_written_into_the_memo_without_changing_the_line
     ]
 
 
+def test_pingpong_store_sweep_fee_is_not_written_twice():
+    """店铺户「资金归集至专用账户」出账也带费用，但手续费已在专用户入账那边拆出，这边不再提示。"""
+    sweep = (
+        "2026-10-08 09:00:00", "PS1", "OS1", "出账", "资金归集至专用账户", "USD", "103.00",
+        S.PP_STORE, "合成专用户", "0.00", S.PP_USER, "3.00",
+    )  # fmt: skip
+    arrive = (
+        "2026-10-08 09:00:01", "PS2", "OS1", "入账", "专用账户入账", "USD", "100.00",
+        S.PP_USER + "01", "合成店铺", "600.00", S.PP_USER,
+    )  # fmt: skip
+    lines = parse_file(S.pingpong([sweep, arrive]), S.seed()).lines
+    store = [line for line in lines if line.source_ref == "PS1"]
+    assert [(line.amount, line.memo) for line in store] == [(Decimal("-103.00"), "")]
+    fees = [line for line in lines if line.description == "PingPong 归集手续费"]
+    assert [line.amount for line in fees] == [Decimal("-3.00")]
+
+
 def test_boc_unregistered_section_without_header_but_with_rows_rejects_the_file():
     rows = [
         *S.boc_section(S.BOC_A, boc_rows("A", n=1), ("20261101", "20261108")),
