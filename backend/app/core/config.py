@@ -286,6 +286,11 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="FINANCE_APPROVAL_EXCLUDED_DEPARTMENT_IDS",
     )
+    # WFS 费用明细：结算报表 Partner ID → 店铺 id 的 JSON；真实值只在线上 app.env。
+    finance_wfs_partner_store_map: str | None = Field(
+        default=None,
+        validation_alias="FINANCE_WFS_PARTNER_STORE_MAP",
+    )
     feishu_base_url: str = Field(
         default="https://open.feishu.cn",
         validation_alias="FEISHU_BASE_URL",

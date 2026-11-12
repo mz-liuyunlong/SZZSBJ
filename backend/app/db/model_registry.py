@@ -19,4 +19,5 @@ def register_productlist_sync_models() -> None:
     import app.modules.walmart_bills.payout_models
     import app.modules.walmart_remote.models
     import app.modules.walmart_scf.persistence
-    import app.modules.warehouse_wfs.models  # noqa: F401
+    import app.modules.warehouse_wfs.models
+    import app.modules.wfs_fees.models  # noqa: F401
