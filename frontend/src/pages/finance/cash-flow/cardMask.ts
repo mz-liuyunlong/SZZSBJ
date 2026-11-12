@@ -3,15 +3,24 @@
  * 系统里存完整卡号；页面默认只露后 4 位，详情里点小眼睛看全号（有日记账板块权限的人都能点）。
  * 认卡号的规则：13～19 位数字（银行卡号的长度），中间可以有空格或横线，并且通过 Luhn 校验位（所有银行卡号都满足，
  * 随手一串数字九成过不了）。只认事由、明细、意见、评论这些手写文字，单号、金额等有自己字段的不碰。
- * 卡号前后常挨着金额、日期（「4111 1111 1111 1111 10元」）：按空格 / 横线分组，在一串数字里找能凑成卡号的
+ * 卡号前后常挨着金额、日期（「4111 1111 1111 1111 10元」）：按空格、横线、点、斜杠分组（全角也算），在一串数字里找能凑成卡号的
  * 连续几组，优先 16 位、再 19 / 15 / 18 / 17 / 14 / 13 位，找到就只打码这几组，前后的金额日期原样留着（刘云龙 #341 P1）。
  * 前面写了「卡号 / 银行卡 / 账号」的，过不了 Luhn 也按卡号打码（有的老卡号不带校验位）。
  */
-const RUN = /(?<!\d)\d+(?:[ -]\d+)*(?!\d)/g;
-const CARD_HINT = /(卡号|银行卡|账号|帐号|card\s*(?:no|number|#)?)\s*[:：]?\s*$/i;
+/* 数字含全角（０-９）；分隔符 = 一个或多个半角空格、全角空格、横线、点、斜杠（「4111 - 1111」「4111.1111」「4111／1111」也能认），
+   切开后分隔符原样保留（刘云龙 #341 补）。 */
+const DIGIT = "0-9\uFF10-\uFF19";
+const SEP = " \u3000\\-./\uFF0F";
+const RUN = new RegExp(`(?<![${DIGIT}])[${DIGIT}]+(?:[${SEP}]+[${DIGIT}]+)*(?![${DIGIT}])`, "g");
+const SEP_SPLIT = new RegExp(`([${SEP}]+)`);
+const CARD_HINT = /(卡号|银行卡|账号|帐号|card\s*(?:no|number|#)?)\s*(?:是|为)?\s*[:：]?\s*$/i;
+
+/** 全角数字换成半角，只用于识别和校验；显示仍按原文打码。 */
+const toHalf = (text: string) => text.replace(/[\uFF10-\uFF19]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
 const PREFERRED_LENGTHS = [16, 19, 15, 18, 17, 14, 13];
 
-export function luhnOk(digits: string): boolean {
+export function luhnOk(raw: string): boolean {
+  const digits = toHalf(raw);
   let sum = 0;
   for (let index = 0; index < digits.length; index += 1) {
     let digit = Number(digits[digits.length - 1 - index]);
@@ -88,10 +97,10 @@ function maskGroups(groups: string[], start: number, end: number): string[] {
 /** 把卡号除后 4 位外的数字换成 *，空格 / 横线和前后的金额日期保留：「4662 4537 5286 6816 10元」→「**** **** **** 6816 10元」。 */
 export function maskCards(text: string): string {
   return text.replace(RUN, (run: string, offset: number) => {
-    const pieces = run.split(/([ -])/);
+    const pieces = run.split(SEP_SPLIT);
     let groups = pieces.filter((_, index) => index % 2 === 0);
     const hinted = CARD_HINT.test(text.slice(Math.max(0, offset - 12), offset));
-    const spans = cardSpans(groups, hinted);
+    const spans = cardSpans(groups.map(toHalf), hinted);
     if (!spans.length) return run;
     for (const [start, end] of spans) groups = maskGroups(groups, start, end);
     return pieces.map((piece, index) => (index % 2 === 0 ? groups[index / 2] : piece)).join("");

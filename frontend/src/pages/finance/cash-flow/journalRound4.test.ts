@@ -97,6 +97,24 @@ describe("card numbers in approval text (Rocky 11-12)", () => {
     expect(maskCards("1234 5678 9012 3456 10")).toBe("1234 5678 9012 3456 10");
   });
 
+  it("other separators and full-width digits are recognised, separators kept as written (刘云龙 #341 补)", () => {
+    expect(maskCards("4111  1111  1111  1111")).toBe("****  ****  ****  1111");
+    expect(maskCards("4111 - 1111 - 1111 - 1111")).toBe("**** - **** - **** - 1111");
+    expect(maskCards("4111\u30001111\u30001111\u30001111")).toBe("****\u3000****\u3000****\u30001111");
+    expect(maskCards("4111.1111.1111.1111")).toBe("****.****.****.1111");
+    expect(maskCards("4111/1111/1111/1111")).toBe("****/****/****/1111");
+    expect(maskCards("\uFF14" + "\uFF11".repeat(15))).toBe("*".repeat(12) + "\uFF11".repeat(4));   // 全角的 4111111111111111
+    expect(maskCards("卡号是：1234 5678 9012 3456")).toBe("卡号是：**** **** **** 3456");
+    expect(maskCards("账号为 1234567890123456")).toBe("账号为 ************3456");
+  });
+
+  it("dates and amounts written with dots or slashes are left alone", () => {
+    expect(maskCards("2026.10.30")).toBe("2026.10.30");
+    expect(maskCards("1.5")).toBe("1.5");
+    expect(maskCards("10/20")).toBe("10/20");
+    expect(maskCards("金额 96.94 4111 1111 1111 1111")).toBe("金额 96.94 **** **** **** 1111");
+  });
+
   it("leaves 12-digit approval serials, short numbers and non-Luhn strings alone", () => {
     expect(maskCards("单号 202610270001 金额 96.94")).toBe("单号 202610270001 金额 96.94");
     expect(luhnOk("4111111111111112")).toBe(false);
