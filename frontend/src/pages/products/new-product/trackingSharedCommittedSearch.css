@@ -1,0 +1,18 @@
+/* Only the tracking page — reuse the shared CommittedSearch component. */
+.report-table-connected-search.np-tracking-committed-search {
+  display: flex;
+  width: 344px;
+  min-width: 240px;
+  max-width: 344px;
+  flex: 0 1 344px;
+}
+.report-table-connected-search.np-tracking-committed-search > .ant-select { display: none; }
+.report-table-connected-search.np-tracking-committed-search > .ant-input-affix-wrapper {
+  margin-inline-start: 0;
+  border-start-start-radius: 6px !important;
+  border-end-start-radius: 6px !important;
+}
+.report-table-connected-search.np-tracking-committed-search > .ant-btn:last-child {
+  border-start-end-radius: 6px !important;
+  border-end-end-radius: 6px !important;
+}

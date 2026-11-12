@@ -1,0 +1,507 @@
+/* Scoped PR337 tracking dashboard V1. Does not alter the completed performance board. */
+.np-original-v4 .np-tracking-dashboard{
+  --track-blue:#1677ff;--track-ink:#1f2937;--track-muted:#748399;
+  --track-line:#e2eaf5;--track-soft:#f3f7fd;
+  box-sizing:border-box;width:100%;height:100%;min-height:0;min-width:0;
+  padding:12px;background:#f3f6fc;overflow:auto;
+  font-size:13px;line-height:1.5;color:var(--track-ink);
+}
+.np-original-v4 .np-tracking-dashboard *{box-sizing:border-box}
+.np-original-v4 .np-track-date-bar{
+  border:1px solid var(--track-line);border-radius:10px;min-height:54px;
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:8px 17px;background:#fff;margin-bottom:12px;
+}
+.np-original-v4 .np-track-date-control{display:flex;gap:14px;align-items:center;min-width:0}
+.np-original-v4 .np-track-date-control>strong{white-space:nowrap;font-size:13px;font-weight:650}
+.np-original-v4 .np-track-date-control .ant-picker{min-height:34px;border-radius:6px}
+.np-original-v4 .np-track-date-note{font-size:11px;color:#8693a7;text-align:right;line-height:1.45}
+.np-original-v4 .np-track-main{display:grid;grid-template-columns:minmax(280px,.95fr) minmax(0,3.05fr);gap:12px;min-width:0;align-items:stretch}
+.np-original-v4 .np-track-overview{min-width:0;min-height:740px;padding:14px;border-radius:11px;display:flex;flex-direction:column;
+  background:linear-gradient(160deg,#0f4eaf 0%,#1877f2 37%,#8ab7f7 78%,#c7d8f3 100%);color:#fff;overflow:hidden;
+}
+.np-original-v4 .np-track-overview-title{display:flex;align-items:center;gap:9px;margin:2px 4px 14px;font-size:16px;color:#fff}
+.np-original-v4 .np-track-overview-title .anticon{font-size:21px}
+.np-original-v4 .np-track-overview-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.np-original-v4 .np-track-metric{border:1px solid #c5d9f9;border-radius:10px;min-height:142px;padding:12px 12px 10px;
+  text-align:left;min-width:0;display:flex;flex-direction:column;align-items:stretch;justify-content:space-between;
+  color:#112e57;background:linear-gradient(150deg,#fff 8%,#e5f1ff 100%);box-shadow:0 2px 6px rgba(17,54,122,.07);
+  cursor:pointer;transition:transform .12s,border-color .12s,box-shadow .12s;
+}
+.np-original-v4 .np-track-metric:hover{transform:translateY(-1px);border-color:#8ab6ff;box-shadow:0 3px 10px rgba(0,54,150,.12)}
+.np-original-v4 .np-track-metric:focus-visible,.np-original-v4 .np-track-text-action:focus-visible,
+.np-original-v4 .np-track-grade-row:focus-visible{outline:2px solid #1677ff;outline-offset:2px}
+.np-original-v4 .np-track-metric-green{background:linear-gradient(145deg,#fff 4%,#e5faf5 100%)}
+.np-original-v4 .np-track-metric-purple{background:linear-gradient(145deg,#fff 4%,#f2eeff 100%)}
+.np-original-v4 .np-track-metric-orange{background:linear-gradient(145deg,#fff 4%,#fff6eb 100%)}
+.np-original-v4 .np-track-metric-heading{display:flex;align-items:center;gap:8px;font-size:13px;line-height:1.4}
+.np-original-v4 .np-track-metric-icon{flex:none;width:28px;height:28px;display:grid;place-items:center;border-radius:8px;
+  background:#e8f2ff;color:#1677ff;font-size:17px}
+.np-original-v4 .np-track-metric-green .np-track-metric-icon{background:#d6fae9;color:#0ea96c}
+.np-original-v4 .np-track-metric-purple .np-track-metric-icon{background:#efe7ff;color:#8347e5}
+.np-original-v4 .np-track-metric-orange .np-track-metric-icon{background:#fff1df;color:#e9902b}
+.np-original-v4 .np-track-metric-value{font-size:28px;font-weight:750;line-height:1.15;text-align:center;color:#102647;letter-spacing:-.4px}
+.np-original-v4 .np-track-metric-detail{font-size:11px;line-height:1.5;color:#7585a2;text-align:center}
+.np-original-v4 .np-track-pending{border-top:1px solid rgba(255,255,255,.45);margin-top:14px;padding-top:10px}
+.np-original-v4 .np-track-pending-title{padding:12px;border:1px solid rgba(255,255,255,.52);border-bottom:0;
+  border-radius:9px 9px 0 0;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.08)}
+.np-original-v4 .np-track-pending-title>.anticon{color:#fff;background:rgba(255,255,255,.18);border-radius:8px;
+  padding:8px;font-size:18px}
+.np-original-v4 .np-track-pending-title strong{font-size:13px;display:block}
+.np-original-v4 .np-track-pending-title small{font-size:11px;color:#dbeaff}
+.np-original-v4 .np-track-pending-content{border-radius:0 0 9px 9px;border:1px solid rgba(255,255,255,.52);
+  padding:9px;background:rgba(255,255,255,.08);min-width:0}
+.np-original-v4 .np-track-pending-table{border-collapse:collapse;border-radius:7px;overflow:hidden;width:100%;background:#fff;
+  color:#2b3850;font-size:11px;table-layout:fixed}
+.np-original-v4 .np-track-pending-table th{padding:8px 6px;font-size:11px;background:#f2f6fc;color:#536782;font-weight:600;text-align:left}
+.np-original-v4 .np-track-pending-table th:first-child{width:36%}
+.np-original-v4 .np-track-pending-table th:nth-child(2){width:22%}
+.np-original-v4 .np-track-pending-table th:nth-child(3){width:20%}
+.np-original-v4 .np-track-pending-table th:nth-child(4){width:22%}
+.np-original-v4 .np-track-pending-table td{padding:8px 6px;border-top:1px solid #ebf0f6;vertical-align:middle;overflow-wrap:anywhere}
+.np-original-v4 .np-track-pending-table td small{display:block;color:#8592a5;line-height:1.45;margin-top:2px}
+.np-original-v4 .np-track-days{color:#de7515;background:#fff1e4;border-radius:5px;padding:4px 5px;white-space:nowrap;font-weight:600}
+.np-original-v4 .np-track-pending-table .ant-btn{padding-inline:7px;font-size:11px}
+.np-original-v4 .np-track-no-pending{font-size:12px;line-height:1.7;color:#fff;text-align:center;padding:14px 3px}
+.np-original-v4 .np-track-analytics{min-width:0;min-height:0;display:flex;flex-direction:column;gap:12px}
+.np-original-v4 .np-track-analytics-top{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:12px;min-width:0}
+.np-original-v4 .np-track-analytics-bottom{display:grid;grid-template-columns:minmax(0,1.06fr) minmax(0,1fr);gap:12px;min-width:0;flex:1}
+.np-original-v4 .np-track-analytics-stack{display:grid;grid-template-rows:minmax(205px,auto) minmax(265px,1fr);gap:12px;min-width:0}
+.np-original-v4 .np-track-panel{background:#fff;border:1px solid var(--track-line);border-radius:10px;overflow:hidden;
+  box-shadow:0 1px 5px rgba(39,80,140,.035);min-width:0;display:flex;flex-direction:column}
+.np-original-v4 .np-track-panel-header{min-height:43px;border-bottom:1px solid #e9eff8;padding:8px 12px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px}
+.np-original-v4 .np-track-panel-heading{display:flex;align-items:center;gap:9px;flex-wrap:wrap;min-width:0}
+.np-original-v4 .np-track-panel-heading:before{content:'';display:block;width:4px;height:17px;flex:none;border-radius:8px;background:#1677ff}
+.np-original-v4 .np-track-panel-heading strong{font-size:13px;font-weight:680;color:#253348;white-space:nowrap}
+.np-original-v4 .np-track-panel-heading span{font-size:11px;color:#96a4b7}
+.np-original-v4 .np-track-panel-action{flex:none}
+.np-original-v4 .np-track-panel-action .ant-btn{font-size:11px;padding-inline:5px}
+.np-original-v4 .np-track-panel-content{padding:6px 9px 10px;min-width:0;flex:1}
+.np-original-v4 .np-track-rating-panel,.np-original-v4 .np-track-operators-panel{min-height:240px}
+.np-original-v4 .np-track-grades{display:flex;flex-direction:column;gap:10px;margin:7px 4px}
+.np-original-v4 .np-track-grade-row{display:grid;grid-template-columns:54px minmax(0,1fr) 24px;gap:10px;align-items:center;
+  width:100%;border:0;background:transparent;color:#30415b;text-align:left;cursor:pointer;padding:2px 1px;font-size:12px}
+.np-original-v4 .np-track-grade-row:hover{background:#f6f9ff}
+.np-original-v4 .np-track-grade-row>strong{font-size:12px;text-align:right}
+.np-original-v4 .np-track-grade-rail{height:8px;border-radius:8px;overflow:hidden;background:#edf1f7}
+.np-original-v4 .np-track-grade-rail span{display:block;height:100%;border-radius:8px;transition:width .12s}
+.np-original-v4 .np-track-rating-foot{font-size:10.5px;color:#8291a7;line-height:1.5;margin:10px 4px 0}
+.np-original-v4 .np-track-panel .ant-table{font-size:12px;line-height:1.4;color:#334155}
+.np-original-v4 .np-track-panel .ant-table-wrapper{max-width:100%;min-width:0}
+.np-original-v4 .np-track-panel .ant-table-cell{padding:7px 7px !important;white-space:normal;word-break:break-word}
+.np-original-v4 .np-track-panel .ant-table-thead>tr>th{background:#f0f5fc !important;color:#52647d;font-size:11px;
+  font-weight:650;border-bottom:1px solid #e0e8f4}
+.np-original-v4 .np-track-panel .ant-table-tbody>tr>td{border-bottom-color:#eaf0f8}
+.np-original-v4 .np-track-panel .ant-btn{height:25px;padding:0 8px;font-size:11px;border-radius:5px}
+.np-original-v4 .np-track-panel .ant-table-body{scrollbar-width:thin}
+.np-original-v4 .np-track-owner{display:flex;gap:6px;align-items:center;min-width:0;font-size:12px;font-weight:550}
+.np-original-v4 .np-track-avatar{display:grid;place-items:center;border-radius:50%;width:21px;height:21px;flex:none;
+  background:#e6f1ff;color:#1677ff;font-size:11px}
+.np-original-v4 .np-track-meter{display:flex;align-items:center;gap:7px;min-width:0}
+.np-original-v4 .np-track-meter-track{height:7px;min-width:15px;flex:1;border-radius:7px;overflow:hidden;background:#eaf0f8}
+.np-original-v4 .np-track-meter-track>span{display:block;height:100%;border-radius:8px}
+.np-original-v4 .np-track-meter>b{font-size:11px;color:#43536f;flex:none;min-width:40px;text-align:right}
+.np-original-v4 .np-track-text-action{border:0;background:transparent;color:#245eb9;font-size:12px;font-weight:600;
+  padding:0;text-align:left;cursor:pointer}
+.np-original-v4 .np-track-text-action:hover{text-decoration:underline}
+.np-original-v4 .np-track-neutral-tag{background:#eff3f8;color:#61738e;padding:3px 6px;border-radius:6px;white-space:nowrap;font-size:11px}
+.np-original-v4 .np-track-secondary-panel .np-track-panel-content{padding-bottom:8px}
+.np-original-v4 .np-track-empty{padding:12px 0}
+.np-original-v4 .np-track-empty .ant-empty-description{font-size:12px}
+.np-original-v4 .np-track-panel-foot{font-size:10.5px;color:#8996aa;line-height:1.6;margin:7px 3px 0}
+.np-original-v4 .np-track-inline-rate{background:transparent;border:0;color:#1677ff;cursor:pointer;font-weight:650;font-size:11px;
+  padding:2px 0}
+.np-original-v4 .np-track-inline-rate:hover{text-decoration:underline}
+.np-original-v4 .np-track-cell-product{display:flex;flex-direction:column;gap:2px}
+.np-original-v4 .np-track-cell-product>b{color:#1677ff}
+.np-original-v4 .np-track-cell-product>small{color:#667085;font-size:11px}
+.np-original-v4 .np-track-drill-caption{color:#667085;font-size:12px;margin-bottom:12px}
+@media(max-width:1450px){
+ .np-original-v4 .np-track-main{grid-template-columns:minmax(260px,.88fr) minmax(0,3.12fr)}
+ .np-original-v4 .np-track-overview{padding:10px}
+ .np-original-v4 .np-track-metric{min-height:132px;padding:10px 8px}
+ .np-original-v4 .np-track-analytics-top{grid-template-columns:minmax(0,.84fr) minmax(0,1.16fr)}
+ .np-original-v4 .np-track-analytics-bottom{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+}
+@media(max-width:1180px){
+ .np-original-v4 .np-track-main{grid-template-columns:minmax(0,1fr)}
+ .np-original-v4 .np-track-overview{min-height:0}
+ .np-original-v4 .np-track-overview-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+ .np-original-v4 .np-track-pending-table{max-width:650px}
+}
+@media(max-width:850px){
+ .np-original-v4 .np-track-analytics-top,.np-original-v4 .np-track-analytics-bottom{grid-template-columns:minmax(0,1fr)}
+ .np-original-v4 .np-track-date-bar{align-items:flex-start;flex-direction:column}
+ .np-original-v4 .np-track-date-note{text-align:left}
+ .np-original-v4 .np-track-analytics-stack{grid-template-rows:auto auto}
+}
+@media(max-width:560px){
+ .np-original-v4 .np-track-overview-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .np-original-v4 .np-track-date-control{align-items:flex-start;flex-direction:column;gap:6px}
+ .np-original-v4 .np-track-panel .ant-table-cell{padding:5px 4px !important;font-size:11px}
+ .np-original-v4 .np-track-metric-value{font-size:24px}
+}
+
+
+/* PR337_TRACKING_OVERVIEW_MATCH_PERFORMANCE_V2
+   Left overview uses the SAME np-pb-* visual rules as the accepted local New Product board.
+   These rules only adapt the tracking layout and typography; no performance CSS is edited. */
+.np-original-v4 .np-tracking-dashboard .np-track-main {
+  grid-template-columns: minmax(0,0.9fr) minmax(0,2.35fr);
+  gap:15px;
+  align-items:stretch;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-overview-unified {
+  min-width:0;
+  min-height:0;
+  height:100%;
+  overflow:hidden;
+  font-size:var(--ant-font-size,14px);
+  line-height:1.5;
+}
+.np-original-v4 .np-track-overview-unified .np-pb-metric {
+  appearance:none;
+  border:0;
+  width:100%;
+  text-align:left;
+  cursor:pointer;
+  font-family:inherit;
+  transition:transform .12s,box-shadow .12s;
+}
+.np-original-v4 .np-track-overview-unified .np-pb-metric:hover {
+  transform:translateY(-1px);
+  box-shadow:0 6px 17px rgba(25,62,129,.17);
+}
+.np-original-v4 .np-track-overview-unified .np-pb-metric:focus-visible,
+.np-original-v4 .np-track-overview-unified .np-pb-mini-button:focus-visible {
+  outline:2px solid #1677ff;
+  outline-offset:2px;
+}
+.np-original-v4 .np-track-overview-unified .np-track-reminder-counter {
+  color:#526b92;
+  display:block;
+  margin-top:3px;
+}
+.np-original-v4 .np-track-overview-unified .np-pb-reminders {
+  flex:1 1 auto;
+  min-height:0;
+  overflow:hidden;
+  margin-top:0;
+}
+.np-original-v4 .np-track-overview-unified .np-pb-reminder-table-wrap {
+  flex:1 1 auto;
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+}
+.np-original-v4 .np-track-overview-unified .np-pb-reminder-table {
+  width:100%;
+  min-width:0;
+  table-layout:fixed;
+}
+.np-original-v4 .np-track-overview-unified .np-pb-reminder-table thead th {
+  position:sticky;
+  top:0;
+  z-index:1;
+}
+.np-original-v4 .np-track-overview-unified .np-pb-reminder-table th,
+.np-original-v4 .np-track-overview-unified .np-pb-reminder-table td {
+  padding:9px 7px;
+  overflow-wrap:anywhere;
+}
+.np-original-v4 .np-track-overview-unified .np-pb-reminder-table th:first-child {width:36%}
+.np-original-v4 .np-track-overview-unified .np-pb-reminder-table th:nth-child(2) {width:25%}
+.np-original-v4 .np-track-overview-unified .np-pb-reminder-table th:nth-child(3) {width:20%}
+.np-original-v4 .np-track-overview-unified .np-pb-reminder-table th:nth-child(4) {width:19%}
+.np-original-v4 .np-track-overview-unified .np-pb-mini-button {height:auto;min-height:30px;white-space:normal}
+.np-original-v4 .np-track-overview-unified .np-track-no-reminders {text-align:center;color:#7687a5;padding:25px 10px}
+@media(max-width:1280px) {
+  .np-original-v4 .np-tracking-dashboard .np-track-main {
+    grid-template-columns:minmax(0,1fr) minmax(0,1.75fr);
+  }
+}
+@media(max-width:1180px) {
+  .np-original-v4 .np-tracking-dashboard .np-track-main {grid-template-columns:minmax(0,1fr)}
+  .np-original-v4 .np-tracking-dashboard .np-track-overview-unified {height:auto;min-height:0;overflow:visible}
+  .np-original-v4 .np-track-overview-unified .np-pb-reminders {max-height:360px;min-height:180px}
+  .np-original-v4 .np-track-overview-unified .np-pb-metrics {grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:480px) {
+
+}
+
+/* PR337_TRACKING_RESPONSIVE_DEMO_V3
+   Browser-height bounded dashboard (mirrors PerformanceBoardRedesign),
+   independent vertical table scrolling and one Product[] view model.
+   Scoped exclusively to tracking dashboard; never modifies the completed new-product board. */
+.np-original-v4 .np-tracking-dashboard[data-pr337-tracking="viewport-single-source-v4"] {
+  --np-track-body-font: var(--ant-font-size, 14px);
+  --np-track-caption-font: var(--ant-font-size-sm, 12px);
+  --np-track-title-font: var(--ant-font-size-lg, 16px);
+  display:flex;
+  flex-direction:column;
+  width:100%;
+  min-width:0;
+  min-height:0;
+  height:var(--np-track-viewport-height, calc(100dvh - 150px));
+  max-height:var(--np-track-viewport-height, calc(100dvh - 150px));
+  overflow:hidden;
+  font-size:var(--np-track-body-font);
+  line-height:1.5;
+}
+.np-original-v4 .np-tracking-dashboard[data-pr337-tracking="viewport-single-source-v4"] .np-track-date-bar {
+  flex:0 0 auto;
+  margin-bottom:12px;
+  flex-wrap:wrap;
+  min-height:54px;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-date-right {
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  align-items:center;
+  gap:10px;
+  min-width:0;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-date-note {
+  font-size:var(--np-track-caption-font);
+  white-space:normal;
+}
+.np-original-v4 .np-tracking-dashboard[data-pr337-tracking="viewport-single-source-v4"] .np-track-main {
+  flex:1 1 auto;
+  height:0;
+  min-height:0;
+  min-width:0;
+  display:grid;
+  grid-template-columns:minmax(0,.9fr) minmax(0,2.35fr);
+  align-items:stretch;
+  gap:15px;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-overview-unified {
+  min-height:0;
+  height:100%;
+  overflow:hidden;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-overview-unified .np-pb-metrics {
+  flex:0 0 auto;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-overview-unified .np-pb-reminders {
+  flex:1 1 auto;
+  height:0;
+  min-height:0;
+  max-height:none !important;
+  margin-top:0;
+  overflow:hidden;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-overview-unified .np-pb-reminder-title {
+  flex:0 0 auto;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-overview-unified .np-pb-reminder-table-wrap {
+  flex:1 1 auto;
+  height:0;
+  min-height:0;
+  max-height:none !important;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-overview-unified .np-pb-reminder-table {
+  border-collapse:separate;
+  border-spacing:0;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-overview-unified .np-pb-reminder-table thead th {
+  position:sticky;
+  top:0;
+  z-index:2;
+  background:#eff4fd;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-analytics {
+  height:100%;
+  min-height:0;
+  display:grid;
+  grid-template-rows:minmax(205px,.85fr) minmax(0,1.75fr);
+  gap:12px;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-analytics-top,
+.np-original-v4 .np-tracking-dashboard .np-track-analytics-bottom {
+  min-height:0;
+  height:100%;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-analytics-stack {
+  min-height:0;
+  height:100%;
+  grid-template-rows:minmax(150px,.9fr) minmax(0,1.1fr);
+}
+.np-original-v4 .np-tracking-dashboard .np-track-panel {
+  min-height:0;
+  height:100%;
+  overflow:hidden;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-panel-content {
+  display:block;
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  scrollbar-width:thin;
+  overscroll-behavior:contain;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-panel .ant-table-content {
+  overflow:visible !important;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-panel .ant-table-content > table {
+  width:100% !important;
+  min-width:0 !important;
+  table-layout:fixed;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-panel .ant-table-thead > tr > th {
+  position:sticky;
+  top:0;
+  z-index:2;
+  font-size:var(--np-track-body-font);
+  white-space:normal;
+  overflow-wrap:anywhere;
+  padding:8px 6px !important;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-panel .ant-table-tbody > tr > td {
+  font-size:var(--np-track-body-font);
+  white-space:normal;
+  overflow-wrap:anywhere;
+  padding:8px 6px !important;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-panel-heading strong {
+  font-size:var(--np-track-title-font);
+}
+.np-original-v4 .np-tracking-dashboard .np-track-panel-heading span,
+.np-original-v4 .np-tracking-dashboard .np-track-rating-foot,
+.np-original-v4 .np-tracking-dashboard .np-track-panel-foot,
+.np-original-v4 .np-tracking-dashboard .np-track-overview-unified .np-track-reminder-counter {
+  font-size:var(--np-track-caption-font);
+}
+.np-original-v4 .np-tracking-dashboard .np-track-panel .ant-btn,
+.np-original-v4 .np-tracking-dashboard .np-track-text-action,
+.np-original-v4 .np-tracking-dashboard .np-track-grade-row,
+.np-original-v4 .np-tracking-dashboard .np-track-meter b,
+.np-original-v4 .np-tracking-dashboard .np-track-inline-rate {
+  font-size:var(--np-track-body-font);
+}
+.np-original-v4 .np-tracking-dashboard .np-track-operators-panel .np-track-panel-content,
+.np-original-v4 .np-tracking-dashboard .np-track-category-panel .np-track-panel-content,
+.np-original-v4 .np-tracking-dashboard .np-track-secondary-panel .np-track-panel-content,
+.np-original-v4 .np-tracking-dashboard .np-track-observation-panel .np-track-panel-content {
+  padding:0 9px 6px;
+}
+/* Same responsive principle as the accepted new-product board:
+   if zoom or a narrow window leaves insufficient horizontal space,
+   stack sections and use vertical page scrolling rather than tiny fonts. */
+@media(max-width:1360px) {
+  .np-original-v4 .np-tracking-dashboard[data-pr337-tracking="viewport-single-source-v4"] {
+    overflow-y:auto;
+    overflow-x:hidden;
+  }
+  .np-original-v4 .np-tracking-dashboard[data-pr337-tracking="viewport-single-source-v4"] .np-track-main {
+    display:flex;
+    flex-direction:column;
+    height:auto;
+    flex:none;
+    min-height:0;
+  }
+  .np-original-v4 .np-tracking-dashboard .np-track-overview-unified {
+    height:auto;
+    min-height:0;
+    overflow:visible;
+  }
+  .np-original-v4 .np-tracking-dashboard .np-track-overview-unified .np-pb-reminders {
+    height:clamp(220px,32dvh,300px);
+    min-height:220px;
+    flex:none;
+  }
+  .np-original-v4 .np-tracking-dashboard .np-track-analytics {
+    height:auto;
+    display:flex;
+    flex-direction:column;
+  }
+  .np-original-v4 .np-tracking-dashboard .np-track-analytics-top,
+  .np-original-v4 .np-tracking-dashboard .np-track-analytics-bottom {
+    height:auto;
+    min-height:0;
+  }
+  .np-original-v4 .np-tracking-dashboard .np-track-analytics-top > .np-track-panel {
+    height:clamp(260px,36dvh,380px);
+  }
+  .np-original-v4 .np-tracking-dashboard .np-track-analytics-bottom > .np-track-panel {
+    height:clamp(330px,48dvh,510px);
+  }
+  .np-original-v4 .np-tracking-dashboard .np-track-analytics-stack {
+    height:auto;
+    display:flex;
+    flex-direction:column;
+  }
+  .np-original-v4 .np-tracking-dashboard .np-track-analytics-stack > .np-track-panel {
+    height:clamp(260px,40dvh,410px);
+  }
+}
+@media(max-width:850px) {
+  .np-original-v4 .np-tracking-dashboard .np-track-date-right {
+    justify-content:flex-start;
+  }
+  .np-original-v4 .np-tracking-dashboard .np-track-analytics-top,
+  .np-original-v4 .np-tracking-dashboard .np-track-analytics-bottom {
+    display:flex;
+    flex-direction:column;
+  }
+  .np-original-v4 .np-tracking-dashboard .np-track-analytics-top > .np-track-panel {
+    height:clamp(300px,42dvh,450px);
+  }
+}
+@media(max-width:560px) {
+  .np-original-v4 .np-tracking-dashboard .np-track-overview-unified .np-pb-metrics {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+
+/* PR337_TRACKING_SINGLE_SOURCE_V4: inherited new-product card sizing.
+   No local px/min-height/font-size overrides on .np-pb-metric.
+   performanceBoardRedesign.css is the single source of visual sizing. */
+.np-original-v4 .np-tracking-dashboard[data-pr337-tracking="viewport-single-source-v4"] .np-track-date-bar {
+  justify-content:flex-start;
+}
+.np-original-v4 .np-tracking-dashboard .np-track-readonly {
+  color:var(--ant-color-text-tertiary,#8492a6);
+  font-size:var(--ant-font-size-sm,12px);
+}
+
+/* PR337_STATIC_METRICS_ONLY */
+.np-original-v4 .np-tracking-dashboard
+.np-track-overview-unified .np-pb-metric {
+    cursor: default;
+    transition: none;
+}
+
+.np-original-v4 .np-tracking-dashboard
+.np-track-overview-unified .np-pb-metric:hover {
+    transform: none;
+    box-shadow: 0 3px 12px rgba(25,62,129,.12);
+}
+
+/* PR337_FAILED_CATEGORY_CARDS */
+.np-original-v4 .np-tracking-dashboard .np-pb-metric {
+    cursor: default;
+    transition: none;
+}
+
+.np-original-v4 .np-tracking-dashboard .np-pb-metric:hover {
+    transform: none;
+}
+
+.np-original-v4 .np-tracking-dashboard .np-pb-metric-red {
+    background: linear-gradient(135deg, #fff, #fff0f2);
+}
+
+.np-original-v4 .np-tracking-dashboard
+.np-pb-metric-red .np-pb-metric-icon {
+    background: #ffe0e4;
+    color: #df3047;
+}

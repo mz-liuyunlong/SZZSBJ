@@ -1,0 +1,27 @@
+/* PR337_RULE_SIGNAL_POPOVER_V2: compact table; full reasons only inside popover. */
+.np-tracking-protable .np-rule-recommendation { display: flex; align-items: center; min-width: 0; }
+.np-tracking-protable .np-rule-recommendation-tag { margin: 0; font-size: 12px; font-weight: 600; line-height: 20px; border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
+.np-tracking-protable .np-rule-recommendation--success { color: #067647; background: #eaf8ef; border-color: #d6eee1; }
+.np-tracking-protable .np-rule-recommendation--observe { color: #345995; background: #edf4ff; border-color: #d7e5fb; }
+.np-tracking-protable .np-rule-recommendation--optimize { color: #a45909; background: #fff5e6; border-color: #ffe6ba; }
+.np-tracking-protable .np-rule-recommendation--danger { color: #b42318; background: #fff0ef; border-color: #fbd8d4; }
+.np-tracking-protable .np-rule-recommendation--insufficient { color: #667085; background: #f3f5f8; border-color: #e4e7ec; }
+.np-tracking-protable .np-rule-trigger-cell { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 7px; min-width: 0; }
+.np-tracking-protable .np-rule-trigger-summary { display: block; flex: 1 1 0%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: #344054; }
+.np-tracking-protable .np-rule-trigger-info { flex: 0 0 23px; margin-left: auto; display: inline-flex; align-items: center; justify-content: center; width: 23px; height: 23px; border-radius: 5px; cursor: help; color: #8493ab; outline-offset: 2px; }
+.np-tracking-protable .np-rule-trigger-info:hover, .np-tracking-protable .np-rule-trigger-info:focus-visible { color: #1677ff; background: #edf4ff; }
+.np-rule-popover-overlay .ant-popover-inner { padding: 0 !important; border: 1px solid #e4e9f2; border-radius: 10px; box-shadow: 0 9px 28px rgba(24,39,75,.13); }
+.np-rule-popover-overlay .ant-popover-inner-content { padding: 0; }
+.np-rule-popover-content { width: min(390px, calc(100vw - 32px)); max-height: min(480px, 70vh); overflow-y: auto; padding: 16px 16px 13px; color: #263445; }
+.np-rule-popover-heading { font-size: 15px; font-weight: 700; line-height: 22px; margin: 0 0 12px; }
+.np-rule-popover-list { display: flex; flex-direction: column; gap: 13px; }
+.np-rule-popover-item:not(:last-child) { border-bottom: 1px solid #edf0f5; padding-bottom: 12px; }
+.np-rule-popover-item-title { display: flex; align-items: center; gap: 9px; font-size: 14px; line-height: 20px; }
+.np-rule-popover-item-title svg { width: 15px; height: 15px; }
+.np-rule-popover-item-title.tone-warning svg { color: #d18c19; }
+.np-rule-popover-item-title.tone-danger svg { color: #d1423e; }
+.np-rule-popover-item-title.tone-positive svg { color: #099268; }
+.np-rule-popover-item-title.tone-neutral svg { color: #7e8b9b; }
+.np-rule-popover-item-description { margin-top: 6px; font-size: 13px; line-height: 21px; color: #344054; overflow-wrap: anywhere; }
+.np-rule-popover-empty { display: flex; align-items: center; gap: 7px; color: #667085; font-size: 13px; }
+.np-rule-popover-footer { display: flex; flex-wrap: wrap; column-gap: 12px; row-gap: 4px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #edf0f5; color: #98a2b3; font-size: 11px; line-height: 18px; }
