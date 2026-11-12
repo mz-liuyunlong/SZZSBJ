@@ -77,6 +77,26 @@ describe("split foreign lines keep the rate source (刘云龙 #341 P2)", () => {
   });
 });
 
+describe("CNH split lines stay same-currency (刘云龙 #341 round 3)", () => {
+  it("100 CNH split 60 (A) + 40 (B), B = 50 CNY → plain difference of 10, no system-rate hint", () => {
+    const line = toCashLine(api({
+      currency_code: "CNH", amount: "-100.0000", amount_cny: "-100.0000", fx_source: "", refs: ["209901010002"],
+      parts: [{ amount: "60.0000", category_code: null, refs: ["209901010001"] }, { amount: "40.0000", category_code: null }],
+    }));
+    const whole = wholeCompareLine(line);
+    expect(whole).toMatchObject({ amt: -40, cur: "CNH" });
+    expect(whole.cnyFrom).toBeUndefined();
+    expect(compareAmount(whole, [view(50, "CNY")])).toMatchObject({ amt: 40, converted: false, exact: true });
+    expect(amountDiff(whole, [view(50, "CNY")])).toBe(10);
+    const [amount] = compareRows(whole, [view(50, "CNY")]);
+    expect(amount.result).toBe("差额 ¥10.00");
+    expect(amount.result).not.toContain("系统汇率");
+    const group = partGroupCompareLine(line, partApprovalGroups(line)[0]);
+    expect(group).toMatchObject({ amt: -60, cur: "CNH" });
+    expect(amountDiff(group, [view(60, "CNY")])).toBe(0);
+  });
+});
+
 describe("card numbers in approval text (Rocky 11-12)", () => {
   const card = "4111 1111 1111 1111";
   it("keeps only the last 4 digits and the spacing", () => {
@@ -124,6 +144,14 @@ describe("card numbers in approval text (Rocky 11-12)", () => {
       "622202 1234567894",
     ]) expect(maskCards(text)).toBe(text);
     expect(maskCards("卡号 622202 1234567894")).toBe("卡号 ****** ******7894");
+  });
+
+  it("with a card hint, any 13–19 digit grouping is masked even without a check digit (刘云龙 #341 round 3)", () => {
+    expect(maskCards("卡号 622202 1234567895")).toBe("卡号 ****** ******7895");
+    expect(maskCards("账号：123 4567 890123")).toBe("账号：*** **** **0123");
+    expect(maskCards("银行卡 6222021234567895 10元")).toBe("银行卡 ************7895 10元");
+    expect(maskCards("卡号 2026.10.30 1234.56")).toBe("卡号 2026.10.30 1234.56");
+    expect(maskCards("账号 2026-10-01 至 2026-10-15 金额 96.94")).toBe("账号 2026-10-01 至 2026-10-15 金额 96.94");
   });
 
   it("leaves 12-digit approval serials, short numbers and non-Luhn strings alone", () => {

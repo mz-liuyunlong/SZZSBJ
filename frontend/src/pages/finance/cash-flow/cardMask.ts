@@ -55,7 +55,7 @@ function cardShaped(groups: string[]): boolean {
 /** 一串数字里认出的卡号：[开始组, 结束组]。候选是过 Luhn、长度 13～19 的连续几组，并且像卡号的写法；
  * 前面有「卡号 / 银行卡 / 账号」提示词的，任意分组过 Luhn 都算（如「卡号 622202 1234567894」）。
  * 先挑像卡号写法的，再按长度优先级，互不重叠地挑（「2026-10-30 4111 1111 1111 1111」不会把日期和卡号拼成一个）。
- * 一个都没有、前面又写了「卡号」的，取第一个像卡号写法的。 */
+ * 一个都没有、前面又写了「卡号」的，取第一个 13～19 位、每组至少 3 位的窗口（像卡号写法的优先）。 */
 function cardSpans(groups: string[], hinted: boolean): [number, number][] {
   const candidates: { start: number; end: number; rank: number }[] = [];
   PREFERRED_LENGTHS.forEach((length, order) => {
@@ -76,10 +76,17 @@ function cardSpans(groups: string[], hinted: boolean): [number, number][] {
     if (spans.every(([a, b]) => end < a || start > b)) spans.push([start, end]);
   }
   if (!spans.length && hinted) {
-    for (const length of PREFERRED_LENGTHS) {
-      for (let start = 0; start < groups.length; start += 1) {
-        const end = endFor(groups, start, length);
-        if (end >= 0 && cardShaped(groups.slice(start, end + 1))) return [[start, end]];
+    // 有提示词、但过不了 Luhn（老卡号 / 手输错一位）：13～19 位、任意分组都打码（刘云龙 #341：「卡号 622202 1234567895」6+10 分组）。
+    // 每组至少 3 位——「卡号 2026.10.30 1234.56」这种日期加金额的组里有 1～2 位的，不算卡号。像卡号写法的优先。
+    const plausible = (window: string[]) => window.every((group) => group.length >= 3);
+    for (const wantShaped of [true, false]) {
+      for (const length of PREFERRED_LENGTHS) {
+        for (let start = 0; start < groups.length; start += 1) {
+          const end = endFor(groups, start, length);
+          if (end < 0) continue;
+          const window = groups.slice(start, end + 1);
+          if (plausible(window) && (!wantShaped || cardShaped(window))) return [[start, end]];
+        }
       }
     }
   }

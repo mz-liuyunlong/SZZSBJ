@@ -2,7 +2,7 @@
 import { type ProColumns } from "@ant-design/pro-components";
 import { type RuntimeColumnGroup } from "@/components/report-table/RuntimeColumnConfigDrawer";
 import { asLive } from "@/pages/finance/cash-flow/journalApi";
-import { type CompareLine } from "@/pages/finance/cash-flow/journalParts";
+import { type CompareLine, RMB_CODES } from "@/pages/finance/cash-flow/journalParts";
 import { type CashAlert, type FsDetail } from "@/pages/finance/cash-flow/data";
 import { fmtMoney, type CashLine, type CashSnapshot, type FeishuApproval } from "@/pages/finance/localFinData";
 import { readUserPreference } from "@/shared/preferences/userPreferenceCache";
@@ -106,7 +106,6 @@ export const viewOf = (serial: string, item?: FeishuApproval, detail?: FsDetail)
 });
 export const norm = (text?: string) => (text ?? "").replace(/[\s()（）·.,，、]/g, "").toLowerCase();
 export const dayGap = (a: string, b: string) => Math.round(Math.abs(Date.parse(a.slice(0, 10)) - Date.parse(b.slice(0, 10))) / 86400000);
-const RMB_CODES = new Set(["CNY", "CNH"]);
 /** 精确的折人民币来源：派安盈实际汇率、人工改（和后端 journal.FX_EXACT_SOURCES 一致）。 */
 const EXACT_FX = new Set(["payoneer", "manual"]);
 /** 和审批单比的流水金额（Rocky 11-12：人民币审批单对美元流水，以前直接拿原币相减，差额没意义）。

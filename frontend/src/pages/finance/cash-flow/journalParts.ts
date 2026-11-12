@@ -13,7 +13,7 @@ export const isPartRow = (row: CashLine): row is PartRow => "partOf" in row;
 export function partCny(line: CashLine): (number | null)[] {
   const parts = line.parts ?? [];
   if (line.cny == null || !line.amt || !parts.length) return parts.map(() => null);
-  if (line.cur === "CNY") return parts.map((part) => part.amt);
+  if (isRmb(line.cur)) return parts.map((part) => part.amt);
   const sign = line.cny < 0 ? -1 : 1;
   const total = Math.round(Math.abs(line.cny) * 100);
   const whole = Math.abs(line.amt);
@@ -29,7 +29,7 @@ export function partCny(line: CashLine): (number | null)[] {
 export function withPartRows(rows: CashLine[]): JournalRow[] {
   return rows.map((line) => {
     if (!line.parts?.length) return line;
-    const cnys = line.cur === "CNY" ? line.parts.map(() => null) : partCny(line);
+    const cnys = isRmb(line.cur) ? line.parts.map(() => null) : partCny(line);
     return { ...line, children: line.parts.map((part, index): PartRow => ({ ...line, id: `${line.id}#p${index + 1}`, amt: part.amt, cny: cnys[index], bal: null, cat: part.cat, parts: undefined, flags: [], partOf: line.id, partIndex: index, fee: part.fee, sum: part.sum ?? line.sum, memo: part.memo ?? "", parentSum: line.sum, ownSum: Boolean(part.sum) })) };
   });
 }
@@ -57,10 +57,14 @@ export function cnyToOriginal(cnyRows: number[], total: number, totalCny: number
 
 /** 拆分行挂的审批单（刘云龙 #339 终审：整笔详情要看得到）。整笔已经挂了的不再列（不重复算）；
  * cny = 这一行折人民币（人民币流水就是这一行金额），用来和审批单比对。 */
+/** 人民币 = CNY / CNH，两者视为同币种（刘云龙 #341：CNH 拆分后不能走外币换算）。 */
+export const RMB_CODES = new Set(["CNY", "CNH"]);
+export const isRmb = (cur: string) => RMB_CODES.has(cur);
+
 export interface PartApprovalRef { ref: string; index: number; amt: number; cny: number | null }
 export function partApprovalRefs(line: CashLine): PartApprovalRef[] {
   const parts = line.parts ?? [];
-  const cnys = line.cur === "CNY" ? parts.map((part) => part.amt) : partCny(line);
+  const cnys = isRmb(line.cur) ? parts.map((part) => part.amt) : partCny(line);
   const seen = new Set(line.refs);
   const out: PartApprovalRef[] = [];
   parts.forEach((part, index) => {
@@ -82,7 +86,7 @@ export type CompareLine = CashLine & { cnyFrom?: { cur: string; amt: number } };
 
 /** 拆分行那张单比对用的「流水」：外币按这一行折人民币比，人民币按这一行金额比。 */
 export function partCompareLine(line: CashLine, item: PartApprovalRef): CompareLine {
-  if (line.cur !== "CNY" && item.cny != null) return { ...line, amt: item.cny, cur: "CNY", refs: [item.ref], cnyFrom: { cur: line.cur, amt: item.amt } };
+  if (!isRmb(line.cur) && item.cny != null) return { ...line, amt: item.cny, cur: "CNY", refs: [item.ref], cnyFrom: { cur: line.cur, amt: item.amt } };
   return { ...line, amt: item.amt, refs: [item.ref] };
 }
 
@@ -100,7 +104,7 @@ export function partApprovalGroups(line: CashLine): PartApprovalGroup[] {
 
 /** 一组拆分行审批单比对用的「流水」：外币按这一行折人民币（缺汇率退回原币），人民币按这一行金额。 */
 export function partGroupCompareLine(line: CashLine, group: PartApprovalGroup): CompareLine {
-  if (line.cur !== "CNY" && group.cny != null) return { ...line, amt: group.cny, cur: "CNY", refs: group.refs, cnyFrom: { cur: line.cur, amt: group.amt } };
+  if (!isRmb(line.cur) && group.cny != null) return { ...line, amt: group.cny, cur: "CNY", refs: group.refs, cnyFrom: { cur: line.cur, amt: group.amt } };
   return { ...line, amt: group.amt, refs: group.refs };
 }
 
@@ -112,7 +116,7 @@ export function wholeCompareLine(line: CashLine): CompareLine {
   if (!taken.length || line.amt == null) return line;
   const sign = line.amt < 0 ? -1 : 1;
   const cents = (value: number) => Math.round(Math.abs(value) * 100);
-  if (line.cur !== "CNY" && line.cny != null) {
+  if (!isRmb(line.cur) && line.cny != null) {
     const cnys = partCny(line);
     const used = taken.reduce((sum, { index }) => sum + cents(cnys[index] ?? 0), 0);
     const usedOriginal = taken.reduce((sum, { part }) => sum + cents(part.amt), 0);
