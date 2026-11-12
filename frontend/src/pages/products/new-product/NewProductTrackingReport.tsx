@@ -67,7 +67,7 @@ function NewProductTrackingReport({ products, config, onReview, drill=null, onCl
   const [search,setSearch] = useState(() => drill?.kind==='item'?drill.value??'':'');
   const [stat, setStat] = useState<StatKey>("all");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(50);
   const [scrollY, setScrollY] = useState(360);
   const viewport = useRef<HTMLDivElement>(null);
 
@@ -212,14 +212,14 @@ function NewProductTrackingReport({ products, config, onReview, drill=null, onCl
     },
     { title: "建议量 / 批准量", key: "qty", width: 151,
       render: (_unused, row) => <div>
-        <div className="np-tracking-cell-main">{suggestion(row, config)} / {row.actualQty > 0 ? row.actualQty : "—"} 件</div>
+        <div className="np-tracking-cell-main">{row.backend && row.backend.suggestedQty===null ? "—" : suggestion(row, config)} / {row.actualQty > 0 ? row.actualQty : "—"} 件</div>
         <div className="np-tracking-cell-sub">建议 / 已有采购数量</div>
       </div>,
     },
     { title: "追踪起点", key: "arrival", dataIndex: "arrival", width: 142,
       render: (_unused, row) => <div>
         <div className="np-tracking-cell-main">{row.arrival || "等待到货 / 可售"}</div>
-        {row.arrival && <div className="np-tracking-cell-sub">到货日期（示例）</div>}
+        {row.arrival && <div className="np-tracking-cell-sub">{row.backend?'WFS首次可售日期':'到货日期（示例）'}</div>}
       </div>,
     },
     {
@@ -228,7 +228,8 @@ function NewProductTrackingReport({ products, config, onReview, drill=null, onCl
       width: 102,
       render: (_unused, row) => <div>
         <div className="np-tracking-cell-main">
-          {period === 30 ? row.sold30 : period === 60 ? row.sold60 : "—"}
+          {row.backend ? (period===30 && row.backend.available.sales30 ? row.sold30 : '—') :
+            (period === 30 ? row.sold30 : period === 60 ? row.sold60 : "—")}
         </div>
         {period === 180 && (
           <div className="np-tracking-cell-sub">
@@ -238,13 +239,13 @@ function NewProductTrackingReport({ products, config, onReview, drill=null, onCl
       </div>,
     },
     { title: "利润率", key: "margin", width: 80,
-      render: (_unused, row) => <span>{row.margin60 || row.margin}%</span>,
+      render: (_unused, row) => <span>{row.backend ? (row.backend.available.margin ? `${row.margin}%` : '—') : `${row.margin60 || row.margin}%`}</span>,
     },
     { title: "ACOS", key: "acos", width: 79,
-      render: (_unused, row) => <span>{row.acos60 || row.acos}%</span>,
+      render: (_unused, row) => <span>{row.backend ? (row.backend.available.acos ? `${row.acos}%` : '—') : `${row.acos60 || row.acos}%`}</span>,
     },
     { title: "当前库存", key: "inventory", dataIndex: "inventory", width: 105,
-      render: (_unused, row) => <strong>{row.inventory} 件</strong>,
+      render: (_unused, row) => <strong>{row.backend && !row.backend.available.inventory ? '—' : `${row.inventory} 件`}</strong>,
     },
     // PR337_RULE_SIGNAL_POPOVER_V1 — system advice never writes human decisions.
     { title: "系统建议", key: "trackingSystemRecommendation", width: 140,

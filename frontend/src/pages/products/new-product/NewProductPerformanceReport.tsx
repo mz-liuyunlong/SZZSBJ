@@ -37,7 +37,7 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
   const [searchField, setSearchField] = useState(focusItemId && phase === "approval" ? "item" : "sku");
   const [keyword, setKeyword] = useState(focusItemId && phase === "approval" ? focusItemId : "");
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(50);
 
 
 
@@ -154,10 +154,12 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
       width: 165,
       render: (_value, row) => (
         <>
-          <div className="strong">{row.days} 天</div>
-          <div className="cell-sub">
-            首单已记录 · 近7天 {row.qty7} 单
+          <div className="strong">
+            {row.backend && !row.backend.available.elapsedDays ? '—' : `${row.days} 天`}
+            <span className="cell-sub"> · 近7天 {row.backend && !row.backend.available.qty7 ? '—' : row.qty7} 单</span>
           </div>
+          <div className="cell-sub">首次可售：{row.backend ? row.backend.firstWfsDate || '—' : row.arrival || '—'}</div>
+          <div className="cell-sub">首单日期：{row.backend?.firstOrderDate || '—'}</div>
         </>
       ),
     },
@@ -168,21 +170,23 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
       render: (_value, row) => (
         <>
           <div className="score-main">
-            {(
-              (
-                row.scores.speed * 30 +
-                row.scores.ad * 20 +
-                row.scores.profit * 25 +
-                row.scores.trust * 10
-              ) / 85
+            {row.backend ? (
+              (['speed','ad','profit','trust'] as const).some(key=>row.backend?.evaluation.dimensions[key]===null)
+                ? '—' : (
+                  (row.scores.speed * config.weights.speed + row.scores.ad * config.weights.ad
+                  + row.scores.profit * config.weights.profit + row.scores.trust * config.weights.trust)
+                  / Math.max(1,config.weights.speed+config.weights.ad+config.weights.profit+config.weights.trust)
+                ).toFixed(1)
+              ) : (
+              (row.scores.speed*30+row.scores.ad*20+row.scores.profit*25+row.scores.trust*10)/85
             ).toFixed(1)}
             <span className="muted"> /10</span>
           </div>
           <div className="cell-sub">
-            出单 {row.scores.speed} · 广告 {row.scores.ad}
+            出单 {row.backend && !row.backend.available.speed ? '—' : row.scores.speed} · 广告 {row.backend && !row.backend.available.ad ? '—' : row.scores.ad}
           </div>
           <div className="cell-sub">
-            利润 {row.scores.profit} · 可信 {row.scores.trust}
+            利润 {row.backend && !row.backend.available.profit ? '—' : row.scores.profit} · 可信 {row.backend && !row.backend.available.trust ? '—' : row.scores.trust}
           </div>
         </>
       ),
@@ -194,7 +198,7 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
       render: (_value, row) => (
         <div>
           {row.market === null ? (
-            <Tag color="orange">待人工评分</Tag>
+            <Tag color="orange">{row.status === "待计算" ? "待计算" : "待人工评分"}</Tag>
           ) : (
             <>
               <div className="score-main">{row.market} /10</div>

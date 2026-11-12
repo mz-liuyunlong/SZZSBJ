@@ -4,7 +4,7 @@ import {useLocation} from "react-router-dom";
 /* PR337_APPROVED_CARD_FILTER_V53 */
 /* PR337_MANAGEMENT_STAT_FILTER_V51 */
 // PR337_FLOW_ACCEPTANCE_20261111
-import {useMemo, useState,type ReactNode, useCallback} from "react";
+import {useMemo, useState,type ReactNode, useCallback, useEffect} from "react";
 import { Drawer as AntdDrawer } from "antd";
 import ManagementStatCards from "@/components/report-table/ManagementStatCards";
 import NewProductPerformanceReport from "./NewProductPerformanceReport";
@@ -15,9 +15,11 @@ import dayjs from "dayjs";
 import {withTrackingVisualSamples} from "./trackingBoardVisualSamples";
 import type {TrackingDrillFilter} from "./trackingBoardDrilldown";
 import NewProductTrackingReport from "./NewProductTrackingReport";
-import {samples,defaultConfig,bands,score,grade,suggestion,type Product,type Config} from "./nativeData";
-import { makeNewProductDevMockRows } from "./newProductDevelopmentFixtures";
+import {defaultConfig,bands,score,grade,suggestion,type Product,type Config} from "./nativeData";
 import NewProductRulesPanel from "./NewProductRulesPanel";
+import { getNewProductRules, applyNewProductRules, listNewProducts,
+  saveNewProductMarketScore, exportNewProductListings } from "./newProductBusinessApi";
+import {toPersistedProduct, type PersistedProduct} from "./newProductRealAdapter";
 import { createInitialRuleDraft, cloneRuleDraft, validateRuleDraft, validateTrackingRuleDraft, type RuleDraft } from "./NewProductRulesModel";
 import TrackingRuleConfigPanel from "./components/TrackingRuleConfigPanel";
 import "./nativeWorkflow.css";
@@ -87,7 +89,7 @@ function Drawer(props: AcceptanceDrawerProps) {
 }
 
 export default function NewProductPages({page,mode}:Props){
- const [items,setItems]=useState<Product[]>(()=>([...samples, ...(import.meta.env.DEV && mode === "performance" ? makeNewProductDevMockRows(samples) : [])].map(p=>({...p,scores:{...p.scores}})))),[cfg,setCfg]=useState<Config>(defaultConfig);
+ const [items,setItems]=useState<Product[]>([]),[cfg,setCfg]=useState<Config>(defaultConfig);
  const [savedRuleDraft,setSavedRuleDraft]=useState<RuleDraft>(()=>createInitialRuleDraft(defaultConfig));
  const [ruleDraft,setRuleDraft]=useState<RuleDraft>(()=>createInitialRuleDraft(defaultConfig));
  const pr337BoardLocation=useLocation();
@@ -97,10 +99,64 @@ export default function NewProductPages({page,mode}:Props){
  const setTab=useCallback((view:"list"|"board")=>setPr337BoardTabState({navKey:pr337NavKey,view}),[pr337NavKey]);
  const [phase,setPhase]=useState("all"),[reportRevision,setReportRevision]=useState(0);
  const [modal,setModal]=useState<ModalType>(null),[selected,setSelected]=useState<string|null>(null),[scoreValue,setScoreValue]=useState<number|null>(null),[qty,setQty]=useState(0),[note,setNote]=useState(""),[review,setReview]=useState("继续观察");
- const [correctionDim,setCorrectionDim]=useState<Correction["dimension"]>("speed"),[,setCorrections]=useState<Correction[]>([]),[cfgTab,setCfgTab]=useState("weights"),[version,setVersion]=useState(1),[notice,setNotice]=useState("");
+ const [correctionDim,setCorrectionDim]=useState<Correction["dimension"]>("speed"),[,setCorrections]=useState<Correction[]>([]),[cfgTab,setCfgTab]=useState("weights"),[version,setVersion]=useState(0),[notice,setNotice]=useState("");
+ const [ruleLoaded,setRuleLoaded]=useState(false);
+ const [marketSaving,setMarketSaving]=useState(false);
+ const refreshReal=useCallback(async(isActive:()=>boolean=()=>true)=>{
+   // Both dashboard and original ProTable consume one complete real Product[].
+   // A partial snapshot is never displayed as the full business total.
+   const loaded:PersistedProduct[]=[];
+   let pageNumber=1;
+   let reportedTotal=0;
+   do{
+     const result=await listNewProducts({page:pageNumber,pageSize:200});
+     if(pageNumber===1)reportedTotal=result.total;
+     else if(result.total!==reportedTotal)throw new Error('商品列表更新中，请重新刷新');
+     if(reportedTotal>5000)throw new Error('真实商品超过5000条，当前全量看板请按数据范围查询');
+     loaded.push(...result.items.map(toPersistedProduct));
+     if(result.items.length===0 && loaded.length<reportedTotal)throw new Error('商品分页缺失，已拒绝使用不完整列表');
+     pageNumber+=1;
+   }while(loaded.length<reportedTotal);
+   if(loaded.length!==reportedTotal)throw new Error('商品总数校验失败');
+   // Ignore an obsolete fetch after navigation or effect cleanup.
+   if(isActive())setItems(loaded);
+ },[]);
+ useEffect(()=>{
+   let active=true;
+   // Defer the initial fetch so this Effect never synchronously cascades a state update.
+   // Errors are shown explicitly; do not restore the seven demo records.
+   void Promise.resolve().then(()=>{
+     if(!active)return;
+     return refreshReal(()=>active).catch(error=>{
+       if(active){setItems([]);setNotice(`真实商品读取失败：${error instanceof Error?error.message:'未知错误'}`);}
+     });
+   });
+   return ()=>{active=false};
+ },[mode,refreshReal]);
  const [approvalFocus,setApprovalFocus]=useState<string|null>(null);
  const [trackingDrill,setTrackingDrill]=useState<TrackingDrillFilter|null>(null);
  const [trackingSampleAnchor]=useState(()=>dayjs().format('YYYY-MM-DD'));
+ // PR337_PHASE2_REAL_API_V1: hydrate the saved and applied rule; never fallback on fetch failure.
+ useEffect(() => {
+   if (mode !== "performance") return;
+   let cancelled = false;
+   getNewProductRules("performance").then(row => {
+     if (cancelled) return;
+     setVersion(row.version);
+     setRuleLoaded(true);
+     if (row.config) {
+       const remote = cloneRuleDraft(row.config as RuleDraft);
+       setSavedRuleDraft(remote);
+       setRuleDraft(cloneRuleDraft(remote));
+       setCfg(current => ({...current,weights:{...remote.weights},remindDays:remote.remindDays,
+         gradeBands:remote.gradeBands,quantities:remote.quantities,quantityStrategy:remote.quantityStrategy,
+         penaltyRules:remote.penalties,vetoRules:remote.vetoes}));
+     }
+   }).catch((error:unknown) => {
+     if (!cancelled) setNotice(`评分规则读取失败：${error instanceof Error ? error.message : "未知错误"}`);
+   });
+   return () => { cancelled = true; };
+ }, [mode]);
  const trackingProducts=useMemo(()=>mode==='tracking'
    ?withTrackingVisualSamples(items,trackingSampleAnchor):items,[items,mode,trackingSampleAnchor]);
  const p=items.find(x=>x.id===selected);
@@ -151,7 +207,7 @@ export default function NewProductPages({page,mode}:Props){
    setRuleDraft(cloneRuleDraft(savedRuleDraft));
    setModal("config");
  };
- const saveRuleConfiguration=()=>{
+ const saveRuleConfiguration=async()=>{
    if(mode==="tracking"){
      const validation=validateTrackingRuleDraft(ruleDraft.success);
      if(validation){msg(validation);return;}
@@ -163,46 +219,50 @@ export default function NewProductPages({page,mode}:Props){
      }));
      setVersion(v=>v+1);
      close();
-     msg("打品成功标准草稿已保存（Demo）");
+     msg("打品成功标准配置已保存");
      return;
    }
+   if(!ruleLoaded){msg('评分规则尚未成功读取，不能保存');return;}
    const validation=validateRuleDraft(ruleDraft);
    if(validation){msg(validation);return;}
    const saved=cloneRuleDraft(ruleDraft);
-   setSavedRuleDraft(previous=>({...saved,success:previous.success}));
-   setCfg(current=>({
-     ...current,
-     weights:{...saved.weights},
-     remindDays:saved.remindDays,
-     gradeBands:saved.gradeBands,
-     quantities:saved.quantities,
-     quantityStrategy:saved.quantityStrategy,
-     penaltyRules:saved.penalties,
-     vetoRules:saved.vetoes,
-   }));
-   setVersion(v=>v+1);
-   close();
-   msg("配置草稿已保存（Demo）");
+   try {
+     const result=await applyNewProductRules("performance",version,saved);
+     setSavedRuleDraft(previous=>({...saved,success:previous.success}));
+     setCfg(current=>({...current,
+       weights:{...saved.weights},remindDays:saved.remindDays,gradeBands:saved.gradeBands,
+       quantities:saved.quantities,quantityStrategy:saved.quantityStrategy,
+       penaltyRules:saved.penalties,vetoRules:saved.vetoes,
+     }));
+     setVersion(result.version);
+     close();
+     try {await refreshReal();msg("评分规则已保存并应用");}
+     catch(error){msg(`规则已生效，刷新商品失败：${error instanceof Error?error.message:'未知错误'}`);}
+   }catch(error){
+     msg(`保存并应用失败：${error instanceof Error?error.message:"请检查网络和权限"}`);
+   }
  };
- const exportRows=()=>{const csv=["SKU,Item ID,品名,负责人,综合分,评级,建议量,状态",...items.map(x=>[x.sku,x.item,x.name,x.owner,score(x,cfg)??"",grade(x,cfg)??"",suggestion(x,cfg),x.status].join(","))].join("\n");const url=URL.createObjectURL(new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"}));const a=document.createElement("a");a.href=url;a.download="新品表现Mock.csv";a.click();URL.revokeObjectURL(url)};
+ const exportRows=()=>{
+   exportNewProductListings().catch(error=>msg(`导出失败：${error instanceof Error?error.message:'未知错误'}`));
+ };
  const pending=items.filter(x=>x.status==="待市场评分").length,purchase=items.filter(x=>x.status==="待采购确认").length,approval=items.filter(x=>x.status==="审核中").length;
- const saveMarket=()=>{
-   if(!p||p.status!=="待市场评分"){
-     msg("当前商品不是待市场评分状态");return;
-   }
+ const saveMarket=async()=>{
+   if(!p||!p.backend){msg('仅真实商品允许保存市场评分');return;}
+   if(marketSaving)return;
    if(scoreValue===null||!Number.isInteger(scoreValue)||scoreValue<0||scoreValue>10||note.trim().length<5){
-     msg("市场竞争分数与至少5个字符的评价依据均为必填");return;
+     msg('市场竞争分数与至少5个字符的评价依据均为必填');return;
    }
-   const evaluated={...p,market:scoreValue,marketReason:note.trim()};
-   const finalGrade=grade(evaluated,cfg);
-   const nextStatus=finalGrade==="D"||finalGrade==="Pass"?"测评停止":"待采购确认";
-   patch(p.id,{market:scoreValue,marketReason:note.trim(),status:nextStatus,
-     risk:p.risk==="待人工评分"?"":p.risk});
-   setNote(note.trim());
-   msg(nextStatus==="测评停止"?"评分已保存，当前评级不进入采购流程":"评分已保存，已生成评级与采购建议");
-   // Keep the detail drawer open; saved evaluation is rendered below, read-only.
+   setMarketSaving(true);
+   try {
+     await saveNewProductMarketScore(p.backend.identity,scoreValue,note.trim(),p.backend.marketVersion);
+     try {await refreshReal();msg('市场评分已保存；综合评分与评级已按当前规则重算');}
+     catch(error){msg(`市场评分已保存，商品刷新失败：${error instanceof Error?error.message:'未知错误'}`);}
+   }catch(error){
+     msg(`市场评分保存失败：${error instanceof Error?error.message:'未知错误'}`);
+   }finally{setMarketSaving(false)}
  };
  const sendPurchase=()=>{
+   if(p?.backend){msg('正式采购申请将在后续审批联调阶段接入，此处不执行模拟提交');return;}
    if(!p||p.status!=="待采购确认"){
      msg("当前状态不能提交采购申请");return;
    }
@@ -220,8 +280,9 @@ export default function NewProductPages({page,mode}:Props){
    close();
    msg("模拟采购申请已提交，正在等待审核");
  };
- const decide=(pass:boolean)=>{if(!p)return;patch(p.id,{status:pass?"已批准":"已驳回",actualQty:pass?qty:p.actualQty,tracking:pass?"等待开售":p.tracking});close();msg(pass?"模拟审批通过":"模拟申请被驳回")};
+ const decide=(pass:boolean)=>{if(p?.backend){msg('正式采购审核只能在审批工作台处理');return;}if(!p)return;patch(p.id,{status:pass?"已批准":"已驳回",actualQty:pass?qty:p.actualQty,tracking:pass?"等待开售":p.tracking});close();msg(pass?"模拟审批通过":"模拟申请被驳回")};
  const saveReview=()=>{
+    if(p?.backend){msg('真实商品人工判定将在打品跟踪阶段接入，此处不执行模拟保存');return;}
     if (!p) return;
 
     if (p.tracking === "打品成功" ||
@@ -242,7 +303,7 @@ export default function NewProductPages({page,mode}:Props){
       return;
     }
     if(!p)return;if(["需要优化","打品失败"].includes(review)&&note.trim().length<5){msg("请填写复盘说明");return}patch(p.id,{tracking:review,reasonFailure:note});close();msg("模拟复盘已保存")};
- const correct=()=>{if(!p||scoreValue===null||note.trim().length<5){msg("请填写分数和原因");return}setCorrections(s=>[...s,{id:s.length+1,sku:p.sku,dimension:correctionDim,from:p.scores[correctionDim],to:scoreValue,reason:note,status:"待审核"}]);close();msg("评分修正申请已提交")};
+ const correct=()=>{if(p?.backend){msg('正式评分修正流程未接通，此处不生成模拟申请');return;}if(!p||scoreValue===null||note.trim().length<5){msg("请填写分数和原因");return}setCorrections(s=>[...s,{id:s.length+1,sku:p.sku,dimension:correctionDim,from:p.scores[correctionDim],to:scoreValue,reason:note,status:"待审核"}]);close();msg("评分修正申请已提交")};
  return <PageShell page={page}><div className="np-original-v4"><div className="content">
 
 <header className="np-workspace-title">
@@ -274,7 +335,8 @@ export default function NewProductPages({page,mode}:Props){
       {tab==="list"&&
         <button className="btn" onClick={()=>{
           if(mode==="performance")reset();
-          msg("已刷新示例数据");
+          refreshReal().then(()=>msg('已刷新真实商品数据'))
+            .catch(error=>msg(`刷新失败：${error instanceof Error?error.message:'未知错误'}`));
         }}>↻ 刷新</button>}
 
       {tab!=="board" && (<button className="btn" onClick={()=>{
@@ -329,9 +391,9 @@ export default function NewProductPages({page,mode}:Props){
  </>}
  </div>
 </section>
-{modal&&modal!=="review"&&<Drawer title={{detail:"新品测评详情",market:"市场竞争评分",purchase:"确认采购数量",approval:"新品采购审核",review:"打品结果复盘",config:mode==="tracking"?"打品辅助规则配置":"新品表现配置",correction:"评分修正申请"}[modal]} sub={p?p.sku+" · "+p.name:"规则草稿 · 仅影响 Mock"} close={close} wide={modal==="config"} footer={modal==="detail"?null:modal==="market"?<button className="btn primary" onClick={saveMarket}>保存市场评分</button>:modal==="purchase"?<button className="btn primary" onClick={sendPurchase}>提交领导审核</button>:modal==="approval"?<><button className="btn" onClick={()=>decide(false)}>驳回</button><button className="btn primary" onClick={()=>decide(true)}>审核通过</button></>:modal==="correction"?<button className="btn primary" onClick={correct}>提交申请</button>:mode==="tracking"?<span className="muted">请在面板右上角保存浏览器本地草稿</span>:<button className="btn primary" onClick={saveRuleConfiguration}>保存配置草稿</button>}>
+{modal&&modal!=="review"&&<Drawer title={{detail:"新品测评详情",market:"市场竞争评分",purchase:"确认采购数量",approval:"新品采购审核",review:"打品结果复盘",config:mode==="tracking"?"打品辅助规则配置":"新品表现配置",correction:"评分修正申请"}[modal]} sub={p?p.sku+" · "+p.name:"当前规则 · 保存后立即生效"} close={close} wide={modal==="config"} footer={modal==="detail"?null:modal==="market"?<button className="btn primary" onClick={saveMarket}>保存市场评分</button>:modal==="purchase"?<button className="btn primary" onClick={sendPurchase}>提交领导审核</button>:modal==="approval"?<><button className="btn" onClick={()=>decide(false)}>驳回</button><button className="btn primary" onClick={()=>decide(true)}>审核通过</button></>:modal==="correction"?<button className="btn primary" onClick={correct}>提交申请</button>:mode==="tracking"?<span className="muted">请在面板右上角保存浏览器本地草稿</span>:<button className="btn primary" onClick={saveRuleConfiguration}>保存并应用</button>}>
  {p&&modal!=="config"&&<div className="product-summary"><div className="thumb">▤</div><div><div className="summary-name">{p.name}</div><div className="summary-meta">{p.sku} · Item ID {p.item} · 负责人 {p.owner}</div><Status text={p.status}/></div><div className="summary-right"><div className="score-main">{score(p,cfg)?.toFixed(2)||"—"}</div><div className="cell-sub">{grade(p,cfg)||"待评分"} 级</div></div></div>}
- {modal==="detail"&&p&&<><div className="section-title">自动评分明细</div><div className="score-grid">{(["speed","ad","profit","trust"] as const).map((d,i)=><div className="score-item" key={d}><div className="score-item-top"><span className="score-item-name">{["出单速度","广告有效性","利润空间","数据可信度"][i]}</span><span className="score-item-value">{p.overrides?.[d]??p.scores[d]} /10</span></div><p>源于业务经营数据 · 权重 {cfg.weights[d]}%</p><button className="btn small" onClick={()=>{setCorrectionDim(d);setScoreValue(p.scores[d]);setNote("");setModal("correction")}}>申请修正</button></div>)}</div>
+ {modal==="detail"&&p&&<><div className="section-title">自动评分明细</div><div className="score-grid">{(["speed","ad","profit","trust"] as const).map((d,i)=><div className="score-item" key={d}><div className="score-item-top"><span className="score-item-name">{["出单速度","广告有效性","利润空间","数据可信度"][i]}</span><span className="score-item-value">{p.backend && !p.backend.available[d] ? '—' : (p.overrides?.[d]??p.scores[d])} /10</span></div><p>源于业务经营数据 · 权重 {cfg.weights[d]}%</p><button className="btn small" onClick={()=>{setCorrectionDim(d);setScoreValue(p.scores[d]);setNote("");setModal("correction")}}>申请修正</button></div>)}</div>
 <div className="section-title">市场竞争评分
       <span className="cell-sub">{p.status==="待市场评分"?"必填":"已保存"}</span>
     </div>
@@ -365,13 +427,13 @@ export default function NewProductPages({page,mode}:Props){
     <div className="section-title">测品数据</div>
     <div className="kv-list">
       <div className="kv-row"><span className="kv-key">首单与订单</span>
-        <span className="kv-val">首单时间待接入 · 近7天 {p.qty7} 单 · 累计订单 {p.orders}</span></div>
+        <span className="kv-val">{p.backend ? (p.backend.firstWfsDate ? `WFS首次可售 ${p.backend.firstWfsDate}` : '首次可售日待同步') : '首单时间待接入'} · 近7天 {p.backend&&!p.backend.available.qty7?'—':p.qty7} 单 · 14天有效订单 {p.backend && !p.backend.available.orders14?'—':p.orders}</span></div>
       <div className="kv-row"><span className="kv-key">广告表现</span>
-        <span className="kv-val">花费 ${p.spend} · 点击 {p.clicks} · ACOS {p.acos}%</span></div>
+        <span className="kv-val">花费 {p.backend&&!p.backend.available.spend?'—':`$${p.spend}`} · 点击 {p.backend&&!p.backend.available.clicks?'—':p.clicks} · ACOS {p.backend&&!p.backend.available.acos?'—':`${p.acos}%`}</span></div>
       <div className="kv-row"><span className="kv-key">盈利能力</span>
-        <span className="kv-val">ROI {p.roi} · 毛利率 {p.margin}%</span></div>
+        <span className="kv-val">ROI {p.backend&&!p.backend.available.roi?'—':p.roi} · 毛利率 {p.backend&&!p.backend.available.margin?'—':`${p.margin}%`}</span></div>
       <div className="kv-row"><span className="kv-key">数据扣分</span>
-        <span className="kv-val">{p.penalties>0?`当前示例扣 ${p.penalties} 分`:"当前示例未触发通用扣分"}</span></div>
+        <span className="kv-val">{p.backend?'通用扣分未自动确认（不使用示例数值）':p.penalties>0?`当前示例扣 ${p.penalties} 分`:"当前示例未触发通用扣分"}</span></div>
     </div>
     {p.market!==null&&p.marketReason.trim().length>=5&&score(p,cfg)!==null?(
       <>
@@ -398,7 +460,7 @@ export default function NewProductPages({page,mode}:Props){
  {modal==="correction"&&p&&<><div className="form-field"><label className="form-label">评分维度</label><select className="select" value={correctionDim} onChange={e=>setCorrectionDim(e.target.value as Correction["dimension"])}>{[["speed","出单速度"],["ad","广告有效性"],["profit","利润空间"],["trust","数据可信度"]].map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></div><div className="form-field"><label className="form-label">申请分数</label><input className="input" type="number" min={0} max={10} value={scoreValue??""} onChange={e=>setScoreValue(Number(e.target.value))}/></div><div className="form-field"><label className="form-label">修正依据</label><textarea className="textarea" rows={4} value={note} onChange={e=>setNote(e.target.value)}/></div></>}
  {modal==="config"&&(mode==="tracking"?<TrackingRuleConfigPanel />:<div className="np-rules-config"><div className="config-shell">
       {mode==="performance"&&<div className="card config-nav">{[["weights","评分权重"],["criteria","评分标准"],["grades","评级与采购数量"],["penalties","扣分与否决"],["version","规则版本"]].map(([key,name])=><button type="button" key={key} className={cfgTab===key?"active":""} onClick={()=>setCfgTab(key)}>{name}</button>)}</div>}
-      <div className="card config-panel"><NewProductRulesPanel tab={cfgTab} draft={ruleDraft} onChange={setRuleDraft} version={version} products={items}/></div>
+      <div className="card config-panel"><NewProductRulesPanel tab={cfgTab} draft={ruleDraft} onChange={setRuleDraft} version={version} products={items.filter(row=>!row.backend)}/></div>
     </div></div>)}
  </Drawer>}
    {/* PR337_TRACKING_REVIEW_DRAWER_V1: portal-based, above top and side navigation */}
@@ -447,11 +509,11 @@ export default function NewProductPages({page,mode}:Props){
           <h3>经营数据参考</h3><span>仅供人工判断，不自动定义结果</span>
         </div>
         <ReviewDescriptions bordered size="small" column={2} items={[
-          {key:"sold", label:"30天销量", children:`${p.sold30} 件`},
-          {key:"profit", label:"利润率", children:`${p.margin}%`},
-          {key:"acos", label:"ACOS", children:`${p.acos}%`},
-          {key:"stock", label:"当前库存", children:`${p.inventory} 件`},
-          {key:"suggest", label:"系统建议量", children:`${suggestion(p,cfg)} 件`},
+          {key:"sold", label:"30天销量", children:p.backend&&!p.backend.available.sales30?'—':`${p.sold30} 件`},
+          {key:"profit", label:"利润率", children:p.backend&&!p.backend.available.margin?'—':`${p.margin}%`},
+          {key:"acos", label:"ACOS", children:p.backend&&!p.backend.available.acos?'—':`${p.acos}%`},
+          {key:"stock", label:"当前库存", children:p.backend&&!p.backend.available.inventory?'—':`${p.inventory} 件`},
+          {key:"suggest", label:"系统建议量", children:p.backend&&p.backend.suggestedQty===null?'—':`${suggestion(p,cfg)} 件`},
           {key:"approved", label:"已有采购数量", children:p.actualQty > 0 ? `${p.actualQty} 件` : "—"},
           {key:"start", label:"追踪起点", children:p.arrival || "等待到货 / 可售", span:2},
         ]}/>

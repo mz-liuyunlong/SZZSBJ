@@ -287,6 +287,14 @@ ACTIONS: tuple[ActionDefinition, ...] = (
         50,
         "high",
     ),
+    # PR337_PHASE2_REAL_API_V1: strictly scoped actions. Assign roles explicitly in IAM.
+    ActionDefinition(
+        "products_new_product_analysis", "configure", "保存并应用新品评分和打品规则", 10, "high"
+    ),
+    ActionDefinition("products_new_product_analysis", "score", "提交新品市场竞争评分", 20),
+    ActionDefinition("products_new_product_analysis", "request", "申请新品采购", 30),
+    ActionDefinition("products_new_product_analysis", "review", "审核新品采购申请", 40, "high"),
+    ActionDefinition("products_new_product_analysis", "tracking", "人工判定打品结果", 50),
     ActionDefinition("products_listing_management", "export", "导出Listing", 10),
     ActionDefinition("products_listing_management", "manage_tags", "管理标签", 20),
     ActionDefinition("products_listing_management", "archive", "归档Listing", 30, "high"),

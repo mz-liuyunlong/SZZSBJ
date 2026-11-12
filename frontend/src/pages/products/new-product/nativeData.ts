@@ -5,7 +5,14 @@ scores:{speed:number;ad:number;profit:number;trust:number};penalties:number;pena
 clicks:number;orders:number;qty7:number;sales30:number;spend:number;unitCost:number;price:number;inventory:number;risk:string;status:string;
 suggested:number|null;requestQty:number|null;requestReason:string;tracking:string;sales60:number;sales90:number;margin60:number;acos60:number;
 launch:string;arrival:string;sold30:number;sold60:number;sold90:number;actualQty:number;reasonFailure:string;
-category?:string;developer?:string;operator?:string;overrides?:Partial<Record<"speed"|"ad"|"profit"|"trust",number>>};
+category?:string;developer?:string;operator?:string;overrides?:Partial<Record<"speed"|"ad"|"profit"|"trust",number>>;
+/** Backend is authoritative for real records; fields above preserve accepted UI layout only. */
+backend?:{
+  identity:{source_account_ref:string;store_id:string;item_id:string};
+  marketVersion:number;ruleVersion:number;
+  evaluation:{total:string|null;grade:Grade|null;dimensions:Record<"market"|"speed"|"ad"|"profit"|"trust",string|null>;missing:string[]};
+  suggestedQty:number|null;available:Record<string,boolean>;firstWfsDate:string|null;firstOrderDate?:string|null;
+}};
 export type Config={weights:{market:number;speed:number;ad:number;profit:number;trust:number};remindDays:number;successDays:30|60|90;successQty:number;successProfit:number;successAcos:number;
  gradeBands?:Partial<Record<"S"|"A"|"B"|"C"|"D",[number,number]>>;
  quantities?:Partial<Record<Grade,[number,number]>>;
@@ -41,12 +48,18 @@ function effectivePenalty(p:Product,c:Config){
   return c.penaltyRules.reduce((sum,rule)=>sum+(rule.enabled&&p.penaltyFlags.includes(rule.name)?rule.deduct:0),0);
 }
 export function score(p:Product,c:Config){
+  if(p.backend){
+    const raw=p.backend.evaluation.total;
+    const value=raw===null?null:Number(raw);
+    return value!==null&&Number.isFinite(value)?value:null;
+  }
   if(p.market===null)return null;
   const w=c.weights,o=p.overrides||{};
   return Math.round(((p.market*w.market+(o.speed??p.scores.speed)*w.speed+(o.ad??p.scores.ad)*w.ad+
   (o.profit??p.scores.profit)*w.profit+(o.trust??p.scores.trust)*w.trust)/100-effectivePenalty(p,c))*100)/100;
 }
 export function grade(p:Product,c:Config):Grade|null{
+  if(p.backend)return p.backend.evaluation.grade;
   const s=score(p,c);if(s===null)return null;
   const levels:["S","A","B","C","D"]=["S","A","B","C","D"];
   let g:Grade="D";
@@ -65,6 +78,7 @@ export function grade(p:Product,c:Config):Grade|null{
   return g;
 }
 export function suggestion(p:Product,c:Config){
+  if(p.backend)return p.backend.suggestedQty??0;
   const g=grade(p,c);if(!g||g==="Pass"||g==="D")return 0;
   const [lo,hi]=c.quantities?.[g]??bands[g];
   if(c.quantityStrategy==="min")return lo;

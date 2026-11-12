@@ -47,7 +47,7 @@ export function isOverdueHumanReview(p:Product,asOf:string,threshold=45):boolean
   return age!==null&&age>threshold&&p.tracking!=='打品成功'&&p.tracking!=='打品失败';
 }
 export function getTrackingPool(products:Product[]):Product[]{
-  return products.filter(p=>p.actualQty>0 || p.status==='已批准' || outcome(p)==='打品成功' || outcome(p)==='打品失败');
+  return products.filter(p=>Boolean(p.backend?.firstWfsDate) || p.actualQty>0 || p.status==='已批准' || outcome(p)==='打品成功' || outcome(p)==='打品失败');
 }
 function groupCategory(products:Product[],pick:(p:TrackingProduct)=>string):TrackingCategoryRow[]{
   const groups=new Map<string,Product[]>();
