@@ -52,7 +52,8 @@ function cardShaped(groups: string[]): boolean {
   return sizes.length === 3 && sizes[0] === 4 && sizes[1] === 6 && (sizes[2] === 5 || sizes[2] === 4);
 }
 
-/** 一串数字里认出的卡号：[开始组, 结束组]。候选是过 Luhn、长度 13～19 的连续几组；
+/** 一串数字里认出的卡号：[开始组, 结束组]。候选是过 Luhn、长度 13～19 的连续几组，并且像卡号的写法；
+ * 前面有「卡号 / 银行卡 / 账号」提示词的，任意分组过 Luhn 都算（如「卡号 622202 1234567894」）。
  * 先挑像卡号写法的，再按长度优先级，互不重叠地挑（「2026-10-30 4111 1111 1111 1111」不会把日期和卡号拼成一个）。
  * 一个都没有、前面又写了「卡号」的，取第一个像卡号写法的。 */
 function cardSpans(groups: string[], hinted: boolean): [number, number][] {
@@ -63,7 +64,10 @@ function cardSpans(groups: string[], hinted: boolean): [number, number][] {
       if (end < 0) continue;
       const window = groups.slice(start, end + 1);
       if (!luhnOk(window.join(""))) continue;
-      candidates.push({ start, end, rank: (cardShaped(window) ? 0 : 100) + order });
+      const shaped = cardShaped(window);
+      // 没有提示词时只认像卡号的写法：点号、斜杠也算分隔符后，金额列表、日期区间偶尔能凑出过 Luhn 的数字（刘云龙 #341 审核）
+      if (!shaped && !hinted) continue;
+      candidates.push({ start, end, rank: (shaped ? 0 : 100) + order });
     }
   });
   candidates.sort((a, b) => a.rank - b.rank || a.start - b.start);

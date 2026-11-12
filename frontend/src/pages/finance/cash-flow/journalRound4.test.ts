@@ -115,6 +115,17 @@ describe("card numbers in approval text (Rocky 11-12)", () => {
     expect(maskCards("金额 96.94 4111 1111 1111 1111")).toBe("金额 96.94 **** **** **** 1111");
   });
 
+  it("amount lists and date ranges are never masked without a card hint (刘云龙 #341 审核)", () => {
+    for (const text of [
+      "明细：37446.72 / 24135.68 / 21333.90",
+      "明细：41864.61/83796.35/75895.44/68539.15/53771.59/49154.43",
+      "15267.92 54637.69 18607.47 2574.71",
+      "2026.10.1-2026.10.15 报销 1234.56元",
+      "622202 1234567894",
+    ]) expect(maskCards(text)).toBe(text);
+    expect(maskCards("卡号 622202 1234567894")).toBe("卡号 ****** ******7894");
+  });
+
   it("leaves 12-digit approval serials, short numbers and non-Luhn strings alone", () => {
     expect(maskCards("单号 202610270001 金额 96.94")).toBe("单号 202610270001 金额 96.94");
     expect(luhnOk("4111111111111112")).toBe(false);
