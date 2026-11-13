@@ -286,6 +286,28 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="FINANCE_APPROVAL_EXCLUDED_DEPARTMENT_IDS",
     )
+    # 第二个飞书企业（env 前缀 YC_）：审批单同步进同一张表，单号前加 YC-。
+    # 应用凭证、审批定义编码、账户主体都只在线上 app.env，不进仓库。
+    yc_feishu_app_id: str | None = Field(default=None, validation_alias="YC_FEISHU_APP_ID")
+    yc_feishu_app_secret: SecretStr | None = Field(
+        default=None,
+        validation_alias="YC_FEISHU_APP_SECRET",
+    )
+    yc_feishu_base_url: str = Field(
+        default="https://open.feishu.cn",
+        validation_alias="YC_FEISHU_BASE_URL",
+    )
+    yc_finance_approval_codes: str | None = Field(
+        default=None,
+        validation_alias="YC_FINANCE_APPROVAL_CODES",
+    )
+    # 逗号分隔：日记账账户表里属于这家公司的「主体」；这些账户的流水只和这家公司的审批单配对。
+    yc_finance_entities: str | None = Field(default=None, validation_alias="YC_FINANCE_ENTITIES")
+    yc_finance_org_label: str = Field(default="YC", validation_alias="YC_FINANCE_ORG_LABEL")
+    # 主公司在页面上显示的名字（审批单只有第二家公司时才显示公司标签）
+    finance_approval_org_label: str = Field(
+        default="主公司", validation_alias="FINANCE_APPROVAL_ORG_LABEL"
+    )
     feishu_base_url: str = Field(
         default="https://open.feishu.cn",
         validation_alias="FEISHU_BASE_URL",
@@ -384,7 +406,7 @@ class Settings(BaseSettings):
             raise ValueError("LINGXING_BASE_URL must be a credential-free HTTPS origin")
         return value.rstrip("/")
 
-    @field_validator("feishu_base_url")
+    @field_validator("feishu_base_url", "yc_feishu_base_url")
     @classmethod
     def validate_feishu_base_url(cls, value: str) -> str:
         try:
