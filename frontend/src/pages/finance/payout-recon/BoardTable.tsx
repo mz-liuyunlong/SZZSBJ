@@ -48,7 +48,15 @@ function BoardTable<T extends object>({ label, rowKey, rows, columns, pageSize =
   /** 合计行（固定在表格底部）：按列 key 给内容，没给的列留空 */
   totals?: Record<string, ReactNode>;
 }) {
-  const shown = useColumnWidths(resizeKey, columns);
+  // 固定列必须在两头（表格组件的要求）：固定在左的在前、固定在右的在后。列配置里存的顺序可能把
+  // 固定列排到中间（比如「账单日」排在固定的「店铺」前面），表头和表体就会错位、互相盖住；
+  // 合计行也按这个顺序出格子，才不会错列。
+  const sized = useColumnWidths(resizeKey, columns);
+  const shown = [
+    ...sized.filter((c) => c.fixed === "left" || c.fixed === true),
+    ...sized.filter((c) => !c.fixed),
+    ...sized.filter((c) => c.fixed === "right"),
+  ];
   return (
     <ReportTableShell label={label}>
       <ProTable<T>
