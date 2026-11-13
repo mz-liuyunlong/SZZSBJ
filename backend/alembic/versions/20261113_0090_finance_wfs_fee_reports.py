@@ -49,6 +49,7 @@ def upgrade() -> None:
         sa.Column("submit_attempts", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("polls", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("remote_failures", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("import_failures", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("error_code", sa.String(64)),
         sa.Column(
             "file_ids",
@@ -59,6 +60,8 @@ def upgrade() -> None:
         sa.Column("last_run_id", sa.Uuid()),
         _ts("next_action_at"),
         _ts("submitted_at", nullable=True),
+        # 最近一次真向沃尔玛下单（submitted / submit_failed）；只复用已有请求的不算
+        _ts("last_post_at", nullable=True),
         _ts("finished_at", nullable=True),
         _ts("created_at"),
         _ts("updated_at"),

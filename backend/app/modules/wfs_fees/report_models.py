@@ -73,11 +73,15 @@ class WalmartWfsReportJob(Base):
     polls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # 连续几次远端没跑成（连不上 / 执行器没回应 / 令牌被拒）；跑成一次清零，满 48 次失败
     remote_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # 连续几次拉回来了但导入出错；正常处理一次清零，满 48 次失败
+    import_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_code: Mapped[str | None] = mapped_column(String(64))
     file_ids: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
     last_run_id: Mapped[UUID | None] = mapped_column()
     next_action_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # 最近一次真向沃尔玛下单（submitted / submit_failed），每店每类每小时最多 1 次就看它
+    last_post_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")

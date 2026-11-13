@@ -8,6 +8,9 @@
   失败 / 疑似个人信息拦下 是终态，定时不再重试，手动同步会重新排队失败的。
 - 沃尔玛下单每店每类每小时 1 次：每次运行每店每类最多下单 1 次，下单前先查近 30 天
   同范围的请求能不能复用（执行器里做）；没生成好隔 1 小时再看，最多看 48 次。
+  "1 小时内下过单"看 last_post_at：真下了单（成功或失败）才记，只复用已有请求的不记。
+- 拉回来导入出错：这家店回滚、隔 1 小时再来，连续 48 次都出错算失败。
+- 入库货件明细读完补分摊；补分摊出错只记 warning，不影响报表导入。
 - 同步按钮：按一次锁 90 分钟；最近一次同步失败锁 60 分钟（Rocky 11-13）。
 - 入库货件明细：沃尔玛远程采集每天落的 items.csv，读进 fact_walmart_wfs_inbound_items，
   入库运费按货件商品件数分摊（service._shipment_items）。
@@ -55,6 +58,7 @@ RETRY_WAIT: Final = timedelta(hours=1)
 MAX_POLLS: Final = 48
 MAX_SUBMITS: Final = 3
 MAX_REMOTE_FAILURES: Final = 48
+MAX_IMPORT_FAILURES: Final = 48
 MAX_POSTS_PER_RUN: Final = len(REPORT_TYPES)
 MANUAL_LOCK: Final = timedelta(minutes=90)
 FAILURE_LOCK: Final = timedelta(minutes=60)
@@ -302,14 +306,17 @@ class WfsReportSync:
         )
 
     def recent_posts(self, store: StoreRef, now: datetime) -> frozenset[str]:
-        """这家店 1 小时内下过单的报表类型（定时和手动挨得近时不再下，复审 P3-1）。"""
+        """这家店 1 小时内真下过单的报表类型（定时和手动挨得近时不再下，复审 P3-1）。
+
+        按 last_post_at 看：下单成功、下单失败都占这一小时的额度；只复用已有请求的不占。
+        """
         return frozenset(
             self.session.scalars(
                 select(WalmartWfsReportJob.report_type)
                 .where(
                     WalmartWfsReportJob.source_account_ref == SOURCE_REF,
                     WalmartWfsReportJob.store_id == store.store_id,
-                    WalmartWfsReportJob.submitted_at > now - RETRY_WAIT,
+                    WalmartWfsReportJob.last_post_at > now - RETRY_WAIT,
                 )
                 .distinct()
             )
@@ -373,6 +380,7 @@ class WfsReportSync:
                 continue
             answered.add(job_key(job))
             job.remote_failures = 0
+            job.import_failures = 0  # 走到这里没出错；整店出错会回滚，不会清零
             if result.get("op") == "submit":
                 self._apply_submit(job, result, now)
             elif result.get("op") == "fetch":
@@ -427,6 +435,7 @@ class WfsReportSync:
             job.next_action_at = now if ready else now + RETRY_WAIT
             if outcome == "submitted":
                 job.submit_attempts += 1
+                job.last_post_at = now
             return
         if outcome in DEFERRED_OUTCOMES:
             job.next_action_at = now + RETRY_WAIT
@@ -439,6 +448,7 @@ class WfsReportSync:
             return
         if outcome == "submit_failed":
             job.submit_attempts += 1
+            job.last_post_at = now  # 下单失败也扣了这一小时的额度
             if job.submit_attempts >= MAX_SUBMITS:
                 self._fail(job, "WFS_REPORT_" + outcome.upper(), now)
             else:
@@ -550,18 +560,25 @@ class WfsReportSync:
         """execute(店, 计划) → RemoteRun；出错抛异常，错误码在 str(异常) 里。"""
         result = SyncOutcome()
         if archive_root is not None:
+            loaded: InboundLoad | None = None
             try:
                 loaded = load_inbound_items(
                     self.session, archive_root, [store.store_id for store in stores]
                 )
                 result.inbound_items = loaded.rows
-                # 货件明细后到：给这些货件里还没分摊的入库运费补分摊
-                result.inbound_reallocated = WfsFeeService(
-                    self.session, self.settings
-                ).reallocate_inbound(loaded.shipments)
             except (OSError, csv.Error, ValueError):
                 self.session.rollback()
                 logger.exception("wfs_inbound_items_load_failed run_id=%s", run_id)
+            if loaded is not None:
+                # 货件明细后到：给这些货件里还没分摊的入库运费补分摊。
+                # 补分摊出错只回滚补分摊（货件明细已经落库），记 warning，报表照常往下导。
+                try:
+                    result.inbound_reallocated = WfsFeeService(
+                        self.session, self.settings
+                    ).reallocate_inbound(loaded.shipments)
+                except Exception:  # noqa: BLE001
+                    self.session.rollback()
+                    logger.warning("wfs_inbound_reallocate_failed run_id=%s", run_id, exc_info=True)
         self.plan_jobs(stores, now, manual=manual, actor=actor)
         for store in stores:
             jobs = self.due_jobs(store, now)
@@ -608,18 +625,26 @@ class WfsReportSync:
     def _import_failed(
         self, store: StoreRef, jobs: list[WalmartWfsReportJob], now: datetime
     ) -> StoreOutcome:
+        """导入出错：隔 1 小时再来；连续 48 次都出错就标失败，不再一直重试。"""
         ids = [job.id for job in jobs]
+        outcome = StoreOutcome(store, error="WFS_REPORT_IMPORT_FAILED")
         for job in self.session.scalars(
             select(WalmartWfsReportJob).where(
                 WalmartWfsReportJob.id.in_(ids),
                 WalmartWfsReportJob.status.in_(ACTIVE_STATUSES),  # 已经导入成功的不动
             )
         ):
-            job.error_code = "WFS_REPORT_IMPORT_FAILED"
-            job.next_action_at = now + RETRY_WAIT
+            job.import_failures += 1
             job.updated_at = now
+            if job.import_failures >= MAX_IMPORT_FAILURES:
+                self._fail(job, "WFS_REPORT_IMPORT_FAILED", now)
+                outcome.failed_jobs += 1
+            else:
+                job.error_code = "WFS_REPORT_IMPORT_FAILED"
+                job.next_action_at = now + RETRY_WAIT
+                outcome.pending += 1
         self.session.commit()
-        return StoreOutcome(store, error="WFS_REPORT_IMPORT_FAILED", pending=len(ids))
+        return outcome
 
 
 # ---------------------------------------------------------------- 页面状态
