@@ -157,8 +157,10 @@ class WfsFeeService:
                 request_id,
                 origin,
             )
-        # 同一份文件不分店先查：导过的文件再传，店铺跟着以前那次走（复审 P2-3）
-        earlier = self._duplicate_file(sha256)
+        # 有费用行的文件：同一份文件不分店先查，导过的再传店铺跟着以前那次走（复审 P2-3）。
+        # 没有费用行的空报告各店可能一字不差，内容相同不代表同一家店：
+        # 只按「店铺 + sha256」查重，不做跨店拒收和兜底（复审 P2-N1）。
+        earlier = self._duplicate_file(sha256) if report.lines else None
         resolved, why = self._resolve_store(report, store_id, file_name)
         if resolved is None and earlier is not None and not why:
             resolved = earlier.store_id
@@ -196,7 +198,7 @@ class WfsFeeService:
                 request_id,
                 origin,
             )
-        duplicate = earlier
+        duplicate = earlier if report.lines else self._duplicate_file(sha256, resolved)
         if duplicate is not None:
             # 同一份文件再传：按现在的规则重新解析刷新（归期、归属可能变了），不新增行
             result = self._ingest(duplicate, report, resolved, actor, request_id)
@@ -414,17 +416,17 @@ class WfsFeeService:
         strong = [store for store, count in votes.items() if count >= 0.8 * matched]
         return strong[0] if len(strong) == 1 else None
 
-    def _duplicate_file(self, sha256: str) -> WalmartWfsFeeFile | None:
-        """同一份文件（按内容，不分店）以前导入过的那条记录。"""
+    def _duplicate_file(self, sha256: str, store_id: str | None = None) -> WalmartWfsFeeFile | None:
+        """同一份文件（按内容）以前导入过的那条记录；给了 store_id 只查这家店。"""
+        query = select(WalmartWfsFeeFile).where(
+            WalmartWfsFeeFile.source_account_ref == SOURCE_REF,
+            WalmartWfsFeeFile.sha256 == sha256,
+            WalmartWfsFeeFile.status != "rejected",
+        )
+        if store_id is not None:
+            query = query.where(WalmartWfsFeeFile.store_id == store_id)
         return self.session.scalars(
-            select(WalmartWfsFeeFile)
-            .where(
-                WalmartWfsFeeFile.source_account_ref == SOURCE_REF,
-                WalmartWfsFeeFile.sha256 == sha256,
-                WalmartWfsFeeFile.status != "rejected",
-            )
-            .order_by(WalmartWfsFeeFile.created_at.desc())
-            .limit(1)
+            query.order_by(WalmartWfsFeeFile.created_at.desc()).limit(1)
         ).first()
 
     def _period_clash(self, store_id: str, report: ParsedReport) -> str | None:

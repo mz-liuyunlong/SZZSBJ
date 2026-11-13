@@ -23,7 +23,7 @@ export interface ApiLine {
 }
 export interface ApiLineList { items: ApiLine[]; total: number; page: number; page_size: number }
 export interface ApiSummaryRow { store_id: string; report_key: string | null; report_date: string | null; fee_type: string; rows: number; amount_usd: string }
-export interface ApiSummary { items: ApiSummaryRow[]; total_amount_usd: string }
+export interface ApiSummary { items: ApiSummaryRow[]; total_amount_usd: string; total_quantity: string }
 export interface ApiCheck {
   store_id: string; report_key: string; fee_type: string; report_date: string | null; lingxing_amount: string | null; lingxing_rows: number;
   report_amount: string | null; report_rows: number; status: "ok" | "diff" | "lx_only" | "report_only";

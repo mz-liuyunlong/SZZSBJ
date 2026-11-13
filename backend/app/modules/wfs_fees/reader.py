@@ -30,7 +30,7 @@ from app.modules.wfs_fees.schemas import (
     WfsFeeTypeRead,
 )
 
-MAX_PAGE_SIZE: Final = 500
+MAX_PAGE_SIZE: Final = 1000  # 和报表通用分页一致：50 / 100 / 200 / 500 / 1000
 
 
 def _many(value: str | None) -> list[str]:
@@ -279,6 +279,12 @@ def summary(session: Session, f: LineFilter) -> tuple[list[WfsFeeSummaryRow], De
         )
         for s, rk, rd, ft, n, amount in rows
     ], total
+
+
+def total_quantity(session: Session, f: LineFilter) -> Decimal:
+    """数量合计（页面底部合计行用），筛选和明细同一套。"""
+    value = session.scalar(_apply(select(func.sum(WalmartWfsFeeLine.quantity)), f))
+    return value or Decimal("0")
 
 
 def list_checks(

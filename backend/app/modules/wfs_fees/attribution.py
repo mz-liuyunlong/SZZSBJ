@@ -82,6 +82,8 @@ def split_amount(total: Decimal, shares: list[Share]) -> list[tuple[Share, Decim
 
     先按比例向零取整到分，剩下的几分按余数从大到小每行补 1 分（余数相同按原顺序），
     不会出现「尾差压在最后一行变成反号」（复审 P2-4：1.00 分 200 份时最后一行是 -0.99）。
+    total 不是整分（报表给到 4 位小数）时，不足 1 分的零头补到余数最大的那一行，Σ 仍等于原行
+    （复审 P3-1）；四舍五入进位时那一行已多分到 1 分，补负零头后仍同号。
     """
     weight_sum = sum((s.weight for s in shares), Decimal("0"))
     if not shares or weight_sum == 0:
@@ -94,7 +96,9 @@ def split_amount(total: Decimal, shares: list[Share]) -> list[tuple[Share, Decim
     order = sorted(range(len(shares)), key=lambda i: (-(exact[i] - floors[i]), i))
     for i in order[:left]:
         floors[i] += 1
-    return [(share, sign * CENT * cents) for share, cents in zip(shares, floors, strict=True)]
+    amounts = [CENT * cents for cents in floors]
+    amounts[order[0]] += abs(total) - CENT * cents_total  # 不足 1 分的零头，整分时为 0
+    return [(share, sign * amount) for share, amount in zip(shares, amounts, strict=True)]
 
 
 def parse_rebate_period(detail: str) -> tuple[date, date] | None:

@@ -46,6 +46,17 @@ def test_split_amount_never_flips_sign_when_shares_outnumber_cents():
         assert max(abs(a) for a in amounts) <= Decimal("0.01")
 
 
+def test_split_amount_keeps_sub_cent_totals():
+    """复审 P3-1：报表给到 4 位小数（1.0050 分 3 份），Σ 仍等于原行，零头补在余数最大的那一行。"""
+    for total in (Decimal("1.0050"), Decimal("-1.0050"), Decimal("0.0040"), Decimal("0.0050")):
+        out = A.split_amount(total, [A.Share(gtin=str(i), weight=Decimal(1)) for i in range(3)])
+        amounts = [amount for _, amount in out]
+        assert sum(amounts) == total
+        assert all(a == 0 or (a > 0) == (total > 0) for a in amounts)
+    out = A.split_amount(Decimal("1.0050"), [A.Share(weight=Decimal(1)) for _ in range(3)])
+    assert [amount for _, amount in out] == [Decimal("0.3350"), Decimal("0.34"), Decimal("0.33")]
+
+
 def test_inbound_uses_shipped_quantity_then_declared():
     items = [
         (S.GTIN_1, "MSKU-1", L1, Decimal(300), Decimal(300)),

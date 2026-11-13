@@ -12,6 +12,7 @@ import { SettingOutlined } from "@ant-design/icons";
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
 import { useMemo, useState } from "react";
 import PageShell from "@/components/page/PageShell";
+import { REPORT_TABLE_DEFAULT_PAGE_SIZE } from "@/components/report-table/pagination";
 import ResetButton from "@/components/report-table/ResetButton";
 import ReportFacetSelect from "@/shared/report-filters";
 import type { NavigationPage } from "@/config/navigation";
@@ -47,7 +48,7 @@ const Bi = ({ zh, en }: { zh: string; en?: string }) => (
 );
 
 const GROUP_COLOR: Record<AttributionGroup, string> = { done: "green", todo: "orange", company: "default" };
-const PAGE_SIZE = 100;
+const PAGE_SIZE = REPORT_TABLE_DEFAULT_PAGE_SIZE;
 
 /**
  * 表格一行：原行没有分摊就是它自己；有分摊的原行不单独显示，按分摊子行展开成多行，
@@ -125,6 +126,9 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
   // 按列配置的顺序和显示与否取列（店铺、操作固定）
   const shownColumns = [...new Set([...columnKeys, "actions"])].map((key) => columns.find((c) => c.key === key)).filter((c): c is ProColumns<Row> => Boolean(c));
   const total = num(summary.data?.total_amount_usd);
+  const pageTotal = rows.reduce((sum, row) => sum + (row.amount ?? 0), 0);
+  const totalQuantity = num(summary.data?.total_quantity);
+  const pageQuantity = rows.reduce((sum, row) => sum + (num(row.quantity) ?? 0), 0);
   const toolbar = (
     <>
       <ReportFacetSelect mode="multiple" ariaLabel="店铺" placeholder="店铺" unit="家" value={picked.stores}
@@ -150,7 +154,7 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
       <Space className="finance-board__toolbar-actions" size={8}>
         <Tooltip title="按店铺 / 账期从沃尔玛接口拉取报表（下一版开放）"><Button disabled>同步</Button></Tooltip>
         <Button type="primary" onClick={() => setImportOpen(true)}>导入</Button>
-        <Tooltip title="导出当前这一页的行（含分摊行）；要导更多，先调大每页条数或加筛选"><Button onClick={() => exportLines(rows, typeName)} disabled={!rows.length}>导出本页</Button></Tooltip>
+        <Tooltip title="导出当前这一页的行（含分摊行）；要导更多请加筛选"><Button onClick={() => exportLines(rows, typeName)} disabled={!rows.length}>导出本页</Button></Tooltip>
         <Button aria-label="列配置" icon={<SettingOutlined aria-hidden="true" />} onClick={() => setColumnConfigOpen(true)} />
       </Space>
     </>
@@ -164,14 +168,19 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
         summary={<ChecksBar storeId={filter.store_id} reportKey={filter.report_key} storeCode={storeCode} typeName={typeName} onChanged={() => void refresh()} />}>
         {lines.error ? <Alert type="error" showIcon message={wfsErrorText(lines.error)} /> : (
           <BoardTable<Row> label="WFS 费用明细表格" rowKey="key" rows={rows} columns={shownColumns} resizeKey="finance-wfs-fees" pageSize={PAGE_SIZE}
+            serverPage={{ current: filter.page, pageSize: filter.page_size, total: lines.data?.total ?? 0, onChange: (page, pageSize) => setFilter((c) => ({ ...c, page: pageSize === c.page_size ? page : 1, page_size: pageSize })) }}
+            totals={{
+              store: <Typography.Text strong>合计</Typography.Text>,
+              quantity: (
+                <span>{totalQuantity == null ? "—" : totalQuantity.toLocaleString()}<br /><Typography.Text type="secondary" className="fin-wfs__sub">本页 {pageQuantity.toLocaleString()}</Typography.Text></span>
+              ),
+              amount: (
+                <Tooltip title={`全部筛选结果合计；本页 ${rows.length} 行合计 ${pageTotal.toFixed(2)}`}>
+                  <span><FinMoney value={total} cur="USD" /><br /><Typography.Text type="secondary" className="fin-wfs__sub">本页 {pageTotal.toFixed(2)}</Typography.Text></span>
+                </Tooltip>
+              ),
+            }}
             emptyTitle="没有费用" emptyText={filter.store_id || filter.report_key || filter.fee_type || filter.q ? "当前筛选下没有费用" : "还没有导入或同步任何报表，点右上角「导入」"} />
-        )}
-        {lines.data && lines.data.total > PAGE_SIZE && (
-          <div className="fin-wfs__pager">
-            <Button disabled={filter.page <= 1} onClick={() => setFilter((c) => ({ ...c, page: c.page - 1 }))}>上一页</Button>
-            <Typography.Text type="secondary">第 {filter.page} / {Math.ceil(lines.data.total / PAGE_SIZE)} 页</Typography.Text>
-            <Button disabled={filter.page * PAGE_SIZE >= lines.data.total} onClick={() => setFilter((c) => ({ ...c, page: c.page + 1 }))}>下一页</Button>
-          </div>
         )}
       </FinanceBoardFrame>
       <ImportDrawer open={importOpen} stores={stores} onClose={() => setImportOpen(false)} onDone={() => void refresh()} />

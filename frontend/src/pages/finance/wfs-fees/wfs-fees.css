@@ -3,6 +3,6 @@
 .fin-wfs__bi { line-height: 1.3; }
 .fin-wfs__checks { margin-bottom: 12px; }
 .fin-wfs__checks .ant-alert-description { margin-top: 8px; }
-.fin-wfs__pager { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 8px 0; }
 .fin-wfs__help-list { margin: 0; padding-left: 18px; }
 .fin-wfs__help-list li { margin: 4px 0; }
+.fin-wfs .board-table__server-pager, .board-table__server-pager { display: flex; justify-content: flex-end; padding: 8px 12px; flex: none; }

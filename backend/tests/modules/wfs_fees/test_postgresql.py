@@ -600,6 +600,71 @@ def test_same_file_cannot_go_to_another_store(service, session):
     assert again.duplicate_of_file and again.store_id == S.STORE_A
 
 
+def test_same_empty_report_goes_to_each_store_by_file_name(service, session):
+    """复审 P2-N1：两店的空仓储报告一字不差，按文件名里学到过的 Partner ID 各归各店，不跨店拒收。"""
+    partner_b = "10009900002"
+    _upload(
+        service, S.settlement([S.fee("Charge", "2026-10-07", "1.00", ref="NA")]), store_id=S.STORE_A
+    )
+    _upload(
+        service,
+        S.settlement([S.fee("Charge", "2026-10-07", "1.00", ref="NB", partner=partner_b)]),
+        store_id=S.STORE_B,
+    )
+    content = S.storage([], period=("2026-10-17", "2026-10-30"), total="0")
+    a = _upload(service, content, name=f"StorageFee_2026-10-17_{S.PARTNER_A}.zip/StorageFee.csv")
+    b = _upload(service, content, name=f"StorageFee_2026-10-17_{partner_b}.zip/StorageFee.csv")
+    assert (a.status, a.store_id) == ("empty", S.STORE_A)
+    assert (b.status, b.store_id) == ("empty", S.STORE_B)
+    again = _upload(
+        service, content, name=f"StorageFee_2026-10-17_{S.PARTNER_A}.zip/StorageFee.csv"
+    )
+    assert again.duplicate_of_file and again.store_id == S.STORE_A
+
+
+def test_file_name_partner_is_ignored_when_the_file_has_lines(service, session):
+    """复审 P2-1 反例：有费用行、投票认不出、文件名里有学到过的 Partner ID → 仍要选店。"""
+    learned = _upload(
+        service,
+        S.settlement([S.fee("LostInventory", "2026-10-07", "-1.00", gtin=S.GTIN_1, ref="F1")]),
+    )
+    assert learned.store_id == S.STORE_A
+    result = _upload(
+        service,
+        S.settlement(
+            [
+                S.fee(
+                    "LostInventory",
+                    "2026-10-08",
+                    "-1.00",
+                    gtin=S.GTIN_3,
+                    ref="F2",
+                    partner="10009900055",
+                )
+            ]
+        ),
+        name=f"Settlement_{S.PARTNER_A}.csv",
+    )
+    assert result.status == "rejected" and result.needs_store
+
+
+def test_company_line_stays_company_when_reimport_changes_its_amount(service, session):
+    """复审 P2-6：人工记公司的行，重导后金额变了，归属仍是公司。"""
+    _upload(
+        service, S.settlement([S.fee("Charge", "2026-10-07", "5.00", ref="RK")]), store_id=S.STORE_A
+    )
+    [row] = _lines(session, fee_type="Charge")
+    service.adjust(
+        row.id, kind="company", payload={}, reason="合成原因", actor="u", request_id=None
+    )
+    _upload(
+        service, S.settlement([S.fee("Charge", "2026-10-07", "6.00", ref="RK")]), store_id=S.STORE_A
+    )
+    session.refresh(row)
+    assert row.amount_usd == Decimal("-6.00")
+    assert row.attribution == "company"
+
+
 def test_adjusted_line_is_flagged_when_reimport_changes_its_amount(service, session):
     """复审 P2-6：人工分摊过的行，重导后原金额变了 → 待核，不自动改人工的分法。"""
     _upload(
@@ -636,6 +701,8 @@ def test_summary_uses_the_same_filters_as_lines(service, session):
     )
     items, total = reader.summary(session, reader.LineFilter(fee_type="LostInventory"))
     assert {item.fee_type for item in items} == {"LostInventory"} and total == Decimal("2.00")
+    quantity = reader.total_quantity(session, reader.LineFilter(fee_type="LostInventory"))
+    assert quantity == Decimal("1")
     _rows, count = reader.list_lines(
         session, reader.LineFilter(fee_type="LostInventory"), page=1, page_size=50
     )

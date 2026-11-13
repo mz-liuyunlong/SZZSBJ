@@ -64,6 +64,7 @@ class WfsFeeSummaryRow(BaseModel):
 class WfsFeeSummaryData(BaseModel):
     items: list[WfsFeeSummaryRow]
     total_amount_usd: str
+    total_quantity: str = "0"
 
 
 class WfsFeeCheckRead(BaseModel):

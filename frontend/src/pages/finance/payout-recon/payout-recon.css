@@ -21,3 +21,6 @@
 .fin-payout-recon__range { width: 250px; }
 .fin-payout-recon__bill-day { font-weight: 600; color: var(--ant-color-primary, #1677ff); }
 .fin-payout-recon__total-row > td { background: var(--ant-color-fill-quaternary, #fafafa); font-weight: 600; }
+
+/* BoardTable 后端分页条（WFS 费用明细等）：和表格自带分页同样靠右 */
+.board-table__server-pager { display: flex; justify-content: flex-end; padding: 8px 12px; flex: none; }

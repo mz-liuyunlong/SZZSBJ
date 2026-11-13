@@ -153,7 +153,7 @@ def list_lines(
     _: viewer,
     f: filters,
     page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=reader.MAX_PAGE_SIZE)] = 100,
+    page_size: Annotated[int, Query(ge=1, le=reader.MAX_PAGE_SIZE)] = 50,
 ) -> SuccessEnvelope[WfsFeeLineListData, None]:
     items, total = reader.list_lines(session, f, page=page, page_size=page_size)
     return success_response(
@@ -171,8 +171,12 @@ def summarize(
     request: Request, session: db_session, _: viewer, f: filters
 ) -> SuccessEnvelope[WfsFeeSummaryData, None]:
     items, total = reader.summary(session, f)
+    quantity = reader.total_quantity(session, f)
     return success_response(
-        request, data=WfsFeeSummaryData(items=items, total_amount_usd=f"{total:.4f}")
+        request,
+        data=WfsFeeSummaryData(
+            items=items, total_amount_usd=f"{total:.4f}", total_quantity=f"{quantity:.4f}"
+        ),
     )
 
 
