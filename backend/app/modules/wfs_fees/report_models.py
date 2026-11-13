@@ -71,6 +71,8 @@ class WalmartWfsReportJob(Base):
     request_id: Mapped[str | None] = mapped_column(String(80))
     submit_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     polls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # 连续几次远端没跑成（连不上 / 执行器没回应 / 令牌被拒）；跑成一次清零，满 48 次失败
+    remote_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_code: Mapped[str | None] = mapped_column(String(64))
     file_ids: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
     last_run_id: Mapped[UUID | None] = mapped_column()

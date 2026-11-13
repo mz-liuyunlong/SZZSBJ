@@ -704,6 +704,36 @@ class WfsFeeService:
             delete(WalmartWfsFeeLine).where(WalmartWfsFeeLine.parent_line_id == row.id)
         )
 
+    def reallocate_inbound(self, shipments: dict[str, set[str]]) -> int:
+        """入库货件明细到了以后补分摊（复审 P2-5）。
+
+        只补这些货件里还没分摊、没人工调整过的入库运费原行。
+
+        shipments = {店铺: {货件号}}；返回补了几行。
+        """
+        rows: list[WalmartWfsFeeLine] = []
+        for store_id, cargo in shipments.items():
+            if not cargo:
+                continue
+            rows.extend(
+                self.session.scalars(
+                    select(WalmartWfsFeeLine).where(
+                        WalmartWfsFeeLine.source_account_ref == SOURCE_REF,
+                        WalmartWfsFeeLine.store_id == store_id,
+                        WalmartWfsFeeLine.fee_type == INBOUND_FEE,
+                        WalmartWfsFeeLine.parent_line_id.is_(None),
+                        WalmartWfsFeeLine.po_number.in_(sorted(cargo)),
+                        WalmartWfsFeeLine.attribution == rules.ATTR_UNALLOCATED,
+                    )
+                )
+            )
+        adjusted = self._adjusted_ids([row.id for row in rows])
+        rows = [row for row in rows if row.id not in adjusted]
+        if rows:
+            self.attribute(rows)
+            self.session.commit()
+        return len(rows)
+
     def _adjusted_ids(self, ids: list[UUID]) -> set[UUID]:
         return set(
             self.session.scalars(

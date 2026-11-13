@@ -326,13 +326,21 @@ class Engine:
             return [("report.csv", raw)]
         z = zipfile.ZipFile(io.BytesIO(raw))
         out = []
+        used = set()
         for n in z.namelist():
             base = os.path.basename(n)
             if n.endswith("/") or not base or base.startswith(".") or n.startswith("__MACOSX/"):
                 continue
             if not base.lower().endswith(".csv"):
                 continue
-            out.append((re.sub(r"[^A-Za-z0-9_.-]", "_", base), z.read(n)))
+            name = re.sub(r"[^A-Za-z0-9_.-]", "_", base)
+            stem, ext = os.path.splitext(name)
+            serial = 1
+            while name in used:  # 不同文件夹里同名的 CSV：加序号，不覆盖
+                serial += 1
+                name = f"{stem}_{serial}{ext}"
+            used.add(name)
+            out.append((name, z.read(n)))
         return out
 
     @staticmethod
@@ -393,7 +401,7 @@ class Engine:
             "counts": self.counts,
             "results": self.results,
         }
-        with open(os.path.join(self.out, "results.json"), "w") as f:
+        with open(os.path.join(self.out, "results.json"), "w", encoding="utf-8") as f:
             json.dump(doc, f, ensure_ascii=False, indent=1, sort_keys=True)
         lines = []
         for root, _dirs, files in os.walk(self.out):
@@ -404,7 +412,7 @@ class Engine:
                 with open(path, "rb") as f:
                     digest = sha256_bytes(f.read())
                 lines.append(f"{digest}  {os.path.relpath(path, self.out)}")
-        with open(os.path.join(self.out, "SHA256SUMS"), "w") as f:
+        with open(os.path.join(self.out, "SHA256SUMS"), "w", encoding="utf-8") as f:
             f.write("\n".join(sorted(lines)) + "\n")
         return code
 
@@ -415,7 +423,7 @@ def main(argv=None):
     parser.add_argument("--out", required=True)
     parser.add_argument("--token-stdin", action="store_true", required=True)
     args = parser.parse_args(argv)
-    with open(args.plan) as f:
+    with open(args.plan, encoding="utf-8") as f:
         plan = json.load(f)
     if not STORE_RE.match(str(plan.get("store_code") or "")):
         return EXIT_SAFETY

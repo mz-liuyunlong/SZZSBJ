@@ -1,7 +1,8 @@
 """WFS 费用明细页面的「同步」按钮：建一条任务中心运行记录，交给现有队列执行。
 
-锁（Rocky 2026-11-13）：按一次 90 分钟内不能再按；最近一次同步失败，60 分钟内不能按；
-正在跑的时候也不能按。按钮的人按 action:finance:wfs-fees:sync 权限放（未分配前只有管理员）。
+锁（Rocky 2026-11-13）：按一次 90 分钟内不能再按；最近一次手动同步失败，60 分钟内不能按；
+正在跑的时候也不能按。定时同步部分店失败不锁按钮（复审 P2-3）：页面照样提示失败的店，
+财务可以手动再拉。按钮的人按 action:finance:wfs-fees:sync 权限放（未分配前只有管理员）。
 """
 
 from __future__ import annotations
@@ -70,8 +71,13 @@ def sync_status(session: Session, *, now: datetime | None = None) -> WfsFeeSyncD
     locks: list[tuple[datetime, str]] = []
     if manual is not None and manual.queued_at + MANUAL_LOCK > now:
         locks.append((manual.queued_at + MANUAL_LOCK, "manual"))
-    if run.status == "failed" and run.finished_at and run.finished_at + FAILURE_LOCK > now:
-        locks.append((run.finished_at + FAILURE_LOCK, "failed"))
+    if (
+        manual is not None
+        and manual.status == "failed"
+        and manual.finished_at
+        and manual.finished_at + FAILURE_LOCK > now
+    ):
+        locks.append((manual.finished_at + FAILURE_LOCK, "failed"))
     locked_until, lock_reason = max(locks) if locks else (None, None)
     if run.status in ACTIVE:
         lock_reason = "running"

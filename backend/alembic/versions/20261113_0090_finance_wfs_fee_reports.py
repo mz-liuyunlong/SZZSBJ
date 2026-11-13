@@ -48,6 +48,7 @@ def upgrade() -> None:
         sa.Column("request_id", sa.String(80)),
         sa.Column("submit_attempts", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("polls", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("remote_failures", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("error_code", sa.String(64)),
         sa.Column(
             "file_ids",

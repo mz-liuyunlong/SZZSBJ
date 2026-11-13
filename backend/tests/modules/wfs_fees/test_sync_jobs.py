@@ -258,8 +258,9 @@ def test_inbound_items_split_the_inbound_fee_and_recognise_the_store(session, tm
         "wmt-synthetic-run-01",
         [(S.CARGO, S.GTIN_1, "MSKU-1", "30", "29"), (S.CARGO, S.GTIN_2, "MSKU-2", "10", "10")],
     )
-    assert J.load_inbound_items(session, tmp_path, [S.STORE_A]) == 2
-    assert J.load_inbound_items(session, tmp_path, [S.STORE_A]) == 0  # 读过的 run 不再读
+    loaded = J.load_inbound_items(session, tmp_path, [S.STORE_A])
+    assert loaded.rows == 2 and loaded.shipments == {S.STORE_A: {S.CARGO}}
+    assert J.load_inbound_items(session, tmp_path, [S.STORE_A]).rows == 0  # 读过的 run 不再读
     assert len(session.scalars(select(WalmartWfsInboundItem)).all()) == 2
     settings = Settings()  # type: ignore[call-arg]
     settings.media_storage_root = tmp_path / "media"
@@ -295,3 +296,189 @@ def test_rate_limit_is_retried_and_never_counts_as_a_failure(session, sync, tmp_
     assert {job.status for job in jobs} == {"queued"}
     assert {job.error_code for job in jobs} == {"WFS_REPORT_RATE_LIMITED"}
     assert {job.submit_attempts for job in jobs} == {0}
+
+
+# ---------------------------------------------------------------- 复审第 1 轮
+
+
+def test_plan_does_not_post_again_within_the_hour():
+    queued = WalmartWfsReportJob(
+        report_type="SETTLEMENT",
+        period_start=date(2026, 10, 3),
+        period_end=date(2026, 10, 16),
+        status="queued",
+    )
+    plan = J.WfsReportSync.build_plan(STORE, [queued], frozenset({"SETTLEMENT"}))
+    assert plan["actions"][0]["post_allowed"] is False
+
+
+def test_remote_unavailable_for_two_days_fails(session, sync, tmp_path):
+    down = FakeRemote(tmp_path, lambda store, plan: DispatchRejected("REMOTE_UNREACHABLE"))
+    for i in range(J.MAX_REMOTE_FAILURES):
+        _run(sync, down, now=NOW + timedelta(hours=2 * i))
+        if i == J.MAX_REMOTE_FAILURES - 2:
+            assert {job.status for job in _jobs(session).values()} == {"queued"}
+    jobs = _jobs(session).values()
+    assert {job.status for job in jobs} == {"failed"}
+    assert {job.error_code for job in jobs} == {"WFS_REPORT_REMOTE_UNAVAILABLE"}
+
+
+def test_unexpected_remote_error_is_logged_not_recorded(session, sync, tmp_path):
+    outcome = _run(sync, FakeRemote(tmp_path, lambda store, plan: RuntimeError("secret detail")))
+    assert outcome.errors == ["HK2612:WFS_REPORT_REMOTE_FAILED"]
+    assert {job.error_code for job in _jobs(session).values()} == {"WFS_REPORT_REMOTE_FAILED"}
+
+
+def test_manual_sync_keeps_pii_blocked_jobs(session, sync, tmp_path):
+    _run(sync, FakeRemote(tmp_path / "a", _submitted))
+
+    def blocked(store, plan):
+        return [{"op": "fetch", "key": a["key"], "outcome": "pii_blocked"} for a in plan["actions"]]
+
+    _run(sync, FakeRemote(tmp_path / "b", blocked), now=NOW + timedelta(hours=2))
+    manual = FakeRemote(tmp_path / "c", _submitted)
+    _run(sync, manual, now=NOW + timedelta(hours=4), manual=True)
+    assert manual.plans == []
+    statuses = [job.status for job in session.scalars(select(WalmartWfsReportJob))]
+    assert statuses == ["pii_blocked", "pii_blocked"]
+
+
+def test_import_failure_in_one_store_does_not_stop_the_other(session, sync, tmp_path, monkeypatch):
+    _run(sync, FakeRemote(tmp_path / "a", _submitted), stores=(STORE, OTHER))
+    settlement = S.settlement(
+        [S.fee("LostInventory", "2026-09-25", "-1.00", gtin=S.GTIN_1, ref="IMP1")]
+    )
+
+    def downloaded(store, plan):
+        return [
+            {"op": "fetch", "key": a["key"], "outcome": "downloaded", "content": settlement}
+            if a["reportType"] == "SETTLEMENT"
+            else {"op": "fetch", "key": a["key"], "outcome": "not_ready"}
+            for a in plan["actions"]
+        ]
+
+    original = WfsFeeService.upload
+
+    def upload(self, **kwargs):
+        if kwargs.get("store_id") == OTHER.store_id:
+            raise RuntimeError("synthetic import failure")
+        return original(self, **kwargs)
+
+    monkeypatch.setattr(WfsFeeService, "upload", upload)
+    outcome = _run(
+        sync,
+        FakeRemote(tmp_path / "b", downloaded),
+        now=NOW + timedelta(hours=2),
+        stores=(STORE, OTHER),
+    )
+    assert outcome.errors == ["HK2613:WFS_REPORT_IMPORT_FAILED"]
+    assert _jobs(session)["SETTLEMENT"].status == "imported"
+    other = _jobs(session, OTHER)["SETTLEMENT"]
+    assert other.status == "submitted" and other.error_code == "WFS_REPORT_IMPORT_FAILED"
+    assert other.next_action_at == NOW + timedelta(hours=2) + J.RETRY_WAIT
+
+
+def test_inbound_items_arriving_later_allocate_the_fee(session, sync, tmp_path):
+    settings = Settings()  # type: ignore[call-arg]
+    settings.media_storage_root = tmp_path / "media"
+    WfsFeeService(session, settings).upload(
+        file_name="inbound.csv",
+        content=S.inbound(
+            [(S.CARGO, "2026-10-05", "Parcel", "Base", "$10.00")], ("2026-10-03", "2026-10-16")
+        ),
+        actor="tester",
+        request_id=None,
+        store_id=S.STORE_A,
+    )
+    parent = session.scalars(
+        select(WalmartWfsFeeLine).where(WalmartWfsFeeLine.parent_line_id.is_(None))
+    ).one()
+    assert parent.attribution == "unallocated"
+    _items_csv(
+        tmp_path / "archive",
+        S.STORE_A,
+        "wmt-synthetic-run-02",
+        [(S.CARGO, S.GTIN_1, "MSKU-1", "30", "29"), (S.CARGO, S.GTIN_2, "MSKU-2", "10", "10")],
+    )
+    outcome = sync.run(
+        [STORE],
+        NOW,
+        manual=False,
+        actor="tester",
+        run_id=uuid4(),
+        execute=FakeRemote(tmp_path / "remote", _submitted),
+        archive_root=tmp_path / "archive",
+    )
+    assert outcome.inbound_items == 2 and outcome.inbound_reallocated == 1
+    session.refresh(parent)
+    children = session.scalars(
+        select(WalmartWfsFeeLine).where(WalmartWfsFeeLine.parent_line_id == parent.id)
+    ).all()
+    assert parent.attribution == "allocated"
+    assert sum(child.amount_usd for child in children) == parent.amount_usd
+
+
+def _wfs_run(session, *, trigger, status, queued_at, finished_at):
+    from app.modules.integration_sync.catalog import IntegrationCatalogService
+    from app.modules.integration_sync.models import IntegrationSyncRun
+    from app.modules.integration_sync.repository import IntegrationSyncRepository
+    from app.modules.integration_sync.wfs_report_catalog import (
+        WFS_REPORT_PROVIDER,
+        WFS_REPORT_SOURCE_REF,
+        WFS_REPORT_SYNC_SPEC,
+    )
+
+    IntegrationCatalogService(session).bootstrap_wfs_report_governance()
+    repository = IntegrationSyncRepository(session)
+    interface = repository.get_interface_by_key(
+        WFS_REPORT_PROVIDER, WFS_REPORT_SYNC_SPEC.interface_key
+    )
+    config = repository.get_config_by_scope(interface.id, WFS_REPORT_SOURCE_REF)
+    run = IntegrationSyncRun(
+        config_id=config.id,
+        interface_id=interface.id,
+        provider=WFS_REPORT_PROVIDER,
+        interface_key=WFS_REPORT_SYNC_SPEC.interface_key,
+        source_account_ref=WFS_REPORT_SOURCE_REF,
+        trigger_type=trigger,
+        status=status,
+        idempotency_key=f"test:{uuid4()}",
+        requested_by="tester",
+        reason="test",
+        queued_at=queued_at,
+        finished_at=finished_at,
+        error_code="SYNC_WFS_REPORTS_STORE_FAILED" if status == "failed" else None,
+        work_items_total=0,
+        work_items_succeeded=0,
+        work_items_failed=0,
+        records_seen=0,
+        records_written=0,
+    )
+    session.add(run)
+    session.flush()
+    return run
+
+
+def test_scheduled_partial_failure_does_not_lock_the_button(session):
+    from app.modules.wfs_fees import sync_api
+
+    now = NOW
+    _wfs_run(
+        session,
+        trigger="schedule",
+        status="failed",
+        queued_at=now - timedelta(minutes=20),
+        finished_at=now - timedelta(minutes=10),
+    )
+    state = sync_api.sync_status(session, now=now)
+    assert state.status == "failed" and state.lock_reason is None
+    _wfs_run(
+        session,
+        trigger="manual",
+        status="failed",
+        queued_at=now - timedelta(minutes=100),
+        finished_at=now - timedelta(minutes=10),
+    )
+    state = sync_api.sync_status(session, now=now)
+    assert state.lock_reason == "failed"
+    assert state.locked_until == now - timedelta(minutes=10) + J.FAILURE_LOCK

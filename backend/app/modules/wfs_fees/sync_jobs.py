@@ -32,6 +32,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.integrations.walmart.remote_dispatch import DispatchRejected
+from app.integrations.walmart.wfs_report_engine import EXIT_TOKEN
 from app.modules.wfs_fees.report_models import (
     ACTIVE_STATUSES,
     REPORT_TYPES,
@@ -52,6 +54,7 @@ HISTORY_FROM: Final = date(2026, 10, 1)
 RETRY_WAIT: Final = timedelta(hours=1)
 MAX_POLLS: Final = 48
 MAX_SUBMITS: Final = 3
+MAX_REMOTE_FAILURES: Final = 48
 MAX_POSTS_PER_RUN: Final = len(REPORT_TYPES)
 MANUAL_LOCK: Final = timedelta(minutes=90)
 FAILURE_LOCK: Final = timedelta(minutes=60)
@@ -81,6 +84,7 @@ class RemoteRun:
     results: list[dict[str, Any]]
     files_dir: Path | None
     cleanup_dir: Path | None = None
+    exit_code: int = 0  # 执行器退出码；EXIT_TOKEN = 令牌被拒，中途停了
 
 
 @dataclass
@@ -93,9 +97,16 @@ class StoreOutcome:
 
 
 @dataclass
+class InboundLoad:
+    rows: int = 0
+    shipments: dict[str, set[str]] = field(default_factory=dict)  # 店铺 → 这次读到的货件号
+
+
+@dataclass
 class SyncOutcome:
     stores: list[StoreOutcome] = field(default_factory=list)
     inbound_items: int = 0
+    inbound_reallocated: int = 0
 
     @property
     def errors(self) -> list[str]:
@@ -150,14 +161,17 @@ def _decimal(value: str | None) -> Decimal | None:
         return None
 
 
-def load_inbound_items(session: Session, archive_root: Path, store_ids: Iterable[str]) -> int:
+def load_inbound_items(
+    session: Session, archive_root: Path, store_ids: Iterable[str]
+) -> InboundLoad:
     """读远程采集每天落的入库货件明细（daily/<日期>/walmart/<店铺>/<run>/items.csv）。
 
     读过的 run 不再读（按 source_run_id 判断）；同一货件同一商品以最新一次为准。
     """
     daily = archive_root / "daily"
+    loaded = InboundLoad()
     if not daily.is_dir():
-        return 0
+        return loaded
     seen = set(
         session.scalars(
             select(WalmartWfsInboundItem.source_run_id)
@@ -165,7 +179,6 @@ def load_inbound_items(session: Session, archive_root: Path, store_ids: Iterable
             .distinct()
         )
     )
-    written = 0
     for store_id in sorted(set(store_ids)):
         for path in sorted(daily.glob(f"*/walmart/{store_id}/*/{ITEMS_FILE}")):
             run_id = path.parent.name
@@ -201,10 +214,11 @@ def load_inbound_items(session: Session, archive_root: Path, store_ids: Iterable
                         },
                     )
                 )
-                written += 1
+                loaded.rows += 1
+                loaded.shipments.setdefault(store_id, set()).add(values["shipment_id"])
             seen.add(run_id)
     session.commit()
-    return written
+    return loaded
 
 
 # ---------------------------------------------------------------- 任务
@@ -250,7 +264,9 @@ class WfsReportSync:
                         for job in active:
                             job.next_action_at = min(job.next_action_at, now)
                     done = any(job.status in ("imported", "empty") for job in jobs)
-                    if active or done or (jobs and not manual):
+                    # 疑似个人信息拦下的：手动同步也不重排，要人看过再处理（复审 P2-2）
+                    blocked = any(job.status == "pii_blocked" for job in jobs)
+                    if active or done or blocked or (jobs and not manual):
                         continue
                     self.session.add(
                         WalmartWfsReportJob(
@@ -285,9 +301,30 @@ class WfsReportSync:
             )
         )
 
+    def recent_posts(self, store: StoreRef, now: datetime) -> frozenset[str]:
+        """这家店 1 小时内下过单的报表类型（定时和手动挨得近时不再下，复审 P3-1）。"""
+        return frozenset(
+            self.session.scalars(
+                select(WalmartWfsReportJob.report_type)
+                .where(
+                    WalmartWfsReportJob.source_account_ref == SOURCE_REF,
+                    WalmartWfsReportJob.store_id == store.store_id,
+                    WalmartWfsReportJob.submitted_at > now - RETRY_WAIT,
+                )
+                .distinct()
+            )
+        )
+
     @staticmethod
-    def build_plan(store: StoreRef, jobs: list[WalmartWfsReportJob]) -> dict[str, Any]:
-        """先看已下单的（不占下单额度），再下新单；执行器自己保证每类最多下单 1 次。"""
+    def build_plan(
+        store: StoreRef,
+        jobs: list[WalmartWfsReportJob],
+        recent_posts: frozenset[str] = frozenset(),
+    ) -> dict[str, Any]:
+        """先看已下单的（不占下单额度），再下新单；执行器自己保证每类最多下单 1 次。
+
+        1 小时内这类报表下过单的，这次只查已有请求能不能复用，不再下新单。
+        """
         actions: list[dict[str, Any]] = []
         for job in jobs:
             if job.status == "submitted" and job.request_id:
@@ -309,7 +346,7 @@ class WfsReportSync:
                         "reportType": job.report_type,
                         "dataStartTime": start,
                         "dataEndTime": end,
-                        "post_allowed": True,
+                        "post_allowed": job.report_type not in recent_posts,
                     }
                 )
         return {"store_code": store.store_code, "max_posts": MAX_POSTS_PER_RUN, "actions": actions}
@@ -325,6 +362,7 @@ class WfsReportSync:
         *,
         run_id: UUID,
         now: datetime,
+        exit_code: int = 0,
     ) -> StoreOutcome:
         outcome = StoreOutcome(store)
         by_key = {job_key(job): job for job in jobs}
@@ -334,16 +372,20 @@ class WfsReportSync:
             if job is None:
                 continue
             answered.add(job_key(job))
+            job.remote_failures = 0
             if result.get("op") == "submit":
                 self._apply_submit(job, result, now)
             elif result.get("op") == "fetch":
                 self._apply_fetch(job, result, files_dir, run_id=run_id, now=now)
             job.last_run_id = run_id
             job.updated_at = now
-        for key, job in by_key.items():
-            if key not in answered:  # 执行器中途停了（比如令牌被拒）：下一轮再来
-                job.next_action_at = now + RETRY_WAIT
-                job.updated_at = now
+        stopped = [job for key, job in by_key.items() if key not in answered]
+        if stopped:  # 执行器中途停了（比如令牌被拒）：下一轮再来，连续次数满了算失败
+            self._remote_failed(
+                stopped,
+                "WFS_REPORTS_TOKEN_REJECTED" if exit_code == EXIT_TOKEN else "WFS_REPORTS_STOPPED",
+                now,
+            )
         for job in jobs:
             if job.status in ("imported", "empty"):
                 outcome.imported += 1
@@ -353,6 +395,18 @@ class WfsReportSync:
                 outcome.failed_jobs += 1
         self.session.commit()
         return outcome
+
+    def _remote_failed(self, jobs: list[WalmartWfsReportJob], code: str, now: datetime) -> None:
+        """远端没跑成：隔 1 小时再来；连续 48 次（约两天）都不成就标失败（复审 P2-1）。"""
+        final = "WFS_REPORT_TOKEN_REJECTED" if "TOKEN" in code else "WFS_REPORT_REMOTE_UNAVAILABLE"
+        for job in jobs:
+            job.remote_failures += 1
+            job.updated_at = now
+            if job.remote_failures >= MAX_REMOTE_FAILURES:
+                self._fail(job, final, now)
+            else:
+                job.error_code = code[:64]
+                job.next_action_at = now + RETRY_WAIT
 
     @staticmethod
     def _fail(job: WalmartWfsReportJob, code: str, now: datetime) -> None:
@@ -497,9 +551,14 @@ class WfsReportSync:
         result = SyncOutcome()
         if archive_root is not None:
             try:
-                result.inbound_items = load_inbound_items(
+                loaded = load_inbound_items(
                     self.session, archive_root, [store.store_id for store in stores]
                 )
+                result.inbound_items = loaded.rows
+                # 货件明细后到：给这些货件里还没分摊的入库运费补分摊
+                result.inbound_reallocated = WfsFeeService(
+                    self.session, self.settings
+                ).reallocate_inbound(loaded.shipments)
             except (OSError, csv.Error, ValueError):
                 self.session.rollback()
                 logger.exception("wfs_inbound_items_load_failed run_id=%s", run_id)
@@ -509,29 +568,58 @@ class WfsReportSync:
             if not jobs:
                 result.stores.append(StoreOutcome(store))
                 continue
-            plan = self.build_plan(store, jobs)
+            plan = self.build_plan(store, jobs, self.recent_posts(store, now))
+            code: str | None = None
             try:
                 remote = execute(store, plan)
-            except Exception as exc:  # noqa: BLE001  一家店失败不影响别的店
+            except DispatchRejected as exc:  # 固定错误码，可以直接记
+                code = str(exc)[:64] or "WFS_REPORT_REMOTE_FAILED"
+            except Exception:  # noqa: BLE001  一家店失败不影响别的店；细节只进日志
+                logger.exception("wfs_report_remote_failed run_id=%s store=%s", run_id, store)
+                code = "WFS_REPORT_REMOTE_FAILED"
+            if code is not None:
                 self.session.rollback()
-                code = str(exc)[:64] or exc.__class__.__name__
-                for job in jobs:
-                    job.next_action_at = now + RETRY_WAIT
-                    job.error_code = code
-                    job.updated_at = now
+                self._remote_failed(jobs, code, now)
                 self.session.commit()
                 result.stores.append(StoreOutcome(store, error=code, pending=len(jobs)))
                 continue
             try:
                 applied = self.apply(
-                    store, jobs, remote.results, remote.files_dir, run_id=run_id, now=now
+                    store,
+                    jobs,
+                    remote.results,
+                    remote.files_dir,
+                    run_id=run_id,
+                    now=now,
+                    exit_code=remote.exit_code,
                 )
-                result.stores.append(applied)
+            except Exception:  # noqa: BLE001
+                # 导入出错：这家店回滚、推后 1 小时，接着下一家（复审 P2-4）
+                logger.exception("wfs_report_import_failed run_id=%s store=%s", run_id, store)
+                self.session.rollback()
+                applied = self._import_failed(store, jobs, now)
             finally:
                 # 拉回来的报表原件已经按 sha256 存进媒体目录，临时目录不留
                 if remote.cleanup_dir is not None:
                     shutil.rmtree(remote.cleanup_dir, ignore_errors=True)
+            result.stores.append(applied)
         return result
+
+    def _import_failed(
+        self, store: StoreRef, jobs: list[WalmartWfsReportJob], now: datetime
+    ) -> StoreOutcome:
+        ids = [job.id for job in jobs]
+        for job in self.session.scalars(
+            select(WalmartWfsReportJob).where(
+                WalmartWfsReportJob.id.in_(ids),
+                WalmartWfsReportJob.status.in_(ACTIVE_STATUSES),  # 已经导入成功的不动
+            )
+        ):
+            job.error_code = "WFS_REPORT_IMPORT_FAILED"
+            job.next_action_at = now + RETRY_WAIT
+            job.updated_at = now
+        self.session.commit()
+        return StoreOutcome(store, error="WFS_REPORT_IMPORT_FAILED", pending=len(ids))
 
 
 # ---------------------------------------------------------------- 页面状态

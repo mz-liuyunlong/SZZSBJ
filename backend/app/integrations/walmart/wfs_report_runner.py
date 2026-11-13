@@ -43,6 +43,25 @@ ENGINE_TIMEOUT = 900
 SSH_OPTS = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes"]
 EXIT_OK_CODES = (engine.EXIT_OK, engine.EXIT_PARTIAL, engine.EXIT_TOKEN)
 SUM_LINE = re.compile(r"^([a-f0-9]{64})  ([A-Za-z0-9_./-]+)$")
+STALE_CLEANUP = [
+    "find",
+    REMOTE_BASE,
+    REMOTE_BASE + "/.runs",
+    "-mindepth",
+    "1",
+    "-maxdepth",
+    "1",
+    "-name",
+    "wfs-*",
+    "-mmin",
+    "+1440",
+    "-exec",
+    "rm",
+    "-rf",
+    "--",
+    "{}",
+    "+",
+]
 
 
 @dataclass(frozen=True)
@@ -159,6 +178,8 @@ def run_plan(
         raise DispatchRejected("REMOTE_UNREACHABLE")
     if _ssh(host, ["mkdir", "-p", REMOTE_BASE + "/.runs"])[0] != 0:
         raise DispatchRejected("REMOTE_LOCK_ROOT_FAILED")
+    # 以前中途断掉没删干净的目录和锁（超过 1 天）先清掉；清不掉不影响这次（复审 P3-3）
+    _ssh(host, STALE_CLEANUP)
     if _ssh(host, ["mkdir", lock])[0] != 0:  # 不带 -p：已有同名锁就不进
         raise DispatchRejected("REMOTE_ALREADY_RUNNING")
     try:

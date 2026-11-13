@@ -85,7 +85,7 @@ def remote_executor(run_id: UUID) -> Executor:
             token_supplier=runner.store_token_supplier(store.store_code),
             local_root=local_root,
         )
-        return RemoteRun(result.results, result.files_dir, result.local_dir)
+        return RemoteRun(result.results, result.files_dir, result.local_dir, result.exit_code)
 
     return execute
 

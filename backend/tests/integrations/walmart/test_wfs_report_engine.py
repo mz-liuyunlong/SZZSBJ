@@ -270,3 +270,13 @@ def test_call_layer_refuses_paths_outside_the_whitelist(tmp_path):
         engine._call("PUT", "/v3/reports/reportRequests")
     with pytest.raises(E.Refused):
         engine._call("GET", None, full_url="http://files.example.test/x")
+
+
+def test_zip_members_with_the_same_name_are_not_overwritten():
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("a/report.csv", "x,y\n1,2\n")
+        archive.writestr("b/report.csv", "x,y\n3,4\n")
+    members = E.Engine._members(buffer.getvalue(), True)
+    assert [name for name, _ in members] == ["report.csv", "report_2.csv"]
+    assert [data for _, data in members] == [b"x,y\n1,2\n", b"x,y\n3,4\n"]

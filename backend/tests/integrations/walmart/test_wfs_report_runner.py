@@ -118,3 +118,27 @@ def test_lock_held_by_another_run_is_not_entered(tmp_path, monkeypatch):
             token_supplier=lambda: pytest.fail("token must not be requested"),
             local_root=tmp_path,
         )
+
+
+def test_old_leftovers_are_cleaned_before_locking(tmp_path, monkeypatch):
+    calls: list[list[str]] = []
+
+    def fake_ssh(host, argv, *, data=None, timeout=120):
+        calls.append(argv)
+        if argv == ["mkdir", runner.REMOTE_BASE + "/.runs/wfs-synthetic-03"]:
+            return 1, ""
+        return 0, ""
+
+    monkeypatch.setattr(runner, "_ssh", fake_ssh)
+    with pytest.raises(DispatchRejected, match="REMOTE_ALREADY_RUNNING"):
+        runner.run_plan(
+            route=ROUTE,
+            run_id="wfs-synthetic-03",
+            plan=PLAN,
+            token_supplier=lambda: pytest.fail("token must not be requested"),
+            local_root=tmp_path,
+        )
+    cleanup = calls.index(runner.STALE_CLEANUP)
+    lock = calls.index(["mkdir", runner.REMOTE_BASE + "/.runs/wfs-synthetic-03"])
+    assert cleanup < lock
+    assert "-mmin" in runner.STALE_CLEANUP and "+1440" in runner.STALE_CLEANUP
