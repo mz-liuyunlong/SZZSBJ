@@ -175,7 +175,10 @@ def summarize(
     return success_response(
         request,
         data=WfsFeeSummaryData(
-            items=items, total_amount_usd=f"{total:.4f}", total_quantity=f"{quantity:.4f}"
+            items=items,
+            total_amount_usd=f"{total:.4f}",
+            total_quantity=f"{quantity:.4f}",
+            by_attribution=reader.attribution_totals(session, f),
         ),
     )
 

@@ -22,5 +22,6 @@
 .fin-payout-recon__bill-day { font-weight: 600; color: var(--ant-color-primary, #1677ff); }
 .fin-payout-recon__total-row > td { background: var(--ant-color-fill-quaternary, #fafafa); font-weight: 600; }
 
-/* BoardTable 后端分页条（WFS 费用明细等）：和表格自带分页同样靠右 */
-.board-table__server-pager { display: flex; justify-content: flex-end; padding: 8px 12px; flex: none; }
+/* BoardTable 后端分页（WFS 费用明细等）：表格在上、分页条在下；分页条样式用公共外框的 .ant-pagination 规则 */
+.report-table-shell.board-table--server-page { flex-direction: column; }
+.report-table-shell.board-table--server-page .ant-pro-table { height: auto; flex: 1 1 0; }

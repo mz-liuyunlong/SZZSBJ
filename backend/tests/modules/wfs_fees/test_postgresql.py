@@ -703,6 +703,9 @@ def test_summary_uses_the_same_filters_as_lines(service, session):
     assert {item.fee_type for item in items} == {"LostInventory"} and total == Decimal("2.00")
     quantity = reader.total_quantity(session, reader.LineFilter(fee_type="LostInventory"))
     assert quantity == Decimal("1")
+    by_attribution = reader.attribution_totals(session, reader.LineFilter(fee_type="LostInventory"))
+    assert sum(item.rows for item in by_attribution) == 1
+    assert sum(Decimal(item.amount_usd) for item in by_attribution) == Decimal("2.00")
     _rows, count = reader.list_lines(
         session, reader.LineFilter(fee_type="LostInventory"), page=1, page_size=50
     )

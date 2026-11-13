@@ -61,10 +61,19 @@ class WfsFeeSummaryRow(BaseModel):
     amount_usd: str
 
 
+class WfsFeeAttributionTotal(BaseModel):
+    """按归属（细分）合计，页面统计卡片用。"""
+
+    attribution: str
+    rows: int
+    amount_usd: str
+
+
 class WfsFeeSummaryData(BaseModel):
     items: list[WfsFeeSummaryRow]
     total_amount_usd: str
     total_quantity: str = "0"
+    by_attribution: list[WfsFeeAttributionTotal] = Field(default_factory=list)
 
 
 class WfsFeeCheckRead(BaseModel):

@@ -22,6 +22,7 @@ from app.modules.wfs_fees.models import (
     WalmartWfsFeeLine,
 )
 from app.modules.wfs_fees.schemas import (
+    WfsFeeAttributionTotal,
     WfsFeeCheckRead,
     WfsFeeFileRead,
     WfsFeeLineRead,
@@ -285,6 +286,24 @@ def total_quantity(session: Session, f: LineFilter) -> Decimal:
     """数量合计（页面底部合计行用），筛选和明细同一套。"""
     value = session.scalar(_apply(select(func.sum(WalmartWfsFeeLine.quantity)), f))
     return value or Decimal("0")
+
+
+def attribution_totals(session: Session, f: LineFilter) -> list[WfsFeeAttributionTotal]:
+    """按归属合计笔数和金额（页面统计卡片用），筛选和明细同一套。"""
+    query = _apply(
+        select(
+            WalmartWfsFeeLine.attribution,
+            func.count(),
+            func.sum(WalmartWfsFeeLine.amount_usd),
+        ),
+        f,
+    ).group_by(WalmartWfsFeeLine.attribution)
+    return [
+        WfsFeeAttributionTotal(
+            attribution=attribution, rows=int(n), amount_usd=f"{(amount or 0):.4f}"
+        )
+        for attribution, n, amount in session.execute(query).all()
+    ]
 
 
 def list_checks(

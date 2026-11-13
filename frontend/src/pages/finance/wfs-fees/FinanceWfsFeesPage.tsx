@@ -8,9 +8,10 @@
  */
 import { Alert, Button, Input, Space, Tag, Tooltip, Typography, message } from "antd";
 import type { ProColumns } from "@ant-design/pro-components";
-import { SettingOutlined } from "@ant-design/icons";
+import { EyeInvisibleOutlined, EyeOutlined, SettingOutlined } from "@ant-design/icons";
+import ManagementStatCards, { type ManagementStatCardItem } from "@/components/report-table/ManagementStatCards";
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import PageShell from "@/components/page/PageShell";
 import { REPORT_TABLE_DEFAULT_PAGE_SIZE } from "@/components/report-table/pagination";
 import ResetButton from "@/components/report-table/ResetButton";
@@ -25,7 +26,7 @@ import ImportDrawer from "./ImportDrawer";
 import { WFS_COLUMN_GROUPS, WFS_DEFAULT_KEYS, WFS_FIXED_KEYS, readWfsColumns, writeWfsColumns } from "./wfsColumns";
 import { exportLines } from "./wfsExport";
 import {
-  ATTRIBUTION_GROUP, ATTRIBUTION_GROUP_TEXT, ATTRIBUTION_TEXT, SOURCE_TEXT, SPLIT_TEXT, attributionParam, detailText, num, reasonText, useBillPeriods, useFeeTypes, useLines, useSummary, useWfsRefresh, wfsErrorText,
+  ATTRIBUTION_GROUP, ATTRIBUTION_GROUP_CODES, ATTRIBUTION_GROUP_TEXT, ATTRIBUTION_TEXT, SOURCE_TEXT, SPLIT_TEXT, attributionParam, detailText, num, reasonText, useBillPeriods, useFeeTypes, useLines, useSummary, useWfsRefresh, wfsErrorText,
   type ApiLine, type AttributionGroup, type FeeSource, type LineFilter,
 } from "./wfsFeesApi";
 import "./wfs-fees.css";
@@ -49,6 +50,16 @@ const Bi = ({ zh, en }: { zh: string; en?: string }) => (
 
 const GROUP_COLOR: Record<AttributionGroup, string> = { done: "green", todo: "orange", company: "default" };
 const PAGE_SIZE = REPORT_TABLE_DEFAULT_PAGE_SIZE;
+type StatKey = "all" | AttributionGroup;
+// 卡片图标用线条 SVG（公共卡片样式按 stroke 画图标，antd 实心图标会显示成空白），同 Listing 管理
+const statIcon = (paths: string[]) => <svg viewBox="0 0 24 24" aria-hidden="true">{paths.map((d) => <path key={d} d={d} />)}</svg>;
+const STAT_ICON: Record<StatKey, ReactNode> = {
+  all: statIcon(["M12 3v18", "M16.5 7.5c-.8-1.2-2.5-2-4.5-2-2.5 0-4.5 1.3-4.5 3.2 0 4.3 9 2.3 9 6.6 0 1.9-2 3.2-4.5 3.2-2.1 0-3.9-.8-4.7-2.1"]),
+  done: statIcon(["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z", "m8 12.5 2.7 2.7L16.5 9.5"]),
+  todo: statIcon(["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z", "M12 7.5v5.5", "M12 16.5h.01"]),
+  company: statIcon(["M4 21h16", "M6 21V8l6-4 6 4v13", "M10 21v-5h4v5", "M9 11h.01M15 11h.01"]),
+};
+const usd = (value: number) => `${value < 0 ? "-" : ""}$${Math.abs(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /**
  * 表格一行：原行没有分摊就是它自己；有分摊的原行不单独显示，按分摊子行展开成多行，
@@ -67,6 +78,7 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
   const [adjusting, setAdjusting] = useState<Row>();
   const [columnKeys, setColumnKeys] = useState<string[]>(readWfsColumns);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
+  const [statisticsVisible, setStatisticsVisible] = useState(true);
   const applyColumns = (keys: string[]) => { setColumnKeys(keys); writeWfsColumns(keys); setColumnConfigOpen(false); };
   // 筛选都可多选（Rocky 11-13）：页面上存数组，传接口时逗号拼接
   const [picked, setPicked] = useState<{ stores: string[]; periods: string[]; types: string[]; sources: FeeSource[]; groups: AttributionGroup[]; splits: string[] }>({ stores: [], periods: [], types: [], sources: [], groups: [], splits: [] });
@@ -152,6 +164,9 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
       <Input.Search allowClear placeholder="商品 ID / SKU / 条码 / 货件号" style={{ width: 260 }} value={q} onChange={(e) => setQ(e.target.value)} onSearch={(value) => set({ q: value.trim() || undefined })} />
       <ResetButton onClick={() => { setQ(""); setPicked({ stores: [], periods: [], types: [], sources: [], groups: [], splits: [] }); setFilter({ page: 1, page_size: PAGE_SIZE }); }} />
       <Space className="finance-board__toolbar-actions" size={8}>
+        <Button icon={statisticsVisible ? <EyeInvisibleOutlined aria-hidden="true" /> : <EyeOutlined aria-hidden="true" />} onClick={() => setStatisticsVisible((visible) => !visible)}>
+          {statisticsVisible ? "隐藏统计" : "显示统计"}
+        </Button>
         <Tooltip title="按店铺 / 账期从沃尔玛接口拉取报表（下一版开放）"><Button disabled>同步</Button></Tooltip>
         <Button type="primary" onClick={() => setImportOpen(true)}>导入</Button>
         <Tooltip title="导出当前这一页的行（含分摊行）；要导更多请加筛选"><Button onClick={() => exportLines(rows, typeName)} disabled={!rows.length}>导出本页</Button></Tooltip>
@@ -159,13 +174,38 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
       </Space>
     </>
   );
-  const subtitle = lines.data ? `${lines.data.total.toLocaleString()} 笔 · 本页 ${lines.data.page}${total != null ? ` · 筛选范围合计 ${total < 0 ? "-" : ""}$${Math.abs(total).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ""}` : "";
+  // 统计卡片（同 Listing 管理）：按归属三档合计，点卡片 = 按这一档筛选，再点取消
+  const byGroup = (group: AttributionGroup) => (summary.data?.by_attribution ?? [])
+    .filter((item) => ATTRIBUTION_GROUP_CODES[group].includes(item.attribution))
+    .reduce((acc, item) => ({ rows: acc.rows + item.rows, amount: acc.amount + (num(item.amount_usd) ?? 0) }), { rows: 0, amount: 0 });
+  const statOf = (group: AttributionGroup) => (summary.data ? byGroup(group) : undefined);
+  const statCard = (key: StatKey, title: string, stat: { rows: number; amount: number } | undefined, tone: ManagementStatCardItem<StatKey>["tone"], icon: ReactNode): ManagementStatCardItem<StatKey> => ({
+    key, title, subtitle: stat ? `${stat.rows.toLocaleString()} 笔` : "", value: stat ? usd(stat.amount) : "—", tone, icon,
+  });
+  const allStat = summary.data ? { rows: (summary.data.by_attribution ?? []).reduce((n, item) => n + item.rows, 0), amount: total ?? 0 } : undefined;
+  const todoStat = statOf("todo");
+  const statCards: ManagementStatCardItem<StatKey>[] = [
+    statCard("all", "费用合计", allStat, "normal", STAT_ICON.all),
+    statCard("done", ATTRIBUTION_GROUP_TEXT.done, statOf("done"), "success", STAT_ICON.done),
+    statCard("todo", ATTRIBUTION_GROUP_TEXT.todo, todoStat, todoStat?.rows ? "warning" : "success", STAT_ICON.todo),
+    statCard("company", ATTRIBUTION_GROUP_TEXT.company, statOf("company"), "normal", STAT_ICON.company),
+  ];
+  const activeStat: StatKey = picked.groups.length === 1 ? picked.groups[0] : "all";
+  const pickStat = (key: StatKey) => {
+    const next: AttributionGroup[] = key === "all" || key === activeStat ? [] : [key];
+    setPicked((c) => ({ ...c, groups: next }));
+    set({ attribution: attributionParam(next) });
+  };
+  const subtitle = lines.data ? `${lines.data.total.toLocaleString()} 笔 · 第 ${lines.data.page} 页${total != null ? ` · 筛选范围合计 ${total < 0 ? "-" : ""}$${Math.abs(total).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ""}` : "";
 
   return (
     <PageShell page={page} headerActions={<HelpButton title="WFS 费用明细" sections={HELP} />}>
       {messageHolder}
       <FinanceBoardFrame title="WFS 费用明细" subtitle={subtitle} preview={false} loading={lines.isPending} toolbar={toolbar}
-        summary={<ChecksBar storeId={filter.store_id} reportKey={filter.report_key} storeCode={storeCode} typeName={typeName} onChanged={() => void refresh()} />}>
+        summary={<>
+          {statisticsVisible && <ManagementStatCards<StatKey> ariaLabel="WFS 费用统计" className="fin-wfs__cards" cards={statCards} activeKey={activeStat} onCardClick={pickStat} />}
+          <ChecksBar storeId={filter.store_id} reportKey={filter.report_key} storeCode={storeCode} typeName={typeName} onChanged={() => void refresh()} />
+        </>}>
         {lines.error ? <Alert type="error" showIcon message={wfsErrorText(lines.error)} /> : (
           <BoardTable<Row> label="WFS 费用明细表格" rowKey="key" rows={rows} columns={shownColumns} resizeKey="finance-wfs-fees" pageSize={PAGE_SIZE}
             serverPage={{ current: filter.page, pageSize: filter.page_size, total: lines.data?.total ?? 0, onChange: (page, pageSize) => setFilter((c) => ({ ...c, page: pageSize === c.page_size ? page : 1, page_size: pageSize })) }}

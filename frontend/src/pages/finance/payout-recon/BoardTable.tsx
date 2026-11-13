@@ -10,6 +10,8 @@ import { readUserPreference, writeUserPreference } from "@/shared/preferences/us
 import EmptyState from "@/shared/states/EmptyState";
 
 const WIDTH_PREF_VERSION = 1;
+/** 单独放的分页条拿不到表格自带的中文文案（ProTable 只给表格内分页配了中文），这里补上，和表格自带分页一样显示「条/页、跳至、页」 */
+const PAGER_LOCALE = { items_per_page: "条/页", jump_to: "跳至", jump_to_confirm: "确定", page: "页", prev_page: "上一页", next_page: "下一页", prev_5: "向前 5 页", next_5: "向后 5 页", prev_3: "向前 3 页", next_3: "向后 3 页" };
 const MIN_WIDTH = 64;
 const headerCell = () => ({ className: "report-table-resizable-header-cell" });
 const scrollX = <T,>(columns: ProColumns<T>[]) => columns.reduce((total, column) => total + Number(column.width ?? 120), 0);
@@ -60,7 +62,7 @@ function BoardTable<T extends object>({ label, rowKey, rows, columns, pageSize =
     ...sized.filter((c) => c.fixed === "right"),
   ];
   return (
-    <ReportTableShell label={label}>
+    <ReportTableShell label={label} className={serverPage ? "board-table--server-page" : undefined}>
       <ProTable<T>
         rowKey={rowKey}
         search={false}
@@ -86,16 +88,15 @@ function BoardTable<T extends object>({ label, rowKey, rows, columns, pageSize =
         columns={shown}
         scroll={autoHeight ? { x: scrollX(shown) } : { x: scrollX(shown), y: "100%" }}
         onRow={onRow ? (row) => ({ onDoubleClick: () => onRow(row) }) : undefined}
-        // 后端分页时表格自己不切页（一页里可能有平铺的分摊行，行数比每页条数多），分页条放在表格底部（footer）里
+        // 后端分页时表格自己不切页（一页里可能有平铺的分摊行，行数比每页条数多），
+        // 分页条放在表格外框里、表格下面，样式和表格自带分页同一套（公共外框的 .ant-pagination 规则）
         pagination={serverPage ? false : { defaultPageSize: pageSize, showSizeChanger: true, showQuickJumper: true, showTotal: (count) => `共 ${count.toLocaleString()} 条` }}
-        footer={serverPage ? () => (
-          <div className="board-table__server-pager">
-            <Pagination size="small" current={serverPage.current} pageSize={serverPage.pageSize} total={serverPage.total} onChange={serverPage.onChange}
-              showSizeChanger showQuickJumper pageSizeOptions={REPORT_TABLE_PAGE_SIZE_OPTIONS} showTotal={(count) => `共 ${count.toLocaleString()} 条`} />
-          </div>
-        ) : undefined}
         locale={{ emptyText: <EmptyState title={emptyTitle} description={emptyText} compact /> }}
       />
+      {serverPage && (
+        <Pagination locale={PAGER_LOCALE} current={serverPage.current} pageSize={serverPage.pageSize} total={serverPage.total} onChange={serverPage.onChange}
+          showSizeChanger showQuickJumper pageSizeOptions={REPORT_TABLE_PAGE_SIZE_OPTIONS} showTotal={(count) => `共 ${count.toLocaleString()} 条`} />
+      )}
     </ReportTableShell>
   );
 }
