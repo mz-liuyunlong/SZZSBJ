@@ -478,10 +478,11 @@ def test_unmatched_gtin_and_rejected_file_are_kept_for_review(service, session):
 
 
 def test_periods_list_bill_periods_with_store_code_and_stores_without_bills(service, session):
+    # 用不属于任何店的条码：认不出店，才会用传进来的 B 店
     _upload(
         service,
         S.storage(
-            [(S.GTIN_1, "MSKU-1", "1.20", "1.20", "0")],
+            [(S.GTIN_3, "B-ONLY", "1.20", "1.20", "0")],
             period=("2026-10-03", "2026-10-16"),
             total="1.20",
         ),
