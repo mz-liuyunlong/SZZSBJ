@@ -281,3 +281,17 @@ def test_inbound_items_split_the_inbound_fee_and_recognise_the_store(session, tm
     ).all()
     assert parent.attribution == "allocated"
     assert sorted(child.amount_usd for child in children) == [Decimal("-7.50"), Decimal("-2.50")]
+
+
+def test_rate_limit_is_retried_and_never_counts_as_a_failure(session, sync, tmp_path):
+    def limited(store, plan):
+        return [
+            {"op": "submit", "key": a["key"], "outcome": "rate_limited"} for a in plan["actions"]
+        ]
+
+    for hour in range(0, 2 * J.MAX_SUBMITS + 1, 2):
+        _run(sync, FakeRemote(tmp_path / str(hour), limited), now=NOW + timedelta(hours=hour))
+    jobs = _jobs(session).values()
+    assert {job.status for job in jobs} == {"queued"}
+    assert {job.error_code for job in jobs} == {"WFS_REPORT_RATE_LIMITED"}
+    assert {job.submit_attempts for job in jobs} == {0}

@@ -377,7 +377,13 @@ class WfsReportSync:
         if outcome in DEFERRED_OUTCOMES:
             job.next_action_at = now + RETRY_WAIT
             return
-        if outcome in ("rate_limited", "submit_failed"):
+        if outcome == "rate_limited":
+            # 沃尔玛限流（这一小时这家店这类报表已经下过单，比如定时和手动挨得近）：
+            # 不算失败次数，隔 1 小时再下。
+            job.error_code = "WFS_REPORT_RATE_LIMITED"
+            job.next_action_at = now + RETRY_WAIT
+            return
+        if outcome == "submit_failed":
             job.submit_attempts += 1
             if job.submit_attempts >= MAX_SUBMITS:
                 self._fail(job, "WFS_REPORT_" + outcome.upper(), now)
