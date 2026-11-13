@@ -42,11 +42,11 @@ export interface ApiImport {
 export interface ApiBillPeriod { store_id: string; store_code: string; store_name: string | null; report_key: string | null; report_date: string | null; period_start_date: string | null; period_end_date: string | null }
 
 export interface LineFilter {
-  store_id?: string; report_key?: string; fee_type?: string; fee_source?: FeeSource; attribution?: string;
+  store_id?: string; report_key?: string; fee_type?: string; fee_source?: string; attribution?: string; split?: string;
   date_from?: string; date_to?: string; q?: string; include_missing?: boolean; page: number; page_size: number;
 }
 /** 归属筛选按三档传给后端（逗号分隔多个细分码） */
-export const attributionParam = (group?: AttributionGroup) => (group ? ATTRIBUTION_GROUP_CODES[group].join(",") : undefined);
+export const attributionParam = (groups: AttributionGroup[]) => (groups.length ? groups.flatMap((g) => ATTRIBUTION_GROUP_CODES[g]).join(",") : undefined);
 
 const qs = (params: object) => {
   const search = new URLSearchParams();
@@ -63,13 +63,14 @@ export type AttributionGroup = "done" | "todo" | "company";
 export const ATTRIBUTION_GROUP: Record<Attribution, AttributionGroup> = {
   matched: "done", allocated: "done", allocated_check: "todo", unmatched: "todo", unallocated: "todo", company: "company",
 };
+export const SPLIT_TEXT: Record<"yes" | "no", string> = { yes: "有分摊", no: "无分摊" };
 export const ATTRIBUTION_GROUP_TEXT: Record<AttributionGroup, string> = { done: "已到商品", todo: "待处理", company: "记公司" };
 export const ATTRIBUTION_GROUP_CODES: Record<AttributionGroup, Attribution[]> = {
   done: ["matched", "allocated"], todo: ["unmatched", "unallocated", "allocated_check"], company: ["company"],
 };
 /** 细分原因（依据列 / 导出用） */
 export const ATTRIBUTION_TEXT: Record<Attribution, string> = {
-  matched: "GTIN 对上商品", unmatched: "GTIN 对不上商品", allocated: "按规则分摊", allocated_check: "已分摊，基数待核", unallocated: "等货件明细，未分摊", company: "记公司",
+  matched: "条码对上商品", unmatched: "条码对不上商品", allocated: "按规则分摊", allocated_check: "已分摊，基数待核", unallocated: "等货件明细，未分摊", company: "记公司",
 };
 export const CHECK_TEXT: Record<ApiCheck["status"], string> = { ok: "一致", diff: "不一致", lx_only: "报表缺", report_only: "领星缺" };
 
@@ -138,3 +139,26 @@ export function wfsErrorText(error: unknown): string {
   return "操作失败，请稍后重试";
 }
 export const isForbidden = (error: unknown) => error instanceof BackendRequestError && error.status === 403;
+
+/** Reason Code 中文（按 2026-10 报表里出现过的；没列到的照原文显示）。分号前是退货原因、分号后 Standard 是标准处理。 */
+const REASON_TEXT: Record<string, string> = {
+  Standard: "标准", Parcel: "包裹", LTL: "零担", Store: "门店", UnplannedBag: "未计划装袋",
+  StorageFeeDispute: "仓储费争议", InboundTransportationShippingRefund: "入库运费多收退款", LostReturnAdjustment: "退货丢失调整",
+  ProductDimensionsAdjustment: "商品尺寸调整", InboundQuantityDispute: "入库数量争议", WalmartFaultReturnRestocked: "沃尔玛责任退货重上架",
+  FoundReturnAdjustment: "退货找回调整",
+  "No Longer Wanted": "不想要了", "Not as described/pictured": "与描述 / 图片不符", "Defective/Broken": "有缺陷 / 损坏",
+  "Difficult to setup/not compatible": "难安装 / 不兼容", "Bought Somewhere Else": "在别处买了", "Missing parts or instructions": "缺配件或说明书",
+  "Too big/large/loose": "太大 / 太松", "Too small/short/tight": "太小 / 太紧", "Received different size than ordered": "收到的尺寸不对",
+};
+export const reasonText = (code: string) => code.split(";").map((part) => REASON_TEXT[part.trim()] ?? part.trim()).filter(Boolean).join("；");
+
+/** 说明（Detail）里的固定英文短语 → 中文；数字、单号原样保留。按 2026-10 报表里出现过的写，没列到的照原文。 */
+const DETAIL_PHRASES: [RegExp, string][] = [
+  [/Item price \(recharged\)/gi, "商品价（再次扣回）"], [/fulfillment fee \(reimbursed\)/gi, "配送费（退回）"], [/referral fee \(reimbursed\)/gi, "佣金（退回）"],
+  [/Item Price/g, "商品价"], [/Fulfillment Fee/gi, "配送费"], [/Commission Discount/g, "佣金折扣"], [/Commission/g, "佣金"],
+  [/Partner payable amount/g, "应付卖家金额"], [/Removal Order\s*:/g, "移除单："], [/Completed On\s*:/g, "完成于："],
+  [/Refunded on:/g, "退款日："], [/Proc Date:/g, "处理日："], [/Delivered on:/g, "送达日："],
+  [/Fee Recalculation until/g, "费用重算至"], [/Original Fees/g, "原费用"], [/less Recalculated Fees/g, "减 重算后费用"], [/less Prior Discount/g, "减 之前折扣"],
+  [/Unit Price/g, "单价"], [/Refund for/g, "退款：货件"], [/overcharge/g, "多收"], [/RMA:/g, "退货单："],
+];
+export const detailText = (detail: string) => DETAIL_PHRASES.reduce((text, [pattern, zh]) => text.replace(pattern, zh), detail);

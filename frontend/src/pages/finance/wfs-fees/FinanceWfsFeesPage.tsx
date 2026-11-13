@@ -6,10 +6,14 @@
  * - 行内「调整」：无 GTIN 的费用改分摊 / 记公司，必填原因，留痕。
  * 全部读写 /api/finance/wfs-fees，没有本地预览数据。
  */
-import { Alert, Button, Input, Select, Space, Tag, Tooltip, Typography, message } from "antd";
+import { Alert, Button, Input, Space, Tag, Tooltip, Typography, message } from "antd";
 import type { ProColumns } from "@ant-design/pro-components";
+import { SettingOutlined } from "@ant-design/icons";
+import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
 import { useMemo, useState } from "react";
 import PageShell from "@/components/page/PageShell";
+import ResetButton from "@/components/report-table/ResetButton";
+import ReportFacetSelect from "@/shared/report-filters";
 import type { NavigationPage } from "@/config/navigation";
 import FinanceBoardFrame, { FinMoney } from "@/pages/finance/FinanceBoardFrame";
 import BoardTable from "@/pages/finance/payout-recon/BoardTable";
@@ -17,9 +21,10 @@ import HelpButton, { type HelpSection } from "@/pages/finance/payout-recon/HelpB
 import AdjustModal from "./AdjustModal";
 import ChecksBar from "./ChecksBar";
 import ImportDrawer from "./ImportDrawer";
+import { WFS_COLUMN_GROUPS, WFS_DEFAULT_KEYS, WFS_FIXED_KEYS, readWfsColumns, writeWfsColumns } from "./wfsColumns";
 import { exportLines } from "./wfsExport";
 import {
-  ATTRIBUTION_GROUP, ATTRIBUTION_GROUP_TEXT, ATTRIBUTION_TEXT, SOURCE_TEXT, attributionParam, num, useBillPeriods, useFeeTypes, useLines, useSummary, useWfsRefresh, wfsErrorText,
+  ATTRIBUTION_GROUP, ATTRIBUTION_GROUP_TEXT, ATTRIBUTION_TEXT, SOURCE_TEXT, SPLIT_TEXT, attributionParam, detailText, num, reasonText, useBillPeriods, useFeeTypes, useLines, useSummary, useWfsRefresh, wfsErrorText,
   type ApiLine, type AttributionGroup, type FeeSource, type LineFilter,
 } from "./wfsFeesApi";
 import "./wfs-fees.css";
@@ -35,6 +40,11 @@ const HELP: HelpSection[] = [
   { title: "导入", body: "所有店铺都可以上传卖家后台下载的原始 CSV（结算报表 / 仓储费报表 / 入库运输报告），系统按内容认类型；结算报表按 Partner ID 认店铺，仓储 / 入库要选店铺。同一份文件再传只刷新不重复；仓储 / 入库同账期重传 = 覆盖，账期交叉但起止不同会拒收。" },
   { title: "调整", body: "无 GTIN 的费用，点「调整」改分摊（分到哪些商品、各多少，合计要等于原金额）或记公司，必填原因，留痕；调整过的行不会被重新导入覆盖。" },
 ];
+
+/** 中文在上、原始英文在下（小字浅色）——页面上所有报表原文都这样显示（Rocky 11-13） */
+const Bi = ({ zh, en }: { zh: string; en?: string }) => (
+  <span className="fin-wfs__bi">{zh}{en && en !== zh ? <><br /><Typography.Text type="secondary" className="fin-wfs__sub">{en}</Typography.Text></> : null}</span>
+);
 
 const GROUP_COLOR: Record<AttributionGroup, string> = { done: "green", todo: "orange", company: "default" };
 const PAGE_SIZE = 100;
@@ -54,7 +64,12 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
   const [q, setQ] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [adjusting, setAdjusting] = useState<Row>();
-  const [attrGroup, setAttrGroup] = useState<AttributionGroup>();
+  const [columnKeys, setColumnKeys] = useState<string[]>(readWfsColumns);
+  const [columnConfigOpen, setColumnConfigOpen] = useState(false);
+  const applyColumns = (keys: string[]) => { setColumnKeys(keys); writeWfsColumns(keys); setColumnConfigOpen(false); };
+  // 筛选都可多选（Rocky 11-13）：页面上存数组，传接口时逗号拼接
+  const [picked, setPicked] = useState<{ stores: string[]; periods: string[]; types: string[]; sources: FeeSource[]; groups: AttributionGroup[]; splits: string[] }>({ stores: [], periods: [], types: [], sources: [], groups: [], splits: [] });
+  const join = (values: string[]) => (values.length ? values.join(",") : undefined);
   const [messageApi, messageHolder] = message.useMessage();
   const types = useFeeTypes();
   const periods = useBillPeriods();
@@ -67,11 +82,11 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
   const typeName = useMemo(() => new Map((types.data ?? []).map((t) => [t.code, t.name])), [types.data]);
   const stores = useMemo(() => Array.from(storeCode.entries()).sort((a, b) => a[1].localeCompare(b[1])), [storeCode]);
   const periodOptions = useMemo(() => {
-    const list = (periods.data ?? []).filter((p) => !filter.store_id || p.store_id === filter.store_id);
+    const list = (periods.data ?? []).filter((p) => !picked.stores.length || picked.stores.includes(p.store_id));
     const seen = new Map<string, string>();
-    for (const p of list) if (p.report_key) seen.set(p.report_key, `${p.report_date}${filter.store_id ? "" : ` · ${p.store_code}`}${p.period_start_date ? `（${p.period_start_date} ~ ${p.period_end_date}）` : ""}`);
+    for (const p of list) if (p.report_key) seen.set(p.report_key, `${p.report_date}${picked.stores.length === 1 ? "" : ` · ${p.store_code}`}${p.period_start_date ? `（${p.period_start_date} ~ ${p.period_end_date}）` : ""}`);
     return Array.from(seen.entries()).map(([value, label]) => ({ value, label })).sort((a, b) => b.label.localeCompare(a.label));
-  }, [periods.data, filter.store_id]);
+  }, [periods.data, picked.stores]);
 
   const toRows = (line: ApiLine): Row[] => {
     const { children, ...parent } = line;
@@ -90,36 +105,53 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
     { key: "report_date", title: "账单日", width: 100, render: (_, row) => row.report_date ?? <Typography.Text type="secondary">未归期</Typography.Text> },
     { key: "date_charged", title: "扣费日期", width: 100, render: (_, row) => row.date_charged },
     { key: "transaction_date", title: "交易日期", width: 100, render: (_, row) => row.transaction_date },
-    { key: "fee_type", title: "费用类型", width: 150, render: (_, row) => <span>{row.typeName}<br /><Typography.Text type="secondary" className="fin-wfs__sub">{row.fee_type}</Typography.Text></span> },
-    { key: "reason_code", title: "Reason", width: 150, ellipsis: true, render: (_, row) => row.reason_code || "—" },
-    { key: "po", title: "PO / 货件号", width: 130, ellipsis: true, render: (_, row) => row.po_number || "—" },
-    { key: "gtin", title: "GTIN", width: 140, render: (_, row) => row.gtin || "—" },
-    { key: "item_id", title: "ITEM ID", width: 120, render: (_, row) => row.item_id || "—" },
-    { key: "msku", title: "MSKU", width: 140, ellipsis: true, render: (_, row) => row.msku || "—" },
-    { key: "local_sku", title: "SKU", width: 110, ellipsis: true, render: (_, row) => row.local_sku || "—" },
+    { key: "fee_type", title: "费用类型", width: 150, render: (_, row) => <Bi zh={row.typeName} en={row.fee_type} /> },
+    { key: "reason_code", title: "原因", width: 170, render: (_, row) => (row.reason_code ? <Bi zh={reasonText(row.reason_code)} en={row.reason_code} /> : "—") },
+    { key: "po", title: "订单 / 货件号", width: 130, ellipsis: true, render: (_, row) => row.po_number || "—" },
+    { key: "gtin", title: "商品条码", width: 140, render: (_, row) => row.gtin || "—" },
+    { key: "item_id", title: "商品 ID", width: 120, render: (_, row) => row.item_id || "—" },
+    { key: "msku", title: "店铺 SKU", width: 140, ellipsis: true, render: (_, row) => row.msku || "—" },
+    { key: "local_sku", title: "本地 SKU", width: 110, ellipsis: true, render: (_, row) => row.local_sku || "—" },
     { key: "quantity", title: "数量", width: 70, align: "right", render: (_, row) => (row.quantity ? Number(row.quantity).toLocaleString() : "") },
     { key: "amount", title: "金额（USD）", width: 120, align: "right", render: (_, row) => <FinMoney value={row.amount} cur="USD" /> },
     { key: "share", title: "分摊", width: 80, render: (_, row) => (row.share ? <Tooltip title={row.shareBasis}>{row.share}</Tooltip> : "") },
     { key: "attribution", title: "归属", width: 100, render: (_, row) => <Tag color={GROUP_COLOR[ATTRIBUTION_GROUP[row.attribution]]} bordered={false}>{ATTRIBUTION_GROUP_TEXT[ATTRIBUTION_GROUP[row.attribution]]}{row.adjusted ? " · 人工" : ""}</Tag> },
     { key: "basis", title: "依据", width: 240, ellipsis: true, render: (_, row) => { const text = [ATTRIBUTION_TEXT[row.attribution], row.allocation_basis, row.bill_match].filter(Boolean).join(" · "); return <Tooltip title={text}>{text}</Tooltip>; } },
     { key: "source", title: "来源", width: 110, render: (_, row) => <span>{SOURCE_TEXT[row.fee_source]}{row.missing_since ? <Tag color="default" bordered={false}>重传后消失</Tag> : null}</span> },
-    { key: "detail", title: "说明", width: 260, ellipsis: true, render: (_, row) => <Tooltip title={row.detail}>{row.detail || "—"}</Tooltip> },
+    { key: "detail", title: "说明", width: 300, render: (_, row) => (row.detail ? <Tooltip title={row.detail}><Bi zh={detailText(row.detail)} en={row.detail} /></Tooltip> : "—") },
     { key: "actions", title: "操作", width: 72, fixed: "right", render: (_, row) => (row.share || !row.gtin ? <Button type="link" size="small" onClick={() => setAdjusting(row)}>调整</Button> : null) },
   ];
 
+  // 按列配置的顺序和显示与否取列（店铺、操作固定）
+  const shownColumns = [...new Set([...columnKeys, "actions"])].map((key) => columns.find((c) => c.key === key)).filter((c): c is ProColumns<Row> => Boolean(c));
   const total = num(summary.data?.total_amount_usd);
   const toolbar = (
     <>
-      <Select allowClear placeholder="店铺" style={{ width: 120 }} value={filter.store_id} options={stores.map(([id, code]) => ({ value: id, label: code }))} onChange={(value) => set({ store_id: value, report_key: undefined })} />
-      <Select allowClear showSearch placeholder="账单期" style={{ width: 260 }} value={filter.report_key} options={periodOptions} optionFilterProp="label" onChange={(value) => set({ report_key: value })} />
-      <Select allowClear showSearch placeholder="费用类型" style={{ width: 170 }} value={filter.fee_type} optionFilterProp="label" options={(types.data ?? []).map((t) => ({ value: t.code, label: `${t.name} ${t.code}` }))} onChange={(value) => set({ fee_type: value })} />
-      <Select allowClear placeholder="来源" style={{ width: 130 }} value={filter.fee_source} options={(Object.keys(SOURCE_TEXT) as FeeSource[]).map((s) => ({ value: s, label: SOURCE_TEXT[s] }))} onChange={(value) => set({ fee_source: value })} />
-      <Select allowClear placeholder="归属" style={{ width: 120 }} value={attrGroup} options={(Object.keys(ATTRIBUTION_GROUP_TEXT) as AttributionGroup[]).map((g) => ({ value: g, label: ATTRIBUTION_GROUP_TEXT[g] }))} onChange={(value: AttributionGroup | undefined) => { setAttrGroup(value); set({ attribution: attributionParam(value) }); }} />
-      <Input.Search allowClear placeholder="ITEM ID / MSKU / SKU / GTIN / 货件号" style={{ width: 260 }} value={q} onChange={(e) => setQ(e.target.value)} onSearch={(value) => set({ q: value.trim() || undefined })} />
+      <ReportFacetSelect mode="multiple" ariaLabel="店铺" placeholder="店铺" unit="家" value={picked.stores}
+        options={stores.map(([value, label]) => ({ value, label }))}
+        onChange={(value) => { const next = (value as string[] | undefined) ?? []; setPicked((c) => ({ ...c, stores: next, periods: [] })); set({ store_id: join(next), report_key: undefined }); }} />
+      <ReportFacetSelect mode="multiple" ariaLabel="账单期" placeholder="账单期" unit="期" value={picked.periods} popupWidth={320}
+        options={periodOptions}
+        onChange={(value) => { const next = (value as string[] | undefined) ?? []; setPicked((c) => ({ ...c, periods: next })); set({ report_key: join(next) }); }} />
+      <ReportFacetSelect mode="multiple" ariaLabel="费用类型" placeholder="费用类型" unit="类" value={picked.types}
+        options={(types.data ?? []).map((t) => ({ value: t.code, label: t.name }))}
+        onChange={(value) => { const next = (value as string[] | undefined) ?? []; setPicked((c) => ({ ...c, types: next })); set({ fee_type: join(next) }); }} />
+      <ReportFacetSelect mode="multiple" ariaLabel="来源" placeholder="来源" unit="种" value={picked.sources} showSearch={false}
+        options={(Object.keys(SOURCE_TEXT) as FeeSource[]).map((value) => ({ value, label: SOURCE_TEXT[value] }))}
+        onChange={(value) => { const next = (value as FeeSource[] | undefined) ?? []; setPicked((c) => ({ ...c, sources: next })); set({ fee_source: join(next) }); }} />
+      <ReportFacetSelect mode="multiple" ariaLabel="归属" placeholder="归属" unit="档" value={picked.groups} showSearch={false}
+        options={(Object.keys(ATTRIBUTION_GROUP_TEXT) as AttributionGroup[]).map((value) => ({ value, label: ATTRIBUTION_GROUP_TEXT[value] }))}
+        onChange={(value) => { const next = (value as AttributionGroup[] | undefined) ?? []; setPicked((c) => ({ ...c, groups: next })); set({ attribution: attributionParam(next) }); }} />
+      <ReportFacetSelect mode="multiple" ariaLabel="分摊" placeholder="分摊" unit="种" value={picked.splits} showSearch={false}
+        options={(Object.keys(SPLIT_TEXT) as ("yes" | "no")[]).map((value) => ({ value, label: SPLIT_TEXT[value] }))}
+        onChange={(value) => { const next = (value as string[] | undefined) ?? []; setPicked((c) => ({ ...c, splits: next })); set({ split: join(next) }); }} />
+      <Input.Search allowClear placeholder="商品 ID / SKU / 条码 / 货件号" style={{ width: 260 }} value={q} onChange={(e) => setQ(e.target.value)} onSearch={(value) => set({ q: value.trim() || undefined })} />
+      <ResetButton onClick={() => { setQ(""); setPicked({ stores: [], periods: [], types: [], sources: [], groups: [], splits: [] }); setFilter({ page: 1, page_size: PAGE_SIZE }); }} />
       <Space className="finance-board__toolbar-actions" size={8}>
         <Tooltip title="按店铺 / 账期从沃尔玛接口拉取报表（下一版开放）"><Button disabled>同步</Button></Tooltip>
         <Button type="primary" onClick={() => setImportOpen(true)}>导入</Button>
         <Button onClick={() => exportLines(rows, typeName)} disabled={!rows.length}>导出 Excel</Button>
+        <Button aria-label="列配置" icon={<SettingOutlined aria-hidden="true" />} onClick={() => setColumnConfigOpen(true)} />
       </Space>
     </>
   );
@@ -131,7 +163,7 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
       <FinanceBoardFrame title="WFS 费用明细" subtitle={subtitle} preview={false} loading={lines.isPending} toolbar={toolbar}
         summary={<ChecksBar storeId={filter.store_id} reportKey={filter.report_key} storeCode={storeCode} typeName={typeName} onChanged={() => void refresh()} />}>
         {lines.error ? <Alert type="error" showIcon message={wfsErrorText(lines.error)} /> : (
-          <BoardTable<Row> label="WFS 费用明细表格" rowKey="key" rows={rows} columns={columns} resizeKey="finance-wfs-fees" pageSize={PAGE_SIZE}
+          <BoardTable<Row> label="WFS 费用明细表格" rowKey="key" rows={rows} columns={shownColumns} resizeKey="finance-wfs-fees" pageSize={PAGE_SIZE}
             emptyTitle="没有费用" emptyText={filter.store_id || filter.report_key || filter.fee_type || filter.q ? "当前筛选下没有费用" : "还没有导入或同步任何报表，点右上角「导入」"} />
         )}
         {lines.data && lines.data.total > PAGE_SIZE && (
@@ -143,6 +175,7 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
         )}
       </FinanceBoardFrame>
       <ImportDrawer open={importOpen} stores={stores} onClose={() => setImportOpen(false)} onDone={() => void refresh()} />
+      <RuntimeColumnConfigDrawer open={columnConfigOpen} groups={WFS_COLUMN_GROUPS} fixedKeys={WFS_FIXED_KEYS} defaultKeys={WFS_DEFAULT_KEYS} appliedKeys={columnKeys} onApply={applyColumns} onClose={() => setColumnConfigOpen(false)} onSaveTemplate={() => void messageApi.info("列模板暂未开放；当前列配置只保存在本浏览器")} />
       {adjusting && adjustingLine && <AdjustModal key={adjustingLine.id} row={adjustingLine} title={`调整归属 · ${adjusting.storeCode} · ${adjusting.typeName} · ${adjusting.date_charged}`} onClose={() => setAdjusting(undefined)} onDone={() => { setAdjusting(undefined); void messageApi.success("已调整"); void refresh(); }} />}
     </PageShell>
   );

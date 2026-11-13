@@ -330,9 +330,7 @@ class WfsFeeService:
                 WalmartListingDimension.gtin,
                 WalmartListingDimension.upc,
                 WalmartListingDimension.item_id,
-            ).where(
-                WalmartListingDimension.source_account_ref == SOURCE_REF, or_(*conditions)
-            )
+            ).where(WalmartListingDimension.source_account_ref == SOURCE_REF, or_(*conditions))
         ):
             if row.msku:
                 by_sku[row.msku.strip()].add(row.store_id)

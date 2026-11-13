@@ -187,13 +187,15 @@ def _zip(files: dict[str, bytes]) -> bytes:
 def test_zip_upload_expands_to_csv_members_only():
     csv_a = S.settlement([S.fee("LostInventory", "2026-10-07", "-1.00", gtin=S.GTIN_1)])
     csv_b = S.storage([(S.GTIN_1, "SKU-1", "1.00", "1.10", "0.10")])
-    content = _zip({
-        "dir/a.csv": csv_a,
-        "b.CSV": csv_b,
-        "__MACOSX/dir/._a.csv": b"junk",
-        ".hidden.csv": b"junk",
-        "readme.txt": b"x",
-    })
+    content = _zip(
+        {
+            "dir/a.csv": csv_a,
+            "b.CSV": csv_b,
+            "__MACOSX/dir/._a.csv": b"junk",
+            ".hidden.csv": b"junk",
+            "readme.txt": b"x",
+        }
+    )
     parts = expand_upload("bundle.zip", content)
     assert parts == [("bundle.zip/a.csv", csv_a), ("bundle.zip/b.CSV", csv_b)]
     plain = b"Transaction Type,Net Payable"

@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Final
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.data_pages.models import LingxingStoreDimension
@@ -30,6 +30,13 @@ from app.modules.wfs_fees.schemas import (
 )
 
 MAX_PAGE_SIZE: Final = 500
+
+
+def _many(value: str | None) -> list[str]:
+    """筛选参数都可多选：逗号分隔。"""
+    return [v for v in (value or "").split(",") if v]
+
+
 MAX_PERIODS: Final = 2000
 
 # 费用类型中文名（和 7~10 月手工表一致）；报表里新出现的类型照原名显示
@@ -113,21 +120,28 @@ def list_lines(
     include_missing: bool,
     page: int,
     page_size: int,
+    split: str | None = None,
 ) -> tuple[list[WfsFeeLineRead], int]:
     """原行分页；每个原行带它的分摊子行。"""
     query = select(WalmartWfsFeeLine).where(WalmartWfsFeeLine.parent_line_id.is_(None))
     if not include_missing:
         query = query.where(WalmartWfsFeeLine.missing_since.is_(None))
     if store_id:
-        query = query.where(WalmartWfsFeeLine.store_id == store_id)
+        query = query.where(WalmartWfsFeeLine.store_id.in_(_many(store_id)))
     if report_key:
-        query = query.where(WalmartWfsFeeLine.report_key == report_key)
+        query = query.where(WalmartWfsFeeLine.report_key.in_(_many(report_key)))
     if fee_type:
-        query = query.where(WalmartWfsFeeLine.fee_type == fee_type)
+        query = query.where(WalmartWfsFeeLine.fee_type.in_(_many(fee_type)))
     if fee_source:
-        query = query.where(WalmartWfsFeeLine.fee_source == fee_source)
+        query = query.where(WalmartWfsFeeLine.fee_source.in_(_many(fee_source)))
     if attribution:
-        query = query.where(WalmartWfsFeeLine.attribution.in_(attribution.split(",")))
+        query = query.where(WalmartWfsFeeLine.attribution.in_(_many(attribution)))
+    wanted = set(_many(split))
+    if wanted and wanted != {"yes", "no"}:
+        # 有分摊 = 原行下有分摊子行（财务检查分摊用）
+        child = WalmartWfsFeeLine.__table__.alias("child")
+        has_children = exists().where(child.c.parent_line_id == WalmartWfsFeeLine.id)
+        query = query.where(has_children if wanted == {"yes"} else ~has_children)
     if date_from:
         query = query.where(WalmartWfsFeeLine.date_charged >= date_from)
     if date_to:
@@ -250,9 +264,9 @@ def summary(
         )
     )
     if store_id:
-        query = query.where(WalmartWfsFeeLine.store_id == store_id)
+        query = query.where(WalmartWfsFeeLine.store_id.in_(_many(store_id)))
     if report_key:
-        query = query.where(WalmartWfsFeeLine.report_key == report_key)
+        query = query.where(WalmartWfsFeeLine.report_key.in_(_many(report_key)))
     if date_from:
         query = query.where(WalmartWfsFeeLine.date_charged >= date_from)
     if date_to:
@@ -281,9 +295,9 @@ def list_checks(
         WalmartWfsFeeCheck.fee_type,
     )
     if store_id:
-        query = query.where(WalmartWfsFeeCheck.store_id == store_id)
+        query = query.where(WalmartWfsFeeCheck.store_id.in_(_many(store_id)))
     if report_key:
-        query = query.where(WalmartWfsFeeCheck.report_key == report_key)
+        query = query.where(WalmartWfsFeeCheck.report_key.in_(_many(report_key)))
     if only_problem:
         query = query.where(
             WalmartWfsFeeCheck.status != "ok", WalmartWfsFeeCheck.verified_at.is_(None)
@@ -375,9 +389,9 @@ def list_files(
         select(WalmartWfsFeeFile).order_by(WalmartWfsFeeFile.created_at.desc()).limit(MAX_PAGE_SIZE)
     )
     if store_id:
-        query = query.where(WalmartWfsFeeFile.store_id == store_id)
+        query = query.where(WalmartWfsFeeFile.store_id.in_(_many(store_id)))
     if fee_source:
-        query = query.where(WalmartWfsFeeFile.fee_source == fee_source)
+        query = query.where(WalmartWfsFeeFile.fee_source.in_(_many(fee_source)))
     return [
         WfsFeeFileRead(
             id=f.id,

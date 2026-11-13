@@ -221,14 +221,17 @@ def test_store_is_recognised_without_choosing(service, session):
 
     # 商品投票：GTIN 只在 A 店 → A 店
     voted = _upload(
-        service, S.settlement([S.fee("LostInventory", "2026-10-07", "-1.00", gtin=S.GTIN_1, ref="R1")])
+        service,
+        S.settlement([S.fee("LostInventory", "2026-10-07", "-1.00", gtin=S.GTIN_1, ref="R1")]),
     )
     assert voted.status == "parsed" and voted.store_id == S.STORE_A
 
     # 同一个 Partner ID 以前导入过 → 没有 GTIN 的行也能认
     learned = _upload(
         service,
-        S.settlement([S.fee("Refund", "2026-10-08", "-3.00", reason="StorageFeeDispute", ref="R2")]),
+        S.settlement(
+            [S.fee("Refund", "2026-10-08", "-3.00", reason="StorageFeeDispute", ref="R2")]
+        ),
     )
     assert learned.status == "parsed" and learned.store_id == S.STORE_A
 

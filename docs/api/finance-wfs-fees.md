@@ -34,7 +34,7 @@ Rocky 2026-11-12 口径：一个 tab、一张表、一列费用类型；展示�
 |---|---|---|
 | `GET /fee-types` | view | 费用类型中英文、来源 |
 | `GET /periods` | view | 店铺 × 账单期（领星同步的沃尔玛账单；店铺代码 = 店铺名横杠前编号），页面筛选用；没有账单的沃尔玛店铺（领星店铺表）和只有费用行的店铺也各给一行 |
-| `GET /lines?store_id&report_key&fee_type&fee_source&attribution&date_from&date_to&q&include_missing&page&page_size` | view | 原行分页（≤ 500），每行带 `children` 分摊子行；`q` 搜 ITEM ID / MSKU / SKU / GTIN / 货件号 / Reference |
+| `GET /lines?store_id&report_key&fee_type&fee_source&attribution&date_from&date_to&q&include_missing&page&page_size` | view | 原行分页（≤ 500），每行带 `children` 分摊子行；`store_id` / `report_key` / `fee_type` / `fee_source` / `attribution` 都可逗号分隔多选（summary / checks / files 同）；`split=yes|no` 筛有 / 无分摊子行的原行；`q` 搜 ITEM ID / MSKU / SKU / GTIN / 货件号 / Reference |
 | `GET /summary?store_id&report_key&date_from&date_to` | view | 店铺 × 账单期 × 类型 汇总 + 合计 |
 | `GET /checks?store_id&report_key&only_problem` | view | 核对结果（默认只给没核实的问题） |
 | `GET /files?store_id&fee_source` | view | 文件记录 |

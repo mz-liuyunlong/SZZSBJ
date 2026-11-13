@@ -1,5 +1,6 @@
 /* 财务 · WFS 费用明细 */
-.fin-wfs__sub { font-size: 11px; }
+.fin-wfs__sub { font-size: 11px; color: var(--ant-color-text-quaternary, #bfbfbf) !important; }
+.fin-wfs__bi { line-height: 1.3; }
 .fin-wfs__checks { margin-bottom: 12px; }
 .fin-wfs__checks .ant-alert-description { margin-top: 8px; }
 .fin-wfs__pager { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 8px 0; }

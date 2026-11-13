@@ -23,6 +23,7 @@ from app.core.config import get_settings
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
 from app.modules.wfs_fees import reader
+from app.modules.wfs_fees.parsing import ParseError, expand_upload
 from app.modules.wfs_fees.schemas import (
     WfsFeeAdjustRequest,
     WfsFeeCheckListData,
@@ -37,7 +38,6 @@ from app.modules.wfs_fees.schemas import (
     WfsFeeTypeRead,
     WfsFeeVerifyRequest,
 )
-from app.modules.wfs_fees.parsing import ParseError, expand_upload
 from app.modules.wfs_fees.service import SOURCE_REF, WfsFeeError, WfsFeeService
 
 READ_PERMISSION: Final = "page:finance:wfs-fees:view"
@@ -117,13 +117,16 @@ def list_lines(
     request: Request,
     session: db_session,
     _: viewer,
-    store_id: Annotated[str | None, Query(pattern=r"^[0-9]+$")] = None,
-    report_key: Annotated[str | None, Query(max_length=64)] = None,
-    fee_type: Annotated[str | None, Query(max_length=64)] = None,
-    fee_source: Annotated[str | None, Query(pattern=r"^(settlement|storage|inbound)$")] = None,
+    store_id: Annotated[str | None, Query(pattern=r"^[0-9]+(,[0-9]+)*$", max_length=600)] = None,
+    report_key: Annotated[str | None, Query(max_length=2000)] = None,
+    fee_type: Annotated[str | None, Query(max_length=600)] = None,
+    fee_source: Annotated[
+        str | None, Query(pattern=r"^(settlement|storage|inbound)(,(settlement|storage|inbound))*$")
+    ] = None,
     attribution: Annotated[
         str | None, Query(max_length=120, pattern=r"^[a-z_]+(,[a-z_]+)*$")
-    ] = None,  # 逗号分隔多个（页面按三档筛）
+    ] = None,  # 所有筛选都可多选：逗号分隔（Rocky 11-13）
+    split: Annotated[str | None, Query(pattern=r"^(yes|no)(,(yes|no))?$")] = None,  # 有 / 无分摊
     date_from: date | None = None,
     date_to: date | None = None,
     q: Annotated[str | None, Query(max_length=64)] = None,
@@ -144,6 +147,7 @@ def list_lines(
         include_missing=include_missing,
         page=page,
         page_size=page_size,
+        split=split,
     )
     return success_response(
         request, data=WfsFeeLineListData(items=items, total=total, page=page, page_size=page_size)
@@ -160,8 +164,8 @@ def summarize(
     request: Request,
     session: db_session,
     _: viewer,
-    store_id: Annotated[str | None, Query(pattern=r"^[0-9]+$")] = None,
-    report_key: Annotated[str | None, Query(max_length=64)] = None,
+    store_id: Annotated[str | None, Query(pattern=r"^[0-9]+(,[0-9]+)*$", max_length=600)] = None,
+    report_key: Annotated[str | None, Query(max_length=2000)] = None,
     date_from: date | None = None,
     date_to: date | None = None,
 ) -> SuccessEnvelope[WfsFeeSummaryData, None]:
@@ -183,8 +187,8 @@ def list_checks(
     request: Request,
     session: db_session,
     _: viewer,
-    store_id: Annotated[str | None, Query(pattern=r"^[0-9]+$")] = None,
-    report_key: Annotated[str | None, Query(max_length=64)] = None,
+    store_id: Annotated[str | None, Query(pattern=r"^[0-9]+(,[0-9]+)*$", max_length=600)] = None,
+    report_key: Annotated[str | None, Query(max_length=2000)] = None,
     only_problem: bool = True,
 ) -> SuccessEnvelope[WfsFeeCheckListData, None]:
     return success_response(
@@ -207,8 +211,10 @@ def list_files(
     request: Request,
     session: db_session,
     _: viewer,
-    store_id: Annotated[str | None, Query(pattern=r"^[0-9]+$")] = None,
-    fee_source: Annotated[str | None, Query(pattern=r"^(settlement|storage|inbound)$")] = None,
+    store_id: Annotated[str | None, Query(pattern=r"^[0-9]+(,[0-9]+)*$", max_length=600)] = None,
+    fee_source: Annotated[
+        str | None, Query(pattern=r"^(settlement|storage|inbound)(,(settlement|storage|inbound))*$")
+    ] = None,
 ) -> SuccessEnvelope[WfsFeeFileListData, None]:
     return success_response(
         request,
@@ -222,7 +228,7 @@ def list_files(
     "/imports",
     responses=ERRORS,
     operation_id="uploadFinanceWfsFeeReport",
-    summary="上传一份报表（结算 / 仓储 / 入库运输原始 CSV，或卖家后台下载的 ZIP）；多文件 = 多次调用",
+    summary="上传一份报表（结算 / 仓储 / 入库运输 CSV，或卖家后台 ZIP）；多文件 = 多次调用",
 )
 async def upload_report(
     request: Request,

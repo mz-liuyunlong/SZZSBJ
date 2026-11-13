@@ -46,9 +46,9 @@ function AdjustModal({ row, title, onClose, onDone }: { row: ApiLine; title: str
         {kind === "realloc" && (
           <>
             <Table<Share> size="small" bordered pagination={false} rowKey="key" dataSource={shares} columns={[
-              { title: "GTIN", width: 160, render: (_, s) => <Input size="small" value={s.gtin} placeholder="有就填，自动带出商品" onChange={(e) => edit(s.key, { gtin: e.target.value })} /> },
-              { title: "ITEM ID", width: 140, render: (_, s) => <Input size="small" value={s.item_id} onChange={(e) => edit(s.key, { item_id: e.target.value })} /> },
-              { title: "MSKU", width: 160, render: (_, s) => <Input size="small" value={s.msku} onChange={(e) => edit(s.key, { msku: e.target.value })} /> },
+              { title: "商品条码", width: 160, render: (_, s) => <Input size="small" value={s.gtin} placeholder="有就填，自动带出商品" onChange={(e) => edit(s.key, { gtin: e.target.value })} /> },
+              { title: "商品 ID", width: 140, render: (_, s) => <Input size="small" value={s.item_id} onChange={(e) => edit(s.key, { item_id: e.target.value })} /> },
+              { title: "店铺 SKU", width: 160, render: (_, s) => <Input size="small" value={s.msku} onChange={(e) => edit(s.key, { msku: e.target.value })} /> },
               { title: "金额（USD）", width: 140, render: (_, s) => <InputNumber size="small" style={{ width: "100%" }} value={s.amount} precision={2} onChange={(value) => edit(s.key, { amount: value })} /> },
               { title: "", width: 60, render: (_, s) => <Button type="link" size="small" danger onClick={() => setShares((c) => c.filter((x) => x.key !== s.key))}>删</Button> },
             ]} />
