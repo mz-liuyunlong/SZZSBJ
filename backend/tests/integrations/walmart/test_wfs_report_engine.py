@@ -323,18 +323,46 @@ def test_zip_total_over_the_limit_is_refused(monkeypatch):
 
 
 def test_zip_header_lying_about_the_size_is_still_refused(monkeypatch):
-    # 文件头说很小、实际解压很大：按实际大小再查一遍
+    # 文件头说很小、实际解压很大：zipfile 按文件头截断后 CRC 对不上（bad_zip），
+    # 没截断的话按实际大小再查一遍（zip_too_large）；两种结果都是拒绝，不落盘
     monkeypatch.setattr(E, "MAX_MEMBER_BYTES", 32)
     raw = _zip_many(1, b"a" * 100)
-    real_open = zipfile.ZipFile.infolist
+    real_infolist = zipfile.ZipFile.infolist
 
     def lying(self):
-        infos = real_open(self)
+        infos = real_infolist(self)
         for info in infos:
             info.file_size = 1
         return infos
 
     monkeypatch.setattr(zipfile.ZipFile, "infolist", lying)
+    with pytest.raises((E.ZipTooLarge, zipfile.BadZipFile)):
+        E.Engine._members(raw, True)
+
+
+def test_zip_member_bigger_than_its_header_is_refused_by_size(monkeypatch):
+    # 直接验第二道保险：文件头通过、读出来超了 → member_too_large
+    monkeypatch.setattr(E, "MAX_MEMBER_BYTES", 32)
+    raw = _zip_many(1, b"a" * 32)
+    real_open = zipfile.ZipFile.open
+
+    class Bigger:
+        def __init__(self, fh):
+            self.fh = fh
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self.fh.close()
+
+        def read(self, n=-1):
+            return self.fh.read(n) + b"b"
+
+    def bigger(self, *a, **k):
+        return Bigger(real_open(self, *a, **k))
+
+    monkeypatch.setattr(zipfile.ZipFile, "open", bigger)
     with pytest.raises(E.ZipTooLarge, match="member_too_large"):
         E.Engine._members(raw, True)
 
