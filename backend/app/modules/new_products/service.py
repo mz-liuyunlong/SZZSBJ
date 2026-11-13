@@ -153,8 +153,9 @@ class NewProductService:
         market_score=_MARKET_UNSET,
         *,
         snapshot: ReadSnapshot | None = None,
+        as_of_la=None,
     ):
-        today = datetime.now(LA).date()
+        today = as_of_la or datetime.now(LA).date()
         key = (account, store, item)
         lock = (
             snapshot.first.get(key)
