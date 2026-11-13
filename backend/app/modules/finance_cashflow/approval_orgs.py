@@ -17,7 +17,6 @@ from app.core.config import Settings
 ORG_MAIN: Final = "zsbj"
 ORG_YC: Final = "yc"
 YC_PREFIX: Final = "YC-"
-MAIN_LABEL: Final = "掌上便捷"
 
 
 def yc_enabled(settings: Settings) -> bool:
@@ -33,7 +32,12 @@ def org_serial(org: str, raw: str) -> str:
 
 
 def org_label(settings: Settings, org: str) -> str:
-    return settings.yc_finance_org_label if org == ORG_YC else MAIN_LABEL
+    return settings.yc_finance_org_label if org == ORG_YC else settings.finance_approval_org_label
+
+
+def org_serials(org: str, raw: str) -> str:
+    """关联单号可能是逗号隔开的几张：逐个加前缀。"""
+    return ",".join(org_serial(org, item.strip()) for item in raw.split(",") if item.strip())
 
 
 def _split(raw: str | None) -> set[str]:

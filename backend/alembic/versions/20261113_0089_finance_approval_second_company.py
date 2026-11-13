@@ -37,6 +37,19 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # 流水上还挂着第二家公司的单（YC- 单号）就不回退：旧代码不认 YC- 单号，挂单会变成找不到的单。
+    # 先在日记账里把这些单摘掉再回退（复审 P3-4）。事件表里的 YC- 单号是历史记录，保留不动。
+    attached = op.get_bind().scalar(
+        sa.text(
+            "select count(*) from manual_finance_cash_line_state "
+            "where refs::text like '%YC-%' or coalesce(parts::text, '') like '%YC-%'"
+        )
+    )
+    if attached:
+        raise RuntimeError(
+            "Second-company approvals (YC-) are still attached to journal lines; "
+            "detach them before downgrading 0089"
+        )
     # 第二家公司的单子（单号带 YC-）回到旧结构后没有公司列，删掉，免得和主公司的单混在一起。
     op.execute(sa.text(f"delete from {TABLE} where org <> 'zsbj'"))
     op.drop_index("ix_std_finance_feishu_approvals_org", table_name=TABLE)

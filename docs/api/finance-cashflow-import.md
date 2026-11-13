@@ -19,6 +19,7 @@
 | `YC_FINANCE_APPROVAL_CODES` | 第二家公司的四类审批定义编码，格式同上。不配就不拉第二家；配了但缺一类，同步失败，错误码 `SYNC_FEISHU_APPROVAL_YC_CODES_NOT_CONFIGURED`。 |
 | `YC_FINANCE_ENTITIES` | 逗号分隔：日记账账户「主体」里属于第二家公司的。这些账户的流水只和第二家的审批单配对，其余账户只和主公司的配对；不配时第二家的审批单不自动挂单，只能手动挂。 |
 | `YC_FINANCE_ORG_LABEL` | 第二家公司在页面上显示的名字，默认 `YC`。 |
+| `FINANCE_APPROVAL_ORG_LABEL` | 主公司在页面上显示的名字，默认「主公司」。 |
 
 账户和带名字的分类规则不进仓库，上线时用 `backend/scripts/finance_cash_deploy_load.py` 导入。没导入账户时，上传被拒收并写明「没登记」。
 

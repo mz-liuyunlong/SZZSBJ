@@ -62,6 +62,8 @@ MATCH_DAYS_AFTER = 45
 AMOUNT_TOL = Decimal("0.011")
 PAID_TOL = Decimal("1")
 SERIAL_IN_TEXT = re.compile(r"(?<!\d)20\d{10}(?!\d)")
+# 摘要 / 备注里的单号，带或不带第二家公司的 YC- 前缀
+SERIAL_IN_TEXT_ORG = re.compile(r"(YC-)?(?<!\d)(20\d{10})(?!\d)")
 PAYEE_NOISE = re.compile(r"有限公司|股份|科技|贸易|商贸|网络|实业|集团|\(.*?\)|（.*?）|\s")
 
 
@@ -555,9 +557,11 @@ def find_auto_matches(
     claimed: set[str] = set()
     open_lines = [line for line in lines if line.stage not in locked_stages]
     for line in open_lines:
-        for raw in dict.fromkeys(SERIAL_IN_TEXT.findall(line.text)):
-            # 摘要里写的是飞书上的原单号；第二家公司账户的流水按它的单号（加 YC-）找。
-            serial = org_serial(line.org, raw)
+        found = [(prefix, raw) for prefix, raw in SERIAL_IN_TEXT_ORG.findall(line.text)]
+        for prefix, raw in dict.fromkeys(found):
+            # 摘要里写的是飞书上的原单号：第二家公司账户的流水按它的单号（加 YC-）找；
+            # 原号前面紧挨着 YC- 的就是第二家的单，不当主公司单号。
+            serial = f"{prefix}{raw}" if prefix else org_serial(line.org, raw)
             approval = known.get(serial)
             if (
                 approval is not None

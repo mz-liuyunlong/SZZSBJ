@@ -807,3 +807,17 @@ def test_second_company_client_uses_its_own_credentials():
     assert client.get_user_name("u9") == "合成姓名"
     assert sent["app_id"] == "yc-id"
     assert sent["user_path"] == "/open-apis/contact/v3/users/u9"
+
+
+def test_number_written_with_yc_prefix_is_never_the_main_company_one():
+    main, yc = approval(SERIAL), approval(YC_SERIAL, org=O.ORG_YC)
+    on_main = line("M1", amount="-1", party="", text=f"付款 {YC_SERIAL}")
+    on_yc = line("Y1", amount="-1", party="", text=f"付款 {YC_SERIAL}", org=O.ORG_YC)
+    assert auto([on_main], [main, yc]) == []
+    assert auto([on_yc], [main, yc]) == [("Y1", YC_SERIAL, "text")]
+
+
+def test_related_numbers_each_get_the_prefix():
+    assert O.org_serials(O.ORG_YC, f"{SERIAL},{OTHER}") == f"YC-{SERIAL},YC-{OTHER}"
+    assert O.org_serials(O.ORG_MAIN, f"{SERIAL},{OTHER}") == f"{SERIAL},{OTHER}"
+    assert O.org_serials(O.ORG_YC, "") == ""

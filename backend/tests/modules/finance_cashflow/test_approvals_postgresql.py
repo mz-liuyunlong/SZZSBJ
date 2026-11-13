@@ -711,7 +711,10 @@ class FakeYcClient(FakeClient):
         self.name_calls.append(user_id)
         if self.name_error:
             raise FeishuApprovalError(self.name_error)
-        return self.names.get(user_id, "")
+        name = self.names.get(user_id, "")
+        if isinstance(name, Exception):
+            raise name
+        return name
 
 
 @pytest.fixture
@@ -788,3 +791,68 @@ def test_excluded_department_only_applies_to_the_main_company(session, yc_codes)
     assert [item.serial for item in ApprovalService(session, settings).list_approvals()] == [
         f"YC-{SERIAL}"
     ]
+
+
+def _yc_form(relation):
+    form = [
+        {"name": "付款事由", "type": "textarea", "value": "合成事由"},
+        {"name": "付款金额", "type": "amount", "value": 100.0, "ext": {"currency": "CNY"}},
+        {"name": "收款人", "type": "input", "value": "张三"},
+        {"name": "关联单号", "type": "input", "value": relation},
+    ]
+    return json.dumps(form, ensure_ascii=False)
+
+
+def test_second_company_related_serials_each_get_the_prefix(session, yc_codes):
+    yc = FakeYcClient({"yinst1": ("YC-0002", detail(form=_yc_form(f"{OTHER},{THIRD}")))})
+    execute(session, FakeClient(), yc_client=yc)
+    row = session.scalars(select(FinanceCashApproval)).one()
+    assert row.related_serial == f"YC-{OTHER},YC-{THIRD}"
+
+
+def test_second_company_names_merge_and_one_missing_person_is_skipped(session, yc_codes):
+    timeline = [{"type": "PASS", "create_time": END_MS, "user_id": "y2"}]
+    pending = detail(user_id="y1", status="PENDING", timeline=timeline)
+    execute(
+        session,
+        FakeClient(),
+        yc_client=FakeYcClient(
+            {"yinst1": ("YC-0002", pending)}, names={"y1": "合成甲", "y2": "合成乙"}
+        ),
+    )
+    # 第二次：y1 改了名，y2 查不到（单个人的错误，不是整个应用没权限）
+    gone = FeishuApprovalError("FEISHU_APPROVAL_USER_HTTP_400_CODE_41050")
+    second = FakeYcClient({"yinst1": ("YC-0002", pending)}, names={"y1": "合成甲二", "y2": gone})
+    run = make_run(session)
+    execute(session, FakeClient(), run=run, yc_client=second)
+    row = session.scalars(select(FinanceCashApproval)).one()
+    assert row.people_names == {"y1": "合成甲二", "y2": "合成乙"}
+    assert sorted(second.name_calls) == ["y1", "y2"]
+
+
+def test_manual_attach_on_second_company_account_uses_its_number(session, yc_codes):
+    uid = seed_line(session, uid="c" * 16, amount="-1", party="", account_key="ACC_YC", entity="乙")
+    execute(
+        session,
+        FakeClient({"inst1": (PAYMENT_CODE, detail())}),
+        yc_client=FakeYcClient({"yinst1": ("YC-0002", detail())}),
+    )
+    _post(session, uid, J.KIND_ATTACH_REF, {"ref": SERIAL}, 0)
+    assert session.get(FinanceCashLineState, uid).refs == [f"YC-{SERIAL}"]
+
+
+def test_manual_attach_across_companies_is_refused(session, yc_codes):
+    uid = seed_line(session, uid="d" * 16, amount="-1", party="")
+    execute(session, FakeClient(), yc_client=FakeYcClient({"yinst1": ("YC-0002", detail())}))
+    with pytest.raises(J.EventRejectedError) as caught:
+        _post(session, uid, J.KIND_ATTACH_REF, {"ref": f"YC-{SERIAL}"}, 0)
+    assert caught.value.status_code == 422
+    assert caught.value.code == J.ERR_APPROVAL_OTHER_COMPANY
+
+
+def test_manual_attach_unknown_number_is_404(session):
+    uid = seed_line(session, uid="e" * 16, amount="-1", party="")
+    with pytest.raises(J.EventRejectedError) as caught:
+        _post(session, uid, J.KIND_ATTACH_REF, {"ref": "209901019999"}, 0)
+    assert caught.value.status_code == 404
+    assert caught.value.code == J.ERR_APPROVAL_NOT_FOUND

@@ -1026,6 +1026,8 @@ ERR_INVALID_EVENT = "CASHFLOW_INVALID_EVENT"
 ERR_VERSION_CONFLICT = "CASHFLOW_VERSION_CONFLICT"
 ERR_IDEMPOTENCY_KEY_REUSED = "CASHFLOW_IDEMPOTENCY_KEY_REUSED"
 ERR_PAIR_CONFLICT = "CASHFLOW_PAIR_CONFLICT"
+ERR_APPROVAL_NOT_FOUND = "CASHFLOW_APPROVAL_NOT_FOUND"
+ERR_APPROVAL_OTHER_COMPANY = "CASHFLOW_APPROVAL_OTHER_COMPANY"
 
 
 class EventRejectedError(Exception):
@@ -1377,7 +1379,7 @@ def _fee_parts(
 def _approval_ref(payload: dict[str, Any]) -> str:
     ref = str(payload.get("ref") or "").strip()
     if not APPROVAL_REF.match(ref):
-        raise EventRejectedError(422, "审批单号是 12 位数字")
+        raise EventRejectedError(422, "审批单号是 12 位数字（第二家公司的单号前面带 YC-）")
     return ref
 
 

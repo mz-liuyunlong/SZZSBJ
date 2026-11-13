@@ -27,7 +27,13 @@ from app.integrations.feishu_approval import (
     HttpFeishuApprovalClient,
 )
 from app.modules.finance_cashflow import approvals as A
-from app.modules.finance_cashflow.approval_orgs import ORG_MAIN, ORG_YC, org_serial, yc_enabled
+from app.modules.finance_cashflow.approval_orgs import (
+    ORG_MAIN,
+    ORG_YC,
+    org_serial,
+    org_serials,
+    yc_enabled,
+)
 from app.modules.finance_cashflow.approval_service import ApprovalService
 from app.modules.finance_cashflow.models import FinanceCashApproval
 from app.modules.integration_sync.finance_approval_catalog import (
@@ -51,7 +57,9 @@ SLICE_DAYS = 30
 EXECUTABLE_TRIGGERS = frozenset({"manual", "schedule", "retry"})
 # 已结束的单隔这么久就不再取详情：取消或撤销基本发生在结束后不久，省接口次数。
 REFRESH_DONE_WITHIN = timedelta(days=14)
-SERIAL_ONLY = re.compile(r"\d{12}")
+# 通讯录查姓名：这些错误是整个应用没权限 / 凭证不对，后面的人也查不到，整次任务停查；
+# 其他（某个人查不到、离职等）只跳过这个人（复审 P3-3）。
+NAME_LOOKUP_FATAL = re.compile(r"_(TRANSPORT|TOKEN\w*)$|_HTTP_(401|403)_|_CODE_99991\d{3}$")
 
 
 class FinanceApprovalSyncError(RuntimeError):
@@ -343,8 +351,8 @@ class FeishuFinanceApprovalSyncHandler:
             names: dict[str, str] = {}
             if org != ORG_MAIN:
                 parsed.serial_number = org_serial(org, parsed.serial_number)
-                if SERIAL_ONLY.fullmatch(parsed.related_serial):
-                    parsed.related_serial = org_serial(org, parsed.related_serial)
+                # 关联单号是逗号隔开的几张，逐个加前缀（复审 P3-1）
+                parsed.related_serial = org_serials(org, parsed.related_serial)
                 names = self._people_names(client, A.people_of(detail))
             self._upsert(parsed, run.id, org, names)
             written += 1
@@ -354,7 +362,7 @@ class FeishuFinanceApprovalSyncHandler:
         """按 user_id 查姓名（同一次任务里查过的不再查）。
 
         查不到 / 没有通讯录权限：留空，页面显示编号，不让整次同步失败；
-        权限问题只记一次日志，这次任务后面的单子不再查。
+        应用级的权限 / 凭证问题只记一次日志，这次任务后面的单子不再查；单个人查不到只跳过他。
         """
         lookup = getattr(client, "get_user_name", None)
         out: dict[str, str] = {}
@@ -363,8 +371,11 @@ class FeishuFinanceApprovalSyncHandler:
                 try:
                     self._names[user_id] = lookup(user_id)
                 except FeishuApprovalError as error:
-                    self._names_off = True
-                    logger.warning("finance_approval_user_name_unavailable code=%s", error.code)
+                    if NAME_LOOKUP_FATAL.search(error.code):
+                        self._names_off = True
+                        logger.warning("finance_approval_user_name_unavailable code=%s", error.code)
+                    else:
+                        self._names[user_id] = ""  # 这个人查不到：这次任务里不再查他
             if self._names.get(user_id):
                 out[user_id] = self._names[user_id]
         return out
@@ -426,11 +437,17 @@ class FeishuFinanceApprovalSyncHandler:
         self.session.execute(
             statement.on_conflict_do_update(
                 index_elements=[FinanceCashApproval.instance_code],
-                # 这次没查到姓名（比如通讯录接口临时不通）就保留上次查到的。
+                # 姓名合并更新：老的加新的、新的优先；这次没查到的人保留上次查到的（复审 P3-2）。
                 set_={
-                    key: statement.excluded[key]
+                    key: (
+                        FinanceCashApproval.__table__.c.people_names.op("||")(
+                            statement.excluded.people_names
+                        )
+                        if key == "people_names"
+                        else statement.excluded[key]
+                    )
                     for key in values
-                    if key != "instance_code" and (key != "people_names" or names)
+                    if key != "instance_code"
                 },
             )
         )
