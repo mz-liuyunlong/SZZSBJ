@@ -370,9 +370,14 @@ class FinanceCashApproval(Base):
     __table_args__ = (
         Index("uq_std_finance_feishu_approvals_serial", "serial_number", unique=True),
         Index("ix_std_finance_feishu_approvals_started", "started_at"),
+        Index("ix_std_finance_feishu_approvals_org", "org"),
     )
 
     instance_code: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # 哪家公司的飞书（approval_orgs）：zsbj = 主公司，yc = 第二家（单号带 YC- 前缀）
+    org: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="zsbj", server_default="zsbj"
+    )
     serial_number: Mapped[str] = mapped_column(String(32), nullable=False)
     approval_code: Mapped[str] = mapped_column(String(64), nullable=False)
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -411,6 +416,10 @@ class FinanceCashApproval(Base):
     )
     comments: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    # 第二家公司的人不在系统员工表里：同步时从它的通讯录查到的 user_id → 姓名
+    people_names: Mapped[dict[str, str]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
     last_run_id: Mapped[UUID | None] = mapped_column()
     fetched_at: Mapped[datetime] = mapped_column(

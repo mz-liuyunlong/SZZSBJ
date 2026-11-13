@@ -14,7 +14,12 @@
 | `FINANCE_CASHFLOW_MAX_UPLOAD_BYTES` | 单文件上限，默认 20 MB（20971520）。 |
 | `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | 同步审批单用的飞书应用，和后端其他飞书功能共用。 |
 | `FINANCE_APPROVAL_CODES` | 四类审批定义编码，格式 `费用报销=…,付款申请=…,备用金申请=…,备用金核销=…`，真实值不进仓库。没配置或缺一类时同步失败，错误码 `SYNC_FEISHU_APPROVAL_CODES_NOT_CONFIGURED`。 |
-| `FINANCE_APPROVAL_EXCLUDED_DEPARTMENT_IDS` | 逗号分隔的飞书部门 ID，这些部门的审批单不进报销闭环。 |
+| `FINANCE_APPROVAL_EXCLUDED_DEPARTMENT_IDS` | 逗号分隔的飞书部门 ID，这些部门的审批单不进报销闭环（只对主公司的单生效）。 |
+| `YC_FEISHU_APP_ID` / `YC_FEISHU_APP_SECRET` / `YC_FEISHU_BASE_URL` | 第二家公司（另一个飞书企业）的飞书应用；需要审批只读、通讯录用户基本信息只读权限。 |
+| `YC_FINANCE_APPROVAL_CODES` | 第二家公司的四类审批定义编码，格式同上。不配就不拉第二家；配了但缺一类，同步失败，错误码 `SYNC_FEISHU_APPROVAL_YC_CODES_NOT_CONFIGURED`。 |
+| `YC_FINANCE_ENTITIES` | 逗号分隔：日记账账户「主体」里属于第二家公司的。这些账户的流水只和第二家的审批单配对，其余账户只和主公司的配对；不配时第二家的审批单不自动挂单，只能手动挂。 |
+| `YC_FINANCE_ORG_LABEL` | 第二家公司在页面上显示的名字，默认 `YC`。 |
+| `FINANCE_APPROVAL_ORG_LABEL` | 主公司在页面上显示的名字，默认「主公司」。 |
 
 账户和带名字的分类规则不进仓库，上线时用 `backend/scripts/finance_cash_deploy_load.py` 导入。没导入账户时，上传被拒收并写明「没登记」。
 
@@ -64,7 +69,7 @@ body：`{kind, payload, reason, expected_version, idempotency_key}`。`expected_
 | `unsplit` | | 取消拆分（确认过的手续费行一起取消） |
 | `confirm_fee` | `payload.fee_amount`（正数）；`payload.fee_layer` 可选，默认 `fee`；`payload.transfer_category` 可选（没拆过时转账行的类别）；`payload.alert_type` 可选，只记录 | 确认记为手续费：没拆过的拆成转账行（金额 − 手续费）+ 手续费行（F01，带 `fee_layer`）；拆过的从最大的非手续费行里扣。同一 `fee_layer` 只能确认一次；手续费不能大于等于被扣的那行。按拆分处理，已审过的退回 todo |
 
-已初审或已终审的流水，再改类别、单号、剔除或拆分，自动退回 todo，并多记一条 `auto_reset` 事件。阶段不允许返回 409；内容不合格返回 422；流水不存在或已作废返回 404。
+已初审或已终审的流水，再改类别、单号、剔除或拆分，自动退回 todo，并多记一条 `auto_reset` 事件。阶段不允许返回 409；内容不合格返回 422；流水不存在或已作废返回 404。挂单（`attach_ref` / `attach_part_ref`）成功时返回值里的 `ref` 是最终存下的单号：第二家公司账户上输入原号，返回 `YC-` + 原号；单号在审批单表和剔除清单里都没有返回 404 `CASHFLOW_APPROVAL_NOT_FOUND`（飞书上刚通过的单先同步再挂）。摘要里的第二家前缀不分大小写，`YC-`、`YC `、`YC` 紧挨单号都认。
 
 ### 配对 / 取消配对
 
