@@ -166,6 +166,7 @@ POST /api/finance/wfs-fees/sync             {store_id?, report_key?}（PR 2）
 ## 15. PR 2 变更（2026-11-13）
 
 分支 `fin/wfs-fees-sync`，迁移 `20261113_0091_finance_wfs_fee_reports`（11-14 按合并顺序改号：#345 占 0089、#342 改 0090、本 PR 改 0091）。Rocky 11-13 拍板：
+- 环境变量（docs/ 不能写项目前缀，全名记在这里）：远端开关 `SZZSBJ_WALMART_REMOTE_COLLECTION_ENABLED=1` 和 `SZZSBJ_WALMART_WFS_REPORTS_ENABLED=1`；路由 / 店铺授权 / 店铺 ID 映射沿用 `SZZSBJ_WALMART_REMOTE_ROUTES`、`SZZSBJ_WALMART_REMOTE_APPROVED_STORES`、`SZZSBJ_WALMART_SCF_STORE_ID_MAP`；货件明细归档目录 `SZZSBJ_WALMART_REMOTE_ARCHIVE_ROOT`；结算报表 Partner ID 映射 `FINANCE_WFS_PARTNER_STORE_MAP`。
 - 先由部署AI第一次启用沃尔玛远程采集（生产 → 店铺服务器 SSH），之后靠定时；执行器每次上传，店铺服务器不安装。
 - 报表类型白名单写死 SETTLEMENT、WFS_STORAGE_FEE；入库货件明细一起开（远程采集的 inbound_shipment_items）。
 - 历史只补 10 月；以后要补由部署AI执行。
