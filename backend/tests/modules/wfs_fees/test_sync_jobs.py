@@ -482,3 +482,162 @@ def test_scheduled_partial_failure_does_not_lock_the_button(session):
     state = sync_api.sync_status(session, now=now)
     assert state.lock_reason == "failed"
     assert state.locked_until == now - timedelta(minutes=10) + J.FAILURE_LOCK
+
+
+# ---------------------------------------------------------------- 复审 P3（PR 2）
+
+
+def test_submit_failed_still_blocks_another_post_within_the_hour(session, sync, tmp_path):
+    def failed(store, plan):
+        return [
+            {"op": "submit", "key": a["key"], "outcome": "submit_failed"} for a in plan["actions"]
+        ]
+
+    _run(sync, FakeRemote(tmp_path / "a", failed))
+    jobs = _jobs(session).values()
+    assert {job.status for job in jobs} == {"queued"}
+    assert {job.last_post_at for job in jobs} == {NOW}
+    assert {job.submitted_at for job in jobs} == {None}
+
+    # 下单失败也扣了这一小时的额度：30 分钟后手动同步，同店同类不再 POST
+    # （执行器看到 post_allowed=False 就不下单，回 deferred_rate_window）
+    def deferred(store, plan):
+        return [
+            {"op": "submit", "key": a["key"], "outcome": "deferred_rate_window"}
+            for a in plan["actions"]
+        ]
+
+    again = FakeRemote(tmp_path / "b", deferred)
+    _run(sync, again, now=NOW + timedelta(minutes=30), manual=True)
+    assert [a["post_allowed"] for a in again.plans[0]["actions"]] == [False, False]
+    assert {job.status for job in _jobs(session).values()} == {"queued"}
+    # 过了 1 小时可以再下
+    later = FakeRemote(tmp_path / "c", failed)
+    _run(sync, later, now=NOW + timedelta(minutes=61), manual=True)
+    assert [a["post_allowed"] for a in later.plans[0]["actions"]] == [True, True]
+
+
+def test_reusing_an_existing_request_does_not_use_the_post_quota(session, sync, tmp_path):
+    # 10-23 两期都到了：旧期复用已有请求，新期这次没轮上（执行器每类每次只下 1 单）
+    now = datetime(2026, 10, 23, 8, 0, tzinfo=UTC)
+    old = date(2026, 9, 19)
+
+    def reused(store, plan):
+        return [
+            {"op": "submit", "key": a["key"], "outcome": "reused", "requestId": f"req-old-{i}"}
+            if a["dataStartTime"].startswith(old.isoformat())
+            else {"op": "submit", "key": a["key"], "outcome": "deferred_one_post_per_type_per_run"}
+            for i, a in enumerate(plan["actions"])
+        ]
+
+    _run(sync, FakeRemote(tmp_path / "a", reused), now=now)
+    jobs = list(session.scalars(select(WalmartWfsReportJob)))
+    assert sorted(job.status for job in jobs) == ["queued", "queued", "submitted", "submitted"]
+    assert {job.last_post_at for job in jobs} == {None}
+    assert sync.recent_posts(STORE, now + timedelta(minutes=10)) == frozenset()
+    # 10 分钟后手动同步：新期照常可以下单
+    manual = FakeRemote(tmp_path / "b", _submitted)
+    _run(sync, manual, now=now + timedelta(minutes=10), manual=True)
+    submits = [a for a in manual.plans[0]["actions"] if a["op"] == "submit"]
+    assert len(submits) == 2 and all(a["post_allowed"] for a in submits)
+
+
+def test_import_failing_48_times_in_a_row_fails_the_job(session, sync, tmp_path, monkeypatch):
+    _run(sync, FakeRemote(tmp_path / "a", _submitted))
+    settlement = S.settlement(
+        [S.fee("LostInventory", "2026-09-25", "-1.00", gtin=S.GTIN_1, ref="IMP48")]
+    )
+
+    def downloaded(store, plan):
+        return [
+            {"op": "fetch", "key": a["key"], "outcome": "downloaded", "content": settlement}
+            for a in plan["actions"]
+        ]
+
+    def broken(self, **kwargs):
+        raise RuntimeError("synthetic import failure")
+
+    monkeypatch.setattr(WfsFeeService, "upload", broken)
+    for i in range(J.MAX_IMPORT_FAILURES):
+        when = NOW + timedelta(hours=2 + 2 * i)
+        outcome = _run(sync, FakeRemote(tmp_path / f"r{i}", downloaded), now=when)
+        assert outcome.errors == ["HK2612:WFS_REPORT_IMPORT_FAILED"]
+        if i == J.MAX_IMPORT_FAILURES - 2:
+            jobs = _jobs(session).values()
+            assert {job.status for job in jobs} == {"submitted"}
+            assert {job.import_failures for job in jobs} == {J.MAX_IMPORT_FAILURES - 1}
+    assert outcome.stores[0].failed_jobs == 2 and outcome.stores[0].pending == 0
+    jobs = _jobs(session).values()
+    assert {job.status for job in jobs} == {"failed"}
+    assert {job.error_code for job in jobs} == {"WFS_REPORT_IMPORT_FAILED"}
+    assert all(job.finished_at is not None for job in jobs)
+    assert session.scalars(select(WalmartWfsFeeLine)).first() is None
+
+
+def test_import_failures_reset_after_a_clean_run(session, sync, tmp_path, monkeypatch):
+    _run(sync, FakeRemote(tmp_path / "a", _submitted))
+    original = WfsFeeService.upload
+
+    def broken(self, **kwargs):
+        raise RuntimeError("synthetic import failure")
+
+    def downloaded(store, plan):
+        return [
+            {"op": "fetch", "key": a["key"], "outcome": "downloaded", "content": b"x"}
+            for a in plan["actions"]
+        ]
+
+    def waiting(store, plan):
+        return [{"op": "fetch", "key": a["key"], "outcome": "not_ready"} for a in plan["actions"]]
+
+    monkeypatch.setattr(WfsFeeService, "upload", broken)
+    _run(sync, FakeRemote(tmp_path / "b", downloaded), now=NOW + timedelta(hours=2))
+    assert {job.import_failures for job in _jobs(session).values()} == {1}
+    monkeypatch.setattr(WfsFeeService, "upload", original)
+    _run(sync, FakeRemote(tmp_path / "c", waiting), now=NOW + timedelta(hours=4))
+    assert {job.import_failures for job in _jobs(session).values()} == {0}
+
+
+def test_reallocate_error_does_not_stop_report_import(session, sync, tmp_path, monkeypatch):
+    _run(sync, FakeRemote(tmp_path / "a", _submitted), stores=(STORE, OTHER))
+    _items_csv(
+        tmp_path / "archive",
+        S.STORE_A,
+        "wmt-synthetic-run-03",
+        [(S.CARGO, S.GTIN_1, "MSKU-1", "30", "29")],
+    )
+    settlement = S.settlement(
+        [S.fee("LostInventory", "2026-09-25", "-1.00", gtin=S.GTIN_1, ref="REALLOC1")]
+    )
+
+    def downloaded(store, plan):
+        return [
+            {"op": "fetch", "key": a["key"], "outcome": "downloaded", "content": settlement}
+            if a["reportType"] == "SETTLEMENT" and store.store_code == STORE.store_code
+            else {"op": "fetch", "key": a["key"], "outcome": "not_ready"}
+            for a in plan["actions"]
+        ]
+
+    def broken(self, shipments):
+        raise RuntimeError("synthetic reallocate failure")
+
+    warned: list[str] = []
+    monkeypatch.setattr(WfsFeeService, "reallocate_inbound", broken)
+    monkeypatch.setattr(J.logger, "warning", lambda msg, *args, **kw: warned.append(msg % args))
+    outcome = sync.run(
+        [STORE, OTHER],
+        NOW + timedelta(hours=2),
+        manual=False,
+        actor="tester",
+        run_id=uuid4(),
+        execute=FakeRemote(tmp_path / "remote", downloaded),
+        archive_root=tmp_path / "archive",
+    )
+    assert outcome.errors == []
+    assert outcome.inbound_items == 1 and outcome.inbound_reallocated == 0
+    # 货件明细已经落库，补分摊回滚
+    assert len(session.scalars(select(WalmartWfsInboundItem)).all()) == 1
+    # 报表照常导入，后面的店照常处理
+    assert _jobs(session)["SETTLEMENT"].status == "imported"
+    assert _jobs(session, OTHER)["SETTLEMENT"].polls == 1
+    assert len(warned) == 1 and warned[0].startswith("wfs_inbound_reallocate_failed run_id=")

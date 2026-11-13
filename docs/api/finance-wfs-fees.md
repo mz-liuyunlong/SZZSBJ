@@ -59,9 +59,9 @@ Rocky 2026-11-12 口径：一个 tab、一张表、一列费用类型；展示�
 - 接口：`GET /sync/status`（view）：最近一次运行、失败的店、按钮锁到什么时候；`POST /sync`（sync 权限）：建一次任务中心运行。锁：点一次 90 分钟、最近一次手动同步失败 60 分钟（定时同步部分店失败不锁）、正在跑时都返回 409 `WFS_FEE_SYNC_LOCKED`；任务没开通 503 `WFS_FEE_SYNC_NOT_CONFIGURED`；队列不可用 503 `WFS_FEE_SYNC_UNAVAILABLE`。
 - 任务中心：`walmart` / `walmartWfsFeeReports`，handler `walmart.wfs_fee_reports.v1`；登记脚本 `backend/scripts/bootstrap_wfs_report_governance.py`（要 `WFS_REPORT_BOOTSTRAP_AUTHORIZED=true`；定时默认关，在任务中心开，建议 UTC cron `0 * * * *`）。
 - 期：2026-08-22 起每 14 天一期（周六到周五），止日 + 7 天上海 03:00 以后去要；历史只补 2026-10-01 以后结束的期。
-- 任务表 `ops_walmart_wfs_report_jobs`：一店 × 一类（SETTLEMENT / WFS_STORAGE_FEE）× 一期；queued → submitted → imported / empty，failed / pii_blocked 终态。没生成好隔 1 小时再看，最多 48 次；下单失败最多 3 次（沃尔玛限流不算）；远端连不上 / 令牌被拒连续 48 次算失败；1 小时内下过单的类型不再下；定时不重试失败的，手动同步只重排失败的（疑似个人信息拦下的不重排）；一家店导入出错只回滚这家店。
+- 任务表 `ops_walmart_wfs_report_jobs`：一店 × 一类（SETTLEMENT / WFS_STORAGE_FEE）× 一期；queued → submitted → imported / empty，failed / pii_blocked 终态。没生成好隔 1 小时再看，最多 48 次；下单失败最多 3 次（沃尔玛限流不算）；远端连不上 / 令牌被拒连续 48 次算失败；1 小时内真下过单的类型不再下（下单成功或失败都算，只复用已有请求不算，看 `last_post_at`）；定时不重试失败的，手动同步只重排失败的（疑似个人信息拦下的不重排）；一家店导入出错只回滚这家店、隔 1 小时再来，连续 48 次都出错算失败（`WFS_REPORT_IMPORT_FAILED`）。
 - 远端：沿用沃尔玛远程采集的路由和店铺授权（`SZZSBJ_WALMART_REMOTE_ROUTES`、`SZZSBJ_WALMART_REMOTE_APPROVED_STORES`、`SZZSBJ_WALMART_SCF_STORE_ID_MAP`、云角色），另加开关 `SZZSBJ_WALMART_WFS_REPORTS_ENABLED=1`。每次把执行器 `wfs_report_engine.py` 上传到店铺服务器（核对 sha256）、令牌只走标准输入、跑完拉回结果按 SHA256SUMS 核对、删掉远端目录。执行器白名单写死：只有 SETTLEMENT / WFS_STORAGE_FEE、只有 GET / POST、POST 只发 `/v3/reports/reportRequests`；每店每类每次最多下单 1 次，下单前先复用近 30 天同范围的请求；下载后疑似个人信息不落盘。
 - 仓储费以接口为准：同一期仓储费不要再手动导卖家后台的报表（账期起止不同会被当成交叉账期拒收）。
-- 入库货件明细：每次运行先读远程采集落下的 `daily/<日期>/walmart/<店铺>/<run>/items.csv`（`SZZSBJ_WALMART_REMOTE_ARCHIVE_ROOT`），读过的 run 不再读；读到的货件里还没分摊、没人工调整过的入库运费自动补分摊。
+- 入库货件明细：每次运行先读远程采集落下的 `daily/<日期>/walmart/<店铺>/<run>/items.csv`（`SZZSBJ_WALMART_REMOTE_ARCHIVE_ROOT`），读过的 run 不再读；读到的货件里还没分摊、没人工调整过的入库运费自动补分摊；补分摊出错只记日志，不影响报表导入。
 - 页面：「同步」按钮带确认弹窗、锁定时显示几点后可以再点；最近一次失败时表格上方列出失败的店和原因。
 - 沃尔玛付款对账单（备用金、实付）不在这个 PR，留给回款对账。
