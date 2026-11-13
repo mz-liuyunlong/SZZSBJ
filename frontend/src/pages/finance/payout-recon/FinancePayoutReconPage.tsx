@@ -132,7 +132,7 @@ function FinancePayoutReconPage({ page }: { page: NavigationPage }) {
   return (
     <PageShell page={page} headerActions={<HelpButton title="回款对账" sections={HELP} />}>
       {periods.data ? <ReconWorkbench data={periods.data} /> : (
-        <FinanceBoardFrame title="回款对账" loading={periods.isPending && !periods.error} subtitle="">
+        <FinanceBoardFrame title="回款对账" preview={false} loading={periods.isPending && !periods.error} subtitle="">
           <EmptyState title={periods.error ? "读取失败" : "加载中"} description={periods.error ? reconErrorText(periods.error) : "正在读取回款对账"} />
         </FinanceBoardFrame>
       )}

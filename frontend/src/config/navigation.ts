@@ -243,6 +243,10 @@ export const navigation: NavigationGroup[] = [
       page('finance', 'settlement_reconciliation', '回款对账', '/finance/settlement-reconciliation', {
         status: 'building', readOnly: false, viewPermissionKey: 'page:finance:settlement-reconciliation:view',
       }),
+      // 2026-11-12 Rocky：WFS 费用明细（结算服务费 + 仓储费 + 入库运费，一张表一列费用类型），读写 /api/finance/wfs-fees。
+      page('finance', 'wfs_fees', 'WFS 费用明细', '/finance/wfs-fees', {
+        status: 'building', readOnly: false, viewPermissionKey: 'page:finance:wfs-fees:view',
+      }),
       page('finance', 'performance_report', '财务报表', '/finance/performance-report'),
       page('finance', 'balance_sheet', '资产负债表', '/finance/balance-sheet'),
       page('finance', 'cash_accounts', '账户总览（按月）', '/finance/cash/accounts', {

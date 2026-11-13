@@ -8,11 +8,12 @@ import FinancePlaceholderPage from "@/pages/finance/FinancePlaceholderPage";
 import AccountsAdminPage from "@/pages/finance/cash-flow/AccountsAdminPage";
 import FxRatesPage from "@/pages/finance/cash-flow/FxRatesPage";
 import FinancePayoutReconPage from "@/pages/finance/payout-recon/FinancePayoutReconPage";
+import FinanceWfsFeesPage from "@/pages/finance/wfs-fees/FinanceWfsFeesPage";
 
 type PageComponent = (props: { page: NavigationPage }) => React.JSX.Element;
 
 // 其他标签各自提 PR 时再加回
-const PAGES: Record<string, PageComponent> = { finance_fx_rates: FxRatesPage, finance_settlement_reconciliation: FinancePayoutReconPage };
+const PAGES: Record<string, PageComponent> = { finance_fx_rates: FxRatesPage, finance_settlement_reconciliation: FinancePayoutReconPage, finance_wfs_fees: FinanceWfsFeesPage };
 
 const CASH_VIEWS = { finance_cash_journal: "journal", finance_cash_stock: "stock" } as const;
 

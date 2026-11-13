@@ -27,6 +27,7 @@ import app.modules.sku_detail.models  # noqa: F401  # Register SKU DWD/DWS proje
 import app.modules.walmart_bills.models  # noqa: F401  # Register Walmart bill lines/periods.
 import app.modules.walmart_bills.payout_models  # noqa: F401  # Register payout reconciliation.
 import app.modules.walmart_monitor.models  # noqa: F401  # Register monitor RAW events.
+import app.modules.wfs_fees.models  # noqa: F401  # Register WFS fee files/lines/checks.
 from alembic import context
 from app.core.config import AppEnvironment, SettingsError, get_database_url, get_settings
 from app.db.base import Base
