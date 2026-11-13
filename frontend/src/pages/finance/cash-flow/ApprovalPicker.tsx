@@ -3,16 +3,17 @@
  * 输入单号 / 收款人 / 金额 / 事由里的字都能搜；候选单（金额、日期对得上的）排在最前面；
  * 每个选项右边有「看」，点了打开审批单详情，不会挂上。也可以直接输入 12 位单号回车。
  */
-import { AutoComplete, Typography } from "antd";
+import { AutoComplete, Tag, Typography } from "antd";
 import { useMemo, useState } from "react";
 import { maskCards } from "@/pages/finance/cash-flow/cardMask";
 import { fmtMoney, type FeishuApproval } from "@/pages/finance/localFinData";
 
-const SERIAL = /^\d{12}$/;
+/** 12 位飞书单号；第二家公司的单号前面带 YC- */
+const SERIAL = /^(?:YC-)?\d{12}$/;
 const MAX_OPTIONS = 50;
 
 function matches(item: FeishuApproval, keyword: string) {
-  const text = `${item.serial} ${item.payee} ${item.reason} ${item.kind} ${item.amount ?? ""} ${item.applicant}`.toLowerCase();
+  const text = `${item.org ?? ""} ${item.serial} ${item.payee} ${item.reason} ${item.kind} ${item.amount ?? ""} ${item.applicant}`.toLowerCase();
   return keyword.toLowerCase().split(/\s+/).filter(Boolean).every((word) => text.includes(word));
 }
 
@@ -38,7 +39,7 @@ function ApprovalPicker({ approvals, candidates = [], onPick, onPreview, width =
         <span className="fin-cash-flow__picker-option">
           <span className="fin-cash-flow__picker-text">
             {first.has(item.serial) && <Typography.Text type="warning">候选 </Typography.Text>}
-            {item.serial} · {item.masked ? "****" : fmtMoney(item.amount, item.cur)} · {(item.payee || "—").slice(0, 10)} · {maskCards(item.masked ? "" : item.reason || "").slice(0, 16)}
+            {item.org && <Tag bordered={false} color="purple">{item.org}</Tag>}{item.serial} · {item.masked ? "****" : fmtMoney(item.amount, item.cur)} · {(item.payee || "—").slice(0, 10)} · {maskCards(item.masked ? "" : item.reason || "").slice(0, 16)}
           </span>
           <Typography.Link className="fin-cash-flow__picker-view" onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); }}
             onClick={(event) => { event.preventDefault(); event.stopPropagation(); onPreview(item); }}>看</Typography.Link>

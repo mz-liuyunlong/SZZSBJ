@@ -14,7 +14,11 @@
 | `FINANCE_CASHFLOW_MAX_UPLOAD_BYTES` | 单文件上限，默认 20 MB（20971520）。 |
 | `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | 同步审批单用的飞书应用，和后端其他飞书功能共用。 |
 | `FINANCE_APPROVAL_CODES` | 四类审批定义编码，格式 `费用报销=…,付款申请=…,备用金申请=…,备用金核销=…`，真实值不进仓库。没配置或缺一类时同步失败，错误码 `SYNC_FEISHU_APPROVAL_CODES_NOT_CONFIGURED`。 |
-| `FINANCE_APPROVAL_EXCLUDED_DEPARTMENT_IDS` | 逗号分隔的飞书部门 ID，这些部门的审批单不进报销闭环。 |
+| `FINANCE_APPROVAL_EXCLUDED_DEPARTMENT_IDS` | 逗号分隔的飞书部门 ID，这些部门的审批单不进报销闭环（只对主公司的单生效）。 |
+| `YC_FEISHU_APP_ID` / `YC_FEISHU_APP_SECRET` / `YC_FEISHU_BASE_URL` | 第二家公司（另一个飞书企业）的飞书应用；需要审批只读、通讯录用户基本信息只读权限。 |
+| `YC_FINANCE_APPROVAL_CODES` | 第二家公司的四类审批定义编码，格式同上。不配就不拉第二家；配了但缺一类，同步失败，错误码 `SYNC_FEISHU_APPROVAL_YC_CODES_NOT_CONFIGURED`。 |
+| `YC_FINANCE_ENTITIES` | 逗号分隔：日记账账户「主体」里属于第二家公司的。这些账户的流水只和第二家的审批单配对，其余账户只和主公司的配对；不配时第二家的审批单不自动挂单，只能手动挂。 |
+| `YC_FINANCE_ORG_LABEL` | 第二家公司在页面上显示的名字，默认 `YC`。 |
 
 账户和带名字的分类规则不进仓库，上线时用 `backend/scripts/finance_cash_deploy_load.py` 导入。没导入账户时，上传被拒收并写明「没登记」。
 

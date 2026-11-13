@@ -146,6 +146,11 @@ describe("approvals in the live snapshot", () => {
     expect(item.paid.map((row) => row.line)).toEqual([snapshot.lines[0].id]);
   });
 
+  it("labels the second company's approvals and leaves the main company's unlabelled", () => {
+    const snapshot = buildLiveSnapshot([account], [category], [line()], [], [approval(), approval({ serial: "YC-209901010001", org: "yc", org_label: "合成二", paid: [] })]);
+    expect(snapshot.feishu.map((item) => [item.serial, item.org])).toEqual([["209901010001", undefined], ["YC-209901010001", "合成二"]]);
+  });
+
   it("keeps an unknown paid amount empty instead of 0", () => {
     const snapshot = buildLiveSnapshot([account], [category], [line()], [], [approval({ state: "待定", paid: [{ line_uid: "0123456789abcdef", amount_cny: null }], paid_sum: "0" })]);
     expect(snapshot.feishu[0].paid[0].amt).toBeNull();

@@ -241,6 +241,8 @@ class CashflowApprovalPaidRead(BaseModel):
 class CashflowApprovalRead(BaseModel):
     serial: str
     kind: str
+    org: str = "zsbj"  # 哪家公司的飞书；第二家的单号带 YC-
+    org_label: str = ""
     status: str
     status_text: str
     state: str

@@ -12,8 +12,8 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.modules.finance_cashflow import approval_orgs, journal
 from app.modules.finance_cashflow import approvals as A
-from app.modules.finance_cashflow import journal
 from app.modules.finance_cashflow.models import FinanceCashApproval, FinanceCashLineEvent
 from app.modules.finance_cashflow.schemas import (
     CashflowApprovalCommentRead,
@@ -132,6 +132,7 @@ class ApprovalService:
         """按规则自动挂单，返回挂了几笔。幂等：已挂的、摘掉过的、已审核的都不动。"""
         cash = CashflowService(self.session, self.settings)
         result, by_uid, states = cash._compute()
+        orgs = cash.account_orgs()
         lines = [
             A.MatchLine(
                 line_uid=item.source.line_uid,
@@ -146,6 +147,7 @@ class ApprovalService:
                 stage=states[item.source.line_uid].stage
                 if item.source.line_uid in states
                 else journal.STAGE_TODO,
+                org=orgs.get(item.source.account_key, approval_orgs.ORG_MAIN),
             )
             for item in result.lines
         ]
@@ -203,7 +205,14 @@ class ApprovalService:
         }
         names = self.employee_names()
         return [
-            self._read(row, by_ref.get(row.serial_number, []), shares, rate_of, names)
+            self._read(
+                row,
+                by_ref.get(row.serial_number, []),
+                shares,
+                rate_of,
+                names,
+                approval_orgs.org_label(self.settings, row.org),
+            )
             for row in rows
         ]
 
@@ -231,7 +240,11 @@ class ApprovalService:
         shares: Mapping[str, Mapping[str, Decimal | None]],
         rate_of: Callable[[date], Decimal | None],
         names: Mapping[str, str],
+        org_label: str = "",
     ) -> CashflowApprovalRead:
+        if row.org != approval_orgs.ORG_MAIN:
+            # 第二家公司的 user_id 是它自己飞书的，和员工表对不上：只用同步时从它通讯录查到的姓名。
+            names = row.people_names or {}
         wanted = abs(row.amount) if row.amount is not None else None
         if wanted is not None and row.currency_code != "CNY":
             day = row.started_at.astimezone(A.SHANGHAI).date() if row.started_at else None
@@ -266,6 +279,8 @@ class ApprovalService:
             started_at=_local_text(row.started_at),
             completed_at=_local_text(row.completed_at),
             handled_at=_local_text(row.handled_at),
+            org=row.org,
+            org_label=org_label,
             applicant=names.get(row.applicant_user_id) or row.applicant_user_id,
             reason=row.reason,
             amount=row.amount,

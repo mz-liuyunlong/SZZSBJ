@@ -16,6 +16,8 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from app.modules.finance_cashflow.approval_orgs import ORG_MAIN, org_serial
+
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 STATUS_APPROVED = "APPROVED"
@@ -403,6 +405,7 @@ class MatchApproval:
     currency_code: str
     payee: str
     anchor_day: date | None  # 通过日期，没有时用发起日期
+    org: str = ORG_MAIN  # 哪家公司的飞书；只和同一家公司账户的流水配对
 
 
 @dataclass(frozen=True)
@@ -418,6 +421,7 @@ class MatchLine:
     # 折人民币；cny_exact = 派安盈月结单上的实际到账人民币（不是月汇率估的），可以按分对单。
     amount_cny: Decimal | None = None
     cny_exact: bool = False
+    org: str = ORG_MAIN  # 流水所在账户属于哪家公司（账户主体，见 approval_orgs）
 
 
 # Rocky 11-10：PingPong 专用户的离岸人民币（CNH）和人民币一起比；
@@ -455,7 +459,8 @@ def _in_window(line: MatchLine, approval: MatchApproval) -> bool:
 
 def _approval_open(line: MatchLine, approval: MatchApproval) -> bool:
     return (
-        line.amount < 0
+        approval.org == line.org
+        and line.amount < 0
         and approval.currency_code == "CNY"
         and approval.status not in CANCELLED_STATUSES
         and approval.amount is not None
@@ -550,10 +555,13 @@ def find_auto_matches(
     claimed: set[str] = set()
     open_lines = [line for line in lines if line.stage not in locked_stages]
     for line in open_lines:
-        for serial in dict.fromkeys(SERIAL_IN_TEXT.findall(line.text)):
+        for raw in dict.fromkeys(SERIAL_IN_TEXT.findall(line.text)):
+            # 摘要里写的是飞书上的原单号；第二家公司账户的流水按它的单号（加 YC-）找。
+            serial = org_serial(line.org, raw)
             approval = known.get(serial)
             if (
                 approval is not None
+                and approval.org == line.org
                 and approval.status not in CANCELLED_STATUSES
                 and serial not in line.refs
                 and (line.line_uid, serial) not in refused

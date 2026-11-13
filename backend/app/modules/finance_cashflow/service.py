@@ -18,8 +18,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.modules.finance_cashflow import approval_orgs, journal
 from app.modules.finance_cashflow import approvals as approval_rules
-from app.modules.finance_cashflow import journal
 from app.modules.finance_cashflow.models import (
     FinanceCashAccount,
     FinanceCashAlertClosure,
@@ -108,7 +108,7 @@ KNOWN_ALERT_TYPES = frozenset(
         journal.ALERT_STATEMENT_CONFLICT,  # 月结单前后不一致
     }
 )
-APPROVAL_SERIAL = re.compile(r"\d{12}")
+APPROVAL_SERIAL = re.compile(r"(?:YC-)?\d{12}")
 LINE_TAIL = re.compile(r"[0-9a-f]{6}")
 
 
@@ -828,11 +828,23 @@ class CashflowService:
         ]
 
     def approval_rows(self) -> list[FinanceCashApproval]:
-        """进日记账报销闭环的审批单：排除配置里不走这边账的部门。"""
+        """进日记账报销闭环的审批单：排除配置里不走这边账的部门（部门 ID 是主公司飞书的，
+        只用来排除主公司的单）。"""
         raw = self.settings.finance_approval_excluded_department_ids or ""
         excluded = {item.strip() for item in raw.split(",") if item.strip()}
         rows = self.session.scalars(select(FinanceCashApproval)).all()
-        return [row for row in rows if row.department_id not in excluded]
+        return [
+            row
+            for row in rows
+            if row.org != approval_orgs.ORG_MAIN or row.department_id not in excluded
+        ]
+
+    def account_orgs(self) -> dict[str, str]:
+        """账户 → 公司（按账户主体），流水只和同一家公司的审批单配对。"""
+        rows = self.session.execute(
+            select(FinanceCashAccount.account_key, FinanceCashAccount.entity)
+        ).all()
+        return approval_orgs.account_orgs(self.settings, [(key, entity) for key, entity in rows])
 
     def match_approvals(self) -> list[approval_rules.MatchApproval]:
         out: list[approval_rules.MatchApproval] = []
@@ -846,6 +858,7 @@ class CashflowService:
                     currency_code=row.currency_code,
                     payee=row.payee,
                     anchor_day=anchor.astimezone(SHANGHAI).date() if anchor else None,
+                    org=row.org,
                 )
             )
         return out
@@ -887,6 +900,7 @@ class CashflowService:
         approvals = self.match_approvals()
         if not approvals:
             return {}
+        orgs = self.account_orgs()
         lines = [
             approval_rules.MatchLine(
                 line_uid=item.source.line_uid,
@@ -899,6 +913,7 @@ class CashflowService:
                 stage="",
                 amount_cny=item.amount_cny,
                 cny_exact=item.fx_source in journal.FX_EXACT_SOURCES,
+                org=orgs.get(item.source.account_key, approval_orgs.ORG_MAIN),
             )
             for item in result.lines
         ]

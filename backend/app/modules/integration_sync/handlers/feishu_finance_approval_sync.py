@@ -2,11 +2,14 @@
 
 写法照 PMC 采购同步：运行记录 + 分步记录 + 状态流转；手动、定时、重试都走这里。
 飞书审批列表一次最多查 30 天，所以时间窗口切成 30 天一段，每段一个分步记录。
+第二家公司（另一个飞书企业，env 前缀 YC_）配了审批定义编码就一起拉，单号前加 YC-，
+申请人 / 处理人姓名从它的通讯录查（这些人不在系统员工表里）。见 finance_cashflow.approval_orgs。
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -24,6 +27,7 @@ from app.integrations.feishu_approval import (
     HttpFeishuApprovalClient,
 )
 from app.modules.finance_cashflow import approvals as A
+from app.modules.finance_cashflow.approval_orgs import ORG_MAIN, ORG_YC, org_serial, yc_enabled
 from app.modules.finance_cashflow.approval_service import ApprovalService
 from app.modules.finance_cashflow.models import FinanceCashApproval
 from app.modules.integration_sync.finance_approval_catalog import (
@@ -47,6 +51,7 @@ SLICE_DAYS = 30
 EXECUTABLE_TRIGGERS = frozenset({"manual", "schedule", "retry"})
 # 已结束的单隔这么久就不再取详情：取消或撤销基本发生在结束后不久，省接口次数。
 REFRESH_DONE_WITHIN = timedelta(days=14)
+SERIAL_ONLY = re.compile(r"\d{12}")
 
 
 class FinanceApprovalSyncError(RuntimeError):
@@ -60,8 +65,16 @@ def _default_client() -> FeishuApprovalClient:
     return HttpFeishuApprovalClient(settings)
 
 
-# 本地预览和测试可以换成回放客户端；正式环境只用上面这个。
+def _default_yc_client() -> FeishuApprovalClient:
+    settings = get_settings()
+    if settings.app_env is not AppEnvironment.PRODUCTION:
+        raise FinanceApprovalSyncError("SYNC_FEISHU_APPROVAL_SERVER_ENVIRONMENT_REQUIRED")
+    return HttpFeishuApprovalClient(settings, second_company=True)
+
+
+# 本地预览和测试可以换成回放客户端；正式环境只用上面这两个。
 client_factory: Callable[[], FeishuApprovalClient] = _default_client
+yc_client_factory: Callable[[], FeishuApprovalClient] = _default_yc_client
 
 
 def month_slices(start: datetime, end: datetime) -> list[tuple[int, int]]:
@@ -88,37 +101,76 @@ class FinanceApprovalSyncResult:
 class FeishuFinanceApprovalSyncHandler:
     handler_key = SPEC.handler_key
 
-    def __init__(self, session: Session, *, client: FeishuApprovalClient | None = None) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        client: FeishuApprovalClient | None = None,
+        yc_client: FeishuApprovalClient | None = None,
+    ) -> None:
         self.session = session
         self.repository = IntegrationSyncRepository(session)
         self._client = client
+        self._yc_client = yc_client
+        self._names: dict[str, str] = {}
+        self._names_off = False
 
     def execute(
         self, run: IntegrationSyncRun, interface: IntegrationInterface
     ) -> FinanceApprovalSyncResult:
+        created: list[FeishuApprovalClient] = []
         try:
             self._preflight(run, interface)
-            codes = parse_finance_approval_codes(get_settings().finance_approval_codes)
-            client = self._client or client_factory()
+            settings = get_settings()
+            codes = parse_finance_approval_codes(settings.finance_approval_codes)
+            yc_codes: dict[str, str] | None = None
+            if yc_enabled(settings):
+                try:
+                    yc_codes = parse_finance_approval_codes(settings.yc_finance_approval_codes)
+                except FinanceApprovalCodesError:
+                    raise FinanceApprovalSyncError(
+                        "SYNC_FEISHU_APPROVAL_YC_CODES_NOT_CONFIGURED"
+                    ) from None
+            client = self._client or self._made(created, client_factory)
+            orgs: list[tuple[str, dict[str, str], FeishuApprovalClient]] = [
+                (ORG_MAIN, codes, client)
+            ]
+            if yc_codes is not None:
+                yc_client = self._yc_client or self._made(created, yc_client_factory)
+                orgs.append((ORG_YC, yc_codes, yc_client))
         except (FinanceApprovalSyncError, FinanceApprovalCodesError) as error:
+            self._close(created)
             return self._fail(run, None, str(error))
         except FeishuApprovalError as error:
+            self._close(created)
             return self._fail(run, None, error.code)
         try:
-            run.status = "running"
-            run.started_at = utc_now()
-            self.session.commit()
-        except IntegrityError:
-            self.session.rollback()
-            recovered = self.repository.get_run_for_update(run.id)
-            if recovered is None:
-                raise FinanceApprovalSyncError("SYNC_FEISHU_APPROVAL_RUN_MISSING") from None
-            return self._fail(recovered, None, "SYNC_FEISHU_APPROVAL_ALREADY_RUNNING")
-        try:
-            return self._run(run, client, codes)
+            try:
+                run.status = "running"
+                run.started_at = utc_now()
+                self.session.commit()
+            except IntegrityError:
+                self.session.rollback()
+                recovered = self.repository.get_run_for_update(run.id)
+                if recovered is None:
+                    raise FinanceApprovalSyncError("SYNC_FEISHU_APPROVAL_RUN_MISSING") from None
+                return self._fail(recovered, None, "SYNC_FEISHU_APPROVAL_ALREADY_RUNNING")
+            return self._run(run, orgs)
         finally:
-            if self._client is None:
-                client.close()
+            self._close(created)
+
+    @staticmethod
+    def _made(
+        created: list[FeishuApprovalClient], factory: Callable[[], FeishuApprovalClient]
+    ) -> FeishuApprovalClient:
+        client = factory()
+        created.append(client)
+        return client
+
+    @staticmethod
+    def _close(created: list[FeishuApprovalClient]) -> None:
+        for client in created:
+            client.close()
 
     def _preflight(self, run: IntegrationSyncRun, interface: IntegrationInterface) -> None:
         if (
@@ -140,39 +192,22 @@ class FeishuFinanceApprovalSyncHandler:
         return start, end
 
     def _run(
-        self, run: IntegrationSyncRun, client: FeishuApprovalClient, codes: dict[str, str]
+        self,
+        run: IntegrationSyncRun,
+        orgs: list[tuple[str, dict[str, str], FeishuApprovalClient]],
     ) -> FinanceApprovalSyncResult:
         start, end = self._window(run)
         result = FinanceApprovalSyncResult(run_id=run.id, status="running")
         ordinal = 0
-        for kind, code in codes.items():
-            for slice_no, (start_ms, end_ms) in enumerate(month_slices(start, end)):
-                ordinal += 1
-                work = self._start_work(run, ordinal, kind, slice_no, start_ms, end_ms)
-                try:
-                    listed, written = self._sync_slice(run, client, kind, code, start_ms, end_ms)
-                except FeishuApprovalError as error:
-                    self.session.rollback()
-                    return self._fail(run, work, error.code)
-                except FinanceApprovalSyncError as error:
-                    self.session.rollback()
-                    return self._fail(run, work, str(error))
-                except A.ApprovalParseError as error:
-                    self.session.rollback()
-                    return self._fail(run, work, f"SYNC_FEISHU_APPROVAL_PARSE_{error}".upper())
-                except Exception:
-                    self.session.rollback()
-                    logger.exception("finance_approval_slice_failed run_id=%s", run.id)
-                    return self._fail(run, work, "SYNC_FEISHU_APPROVAL_PUBLISH_FAILED")
-                result.listed += listed
-                result.written += written
-                work.status = "succeeded"
-                work.response_count = listed
-                work.finished_at = utc_now()
-                run.work_items_succeeded += 1
-                run.records_seen += listed
-                run.records_written += written
-                self.session.commit()
+        for org, codes, client in orgs:
+            for kind, code in codes.items():
+                for slice_no, (start_ms, end_ms) in enumerate(month_slices(start, end)):
+                    ordinal += 1
+                    failed = self._run_slice(
+                        run, result, client, org, kind, code, ordinal, slice_no, start_ms, end_ms
+                    )
+                    if failed is not None:
+                        return failed
         try:
             matched = ApprovalService(self.session).auto_match(request_id=str(run.id))
         except Exception:
@@ -193,26 +228,72 @@ class FeishuFinanceApprovalSyncHandler:
         )
         return result
 
+    def _run_slice(
+        self,
+        run: IntegrationSyncRun,
+        result: FinanceApprovalSyncResult,
+        client: FeishuApprovalClient,
+        org: str,
+        kind: str,
+        code: str,
+        ordinal: int,
+        slice_no: int,
+        start_ms: int,
+        end_ms: int,
+    ) -> FinanceApprovalSyncResult | None:
+        """拉一段；失败返回失败结果（整个任务停），成功返回 None。"""
+        work = self._start_work(run, ordinal, org, kind, slice_no, start_ms, end_ms)
+        try:
+            listed, written = self._sync_slice(run, client, org, kind, code, start_ms, end_ms)
+        except FeishuApprovalError as error:
+            self.session.rollback()
+            return self._fail(run, work, error.code)
+        except FinanceApprovalSyncError as error:
+            self.session.rollback()
+            return self._fail(run, work, str(error))
+        except A.ApprovalParseError as error:
+            self.session.rollback()
+            return self._fail(run, work, f"SYNC_FEISHU_APPROVAL_PARSE_{error}".upper())
+        except Exception:
+            self.session.rollback()
+            logger.exception("finance_approval_slice_failed run_id=%s", run.id)
+            return self._fail(run, work, "SYNC_FEISHU_APPROVAL_PUBLISH_FAILED")
+        result.listed += listed
+        result.written += written
+        work.status = "succeeded"
+        work.response_count = listed
+        work.finished_at = utc_now()
+        run.work_items_succeeded += 1
+        run.records_seen += listed
+        run.records_written += written
+        self.session.commit()
+        return None
+
     def _start_work(
         self,
         run: IntegrationSyncRun,
         ordinal: int,
+        org: str,
         kind: str,
         slice_no: int,
         start_ms: int,
         end_ms: int,
     ) -> IntegrationSyncRunWorkItem:
+        params: dict[str, str | int] = {"kind": kind, "start_ms": start_ms, "end_ms": end_ms}
+        if org != ORG_MAIN:
+            params["org"] = org
         work = IntegrationSyncRunWorkItem(
             id=uuid4(),
             run_id=run.id,
             ordinal=ordinal,
             request_kind=SPEC.request_kind,
-            scope_key=kind,
+            # 主公司的分步照旧只写类型；第二家前面带公司，任务中心一眼能看出是哪家失败。
+            scope_key=kind if org == ORG_MAIN else f"{org}:{kind}",
             status="running",
             attempt_count=1,
             offset_value=slice_no,
             length_value=SPEC.default_page_size,
-            request_safe_params={"kind": kind, "start_ms": start_ms, "end_ms": end_ms},
+            request_safe_params=params,
             started_at=utc_now(),
         )
         self.repository.add_work_items([work])
@@ -224,6 +305,7 @@ class FeishuFinanceApprovalSyncHandler:
         self,
         run: IntegrationSyncRun,
         client: FeishuApprovalClient,
+        org: str,
         kind: str,
         code: str,
         start_ms: int,
@@ -253,13 +335,39 @@ class FeishuFinanceApprovalSyncHandler:
             if instance_code in settled:
                 continue
             detail = client.get_instance(instance_code)
-            # 姓名不在这里定：读取时按员工表现查，员工表以后补了人，老单子也能显示名字。
+            # 主公司的姓名不在这里定：读取时按员工表现查，员工表以后补了人，老单子也能显示名字。
+            # 第二家公司的人不在员工表里，这里从它的通讯录查一次，存在这张单上。
             parsed = A.parse_instance(
                 detail, approval_code=code, kind=kind, instance_code=instance_code
             )
-            self._upsert(parsed, run.id)
+            names: dict[str, str] = {}
+            if org != ORG_MAIN:
+                parsed.serial_number = org_serial(org, parsed.serial_number)
+                if SERIAL_ONLY.fullmatch(parsed.related_serial):
+                    parsed.related_serial = org_serial(org, parsed.related_serial)
+                names = self._people_names(client, A.people_of(detail))
+            self._upsert(parsed, run.id, org, names)
             written += 1
         return len(codes), written
+
+    def _people_names(self, client: FeishuApprovalClient, people: set[str]) -> dict[str, str]:
+        """按 user_id 查姓名（同一次任务里查过的不再查）。
+
+        查不到 / 没有通讯录权限：留空，页面显示编号，不让整次同步失败；
+        权限问题只记一次日志，这次任务后面的单子不再查。
+        """
+        lookup = getattr(client, "get_user_name", None)
+        out: dict[str, str] = {}
+        for user_id in sorted(people):
+            if user_id not in self._names and lookup is not None and not self._names_off:
+                try:
+                    self._names[user_id] = lookup(user_id)
+                except FeishuApprovalError as error:
+                    self._names_off = True
+                    logger.warning("finance_approval_user_name_unavailable code=%s", error.code)
+            if self._names.get(user_id):
+                out[user_id] = self._names[user_id]
+        return out
 
     def _settled(self, codes: list[str]) -> set[str]:
         """已结束且结束超过 14 天的单，上次取过就不再取详情。"""
@@ -281,9 +389,13 @@ class FeishuFinanceApprovalSyncHandler:
             and row.completed_at < cutoff
         }
 
-    def _upsert(self, parsed: A.ParsedApproval, run_id: UUID) -> None:
+    def _upsert(
+        self, parsed: A.ParsedApproval, run_id: UUID, org: str, names: dict[str, str]
+    ) -> None:
         values = {
             "instance_code": parsed.instance_code,
+            "org": org,
+            "people_names": names,
             "serial_number": parsed.serial_number,
             "approval_code": parsed.approval_code,
             "kind": parsed.kind,
@@ -314,7 +426,12 @@ class FeishuFinanceApprovalSyncHandler:
         self.session.execute(
             statement.on_conflict_do_update(
                 index_elements=[FinanceCashApproval.instance_code],
-                set_={key: statement.excluded[key] for key in values if key != "instance_code"},
+                # 这次没查到姓名（比如通讯录接口临时不通）就保留上次查到的。
+                set_={
+                    key: statement.excluded[key]
+                    for key in values
+                    if key != "instance_code" and (key != "people_names" or names)
+                },
             )
         )
 

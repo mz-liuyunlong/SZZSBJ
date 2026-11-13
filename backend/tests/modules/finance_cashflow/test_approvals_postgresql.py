@@ -130,14 +130,13 @@ class FakeClient:
         pass
 
 
-def seed_line(session, uid="0123456789abcdef", amount="-100", party="张三", day=date(2026, 10, 2), memo=""):  # fmt: skip
-    account_key = "ACC_TEST"
+def seed_line(session, uid="0123456789abcdef", amount="-100", party="张三", day=date(2026, 10, 2), memo="", account_key="ACC_TEST", entity="甲"):  # fmt: skip
     if session.get(FinanceCashAccount, account_key) is None:
         session.add(
             FinanceCashAccount(
                 account_key=account_key,
-                display_name="甲",
-                entity="甲",
+                display_name=entity,
+                entity=entity,
                 currency_code="CNY",
                 kind="对公",
                 provider="boc",
@@ -219,12 +218,13 @@ def make_run(session, trigger="manual") -> IntegrationSyncRun:
     return run
 
 
-def execute(session, client, run=None):
+def execute(session, client, run=None, yc_client=None):
     run = run or make_run(session)
     from app.modules.integration_sync.repository import IntegrationSyncRepository
 
     interface = IntegrationSyncRepository(session).get_interface(run.interface_id)
-    return run, FeishuFinanceApprovalSyncHandler(session, client=client).execute(run, interface)
+    handler = FeishuFinanceApprovalSyncHandler(session, client=client, yc_client=yc_client)
+    return run, handler.execute(run, interface)
 
 
 def test_sync_writes_approval_and_run_records(session):
@@ -691,3 +691,100 @@ def test_list_refund_still_reduces_paid(session):
     items = _listed(session)
     assert items[SERIAL].paid_sum == Decimal("90.00")
     assert items[OTHER].paid_sum == Decimal("180.00")
+
+
+# ---------------------------------------------------------------- 第二家公司（另一个飞书企业）
+
+YC_CODES = "费用报销=YC-0001,付款申请=YC-0002,备用金申请=YC-0003,备用金核销=YC-0004"
+
+
+class FakeYcClient(FakeClient):
+    """第二家公司的飞书：能按 user_id 查姓名。"""
+
+    def __init__(self, instances=None, *, names=None, name_error=None, **kw):
+        super().__init__(instances, **kw)
+        self.names = names or {}
+        self.name_error = name_error
+        self.name_calls: list[str] = []
+
+    def get_user_name(self, user_id):
+        self.name_calls.append(user_id)
+        if self.name_error:
+            raise FeishuApprovalError(self.name_error)
+        return self.names.get(user_id, "")
+
+
+@pytest.fixture
+def yc_codes(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    monkeypatch.setenv("YC_FINANCE_APPROVAL_CODES", YC_CODES)
+    monkeypatch.setenv("YC_FINANCE_ENTITIES", "乙")
+    monkeypatch.setenv("YC_FINANCE_ORG_LABEL", "合成二")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+def test_second_company_same_number_is_kept_apart_with_prefix(session, yc_codes):
+    timeline = [{"type": "PASS", "create_time": END_MS, "user_id": "y2"}]
+    yc = FakeYcClient(
+        {"yinst1": ("YC-0002", detail(user_id="y1", timeline=timeline))},
+        names={"y1": "合成申请人", "y2": "合成审批人"},
+    )
+    run, result = execute(session, FakeClient({"inst1": (PAYMENT_CODE, detail())}), yc_client=yc)
+    assert result.status == "succeeded"
+    rows = {row.serial_number: row for row in session.scalars(select(FinanceCashApproval))}
+    assert set(rows) == {SERIAL, f"YC-{SERIAL}"}
+    assert rows[SERIAL].org == "zsbj" and rows[SERIAL].people_names == {}
+    assert rows[f"YC-{SERIAL}"].org == "yc"
+    assert rows[f"YC-{SERIAL}"].people_names == {"y1": "合成申请人", "y2": "合成审批人"}
+    works = session.scalars(
+        select(IntegrationSyncRunWorkItem).where(IntegrationSyncRunWorkItem.run_id == run.id)
+    ).all()
+    # 两家公司 × 四种类型 × 两段窗口；第二家的分步前面带公司
+    assert len(works) == 16
+    assert "yc:付款申请" in {work.scope_key for work in works}
+    read = {item.serial: item for item in ApprovalService(session).list_approvals()}
+    assert read[f"YC-{SERIAL}"].org_label == "合成二"
+    assert read[f"YC-{SERIAL}"].applicant == "合成申请人"
+    assert read[f"YC-{SERIAL}"].records[0].who == "合成审批人"
+    assert read[SERIAL].applicant == "u1"
+
+
+def test_second_company_names_unavailable_does_not_fail_the_sync(session, yc_codes):
+    yc = FakeYcClient(
+        {"yinst1": ("YC-0002", detail(user_id="y1"))},
+        name_error="FEISHU_APPROVAL_USER_HTTP_400_CODE_99991672",
+    )
+    _run, result = execute(session, FakeClient(), yc_client=yc)
+    assert result.status == "succeeded"
+    row = session.scalars(select(FinanceCashApproval)).one()
+    assert row.people_names == {}
+    assert _approval_read(session).applicant == "y1"
+
+
+def test_second_company_approval_only_attaches_to_its_own_accounts(session, yc_codes):
+    main_line = seed_line(session, uid="a" * 16)
+    yc_line = seed_line(session, uid="b" * 16, account_key="ACC_YC", entity="乙")
+    yc = FakeYcClient({"yinst1": ("YC-0002", detail())})
+    execute(session, FakeClient(), yc_client=yc)
+    assert session.get(FinanceCashLineState, main_line) is None
+    assert session.get(FinanceCashLineState, yc_line).refs == [f"YC-{SERIAL}"]
+
+
+def test_second_company_codes_must_be_complete(session, monkeypatch):
+    monkeypatch.setenv("YC_FINANCE_APPROVAL_CODES", "费用报销=YC-0001")
+    get_settings.cache_clear()
+    run, result = execute(session, FakeClient(), yc_client=FakeYcClient())
+    assert result.status == "failed"
+    assert run.error_code == "SYNC_FEISHU_APPROVAL_YC_CODES_NOT_CONFIGURED"
+    get_settings.cache_clear()
+
+
+def test_excluded_department_only_applies_to_the_main_company(session, yc_codes):
+    yc = FakeYcClient({"yinst1": ("YC-0002", detail(department_id="d9"))})
+    execute(session, FakeClient(), yc_client=yc)
+    settings = Settings()  # type: ignore[call-arg]
+    settings.finance_approval_excluded_department_ids = "d9"
+    assert [item.serial for item in ApprovalService(session, settings).list_approvals()] == [
+        f"YC-{SERIAL}"
+    ]
