@@ -710,3 +710,22 @@ def test_summary_uses_the_same_filters_as_lines(service, session):
         session, reader.LineFilter(fee_type="LostInventory"), page=1, page_size=50
     )
     assert count == 1
+
+
+def test_cards_ignore_the_attribution_filter(service, session):
+    """复审 P3-1（第 3 轮）：点了一张卡片（按归属筛选），其他卡片不能变成 0。"""
+    _upload(
+        service,
+        S.settlement(
+            [
+                S.fee("LostInventory", "2026-10-07", "-2.00", gtin=S.GTIN_1, ref="C1"),
+                S.fee("Charge", "2026-10-07", "5.00", ref="C2"),
+            ]
+        ),
+    )
+    every = reader.attribution_totals(session, reader.LineFilter())
+    picked = reader.attribution_totals(session, reader.LineFilter(attribution="matched"))
+    assert len(every) >= 2
+    assert sorted((item.attribution, item.rows, item.amount_usd) for item in picked) == sorted(
+        (item.attribution, item.rows, item.amount_usd) for item in every
+    )

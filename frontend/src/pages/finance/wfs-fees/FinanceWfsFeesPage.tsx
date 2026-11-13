@@ -161,7 +161,9 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
   const shownColumns = [...new Set([...columnKeys, "actions"])].map((key) => columns.find((c) => c.key === key)).filter((c): c is ProColumns<Row> => Boolean(c));
   const total = num(summary.data?.total_amount_usd);
   const pageTotal = rows.reduce((sum, row) => sum + (row.amount ?? 0), 0);
-  const totalQuantity = num(summary.data?.total_quantity);
+  // 数量的单位按来源不同（件数、立方英尺……），只选了一种来源时合计才有意义（复审 P3-2）
+  const oneSource = picked.sources.length === 1;
+  const totalQuantity = oneSource ? num(summary.data?.total_quantity) : null;
   const pageQuantity = rows.reduce((sum, row) => sum + (num(row.quantity) ?? 0), 0);
   const toolbar = (
     <>
@@ -204,7 +206,8 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
   const statCard = (key: StatKey, title: string, stat: { rows: number; amount: number } | undefined, tone: ManagementStatCardItem<StatKey>["tone"], icon: ReactNode): ManagementStatCardItem<StatKey> => ({
     key, title, subtitle: stat ? `${stat.rows.toLocaleString()} 笔` : "", value: stat ? usd(stat.amount) : "—", tone, icon,
   });
-  const allStat = summary.data ? { rows: (summary.data.by_attribution ?? []).reduce((n, item) => n + item.rows, 0), amount: total ?? 0 } : undefined;
+  // 卡片不受归属筛选影响（后端 by_attribution 不带归属筛选），费用合计 = 各档相加
+  const allStat = summary.data ? (summary.data.by_attribution ?? []).reduce((acc, item) => ({ rows: acc.rows + item.rows, amount: acc.amount + (num(item.amount_usd) ?? 0) }), { rows: 0, amount: 0 }) : undefined;
   const todoStat = statOf("todo");
   const statCards: ManagementStatCardItem<StatKey>[] = [
     statCard("all", "费用合计", allStat, "normal", STAT_ICON.all),
@@ -241,7 +244,9 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
             totals={{
               store: <Typography.Text strong>合计</Typography.Text>,
               quantity: (
-                <span>{totalQuantity == null ? "—" : totalQuantity.toLocaleString()}<br /><Typography.Text type="secondary" className="fin-wfs__sub">本页 {pageQuantity.toLocaleString()}</Typography.Text></span>
+                oneSource
+                  ? <span>{totalQuantity == null ? "—" : totalQuantity.toLocaleString()}<br /><Typography.Text type="secondary" className="fin-wfs__sub">本页 {pageQuantity.toLocaleString()}</Typography.Text></span>
+                  : <Tooltip title="各来源的数量单位不同，选一种来源后显示合计"><span>—</span></Tooltip>
               ),
               amount: (
                 <Tooltip title={`全部筛选结果合计；本页 ${rows.length} 行合计 ${pageTotal.toFixed(2)}`}>
