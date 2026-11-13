@@ -61,6 +61,10 @@ from app.modules.integration_sync.schemas import (
     WorkItemRead,
 )
 from app.modules.integration_sync.walmart_bill_catalog import WALMART_BILL_SYNC_SPEC
+from app.modules.integration_sync.wfs_report_catalog import (
+    WFS_REPORT_PROVIDER,
+    WFS_REPORT_SYNC_SPEC,
+)
 
 SYNC_INTERFACE_DISABLED = "SYNC_INTERFACE_DISABLED"
 SYNC_RUN_NOT_RETRYABLE = "SYNC_RUN_NOT_RETRYABLE"
@@ -614,6 +618,11 @@ class IntegrationSyncService:
             and interface.endpoint_path == WALMART_BILL_SYNC_SPEC.endpoint_path
             and interface.handler_key == WALMART_BILL_SYNC_SPEC.handler_key
         )
+        is_wfs_report = (
+            interface.provider == WFS_REPORT_PROVIDER
+            and interface.interface_key == WFS_REPORT_SYNC_SPEC.interface_key
+            and interface.handler_key == WFS_REPORT_SYNC_SPEC.handler_key
+        )
         if productlist_only and not (
             is_productlist
             or is_productinfo
@@ -622,6 +631,7 @@ class IntegrationSyncService:
             or is_finance_approval
             or is_fx
             or is_walmart_bill
+            or is_wfs_report
         ):
             raise ApiError(code=SYNC_PRODUCTLIST_ONLY, status_code=409)
         if is_pmc_purchase and (trigger is not TriggerType.MANUAL or config.schedule_enabled):

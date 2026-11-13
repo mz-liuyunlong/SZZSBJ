@@ -9,7 +9,7 @@ Rocky 2026-11-12 口径：一个 tab、一张表、一列费用类型；展示�
 |---|---|---|---|
 | `settlement` | 沃尔玛结算报表（SETTLEMENT；接口下载或卖家后台「服务费 → 下载」） | Refund、PrepServiceFee、MultiChannelFulfillmentFee、LostInventory、InventoryTransferFee、InventoryRemovalOrder、InventoryDisposalOrder、FoundInventory、DiscountAdjustment、DamageInWarehouse、RC_InventoryDisposalFee、Charge、WFSWalmartFaultReturnRestockedFee、ReturnProcessingFee（以报表为准，新类型照原名收） | 报表自带 GTIN；无 GTIN 按规则分摊 |
 | `storage` | 仓储费报表（WFS_STORAGE_FEE） | StorageFee | 报表自带 GTIN / Item ID |
-| `inbound` | 入库运输报告（卖家后台） | InboundTransportationFee | 按货件 → 货件商品实发数量分（PR 2 接领星货件同步；PR 1 靠历史迁入的分摊或人工调整） |
+| `inbound` | 入库运输报告（卖家后台） | InboundTransportationFee | 按货件 → 货件商品件数分（沃尔玛远程采集的入库货件明细 `fact_walmart_wfs_inbound_items`：itemQty，没有时 receivedQty）；报告里的货件号都属于同一家店时自动认店 |
 
 结算报表里的 **FulfillmentFee（配送费）不入表**；StorageFee / InboundTransportationFee 的店铺级周汇总行也不入表（另有专门报表），只用于核对。
 
@@ -43,7 +43,7 @@ Rocky 2026-11-12 口径：一个 tab、一张表、一列费用类型；展示�
 | `POST /lines/{id}/adjust` `{kind: realloc|company, reason, payload:{shares:[{gtin,item_id,msku,amount}]}}` | adjust | 分摊合计必须等于原金额 |
 | `POST /checks/verify` `{store_id, report_key, fee_type, reason}` | adjust | 标已核实；金额变了自动清掉 |
 
-权限键：`page:finance:wfs-fees:view`、`action:finance:wfs-fees:import`、`action:finance:wfs-fees:adjust`、`action:finance:wfs-fees:sync`（PR 2）。错误码前缀 `WFS_FEE_`。
+权限键：`page:finance:wfs-fees:view`、`action:finance:wfs-fees:import`、`action:finance:wfs-fees:adjust`、`action:finance:wfs-fees:sync`。错误码前缀 `WFS_FEE_`。
 
 ## 配置
 
@@ -54,6 +54,13 @@ Rocky 2026-11-12 口径：一个 tab、一张表、一列费用类型；展示�
 
 `backend/scripts/load_wfs_fee_history.py`（上线后按票据在服务器执行，数据不进仓库）：旧系统 `fact_wfs_storage_fee` / `fact_inbound_freight_alloc` 只读导出 → 合成报表导入；已拉的结算报表原始 CSV 直接导入。
 
-## PR 2（待做）
+## 同步（PR 2）
 
-沃尔玛接口拉取（SETTLEMENT、WFS_STORAGE_FEE 报表的提交 / 查状态 / 下载加进云函数放行名单）、任务中心 `walmartWfsFeeReports`（账单日后第 3 天上海 03:00）、页面「同步」按钮、领星 WFS 货件同步 + 入库自动分摊。
+- 接口：`GET /sync/status`（view）：最近一次运行、失败的店、按钮锁到什么时候；`POST /sync`（sync 权限）：建一次任务中心运行。锁：点一次 90 分钟、最近一次失败 60 分钟、正在跑时都返回 409 `WFS_FEE_SYNC_LOCKED`；任务没开通 503 `WFS_FEE_SYNC_NOT_CONFIGURED`；队列不可用 503 `WFS_FEE_SYNC_UNAVAILABLE`。
+- 任务中心：`walmart` / `walmartWfsFeeReports`，handler `walmart.wfs_fee_reports.v1`；登记脚本 `backend/scripts/bootstrap_wfs_report_governance.py`（要 `WFS_REPORT_BOOTSTRAP_AUTHORIZED=true`；定时默认关，在任务中心开，建议 UTC cron `0 * * * *`）。
+- 期：2026-08-22 起每 14 天一期（周六到周五），止日 + 7 天上海 03:00 以后去要；历史只补 2026-10-01 以后结束的期。
+- 任务表 `ops_walmart_wfs_report_jobs`：一店 × 一类（SETTLEMENT / WFS_STORAGE_FEE）× 一期；queued → submitted → imported / empty，failed / pii_blocked 终态。没生成好隔 1 小时再看，最多 48 次；下单失败最多 3 次；定时不重试失败的，手动同步重新排队。
+- 远端：沿用沃尔玛远程采集的路由和店铺授权（`SZZSBJ_WALMART_REMOTE_ROUTES`、`SZZSBJ_WALMART_REMOTE_APPROVED_STORES`、`SZZSBJ_WALMART_SCF_STORE_ID_MAP`、云角色），另加开关 `SZZSBJ_WALMART_WFS_REPORTS_ENABLED=1`。每次把执行器 `wfs_report_engine.py` 上传到店铺服务器（核对 sha256）、令牌只走标准输入、跑完拉回结果按 SHA256SUMS 核对、删掉远端目录。执行器白名单写死：只有 SETTLEMENT / WFS_STORAGE_FEE、只有 GET / POST、POST 只发 `/v3/reports/reportRequests`；每店每类每次最多下单 1 次，下单前先复用近 30 天同范围的请求；下载后疑似个人信息不落盘。
+- 入库货件明细：每次运行先读远程采集落下的 `daily/<日期>/walmart/<店铺>/<run>/items.csv`（`SZZSBJ_WALMART_REMOTE_ARCHIVE_ROOT`），读过的 run 不再读。
+- 页面：「同步」按钮带确认弹窗、锁定时显示几点后可以再点；最近一次失败时表格上方列出失败的店和原因。
+- 沃尔玛付款对账单（备用金、实付）不在这个 PR，留给回款对账。

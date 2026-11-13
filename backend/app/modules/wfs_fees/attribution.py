@@ -150,7 +150,7 @@ def allocate_inbound(
     ]
     children = split_amount(amount, shares)
     if not children:
-        return Allocation(ATTR_UNALLOCATED, note="货件商品明细还没有（等领星货件同步）")
+        return Allocation(ATTR_UNALLOCATED, note="货件商品明细还没有（等沃尔玛入库货件明细）")
     return Allocation(
         ATTR_ALLOCATED,
         children,
