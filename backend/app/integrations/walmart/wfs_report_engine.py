@@ -56,6 +56,10 @@ TIMEOUT = 120
 MIN_INTERVAL = 1.25
 MAX_DOWNLOAD_BYTES = 300 * 1024 * 1024
 MAX_ACTIONS = 20
+# ZIP 解压上限（刘云龙 11-14）：个数 / 单个解压后 / 全部解压后；超了这份报表不处理，不影响别的店
+MAX_ZIP_MEMBERS = 20
+MAX_MEMBER_BYTES = 200 * 1024 * 1024
+MAX_UNZIPPED_BYTES = 500 * 1024 * 1024
 
 # ---- 白名单（测试锁住，改动要 Rocky 批准）
 REPORT_TYPES = {"SETTLEMENT": "v1", "WFS_STORAGE_FEE": "v1"}
@@ -86,6 +90,10 @@ class TokenRejected(Exception):
 
 class Refused(Exception):
     pass
+
+
+class ZipTooLarge(Exception):
+    """ZIP 超过解压上限：str(e) 是原因（too_many_members / member_too_large / total_too_large）。"""
 
 
 def now_iso():
@@ -304,6 +312,10 @@ class Engine:
             res.update(outcome="bad_zip")
             self.results.append(res)
             return
+        except ZipTooLarge as e:
+            res.update(outcome="zip_too_large", zip_limit=str(e))
+            self.results.append(res)
+            return
         pii = self._pii_scan(members)
         if pii:
             res.update(outcome="pii_blocked", pii=pii)
@@ -325,14 +337,27 @@ class Engine:
         if not is_zip:
             return [("report.csv", raw)]
         z = zipfile.ZipFile(io.BytesIO(raw))
-        out = []
-        used = set()
-        for n in z.namelist():
+        wanted = []
+        for info in z.infolist():
+            n = info.filename
             base = os.path.basename(n)
             if n.endswith("/") or not base or base.startswith(".") or n.startswith("__MACOSX/"):
                 continue
             if not base.lower().endswith(".csv"):
                 continue
+            wanted.append(info)
+        # 先按文件头里的大小查，不解压就能拒；真解压时再按实际大小查一遍（文件头可以造假）
+        if len(wanted) > MAX_ZIP_MEMBERS:
+            raise ZipTooLarge("too_many_members")
+        if any(info.file_size > MAX_MEMBER_BYTES for info in wanted):
+            raise ZipTooLarge("member_too_large")
+        if sum(info.file_size for info in wanted) > MAX_UNZIPPED_BYTES:
+            raise ZipTooLarge("total_too_large")
+        out = []
+        used = set()
+        total = 0
+        for info in wanted:
+            base = os.path.basename(info.filename)
             name = re.sub(r"[^A-Za-z0-9_.-]", "_", base)
             stem, ext = os.path.splitext(name)
             serial = 1
@@ -340,7 +365,14 @@ class Engine:
                 serial += 1
                 name = f"{stem}_{serial}{ext}"
             used.add(name)
-            out.append((name, z.read(n)))
+            with z.open(info) as fh:
+                data = fh.read(MAX_MEMBER_BYTES + 1)
+            if len(data) > MAX_MEMBER_BYTES:
+                raise ZipTooLarge("member_too_large")
+            total += len(data)
+            if total > MAX_UNZIPPED_BYTES:
+                raise ZipTooLarge("total_too_large")
+            out.append((name, data))
         return out
 
     @staticmethod

@@ -495,6 +495,8 @@ class WfsReportSync:
                 job.error_code = ("WFS_REPORT_" + outcome.upper())[:64]
             job.next_action_at = now + RETRY_WAIT
             return
+        # 其余（zip_too_large 超过解压上限、refused_bad_request……）：这一份报表直接失败，
+        # 同一份文件再拉也一样，不重试；别的任务、别的店不受影响。
         self._fail(job, "WFS_REPORT_" + (outcome or "unknown").upper(), now)
 
     def _import(

@@ -91,7 +91,7 @@ export function ApprovalDrawer({ item, data, details, onClose }: { item?: Feishu
   const accounts = new Map(data.accounts.map((account) => [account.id, account.name]));
   const hide = (value: string) => (item.masked ? "****" : value ? <CardText text={value} /> : EMPTY);
   return (
-    <Drawer open width={640} rootClassName="fin-cash-flow__drawer" onClose={onClose} title={<Space>飞书审批单 {item.serial}<Tag bordered={false} color={STATE_COLOR[item.state]}>{item.state}</Tag></Space>}>
+    <Drawer open width={640} rootClassName="fin-cash-flow__drawer" onClose={onClose} title={<Space>飞书审批单 {item.serial}{item.org && <Tag bordered={false} color="purple">{item.org}</Tag>}<Tag bordered={false} color={STATE_COLOR[item.state]}>{item.state}</Tag></Space>}>
       {details[item.serial] ? <ApprovalPanel view={viewOf(item.serial, item, details[item.serial])} /> : <>
       <Descriptions size="small" column={1} bordered>
         <Descriptions.Item label="类型">{item.kind}</Descriptions.Item>
