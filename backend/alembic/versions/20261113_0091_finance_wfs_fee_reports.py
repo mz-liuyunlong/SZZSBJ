@@ -4,7 +4,7 @@ fact_walmart_wfs_fee_lines; plus the inbound shipment items (shipped / received 
 shipment and item) collected by the Walmart remote collection, used to split inbound
 transportation fees by shipped units.
 
-Both tables start empty. No permission changes (action:finance:wfs-fees:sync was added in 0089).
+Both tables start empty. No permission changes (action:finance:wfs-fees:sync was added in 0090).
 """
 
 from collections.abc import Sequence
@@ -14,8 +14,8 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision: str = "20261113_0090_finance_wfs_fee_reports"
-down_revision: str | Sequence[str] | None = "20261113_0089_finance_wfs_fees"
+revision: str = "20261113_0091_finance_wfs_fee_reports"
+down_revision: str | Sequence[str] | None = "20261113_0090_finance_wfs_fees"
 branch_labels = None
 depends_on = None
 

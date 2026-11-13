@@ -641,3 +641,25 @@ def test_reallocate_error_does_not_stop_report_import(session, sync, tmp_path, m
     assert _jobs(session)["SETTLEMENT"].status == "imported"
     assert _jobs(session, OTHER)["SETTLEMENT"].polls == 1
     assert len(warned) == 1 and warned[0].startswith("wfs_inbound_reallocate_failed run_id=")
+
+
+def test_oversized_zip_fails_only_that_report(session, sync, tmp_path):
+    _run(sync, FakeRemote(tmp_path / "a", _submitted), stores=(STORE, OTHER))
+
+    def answers(store, plan):
+        return [
+            {"op": "fetch", "key": a["key"], "outcome": "zip_too_large", "zip_limit": "total"}
+            if a["reportType"] == "SETTLEMENT" and store.store_code == STORE.store_code
+            else {"op": "fetch", "key": a["key"], "outcome": "not_ready"}
+            for a in plan["actions"]
+        ]
+
+    later = NOW + timedelta(hours=2)
+    outcome = _run(sync, FakeRemote(tmp_path / "b", answers), now=later, stores=(STORE, OTHER))
+    assert outcome.errors == []
+    jobs = _jobs(session)
+    assert jobs["SETTLEMENT"].status == "failed"
+    assert jobs["SETTLEMENT"].error_code == "WFS_REPORT_ZIP_TOO_LARGE"
+    assert jobs["WFS_STORAGE_FEE"].status == "submitted"
+    assert {job.status for job in _jobs(session, OTHER).values()} == {"submitted"}
+    assert session.scalars(select(WalmartWfsFeeLine)).first() is None
