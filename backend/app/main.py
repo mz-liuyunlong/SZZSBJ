@@ -9,6 +9,7 @@ from app.core.api import SuccessEnvelope, install_api_foundation, success_respon
 from app.core.auth import enforce_protected_by_default
 from app.core.local_scoped_writes import install_local_scoped_write_guard
 from app.db.session import dispose_engine
+from app.modules.ads_search_terms.router import router as ads_search_terms_router
 from app.modules.after_sales.router import router as after_sales_router
 from app.modules.ai_runtime.general_routes import router as ai_runtime_router
 from app.modules.ai_runtime.listing_routes import router as ai_listing_router
@@ -82,6 +83,7 @@ def create_app() -> FastAPI:
     )
     install_api_foundation(application)
     install_local_scoped_write_guard(application)
+    application.include_router(ads_search_terms_router)
     application.include_router(after_sales_router)
     application.include_router(ai_runtime_router)
     application.include_router(skill_library_router)

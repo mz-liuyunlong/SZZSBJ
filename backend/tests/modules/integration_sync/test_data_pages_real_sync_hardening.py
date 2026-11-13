@@ -375,9 +375,13 @@ def test_ad_identity_hash_distinguishes_same_source_key_across_campaign_context(
 class _CaptureSession:
     def __init__(self) -> None:
         self.calls: list[tuple[Any, Any]] = []
+        self.added: list[Any] = []
 
     def execute(self, statement: Any, params: Any = None) -> None:
         self.calls.append((statement, params))
+
+    def add(self, value: Any) -> None:
+        self.added.append(value)
 
 
 def _ad_writer_runner(session: _CaptureSession) -> DataPagesRealSyncRunner:
@@ -628,3 +632,195 @@ def test_dedupe_ad_rows_for_resolution_matches_write_ads_identity_collapse() -> 
     assert len(deduped) == 1
     assert deduped[0]["adSpend"] == "6.42"
     assert deduped[0]["numAdsShown"] == "2775"
+
+
+def test_sp_campaign_bundle_uses_verified_campaign_ids_for_search_and_manual_keywords() -> None:
+    client = _SequenceClient(
+        [
+            _response(
+                parser_key="walmart_sp_campaign_list",
+                rows=(
+                    {
+                        "advertiserId": "123",
+                        "campaignId": "1001",
+                        "campaignType": "sponsoredProducts",
+                        "targetingType": "auto",
+                    },
+                    {
+                        "advertiserId": "123",
+                        "campaignId": "2001",
+                        "campaignType": "sponsoredProducts",
+                        "targetingType": "manual",
+                    },
+                    {
+                        "advertiserId": "999",
+                        "campaignId": "9001",
+                        "targetingType": "auto",
+                    },
+                ),
+            ),
+            _response(
+                parser_key="walmart_sp_search_term_list",
+                rows=(
+                    {
+                        "advertiserId": "123",
+                        "campaignId": "1001",
+                        "searchedKeyword": "lemon squeezer",
+                        "targetingType": "auto",
+                    },
+                ),
+            ),
+            _response(
+                parser_key="walmart_sp_keyword_list",
+                rows=(
+                    {
+                        "advertiserId": "123",
+                        "campaignId": "2001",
+                        "adGroupId": "group-1",
+                        "keywordName": "lemon squeezer",
+                    },
+                ),
+            ),
+        ]
+    )
+    runner = _runner(client)
+
+    campaign_map, search_terms, manual_keywords = runner._fetch_sp_search_terms_bundle(("123",))
+
+    assert set(campaign_map) == {("123", "1001"), ("123", "2001")}
+    assert len(search_terms) == 1
+    assert len(manual_keywords) == 1
+    assert client.calls[0]["body"]["campaignType"] == [
+        "sponsoredProducts-manual",
+        "sponsoredProducts-auto",
+    ]
+    assert client.calls[0]["body"]["operationSourceType"] == "gateway"
+    assert client.calls[1]["body"]["campaignIds"] == [1001, 2001]
+    assert client.calls[2]["body"]["campaignIds"] == [2001]
+
+
+def test_sp_campaign_pagination_fails_closed_when_reported_total_is_incomplete() -> None:
+    client = _SequenceClient(
+        [
+            _response(
+                parser_key="walmart_sp_campaign_list",
+                rows=(
+                    {"advertiserId": "123", "campaignId": "1001"},
+                    {"advertiserId": "123", "campaignId": "1002"},
+                ),
+                total=3,
+                page_no=1,
+                page_size=2,
+            ),
+            _response(
+                parser_key="walmart_sp_campaign_list",
+                rows=(),
+                total=3,
+                page_no=2,
+                page_size=2,
+            ),
+        ]
+    )
+    runner = _runner(client, page_size=2)
+
+    with pytest.raises(
+        DataPagesRealSyncError,
+        match="DATA_PAGES_PAGINATION_INCOMPLETE:walmartSpCampaignList",
+    ):
+        runner._fetch_page_all(
+            "walmart_sp_campaign_list",
+            lambda page, size: {"pageNum": page, "pageSize": size},
+            page_size=2,
+            require_complete_total=True,
+        )
+
+
+def test_write_search_term_fact_uses_verified_campaign_and_source_identity() -> None:
+    session = _CaptureSession()
+    runner = _ad_writer_runner(session)
+    runner._advertiser_context = cast(
+        Any, lambda _advertiser_id: ("store-1", "Advertiser", "Seller")
+    )
+    runner._listing_mapping_status = cast(Any, lambda _store_id, _item_id: "unique")
+    campaign_map = {
+        ("adv-1", "campaign-1"): (
+            "auto",
+            {
+                "campaignName": "Auto campaign",
+                "campaignType": "sponsoredProducts",
+                "targetingType": "auto",
+            },
+        )
+    }
+
+    count = runner._write_search_terms(
+        [
+            {
+                "advertiserId": "adv-1",
+                "campaignId": "campaign-1",
+                "searchedKeyword": "  Lemon   Squeezer ",
+                "targetingType": "auto",
+                "storeId": "store-1",
+                "itemId": "item-1",
+                "adSpend": "1.25",
+                "attributedOrders": "1",
+                "key": "row-1",
+            }
+        ],
+        campaign_map,
+    )
+
+    assert count == 1
+    fact = session.added[0]
+    assert fact.normalized_search_term == "lemon squeezer"
+    assert fact.targeting_type == "auto"
+    assert fact.store_id == "store-1"
+    assert fact.item_id == "item-1"
+    assert fact.listing_mapping_status == "unique"
+    assert len(fact.source_identity_hash) == 64
+    assert len(fact.source_line_hash) == 64
+
+
+def test_write_manual_keyword_fact_requires_verified_manual_campaign() -> None:
+    session = _CaptureSession()
+    runner = _ad_writer_runner(session)
+    runner._advertiser_context = cast(
+        Any, lambda _advertiser_id: ("store-1", "Advertiser", "Seller")
+    )
+    runner._listing_mapping_status = cast(Any, lambda _store_id, _item_id: "unique")
+    campaign_map = {
+        ("adv-1", "manual-1"): (
+            "manual",
+            {
+                "campaignName": "Manual campaign",
+                "campaignType": "sponsoredProducts",
+                "targetingType": "manual",
+            },
+        )
+    }
+
+    count = runner._write_manual_keywords(
+        [
+            {
+                "advertiserId": "adv-1",
+                "campaignId": "manual-1",
+                "adGroupId": "group-1",
+                "keywordId": "keyword-1",
+                "keywordName": "lemon squeezer",
+                "keywordBid": "0.75",
+            },
+            {
+                "advertiserId": "adv-1",
+                "campaignId": "auto-1",
+                "adGroupId": "group-2",
+                "keywordName": "lemon press",
+            },
+        ],
+        campaign_map,
+    )
+
+    assert count == 1
+    assert len(session.added) == 1
+    assert session.added[0].targeting_type == "manual"
+    assert str(session.added[0].keyword_bid_amount) == "0.75"
+    assert runner.summary.manual_keyword_unverified_rows == 1

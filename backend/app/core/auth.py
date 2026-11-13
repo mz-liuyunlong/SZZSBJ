@@ -42,6 +42,8 @@ _PREVIEW_PERMISSIONS: Final = frozenset(
         "page:pmc:domestic-warehouse-board:view",
         "page:operations:plan:view",
         "page:data-center:task-center:view",
+        "page:ads:search-terms:view",
+        "action:ads:search-terms:manage-actions",
         "products:read",
         "products:pricing_rules:read",
         "products:cost:read",
@@ -74,6 +76,7 @@ _PREVIEW_PATH_PREFIXES: Final = frozenset(
         "/api/operations/",
         "/api/operations/plans/",
         "/api/integrations/sync-runs/",
+        "/api/ads/search-terms/",
     }
 )
 _PREVIEW_READ_PATHS: Final[frozenset[str]] = frozenset(

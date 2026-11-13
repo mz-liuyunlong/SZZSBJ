@@ -30,6 +30,10 @@ from app.integrations.lingxing.token_manager import (
     LingxingTokenManager,
     get_shared_lingxing_token_manager,
 )
+from app.modules.ads_search_terms.models import (
+    WalmartAdSearchTermDailyFact,
+    WalmartManualKeywordDailyFact,
+)
 from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 from app.modules.integration_sync.catalog import IntegrationCatalogService
 from app.modules.integration_sync.data_pages_catalog import DATA_PAGES_SYNC_INTERFACE_SPECS_BY_KEY
@@ -185,6 +189,12 @@ class DataPagesRealSyncSummary:
     ad_mapped_rows: int = 0
     ad_unresolved_rows: int = 0
     ad_unresolved_positive_spend: Decimal = Decimal("0")
+    sp_campaign_rows: int = 0
+    sp_campaign_unverified_rows: int = 0
+    search_term_rows: int = 0
+    search_term_unverified_rows: int = 0
+    manual_keyword_rows: int = 0
+    manual_keyword_unverified_rows: int = 0
     mart_daily_sales_rows: int = 0
     mart_order_profit_rows: int = 0
     mart_listing_rows: int = 0
@@ -215,6 +225,12 @@ class DataPagesRealSyncSummary:
             f"ad_mapped_rows={self.ad_mapped_rows}",
             f"ad_unresolved_rows={self.ad_unresolved_rows}",
             f"ad_unresolved_positive_spend={self.ad_unresolved_positive_spend}",
+            f"sp_campaign_rows={self.sp_campaign_rows}",
+            f"sp_campaign_unverified_rows={self.sp_campaign_unverified_rows}",
+            f"search_term_rows={self.search_term_rows}",
+            f"search_term_unverified_rows={self.search_term_unverified_rows}",
+            f"manual_keyword_rows={self.manual_keyword_rows}",
+            f"manual_keyword_unverified_rows={self.manual_keyword_unverified_rows}",
             f"mart_daily_sales_rows={self.mart_daily_sales_rows}",
             f"mart_order_profit_rows={self.mart_order_profit_rows}",
             f"mart_listing_rows={self.mart_listing_rows}",
@@ -507,6 +523,10 @@ class DataPagesRealSyncRunner:
         self._listing_capture_by_identity: dict[tuple[str, str, str], datetime] = {}
         self.store_ids: tuple[str, ...] = ()
         self.advertiser_ids: tuple[str, ...] = ()
+        self._advertiser_context_cache: dict[
+            str, tuple[str | None, str | None, str | None]
+        ] = {}
+        self._listing_mapping_cache: dict[tuple[str, str], str] = {}
 
     def execute(self) -> DataPagesRealSyncSummary:
         if self.client is None:
@@ -552,6 +572,11 @@ class DataPagesRealSyncRunner:
             ad_rows: list[dict[str, Any]] = []
             for advertiser_id in self.advertiser_ids[: self.max_advertisers]:
                 ad_rows.extend(self._fetch_ads_all(advertiser_id))
+            campaign_map, search_term_rows, manual_keyword_rows = (
+                self._fetch_sp_search_terms_bundle(
+                    self.advertiser_ids[: self.max_advertisers]
+                )
+            )
 
             self.summary.store_rows = self._write_stores(stores)
             self.summary.advertiser_rows = self._write_advertisers(advertisers)
@@ -560,6 +585,13 @@ class DataPagesRealSyncRunner:
             self.summary.order_rows = self._write_orders(orders)
             self.summary.refund_rows = self._write_refunds(refunds)
             self.summary.ad_rows = self._write_ads(ad_rows)
+            self.summary.sp_campaign_rows = len(campaign_map)
+            self.summary.search_term_rows = self._write_search_terms(
+                search_term_rows, campaign_map
+            )
+            self.summary.manual_keyword_rows = self._write_manual_keywords(
+                manual_keyword_rows, campaign_map
+            )
 
             self.summary.order_unresolved_rows = self._resolve_order_items()
             self.summary.refund_unresolved_rows = self._resolve_refund_items()
@@ -671,9 +703,11 @@ class DataPagesRealSyncRunner:
         body_builder: Any,
         *,
         body_suffix: str | None = None,
+        page_size: int | None = None,
+        require_complete_total: bool = False,
     ) -> list[dict[str, Any]]:
         spec = DATA_PAGES_SYNC_INTERFACE_SPECS_BY_KEY[parser_key]
-        size = self.page_size
+        size = page_size or self.page_size
         page_no = 1
         rows: list[dict[str, Any]] = []
         previous_signature: str | None = None
@@ -692,7 +726,13 @@ class DataPagesRealSyncRunner:
             previous_signature = signature
             rows.extend(current)
             total = _total_of(response.response_json)
-            if not current or len(current) < size or (total and len(rows) >= total):
+            if not current or len(current) < size:
+                if require_complete_total and total and len(rows) < total:
+                    raise DataPagesRealSyncError(
+                        f"DATA_PAGES_PAGINATION_INCOMPLETE:{spec.interface_key}"
+                    )
+                return rows
+            if not require_complete_total and total and len(rows) >= total:
                 return rows
             page_no += 1
         raise DataPagesRealSyncError(f"DATA_PAGES_MAX_PAGES_EXCEEDED:{spec.interface_key}")
@@ -743,6 +783,531 @@ class DataPagesRealSyncRunner:
             if not current or len(current) < size:
                 return rows
         raise DataPagesRealSyncError("DATA_PAGES_MAX_PAGES_EXCEEDED:walmartAdItemSpList")
+
+
+    def _fetch_sp_campaigns_all(self, advertiser_id: str) -> list[dict[str, Any]]:
+        spec = DATA_PAGES_SYNC_INTERFACE_SPECS_BY_KEY["walmart_sp_campaign_list"]
+        advertiser_value: int | str = (
+            int(advertiser_id) if advertiser_id.isdecimal() else advertiser_id
+        )
+        day = self.business_date.isoformat()
+        return self._fetch_page_all(
+            "walmart_sp_campaign_list",
+            lambda page, size: {
+                "advertiserIds": [advertiser_value],
+                "campaignType": list(SP_SEARCH_CAMPAIGN_TYPES),
+                "day": 14,
+                "endDate": day,
+                "operationSourceType": "gateway",
+                "pageNum": page,
+                "pageSize": size,
+                "paging": True,
+                "startDate": day,
+            },
+            body_suffix=advertiser_id,
+            page_size=min(self.page_size, spec.default_page_size),
+            require_complete_total=True,
+        )
+
+    def _fetch_sp_search_terms_all(
+        self,
+        advertiser_id: str,
+        campaign_ids: list[str],
+    ) -> list[dict[str, Any]]:
+        spec = DATA_PAGES_SYNC_INTERFACE_SPECS_BY_KEY["walmart_sp_search_term_list"]
+        advertiser_value: int | str = (
+            int(advertiser_id) if advertiser_id.isdecimal() else advertiser_id
+        )
+        day = self.business_date.isoformat()
+        rows: list[dict[str, Any]] = []
+        for chunk_index, offset in enumerate(range(0, len(campaign_ids), 20), start=1):
+            campaign_chunk = campaign_ids[offset : offset + 20]
+            campaign_values = [
+                int(value) if value.isdecimal() else value for value in campaign_chunk
+            ]
+            rows.extend(
+                self._fetch_page_all(
+                    "walmart_sp_search_term_list",
+                    lambda page, size, campaign_values=campaign_values: {
+                        "advertiserIds": [advertiser_value],
+                        "campaignIds": campaign_values,
+                        "day": 14,
+                        "endDate": day,
+                        "operationSourceType": "gateway",
+                        "pageNum": page,
+                        "pageSize": size,
+                        "paging": True,
+                        "startDate": day,
+                    },
+                    body_suffix=f"{advertiser_id}:campaigns:{chunk_index}",
+                    page_size=min(self.page_size, spec.default_page_size),
+                    require_complete_total=True,
+                )
+            )
+        return rows
+
+    def _fetch_sp_manual_keywords_all(
+        self,
+        advertiser_id: str,
+        campaign_ids: list[str],
+    ) -> list[dict[str, Any]]:
+        spec = DATA_PAGES_SYNC_INTERFACE_SPECS_BY_KEY["walmart_sp_keyword_list"]
+        advertiser_value: int | str = (
+            int(advertiser_id) if advertiser_id.isdecimal() else advertiser_id
+        )
+        day = self.business_date.isoformat()
+        rows: list[dict[str, Any]] = []
+        for chunk_index, offset in enumerate(range(0, len(campaign_ids), 20), start=1):
+            campaign_chunk = campaign_ids[offset : offset + 20]
+            campaign_values = [
+                int(value) if value.isdecimal() else value for value in campaign_chunk
+            ]
+            rows.extend(
+                self._fetch_page_all(
+                    "walmart_sp_keyword_list",
+                    lambda page, size, campaign_values=campaign_values: {
+                        "advertiserIds": [advertiser_value],
+                        "campaignIds": campaign_values,
+                        "campaignType": list(SP_SEARCH_CAMPAIGN_TYPES),
+                        "day": 14,
+                        "endDate": day,
+                        "pageNum": page,
+                        "pageSize": size,
+                        "paging": True,
+                        "startDate": day,
+                    },
+                    body_suffix=f"{advertiser_id}:manual-campaigns:{chunk_index}",
+                    page_size=min(self.page_size, spec.default_page_size),
+                    require_complete_total=True,
+                )
+            )
+        return rows
+
+    def _fetch_sp_search_terms_bundle(
+        self,
+        advertiser_ids: Iterable[str],
+    ) -> tuple[
+        dict[tuple[str, str], tuple[str, dict[str, Any]]],
+        list[dict[str, Any]],
+        list[dict[str, Any]],
+    ]:
+        campaign_map: dict[tuple[str, str], tuple[str, dict[str, Any]]] = {}
+        advertisers = tuple(dict.fromkeys(advertiser_ids))
+        for advertiser_id in advertisers:
+            campaign_rows = self._fetch_sp_campaigns_all(advertiser_id)
+            for campaign in campaign_rows:
+                row_advertiser_id = _field(campaign, "advertiserId", "advertiser_id")
+                campaign_id = _field(campaign, "campaignId", "campaign_id")
+                targeting_type = _campaign_targeting_type(campaign)
+                if (
+                    row_advertiser_id != advertiser_id
+                    or campaign_id is None
+                    or targeting_type not in {"auto", "manual"}
+                ):
+                    self.summary.sp_campaign_unverified_rows += 1
+                    continue
+                key = (row_advertiser_id, campaign_id)
+                previous = campaign_map.get(key)
+                if previous is not None and previous[0] != targeting_type:
+                    raise DataPagesRealSyncError(
+                        "DATA_PAGES_SP_CAMPAIGN_TARGETING_CONFLICT"
+                    )
+                if previous is None:
+                    campaign_map[key] = (targeting_type, campaign)
+
+        search_term_rows: list[dict[str, Any]] = []
+        manual_keyword_rows: list[dict[str, Any]] = []
+        for advertiser_id in advertisers:
+            advertiser_campaign_ids = sorted(
+                campaign_id
+                for row_advertiser_id, campaign_id in campaign_map
+                if row_advertiser_id == advertiser_id
+            )
+            search_term_rows.extend(
+                self._fetch_sp_search_terms_all(advertiser_id, advertiser_campaign_ids)
+            )
+            manual_campaign_ids = sorted(
+                campaign_id
+                for (row_advertiser_id, campaign_id), (targeting_type, _) in campaign_map.items()
+                if row_advertiser_id == advertiser_id and targeting_type == "manual"
+            )
+            manual_keyword_rows.extend(
+                self._fetch_sp_manual_keywords_all(advertiser_id, manual_campaign_ids)
+            )
+        return campaign_map, search_term_rows, manual_keyword_rows
+
+    def _advertiser_context(
+        self,
+        advertiser_id: str,
+    ) -> tuple[str | None, str | None, str | None]:
+        cached = self._advertiser_context_cache.get(advertiser_id)
+        if cached is not None:
+            return cached
+        row = self.session.execute(
+            text(
+                "select a.store_id, a.advertiser_name, s.store_name "
+                "from dim_walmart_advertisers a "
+                "left join dim_lingxing_stores s "
+                "on s.source_account_ref = a.source_account_ref "
+                "and s.store_id = a.store_id "
+                "where a.source_account_ref = :account "
+                "and a.advertiser_id = :advertiser"
+            ),
+            {"account": self.source_account_ref, "advertiser": advertiser_id},
+        ).first()
+        value = (
+            str(row[0]) if row and row[0] is not None else None,
+            str(row[1]) if row and row[1] is not None else None,
+            str(row[2]) if row and row[2] is not None else None,
+        )
+        self._advertiser_context_cache[advertiser_id] = value
+        return value
+
+    def _listing_mapping_status(
+        self,
+        store_id: str | None,
+        item_id: str | None,
+    ) -> str:
+        if not store_id or not item_id:
+            return "unresolved"
+        identity = (store_id, item_id)
+        cached = self._listing_mapping_cache.get(identity)
+        if cached is not None:
+            return cached
+        count = int(
+            self.session.execute(
+                text(
+                    "select count(*) from dim_walmart_listings "
+                    "where source_account_ref = :account "
+                    "and store_id = :store and item_id = :item"
+                ),
+                {
+                    "account": self.source_account_ref,
+                    "store": store_id,
+                    "item": item_id,
+                },
+            ).scalar_one()
+            or 0
+        )
+        status = "unique" if count == 1 else "ambiguous" if count > 1 else "unresolved"
+        self._listing_mapping_cache[identity] = status
+        return status
+
+    def _write_search_terms(
+        self,
+        rows: Iterable[dict[str, Any]],
+        campaign_map: dict[tuple[str, str], tuple[str, dict[str, Any]]],
+    ) -> int:
+        self.session.execute(
+            text(
+                "delete from fact_walmart_ad_search_term_daily "
+                "where source_account_ref = :account "
+                "and business_date_la = :day and attribution_days = 14"
+            ),
+            {"account": self.source_account_ref, "day": self.business_date},
+        )
+        deduped: dict[tuple[str, str], tuple[dict[str, Any], str]] = {}
+        for row in rows:
+            advertiser_id = _field(row, "advertiserId", "advertiser_id")
+            campaign_id = _field(row, "campaignId", "campaign_id")
+            searched_keyword = _field(row, "searchedKeyword", "searched_keyword")
+            verified = (
+                campaign_map.get((advertiser_id, campaign_id))
+                if advertiser_id and campaign_id
+                else None
+            )
+            if verified is None or searched_keyword is None:
+                self.summary.search_term_unverified_rows += 1
+                continue
+            targeting_type, _campaign = verified
+            row_targeting_type = _campaign_targeting_type(row)
+            if row_targeting_type is not None and row_targeting_type != targeting_type:
+                self.summary.search_term_unverified_rows += 1
+                continue
+            normalized_term = _normalize_name(searched_keyword)
+            if not normalized_term:
+                self.summary.search_term_unverified_rows += 1
+                continue
+            identity = {
+                "advertiser_id": advertiser_id,
+                "campaign_id": campaign_id,
+                "ad_group_id": _field(row, "adGroupId", "ad_group_id"),
+                "store_id": _field(row, "storeId", "store_id"),
+                "item_id": _field(row, "itemId", "item_id"),
+                "normalized_search_term": normalized_term,
+                "targeting_type": targeting_type,
+                "source_key": _field(row, "key"),
+                "platform": _field(row, "platform"),
+            }
+            identity_hash = hashlib.sha256(
+                canonical_json(identity).encode("utf-8")
+            ).hexdigest()
+            source_line_hash = hashlib.sha256(
+                canonical_json(row).encode("utf-8")
+            ).hexdigest()
+            dedupe_key = (advertiser_id, identity_hash)
+            previous = deduped.get(dedupe_key)
+            if previous is not None:
+                if previous[1] != source_line_hash:
+                    raise DataPagesRealSyncError(
+                        "DATA_PAGES_SEARCH_TERM_SOURCE_IDENTITY_DUPLICATE"
+                    )
+                continue
+            deduped[dedupe_key] = (row, source_line_hash)
+
+        now = _now()
+        count = 0
+        for (advertiser_id, identity_hash), (row, source_line_hash) in deduped.items():
+            campaign_id = _field(row, "campaignId", "campaign_id")
+            if campaign_id is None:
+                continue
+            targeting_type, campaign = campaign_map[(advertiser_id, campaign_id)]
+            searched_keyword = _field(row, "searchedKeyword", "searched_keyword")
+            if searched_keyword is None:
+                continue
+            advertiser_store_id, advertiser_name, store_name = self._advertiser_context(
+                advertiser_id
+            )
+            row_store_id = _field(row, "storeId", "store_id")
+            store_id = row_store_id or advertiser_store_id
+            item_id = _field(row, "itemId", "item_id")
+            mapping_status = self._listing_mapping_status(store_id, item_id)
+            if row_store_id and advertiser_store_id and row_store_id != advertiser_store_id:
+                mapping_status = "ambiguous"
+            self.session.add(
+                WalmartAdSearchTermDailyFact(
+                    id=uuid4(),
+                    business_date_la=self.business_date,
+                    source_account_ref=self.source_account_ref,
+                    advertiser_id=advertiser_id,
+                    store_id=store_id,
+                    item_id=item_id,
+                    listing_mapping_status=mapping_status,
+                    mp_seller_name=(
+                        _field(row, "mpSellerName", "mp_seller_name")
+                        or _field(campaign, "mpSellerName", "mp_seller_name")
+                        or store_name
+                    ),
+                    mp_advertiser_name=(
+                        _field(row, "mpAdvertiserName", "mp_advertiser_name")
+                        or _field(campaign, "mpAdvertiserName", "mp_advertiser_name")
+                        or advertiser_name
+                    ),
+                    campaign_id=campaign_id,
+                    campaign_name=(
+                        _field(row, "campaignName", "campaign_name")
+                        or _field(campaign, "campaignName", "campaign_name")
+                    ),
+                    campaign_type=(
+                        _field(row, "campaignType", "campaign_type")
+                        or _field(campaign, "campaignType", "campaign_type")
+                    ),
+                    campaign_status=_field(
+                        campaign, "campaignStatus", "campaign_status"
+                    ),
+                    bidding_strategy=_field(
+                        campaign, "biddingStrategy", "bidding_strategy"
+                    ),
+                    targeting_type=targeting_type,
+                    searched_keyword=searched_keyword,
+                    normalized_search_term=normalized_term,
+                    attribution_days=14,
+                    num_ads_shown=_int(row.get("numAdsShown")),
+                    num_ads_clicks=_int(row.get("numAdsClicks")),
+                    ad_spend_amount=_decimal(row.get("adSpend")),
+                    ad_spend_currency_code="USD",
+                    attributed_orders=_decimal(row.get("attributedOrders")),
+                    advertised_sku_sales_amount=_decimal(
+                        row.get("advertisedSkuSales")
+                    ),
+                    advertised_sku_units=_decimal(row.get("advertisedSkuUnits")),
+                    other_sku_sales_amount=_decimal(row.get("otherSkuSales")),
+                    other_sku_units=_decimal(row.get("otherSkuUnits")),
+                    cpc=_decimal(row.get("cpc")),
+                    ctr=_decimal(row.get("ctr")),
+                    cvr=_decimal(row.get("cvr")),
+                    cpa=_decimal(row.get("cpa")),
+                    ad_spend_percent=_decimal(row.get("adSpendPercent")),
+                    num_ads_shown_percent=_decimal(row.get("numAdsShownPercent")),
+                    num_ads_clicks_percent=_decimal(row.get("numAdsClicksPercent")),
+                    attributed_orders_percent=_decimal(
+                        row.get("attributedOrdersPercent")
+                    ),
+                    advertised_sku_sales_percent=_decimal(
+                        row.get("advertisedSkuSalesPercent")
+                    ),
+                    advertised_sku_units_percent=_decimal(
+                        row.get("advertisedSkuUnitsPercent")
+                    ),
+                    other_sku_sales_percent=_decimal(
+                        row.get("otherSkuSalesPercent")
+                    ),
+                    other_sku_units_percent=_decimal(
+                        row.get("otherSkuUnitsPercent")
+                    ),
+                    source_identity_hash=identity_hash,
+                    source_line_hash=source_line_hash,
+                    source_raw_request_ref_id=None,
+                    synced_at=now,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            count += 1
+        return count
+
+    def _write_manual_keywords(
+        self,
+        rows: Iterable[dict[str, Any]],
+        campaign_map: dict[tuple[str, str], tuple[str, dict[str, Any]]],
+    ) -> int:
+        self.session.execute(
+            text(
+                "delete from fact_walmart_keyword_sp_daily "
+                "where source_account_ref = :account "
+                "and business_date_la = :day and attribution_days = 14"
+            ),
+            {"account": self.source_account_ref, "day": self.business_date},
+        )
+        deduped: dict[tuple[str, str], tuple[dict[str, Any], str]] = {}
+        for row in rows:
+            advertiser_id = _field(row, "advertiserId", "advertiser_id")
+            campaign_id = _field(row, "campaignId", "campaign_id")
+            ad_group_id = _field(row, "adGroupId", "ad_group_id")
+            keyword_name = _field(row, "keywordName", "keyword_name")
+            verified = (
+                campaign_map.get((advertiser_id, campaign_id))
+                if advertiser_id and campaign_id
+                else None
+            )
+            if (
+                verified is None
+                or verified[0] != "manual"
+                or ad_group_id is None
+                or keyword_name is None
+            ):
+                self.summary.manual_keyword_unverified_rows += 1
+                continue
+            row_targeting_type = _campaign_targeting_type(row)
+            if row_targeting_type is not None and row_targeting_type != "manual":
+                self.summary.manual_keyword_unverified_rows += 1
+                continue
+            normalized_keyword = _normalize_name(keyword_name)
+            if not normalized_keyword:
+                self.summary.manual_keyword_unverified_rows += 1
+                continue
+            identity = {
+                "advertiser_id": advertiser_id,
+                "campaign_id": campaign_id,
+                "ad_group_id": ad_group_id,
+                "keyword_id": _field(row, "keywordId", "keyword_id"),
+                "normalized_keyword": normalized_keyword,
+                "match_type": _field(row, "matchType", "match_type"),
+                "store_id": _field(row, "storeId", "store_id"),
+                "item_id": _field(row, "itemId", "item_id"),
+                "source_key": _field(row, "key"),
+                "platform": _field(row, "platform"),
+            }
+            identity_hash = hashlib.sha256(
+                canonical_json(identity).encode("utf-8")
+            ).hexdigest()
+            source_line_hash = hashlib.sha256(
+                canonical_json(row).encode("utf-8")
+            ).hexdigest()
+            dedupe_key = (advertiser_id, identity_hash)
+            previous = deduped.get(dedupe_key)
+            if previous is not None:
+                if previous[1] != source_line_hash:
+                    raise DataPagesRealSyncError(
+                        "DATA_PAGES_MANUAL_KEYWORD_SOURCE_IDENTITY_DUPLICATE"
+                    )
+                continue
+            deduped[dedupe_key] = (row, source_line_hash)
+
+        now = _now()
+        count = 0
+        for (advertiser_id, identity_hash), (row, source_line_hash) in deduped.items():
+            campaign_id = _field(row, "campaignId", "campaign_id")
+            ad_group_id = _field(row, "adGroupId", "ad_group_id")
+            keyword_name = _field(row, "keywordName", "keyword_name")
+            if campaign_id is None or ad_group_id is None or keyword_name is None:
+                continue
+            campaign = campaign_map[(advertiser_id, campaign_id)][1]
+            advertiser_store_id, advertiser_name, store_name = self._advertiser_context(
+                advertiser_id
+            )
+            row_store_id = _field(row, "storeId", "store_id")
+            store_id = row_store_id or advertiser_store_id
+            item_id = _field(row, "itemId", "item_id")
+            mapping_status = self._listing_mapping_status(store_id, item_id)
+            if row_store_id and advertiser_store_id and row_store_id != advertiser_store_id:
+                mapping_status = "ambiguous"
+            self.session.add(
+                WalmartManualKeywordDailyFact(
+                    id=uuid4(),
+                    business_date_la=self.business_date,
+                    source_account_ref=self.source_account_ref,
+                    advertiser_id=advertiser_id,
+                    store_id=store_id,
+                    item_id=item_id,
+                    listing_mapping_status=mapping_status,
+                    mp_seller_name=(
+                        _field(row, "mpSellerName", "mp_seller_name") or store_name
+                    ),
+                    mp_advertiser_name=(
+                        _field(row, "mpAdvertiserName", "mp_advertiser_name")
+                        or advertiser_name
+                    ),
+                    campaign_id=campaign_id,
+                    campaign_name=(
+                        _field(row, "campaignName", "campaign_name")
+                        or _field(campaign, "campaignName", "campaign_name")
+                    ),
+                    ad_group_id=ad_group_id,
+                    ad_group_name=_field(row, "adGroupName", "ad_group_name"),
+                    campaign_status=(
+                        _field(row, "campaignStatus", "campaign_status")
+                        or _field(campaign, "campaignStatus", "campaign_status")
+                    ),
+                    ad_group_status=_field(
+                        row, "adGroupStatus", "ad_group_status"
+                    ),
+                    keyword_id=_field(row, "keywordId", "keyword_id"),
+                    keyword_name=keyword_name,
+                    normalized_keyword=normalized_keyword,
+                    keyword_status=_field(
+                        row, "keywordStatus", "keyword_status"
+                    ),
+                    keyword_state=_field(row, "keywordState", "keyword_state"),
+                    targeting_type="manual",
+                    attribution_days=14,
+                    keyword_bid_amount=_decimal(
+                        row.get("keywordBid", row.get("bid"))
+                    ),
+                    num_ads_shown=_int(row.get("numAdsShown")),
+                    num_ads_clicks=_int(row.get("numAdsClicks")),
+                    ad_spend_amount=_decimal(row.get("adSpend")),
+                    ad_spend_currency_code="USD",
+                    attributed_orders=_decimal(row.get("attributedOrders")),
+                    advertised_sku_sales_amount=_decimal(
+                        row.get("advertisedSkuSales")
+                    ),
+                    other_sku_sales_amount=_decimal(row.get("otherSkuSales")),
+                    cpc=_decimal(row.get("cpc")),
+                    ctr=_decimal(row.get("ctr")),
+                    cvr=_decimal(row.get("cvr")),
+                    acos=_decimal(row.get("acos")),
+                    roas=_decimal(row.get("roas")),
+                    source_identity_hash=identity_hash,
+                    source_line_hash=source_line_hash,
+                    source_raw_request_ref_id=None,
+                    synced_at=now,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            count += 1
+        return count
 
     def _persist_raw_blob(
         self,
@@ -1822,6 +2387,9 @@ def _rows_for(parser_key: DataPagesParserKey, payload: JsonValue) -> list[dict[s
         "sale_stat_page_list",
         "order_v2_list",
         "walmart_return_order_list",
+        "walmart_sp_campaign_list",
+        "walmart_sp_search_term_list",
+        "walmart_sp_keyword_list",
     }:
         if isinstance(data, dict):
             return _dict_rows(data.get("list") or data.get("rows") or data.get("data"))
@@ -2055,6 +2623,23 @@ def _unique(values: Iterable[str | None]) -> list[str]:
             result.append(value)
             seen.add(value)
     return result
+
+
+
+SP_SEARCH_CAMPAIGN_TYPES = ("sponsoredProducts-manual", "sponsoredProducts-auto")
+
+
+def _campaign_targeting_type(row: Mapping[str, Any]) -> str | None:
+    for field_name in ("targetingType", "campaignType", "campaignAndTargetingType"):
+        value = row.get(field_name)
+        if not isinstance(value, str):
+            continue
+        normalized = value.strip().casefold()
+        if "auto" in normalized:
+            return "auto"
+        if "manual" in normalized:
+            return "manual"
+    return None
 
 
 def _normalize_name(value: object) -> str:

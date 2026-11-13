@@ -13,6 +13,9 @@ EXPECTED_PARSER_KEYS = {
     "walmart_return_order_list",
     "walmart_advertiser_list",
     "walmart_ad_item_sp_list",
+    "walmart_sp_campaign_list",
+    "walmart_sp_search_term_list",
+    "walmart_sp_keyword_list",
 }
 
 
@@ -30,15 +33,22 @@ def test_data_pages_sync_catalog_matches_parser_contracts() -> None:
         assert spec.request_kind == "offset_page"
         assert spec.default_page_size > 0
         assert spec.default_max_pages > 0
-        assert spec.initial_outbound_enabled is False
+        assert spec.initial_outbound_enabled is (
+            spec.interface_key
+            in {
+                "walmartSpCampaignList",
+                "walmartSpSearchTermList",
+                "walmartSpKeywordList",
+            }
+        )
         assert spec.schedule_enabled is False
 
 
 def test_data_pages_sync_catalog_has_stable_unique_keys() -> None:
-    assert len({spec.parser_key for spec in DATA_PAGES_SYNC_INTERFACE_SPECS}) == 7
-    assert len({spec.interface_key for spec in DATA_PAGES_SYNC_INTERFACE_SPECS}) == 7
-    assert len({spec.handler_key for spec in DATA_PAGES_SYNC_INTERFACE_SPECS}) == 7
-    assert len({spec.retention_policy_key for spec in DATA_PAGES_SYNC_INTERFACE_SPECS}) == 7
+    assert len({spec.parser_key for spec in DATA_PAGES_SYNC_INTERFACE_SPECS}) == 10
+    assert len({spec.interface_key for spec in DATA_PAGES_SYNC_INTERFACE_SPECS}) == 10
+    assert len({spec.handler_key for spec in DATA_PAGES_SYNC_INTERFACE_SPECS}) == 10
+    assert len({spec.retention_policy_key for spec in DATA_PAGES_SYNC_INTERFACE_SPECS}) == 10
 
     for spec in DATA_PAGES_SYNC_INTERFACE_SPECS:
         assert spec.handler_key.startswith("lingxing.data_pages.")

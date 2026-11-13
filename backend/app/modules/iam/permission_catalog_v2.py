@@ -257,6 +257,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
 
 ACTIONS: tuple[ActionDefinition, ...] = (
     ActionDefinition("ai_center_keyword_launch", "manage", "维护关键词来源与分析", 10),
+    ActionDefinition("ads_search_terms", "manage_actions", "处理搜索词建议", 10),
     ActionDefinition("ai_center_keyword_rules", "submit", "提交关键词规则裁决", 10, "high"),
     ActionDefinition("ai_center_keyword_rules", "review", "复核关键词规则裁决", 20, "high"),
     ActionDefinition("ai_center_keyword_rules", "publish", "发布关键词规则", 30, "high"),
