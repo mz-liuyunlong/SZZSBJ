@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal
 from typing import Final
@@ -289,14 +289,18 @@ def total_quantity(session: Session, f: LineFilter) -> Decimal:
 
 
 def attribution_totals(session: Session, f: LineFilter) -> list[WfsFeeAttributionTotal]:
-    """按归属合计笔数和金额（页面统计卡片用），筛选和明细同一套。"""
+    """按归属合计笔数和金额（页面统计卡片用）。
+
+    除了归属本身，筛选和明细同一套：卡片就是按归属分的，点了一张卡片（= 按归属筛选），
+    其他卡片不能跟着变成 0（复审 P3-1）。
+    """
     query = _apply(
         select(
             WalmartWfsFeeLine.attribution,
             func.count(),
             func.sum(WalmartWfsFeeLine.amount_usd),
         ),
-        f,
+        replace(f, attribution=None),
     ).group_by(WalmartWfsFeeLine.attribution)
     return [
         WfsFeeAttributionTotal(
