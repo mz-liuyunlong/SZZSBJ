@@ -29,6 +29,8 @@ ENDPOINTS = [
     ("POST", "/api/finance/wfs-fees/imports"),
     ("POST", f"/api/finance/wfs-fees/lines/{LINE}/adjust"),
     ("POST", "/api/finance/wfs-fees/checks/verify"),
+    ("GET", "/api/finance/wfs-fees/sync/status"),
+    ("POST", "/api/finance/wfs-fees/sync"),
 ]
 
 
@@ -122,3 +124,46 @@ def test_adjust_validation(client_for) -> None:
         ).status_code
         == 422
     )
+
+
+SYNC = "action:finance:wfs-fees:sync"
+
+
+def test_sync_needs_its_own_permission(client_for, monkeypatch) -> None:
+    from app.modules.wfs_fees.schemas import WfsFeeSyncData
+
+    monkeypatch.setattr(wfs_router.sync_api, "sync_status", lambda *a, **k: WfsFeeSyncData())
+    started: list[str] = []
+    monkeypatch.setattr(
+        wfs_router.sync_api,
+        "start_sync",
+        lambda *a, **k: started.append(k["actor"]) or WfsFeeSyncData(status="queued"),
+    )
+    viewer = client_for(user(READ))
+    assert viewer.get("/api/finance/wfs-fees/sync/status").json()["data"]["status"] == "never"
+    assert viewer.post("/api/finance/wfs-fees/sync").status_code == 403
+    syncer = client_for(user(SYNC))
+    assert syncer.post("/api/finance/wfs-fees/sync").json()["data"]["status"] == "queued"
+    assert started == ["u1"]
+
+
+def test_locked_sync_returns_409_with_reason(client_for, monkeypatch) -> None:
+    from datetime import UTC, datetime
+
+    from app.modules.wfs_fees.schemas import WfsFeeSyncData
+
+    def locked(*a, **k):
+        raise wfs_router.sync_api.WfsSyncLockedError(
+            WfsFeeSyncData(
+                status="failed",
+                lock_reason="failed",
+                locked_until=datetime(2026, 11, 13, 8, 30, tzinfo=UTC),
+            )
+        )
+
+    monkeypatch.setattr(wfs_router.sync_api, "start_sync", locked)
+    response = client_for(user(SYNC)).post("/api/finance/wfs-fees/sync")
+    assert response.status_code == 409
+    body = response.json()
+    assert body["error"]["code"] == "WFS_FEE_SYNC_LOCKED"
+    assert "60 分钟" in body["error"]["message"] and "16:30" in body["error"]["message"]

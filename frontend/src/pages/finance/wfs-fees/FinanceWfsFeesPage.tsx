@@ -1,17 +1,17 @@
 /**
  * 财务 · WFS 费用明细（Rocky 2026-11-12）：一个 tab、一张表、一列费用类型。
  * - 展示已经归属到商品的全部 WFS 费用：结算报表里的服务费各类 + 退货处理费、仓储费、入库运费；配送费不进。
- * - 顶部「导入」上传卖家后台 / 接口下载的原始 CSV（所有店铺都可以）；「同步」走沃尔玛接口（PR 2 开放）；「导出」当前筛选。
+ * - 顶部「导入」上传卖家后台 / 接口下载的原始 CSV（所有店铺都可以）；「同步」走沃尔玛接口按店按期拉结算 / 仓储费报表（点一次锁 90 分钟、失败锁 60 分钟）；「导出」当前页。
  * - 表格上方提示条：和领星账单按 店铺 × 账单期 × 费用类型 核对不一致的；财务看过可以标「已核实」。
  * - 行内「调整」：无 GTIN 的费用改分摊 / 记公司，必填原因，留痕。
  * 全部读写 /api/finance/wfs-fees，没有本地预览数据。
  */
-import { Alert, Button, Input, Space, Tag, Tooltip, Typography, message } from "antd";
+import { Alert, Button, Input, Modal, Space, Tag, Tooltip, Typography, message } from "antd";
 import type { ProColumns } from "@ant-design/pro-components";
 import { EyeInvisibleOutlined, EyeOutlined, SettingOutlined } from "@ant-design/icons";
 import ManagementStatCards, { type ManagementStatCardItem } from "@/components/report-table/ManagementStatCards";
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import PageShell from "@/components/page/PageShell";
 import { REPORT_TABLE_DEFAULT_PAGE_SIZE } from "@/components/report-table/pagination";
 import ResetButton from "@/components/report-table/ResetButton";
@@ -26,7 +26,7 @@ import ImportDrawer from "./ImportDrawer";
 import { WFS_COLUMN_GROUPS, WFS_DEFAULT_KEYS, WFS_FIXED_KEYS, readWfsColumns, writeWfsColumns } from "./wfsColumns";
 import { exportLines } from "./wfsExport";
 import {
-  ATTRIBUTION_GROUP, ATTRIBUTION_GROUP_CODES, ATTRIBUTION_GROUP_TEXT, ATTRIBUTION_TEXT, SOURCE_TEXT, SPLIT_TEXT, attributionParam, detailText, num, reasonText, useBillPeriods, useFeeTypes, useLines, useSummary, useWfsRefresh, wfsErrorText,
+  ATTRIBUTION_GROUP, ATTRIBUTION_GROUP_CODES, ATTRIBUTION_GROUP_TEXT, ATTRIBUTION_TEXT, SOURCE_TEXT, SPLIT_TEXT, attributionParam, detailText, num, reasonText, LOCK_TEXT, isSyncActive, storeErrorText, useBillPeriods, useFeeTypes, useLines, useSummary, useWfsRefresh, useWfsSync, wfsErrorText,
   type ApiLine, type AttributionGroup, type FeeSource, type LineFilter,
 } from "./wfsFeesApi";
 import "./wfs-fees.css";
@@ -39,6 +39,7 @@ const HELP: HelpSection[] = [
   { title: "分摊行", body: "一笔费用分到多个商品时，表里按分到的商品一行一行列（店铺、日期、类型、货件号同原行，商品和金额是各自的），「分摊」列标 第几份/共几份，几份合计 = 原金额。导出也是这样。" },
   { title: "账单期", body: "每笔费用按扣费周（周五）归到领星沃尔玛账单的那一期；按天出账的退货类按交易日；仓储、入库按账期止日。归期依据在明细列里。" },
   { title: "核对", body: "表格上方列出和领星账单对不上的 店铺 × 账单期 × 费用类型。常见原因：期末一天时区差（两期合计相等）、报表漏行、领星没有的新类型。财务核实后点「已核实」写原因，下次金额变了会重新标出。" },
+  { title: "同步", body: "点「同步」后，系统按店铺、按账单期（每 14 天一期）向沃尔玛要结算报表和仓储费报表，生成好后自动导入这张表；沃尔玛生成报表要一段时间，系统每小时自动接着看，不用一直点。点一次后 90 分钟内不能再点（沃尔玛每店每类报表每小时只能要一次）；同步失败后 60 分钟内不能点，失败的店和原因在页面上方提示。已经导入过的期不会重复导入。定时同步在任务中心「WFS 费用报表同步（沃尔玛）」。" },
   { title: "导入", body: "所有店铺都可以上传卖家后台下载的原始 CSV 或 ZIP（结算报表 / 仓储费报表 / 入库运输报告），不用选店铺、账期：系统按内容认类型，按 Partner ID 和文件里的商品自动认店，账期取报表自带的。认不出店（比如多店共有的商品、入库运输报告）才会在那一行让你选店重传。同一份文件再传只刷新不重复，已导入到别的店的文件会拒收；仓储 / 入库同账期重传 = 覆盖，账期交叉但起止不同会拒收。" },
   { title: "调整", body: "无 GTIN 的费用，点「调整」改分摊（分到哪些商品、各多少，合计要等于原金额）或记公司，必填原因，留痕；调整过的行不会被重新导入覆盖。" },
 ];
@@ -90,6 +91,27 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
   const adjustingLine = adjusting ? (lines.data?.items ?? []).find((l) => l.id === adjusting.parentId) : undefined;
   const summary = useSummary(filter);
   const refresh = useWfsRefresh();
+  const sync = useWfsSync();
+  const [syncConfirm, setSyncConfirm] = useState(false);
+  const syncState = sync.state;
+  const syncing = sync.starting || isSyncActive(syncState?.status);
+  const lockedUntil = syncState?.locked_until ? new Date(syncState.locked_until) : undefined;
+  const syncLocked = syncing || Boolean(syncState?.lock_reason && (syncState.lock_reason === "running" || (lockedUntil && lockedUntil > new Date())));
+  const hhmm = (value: Date) => value.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
+  const syncTip = syncLocked && syncState?.lock_reason
+    ? `${LOCK_TEXT[syncState.lock_reason]}${lockedUntil && syncState.lock_reason !== "running" ? `；${hhmm(lockedUntil)} 后可以再点` : ""}`
+    : `按店铺、按账单期从沃尔玛拉结算 / 仓储费报表${syncState?.last_success_at ? `；上次成功：${new Date(syncState.last_success_at).toLocaleString("zh-CN", { hour12: false })}` : ""}`;
+  // 同步跑完：重读表格和合计
+  const lastStatus = useRef(syncState?.status);
+  useEffect(() => {
+    if (isSyncActive(lastStatus.current) && syncState && !isSyncActive(syncState.status)) void refresh();
+    lastStatus.current = syncState?.status;
+  }, [syncState, refresh]);
+  const startSync = () => {
+    sync.start()
+      .then(() => { setSyncConfirm(false); void messageApi.success("已开始同步，沃尔玛生成报表要一段时间，好了会自动导入"); })
+      .catch((error: unknown) => { setSyncConfirm(false); void messageApi.error(wfsErrorText(error)); });
+  };
 
   const storeCode = useMemo(() => new Map((periods.data ?? []).map((p) => [p.store_id, p.store_code])), [periods.data]);
   const typeName = useMemo(() => new Map((types.data ?? []).map((t) => [t.code, t.name])), [types.data]);
@@ -169,7 +191,7 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
         <Button icon={statisticsVisible ? <EyeInvisibleOutlined aria-hidden="true" /> : <EyeOutlined aria-hidden="true" />} onClick={() => setStatisticsVisible((visible) => !visible)}>
           {statisticsVisible ? "隐藏统计" : "显示统计"}
         </Button>
-        <Tooltip title="按店铺 / 账期从沃尔玛接口拉取报表（下一版开放）"><Button disabled>同步</Button></Tooltip>
+        <Tooltip title={syncTip}><Button loading={syncing} disabled={syncLocked && !syncing} onClick={() => setSyncConfirm(true)}>{syncing ? "同步中" : "同步"}</Button></Tooltip>
         <Button type="primary" onClick={() => setImportOpen(true)}>导入</Button>
         <Tooltip title="导出当前这一页的行（含分摊行）；要导更多请加筛选"><Button onClick={() => exportLines(rows, typeName)} disabled={!rows.length}>导出本页</Button></Tooltip>
         <Button aria-label="列配置" icon={<SettingOutlined aria-hidden="true" />} onClick={() => setColumnConfigOpen(true)} />
@@ -206,6 +228,13 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
       {messageHolder}
       <FinanceBoardFrame title="WFS 费用明细" subtitle={subtitle} preview={false} loading={lines.isPending} toolbar={toolbar}
         summary={<>
+          {syncState?.status === "failed" && (
+            <Alert className="fin-wfs__checks" type="error" showIcon
+              message={`最近一次同步失败${syncState.finished_at ? `（${new Date(syncState.finished_at).toLocaleString("zh-CN", { hour12: false })}）` : ""}；已导入的数据不受影响`}
+              description={syncState.failed_stores.length
+                ? <ul className="fin-wfs__help-list">{syncState.failed_stores.map((item) => <li key={item.store_code}>{item.store_code}：{storeErrorText(item.error_code)}</li>)}</ul>
+                : storeErrorText(syncState.error_code ?? "")} />
+          )}
           {statisticsVisible && <ManagementStatCards<StatKey> ariaLabel="WFS 费用统计" className="fin-wfs__cards" cards={statCards} activeKey={activeStat} onCardClick={pickStat} />}
           <ChecksBar storeId={filter.store_id} reportKey={filter.report_key} storeCode={storeCode} typeName={typeName} onChanged={() => void refresh()} />
         </>}>
@@ -228,6 +257,15 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
             emptyTitle="没有费用" emptyText={filter.store_id || filter.report_key || filter.fee_type || filter.q ? "当前筛选下没有费用" : "还没有导入或同步任何报表，点右上角「导入」"} />
         )}
       </FinanceBoardFrame>
+      <Modal open={syncConfirm} title="从沃尔玛同步 WFS 费用报表" okText="开始同步" cancelText="取消" confirmLoading={sync.starting} onOk={startSync} onCancel={() => setSyncConfirm(false)}>
+        <p>按店铺、按账单期向沃尔玛要结算报表和仓储费报表，生成好后自动导入到这张表。</p>
+        <ul className="fin-wfs__help-list">
+          <li>沃尔玛生成报表要一段时间（一般一到几个小时），系统每小时自动接着看，不用一直点。</li>
+          <li>点一次后 90 分钟内不能再点：沃尔玛每家店每类报表每小时只能要一次。</li>
+          <li>同步失败后 60 分钟内不能点，失败的店和原因会在页面上方提示。</li>
+          <li>已经导入过的账单期不会重复导入。</li>
+        </ul>
+      </Modal>
       <ImportDrawer open={importOpen} stores={stores} onClose={() => setImportOpen(false)} onDone={() => void refresh()} />
       <RuntimeColumnConfigDrawer open={columnConfigOpen} groups={WFS_COLUMN_GROUPS} fixedKeys={WFS_FIXED_KEYS} defaultKeys={WFS_DEFAULT_KEYS} appliedKeys={columnKeys} onApply={applyColumns} onClose={() => setColumnConfigOpen(false)} onSaveTemplate={() => void messageApi.info("列模板暂未开放；当前列配置只保存在本浏览器")} />
       {adjusting && adjustingLine && <AdjustModal key={adjustingLine.id} row={adjustingLine} title={`调整归属 · ${adjusting.storeCode} · ${adjusting.typeName} · ${adjusting.date_charged}`} onClose={() => setAdjusting(undefined)} onDone={() => { setAdjusting(undefined); void messageApi.success("已调整"); void refresh(); }} />}

@@ -21,3 +21,4 @@ def register_productlist_sync_models() -> None:
     import app.modules.walmart_scf.persistence
     import app.modules.warehouse_wfs.models
     import app.modules.wfs_fees.models  # noqa: F401
+    import app.modules.wfs_fees.report_models  # noqa: F401

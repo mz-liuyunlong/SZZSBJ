@@ -2,7 +2,7 @@
  * WFS 费用明细接口层（/api/finance/wfs-fees）。金额后端给字符串（我方视角：正 = Walmart 付我们，负 = 扣费），
  * 这里转数字只用来显示和合计；写操作全部走接口。店铺代码 / 账单期从沃尔玛账单接口取（回款对账已有）。
  */
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { backendRequest, BackendRequestError } from "@/api/backendApi";
 
 const BASE = "/api/finance/wfs-fees";
@@ -122,6 +122,9 @@ export const verifyCheck = (check: Pick<ApiCheck, "store_id" | "report_key" | "f
   post<ApiCheck>(`${BASE}/checks/verify`, { ...check, reason });
 
 const CODE_TEXT: Record<string, string> = {
+  WFS_FEE_SYNC_LOCKED: "现在不能同步（正在跑，或刚同步过 / 刚失败，等锁定时间过了再点）",
+  WFS_FEE_SYNC_NOT_CONFIGURED: "同步任务还没开通，请联系管理员",
+  WFS_FEE_SYNC_UNAVAILABLE: "同步队列暂时不可用，请稍后再试",
   WFS_FEE_STORE_MISMATCH: "文件里的 Partner ID 和选的店铺不一致",
   WFS_FEE_LINE_NOT_FOUND: "这笔费用不存在，或者它是分摊子行（请调整原行）",
   WFS_FEE_REASON_REQUIRED: "要写原因",
@@ -136,7 +139,7 @@ export function wfsErrorText(error: unknown): string {
   if (!(error instanceof BackendRequestError)) return "操作失败，请稍后重试";
   if (error.code && CODE_TEXT[error.code]) return CODE_TEXT[error.code];
   if (error.status === 401) return "登录已过期，请重新登录";
-  if (error.status === 403) return "没有这个操作的权限（导入 / 调整分开授权）";
+  if (error.status === 403) return "没有这个操作的权限（导入 / 调整 / 同步分开授权）";
   if (error.status === 413) return "文件超过 16MB";
   if (error.status === 422) return "填写的内容不符合要求，请检查后再提交";
   return "操作失败，请稍后重试";
@@ -165,3 +168,49 @@ const DETAIL_PHRASES: [RegExp, string][] = [
   [/Unit Price/g, "单价"], [/Refund for/g, "退款：货件"], [/overcharge/g, "多收"], [/RMA:/g, "退货单："],
 ];
 export const detailText = (detail: string) => DETAIL_PHRASES.reduce((text, [pattern, zh]) => text.replace(pattern, zh), detail);
+
+/** 同步按钮的状态（后端 /sync/status）。lock_reason：running 正在跑 / manual 刚点过（90 分钟）/ failed 刚失败（60 分钟）。 */
+export interface ApiSyncStatus {
+  run_id: string | null; status: "never" | "queued" | "running" | "succeeded" | "failed"; trigger: string | null;
+  started_at: string | null; finished_at: string | null; error_code: string | null; records_written: number; last_success_at: string | null;
+  locked_until: string | null; lock_reason: "running" | "manual" | "failed" | null; failed_stores: { store_code: string; error_code: string }[];
+}
+const SYNC_KEY = [...ROOT_KEY, "sync"] as const;
+export const isSyncActive = (status?: string) => status === "queued" || status === "running";
+export const LOCK_TEXT: Record<NonNullable<ApiSyncStatus["lock_reason"]>, string> = {
+  running: "正在同步，等这次跑完",
+  manual: "刚同步过，90 分钟内不能再点（沃尔玛每店每类报表每小时只能要一次）",
+  failed: "上次同步失败，60 分钟后才能再点",
+};
+/** 店铺同步失败的原因（任务中心的错误码 → 中文；没列到的照原样显示）。 */
+const STORE_ERROR_TEXT: Record<string, string> = {
+  REMOTE_UNREACHABLE: "连不上店铺服务器",
+  REMOTE_ALREADY_RUNNING: "这家店上一次还没跑完",
+  REMOTE_TOKEN_UNAVAILABLE: "拿不到这家店的沃尔玛授权",
+  REMOTE_CLOUD_IDENTITY_MISSING: "服务器上的云授权没配置",
+  WFS_REPORTS_UPLOAD_FAILED: "上传执行程序到店铺服务器失败",
+  WFS_REPORTS_UPLOAD_HASH_MISMATCH: "上传到店铺服务器的文件校验不对",
+  WFS_REPORTS_ENGINE_REFUSED: "执行程序拒绝执行（计划不合规）",
+  WFS_REPORTS_ENGINE_UNCONFIRMED: "执行超时，结果没确认，下一轮再看",
+  WFS_REPORTS_FETCH_FAILED: "从店铺服务器取回结果失败",
+  WFS_REPORTS_FILES_MISMATCH: "取回的文件和校验清单对不上",
+  WFS_REPORTS_FILE_HASH_MISMATCH: "取回的文件校验不对",
+};
+export const storeErrorText = (code: string) => STORE_ERROR_TEXT[code] ?? code;
+
+/** 同步：点一下建一次任务；跑的时候每 5 秒看一次状态，平时每分钟看一次（锁定倒计时要更新）。 */
+export function useWfsSync() {
+  const client = useQueryClient();
+  const state = useQuery({
+    queryKey: SYNC_KEY,
+    retry: false,
+    refetchInterval: (query) => (isSyncActive(query.state.data?.status) ? 5_000 : 60_000),
+    queryFn: async () => (await backendRequest<ApiSyncStatus>(`${BASE}/sync/status`)).data,
+  });
+  const start = useMutation({
+    mutationFn: async () => (await backendRequest<ApiSyncStatus>(`${BASE}/sync`, { method: "POST" })).data,
+    onSuccess: (data) => client.setQueryData(SYNC_KEY, data),
+    onError: () => void client.invalidateQueries({ queryKey: SYNC_KEY }),
+  });
+  return { state: state.data, start: start.mutateAsync, starting: start.isPending };
+}

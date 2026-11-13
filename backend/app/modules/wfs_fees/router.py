@@ -4,7 +4,7 @@
 - 看：page:finance:wfs-fees:view
 - 导入：action:finance:wfs-fees:import（所有店铺都可上传卖家后台下载的报表；Rocky 2026-11-12）
 - 调整 / 标已核实：action:finance:wfs-fees:adjust
-- 同步：action:finance:wfs-fees:sync（PR 2 接沃尔玛接口；本 PR 只登记权限，不提供接口）
+- 同步：action:finance:wfs-fees:sync（沃尔玛接口拉报表；按一次锁 90 分钟、失败锁 60 分钟）
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from app.core.auth import Principal
 from app.core.config import get_settings
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
-from app.modules.wfs_fees import reader
+from app.modules.wfs_fees import reader, sync_api
 from app.modules.wfs_fees.parsing import ParseError, expand_upload
 from app.modules.wfs_fees.schemas import (
     WfsFeeAdjustRequest,
@@ -35,14 +35,20 @@ from app.modules.wfs_fees.schemas import (
     WfsFeeLineRead,
     WfsFeePeriodListData,
     WfsFeeSummaryData,
+    WfsFeeSyncData,
     WfsFeeTypeRead,
     WfsFeeVerifyRequest,
 )
 from app.modules.wfs_fees.service import SOURCE_REF, WfsFeeError, WfsFeeService
+from app.modules.wfs_fees.sync_jobs import SHANGHAI
 
 READ_PERMISSION: Final = "page:finance:wfs-fees:view"
 IMPORT_PERMISSION: Final = "action:finance:wfs-fees:import"
 ADJUST_PERMISSION: Final = "action:finance:wfs-fees:adjust"
+SYNC_PERMISSION: Final = "action:finance:wfs-fees:sync"
+ERR_SYNC_LOCKED: Final = "WFS_FEE_SYNC_LOCKED"
+ERR_SYNC_NOT_CONFIGURED: Final = "WFS_FEE_SYNC_NOT_CONFIGURED"
+ERR_SYNC_UNAVAILABLE: Final = "WFS_FEE_SYNC_UNAVAILABLE"
 ERR_EMPTY_UPLOAD: Final = "WFS_FEE_EMPTY_UPLOAD"
 ERR_TOO_LARGE: Final = "WFS_FEE_UPLOAD_TOO_LARGE"
 ERR_BAD_ZIP: Final = "WFS_FEE_BAD_ZIP"
@@ -54,11 +60,13 @@ db_session = Annotated[Session, Depends(get_db_session)]
 viewer = Annotated[Principal, Depends(require_permission(READ_PERMISSION))]
 importer = Annotated[Principal, Depends(require_permission(IMPORT_PERMISSION))]
 adjuster = Annotated[Principal, Depends(require_permission(ADJUST_PERMISSION))]
+syncer = Annotated[Principal, Depends(require_permission(SYNC_PERMISSION))]
 
 ERRORS: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorEnvelope},
     403: {"model": ErrorEnvelope},
     404: {"model": ErrorEnvelope},
+    409: {"model": ErrorEnvelope},
     413: {"model": ErrorEnvelope},
     422: {"model": ErrorEnvelope},
     503: {"model": ErrorEnvelope},
@@ -327,3 +335,48 @@ def verify_check(
     return success_response(
         request, data=next(item for item in items if item.fee_type == check.fee_type)
     )
+
+
+@router.get(
+    "/sync/status",
+    responses=ERRORS,
+    operation_id="getFinanceWfsFeeSyncStatus",
+    summary="同步状态：最近一次运行、失败的店、按钮锁到什么时候",
+)
+def get_sync_status(
+    request: Request, session: db_session, _: viewer
+) -> SuccessEnvelope[WfsFeeSyncData, None]:
+    return success_response(request, data=sync_api.sync_status(session))
+
+
+@router.post(
+    "/sync",
+    responses=ERRORS,
+    operation_id="startFinanceWfsFeeSync",
+    summary="手动同步：按店按期向沃尔玛要结算 / 仓储费报表并导入（按一次锁 90 分钟）",
+)
+def start_sync(
+    request: Request, session: db_session, principal: syncer
+) -> SuccessEnvelope[WfsFeeSyncData, None]:
+    try:
+        data = sync_api.start_sync(
+            session, actor=principal.user_id, request_id=get_request_id(request)
+        )
+    except sync_api.WfsSyncLockedError as exc:
+        until = exc.data.locked_until
+        reason = {
+            "running": "正在同步，等这次跑完",
+            "manual": "刚同步过，90 分钟内不能再点",
+            "failed": "上次同步失败，60 分钟后再试",
+        }.get(exc.data.lock_reason or "", "暂时不能同步")
+        when = f"（{until.astimezone(SHANGHAI):%H:%M} 后可以）" if until else ""
+        raise ApiError(code=ERR_SYNC_LOCKED, status_code=409, message=reason + when) from exc
+    except sync_api.WfsSyncNotConfiguredError as exc:
+        raise ApiError(
+            code=ERR_SYNC_NOT_CONFIGURED, status_code=503, message="同步任务还没开通，请联系管理员"
+        ) from exc
+    except sync_api.WfsSyncUnavailableError as exc:
+        raise ApiError(
+            code=ERR_SYNC_UNAVAILABLE, status_code=503, message="同步队列暂时不可用，请稍后再试"
+        ) from exc
+    return success_response(request, data=data)

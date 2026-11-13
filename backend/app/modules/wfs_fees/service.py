@@ -53,9 +53,10 @@ from app.modules.wfs_fees.parsing import (
     friday_of,
     parse,
 )
+from app.modules.wfs_fees.report_models import WalmartWfsInboundItem
 
 SOURCE_REF: Final = "primary"
-INBOUND_STORE_HINT: Final = "（入库运输报告没有商品，要等领星货件同步后才能自动认店）"
+INBOUND_STORE_HINT: Final = "（入库运输报告没有商品，要等入库货件明细同步后才能自动认店）"
 # 领星账单里的描述 → 本表 fee_type（领星把退货两类写成带空格的英文名）
 LX_FEE_NAMES: Final = {
     "Returned Item Disposal Fee": "RC_InventoryDisposalFee",
@@ -161,7 +162,11 @@ class WfsFeeService:
         # 没有费用行的空报告各店可能一字不差，内容相同不代表同一家店：
         # 只按「店铺 + sha256」查重，不做跨店拒收和兜底（复审 P2-N1）。
         earlier = self._duplicate_file(sha256) if report.lines else None
-        resolved, why = self._resolve_store(report, store_id, file_name)
+        if origin == "sync" and store_id and store_id.isdecimal():
+            # 沃尔玛接口按店下单拉回来的报表：店铺是确定的，不再按内容猜。
+            resolved, why = store_id, ""
+        else:
+            resolved, why = self._resolve_store(report, store_id, file_name)
         if resolved is None and earlier is not None and not why:
             resolved = earlier.store_id
         if resolved is None:
@@ -357,12 +362,32 @@ class WfsFeeService:
         }
         return stores.pop() if len(stores) == 1 else None
 
+    def _shipment_store(self, report: ParsedReport) -> str | None:
+        """入库运输报告没有商品：按货件号对入库货件明细，所有货件都属于同一家店才认。"""
+        if report.fee_source != FEE_SOURCE_INBOUND:
+            return None
+        shipments = {line.po_number.strip() for line in report.lines if line.po_number.strip()}
+        if not shipments:
+            return None
+        found = self.session.execute(
+            select(WalmartWfsInboundItem.shipment_id, WalmartWfsInboundItem.store_id)
+            .where(
+                WalmartWfsInboundItem.source_account_ref == SOURCE_REF,
+                WalmartWfsInboundItem.shipment_id.in_(shipments),
+            )
+            .distinct()
+        ).all()
+        stores = {store for _shipment, store in found}
+        if len(stores) != 1 or {shipment for shipment, _store in found} != shipments:
+            return None
+        return stores.pop()
+
     def _vote_store(self, report: ParsedReport) -> str | None:
         skus = {line.sku.strip() for line in report.lines if line.sku.strip()}
         gtins = {line.gtin.strip().lstrip("0") for line in report.lines if line.gtin.strip()}
         items = {line.item_id.strip() for line in report.lines if line.item_id.strip()}
         if not (skus or gtins or items):
-            return None
+            return self._shipment_store(report)
         conditions = []
         if skus:
             conditions.append(WalmartListingDimension.msku.in_(skus))
@@ -679,6 +704,36 @@ class WfsFeeService:
             delete(WalmartWfsFeeLine).where(WalmartWfsFeeLine.parent_line_id == row.id)
         )
 
+    def reallocate_inbound(self, shipments: dict[str, set[str]]) -> int:
+        """入库货件明细到了以后补分摊（复审 P2-5）。
+
+        只补这些货件里还没分摊、没人工调整过的入库运费原行。
+
+        shipments = {店铺: {货件号}}；返回补了几行。
+        """
+        rows: list[WalmartWfsFeeLine] = []
+        for store_id, cargo in shipments.items():
+            if not cargo:
+                continue
+            rows.extend(
+                self.session.scalars(
+                    select(WalmartWfsFeeLine).where(
+                        WalmartWfsFeeLine.source_account_ref == SOURCE_REF,
+                        WalmartWfsFeeLine.store_id == store_id,
+                        WalmartWfsFeeLine.fee_type == INBOUND_FEE,
+                        WalmartWfsFeeLine.parent_line_id.is_(None),
+                        WalmartWfsFeeLine.po_number.in_(sorted(cargo)),
+                        WalmartWfsFeeLine.attribution == rules.ATTR_UNALLOCATED,
+                    )
+                )
+            )
+        adjusted = self._adjusted_ids([row.id for row in rows])
+        rows = [row for row in rows if row.id not in adjusted]
+        if rows:
+            self.attribute(rows)
+            self.session.commit()
+        return len(rows)
+
     def _adjusted_ids(self, ids: list[UUID]) -> set[UUID]:
         return set(
             self.session.scalars(
@@ -829,8 +884,36 @@ class WfsFeeService:
     def _shipment_items(
         self, store_id: str, cargo: str, listings
     ) -> list[tuple[str, str, rules.Listing | None, Decimal, Decimal]]:
-        """货件商品明细（PR 2 接领星 WFS 货件同步后填充）；PR 1 只认历史迁入的分摊子行。"""
-        return []
+        """货件商品明细：沃尔玛远程采集的入库货件明细（fact_walmart_wfs_inbound_items）。
+
+        实发 = 货件里这个商品的件数（itemQty）；没有时用仓库实收（receivedQty）。
+        """
+        rows = self.session.execute(
+            select(
+                WalmartWfsInboundItem.gtin,
+                WalmartWfsInboundItem.sku,
+                WalmartWfsInboundItem.item_qty,
+                WalmartWfsInboundItem.received_qty,
+            )
+            .where(
+                WalmartWfsInboundItem.source_account_ref == SOURCE_REF,
+                WalmartWfsInboundItem.store_id == store_id,
+                WalmartWfsInboundItem.shipment_id == cargo,
+            )
+            .order_by(WalmartWfsInboundItem.gtin, WalmartWfsInboundItem.sku)
+        ).all()
+        zero = Decimal("0")
+        return [
+            (
+                gtin,
+                sku,
+                rules.lookup(listings, store_id, gtin),
+                item_qty or zero,
+                received_qty or zero,
+            )
+            for gtin, sku, item_qty, received_qty in rows
+            if cargo
+        ]
 
     # ------------------------------------------------------------ 核对
 

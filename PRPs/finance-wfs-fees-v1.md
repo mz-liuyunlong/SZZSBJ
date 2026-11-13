@@ -162,3 +162,17 @@ POST /api/finance/wfs-fees/sync             {store_id?, report_key?}（PR 2）
 - 配送费以后是否也入表（订单审核可能要）。
 - CN2502 是否配线路。
 - 仓储费日摊（旧系统 `fact_storage_fee_daily`）结算利润要用时再做。
+
+## 15. PR 2 变更（2026-11-13）
+
+分支 `fin/wfs-fees-sync`，迁移 `20261113_0091_finance_wfs_fee_reports`（11-14 按合并顺序改号：#345 占 0089、#342 改 0090、本 PR 改 0091）。Rocky 11-13 拍板：
+- 环境变量（docs/ 不能写项目前缀，全名记在这里）：远端开关 `SZZSBJ_WALMART_REMOTE_COLLECTION_ENABLED=1` 和 `SZZSBJ_WALMART_WFS_REPORTS_ENABLED=1`；路由 / 店铺授权 / 店铺 ID 映射沿用 `SZZSBJ_WALMART_REMOTE_ROUTES`、`SZZSBJ_WALMART_REMOTE_APPROVED_STORES`、`SZZSBJ_WALMART_SCF_STORE_ID_MAP`；货件明细归档目录 `SZZSBJ_WALMART_REMOTE_ARCHIVE_ROOT`；结算报表 Partner ID 映射 `FINANCE_WFS_PARTNER_STORE_MAP`。
+- 先由部署AI第一次启用沃尔玛远程采集（生产 → 店铺服务器 SSH），之后靠定时；执行器每次上传，店铺服务器不安装。
+- 报表类型白名单写死 SETTLEMENT、WFS_STORAGE_FEE；入库货件明细一起开（远程采集的 inbound_shipment_items）。
+- 历史只补 10 月；以后要补由部署AI执行。
+- 同步按钮：有权限的人能点（未分配前只有管理员）；点前确认弹窗写明原因；点一次锁 90 分钟；失败锁 60 分钟。
+- 失败提醒：任务中心标红 + WFS 费用明细页面提示；飞书提醒以后再做。
+- 付款对账单（备用金）不放进本 PR，回款对账改用沃尔玛实付时再加。
+- 仓储费以接口为准（复审 P3-6）：接口按 14 天一期拉仓储费报表；卖家后台下载的仓储费报表账期起止不一定相同，同店账期交叉会被拒收，所以同一期不要再手动导。
+- 复审修改（11-13）：远端连续 48 次没跑成算失败；手动同步不重排疑似个人信息拦下的；失败锁只看手动同步；一店导入出错只回滚这家店；货件明细后到自动补分摊；1 小时内下过单的类型不再下；非固定错误码只进日志；远端超过 1 天的残留目录先清；执行器文件读写指定 UTF-8、ZIP 同名 CSV 加序号。复核 P3：1 小时 1 次看真下单时间（`last_post_at`，复用不算）；导入连续 48 次出错算失败；补分摊出错不影响报表导入。刘云龙 11-14：执行器 ZIP 解压加上限，超了这份报表失败、不影响别的店。复核 P2-1 改成：下载 ≤ 64MB、单个解压后 ≤ 64MB、合计解压后 ≤ 128MB、CSV ≤ 20 个、ZIP 总条目 ≤ 1000（最终数值等刘云龙按店铺服务器内存确认）；个人信息检查按行读字节流，不整份转文字。
+  遇到 `WFS_REPORT_ZIP_TOO_LARGE`（任务中心能看到店铺、报表类型、期次）怎么办：① 人工到卖家后台下载这一期的报表，ZIP 里有几个 CSV 就拆成几个文件，在「WFS 费用明细」页按文件上传（上传走同一套导入和分摊）；② 如果这家店经常超，评估店铺服务器内存后调高执行器顶部的上限常量和 `test_zip_limits_are_set`，走一次正常发版。任务本身不会自动重试，手动同步也不重排它。

@@ -33,6 +33,11 @@ from app.modules.integration_sync.walmart_bill_catalog import (
     WALMART_BILL_SYNC_SPEC,
 )
 from app.modules.integration_sync.wfs_catalog import WFS_SETTLEMENT_SYNC_SPEC
+from app.modules.integration_sync.wfs_report_catalog import (
+    WFS_REPORT_PROVIDER,
+    WFS_REPORT_SOURCE_REF,
+    WFS_REPORT_SYNC_SPEC,
+)
 
 BootstrapStatus = Literal["created", "updated", "unchanged"]
 
@@ -533,6 +538,88 @@ class IntegrationCatalogService:
                         id=uuid4(),
                         interface_id=interface.id,
                         source_account_ref=FINANCE_APPROVAL_SOURCE_REF,
+                        is_enabled=True,
+                        schedule_enabled=False,
+                        schedule_cron=None,
+                        schedule_timezone="UTC",
+                        page_size=spec.default_page_size,
+                        batch_size=None,
+                        max_pages=spec.default_max_pages,
+                        max_attempts=1,
+                        retention_policy_id=policy.id,
+                        next_run_at=None,
+                        last_scheduled_at=None,
+                    )
+                )
+                config_status = "created"
+            self.session.commit()
+            return interface_status, policy_status, config_status
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def bootstrap_wfs_report_governance(self) -> tuple[BootstrapStatus, ...]:
+        """登记 WFS 费用报表同步：接口和配置打开，定时保持关闭，以后在任务中心开。"""
+
+        spec = WFS_REPORT_SYNC_SPEC
+        try:
+            interface = self.repository.get_interface_by_key(
+                WFS_REPORT_PROVIDER, spec.interface_key
+            )
+            values = {
+                "display_name": spec.display_name,
+                "method": spec.method,
+                "endpoint_path": spec.endpoint_path,
+                "request_kind": spec.request_kind,
+                "handler_key": spec.handler_key,
+                "contract_version": "v1",
+                "outbound_enabled": True,
+            }
+            interface_status: BootstrapStatus
+            if interface is None:
+                interface = self.repository.add_catalog_record(
+                    IntegrationInterface(
+                        id=uuid4(),
+                        provider=WFS_REPORT_PROVIDER,
+                        interface_key=spec.interface_key,
+                        **values,
+                    )
+                )
+                interface_status = "created"
+            else:
+                interface_status = _apply_approved_values(interface, **values)
+
+            policy_values = {
+                "provider": WFS_REPORT_PROVIDER,
+                "interface_key": spec.interface_key,
+                "hot_retention_days": 365,
+                "archive_after_days": None,
+                "delete_after_days": None,
+                "archive_required": False,
+                "legal_hold": False,
+                "is_active": True,
+            }
+            policy = self.repository.get_retention_policy_by_key(spec.retention_policy_key)
+            policy_status: BootstrapStatus
+            if policy is None:
+                policy = self.repository.add_catalog_record(
+                    RawRetentionPolicy(
+                        id=uuid4(), policy_key=spec.retention_policy_key, **policy_values
+                    )
+                )
+                policy_status = "created"
+            else:
+                policy_status = _apply_approved_values(policy, **policy_values)
+
+            config = self.repository.get_config_by_scope(interface.id, WFS_REPORT_SOURCE_REF)
+            config_status: BootstrapStatus = "unchanged"
+            # 已有配置不覆盖：定时开关等运行参数归任务中心管。
+            if config is None:
+                self.repository.add_catalog_record(
+                    IntegrationSyncConfig(
+                        id=uuid4(),
+                        interface_id=interface.id,
+                        source_account_ref=WFS_REPORT_SOURCE_REF,
                         is_enabled=True,
                         schedule_enabled=False,
                         schedule_cron=None,

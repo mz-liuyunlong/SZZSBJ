@@ -181,3 +181,27 @@ class WfsFeePeriodRead(BaseModel):
 
 class WfsFeePeriodListData(BaseModel):
     items: list[WfsFeePeriodRead]
+
+
+class WfsFeeSyncStoreError(BaseModel):
+    store_code: str
+    error_code: str
+
+
+class WfsFeeSyncData(BaseModel):
+    """同步按钮的状态。
+
+    lock_reason：running 正在跑 / manual 刚按过（90 分钟）/ failed 刚失败（60 分钟）。
+    """
+
+    run_id: UUID | None = None
+    status: str = "never"  # never / queued / running / succeeded / failed
+    trigger: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    error_code: str | None = None
+    records_written: int = 0
+    last_success_at: datetime | None = None
+    locked_until: datetime | None = None
+    lock_reason: Literal["running", "manual", "failed"] | None = None
+    failed_stores: list[WfsFeeSyncStoreError] = Field(default_factory=list)
