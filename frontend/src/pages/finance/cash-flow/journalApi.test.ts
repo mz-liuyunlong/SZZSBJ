@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildLiveSnapshot, syncErrorText, syncFailedText, toFsDetail, type ApiApproval, cashErrorText, cashViewSource, fxNote, nextImportNode, postLineEvent, resolveCashSource, toCashLine, type ApiAccount, type ApiAnomaly, type ApiCategory, type ApiLine } from "@/pages/finance/cash-flow/journalApi";
+import { attachedText, buildLiveSnapshot, syncErrorText, syncFailedText, toFsDetail, type ApiApproval, cashErrorText, cashViewSource, fxNote, nextImportNode, postLineEvent, resolveCashSource, toCashLine, type ApiAccount, type ApiAnomaly, type ApiCategory, type ApiLine } from "@/pages/finance/cash-flow/journalApi";
 import { pairLines } from "@/pages/finance/cash-flow/journalPair";
 import { backendRequest, BackendRequestError } from "@/api/backendApi";
 
@@ -79,6 +79,17 @@ describe("postLineEvent", () => {
     expect(body.expected_version).toBe(target.version);
     expect(body.expected_version).toBe(7);
     expect(typeof body.idempotency_key).toBe("string");
+  });
+});
+
+describe("attachedText", () => {
+  it("用后端最终存下的单号，第二家公司带 YC-", () => {
+    const base = { stage: "todo", version: 2, auto_reset: false };
+    expect(attachedText({ ...base, ref: "YC-209901010001" }, "209901010001")).toBe("已挂上 YC-209901010001");
+    expect(attachedText({ ...base, ref: "YC-209901010001" }, "209901010001", "第 2 行")).toBe("第 2 行已挂上 YC-209901010001");
+  });
+  it("后端没回单号（旧版本）时用输入的", () => {
+    expect(attachedText({ stage: "todo", version: 2, auto_reset: false }, "209901010001")).toBe("已挂上 209901010001");
   });
 });
 

@@ -257,8 +257,12 @@ export function syncErrorText(error: unknown): string {
 }
 export const syncFailedText = (code: string | null) => `同步失败${code ? `（${code}）` : ""}，已同步的单子不受影响，可以再点一次`;
 
+/** ref：挂单时后端最终存下的单号（第二家公司是 YC- + 原号），别的操作为 null。 */
+export type LineEventResult = { stage: string; version: number; auto_reset: boolean; ref?: string | null };
+export const attachedText = (result: LineEventResult, typed: string, prefix = "") => `${prefix}已挂上 ${result.ref || typed}`;
+
 export async function postLineEvent(line: LiveCashLine, kind: LineEventKind, fields: { payload?: Record<string, unknown>; reason?: string } = {}) {
-  const { data } = await backendRequest<{ stage: string; version: number; auto_reset: boolean }>(`${BASE}/lines/${line.uid}/events`, {
+  const { data } = await backendRequest<LineEventResult>(`${BASE}/lines/${line.uid}/events`, {
     method: "POST",
     body: JSON.stringify({ kind, payload: fields.payload ?? {}, reason: fields.reason, expected_version: line.version, idempotency_key: crypto.randomUUID() }),
   });

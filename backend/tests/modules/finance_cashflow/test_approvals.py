@@ -22,7 +22,10 @@ from app.modules.integration_sync.finance_approval_catalog import (
     FinanceApprovalCodesError,
     parse_finance_approval_codes,
 )
-from app.modules.integration_sync.handlers.feishu_finance_approval_sync import month_slices
+from app.modules.integration_sync.handlers.feishu_finance_approval_sync import (
+    NAME_LOOKUP_FATAL,
+    month_slices,
+)
 
 SERIAL = "209901010001"
 OTHER = "209901010002"
@@ -815,6 +818,35 @@ def test_number_written_with_yc_prefix_is_never_the_main_company_one():
     on_yc = line("Y1", amount="-1", party="", text=f"付款 {YC_SERIAL}", org=O.ORG_YC)
     assert auto([on_main], [main, yc]) == []
     assert auto([on_yc], [main, yc]) == [("Y1", YC_SERIAL, "text")]
+
+
+@pytest.mark.parametrize("written", [f"yc-{SERIAL}", f"YC {SERIAL}", f"Yc{SERIAL}"])
+def test_yc_prefix_in_any_case_or_with_a_space_is_the_second_company(written):
+    main, yc = approval(SERIAL), approval(YC_SERIAL, org=O.ORG_YC)
+    on_main = line("M1", amount="-1", party="", text=f"付款 {written}")
+    on_yc = line("Y1", amount="-1", party="", text=f"付款 {written}", org=O.ORG_YC)
+    assert auto([on_main], [main, yc]) == []
+    assert auto([on_yc], [main, yc]) == [("Y1", YC_SERIAL, "text")]
+
+
+@pytest.mark.parametrize(
+    ("code", "fatal"),
+    [
+        ("FEISHU_APPROVAL_USER_TRANSPORT", True),
+        ("FEISHU_APPROVAL_TOKEN_TRANSPORT", True),
+        ("FEISHU_APPROVAL_TOKEN_EMPTY", True),
+        ("FEISHU_APPROVAL_TOKEN_HTTP_400_CODE_10003", True),
+        ("FEISHU_APPROVAL_USER_HTTP_401_CODE_None", True),
+        ("FEISHU_APPROVAL_USER_HTTP_403_CODE_None", True),
+        ("FEISHU_APPROVAL_USER_HTTP_400_CODE_99991672", True),
+        ("FEISHU_APPROVAL_USER_HTTP_400_CODE_41050", False),
+        ("FEISHU_APPROVAL_USER_HTTP_429_CODE_None", False),
+        ("FEISHU_APPROVAL_USER_HTTP_500_CODE_None", False),
+    ],
+)
+def test_name_lookup_stops_only_on_app_level_errors(code, fatal):
+    """应用级错误（连不上、令牌、401/403、99991xxx）整体停查；单个人的错误只跳过这个人。"""
+    assert bool(NAME_LOOKUP_FATAL.search(code)) is fatal
 
 
 def test_related_numbers_each_get_the_prefix():

@@ -865,7 +865,9 @@ class CashflowService:
             )
             if not listed:
                 raise journal.EventRejectedError(
-                    404, f"找不到审批单 {ref}", journal.ERR_APPROVAL_NOT_FOUND
+                    404,
+                    f"找不到审批单 {ref}；飞书上刚通过的单请先同步再挂",
+                    journal.ERR_APPROVAL_NOT_FOUND,
                 )
         elif self.settings.yc_finance_entities and approval.org != line_org:
             raise journal.EventRejectedError(
@@ -1338,6 +1340,7 @@ class CashflowService:
             stage_reason=state.stage_reason,
             version=state.version,
             auto_reset=auto_reset,
+            ref=_attached_ref(request.kind, request.payload),
         )
         try:
             self.session.commit()
@@ -1537,7 +1540,8 @@ class CashflowService:
                 409, "这个幂等键已经用在别的操作上", journal.ERR_IDEMPOTENCY_KEY_REUSED
             )
         self.session.rollback()
-        return self._event_data(line_uid, replayed=True)
+        data = self._event_data(line_uid, replayed=True)
+        return data.model_copy(update={"ref": _attached_ref(seen.kind, seen.payload)})
 
     def _category_codes(self) -> frozenset[str]:
         return frozenset(self.session.scalars(select(FinanceCashCategory.code)))
@@ -1583,6 +1587,13 @@ class CashflowService:
             version=state.version,
             replayed=replayed,
         )
+
+
+def _attached_ref(kind: str, payload: Mapping[str, Any] | None) -> str | None:
+    """挂单事件最终存下的单号（_checked_attach 已经按公司换成 YC- 号）。"""
+    if kind not in {journal.KIND_ATTACH_REF, journal.KIND_ATTACH_PART_REF}:
+        return None
+    return str((payload or {}).get("ref") or "").strip() or None
 
 
 def _parts_with_approval(

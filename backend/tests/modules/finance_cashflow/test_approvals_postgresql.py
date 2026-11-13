@@ -837,8 +837,9 @@ def test_manual_attach_on_second_company_account_uses_its_number(session, yc_cod
         FakeClient({"inst1": (PAYMENT_CODE, detail())}),
         yc_client=FakeYcClient({"yinst1": ("YC-0002", detail())}),
     )
-    _post(session, uid, J.KIND_ATTACH_REF, {"ref": SERIAL}, 0)
+    data = _post(session, uid, J.KIND_ATTACH_REF, {"ref": SERIAL}, 0)
     assert session.get(FinanceCashLineState, uid).refs == [f"YC-{SERIAL}"]
+    assert data.ref == f"YC-{SERIAL}"  # 页面提示用后端最终存下的单号
 
 
 def test_manual_attach_across_companies_is_refused(session, yc_codes):
@@ -855,4 +856,5 @@ def test_manual_attach_unknown_number_is_404(session):
     with pytest.raises(J.EventRejectedError) as caught:
         _post(session, uid, J.KIND_ATTACH_REF, {"ref": "209901019999"}, 0)
     assert caught.value.status_code == 404
+    assert "先同步再挂" in str(caught.value)
     assert caught.value.code == J.ERR_APPROVAL_NOT_FOUND

@@ -16,7 +16,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from app.modules.finance_cashflow.approval_orgs import ORG_MAIN, org_serial
+from app.modules.finance_cashflow.approval_orgs import ORG_MAIN, ORG_YC, org_serial
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 
@@ -62,8 +62,9 @@ MATCH_DAYS_AFTER = 45
 AMOUNT_TOL = Decimal("0.011")
 PAID_TOL = Decimal("1")
 SERIAL_IN_TEXT = re.compile(r"(?<!\d)20\d{10}(?!\d)")
-# 摘要 / 备注里的单号，带或不带第二家公司的 YC- 前缀
-SERIAL_IN_TEXT_ORG = re.compile(r"(YC-)?(?<!\d)(20\d{10})(?!\d)")
+# 摘要 / 备注里的单号，带或不带第二家公司的前缀：
+# YC- / yc- / YC 空格 / YC 紧挨着都算，YC 前面不能紧挨着字母
+SERIAL_IN_TEXT_ORG = re.compile(r"((?<![a-z])YC[-\s]?)?(?<!\d)(20\d{10})(?!\d)", re.I)
 PAYEE_NOISE = re.compile(r"有限公司|股份|科技|贸易|商贸|网络|实业|集团|\(.*?\)|（.*?）|\s")
 
 
@@ -561,7 +562,7 @@ def find_auto_matches(
         for prefix, raw in dict.fromkeys(found):
             # 摘要里写的是飞书上的原单号：第二家公司账户的流水按它的单号（加 YC-）找；
             # 原号前面紧挨着 YC- 的就是第二家的单，不当主公司单号。
-            serial = f"{prefix}{raw}" if prefix else org_serial(line.org, raw)
+            serial = org_serial(ORG_YC if prefix else line.org, raw)
             approval = known.get(serial)
             if (
                 approval is not None
