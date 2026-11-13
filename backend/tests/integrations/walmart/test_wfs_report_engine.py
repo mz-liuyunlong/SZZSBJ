@@ -294,10 +294,36 @@ def _zip_many(count, body=b"x,y\n1,2\n"):
 
 
 def test_zip_limits_are_set():
-    assert E.MAX_ZIP_MEMBERS == 20
-    assert E.MAX_MEMBER_BYTES == 200 * 1024 * 1024
-    assert E.MAX_UNZIPPED_BYTES == 500 * 1024 * 1024
-    assert E.MAX_UNZIPPED_BYTES <= E.MAX_ZIP_MEMBERS * E.MAX_MEMBER_BYTES
+    mb = 1024 * 1024
+    assert E.MAX_ZIP_MEMBERS == 20 and E.MAX_ZIP_ENTRIES == 1000
+    assert E.MAX_DOWNLOAD_BYTES == 64 * mb
+    assert E.MAX_MEMBER_BYTES == 64 * mb
+    assert E.MAX_UNZIPPED_BYTES == 128 * mb
+    assert E.MAX_MEMBER_BYTES <= E.MAX_UNZIPPED_BYTES <= E.MAX_ZIP_MEMBERS * E.MAX_MEMBER_BYTES
+    # 下载的和解压后的都在内存里：合计不超过 256MB（复核 P2-1）
+    assert E.MAX_DOWNLOAD_BYTES + E.MAX_UNZIPPED_BYTES <= 256 * mb
+
+
+def test_zip_with_too_many_entries_is_refused_even_if_they_are_not_csv(monkeypatch):
+    monkeypatch.setattr(E, "MAX_ZIP_ENTRIES", 3)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("report.csv", "x,y\n1,2\n")
+        for i in range(3):
+            archive.writestr(f"junk{i}.txt", "")
+    with pytest.raises(E.ZipTooLarge, match="too_many_members"):
+        E.Engine._members(buffer.getvalue(), True)
+
+
+def test_pii_scan_reads_rows_without_decoding_the_whole_file():
+    clean = [("a.csv", "\ufeffTransaction Type,Net Payable\nSale,1.00\n".encode("utf-8"))]
+    assert E.Engine._pii_scan(clean) == {}
+    header_hit = [("b.csv", b"Customer Name,Net Payable\nSomeone,1\n")]
+    assert E.Engine._pii_scan(header_hit)["b.csv"]["header_columns"] == ["Customer Name"]
+    value_hit = [("c.csv", b"Note,Net Payable\nmail someone@example.test,1\n")]
+    assert E.Engine._pii_scan(value_hit)["c.csv"]["value_columns"] == ["Note"]
+    broken = [("d.csv", b"Transaction Type,Net Payable\nSale,\xff\xfe1\n")]
+    assert E.Engine._pii_scan(broken) == {}  # 坏字节不让检查崩
 
 
 def test_zip_with_too_many_members_is_refused(monkeypatch):
@@ -338,6 +364,24 @@ def test_zip_header_lying_about_the_size_is_still_refused(monkeypatch):
     monkeypatch.setattr(zipfile.ZipFile, "infolist", lying)
     with pytest.raises((E.ZipTooLarge, zipfile.BadZipFile)):
         E.Engine._members(raw, True)
+
+
+def test_zip_header_lying_report_writes_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr(E, "MAX_MEMBER_BYTES", 32)
+    real_infolist = zipfile.ZipFile.infolist
+
+    def lying(self):
+        infos = real_infolist(self)
+        for info in infos:
+            info.file_size = 1
+        return infos
+
+    monkeypatch.setattr(zipfile.ZipFile, "infolist", lying)
+    action = {"op": "fetch", "key": "k1", "reportType": "SETTLEMENT", "requestId": "req-00000001"}
+    big = _zip_many(1, b"a" * 100)
+    _c, doc = _run(tmp_path, {"actions": [action]}, FakeWalmart(file_bytes=big))
+    assert doc["results"][0]["outcome"] in {"bad_zip", "zip_too_large"}
+    assert list((tmp_path / "files").iterdir()) == []  # files/ 目录运行时就建好，里面不能有东西
 
 
 def test_zip_member_bigger_than_its_header_is_refused_by_size(monkeypatch):

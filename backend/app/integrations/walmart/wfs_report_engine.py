@@ -54,12 +54,16 @@ BASE = "https://marketplace.walmartapis.com"
 SVC_NAME = "Walmart Marketplace"
 TIMEOUT = 120
 MIN_INTERVAL = 1.25
-MAX_DOWNLOAD_BYTES = 300 * 1024 * 1024
+# 下载和解压都在内存里，店铺服务器内存不大：下载 + 解压后合计不超过 256MB（复核 P2-1）
+# 最终数值等刘云龙按店铺服务器内存确认
+MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024
 MAX_ACTIONS = 20
-# ZIP 解压上限（刘云龙 11-14）：个数 / 单个解压后 / 全部解压后；超了这份报表不处理，不影响别的店
+# ZIP 解压上限（刘云龙 11-14）：CSV 个数 / 单个解压后 / 全部解压后；超了这份报表不处理，不影响别的店
 MAX_ZIP_MEMBERS = 20
-MAX_MEMBER_BYTES = 200 * 1024 * 1024
-MAX_UNZIPPED_BYTES = 500 * 1024 * 1024
+MAX_MEMBER_BYTES = 64 * 1024 * 1024
+MAX_UNZIPPED_BYTES = 128 * 1024 * 1024
+# ZIP 总条目数（含文件夹、非 CSV）：超过就不看了，防止目录本身就是炸弹
+MAX_ZIP_ENTRIES = 1000
 
 # ---- 白名单（测试锁住，改动要 Rocky 批准）
 REPORT_TYPES = {"SETTLEMENT": "v1", "WFS_STORAGE_FEE": "v1"}
@@ -337,8 +341,11 @@ class Engine:
         if not is_zip:
             return [("report.csv", raw)]
         z = zipfile.ZipFile(io.BytesIO(raw))
+        infos = z.infolist()
+        if len(infos) > MAX_ZIP_ENTRIES:
+            raise ZipTooLarge("too_many_members")
         wanted = []
-        for info in z.infolist():
+        for info in infos:
             n = info.filename
             base = os.path.basename(n)
             if n.endswith("/") or not base or base.startswith(".") or n.startswith("__MACOSX/"):
@@ -383,7 +390,11 @@ class Engine:
         """
         hits = {}
         for base, data in members:
-            rdr = csv.reader(io.StringIO(data.decode("utf-8-sig", "replace"), newline=""))
+            # 不整份转成文字（那会再占一份内存）：按行从字节流里读
+            text = io.TextIOWrapper(
+                io.BytesIO(data), encoding="utf-8-sig", errors="replace", newline=""
+            )
+            rdr = csv.reader(text)
             header = next(rdr, [])
             cols = [h for h in header if PII_HEADER_RE.search(h or "")]
             vals = set()
