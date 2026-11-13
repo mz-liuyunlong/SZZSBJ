@@ -194,6 +194,7 @@ function ReconBoard({ actions, subtitle, rows: allRows, payDates, picked, onPick
   return (
     <FinanceBoardFrame
       title="回款对账"
+      preview={false}
       subtitle={subtitle}
       toolbar={<>
         <ReportFacetSelect mode="multiple" ariaLabel="账单日" placeholder="全部期" unit="期" value={picked} showSearch={false}
