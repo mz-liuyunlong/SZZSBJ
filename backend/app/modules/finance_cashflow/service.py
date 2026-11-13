@@ -18,8 +18,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.modules.finance_cashflow import approval_orgs, journal
 from app.modules.finance_cashflow import approvals as approval_rules
-from app.modules.finance_cashflow import journal
 from app.modules.finance_cashflow.models import (
     FinanceCashAccount,
     FinanceCashAlertClosure,
@@ -108,7 +108,7 @@ KNOWN_ALERT_TYPES = frozenset(
         journal.ALERT_STATEMENT_CONFLICT,  # 月结单前后不一致
     }
 )
-APPROVAL_SERIAL = re.compile(r"\d{12}")
+APPROVAL_SERIAL = re.compile(r"(?:YC-)?\d{12}")
 LINE_TAIL = re.compile(r"[0-9a-f]{6}")
 
 
@@ -828,11 +828,64 @@ class CashflowService:
         ]
 
     def approval_rows(self) -> list[FinanceCashApproval]:
-        """进日记账报销闭环的审批单：排除配置里不走这边账的部门。"""
+        """进日记账报销闭环的审批单：排除配置里不走这边账的部门（部门 ID 是主公司飞书的，
+        只用来排除主公司的单）。"""
         raw = self.settings.finance_approval_excluded_department_ids or ""
         excluded = {item.strip() for item in raw.split(",") if item.strip()}
         rows = self.session.scalars(select(FinanceCashApproval)).all()
-        return [row for row in rows if row.department_id not in excluded]
+        return [
+            row
+            for row in rows
+            if row.org != approval_orgs.ORG_MAIN or row.department_id not in excluded
+        ]
+
+    def _checked_attach(
+        self, request: CashflowLineEventRequest, line: FinanceCashLine
+    ) -> CashflowLineEventRequest:
+        """手动挂单前查单号（复审 P2-1）：
+
+        - 第二家公司账户的流水上输的是飞书原号（不带 YC-）：按第二家的单号找；
+        - 审批单表和剔除清单里都没有这个单号 → 404；
+        - 配了 YC_FINANCE_ENTITIES 时，单和流水不是同一家公司 → 422。
+        格式不对的交给 journal 报 422。
+        """
+        raw = str((request.payload or {}).get("ref") or "").strip()
+        if not journal.APPROVAL_REF.match(raw):
+            return request
+        line_org = self.account_orgs().get(line.account_key, approval_orgs.ORG_MAIN)
+        ref = approval_orgs.org_serial(line_org, raw)
+        approval = self.session.scalars(
+            select(FinanceCashApproval).where(FinanceCashApproval.serial_number == ref).limit(1)
+        ).first()
+        if approval is None:
+            listed = self.session.scalar(
+                select(func.count())
+                .select_from(FinanceCashExclusion)
+                .where(FinanceCashExclusion.ref == ref)
+            )
+            if not listed:
+                raise journal.EventRejectedError(
+                    404,
+                    f"找不到审批单 {ref}；飞书上刚通过的单请先同步再挂",
+                    journal.ERR_APPROVAL_NOT_FOUND,
+                )
+        elif self.settings.yc_finance_entities and approval.org != line_org:
+            raise journal.EventRejectedError(
+                422,
+                f"审批单 {ref} 是{approval_orgs.org_label(self.settings, approval.org)}的，"
+                f"这笔流水在{approval_orgs.org_label(self.settings, line_org)}的账户上，不能挂",
+                journal.ERR_APPROVAL_OTHER_COMPANY,
+            )
+        if ref == raw:
+            return request
+        return request.model_copy(update={"payload": {**(request.payload or {}), "ref": ref}})
+
+    def account_orgs(self) -> dict[str, str]:
+        """账户 → 公司（按账户主体），流水只和同一家公司的审批单配对。"""
+        rows = self.session.execute(
+            select(FinanceCashAccount.account_key, FinanceCashAccount.entity)
+        ).all()
+        return approval_orgs.account_orgs(self.settings, [(key, entity) for key, entity in rows])
 
     def match_approvals(self) -> list[approval_rules.MatchApproval]:
         out: list[approval_rules.MatchApproval] = []
@@ -846,6 +899,7 @@ class CashflowService:
                     currency_code=row.currency_code,
                     payee=row.payee,
                     anchor_day=anchor.astimezone(SHANGHAI).date() if anchor else None,
+                    org=row.org,
                 )
             )
         return out
@@ -887,6 +941,7 @@ class CashflowService:
         approvals = self.match_approvals()
         if not approvals:
             return {}
+        orgs = self.account_orgs()
         lines = [
             approval_rules.MatchLine(
                 line_uid=item.source.line_uid,
@@ -899,6 +954,7 @@ class CashflowService:
                 stage="",
                 amount_cny=item.amount_cny,
                 cny_exact=item.fx_source in journal.FX_EXACT_SOURCES,
+                org=orgs.get(item.source.account_key, approval_orgs.ORG_MAIN),
             )
             for item in result.lines
         ]
@@ -1252,6 +1308,8 @@ class CashflowService:
         )
         if request.kind == journal.KIND_SET_CNY and line.currency_code in {"CNY", "CNH"}:
             raise journal.EventRejectedError(422, "人民币流水不用改折人民币")
+        if request.kind in {journal.KIND_ATTACH_REF, journal.KIND_ATTACH_PART_REF}:
+            request = self._checked_attach(request, line)
         auto_reset = journal.apply_event(
             draft,
             kind=request.kind,
@@ -1282,6 +1340,7 @@ class CashflowService:
             stage_reason=state.stage_reason,
             version=state.version,
             auto_reset=auto_reset,
+            ref=_attached_ref(request.kind, request.payload),
         )
         try:
             self.session.commit()
@@ -1481,7 +1540,8 @@ class CashflowService:
                 409, "这个幂等键已经用在别的操作上", journal.ERR_IDEMPOTENCY_KEY_REUSED
             )
         self.session.rollback()
-        return self._event_data(line_uid, replayed=True)
+        data = self._event_data(line_uid, replayed=True)
+        return data.model_copy(update={"ref": _attached_ref(seen.kind, seen.payload)})
 
     def _category_codes(self) -> frozenset[str]:
         return frozenset(self.session.scalars(select(FinanceCashCategory.code)))
@@ -1527,6 +1587,13 @@ class CashflowService:
             version=state.version,
             replayed=replayed,
         )
+
+
+def _attached_ref(kind: str, payload: Mapping[str, Any] | None) -> str | None:
+    """挂单事件最终存下的单号（_checked_attach 已经按公司换成 YC- 号）。"""
+    if kind not in {journal.KIND_ATTACH_REF, journal.KIND_ATTACH_PART_REF}:
+        return None
+    return str((payload or {}).get("ref") or "").strip() or None
 
 
 def _parts_with_approval(

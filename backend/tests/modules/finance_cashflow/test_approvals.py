@@ -14,6 +14,7 @@ import pytest
 
 from app.core.config import Settings
 from app.integrations.feishu_approval import FeishuApprovalError, HttpFeishuApprovalClient
+from app.modules.finance_cashflow import approval_orgs as O
 from app.modules.finance_cashflow import approvals as A
 from app.modules.finance_cashflow import journal as J
 from app.modules.finance_cashflow.approval_service import allocate_payment
@@ -21,7 +22,10 @@ from app.modules.integration_sync.finance_approval_catalog import (
     FinanceApprovalCodesError,
     parse_finance_approval_codes,
 )
-from app.modules.integration_sync.handlers.feishu_finance_approval_sync import month_slices
+from app.modules.integration_sync.handlers.feishu_finance_approval_sync import (
+    NAME_LOOKUP_FATAL,
+    month_slices,
+)
 
 SERIAL = "209901010001"
 OTHER = "209901010002"
@@ -185,12 +189,12 @@ def test_people_of_collects_everyone():
 # ---------------------------------------------------------------- 匹配
 
 
-def approval(serial=SERIAL, *, amount="100", payee="张三", status="APPROVED", day=date(2026, 10, 1), cur="CNY"):  # fmt: skip
-    return A.MatchApproval(serial, status, Decimal(amount), cur, payee, day)
+def approval(serial=SERIAL, *, amount="100", payee="张三", status="APPROVED", day=date(2026, 10, 1), cur="CNY", org="zsbj"):  # fmt: skip
+    return A.MatchApproval(serial, status, Decimal(amount), cur, payee, day, org)
 
 
-def line(uid="L1", *, amount="-100", party="张三", day=date(2026, 10, 2), refs=(), stage="todo", text="", cur="CNY"):  # fmt: skip
-    return A.MatchLine(uid, day, Decimal(amount), cur, party, text, tuple(refs), stage)
+def line(uid="L1", *, amount="-100", party="张三", day=date(2026, 10, 2), refs=(), stage="todo", text="", cur="CNY", org="zsbj"):  # fmt: skip
+    return A.MatchLine(uid, day, Decimal(amount), cur, party, text, tuple(refs), stage, org=org)
 
 
 def auto(lines, approvals, **kw):
@@ -721,3 +725,131 @@ def test_one_payment_for_two_approvals_of_the_same_payee_is_suggested():
 def test_part_refs_count_as_taken():
     taken = line("L2", refs=(SERIAL,))
     assert A.candidates_by_line([line(), taken], [approval()]) == {}
+
+
+# ---------------------------------------------------------------- 第二家公司（另一个飞书企业）
+
+YC_SERIAL = f"YC-{SERIAL}"
+
+
+def test_second_company_serial_gets_prefix_once():
+    assert O.org_serial(O.ORG_YC, SERIAL) == YC_SERIAL
+    assert O.org_serial(O.ORG_YC, YC_SERIAL) == YC_SERIAL
+    assert O.org_serial(O.ORG_MAIN, SERIAL) == SERIAL
+    assert O.org_serial(O.ORG_YC, "") == ""
+
+
+def test_accounts_belong_to_second_company_by_entity():
+    settings = Settings.model_construct(yc_finance_entities=" 乙 , 丙")
+    orgs = O.account_orgs(settings, [("A1", "甲"), ("A2", "乙"), ("A3", "丙 ")])
+    assert orgs == {"A1": O.ORG_MAIN, "A2": O.ORG_YC, "A3": O.ORG_YC}
+    # 没配主体：全算主公司，第二家的单不会自动配到任何流水
+    assert O.account_orgs(Settings.model_construct(yc_finance_entities=None), [("A2", "乙")]) == {
+        "A2": O.ORG_MAIN
+    }
+
+
+def test_approval_only_matches_lines_of_the_same_company():
+    yc = approval(YC_SERIAL, org=O.ORG_YC)
+    assert auto([line()], [yc]) == []
+    assert A.candidates_by_line([line()], [yc]) == {}
+    assert auto([line(org=O.ORG_YC)], [yc]) == [("L1", YC_SERIAL, "match")]
+
+
+def test_same_number_from_two_companies_attaches_by_the_line_company():
+    """两家飞书同一天的第一单原号相同：摘要里写的原号按流水所在账户的公司找。"""
+    main, yc = approval(SERIAL), approval(YC_SERIAL, org=O.ORG_YC)
+    on_yc = line("Y1", amount="-1", party="", text=f"付款 {SERIAL}", org=O.ORG_YC)
+    on_main = line("M1", amount="-1", party="", text=f"付款 {SERIAL}")
+    assert sorted(auto([on_yc, on_main], [main, yc])) == [
+        ("M1", SERIAL, "text"),
+        ("Y1", YC_SERIAL, "text"),
+    ]
+
+
+def test_combo_only_uses_the_same_company():
+    pair = [approval(f"YC-20990101000{i}", amount="50", org=O.ORG_YC) for i in (1, 2)]
+    assert A.combo_candidates(line(), pair) == []
+    assert sorted(A.combo_candidates(line(org=O.ORG_YC), pair)) == [
+        "YC-209901010001",
+        "YC-209901010002",
+    ]
+
+
+def test_second_company_client_uses_its_own_credentials():
+    from pydantic import SecretStr
+
+    settings = Settings.model_construct(
+        feishu_app_id="main-id",
+        feishu_app_secret=SecretStr("main-secret"),
+        yc_feishu_app_id=None,
+        yc_feishu_app_secret=None,
+        feishu_request_timeout_ms=1000,
+    )
+    with pytest.raises(FeishuApprovalError) as caught:
+        HttpFeishuApprovalClient(settings, second_company=True)
+    assert caught.value.code == "FEISHU_APPROVAL_YC_CREDENTIALS_MISSING"
+    settings.yc_feishu_app_id = "yc-id"
+    settings.yc_feishu_app_secret = SecretStr("yc-secret")
+    sent = {}
+
+    def handler(request):
+        if request.url.path.endswith("/internal"):
+            sent.update(json.loads(request.content))
+            return httpx.Response(200, json={"code": 0, "tenant_access_token": "tok"})
+        sent["user_path"] = request.url.path
+        return httpx.Response(200, json={"code": 0, "data": {"user": {"name": " 合成姓名 "}}})
+
+    client = HttpFeishuApprovalClient(
+        settings,
+        second_company=True,
+        http_client=httpx.Client(
+            base_url="https://feishu.invalid", transport=httpx.MockTransport(handler)
+        ),
+    )
+    assert client.get_user_name("u9") == "合成姓名"
+    assert sent["app_id"] == "yc-id"
+    assert sent["user_path"] == "/open-apis/contact/v3/users/u9"
+
+
+def test_number_written_with_yc_prefix_is_never_the_main_company_one():
+    main, yc = approval(SERIAL), approval(YC_SERIAL, org=O.ORG_YC)
+    on_main = line("M1", amount="-1", party="", text=f"付款 {YC_SERIAL}")
+    on_yc = line("Y1", amount="-1", party="", text=f"付款 {YC_SERIAL}", org=O.ORG_YC)
+    assert auto([on_main], [main, yc]) == []
+    assert auto([on_yc], [main, yc]) == [("Y1", YC_SERIAL, "text")]
+
+
+@pytest.mark.parametrize("written", [f"yc-{SERIAL}", f"YC {SERIAL}", f"Yc{SERIAL}"])
+def test_yc_prefix_in_any_case_or_with_a_space_is_the_second_company(written):
+    main, yc = approval(SERIAL), approval(YC_SERIAL, org=O.ORG_YC)
+    on_main = line("M1", amount="-1", party="", text=f"付款 {written}")
+    on_yc = line("Y1", amount="-1", party="", text=f"付款 {written}", org=O.ORG_YC)
+    assert auto([on_main], [main, yc]) == []
+    assert auto([on_yc], [main, yc]) == [("Y1", YC_SERIAL, "text")]
+
+
+@pytest.mark.parametrize(
+    ("code", "fatal"),
+    [
+        ("FEISHU_APPROVAL_USER_TRANSPORT", True),
+        ("FEISHU_APPROVAL_TOKEN_TRANSPORT", True),
+        ("FEISHU_APPROVAL_TOKEN_EMPTY", True),
+        ("FEISHU_APPROVAL_TOKEN_HTTP_400_CODE_10003", True),
+        ("FEISHU_APPROVAL_USER_HTTP_401_CODE_None", True),
+        ("FEISHU_APPROVAL_USER_HTTP_403_CODE_None", True),
+        ("FEISHU_APPROVAL_USER_HTTP_400_CODE_99991672", True),
+        ("FEISHU_APPROVAL_USER_HTTP_400_CODE_41050", False),
+        ("FEISHU_APPROVAL_USER_HTTP_429_CODE_None", False),
+        ("FEISHU_APPROVAL_USER_HTTP_500_CODE_None", False),
+    ],
+)
+def test_name_lookup_stops_only_on_app_level_errors(code, fatal):
+    """应用级错误（连不上、令牌、401/403、99991xxx）整体停查；单个人的错误只跳过这个人。"""
+    assert bool(NAME_LOOKUP_FATAL.search(code)) is fatal
+
+
+def test_related_numbers_each_get_the_prefix():
+    assert O.org_serials(O.ORG_YC, f"{SERIAL},{OTHER}") == f"YC-{SERIAL},YC-{OTHER}"
+    assert O.org_serials(O.ORG_MAIN, f"{SERIAL},{OTHER}") == f"{SERIAL},{OTHER}"
+    assert O.org_serials(O.ORG_YC, "") == ""
