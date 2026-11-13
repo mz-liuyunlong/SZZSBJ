@@ -107,6 +107,40 @@ def list_periods(
     )
 
 
+def line_filter(
+    store_id: Annotated[str | None, Query(pattern=r"^[0-9]+(,[0-9]+)*$", max_length=600)] = None,
+    report_key: Annotated[str | None, Query(max_length=2000)] = None,
+    fee_type: Annotated[str | None, Query(max_length=600)] = None,
+    fee_source: Annotated[
+        str | None, Query(pattern=r"^(settlement|storage|inbound)(,(settlement|storage|inbound))*$")
+    ] = None,
+    attribution: Annotated[
+        str | None, Query(max_length=120, pattern=r"^[a-z_]+(,[a-z_]+)*$")
+    ] = None,
+    split: Annotated[str | None, Query(pattern=r"^(yes|no)(,(yes|no))?$")] = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    q: Annotated[str | None, Query(max_length=64)] = None,
+    include_missing: bool = False,
+) -> reader.LineFilter:
+    """明细和合计共用的筛选；都可逗号分隔多选（Rocky 11-13）。split = 有 / 无分摊。"""
+    return reader.LineFilter(
+        store_id=store_id,
+        report_key=report_key,
+        fee_type=fee_type,
+        fee_source=fee_source,
+        attribution=attribution,
+        date_from=date_from,
+        date_to=date_to,
+        q=q,
+        include_missing=include_missing,
+        split=split,
+    )
+
+
+filters = Annotated[reader.LineFilter, Depends(line_filter)]
+
+
 @router.get(
     "/lines",
     responses=ERRORS,
@@ -117,38 +151,11 @@ def list_lines(
     request: Request,
     session: db_session,
     _: viewer,
-    store_id: Annotated[str | None, Query(pattern=r"^[0-9]+(,[0-9]+)*$", max_length=600)] = None,
-    report_key: Annotated[str | None, Query(max_length=2000)] = None,
-    fee_type: Annotated[str | None, Query(max_length=600)] = None,
-    fee_source: Annotated[
-        str | None, Query(pattern=r"^(settlement|storage|inbound)(,(settlement|storage|inbound))*$")
-    ] = None,
-    attribution: Annotated[
-        str | None, Query(max_length=120, pattern=r"^[a-z_]+(,[a-z_]+)*$")
-    ] = None,  # 所有筛选都可多选：逗号分隔（Rocky 11-13）
-    split: Annotated[str | None, Query(pattern=r"^(yes|no)(,(yes|no))?$")] = None,  # 有 / 无分摊
-    date_from: date | None = None,
-    date_to: date | None = None,
-    q: Annotated[str | None, Query(max_length=64)] = None,
-    include_missing: bool = False,
+    f: filters,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=reader.MAX_PAGE_SIZE)] = 100,
 ) -> SuccessEnvelope[WfsFeeLineListData, None]:
-    items, total = reader.list_lines(
-        session,
-        store_id=store_id,
-        report_key=report_key,
-        fee_type=fee_type,
-        fee_source=fee_source,
-        attribution=attribution,
-        date_from=date_from,
-        date_to=date_to,
-        q=q,
-        include_missing=include_missing,
-        page=page,
-        page_size=page_size,
-        split=split,
-    )
+    items, total = reader.list_lines(session, f, page=page, page_size=page_size)
     return success_response(
         request, data=WfsFeeLineListData(items=items, total=total, page=page, page_size=page_size)
     )
@@ -158,20 +165,12 @@ def list_lines(
     "/summary",
     responses=ERRORS,
     operation_id="summarizeFinanceWfsFees",
-    summary="店铺 × 账单期 × 费用类型 汇总",
+    summary="店铺 × 账单期 × 费用类型 合计（筛选与明细相同）",
 )
 def summarize(
-    request: Request,
-    session: db_session,
-    _: viewer,
-    store_id: Annotated[str | None, Query(pattern=r"^[0-9]+(,[0-9]+)*$", max_length=600)] = None,
-    report_key: Annotated[str | None, Query(max_length=2000)] = None,
-    date_from: date | None = None,
-    date_to: date | None = None,
+    request: Request, session: db_session, _: viewer, f: filters
 ) -> SuccessEnvelope[WfsFeeSummaryData, None]:
-    items, total = reader.summary(
-        session, store_id=store_id, report_key=report_key, date_from=date_from, date_to=date_to
-    )
+    items, total = reader.summary(session, f)
     return success_response(
         request, data=WfsFeeSummaryData(items=items, total_amount_usd=f"{total:.4f}")
     )
@@ -314,9 +313,10 @@ def verify_check(
         )
     except WfsFeeError as exc:
         raise _api_error(exc) from exc
+    # 同一店铺 × 账单期下有多种费用类型：返回刚标的这一条（复审 P3）
+    items = reader.list_checks(
+        session, store_id=check.store_id, report_key=check.report_key, only_problem=False
+    )
     return success_response(
-        request,
-        data=reader.list_checks(
-            session, store_id=check.store_id, report_key=check.report_key, only_problem=False
-        )[0],
+        request, data=next(item for item in items if item.fee_type == check.fee_type)
     )

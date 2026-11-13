@@ -20,6 +20,7 @@ import hashlib
 import io
 import re
 import zipfile
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -270,7 +271,13 @@ def parse_settlement(content: bytes) -> ParsedReport:
             _key("settlement", ref)
             if ref
             else _key(
-                "settlement", fee_type, reason, when.isoformat(), str(net), gtin, cell(row, "po")
+                "settlement",
+                fee_type,
+                reason,
+                when.isoformat(),
+                str(net.quantize(Decimal("0.01"))),
+                gtin,
+                cell(row, "po"),
             )
         )
         if key in seen:
@@ -371,7 +378,7 @@ def parse_storage(
         index = idx[name]
         return _clean(row[index]) if 0 <= index < len(row) else ""
 
-    lines: list[ParsedLine] = []
+    lines: list[ParsedLine] = []  # 后面按 GTIN + SKU 合并重复行
     for row in rows[head_at + 1 :]:
         gtin = _digits(cell(row, "gtin"))
         if len(gtin) < 8:
@@ -399,6 +406,7 @@ def parse_storage(
                 },
             )
         )
+    lines = _merge_storage_duplicates(lines, period_start, period_end)
     total = sum((-line.amount_usd for line in lines), Decimal("0"))
     if lines and declared is not None and abs(total - declared) > Decimal("0.5"):
         raise ParseError(
@@ -411,6 +419,40 @@ def parse_storage(
         period_end,
         declared if declared is not None else total,
     )
+
+
+def _merge_storage_duplicates(
+    lines: list[ParsedLine], period_start: date, period_end: date
+) -> list[ParsedLine]:
+    """同一 GTIN 出现多行（复审 P3：以前会撞唯一键报 500）：
+
+    GTIN + SKU 都相同 → 金额、数量相加合成一行；同 GTIN 不同 SKU → 各自一行，line_key 带上 SKU。
+    """
+    merged: dict[tuple[str, str], ParsedLine] = {}
+    for line in lines:
+        key = (line.gtin, line.sku)
+        prior = merged.get(key)
+        if prior is None:
+            merged[key] = line
+            continue
+        prior.amount_usd += line.amount_usd
+        if line.quantity is not None:
+            prior.quantity = (prior.quantity or Decimal("0")) + line.quantity
+        if line.original_amount is not None:
+            prior.original_amount = (prior.original_amount or Decimal("0")) + line.original_amount
+        if line.discount_savings is not None:
+            prior.discount_savings = (
+                prior.discount_savings or Decimal("0")
+            ) + line.discount_savings
+    per_gtin: dict[str, int] = defaultdict(int)
+    for gtin, _sku in merged:
+        per_gtin[gtin] += 1
+    for (gtin, sku), line in merged.items():
+        if per_gtin[gtin] > 1:
+            line.line_key = _key(
+                "storage", gtin, sku, period_start.isoformat(), period_end.isoformat()
+            )
+    return list(merged.values())
 
 
 # ---------------------------------------------------------------- 入库运输报告

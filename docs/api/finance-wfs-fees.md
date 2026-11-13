@@ -26,7 +26,8 @@ Rocky 2026-11-12 口径：一个 tab、一张表、一列费用类型；展示�
 
 - 归期：结算报表按扣费周五（`date_charged`）找领星同店同类同日账单行 → 同店同日任一账单 → 账单期起止包含 → 多期重叠取较晚（`bill_match` 记依据）；RC_InventoryDisposalFee、ReturnProcessingFee 领星按天出账，按交易日。仓储 / 入库按账期止日。
 - 归属 `attribution`：matched（GTIN 对上商品表）、unmatched、allocated、allocated_check（新卖家补贴基数 × 10% 与返还额差 > 1%）、unallocated、company。规则见 `app/modules/wfs_fees/attribution.py`，和 7~10 月手工表一致。
-- 导入规则：同一文件再传只刷新；仓储 / 入库同账期重传 = 覆盖；账期交叉但起止不同 = 拒收；仓储头部 Total 与明细差 > 0.5 拒收；空报告留 0 行记录。人工调整过的行重新导入不重算。
+- 分摊：按比例最大余数法分到分，每行与原行同号，Σ = 原行；人工分摊过的行重导后原金额变了 → 标「已分摊，基数待核」，依据写「原金额已变，人工分摊需重做」。
+- 导入规则：同一文件再传只刷新；仓储报表同一 GTIN 多行：同 SKU 合并、不同 SKU 各一行；仓储 / 入库同账期重传 = 覆盖；账期交叉但起止不同 = 拒收；仓储头部 Total 与明细差 > 0.5 拒收；空报告留 0 行记录。人工调整过的行重新导入不重算。
 
 ## 接口
 
@@ -35,10 +36,10 @@ Rocky 2026-11-12 口径：一个 tab、一张表、一列费用类型；展示�
 | `GET /fee-types` | view | 费用类型中英文、来源 |
 | `GET /periods` | view | 店铺 × 账单期（领星同步的沃尔玛账单；店铺代码 = 店铺名横杠前编号），页面筛选用；没有账单的沃尔玛店铺（领星店铺表）和只有费用行的店铺也各给一行 |
 | `GET /lines?store_id&report_key&fee_type&fee_source&attribution&date_from&date_to&q&include_missing&page&page_size` | view | 原行分页（≤ 500），每行带 `children` 分摊子行；`store_id` / `report_key` / `fee_type` / `fee_source` / `attribution` 都可逗号分隔多选（summary / checks / files 同）；`split=yes|no` 筛有 / 无分摊子行的原行；`q` 搜 ITEM ID / MSKU / SKU / GTIN / 货件号 / Reference |
-| `GET /summary?store_id&report_key&date_from&date_to` | view | 店铺 × 账单期 × 类型 汇总 + 合计 |
+| `GET /summary`（参数同 `/lines`，不分页） | view | 店铺 × 账单期 × 类型 汇总 + 合计，筛选与明细同一口径 |
 | `GET /checks?store_id&report_key&only_problem` | view | 核对结果（默认只给没核实的问题） |
 | `GET /files?store_id&fee_source` | view | 文件记录 |
-| `POST /imports`（body = 文件；头 `X-File-Name`、`X-Store-Id`、`X-Period-Start`、`X-Period-End`） | import | 上传一份报表（CSV，或卖家后台下载的 ZIP：只取里面的 .csv，≤50 个、每个解压后 ≤16MB、合计 ≤64MB），返回 `items`（每个 CSV 一条）；不用选店铺（Rocky 11-13）：结算报表按 Partner ID（`FINANCE_WFS_PARTNER_STORE_MAP` → 以前导入过的同一 Partner ID）认店，其余按文件里的 SKU / GTIN / Item ID 对商品表投票（唯一一家、占 80% 以上才算）；认不出才拒收并返回 `needs_store=true`，页面在那一行选店后带 `X-Store-Id` 重传——`X-Store-Id` 只补认不出的，不覆盖认出的；接口下载的仓储报表（没有汇总块）要账期头 |
+| `POST /imports`（body = 文件；头 `X-File-Name`、`X-Store-Id`、`X-Period-Start`、`X-Period-End`） | import | 上传一份报表（CSV，或卖家后台下载的 ZIP：只取里面的 .csv，≤50 个、每个解压后 ≤16MB、合计 ≤64MB），返回 `items`（每个 CSV 一条）；不用选店铺（Rocky 11-13）：结算报表按 Partner ID（`FINANCE_WFS_PARTNER_STORE_MAP` → 以前导入过的同一 Partner ID）认店，其余按文件里的 SKU / GTIN / Item ID 对商品表投票（只有一家店覆盖 ≥ 80% 的可匹配行、且可匹配行 ≥ 有商品信息行的 50% 才算；学到的 Partner 店铺与投票不一致 → 拒收待人选）；文件名里的 Partner ID 只给没有费用行的文件兜底；同一份文件（按内容）已导入到别的店 → 拒收；认不出才拒收并返回 `needs_store=true`，页面在那一行选店后带 `X-Store-Id` 重传——`X-Store-Id` 只补认不出的，不覆盖认出的；接口下载的仓储报表（没有汇总块）要账期头 |
 | `POST /lines/{id}/adjust` `{kind: realloc|company, reason, payload:{shares:[{gtin,item_id,msku,amount}]}}` | adjust | 分摊合计必须等于原金额 |
 | `POST /checks/verify` `{store_id, report_key, fee_type, reason}` | adjust | 标已核实；金额变了自动清掉 |
 

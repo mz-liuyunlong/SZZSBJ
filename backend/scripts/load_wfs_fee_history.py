@@ -11,7 +11,7 @@
    再把旧系统分到各 msku 的金额写成分摊子行（basis=旧系统分摊），不重新按货件算。
 
 用法（服务器上，激活后端 .venv，连生产库需 Rocky 授权）：
-  python scripts/load_wfs_fee_history.py --stores '{"CN2501":"1106...","HK2612":"1107..."}' \
+  python scripts/load_wfs_fee_history.py --stores '{"<店铺代码>":"<店铺 id>", ...}' \
       --settlement /srv/wfs_history/settlement --storage /srv/wfs_history/fact_wfs_storage_fee.csv \
       --inbound /srv/wfs_history/fact_inbound_freight_alloc.csv [--dry-run]
 不打印任何凭证；每个文件只回报 店铺 / 类型 / 账期 / 新增 / 重复 / 拒收原因。

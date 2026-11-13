@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from typing import Final
@@ -106,49 +107,49 @@ def _line(row: WalmartWfsFeeLine, adjusted: set[UUID]) -> WfsFeeLineRead:
     )
 
 
-def list_lines(
-    session: Session,
-    *,
-    store_id: str | None,
-    report_key: str | None,
-    fee_type: str | None,
-    fee_source: str | None,
-    attribution: str | None,
-    date_from: date | None,
-    date_to: date | None,
-    q: str | None,
-    include_missing: bool,
-    page: int,
-    page_size: int,
-    split: str | None = None,
-) -> tuple[list[WfsFeeLineRead], int]:
-    """原行分页；每个原行带它的分摊子行。"""
-    query = select(WalmartWfsFeeLine).where(WalmartWfsFeeLine.parent_line_id.is_(None))
-    if not include_missing:
+@dataclass(frozen=True)
+class LineFilter:
+    """明细、合计共用的一套筛选（复审 P2-7：页面上的合计和表格同一口径）。都可逗号分隔多选。"""
+
+    store_id: str | None = None
+    report_key: str | None = None
+    fee_type: str | None = None
+    fee_source: str | None = None
+    attribution: str | None = None
+    date_from: date | None = None
+    date_to: date | None = None
+    q: str | None = None
+    include_missing: bool = False
+    split: str | None = None
+
+
+def _apply(query, f: LineFilter):  # type: ignore[no-untyped-def]
+    query = query.where(WalmartWfsFeeLine.parent_line_id.is_(None))
+    if not f.include_missing:
         query = query.where(WalmartWfsFeeLine.missing_since.is_(None))
-    if store_id:
-        query = query.where(WalmartWfsFeeLine.store_id.in_(_many(store_id)))
-    if report_key:
-        query = query.where(WalmartWfsFeeLine.report_key.in_(_many(report_key)))
-    if fee_type:
-        query = query.where(WalmartWfsFeeLine.fee_type.in_(_many(fee_type)))
-    if fee_source:
-        query = query.where(WalmartWfsFeeLine.fee_source.in_(_many(fee_source)))
-    if attribution:
-        query = query.where(WalmartWfsFeeLine.attribution.in_(_many(attribution)))
-    wanted = set(_many(split))
+    if f.store_id:
+        query = query.where(WalmartWfsFeeLine.store_id.in_(_many(f.store_id)))
+    if f.report_key:
+        query = query.where(WalmartWfsFeeLine.report_key.in_(_many(f.report_key)))
+    if f.fee_type:
+        query = query.where(WalmartWfsFeeLine.fee_type.in_(_many(f.fee_type)))
+    if f.fee_source:
+        query = query.where(WalmartWfsFeeLine.fee_source.in_(_many(f.fee_source)))
+    if f.attribution:
+        query = query.where(WalmartWfsFeeLine.attribution.in_(_many(f.attribution)))
+    wanted = set(_many(f.split))
     if wanted and wanted != {"yes", "no"}:
         # 有分摊 = 原行下有分摊子行（财务检查分摊用）
         child = WalmartWfsFeeLine.__table__.alias("child")
         has_children = exists().where(child.c.parent_line_id == WalmartWfsFeeLine.id)
         query = query.where(has_children if wanted == {"yes"} else ~has_children)
-    if date_from:
-        query = query.where(WalmartWfsFeeLine.date_charged >= date_from)
-    if date_to:
-        query = query.where(WalmartWfsFeeLine.date_charged <= date_to)
-    if q:
-        needle = f"%{q.strip()}%"
-        child = select(WalmartWfsFeeLine.parent_line_id).where(
+    if f.date_from:
+        query = query.where(WalmartWfsFeeLine.date_charged >= f.date_from)
+    if f.date_to:
+        query = query.where(WalmartWfsFeeLine.date_charged <= f.date_to)
+    if f.q:
+        needle = f"%{f.q.strip()}%"
+        child_hit = select(WalmartWfsFeeLine.parent_line_id).where(
             WalmartWfsFeeLine.parent_line_id.is_not(None),
             or_(
                 WalmartWfsFeeLine.item_id.ilike(needle),
@@ -165,9 +166,17 @@ def list_lines(
                 WalmartWfsFeeLine.gtin.ilike(needle),
                 WalmartWfsFeeLine.po_number.ilike(needle),
                 WalmartWfsFeeLine.source_ref.ilike(needle),
-                WalmartWfsFeeLine.id.in_(child),
+                WalmartWfsFeeLine.id.in_(child_hit),
             )
         )
+    return query
+
+
+def list_lines(
+    session: Session, f: LineFilter, *, page: int, page_size: int
+) -> tuple[list[WfsFeeLineRead], int]:
+    """原行分页；每个原行带它的分摊子行。"""
+    query = _apply(select(WalmartWfsFeeLine), f)
     total = session.scalar(select(func.count()).select_from(query.subquery())) or 0
     page_size = max(1, min(page_size, MAX_PAGE_SIZE))
     rows = list(
@@ -231,25 +240,19 @@ def get_line(session: Session, line_id: UUID) -> WfsFeeLineRead | None:
     return item
 
 
-def summary(
-    session: Session,
-    *,
-    store_id: str | None,
-    report_key: str | None,
-    date_from: date | None,
-    date_to: date | None,
-) -> tuple[list[WfsFeeSummaryRow], Decimal]:
+def summary(session: Session, f: LineFilter) -> tuple[list[WfsFeeSummaryRow], Decimal]:
+    """店铺 × 账单期 × 费用类型 合计；筛选和明细同一套。"""
     query = (
-        select(
-            WalmartWfsFeeLine.store_id,
-            WalmartWfsFeeLine.report_key,
-            WalmartWfsFeeLine.report_date,
-            WalmartWfsFeeLine.fee_type,
-            func.count(),
-            func.sum(WalmartWfsFeeLine.amount_usd),
-        )
-        .where(
-            WalmartWfsFeeLine.parent_line_id.is_(None), WalmartWfsFeeLine.missing_since.is_(None)
+        _apply(
+            select(
+                WalmartWfsFeeLine.store_id,
+                WalmartWfsFeeLine.report_key,
+                WalmartWfsFeeLine.report_date,
+                WalmartWfsFeeLine.fee_type,
+                func.count(),
+                func.sum(WalmartWfsFeeLine.amount_usd),
+            ),
+            f,
         )
         .group_by(
             WalmartWfsFeeLine.store_id,
@@ -263,14 +266,6 @@ def summary(
             WalmartWfsFeeLine.fee_type,
         )
     )
-    if store_id:
-        query = query.where(WalmartWfsFeeLine.store_id.in_(_many(store_id)))
-    if report_key:
-        query = query.where(WalmartWfsFeeLine.report_key.in_(_many(report_key)))
-    if date_from:
-        query = query.where(WalmartWfsFeeLine.date_charged >= date_from)
-    if date_to:
-        query = query.where(WalmartWfsFeeLine.date_charged <= date_to)
     rows = session.execute(query).all()
     total = sum((amount or Decimal("0") for *_, amount in rows), Decimal("0"))
     return [

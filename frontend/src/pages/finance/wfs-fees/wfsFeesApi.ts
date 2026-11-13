@@ -80,8 +80,10 @@ export function useFeeTypes() {
 export function useLines(filter: LineFilter) {
   return useQuery({ queryKey: [...ROOT_KEY, "lines", filter], queryFn: async () => (await backendRequest<ApiLineList>(`${BASE}/lines${qs(filter)}`)).data, retry: false, placeholderData: (previous) => previous });
 }
-export function useSummary(filter: Pick<LineFilter, "store_id" | "report_key" | "date_from" | "date_to">) {
-  return useQuery({ queryKey: [...ROOT_KEY, "summary", filter], queryFn: async () => (await backendRequest<ApiSummary>(`${BASE}/summary${qs(filter)}`)).data, retry: false });
+/** 合计和明细同一套筛选（复审 P2-7），只是不分页。 */
+export function useSummary(filter: LineFilter) {
+  const params = { ...filter, page: undefined, page_size: undefined };
+  return useQuery({ queryKey: [...ROOT_KEY, "summary", params], queryFn: async () => (await backendRequest<ApiSummary>(`${BASE}/summary${qs(params)}`)).data, retry: false });
 }
 export function useChecks(filter: { store_id?: string; report_key?: string }) {
   return useQuery({ queryKey: [...ROOT_KEY, "checks", filter], queryFn: async () => (await backendRequest<{ items: ApiCheck[] }>(`${BASE}/checks${qs({ ...filter, only_problem: true })}`)).data.items, retry: false });

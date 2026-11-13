@@ -19,16 +19,31 @@ def test_lookup_tolerates_leading_zeros():
     assert A.lookup(LISTINGS, S.STORE_A, "") is None
 
 
-def test_split_amount_keeps_the_total_and_puts_the_rounding_on_the_last_row():
+def test_split_amount_keeps_the_total_with_largest_remainder():
     shares = [
         A.Share(gtin="a", weight=Decimal(1)),
         A.Share(gtin="b", weight=Decimal(1)),
         A.Share(gtin="c", weight=Decimal(1)),
     ]
     out = A.split_amount(Decimal("-10.00"), shares)
-    assert [amount for _, amount in out] == [Decimal("-3.33"), Decimal("-3.33"), Decimal("-3.34")]
+    # 余数相同按原顺序补：第一行多 1 分
+    assert [amount for _, amount in out] == [Decimal("-3.34"), Decimal("-3.33"), Decimal("-3.33")]
     assert sum(amount for _, amount in out) == Decimal("-10.00")
     assert A.split_amount(Decimal("5"), [A.Share(weight=Decimal(0))]) == []
+    uneven = A.split_amount(
+        Decimal("1.00"), [A.Share(weight=Decimal(2)), A.Share(weight=Decimal(1))]
+    )
+    assert [amount for _, amount in uneven] == [Decimal("0.67"), Decimal("0.33")]
+
+
+def test_split_amount_never_flips_sign_when_shares_outnumber_cents():
+    """复审 P2-4：1.00 分 200 份、3.00 分 400 份，旧算法最后一行会变成反号。"""
+    for total, count in ((Decimal("1.00"), 200), (Decimal("3.00"), 400), (Decimal("-1.00"), 200)):
+        out = A.split_amount(total, [A.Share(gtin=str(i), weight=Decimal(1)) for i in range(count)])
+        amounts = [amount for _, amount in out]
+        assert sum(amounts) == total
+        assert all(a == 0 or (a > 0) == (total > 0) for a in amounts)
+        assert max(abs(a) for a in amounts) <= Decimal("0.01")
 
 
 def test_inbound_uses_shipped_quantity_then_declared():

@@ -495,3 +495,148 @@ def test_periods_list_bill_periods_with_store_code_and_stores_without_bills(serv
         (S.STORE_B, S.STORE_B, None),
     ]
     assert items[0].period_start_date == date(2026, 10, 17)
+
+
+def test_vote_refuses_when_most_products_are_shared_between_stores(service, session):
+    """复审 P1-1：B 店文件 9 行两店共有 + 1 行只在 A 店，不能认到 A。"""
+    _listing(session, S.GTIN_2, "30000000002", "B-MSKU-2", store_id=S.STORE_B)
+    session.flush()
+    shared = [
+        S.fee("LostInventory", "2026-10-07", "-1.00", gtin=S.GTIN_2, ref=f"S{i}", partner="P-V")
+        for i in range(9)
+    ]
+    mixed = _upload(
+        service,
+        S.settlement(
+            shared
+            + [
+                S.fee(
+                    "LostInventory", "2026-10-07", "-1.00", gtin=S.GTIN_1, ref="A1", partner="P-V"
+                )
+            ]
+        ),
+    )
+    assert mixed.status == "rejected" and mixed.needs_store
+    only_a = _upload(
+        service,
+        S.settlement(
+            [
+                S.fee(
+                    "LostInventory",
+                    "2026-10-07",
+                    "-1.00",
+                    gtin=S.GTIN_1,
+                    ref=f"A{i}",
+                    partner="P-W",
+                )
+                for i in range(10)
+            ]
+        ),
+    )
+    assert only_a.status == "parsed" and only_a.store_id == S.STORE_A
+
+
+def test_vote_needs_half_of_the_products_to_match(service, session):
+    """复审 P1-1：可匹配行不到有商品信息行的一半 → 不认。"""
+    rows = [S.fee("LostInventory", "2026-10-07", "-1.00", gtin=S.GTIN_1, ref="A1", partner="P-H")]
+    rows += [
+        S.fee(
+            "LostInventory", "2026-10-07", "-1.00", gtin=f"0099{i:010d}", ref=f"X{i}", partner="P-H"
+        )
+        for i in range(3)
+    ]
+    result = _upload(service, S.settlement(rows))
+    assert result.status == "rejected" and result.needs_store
+
+
+def test_learned_partner_conflicting_with_vote_is_rejected(service, session):
+    """复审 P2-2：以前学到 Partner 在 A 店，这次商品唯一属于 B 店 → 拒收；人选了其中一家才放行。"""
+    _listing(session, S.GTIN_3, "30000000003", "B-MSKU-3", store_id=S.STORE_B)
+    session.flush()
+    first = _upload(
+        service,
+        S.settlement(
+            [
+                S.fee(
+                    "LostInventory",
+                    "2026-10-07",
+                    "-1.00",
+                    gtin=S.GTIN_1,
+                    ref="L1",
+                    partner="10009900077",
+                )
+            ]
+        ),
+    )
+    assert first.store_id == S.STORE_A
+    clash = S.settlement(
+        [
+            S.fee(
+                "LostInventory",
+                "2026-10-08",
+                "-1.00",
+                gtin=S.GTIN_3,
+                ref="L2",
+                partner="10009900077",
+            )
+        ]
+    )
+    rejected = _upload(service, clash)
+    assert rejected.status == "rejected" and rejected.needs_store
+    assert "店铺对不上" in (rejected.reject_reason or "")
+    picked = _upload(service, clash, store_id=S.STORE_B)
+    assert picked.status == "parsed" and picked.store_id == S.STORE_B
+
+
+def test_same_file_cannot_go_to_another_store(service, session):
+    """复审 P2-3：查重不分店；已导入 A 店的文件再传到 B 店 → 拒收；不选店再传 → 跟着 A 店刷新。"""
+    content = S.inbound(
+        [(S.CARGO, "2026-10-05", "Parcel", "Base", "$10.00")], ("2026-10-03", "2026-10-16")
+    )
+    assert _upload(service, content, store_id=S.STORE_A).store_id == S.STORE_A
+    other = _upload(service, content, store_id=S.STORE_B)
+    assert other.status == "rejected" and "已导入到" in (other.reject_reason or "")
+    again = _upload(service, content)
+    assert again.duplicate_of_file and again.store_id == S.STORE_A
+
+
+def test_adjusted_line_is_flagged_when_reimport_changes_its_amount(service, session):
+    """复审 P2-6：人工分摊过的行，重导后原金额变了 → 待核，不自动改人工的分法。"""
+    _upload(
+        service, S.settlement([S.fee("Charge", "2026-10-07", "5.00", ref="RC")]), store_id=S.STORE_A
+    )
+    [row] = _lines(session, fee_type="Charge")
+    service.adjust(
+        row.id,
+        kind="realloc",
+        payload={"shares": [{"gtin": S.GTIN_1, "amount": "-5.00"}]},
+        reason="合成原因",
+        actor="u",
+        request_id=None,
+    )
+    _upload(
+        service, S.settlement([S.fee("Charge", "2026-10-07", "6.00", ref="RC")]), store_id=S.STORE_A
+    )
+    session.refresh(row)
+    assert row.amount_usd == Decimal("-6.00")
+    assert row.attribution == "allocated_check"
+    assert row.allocation_basis == "原金额已变，人工分摊需重做"
+
+
+def test_summary_uses_the_same_filters_as_lines(service, session):
+    """复审 P2-7：页面合计和表格同一套筛选。"""
+    _upload(
+        service,
+        S.settlement(
+            [
+                S.fee("LostInventory", "2026-10-07", "-2.00", gtin=S.GTIN_1, ref="Q1"),
+                S.fee("Charge", "2026-10-07", "5.00", ref="Q2"),
+            ]
+        ),
+    )
+    items, total = reader.summary(session, reader.LineFilter(fee_type="LostInventory"))
+    assert {item.fee_type for item in items} == {"LostInventory"} and total == Decimal("2.00")
+    _rows, count = reader.list_lines(
+        session, reader.LineFilter(fee_type="LostInventory"), page=1, page_size=50
+    )
+    assert count == 1

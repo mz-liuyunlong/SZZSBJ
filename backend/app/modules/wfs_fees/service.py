@@ -28,9 +28,10 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.modules.data_pages.models import WalmartListingDimension
+from app.modules.data_pages.models import LingxingStoreDimension, WalmartListingDimension
 from app.modules.finance_cashflow.service import store_original
 from app.modules.walmart_bills.models import WalmartBillLine, WalmartBillPeriod
+from app.modules.walmart_bills.payout_service import store_code
 from app.modules.wfs_fees import attribution as rules
 from app.modules.wfs_fees.models import (
     WalmartWfsFeeAdjustment,
@@ -156,7 +157,11 @@ class WfsFeeService:
                 request_id,
                 origin,
             )
-        resolved = self._resolve_store(report, store_id, file_name)
+        # 同一份文件不分店先查：导过的文件再传，店铺跟着以前那次走（复审 P2-3）
+        earlier = self._duplicate_file(sha256)
+        resolved, why = self._resolve_store(report, store_id, file_name)
+        if resolved is None and earlier is not None and not why:
+            resolved = earlier.store_id
         if resolved is None:
             result = self._reject(
                 file_name,
@@ -165,16 +170,33 @@ class WfsFeeService:
                 root,
                 "",
                 report.fee_source,
-                "认不出是哪家店：文件里的商品对不上唯一一家店铺"
-                + (INBOUND_STORE_HINT if report.fee_source == FEE_SOURCE_INBOUND else "")
-                + "，请在这一行选店铺后重新导入",
+                why
+                or (
+                    "认不出是哪家店：文件里的商品对不上唯一一家店铺"
+                    + (INBOUND_STORE_HINT if report.fee_source == FEE_SOURCE_INBOUND else "")
+                    + "，请在这一行选店铺后重新导入"
+                ),
                 actor,
                 request_id,
                 origin,
             )
             result.needs_store = True
             return result
-        duplicate = self._duplicate_file(resolved, sha256)
+        if earlier is not None and earlier.store_id != resolved:
+            return self._reject(
+                file_name,
+                sha256,
+                content,
+                root,
+                resolved,
+                report.fee_source,
+                f"此文件已导入到 {self._store_label(earlier.store_id)} 店，不能再导入到 "
+                f"{self._store_label(resolved)} 店；如果之前导错了，请联系管理员处理",
+                actor,
+                request_id,
+                origin,
+            )
+        duplicate = earlier
         if duplicate is not None:
             # 同一份文件再传：按现在的规则重新解析刷新（归期、归属可能变了），不新增行
             result = self._ingest(duplicate, report, resolved, actor, request_id)
@@ -264,27 +286,55 @@ class WfsFeeService:
 
     def _resolve_store(
         self, report: ParsedReport, store_id: str | None, file_name: str = ""
-    ) -> str | None:
-        """认店铺，不用人选（Rocky 11-13）：
+    ) -> tuple[str | None, str]:
+        """认店铺，不用人选（Rocky 11-13）。返回 (店铺, 拒收原因)。
 
         1. 结算报表的 Partner ID：配置表 → 以前导入过同一 Partner ID 的店铺（唯一才算）；
-        2. 文件里的商品（SKU / GTIN / Item ID）对商品表投票：唯一一家店匹配最多、
-           且占能匹配行的 80% 以上才算；同一商品挂在多家店、分不出来 → 认不出；
-        3. 文件里没有商品（空报告）时，看卖家后台文件名里的 Partner ID（如
-           StorageFee_<日期>_<Partner ID>.zip），必须是以前结算报表内容里出现过的 Partner ID；
-        4. 认不出时才用页面上选的店铺（store_id 只补空，不覆盖自动认出的店：
-           ZIP 里一部分认得出、一部分认不出，整包重传也不会把认出的改错）。
+        2. 文件里的商品（SKU / GTIN / Item ID）对商品表投票：只有一家店覆盖 ≥ 80% 的可匹配行、
+           且可匹配行 ≥ 有商品信息行的 50% 才算；多店共有的商品分不出来 → 认不出；
+        3. 学到的 Partner 店铺和投票唯一认出的店不一致 → 拒收（让人核对），页面选了其中一家才放行；
+        4. 文件里没有任何费用行（空报告 / 只有汇总行）时，才看卖家后台文件名里的 Partner ID，
+           且必须是以前从文件内容里学到过的；
+        5. 认不出时才用页面上选的店铺（只补空，不覆盖自动认出的店）。
         """
-        known = self._partner_store(report.partner_id) if report.partner_id else None
-        known = known or self._vote_store(report) or self._file_name_store(file_name)
+        picked = store_id if store_id and store_id.isdecimal() else None
+        partner, learned = (
+            self._partner_store(report.partner_id) if report.partner_id else (None, False)
+        )
+        voted = self._vote_store(report)
+        if partner and voted and partner != voted:
+            if learned:
+                if picked in (partner, voted):
+                    return picked, ""
+                return None, (
+                    f"店铺对不上：文件的 Partner ID 以前导入在 {self._store_label(partner)} 店，"
+                    f"但文件里的商品属于 {self._store_label(voted)} 店，"
+                    "请核对后在这一行选店铺重新导入"
+                )
+            return partner, ""  # 配置表里登记的 Partner ID 为准
+        known = partner or voted
+        if not known and not report.lines:
+            known = self._file_name_store(file_name)
         if known:
-            return known
-        return store_id if store_id and store_id.isdecimal() else None
+            return known, ""
+        return picked, ""
 
-    def _partner_store(self, partner_id: str) -> str | None:
+    def _store_label(self, store_id: str) -> str:
+        name = self.session.scalar(
+            select(LingxingStoreDimension.store_name)
+            .where(
+                LingxingStoreDimension.store_id == store_id,
+                LingxingStoreDimension.platform_code == "walmart",
+            )
+            .limit(1)
+        )
+        return store_code(name, store_id)
+
+    def _partner_store(self, partner_id: str) -> tuple[str | None, bool]:
+        """(店铺, 是否从以前导入学到的)；配置表登记的为 (店铺, False)。"""
         mapped = partner_store_map(self.settings).get(partner_id)
         if mapped:
-            return mapped
+            return mapped, False
         seen = self.session.scalars(
             select(WalmartWfsFeeLine.store_id)
             .where(
@@ -294,14 +344,14 @@ class WfsFeeService:
             .distinct()
             .limit(2)
         ).all()
-        return seen[0] if len(seen) == 1 else None
+        return (seen[0], True) if len(seen) == 1 else (None, False)
 
     def _file_name_store(self, file_name: str) -> str | None:
         """文件名里的长数字串当 Partner ID 去对；只认以前从文件内容里学到的，对不上就不认。"""
         stores = {
             store
             for digits in re.findall(r"(?<!\d)\d{8,20}(?!\d)", file_name)
-            if (store := self._partner_store(digits))
+            if (store := self._partner_store(digits)[0])
         }
         return stores.pop() if len(stores) == 1 else None
 
@@ -341,6 +391,11 @@ class WfsFeeService:
                 by_item[row.item_id.strip()].add(row.store_id)
         votes: dict[str, int] = defaultdict(int)
         matched = 0
+        informative = sum(
+            1
+            for line in report.lines
+            if line.sku.strip() or line.gtin.strip() or line.item_id.strip()
+        )
         for line in report.lines:
             # SKU 是店铺自己的编码，最准；没有 SKU 再看 GTIN、Item ID
             stores = (
@@ -353,19 +408,18 @@ class WfsFeeService:
             matched += 1
             for store in stores:
                 votes[store] += 1
-        if not votes:
+        # 覆盖太少（大部分商品对不上）不认；只有一家店覆盖 ≥ 80% 才认（复审 P1-1）
+        if not votes or matched < 0.5 * informative:
             return None
-        ranked = sorted(votes.items(), key=lambda kv: kv[1], reverse=True)
-        best, count = ranked[0]
-        if len(ranked) > 1 and ranked[1][1] == count:
-            return None
-        return best if count >= 0.8 * matched else None
+        strong = [store for store, count in votes.items() if count >= 0.8 * matched]
+        return strong[0] if len(strong) == 1 else None
 
-    def _duplicate_file(self, store_id: str, sha256: str) -> WalmartWfsFeeFile | None:
+    def _duplicate_file(self, sha256: str) -> WalmartWfsFeeFile | None:
+        """同一份文件（按内容，不分店）以前导入过的那条记录。"""
         return self.session.scalars(
             select(WalmartWfsFeeFile)
             .where(
-                WalmartWfsFeeFile.store_id == store_id,
+                WalmartWfsFeeFile.source_account_ref == SOURCE_REF,
                 WalmartWfsFeeFile.sha256 == sha256,
                 WalmartWfsFeeFile.status != "rejected",
             )
@@ -422,6 +476,7 @@ class WfsFeeService:
         bills = _BillIndex(self.session, store_id)
         new_rows = 0
         touched: list[WalmartWfsFeeLine] = []
+        amount_changed: set[UUID] = set()
         for parsed in report.lines:
             row = existing.get(parsed.line_key)
             if row is None:
@@ -439,7 +494,12 @@ class WfsFeeService:
                 )
                 self.session.add(row)
                 new_rows += 1
+                before = None
+            else:
+                before = row.amount_usd
             self._fill(row, parsed, report, bills)
+            if before is not None and before != row.amount_usd:
+                amount_changed.add(row.id)
             row.last_file_id = record.id
             row.missing_since = None
             row.updated_at = now
@@ -459,7 +519,7 @@ class WfsFeeService:
                 if row.line_key not in {line.line_key for line in report.lines}:
                     row.missing_since = now
         self.session.flush()
-        self.attribute(touched)
+        self.attribute(touched, amount_changed=amount_changed)
         record.row_count = len(report.lines)
         record.rows_new = new_rows
         record.rows_duplicate = len(report.lines) - new_rows
@@ -515,15 +575,31 @@ class WfsFeeService:
 
     # ------------------------------------------------------------ 归属
 
-    def attribute(self, rows: list[WalmartWfsFeeLine]) -> None:
-        """对这些原行重算归属和分摊子行（已人工调整过的不动）。"""
+    def attribute(
+        self, rows: list[WalmartWfsFeeLine], *, amount_changed: set[UUID] | None = None
+    ) -> None:
+        """对这些原行重算归属和分摊子行（已人工调整过的不动）。
+
+        人工调整过的行重导后原金额变了：人工分摊的合计已经不等于原行，标「待核」让财务重做，
+        不自动改人工的分法（复审 P2-6）。
+        """
         if not rows:
             return
         adjusted = self._adjusted_ids([row.id for row in rows])
         store_ids = {row.store_id for row in rows}
         listings = self._listings(store_ids)
         for row in rows:
-            if row.parent_line_id is not None or row.id in adjusted:
+            if row.parent_line_id is not None:
+                continue
+            if row.id in adjusted:
+                # 记公司的不受金额影响；人工分到商品的才需要重做
+                if (
+                    amount_changed
+                    and row.id in amount_changed
+                    and row.attribution != rules.ATTR_COMPANY
+                ):
+                    row.attribution = rules.ATTR_ALLOCATED_CHECK
+                    row.allocation_basis = "原金额已变，人工分摊需重做"
                 continue
             self._drop_children(row)
             if row.gtin:
@@ -972,20 +1048,26 @@ class _BillIndex:
 
 
 def _fulfillment_rows(content: bytes):
-    """从存档的结算报表里取配送费行：(ref, 交易日, gtin, 原价, 折扣)。给新卖家补贴分摊用。"""
-    import csv
-    import io
+    """从存档的结算报表里取配送费行：(ref, 交易日, gtin, 原价, 折扣)。给新卖家补贴分摊用。
 
+    和导入用同一个读法（parsing._rows，newline="" 容错 \r / \r\n）；读不出来的文件、
+    日期认不出的行直接跳过，不让一份坏存档把整次分摊弄失败（复审 P2-5）。
+    """
     from app.modules.wfs_fees.parsing import (
         SETTLEMENT_COLUMNS,
+        ParseError,
         _clean,
         _date,
         _decimal,
         _digits,
         _header_index,
+        _rows,
     )
 
-    rows = list(csv.reader(io.StringIO(content.decode("utf-8-sig", errors="replace"))))
+    try:
+        rows = _rows(content)
+    except ParseError:
+        return
     head_at = next(
         (i for i, row in enumerate(rows) if _header_index(row, "Transaction Type") >= 0), -1
     )
@@ -1001,11 +1083,14 @@ def _fulfillment_rows(content: bytes):
     for row in rows[head_at + 1 :]:
         if cell(row, "type") != FULFILLMENT_FEE:
             continue
-        when = _date(cell(row, "date"))
+        try:
+            when = _date(cell(row, "date"))
+            orig = _decimal(cell(row, "orig")) or Decimal("0")
+            disc = _decimal(cell(row, "disc")) or Decimal("0")
+        except ParseError:
+            continue
         if when is None:
             continue
         gtin = _digits(cell(row, "gtin"))
-        orig = _decimal(cell(row, "orig")) or Decimal("0")
-        disc = _decimal(cell(row, "disc")) or Decimal("0")
         ref = cell(row, "ref") or f"{when}|{gtin}|{cell(row, 'net')}"
         yield ref, when, gtin, orig, disc

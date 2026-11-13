@@ -37,7 +37,7 @@ const HELP: HelpSection[] = [
   { title: "分摊行", body: "一笔费用分到多个商品时，表里按分到的商品一行一行列（店铺、日期、类型、货件号同原行，商品和金额是各自的），「分摊」列标 第几份/共几份，几份合计 = 原金额。导出也是这样。" },
   { title: "账单期", body: "每笔费用按扣费周（周五）归到领星沃尔玛账单的那一期；按天出账的退货类按交易日；仓储、入库按账期止日。归期依据在明细列里。" },
   { title: "核对", body: "表格上方列出和领星账单对不上的 店铺 × 账单期 × 费用类型。常见原因：期末一天时区差（两期合计相等）、报表漏行、领星没有的新类型。财务核实后点「已核实」写原因，下次金额变了会重新标出。" },
-  { title: "导入", body: "所有店铺都可以上传卖家后台下载的原始 CSV（结算报表 / 仓储费报表 / 入库运输报告），系统按内容认类型；结算报表按 Partner ID 认店铺，仓储 / 入库要选店铺。同一份文件再传只刷新不重复；仓储 / 入库同账期重传 = 覆盖，账期交叉但起止不同会拒收。" },
+  { title: "导入", body: "所有店铺都可以上传卖家后台下载的原始 CSV 或 ZIP（结算报表 / 仓储费报表 / 入库运输报告），不用选店铺、账期：系统按内容认类型，按 Partner ID 和文件里的商品自动认店，账期取报表自带的。认不出店（比如多店共有的商品、入库运输报告）才会在那一行让你选店重传。同一份文件再传只刷新不重复，已导入到别的店的文件会拒收；仓储 / 入库同账期重传 = 覆盖，账期交叉但起止不同会拒收。" },
   { title: "调整", body: "无 GTIN 的费用，点「调整」改分摊（分到哪些商品、各多少，合计要等于原金额）或记公司，必填原因，留痕；调整过的行不会被重新导入覆盖。" },
 ];
 
@@ -75,7 +75,7 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
   const periods = useBillPeriods();
   const lines = useLines(filter);
   const adjustingLine = adjusting ? (lines.data?.items ?? []).find((l) => l.id === adjusting.parentId) : undefined;
-  const summary = useSummary({ store_id: filter.store_id, report_key: filter.report_key, date_from: filter.date_from, date_to: filter.date_to });
+  const summary = useSummary(filter);
   const refresh = useWfsRefresh();
 
   const storeCode = useMemo(() => new Map((periods.data ?? []).map((p) => [p.store_id, p.store_code])), [periods.data]);
@@ -150,7 +150,7 @@ function FinanceWfsFeesPage({ page }: { page: NavigationPage }) {
       <Space className="finance-board__toolbar-actions" size={8}>
         <Tooltip title="按店铺 / 账期从沃尔玛接口拉取报表（下一版开放）"><Button disabled>同步</Button></Tooltip>
         <Button type="primary" onClick={() => setImportOpen(true)}>导入</Button>
-        <Button onClick={() => exportLines(rows, typeName)} disabled={!rows.length}>导出 Excel</Button>
+        <Tooltip title="导出当前这一页的行（含分摊行）；要导更多，先调大每页条数或加筛选"><Button onClick={() => exportLines(rows, typeName)} disabled={!rows.length}>导出本页</Button></Tooltip>
         <Button aria-label="列配置" icon={<SettingOutlined aria-hidden="true" />} onClick={() => setColumnConfigOpen(true)} />
       </Space>
     </>

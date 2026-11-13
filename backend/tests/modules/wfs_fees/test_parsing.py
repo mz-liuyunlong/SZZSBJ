@@ -215,3 +215,46 @@ def test_summary_only_settlement_keeps_partner_and_explains_skip():
     assert report.lines == []
     assert report.partner_id == S.PARTNER_A
     assert any("仓储费店铺周汇总 1 行" in w for w in report.warnings)
+
+
+def test_storage_duplicate_gtin_rows_are_merged_or_split_by_sku():
+    """复审 P3：同一 GTIN 多行不能撞唯一键 —— 同 SKU 合并，不同 SKU 各自一行。"""
+    report = parse(
+        S.storage(
+            [
+                (S.GTIN_1, "SKU-1", "1.00", "1.10", "0.10"),
+                (S.GTIN_1, "SKU-1", "2.00", "2.20", "0.20"),
+                (S.GTIN_1, "SKU-2", "0.50", "0.50", "0"),
+            ],
+            period=("2026-10-03", "2026-10-16"),
+            total="3.50",
+        )
+    )
+    by_sku = {line.sku: line for line in report.lines}
+    assert set(by_sku) == {"SKU-1", "SKU-2"}
+    assert by_sku["SKU-1"].amount_usd == Decimal("-3.00")
+    assert by_sku["SKU-1"].original_amount == Decimal("-3.30")
+    assert len({line.line_key for line in report.lines}) == 2
+
+
+def test_settlement_line_key_ignores_trailing_zeros_without_reference_id():
+    a = parse(S.settlement([S.fee("Charge", "2026-10-07", "-1.5", ref="")])).lines[0]
+    b = parse(S.settlement([S.fee("Charge", "2026-10-07", "-1.50", ref="")])).lines[0]
+    assert a.line_key == b.line_key
+
+
+def test_fulfillment_rows_read_carriage_return_files_and_skip_bad_ones():
+    """复审 P2-5：新卖家补贴分摊读存档时和导入同一个读法，纯 \\r 换行也认；坏文件跳过不报错。"""
+    from app.modules.wfs_fees.service import _fulfillment_rows
+
+    content = S.settlement(
+        [
+            S.fee("FulfillmentFee", "2026-10-07", "3.45", gtin=S.GTIN_1, ref="F1", orig="3.45"),
+            S.fee("FulfillmentFee", "bad-date", "1.00", gtin=S.GTIN_2, ref="F2", orig="1.00"),
+        ]
+    ).replace(b"\r\n", b"\r")
+    rows = list(_fulfillment_rows(content))
+    assert [(ref, gtin, orig) for ref, _when, gtin, orig, _disc in rows] == [
+        ("F1", S.GTIN_1, Decimal("3.45"))
+    ]
+    assert list(_fulfillment_rows(b"\x00\xff not a csv")) == []
