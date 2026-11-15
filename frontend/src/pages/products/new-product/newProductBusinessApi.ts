@@ -13,6 +13,12 @@ export type RealScore = {
   observation_state: string;
 };
 export type NewProductListing = {
+  evaluation_status?: "待到货"|"测评中"|"待市场评分"|"测评通过"|"测评未通过";
+  evaluation_review_status?: "submitted"|"info_required"|"approved"|"rejected"|null;
+  evaluation_review_id?: string|null;
+  evaluation_job_status?: "none"|"queued"|"running"|"completed"|"failed"|null;
+  evaluation_manual_exception?: boolean;
+  evaluation_recheck_required?: boolean;
   listing: {
     id: string; source_account_ref: string; store_id: string; item_id: string;
     msku: string | null; local_sku: string | null; title: string | null;
@@ -34,6 +40,19 @@ export type NewProductListing = {
   suggested_qty: number | null;
   purchase_status: string | null;
   purchase_id: string | null;
+  tracking_final_result?: string | null;
+  tracking_review_status?: string | null;
+  tracking_review_application?: {
+    proposed_result: string; reason: string; status: string; created_at: string | null;
+  } | null;
+  tracking_started_date_la?: string | null;
+  tracking_start_status?: string | null;
+  tracking_status?: string | null;
+  purchase_version?: number | null;
+  requested_qty?: number | null;
+  approved_qty?: number | null;
+  purchase_reason?: string | null;
+  tracking_version?: number;
   system_recommendation: { value: string; reasons: string[] };
 };
 export type PageResponse = { items: NewProductListing[]; total: number; page: number; page_size: number; rule_version: number };
@@ -82,4 +101,28 @@ export async function reviewNewProductPurchase(id:string,decision:"approved"|"re
 }
 export async function exportNewProductListings() {
   await backendDownload("/api/new-products/listings-export","new-products-real.csv");
+}
+
+// PR337_EVALUATION_FULL_WORKFLOW_20261116: all evaluation mutations use the existing authenticated backendRequest.
+export async function requestNewProductEvaluation(identity: Identity) {
+  return (await backendRequest<{status:string;trigger:string;item_id:string;missing?:string[]},null>(
+    "/api/new-products/evaluations/calculate", {method:"POST",body:JSON.stringify(identity)})).data;
+}
+export async function getNewProductEvaluationJob(identity: Identity) {
+  const a=encodeURIComponent(identity.source_account_ref),s=encodeURIComponent(identity.store_id),
+        i=encodeURIComponent(identity.item_id);
+  return (await backendRequest<{status:string;item_id:string},null>(
+    `/api/new-products/evaluations/status/${a}/${s}/${i}`)).data;
+}
+export async function requestNewProductEvaluationReview(identity: Identity,
+  reasonType:"calculation_error"|"scoring_basis_error"|"special_exception",reason:string,evidence:string) {
+  return (await backendRequest<{application_id:string;status:string;version:number},null>(
+    "/api/new-products/evaluation-reviews", {method:"POST",body:JSON.stringify(
+      {...identity,reason_type:reasonType,reason,evidence})})).data;
+}
+
+export async function requestNewProductEvaluationRecheck(applicationId: string) {
+  return (await backendRequest<{status:string;execution_id:string;grade:string},null>(
+    "/api/new-products/evaluation-reviews/" + encodeURIComponent(applicationId) + "/recheck",
+    {method:"POST"})).data;
 }

@@ -191,7 +191,7 @@ export default function PurchaseApprovalDecisionDrawer({record, seed, profile, o
   const isInitial = kind === 'initial';
   const isReplenishment = kind === 'replenishment';
   const p = profile.purchaseAnalysis;
-  const canDecide = record.status === 'submitted' && Boolean(onAction);
+  const canDecide = record.status === 'submitted' && Boolean(onAction) && (record.id.startsWith('DEMO-') || record.can_review);
   const statusNames: Record<string, string> = {submitted: '待审批', approved: '已审批', rejected: '已驳回', info_required: '待补资料'};
   const requestQty = profile.quantity;
   const suggestQty = profile.suggestedQty;
@@ -254,7 +254,7 @@ export default function PurchaseApprovalDecisionDrawer({record, seed, profile, o
       </div>
     </div>
     <footer className="purchase-decision__footer">
-      <span>申请时分析快照 · 模拟审批，不写入生产业务数据</span>
+      <span>{record.approval_type === "new_product_purchase" ? "申请时真实评分快照 · 审批结果写入原采购申请" : "申请时分析快照 · 模拟审批，不写入生产业务数据"}</span>
       <div className="purchase-decision__footer-actions">
         {/* PR337_PURCHASE_DETAIL_SYSTEM_UI_V33: use standard Ant Design actions and retained guard. */}
         <Button size="middle" onClick={onClose}>关闭</Button>

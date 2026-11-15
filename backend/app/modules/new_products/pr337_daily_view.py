@@ -20,6 +20,11 @@ def saved_daily_view(row: dict[str, Any], matched: tuple | None) -> bool:
     if row.get("evaluation", {}).get("observation_state") == "frozen":
         return False
     coverage = perf.data_coverage_json
+    # V2 authoritative publisher owns this item's profit and score.
+    # A historical PR337 daily proof may remain for audit, but MUST NOT
+    # overwrite V2 ROI, market score, trust or final grade on GET.
+    if isinstance(coverage.get("new_products_authority_v2"), dict):
+        return False
     block = coverage.get("auto_dimension_scores")
     proof = coverage.get("pr337_daily_verified_v1")
     if not isinstance(block, dict) or not isinstance(proof, dict):

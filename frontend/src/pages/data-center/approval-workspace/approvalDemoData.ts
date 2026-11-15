@@ -1,5 +1,5 @@
 import type { ApprovalFilters, ApprovalItem } from "./approvalTypes";
-import { fetchApprovals } from "./approvalApi";
+import { fetchApprovals, fetchNewProductPurchaseApprovals } from "./approvalApi";
 import { fetchClearanceApprovals } from "@/pages/products/clearance/clearanceApi";
 
 export interface DemoSeed {
@@ -309,6 +309,10 @@ export async function fetchWorkbenchList(
     }
     return fetchClearanceApprovals(filters);
   }
+  // NP_PURCHASE_WORKBENCH_REAL_API_V1_20261116: both real purchase sources.
+  if (filters.approval_type === "purchase_exception") {
+    return fetchRealPurchaseList(filters);
+  }
   // WFS 查询完全交给原有真实接口处理。
   if (filters.approval_type === "wfs_case_abandon") {
     return fetchApprovals(filters);
@@ -381,65 +385,80 @@ export async function fetchWorkbenchList(
   };
 }
 
-/** CLEARANCE_APPROVAL_VISIBILITY_V32
- * List only real clearance approvals, including in All.  Keep the existing WFS
- * endpoint and every non-clearance demo business untouched.  The all-business
- * order is: real clearance, real WFS, then other-business demo rows; this makes
- * newly submitted clearance requests visible on the first page immediately.
- * Global pages are constructed from source offset ranges without creating
- * duplicate rows or silently hiding real requests at pagination boundaries.
+/** NP_PURCHASE_WORKBENCH_REAL_API_V1_20261116
+ * Merge bounded real approval sources without mixing simulated purchase rows.
+ * No cross-source SQL writes or pagination gaps.
  */
-async function fetchAllWithRealClearanceV32(filters: ApprovalFilters): Promise<ApprovalResponse> {
+type RealFetcher = (filters: ApprovalFilters) => Promise<ApprovalResponse>;
+async function combinedRealSources(
+  filters: ApprovalFilters,
+  sources: {type: string; fetcher: RealFetcher}[],
+  includeOtherDemo: boolean,
+): Promise<ApprovalResponse> {
   const probe = { ...filters, page: 1, page_size: 1 };
-  const [clearanceHead, wfsHead] = await Promise.all([
-    fetchClearanceApprovals({ ...probe, approval_type: "clearance_request" }),
-    fetchApprovals({ ...probe, approval_type: "wfs_case_abandon" }),
-  ]);
-  const clearanceTotal = clearanceHead.meta.total;
-  const wfsTotal = wfsHead.meta.total;
-  // Keep other demo business families unchanged; never display DEMO-CLR as real.
-  const otherDemo = getFilteredDemoItems(filters).filter(item => item.approval_type !== "clearance_request");
-  const offset = (filters.page - 1) * filters.page_size;
+  const heads = await Promise.all(sources.map(s =>
+    s.fetcher({...probe,approval_type:s.type})
+  ));
+  const totals = heads.map(h => h.meta.total);
+  const otherDemo = includeOtherDemo
+    ? getFilteredDemoItems(filters).filter(row =>
+        row.approval_type !== "clearance_request" &&
+        row.approval_type !== "purchase_exception")
+    : [];
+  const offset = (filters.page-1) * filters.page_size;
   const end = offset + filters.page_size;
-  const sourcePageSize = 50; // Both API endpoints support this small bounded page size.
-
-  async function fromSource(
-    fetcher: (args: ApprovalFilters) => Promise<ApprovalResponse>,
-    approvalType: string,
-    sourceStart: number,
-    total: number,
-  ): Promise<ApprovalItem[]> {
-    const start = Math.max(offset - sourceStart, 0);
-    const stop = Math.min(total, end - sourceStart);
-    if (stop <= start) return [];
-    const found: ApprovalItem[] = [];
-    let cursor = start;
-    while (cursor < stop) {
-      const page = Math.floor(cursor / sourcePageSize) + 1;
-      const index = cursor % sourcePageSize;
-      const needed = Math.min(stop - cursor, sourcePageSize - index);
-      const response = await fetcher({
-        ...filters, approval_type: approvalType, page, page_size: sourcePageSize,
-      });
-      const chunk = response.data.items.slice(index, index + needed);
-      if (chunk.length !== needed) {
-        throw new Error("Approval source pagination changed during clearance listing; reload to retry");
-      }
-      found.push(...chunk);
-      cursor += needed;
+  const sourcePageSize = 50;
+  let sourceStart = 0;
+  const pages: Promise<ApprovalItem[]>[] = [];
+  for (let n=0; n<sources.length; n++) {
+    const source = sources[n];
+    const total = totals[n];
+    const start = Math.max(offset-sourceStart,0);
+    const stop = Math.min(total,end-sourceStart);
+    if (stop<=start) {
+      pages.push(Promise.resolve([]));
+    } else {
+      pages.push((async () => {
+        const result: ApprovalItem[] = [];
+        let cursor = start;
+        while(cursor<stop) {
+          const page = Math.floor(cursor/sourcePageSize)+1;
+          const index = cursor%sourcePageSize;
+          const needed = Math.min(stop-cursor, sourcePageSize-index);
+          const next = await source.fetcher({
+            ...filters, approval_type:source.type,
+            page, page_size:sourcePageSize,
+          });
+          const chunk = next.data.items.slice(index,index+needed);
+          if(chunk.length!==needed) throw new Error("审批列表数据已变化，请刷新重试");
+          result.push(...chunk);
+          cursor+=needed;
+        }
+        return result;
+      })());
     }
-    return found;
+    sourceStart += total;
   }
-
-  const [clearanceRows, wfsRows] = await Promise.all([
-    fromSource((args) => fetchClearanceApprovals(args) as Promise<ApprovalResponse>, "clearance_request", 0, clearanceTotal),
-    fromSource(fetchApprovals, "wfs_case_abandon", clearanceTotal, wfsTotal),
-  ]);
-  const demoStart = Math.max(0, offset - clearanceTotal - wfsTotal);
-  const demoEnd = Math.max(0, end - clearanceTotal - wfsTotal);
+  const rows = (await Promise.all(pages)).flat();
+  const demoStart=Math.max(0,offset-sourceStart);
+  const demoEnd=Math.max(0,end-sourceStart);
   return {
-    ...wfsHead,
-    data: { ...wfsHead.data, items: [...clearanceRows, ...wfsRows, ...otherDemo.slice(demoStart, demoEnd)] },
-    meta: { ...wfsHead.meta, page: filters.page, page_size: filters.page_size, total: clearanceTotal + wfsTotal + otherDemo.length },
-  };
+    data:{items:[...rows,...otherDemo.slice(demoStart,demoEnd)]},
+    meta:{page:filters.page,page_size:filters.page_size,
+      total:sourceStart+otherDemo.length},
+  } as ApprovalResponse;
+}
+async function fetchRealPurchaseList(filters:ApprovalFilters):Promise<ApprovalResponse> {
+  return combinedRealSources(filters,[
+    {type:"purchase_exception",fetcher:fetchNewProductPurchaseApprovals},
+    {type:"purchase_exception",fetcher:fetchApprovals},
+  ],false);
+}
+async function fetchAllWithRealClearanceV32(filters:ApprovalFilters):Promise<ApprovalResponse> {
+  return combinedRealSources(filters,[
+    {type:"clearance_request",fetcher:(f)=>fetchClearanceApprovals(f) as Promise<ApprovalResponse>},
+    {type:"purchase_exception",fetcher:fetchNewProductPurchaseApprovals},
+    {type:"purchase_exception",fetcher:fetchApprovals},
+    {type:"wfs_case_abandon",fetcher:fetchApprovals},
+  ],true);
 }

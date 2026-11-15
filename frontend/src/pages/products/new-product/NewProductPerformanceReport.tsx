@@ -11,13 +11,14 @@ import ReportFacetSelect from "@/shared/report-filters";
 import type { ReportFilterOption } from "@/shared/report-filters";
 import { grade, score, type Config, type Product } from "./nativeData";
 
-type Action = "detail" | "market" | "purchase" | "approval";
+type Action = "detail" | "market" | "purchase" | "approval" | "resultApproval" | 'calculate' | 'evaluationReview' | 'recheck';
 type Props = {
   items: Product[];
   config: Config;
   phase: string;
   onOpen: (kind: Action, id: string) => void;
   onResetPhase: () => void;
+  calculatingItemId?: string | null;
   focusItemId?: string | null;
 };
 
@@ -292,7 +293,8 @@ function automaticScoreExplanation(row: Product, config: Config) {
   );
 }
 
-function NewProductPerformanceReportBody({ items, config, phase, onOpen, onResetPhase, focusItemId }: Props) {
+function NewProductPerformanceReportBody({ items, config, phase, onOpen, onResetPhase, focusItemId, calculatingItemId }: Props) {
+  const [statuses, setStatuses] = useState<string[]>([]);
   const [owners, setOwners] = useState<string[]>([]);
   const [ratings, setRatings] = useState<string[]>([]);
   const [searchField, setSearchField] = useState(focusItemId && phase === "approval" ? "item" : "sku");
@@ -301,6 +303,16 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
   const [pageSize, setPageSize] = useState(50);
 
 
+
+  // PR337_FLOW_STATUS_MULTI_COUNT_FILTER_20261116
+  const statusOptions = useMemo<ReportFilterOption[]>(() => {
+    const counts = new Map<string, number>();
+    for (const row of items) {
+      if (!row.status) continue;
+      counts.set(row.status, (counts.get(row.status) ?? 0) + 1);
+    }
+    return [...counts].map(([value, count]) => ({ value, label: value, count }));
+  }, [items]);
 
   const ownerOptions = useMemo<ReportFilterOption[]>(() =>
     [...new Set(items.map((row) => row.owner))].map((value) => ({
@@ -317,21 +329,22 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
 
   const filtered = useMemo(() => items.filter((row) => {
     const inPhase = phase === "all" ||
+      (phase === "evaluating" && row.status === "测评中") ||
       (phase === "market" && row.status === "待市场评分") ||
-      (phase === "purchase" && row.status === "待采购确认") ||
-      (phase === "approval" && row.status === "审核中") ||
-      (phase === "approved" && ["已批准","已通过","审批通过"].includes(row.status));
+      (phase === "passed" && row.status === "测评通过") ||
+      (phase === "failed" && row.status === "测评未通过");
     const fieldValue = searchField === "item" ? row.item :
       searchField === "name" ? row.name :
       searchField === "owner" ? row.owner : row.sku;
-    return inPhase && contains(owners, row.owner) &&
+    return inPhase && contains(statuses, row.status) && contains(owners, row.owner) &&
       contains(ratings, grade(row, config) ?? "pending") &&
       (!keyword || (searchField === "item" && keyword === focusItemId
         ? row.item === keyword
         : String(fieldValue).toLowerCase().includes(keyword.toLowerCase())));
-  }), [items, config, phase, owners, ratings, searchField, keyword, focusItemId]);
+  }), [items, config, phase, statuses, owners, ratings, searchField, keyword, focusItemId]);
 
   const reset = () => {
+    setStatuses([]);
     setOwners([]);
     setRatings([]);
 
@@ -474,10 +487,10 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
           </div>
 </Popover>
           <div className="cell-sub">
-            出单 {row.backend && !row.backend.available.speed ? '—' : Number(row.scores.speed).toFixed(2)} · 广告 {row.backend && !row.backend.available.ad ? '—' : Number(row.scores.ad).toFixed(2)}
+            出单 {(row.backend && !row.backend.available.speed) ? '—' : Number(row.scores.speed).toFixed(2)} · 广告 {(row.backend && !row.backend.available.ad) ? '—' : Number(row.scores.ad).toFixed(2)}
           </div>
           <div className="cell-sub">
-            利润 {row.backend && !row.backend.available.profit ? '—' : Number(row.scores.profit).toFixed(2)} · 可信 {row.backend && !row.backend.available.trust ? '—' : Number(row.scores.trust).toFixed(2)}
+            利润 {(row.backend && !row.backend.available.profit) ? '—' : Number(row.scores.profit).toFixed(2)} · 可信 {(row.backend && !row.backend.available.trust) ? '—' : Number(row.scores.trust).toFixed(2)}
           </div>
         </>
       ),
@@ -488,7 +501,10 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
       width: 165,
       render: (_value, row) => (
         <div>
-          {row.market === null ? (
+          {(row.status === "测评中" || (row.backend && !row.backend.firstWfsDate && !row.launch)) &&
+            row.tracking !== "打品成功" && row.tracking !== "打品失败" ? (
+            <span className="muted">—</span>
+          ) : row.market === null ? (
             <Tag color="orange">{row.status === "待计算" ? "待计算" : "待人工评分"}</Tag>
           ) : (
             <>
@@ -504,8 +520,8 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
       key: "grade",
       width: 155,
       render: (_value, row) => {
-        const total = score(row, config);
-        const rating = grade(row, config);
+        const total = row.status === "测评中" ? null : score(row, config);
+        const rating = row.status === "测评中" ? null : grade(row, config);
 
         const tone =
           rating === "S" ? "grade-s" :
@@ -514,7 +530,7 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
           rating === "C" ? "grade-c" : "grade-d";
 
         return total === null ? (
-          <span className="muted">待评分</span>
+          <span className="muted">{row.status === "测评中" ? "—" : "待评分"}</span>
         ) : (
           <>
             <div className="score-main">{total.toFixed(2)}</div>
@@ -533,44 +549,53 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
       render: (_value, row) => {
         const color =
           row.status === "待市场评分" ? "orange" :
-          row.status === "待采购确认" ? "blue" :
-          row.status === "审核中" ? "purple" :
-          row.status === "已批准" ? "green" :
-          row.status.includes("停止") ||
-          row.status.includes("失败") ||
-          row.status.includes("驳回") ? "red" :
-          "default";
-
-        return (
-          <>
-            <Tag color={color}>{row.status}</Tag>
-            <div className="cell-sub">{row.risk || "—"}</div>
-          </>
-        );
+          row.status === "测评中" ? "blue" :
+          row.status === "测评通过" ? "green" :
+          row.status === "测评未通过" ? "red" : "default";
+        return <Tag color={color}>{row.status}</Tag>;
       },
     },
     {
-      title: "操作", key: "actions", width: 142, fixed: "right",
+      title: "操作", key: "actions", width: 184, fixed: "right",
       render: (_value, row) => {
-        if (["已批准","已通过","审批通过"].includes(row.status)) {
-          return <Button size="small" onClick={() => onOpen("detail", row.id)}>详情</Button>;
-        }
         const state = row.status;
-        const action: Action = state === "待市场评分" ? "market" :
-          state === "待采购确认" ? "purchase" :
-          state === "审核中" ? "approval" : "detail";
-        const label = state === "待市场评分" ? "去评分" :
-          state === "待采购确认" ? "确认采购" :
-          state === "审核中" ? "查看申请" : "详情";
-        const primary = state === "待市场评分" || state === "待采购确认";
-        return <Button type={primary ? "primary" : "default"} size="small"
-          onClick={() => onOpen(action, row.id)}>{label}</Button>;
+        if (state === "待到货") return <span className="muted">—</span>;
+        if (state === "测评中") return <span style={{ display: "inline-flex", alignItems: "center", gap: 12, whiteSpace: "nowrap" }}>
+          <Button size="small" onClick={() => onOpen("detail",row.id)} style={{ minWidth: 58, borderRadius: 8, borderColor: "#d0d5dd", color: "#344054", fontWeight: 500 }}>详情</Button>
+          <Button size="small" type="primary" disabled={calculatingItemId === row.id}
+            onClick={() => onOpen("calculate",row.id)}>
+            {calculatingItemId === row.id ? "计算中" : "立即计算"}
+          </Button>
+        </span>;
+        if (state === "待市场评分") return <Button size="small" type="primary"
+          onClick={() => onOpen("market",row.id)}>去评分</Button>;
+        if (state === "测评未通过") return <span style={{ display: "inline-flex", alignItems: "center", gap: 12, whiteSpace: "nowrap" }}>
+          <Button size="small" onClick={() => onOpen("detail",row.id)} style={{ minWidth: 58, borderRadius: 8, borderColor: "#d0d5dd", color: "#344054", fontWeight: 500 }}>详情</Button>
+          {row.evaluationRecheckRequired && row.evaluationReviewStatus === "approved" ?
+            <Button size="small" type="primary" disabled={calculatingItemId === row.id}
+              onClick={() => onOpen("recheck",row.id)}>重新核算</Button> :
+            row.evaluationReviewStatus === "submitted" || row.evaluationReviewStatus === "info_required" ?
+            <Button size="small" disabled>复核审核中</Button> :
+            row.evaluationManualException ? <Button size="small" disabled>人工特批</Button> :
+            <Button size="small" type="primary"
+              onClick={() => onOpen("evaluationReview",row.id)}>
+              {row.evaluationReviewStatus === "rejected" ? "重新申请" : "申请复核"}</Button>}
+        </span>;
+        if (state === "测评通过") return <span style={{ display: "inline-flex", alignItems: "center", gap: 12, whiteSpace: "nowrap" }}>
+<Button size="small"
+          onClick={() => onOpen("detail",row.id)} style={{ minWidth: 58, borderRadius: 8, borderColor: "#d0d5dd", color: "#344054", fontWeight: 500 }}>详情</Button>
+{row.backend && ["S","A","B","C"].includes(row.backend.evaluation.grade ?? "") && row.backend.evaluation.total !== null && (row.backend.suggestedQty ?? 0) > 0 && <Button size="small" type="primary" onClick={() => onOpen("purchase",row.id)}>申请采购</Button>}
+</span>;
+        return <span className="muted">—</span>;
       },
     },
   ];
 
   return <section className={phase==="approved"?"np-performance-report np-approved-report":"np-performance-report"} aria-label="新品表现明细">
     <div className="np-performance-toolbar" role="search" aria-label="新品表现筛选">
+      <ReportFacetSelect mode="multiple" ariaLabel="流程状态" placeholder="全部状态"
+        unit="项" value={statuses} options={statusOptions}
+        onChange={(value) => { setStatuses(Array.isArray(value) ? value : []); setCurrentPage(1); }} />
       <ReportFacetSelect mode="multiple" ariaLabel="负责人" placeholder="全部负责人"
         unit="人" value={owners} options={ownerOptions}
         onChange={(value) => { setOwners(Array.isArray(value) ? value : []); setCurrentPage(1); }} />

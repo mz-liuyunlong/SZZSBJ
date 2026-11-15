@@ -24,6 +24,7 @@ import { useEffect, useState } from "react";
 import type { ApprovalDetail, ApprovalItem, Decision } from "../approvalTypes";
 import {
   decideApproval,
+  decideNewProductEvaluationReview,
   decideCurrentWfsCase,
   fetchApprovalDetail,
   fetchWfsCaseReviewDetail,
@@ -41,6 +42,7 @@ interface Props {
   selected?: ApprovalItem;
   canReview: boolean;
   canAdmin: boolean;
+  canNewProductReview?: boolean;
   canSupplement: boolean;
   canPurchaseSupplement: boolean;
   onClose(): void;
@@ -70,6 +72,7 @@ function ApprovalDetailDrawerInner({
   directReviewAction,
   canReview,
   canAdmin,
+  canNewProductReview=false,
   canSupplement,
   canPurchaseSupplement,
   onClose,
@@ -109,7 +112,8 @@ function ApprovalDetailDrawerInner({
   const mayApprove = Boolean(
     shown && !shown.requires_verification && (shown.status === "submitted" || (shown.case_review && shown.status === "info_required")) &&
     shown.can_review && !shown.data_changed &&
-    (shown.approval_type === "wfs_case_abandon" ? canReview : canAdmin),
+    (shown.approval_type === "wfs_case_abandon" ? canReview :
+      shown.approval_type === "new_product_evaluation_review" ? canNewProductReview : canAdmin),
   );
   // Derived review action opens the decision modal without a state update in an effect.
   const resolvedAction: ReviewAction | undefined = action ?? (
@@ -156,6 +160,10 @@ function ApprovalDetailDrawerInner({
     try {
       if (resolvedAction === "resubmit") {
         await supplementApproval(shown.id, shown.version, note.trim(), evidence.trim());
+      } else if (shown.approval_type === "new_product_evaluation_review") {
+        if (resolvedAction === "info_required") return;
+        await decideNewProductEvaluationReview(shown.id, shown.version,
+          resolvedAction, note.trim());
       } else if (shown.case_review) {
         await decideCurrentWfsCase(shown.business_ref, shown.version, resolvedAction, note.trim(), identityConfirmed);
       } else {
@@ -206,7 +214,8 @@ function ApprovalDetailDrawerInner({
           {!mayApprove && !maySupplement ? <Tag color="default">"当前无可用审核操作"</Tag> : null}
           {maySupplement ? <Button icon={<FileTextOutlined />} onClick={() => openAction("resubmit")}>补充资料后重新提交</Button> : null}
           {mayApprove ? <>
-            <Button icon={<MessageOutlined />} onClick={() => openAction("info_required")}>要求补充资料</Button>
+            {shown?.approval_type !== "new_product_evaluation_review" ?
+              <Button icon={<MessageOutlined />} onClick={() => openAction("info_required")}>要求补充资料</Button> : null}
             <Button danger icon={<CloseOutlined />} onClick={() => openAction("rejected")}>驳回</Button>
             <Button type="primary" icon={<CheckCircleOutlined />} onClick={() => openAction("approved")}>审批通过</Button>
           </> : null}

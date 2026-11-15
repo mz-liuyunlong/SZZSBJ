@@ -26,6 +26,19 @@ export interface PurchaseApprovalDetails {
   requested_qty?: number | null;
   amount?: number | string | null;
   currency_code?: string | null;
+  item_id?: string | null;
+  msku?: string | null;
+  analysis?: {
+    sellingPrice?: number | null;
+    grossMarginPct?: number | null;
+    roi?: number | null;
+    acosPct?: number | null;
+    adSpend?: number | null;
+    adSales?: number | null;
+    adClicks?: number | null;
+    validOrders14?: number | null;
+    firstOrderDays?: number | null;
+  } | null;
 }
 export interface ApprovalItem {
   purchase_details?: PurchaseApprovalDetails | null;

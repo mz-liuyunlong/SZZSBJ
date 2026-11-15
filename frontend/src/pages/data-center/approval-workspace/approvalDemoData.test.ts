@@ -2,9 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import type { ApprovalFilters } from "./approvalTypes";
 
 vi.mock("./approvalApi", () => ({
+  fetchNewProductPurchaseApprovals: vi.fn(async (filters: ApprovalFilters) => ({
+    data: { items: [] },
+    meta: {page:filters.page,page_size:filters.page_size,total:0},
+  })),
   fetchApprovals: vi.fn(async (filters: ApprovalFilters) => ({
     data: {
-      items: [{
+      items: filters.approval_type === "purchase_exception" ? [] : [{
         id: "REAL-WFS-001",
         approval_type: "wfs_case_abandon",
         status: "submitted",
@@ -13,7 +17,7 @@ vi.mock("./approvalApi", () => ({
     meta: {
       page: filters.page,
       page_size: filters.page_size,
-      total: 1,
+      total: filters.approval_type === "purchase_exception" ? 0 : 1,
     },
   })),
 }));
@@ -90,7 +94,7 @@ describe("approval workbench demo isolation", () => {
   it("combines real WFS and demo rows only in All", async () => {
     const result = await fetchWorkbenchList(filters);
 
-    expect(result.meta.total).toBe(4); // clearance demo seeds are excluded after real API activation
+    expect(result.meta.total).toBe(3); // real WFS + listing/price demos; purchase demo is no longer active
     expect(result.data.items[0].id).toBe("REAL-WFS-001");
     expect(result.data.items.slice(1).every(isDemoApproval)).toBe(true);
   });

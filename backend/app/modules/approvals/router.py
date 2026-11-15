@@ -56,13 +56,20 @@ def list_approvals(
     accounts: account_scope,
 ):
     approved = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
+    np_reviewer = has_permission(principal, "action:products:new-product-analysis:review")
     data, total = ApprovalService(session).list_requests(
         query,
         accounts,
         principal.user_id,
-        approved,
+        approved or np_reviewer,
         is_admin=has_permission(principal, "*"),
+        np_may_review=np_reviewer,
+        wfs_may_review=approved,
     )
+    if np_reviewer and not approved and not has_permission(principal, "*"):
+        for item in data.items:
+            if item.approval_type != "new_product_evaluation_review":
+                item.can_review = False
     return success_response(
         request,
         data=data,
@@ -153,12 +160,14 @@ def get_approval(
     accounts: account_scope,
 ):
     may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
+    np_may_review = has_permission(principal, "action:products:new-product-analysis:review")
     data = ApprovalService(session).detail(
         approval_id,
         accounts,
         principal.user_id,
         may_review,
         is_admin=has_permission(principal, "*"),
+        np_may_review=np_may_review,
     )
     return success_response(request, data=data, meta=None)
 
@@ -264,4 +273,81 @@ def supplement(
     if not allowed:
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     ApprovalService(session).supplement(approval_id, payload, accounts, principal.user_id)
+    return success_response(request, data={"updated": True}, meta=None)
+
+
+# NP_PURCHASE_WORKBENCH_REAL_API_V1_20261116
+# New-product purchase lives in its own source table, not purchase_exception.
+# Reuse the existing approval workbench UI with independently scoped endpoints.
+@router.get(
+    "/new-products/purchases", response_model=SuccessEnvelope[ApprovalListData, ApprovalMeta]
+)
+def new_product_purchase_workbench_list(
+    request: Request,
+    query: Annotated[ApprovalQuery, Query()],
+    session: db_session,
+    principal: view_principal,
+    accounts: account_scope,
+):
+    from app.modules.approvals.new_product_purchase_bridge import NewProductPurchaseBridge
+
+    can_review = has_permission(principal, "action:products:new-product-analysis:review")
+    can_review = can_review or has_permission(principal, "*")
+    data, meta = NewProductPurchaseBridge(session).list(
+        query, accounts, principal.user_id, can_review
+    )
+    return success_response(request, data=data, meta=meta)
+
+
+@router.get(
+    "/new-products/purchases/{application_id}", response_model=SuccessEnvelope[ApprovalDetail, None]
+)
+def new_product_purchase_workbench_detail(
+    request: Request,
+    application_id: UUID,
+    session: db_session,
+    principal: view_principal,
+    accounts: account_scope,
+):
+    from app.modules.approvals.new_product_purchase_bridge import NewProductPurchaseBridge
+
+    can_review = has_permission(principal, "action:products:new-product-analysis:review")
+    can_review = can_review or has_permission(principal, "*")
+    result = NewProductPurchaseBridge(session).detail(
+        application_id, accounts, principal.user_id, can_review
+    )
+    return success_response(request, data=result, meta=None)
+
+
+@router.post(
+    "/new-products/purchases/{application_id}/decision",
+    response_model=SuccessEnvelope[dict[str, bool], None],
+)
+def new_product_purchase_workbench_decision(
+    request: Request,
+    application_id: UUID,
+    payload: ApprovalDecisionWrite,
+    session: db_session,
+    principal: Annotated[
+        Principal, Depends(require_permission("action:products:new-product-analysis:review"))
+    ],
+    accounts: account_scope,
+):
+    from app.core.api import ApiError, ErrorCode
+    from app.modules.new_products.schemas import PurchaseDecision
+    from app.modules.new_products.service import NewProductService
+
+    if payload.decision not in ("approved", "rejected"):
+        raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422)
+    # Source service owns locking, version check, self-review guard and audit.
+    NewProductService(session).decide_purchase(
+        accounts,
+        application_id,
+        PurchaseDecision(
+            decision=payload.decision,
+            reason=payload.note,
+            expected_version=payload.expected_version,
+        ),
+        principal.user_id,
+    )
     return success_response(request, data={"updated": True}, meta=None)

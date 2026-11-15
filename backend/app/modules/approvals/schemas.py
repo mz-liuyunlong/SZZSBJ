@@ -13,7 +13,7 @@ ApprovalDecision = Literal["approved", "rejected", "info_required"]
 ApprovalStatus = Literal[
     "submitted", "info_required", "approved", "rejected", "withdrawn", "legacy_unverified"
 ]
-ApprovalRisk = Literal["low", "medium", "high"]
+ApprovalRisk = Literal["low", "medium", "high", "unknown"]
 
 
 class StrictSchema(BaseModel):
@@ -31,6 +31,7 @@ class ApprovalQuery(StrictSchema):
 
 
 class ApprovalItem(StrictSchema):
+    purchase_details: dict[str, Any] | None = None
     id: str
     version: int
     approval_type: str
