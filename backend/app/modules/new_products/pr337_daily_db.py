@@ -22,7 +22,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from . import rules
-from .pr337_daily_core import VERSION, compute, natural, numeric, to_date
+from .pr337_daily_core import VERSION, compute, daily_partition, natural, numeric, to_date
 
 LOG = logging.getLogger(__name__)
 LA = ZoneInfo("America/Los_Angeles")
@@ -129,6 +129,34 @@ GROUP BY w.idx,a.business_date_la
 ORDER BY w.idx,a.business_date_la LIMIT :row_limit
 """)
 
+_FACT_TRUST = text("""
+WITH wants AS (
+ SELECT idx,account,store,item,begin_day,end_day
+ FROM jsonb_to_recordset(CAST(:wanted AS jsonb))
+ AS j(idx text,account text,store text,item text,begin_day date,end_day date)
+), source_orders AS (
+ SELECT w.idx, f.source_order_id AS order_ref,
+        MIN(f.business_date_la) AS day,
+        COUNT(DISTINCT f.business_date_la) AS business_days,
+        SUM(f.quantity) AS units,
+        COUNT(*) FILTER (WHERE f.source_order_id IS NULL OR f.quantity IS NULL
+           OR f.quantity<=0 OR f.quantity<>TRUNC(f.quantity)
+           OR f.business_date_la IS NULL) AS bad_lines
+ FROM wants w JOIN fact_walmart_order_items f
+   ON f.source_account_ref=w.account AND f.store_id=w.store AND f.item_id=w.item
+   AND f.business_date_la BETWEEN w.begin_day AND w.end_day
+ WHERE f.is_identity_current IS TRUE AND f.is_sample_order IS FALSE
+   AND UPPER(COALESCE(f.order_status_raw,'')) NOT IN
+      ('CANCELED','CANCELLED','CANCEL','VOID')
+ GROUP BY w.idx,f.source_order_id
+)
+SELECT idx,day,COUNT(*) AS orders,COALESCE(SUM(units),0) AS units,
+ COUNT(*) FILTER (WHERE units=1 AND bad_lines=0 AND business_days=1) AS singles,
+ COALESCE(SUM(bad_lines),0) AS bad_lines,
+ COUNT(*) FILTER (WHERE order_ref IS NULL OR business_days<>1) AS invalid_orders
+FROM source_orders GROUP BY idx,day ORDER BY idx,day LIMIT :row_limit
+""")
+
 _WATERMARKS = text("""
 WITH wanted AS (
  SELECT account,store FROM jsonb_to_recordset(CAST(:stores AS jsonb))
@@ -171,7 +199,6 @@ ON CONFLICT (registry_id) DO NOTHING
 _UPDATE = text("""
 UPDATE biz_new_product_performance_current p
 SET first_wfs_available_date_la=:first_wfs,
-    first_order_date_la=:first_order,
     metric_window_start_la=:start,metric_window_end_la=:end,
     sales_orders=:orders,sales_units=:units,
     sales_amount_usd=:revenue,profit_usd=:profit,
@@ -261,14 +288,8 @@ def plan(row: Mapping[str, Any], proof: dict | None, config_id: str | None) -> d
     start, end = to_date(proof["window_start_la"]), to_date(proof["window_end_la"])
     saved_begin = to_date(row.get("saved_begin"))
     saved_end = to_date(row.get("saved_end"))
-    saved_first = to_date(row.get("saved_first"))
-    if (
-        saved_first is not None
-        and saved_begin == start
-        and saved_end == end
-        and saved_first != to_date(proof.get("first_order_date"))
-    ):
-        raise ValueError("SAVED_FIRST_ORDER_DISAGREES")
+    # The historical first-order day must not be compared with the
+    # first positive day inside the WFS 14-day observation window.
     if (old_start is not None and old_start != start) or (
         saved_begin == start
         and saved_end == end
@@ -397,6 +418,77 @@ def run_daily(session: Session, *, apply: bool = False, cutoff_la: date | None =
             marts[r["idx"]].append(dict(r))
         for r in aa:
             ads[r["idx"]].append(dict(r))
+    # Query identity-current FACT only where MART daily partition is ambiguous.
+    # Each business day must independently agree; matching grand totals alone
+    # cannot prove that single-order evidence came from the same daily sales.
+    ambiguous_wants = []
+    for wanted in wants:
+        if any(
+            (n := natural(day.get("orders"))) is not None
+            and (q := natural(day.get("units"))) is not None
+            and n > 0
+            and q >= n
+            and daily_partition(n, q) is None
+            for day in marts.get(wanted["idx"], ())
+        ):
+            ambiguous_wants.append(wanted)
+    fact_singles = {}
+    for group in batches(ambiguous_wants):
+        rows = list(
+            session.execute(
+                _FACT_TRUST, {"wanted": _json(group), "row_limit": MAX_DAILY_ROWS + 1}
+            ).mappings()
+        )
+        if len(rows) > MAX_DAILY_ROWS:
+            raise RuntimeError("FACT_TRUST_RESULT_LIMIT_EXCEEDED")
+        requested = {w["idx"] for w in group}
+        grouped = defaultdict(dict)
+        for record in rows:
+            idx, day = str(record["idx"]), to_date(record.get("day"))
+            if idx not in requested or day is None or day in grouped[idx]:
+                raise RuntimeError("FACT_TRUST_IDENTITY_OR_DAY_INVALID")
+            grouped[idx][day] = record
+        for wanted in group:
+            idx = wanted["idx"]
+            mart_days = {}
+            invalid = False
+            for record in marts.get(idx, ()):
+                day = to_date(record.get("day"))
+                n = natural(record.get("orders"))
+                q = natural(record.get("units"))
+                if day is None or n is None or q is None or day in mart_days:
+                    invalid = True
+                    break
+                mart_days[day] = (n, q)
+            actual = grouped.get(idx, {})
+            if invalid or not mart_days or not actual:
+                continue
+            if any(day not in mart_days for day in actual):
+                continue
+            verified = 0
+            for day, (n, q) in mart_days.items():
+                item = actual.get(day)
+                if item is None:
+                    if n != 0 or q != 0:
+                        invalid = True
+                        break
+                    continue
+                n_fact = natural(item.get("orders"))
+                q_fact = natural(item.get("units"))
+                singles = natural(item.get("singles"))
+                if (
+                    n_fact != n
+                    or q_fact != q
+                    or singles is None
+                    or singles > n_fact
+                    or natural(item.get("bad_lines")) != 0
+                    or natural(item.get("invalid_orders")) != 0
+                ):
+                    invalid = True
+                    break
+                verified += singles
+            if not invalid:
+                fact_singles[idx] = verified
     stores = sorted({(c["account"], c["store"]) for c in candidates})
     watermark = {}
     for group in batches(stores):
@@ -445,6 +537,7 @@ def run_daily(session: Session, *, apply: bool = False, cutoff_la: date | None =
                     ads=ads.get(c["_idx"], []),
                     config=cfg,
                     rule_version=cfg_version,
+                    verified_singles=fact_singles.get(c["_idx"]),
                 )
             result = plan(c, proof, cfg_id)
             if result is None:
@@ -553,7 +646,6 @@ def run_daily(session: Session, *, apply: bool = False, cutoff_la: date | None =
             upd = {
                 "id": rg_id,
                 "first_wfs": start,
-                "first_order": to_date(proof.get("first_order_date")),
                 "start": start,
                 "end": to_date(proof["window_end_la"]),
                 "orders": proof["orders"],

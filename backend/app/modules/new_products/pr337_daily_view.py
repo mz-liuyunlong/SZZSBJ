@@ -41,14 +41,12 @@ def saved_daily_view(row: dict[str, Any], matched: tuple | None) -> bool:
     start = to_date(getattr(perf, "metric_window_start_la", None))
     end = to_date(getattr(perf, "metric_window_end_la", None))
     first = to_date(getattr(perf, "first_wfs_available_date_la", None))
-    first_order = to_date(getattr(perf, "first_order_date_la", None))
     if (
         start is None
         or first != start
         or end is None
         or proof.get("window_start_la") != start.isoformat()
         or proof.get("window_end_la") != end.isoformat()
-        or proof.get("first_order_date") != (first_order.isoformat() if first_order else None)
         or natural(getattr(perf, "sales_orders", None)) != natural(proof.get("orders"))
         or numeric(getattr(perf, "sales_units", None)) != numeric(proof.get("units"))
     ):
@@ -74,7 +72,7 @@ def saved_daily_view(row: dict[str, Any], matched: tuple | None) -> bool:
         {
             "first_wfs_available_date_la": proof["window_start_la"],
             "first_order_day": proof.get("first_order_day"),
-            "first_order_date": proof.get("first_order_date"),
+            "observation_first_order_date_la": proof.get("first_order_date"),
             "effective_orders_14d": natural(proof.get("orders")),
             "sales_orders": natural(proof.get("orders")),
             "sales_units": str(proof["units"]),
@@ -95,7 +93,11 @@ def saved_daily_view(row: dict[str, Any], matched: tuple | None) -> bool:
             if proof.get("trust_proven")
             else None,
             "speed_evidence_source": VERSION,
-            "trust_evidence_source": VERSION if proof.get("trust_proven") else "UNVERIFIED_SINGLES",
+            "trust_evidence_source": (
+                proof.get("trust_evidence_source", VERSION)
+                if proof.get("trust_proven")
+                else "UNVERIFIED_SINGLES"
+            ),
             "order_unit_display_source": "mart_daily_sales_item_day",
             "data_cutoff_la": proof["cutoff_la"],
             "metric_window_start_la": proof["window_start_la"],
