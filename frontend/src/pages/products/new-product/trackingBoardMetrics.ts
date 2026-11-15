@@ -47,7 +47,8 @@ export function isOverdueHumanReview(p:Product,asOf:string,threshold=45):boolean
   return age!==null&&age>threshold&&p.tracking!=='打品成功'&&p.tracking!=='打品失败';
 }
 export function getTrackingPool(products:Product[]):Product[]{
-  return products.filter(p=>Boolean(p.backend?.firstWfsDate) || p.actualQty>0 || p.status==='已批准' || outcome(p)==='打品成功' || outcome(p)==='打品失败');
+  // SZZSBJ_LOCAL_REAL_FLOW_20261115: WFS stock alone is not purchase approval.
+  return products.filter(p=>p.actualQty>0 || (p.status==='已批准' || p.status==='采购已通过') || !['等待开售','未判定',''].includes(p.tracking));
 }
 function groupCategory(products:Product[],pick:(p:TrackingProduct)=>string):TrackingCategoryRow[]{
   const groups=new Map<string,Product[]>();

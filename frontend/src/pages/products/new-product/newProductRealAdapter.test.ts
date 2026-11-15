@@ -26,7 +26,7 @@ describe('new products real adapter',()=>{
    expect(row.backend.evaluation.total).toBeNull();
    expect(row.backend.evaluation.grade).toBeNull();
    expect(row.backend.available.roi).toBe(false);
-   expect(row.status).toBe('待市场评分');
+   expect(row.status).toBe('可售时间待核实');
    expect(row.id).toBe('acc::store::item');
  });
  it('carries persisted optimistic concurrency versions',()=>{
@@ -37,7 +37,7 @@ describe('new products real adapter',()=>{
    const row=toPersistedProduct({...original,
      evaluation:{...original.evaluation,observation_state:'not_calculated'},
      facts:{first_wfs_available_date_la:null,elapsed_days:null,data_status:'not_calculated'}});
-   expect(row.status).toBe('待计算');
+   expect(row.status).toBe('可售时间待核实');
    expect(row.tracking).toBe('未判定');
    expect(row.backend.available.elapsedDays).toBe(false);
    expect(row.backend.evaluation.total).toBeNull();

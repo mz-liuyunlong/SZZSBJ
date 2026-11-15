@@ -8,6 +8,7 @@ import {useMemo, useState,type ReactNode, useCallback, useEffect, useRef} from "
 import { Drawer as AntdDrawer } from "antd";
 import ManagementStatCards from "@/components/report-table/ManagementStatCards";
 import NewProductPerformanceReport from "./NewProductPerformanceReport";
+import NewProductEvaluationReviewModal, {type ReviewReasonType} from "./NewProductEvaluationReviewModal";
 import PageShell from "@/components/page/PageShell";
 import type {NavigationPage} from "@/config/navigation";
 import NativeBoard from "./TrackingBoardSwitch";
@@ -18,7 +19,11 @@ import NewProductTrackingReport from "./NewProductTrackingReport";
 import {defaultConfig,bands,score,grade,suggestion,type Product,type Config} from "./nativeData";
 import NewProductRulesPanel from "./NewProductRulesPanel";
 import { getNewProductRules, applyNewProductRules, listNewProducts,
-  saveNewProductMarketScore, exportNewProductListings } from "./newProductBusinessApi";
+  saveNewProductMarketScore, saveNewProductTrackingDecision, submitNewProductPurchase,
+  reviewNewProductPurchase, exportNewProductListings,
+  requestNewProductEvaluation,
+  requestNewProductEvaluationReview,
+  requestNewProductEvaluationRecheck } from "./newProductBusinessApi";
 import {toPersistedProduct, type PersistedProduct} from "./newProductRealAdapter";
 import { createInitialRuleDraft, cloneRuleDraft, retainFourAutomaticRisks, validateRuleDraft, validateTrackingRuleDraft, type RuleDraft } from "./NewProductRulesModel";
 import TrackingRuleConfigPanel from "./components/TrackingRuleConfigPanel";
@@ -32,7 +37,7 @@ import "./newProductMarketCompetitionVisual.css";
 import { Button as ReviewButton, Descriptions as ReviewDescriptions, Drawer as ReviewDrawer, Input as ReviewInput, Radio as ReviewRadio, Tag as ReviewTag } from "antd";
 type Mode="performance"|"tracking";
 type Props={page:NavigationPage;mode:Mode;username?:string;canManage?:boolean;canConfigure?:boolean;canScore?:boolean;canRequest?:boolean;canReview?:boolean;canViewCost?:boolean};
-type ModalType="detail"|"market"|"purchase"|"approval"|"review"|"config"|null;
+type ModalType="detail"|"market"|"purchase"|"approval"|"resultApproval"|"review"|"config"|null | 'calculate' | 'evaluationReview' | 'recheck';
 type Correction={id:number;sku:string;dimension:"speed"|"ad"|"profit"|"trust";from:number;to:number;reason:string;status:"待审核"|"已通过"|"已驳回"};
 function Status({text}:{text:string}){return <span className={"badge "+(text.includes("审核")?"b-purple":text.includes("批准")||text.includes("成功")?"b-green":text.includes("失败")||text.includes("驳回")?"b-red":text.includes("待")?"b-orange":"b-blue")}>{text}</span>}
 function LegacyDrawer({title,sub,close,children,footer,wide}:{title:string;sub:string;close:()=>void;children:ReactNode;footer:ReactNode;wide?:boolean}){return <div className="drawer-mask open" onMouseDown={e=>{if(e.target===e.currentTarget)close()}}><div className={"drawer "+(wide?"wide":"")} role="dialog" aria-modal="true"><div className="drawer-head"><div><h2>{title}</h2><p>{sub}</p></div><button className="close" onClick={close}>×</button></div><div className="drawer-body">{children}</div><div className="drawer-foot"><button className="btn" onClick={close}>取消</button><div className="right">{footer}</div></div></div></div>}
@@ -150,11 +155,15 @@ export default function NewProductPages({page,mode}:Props){
  const [,setCorrections]=useState<Correction[]>([]),[cfgTab,setCfgTab]=useState("weights"),[version,setVersion]=useState(0),[notice,setNotice]=useState("");
  const [ruleLoaded,setRuleLoaded]=useState(false);
  const [marketSaving,setMarketSaving]=useState(false);
+ const [evaluationRequesting,setEvaluationRequesting]=useState<string|null>(null);
+ const [evaluationReviewItem,setEvaluationReviewItem]=useState<string|null>(null);
+ const [evaluationReviewSubmitting,setEvaluationReviewSubmitting]=useState(false);
+ const [flowSaving,setFlowSaving]=useState(false);
  // PR337_MANUAL_RISK_V1: selection stays local to risk component; ref avoids full page rerender.
  const riskSelectionRef=useRef<ManualRiskCode[]>([]);
- const refreshReal=useCallback(async(isActive:()=>boolean=()=>true)=>{
+ const refreshReal=useCallback(async(isActive:()=>boolean=()=>true,progressive=false)=>{
    // Both dashboard and original ProTable consume one complete real Product[].
-   // A partial snapshot is never displayed as the full business total.
+   // Performance shows completed pages early; final count is verified.
    const loaded:PersistedProduct[]=[];
    let pageNumber=1;
    let reportedTotal=0;
@@ -165,11 +174,14 @@ export default function NewProductPages({page,mode}:Props){
      if(reportedTotal>5000)throw new Error('真实商品超过5000条，当前全量看板请按数据范围查询');
      loaded.push(...result.items.map(toPersistedProduct));
      if(result.items.length===0 && loaded.length<reportedTotal)throw new Error('商品分页缺失，已拒绝使用不完整列表');
+     // NP_PERFORMANCE_PROGRESSIVE_PAGES_V1
+     if(progressive && loaded.length<reportedTotal && isActive())setItems([...loaded]);
      pageNumber+=1;
    }while(loaded.length<reportedTotal);
    if(loaded.length!==reportedTotal)throw new Error('商品总数校验失败');
    // Ignore an obsolete fetch after navigation or effect cleanup.
    if(isActive())setItems(loaded);
+   return loaded;
  },[]);
  useEffect(()=>{
    let active=true;
@@ -177,7 +189,7 @@ export default function NewProductPages({page,mode}:Props){
    // Errors are shown explicitly; do not restore the seven demo records.
    void Promise.resolve().then(()=>{
      if(!active)return;
-     return refreshReal(()=>active).catch(error=>{
+     return refreshReal(()=>active,mode==="performance").catch(error=>{
        if(active){setItems([]);setNotice(`真实商品读取失败：${error instanceof Error?error.message:'未知错误'}`);}
      });
    });
@@ -215,14 +227,64 @@ export default function NewProductPages({page,mode}:Props){
  // Production must use an explicit "Listing is sellable" field instead.
  const reviewWaiting = Boolean(p &&
    (p.tracking === "等待开售" || p.tracking === "未判定") &&
-   !(p.launch?.trim() && p.arrival?.trim()));
+   (p.backend ? !p.backend.firstWfsDate : !(p.launch?.trim() && p.arrival?.trim())));
  const reviewReadOnly = reviewFinal || reviewWaiting;
  const msg=(s:string)=>{setNotice(s);window.setTimeout(()=>setNotice(""),2600)};
  const patch=(id:string,change:Partial<Product>)=>setItems(prev=>prev.map(x=>x.id===id?{...x,...change}:x));
  const show=(kind:ModalType,id?:string)=>{
    const item=id?items.find(x=>x.id===id):undefined;
+   if(kind==="market"&&item?.backend&&!item.backend.firstWfsDate&&!item.launch){
+     msg("WFS首次可售时间未核实，暂不能评分");return;
+   }
+   if(kind==="resultApproval"&&item&&!item.backend?.reviewApplication){
+     msg("没有可查看的打品结果申请");return;
+   }
+   if(kind==="approval"&&item?.backend){
+     if(!["审核中","采购审核中"].includes(item.status)||!item.backend.purchaseId){msg("没有可审核的正式采购申请");return;}
+     setSelected(item.id);
+     setNote("");
+     setQty(item.requestQty??0);
+     setModal("approval");
+     return;
+   }
+   if(kind==="calculate"&&item){
+     if(!item.backend || item.evaluationStatus!=="测评中"){
+       msg("仅测评中的真实商品允许立即计算");return;
+     }
+     if(evaluationRequesting===item.id)return;
+     setEvaluationRequesting(item.id);
+     void requestNewProductEvaluation(item.backend.identity)
+       .then(result=>{
+         msg(result.status==="completed" ? "当前商品自动评分已完成" :
+           `已计算，证据不足：${(result.missing||[]).join("、")}`);
+         return refreshReal();})
+       .catch(error=>msg(`提交计算失败：${error instanceof Error?error.message:"请检查权限与数据证据"}`))
+       .finally(()=>setEvaluationRequesting(null));
+     return;
+   }
+   if(kind==="recheck"&&item){
+     if(!item.backend || !item.evaluationReviewId || !item.evaluationRecheckRequired){
+       msg("未找到已批准的纠错复核授权");return;
+     }
+     if(evaluationRequesting===item.id)return;
+     setEvaluationRequesting(item.id);
+     void requestNewProductEvaluationRecheck(item.evaluationReviewId)
+       .then(()=>{msg("当前商品已完成纠错重新核算");return refreshReal();})
+       .catch(error=>msg(`重新核算失败：${error instanceof Error?error.message:"请检查来源数据与审批权限"}`))
+       .finally(()=>setEvaluationRequesting(null));
+     return;
+   }
+   if(kind==="evaluationReview"&&item){
+     if(!item.backend || item.evaluationStatus!=="测评未通过"){
+       msg("仅测评未通过的真实商品可申请复核");return;
+     }
+     if(item.evaluationReviewStatus==="submitted"||item.evaluationReviewStatus==="info_required"){
+       msg("已有进行中的复核申请");return;
+     }
+     setEvaluationReviewItem(item.id);return;
+   }
    if(kind==="approval"&&item){
-     if(item.status!=="审核中"){msg("仅审核中的商品可以查看申请");return}
+     if(!["审核中","采购审核中"].includes(item.status)){msg("仅审核中的商品可以查看申请");return}
      setModal(null);
      setSelected(null);
      setTab("list");
@@ -232,7 +294,7 @@ export default function NewProductPages({page,mode}:Props){
      return;
    }
    if(kind==="purchase"&&item){
-     if(item.status!=="待采购确认"){
+     if(!(item.backend ? item.evaluationStatus === "测评通过" : ["待采购确认","待采购","已驳回","采购已驳回"].includes(item.status))){
        msg("当前状态不能确认采购");return;
      }
      const finalGrade=grade(item,cfg);
@@ -250,6 +312,19 @@ export default function NewProductPages({page,mode}:Props){
      setNote(kind==="purchase"?(item.requestReason||""):(item.marketReason||""));
      setReview(item.tracking||"继续观察");
    }
+ };
+ const submitEvaluationReview=async (reasonType:ReviewReasonType,reason:string,evidence:string)=>{
+   const item=items.find(row=>row.id===evaluationReviewItem);
+   if(!item?.backend || evaluationReviewSubmitting)return;
+   setEvaluationReviewSubmitting(true);
+   try{
+     await requestNewProductEvaluationReview(item.backend.identity,reasonType,reason,evidence);
+     setEvaluationReviewItem(null);
+     await refreshReal();
+     msg("测评复核申请已提交，请到审批工作台审核");
+   }catch(error){
+     msg(`复核申请失败：${error instanceof Error?error.message:"请检查权限及当前评级"}`);
+   }finally{setEvaluationReviewSubmitting(false);}
  };
  const close=()=>{setModal(null);setNote("")};
  const reset=()=>{setPhase("all");setReportRevision(n=>n+1)};
@@ -296,7 +371,11 @@ export default function NewProductPages({page,mode}:Props){
  const exportRows=()=>{
    exportNewProductListings().catch(error=>msg(`导出失败：${error instanceof Error?error.message:'未知错误'}`));
  };
- const pending=items.filter(x=>x.status==="待市场评分").length,purchase=items.filter(x=>x.status==="待采购确认").length,approval=items.filter(x=>x.status==="审核中").length;
+ const performanceItems=useMemo(() => items.map(x => x.evaluationStatus ? {...x,status:x.evaluationStatus}:x),[items]);
+ const pending=performanceItems.filter(x=>x.status==="待市场评分").length;
+ const evaluating=performanceItems.filter(x=>x.status==="测评中").length;
+ const passed=performanceItems.filter(x=>x.status==="测评通过").length;
+ const failed=performanceItems.filter(x=>x.status==="测评未通过").length;
  const saveMarket=async(chosenScore: number|null=scoreValue, chosenReason: string=note)=>{
    if(!p||!p.backend){msg('仅真实商品允许保存市场评分');return;}
    if(marketSaving)return;
@@ -309,15 +388,41 @@ export default function NewProductPages({page,mode}:Props){
    setMarketSaving(true);
    try {
      await saveNewProductMarketScore(p.backend.identity,chosenScore,chosenReason.trim(),p.backend.marketVersion,riskSelectionRef.current);
-     try {await refreshReal();msg('市场评分已保存；综合评分与评级已按当前规则重算');}
-     catch(error){msg(`市场评分已保存，商品刷新失败：${error instanceof Error?error.message:'未知错误'}`);}
+     try {
+       const fresh=await refreshReal();
+       const result=fresh.find(x=>x.id===p.id);
+       if(result?.backend?.evaluation.grade&&result.backend.evaluation.total!==null){
+         close();
+         msg(['D','Pass'].includes(result.backend.evaluation.grade)
+           ?`市场评分已保存，评级 ${result.backend.evaluation.grade}，当前不符合采购条件`
+           :`市场评分已保存，评级 ${result.backend.evaluation.grade}，可按流程申请采购`);
+       }else{
+         // Preserve details: a market score is not proof of complete automatic evidence.
+         msg(`市场评分已保存；${result?.backend?.evaluation.missing.join('、')||'后台评分证据尚未齐备'}，暂不生成评级`);
+       }
+     }catch(error){msg(`市场评分已保存，商品刷新失败：${error instanceof Error?error.message:'未知错误'}`);}
    }catch(error){
      msg(`市场评分保存失败：${error instanceof Error?error.message:'未知错误'}`);
    }finally{setMarketSaving(false)}
  };
- const sendPurchase=()=>{
-   if(p?.backend){msg('正式采购申请将在后续审批联调阶段接入，此处不执行模拟提交');return;}
-   if(!p||p.status!=="待采购确认"){
+ // SZZSBJ_LOCAL_REAL_FLOW_20261115: business writes use the existing guarded API.
+ const sendPurchase=async()=>{
+   if(p?.backend){
+     if(flowSaving)return;
+     if(p.evaluationStatus!=="测评通过"||!["S","A","B","C"].includes(p.backend.evaluation.grade??"")||p.backend.evaluation.total===null||(p.backend.suggestedQty??0)<1){
+       msg('当前商品没有有效评级或采购建议，不能发起采购申请');return;
+     }
+     if(!Number.isInteger(qty)||qty<1){msg('请填写有效采购数量');return;}
+     if(qty!==p.backend.suggestedQty&&note.trim().length<5){msg('调整数量需填写至少5字原因');return;}
+     setFlowSaving(true);
+     try{
+       await submitNewProductPurchase(p.backend.identity,qty,note.trim(),p.backend.ruleVersion);
+       await refreshReal();close();msg('正式采购申请已提交，进入审核中');
+     }catch(error){msg(`采购申请失败：${error instanceof Error?error.message:'未知错误'}`);}
+     finally{setFlowSaving(false);}
+     return;
+   }
+   if(!p||!["待采购确认","待采购"].includes(p.status)){
      msg("当前状态不能提交采购申请");return;
    }
    const finalGrade=grade(p,cfg);
@@ -334,9 +439,36 @@ export default function NewProductPages({page,mode}:Props){
    close();
    msg("模拟采购申请已提交，正在等待审核");
  };
- const decide=(pass:boolean)=>{if(p?.backend){msg('正式采购审核只能在审批工作台处理');return;}if(!p)return;patch(p.id,{status:pass?"已批准":"已驳回",actualQty:pass?qty:p.actualQty,tracking:pass?"等待开售":p.tracking});close();msg(pass?"模拟审批通过":"模拟申请被驳回")};
- const saveReview=()=>{
-    if(p?.backend){msg('真实商品人工判定将在打品跟踪阶段接入，此处不执行模拟保存');return;}
+ const decide=async(pass:boolean)=>{
+   if(p?.backend){
+     if(flowSaving)return;
+     if(!p.backend.purchaseId||!p.backend.purchaseVersion){msg('缺少正式采购审批单或版本号');return;}
+     if(!pass&&note.trim().length<5){msg('驳回原因至少5字');return;}
+     setFlowSaving(true);
+     try{
+       await reviewNewProductPurchase(p.backend.purchaseId,pass?'approved':'rejected',note.trim(),p.backend.purchaseVersion);
+       await refreshReal();close();msg(pass?'采购申请已审核通过':'采购申请已驳回');
+     }catch(error){msg(`审批操作失败：${error instanceof Error?error.message:'未知错误'}`);}
+     finally{setFlowSaving(false);}
+     return;
+   }
+   if(!p)return;patch(p.id,{status:pass?"已批准":"已驳回",actualQty:pass?qty:p.actualQty,tracking:pass?"等待开售":p.tracking});close();msg(pass?"模拟审批通过":"模拟申请被驳回");
+ };
+ const saveReview=async()=>{
+    if(p?.backend){
+      if(flowSaving)return;
+      if(reviewFinal){msg('成功或失败已锁定，不能修改');return;}
+      if(!p.backend.firstWfsDate){msg('缺少真实 WFS 首次可售日期，不能判定');return;}
+      if(!['继续观察','需要优化','打品成功','打品失败'].includes(review)){msg('请选择打品结果');return;}
+      if(['需要优化','打品失败'].includes(review)&&note.trim().length<5){msg('请填写至少5字判定依据');return;}
+      setFlowSaving(true);
+      try{
+        await saveNewProductTrackingDecision(p.backend.identity,review,note.trim(),p.backend.trackingVersion??0);
+        await refreshReal();close();msg('正式打品判定已保存');
+      }catch(error){msg(`打品判定失败：${error instanceof Error?error.message:'未知错误'}`);}
+      finally{setFlowSaving(false);}
+      return;
+    }
     if (!p) return;
 
     if (p.tracking === "打品成功" ||
@@ -417,21 +549,21 @@ export default function NewProductPages({page,mode}:Props){
   </div>
 
  <div className="np-workspace-body">
- {tab==="board"?<NativeBoard mode={mode} products={mode==="tracking"?trackingProducts:items} config={cfg} detail={()=>setTab("list")} onTrackingDrill={filter=>{setTrackingDrill(filter);setTab("list");}} open={(key,id)=>key==="export"?exportRows():show(key as ModalType,id)}/>:
+ {tab==="board"?<NativeBoard mode={mode} products={mode==="tracking"?trackingProducts:performanceItems} config={cfg} detail={()=>setTab("list")} onTrackingDrill={filter=>{setTrackingDrill(filter);setTab("list");}} open={(key,id)=>key==="export"?exportRows():show(key as ModalType,id)}/>:
  mode==="performance"?<>
  <ManagementStatCards ariaLabel="新品表现统计" className="np-performance-stats"
    activeKey={phase}
    cards={[
      {key:"all",title:"全部新品",subtitle:"当前全部测评商品",value:items.length,tone:"normal",icon:<span>▦</span>},
+     {key:"evaluating",title:"测评中",subtitle:"等待满足正式自动测评条件",value:evaluating,tone:"normal",icon:<span>◷</span>},
      {key:"market",title:"待市场评分",subtitle:"自动评分完成，等待运营判断",value:pending,tone:"normal",icon:<span>✎</span>},
-     {key:"purchase",title:"待确认采购",subtitle:"已评级，等待确认采购数量",value:purchase,tone:"normal",icon:<span>▤</span>},
-     {key:"approval",title:"审核中",subtitle:"包含数量调整申请",value:approval,tone:"warning",icon:<span>◷</span>},
-     {key:"approved",title:"已通过",subtitle:"审批已通过的商品",value:items.filter(x=>["已批准","已通过","审批通过"].includes(x.status)).length,tone:"success",icon:<span>✓</span>},
+     {key:"passed",title:"测评通过",subtitle:"已形成有效通过评级",value:passed,tone:"success",icon:<span>✓</span>},
+     {key:"failed",title:"测评未通过",subtitle:"已形成有效未通过评级",value:failed,tone:"warning",icon:<span>▤</span>},
    ]}
    onCardClick={(key)=>{setPhase(key);setApprovalFocus(null);setReportRevision(n=>n+1);}}/>
 
- <NewProductPerformanceReport key={reportRevision} items={items} config={cfg} phase={phase} focusItemId={approvalFocus} onOpen={(kind,id)=>show(kind,id)}
-      onResetPhase={()=>{setApprovalFocus(null);setPhase(current=>current==="approval"||current==="approved"?current:"all")}}/>
+ <NewProductPerformanceReport key={reportRevision} items={performanceItems} config={cfg} phase={phase} focusItemId={approvalFocus} calculatingItemId={evaluationRequesting} onOpen={(kind,id)=>show(kind,id)}
+      onResetPhase={()=>{setApprovalFocus(null);setPhase("all")}}/>
  </>:<>
   <NewProductTrackingReport key={trackingDrill?JSON.stringify(trackingDrill):'manual'}
     products={trackingProducts} config={cfg} drill={trackingDrill}
@@ -459,7 +591,7 @@ export default function NewProductPages({page,mode}:Props){
  </>}
  </div>
 </section>
-{modal&&modal!=="review"&&<Drawer title={{detail:"新品测评详情",market:"市场竞争评分",purchase:"确认采购数量",approval:"新品采购审核",review:"打品结果复盘",config:mode==="tracking"?"打品辅助规则配置":"新品表现配置"}[modal]} sub={p?p.sku+" · "+p.name:"当前规则 · 保存后立即生效"} close={close} wide={modal==="config"} footer={modal==="detail"?null:modal==="market"?<button className="btn primary" onClick={() => { void saveMarket(); }}>保存市场评分</button>:modal==="purchase"?<button className="btn primary" onClick={sendPurchase}>提交领导审核</button>:modal==="approval"?<><button className="btn" onClick={()=>decide(false)}>驳回</button><button className="btn primary" onClick={()=>decide(true)}>审核通过</button></>:mode==="tracking"?<span className="muted">请在面板右上角保存浏览器本地草稿</span>:<button className="btn primary" onClick={saveRuleConfiguration}>保存并应用</button>}>
+{modal&&modal!=="review"&&<Drawer title={{detail:"新品测评详情",market:"市场竞争评分",purchase:"确认采购数量",approval:"新品采购审核",resultApproval:"打品结果审核申请",calculate:"立即计算",evaluationReview:"测评复核申请",recheck:"复核重新核算",review:"打品结果复盘",config:mode==="tracking"?"打品辅助规则配置":"新品表现配置"}[modal]} sub={p?p.sku+" · "+p.name:"当前规则 · 保存后立即生效"} close={close} wide={modal==="config"} footer={modal==="detail"||modal==="resultApproval"?null:modal==="market"?<button className="btn primary" onClick={() => { void saveMarket(); }}>保存市场评分</button>:modal==="purchase"?<button className="btn primary" onClick={()=>{void sendPurchase();}} disabled={flowSaving}>提交领导审核</button>:modal==="approval"?<><button className="btn" onClick={()=>{void decide(false);}} disabled={flowSaving}>驳回</button><button className="btn primary" onClick={()=>{void decide(true);}} disabled={flowSaving}>审核通过</button></>:mode==="tracking"?<span className="muted">请在面板右上角保存浏览器本地草稿</span>:<button className="btn primary" onClick={saveRuleConfiguration}>保存并应用</button>}>
  {p&&modal!=="config"&&(modal==="detail" ? (
    <div className="np-detail-identity-strip" aria-label="商品基础信息">
      <div className="np-detail-identity-fields">
@@ -468,12 +600,12 @@ export default function NewProductPages({page,mode}:Props){
        <span className="np-detail-identity-field"><span className="np-detail-identity-label">负责人</span><strong>{p.owner || "—"}</strong></span>
      </div>
      <div className="np-detail-identity-states">
-       <Status text={p.status}/>
+       <Status text={mode==="performance" ? p.evaluationStatus ?? p.status : p.status}/>
        {grade(p,cfg) && <span className="np-detail-identity-grade">评级 {grade(p,cfg)}</span>}
      </div>
    </div>
  ) : (
-   <div className="product-summary"><div className="thumb">▤</div><div><div className="summary-name">{p.name}</div><div className="summary-meta">{p.sku} · Item ID {p.item} · 负责人 {p.owner}</div><Status text={p.status}/></div><div className="summary-right"><div className="score-main">{score(p,cfg)?.toFixed(2)||"—"}</div><div className="cell-sub">{grade(p,cfg)||"待评分"} 级</div></div></div>
+   <div className="product-summary"><div className="thumb">▤</div><div><div className="summary-name">{p.name}</div><div className="summary-meta">{p.sku} · Item ID {p.item} · 负责人 {p.owner}</div><Status text={mode==="performance" ? p.evaluationStatus ?? p.status : p.status}/></div><div className="summary-right"><div className="score-main">{score(p,cfg)?.toFixed(2)||"—"}</div><div className="cell-sub">{grade(p,cfg)||"待评分"} 级</div></div></div>
  ))}
  {modal==="detail"&&p&&<><NewProductEvaluationData product={p} />
 <div className="section-title">自动评分明细</div><div className="score-grid np-score-visual-grid">
@@ -505,7 +637,7 @@ export default function NewProductPages({page,mode}:Props){
   ))}
 </div>
 {/* PR337_MANUAL_RISK_V1: manually assessed, never preselected. */}
-{p.market===null && <NewProductManualRisk key={p.id}
+{<NewProductManualRisk key={`${p.id}:${p.backend?.marketVersion??0}`}
   disabled={marketSaving} onChange={names=>{riskSelectionRef.current=names;}} />}
 <div className="np-market-v3">
   <div className="np-market-v3-weight">权重 {cfg.weights.market}%</div>
@@ -529,8 +661,8 @@ export default function NewProductPages({page,mode}:Props){
       </tbody>
     </table>
   </div>
-  {p.status === "待市场评分" ? (
-    <MarketScoringDraft key={p.id} initialScore={p.market}
+  {(p.backend || p.status === "待市场评分") ? (
+    <MarketScoringDraft key={`${p.id}:${p.backend?.marketVersion??0}`} initialScore={p.market}
       initialReason={p.marketReason || ""} saving={marketSaving}
       onSave={(value, reason) => { void saveMarket(value, reason); }} />
   ) : (
@@ -558,11 +690,21 @@ export default function NewProductPages({page,mode}:Props){
           </div>
         </div>
       </>
-    ):<div className="info-box">市场竞争评分未保存前，不生成最终评级和采购建议。</div>}
+    ):<div className="info-box">{p.market===null
+      ?"请先保存市场竞争评分。"
+      :`市场评分已保存；${p.backend?.evaluation.missing.join('、')||'尚缺完整自动评分证据'}。证据核实前不生成总分、评级或采购建议。`}</div>}
     </>}
  {modal==="market"&&<><div className="section-title">市场竞争评分（0–10 分）</div><div className="market-scale">{Array.from({length:11},(_,i)=><button key={i} className={"market-score-btn "+(scoreValue===i?"active":"")} onClick={()=>setScoreValue(i)}>{i}</button>)}</div><div className="form-field"><label className="form-label">市场竞争评价依据</label><textarea className="textarea" rows={4} value={note} onChange={e=>setNote(e.target.value)} placeholder="竞品数量、售价、Review、差异化空间等"/></div></>}
+ {modal==="resultApproval"&&p?.backend?.reviewApplication&&(
+   <div className="kv-list" aria-label="打品结果审核申请">
+     <div className="kv-row"><span className="kv-key">申请结果</span><b>{p.backend.reviewApplication.proposed_result}</b></div>
+     <div className="kv-row"><span className="kv-key">申请说明</span><b>{p.backend.reviewApplication.reason || "—"}</b></div>
+     <div className="kv-row"><span className="kv-key">申请时间</span><b>{p.backend.reviewApplication.created_at?.slice(0,10) || "—"}</b></div>
+     <div className="kv-row"><span className="kv-key">审批状态</span><b>待审核</b></div>
+   </div>
+ )}
  {modal==="purchase"&&p&&<><div className="kv-list"><div className="kv-row"><span className="kv-key">系统建议采购量</span><b>{suggestion(p,cfg)} 件</b></div><div className="kv-row"><span className="kv-key">当前评级范围</span><span>{(cfg.quantities?.[grade(p,cfg)||"D"]??bands[grade(p,cfg)||"D"]).join("–")} 件</span></div></div><div className="form-field"><label className="form-label">运营申请采购数量</label><input className="input" type="number" min={1} value={qty} onChange={e=>setQty(Number(e.target.value))}/></div>{qty>(cfg.quantities?.[grade(p,cfg)||"D"]??bands[grade(p,cfg)||"D"])[1]&&<div className="warning-box">超过当前等级采购范围，需要说明原因。</div>}<div className="form-field"><label className="form-label">调整原因</label><textarea className="textarea" rows={4} value={note} onChange={e=>setNote(e.target.value)}/></div></>}
- {modal==="approval"&&p&&<><div className="kv-list">{[["系统建议",suggestion(p,cfg)+" 件"],["申请数量",(p.requestQty||qty)+" 件"],["申请原因",p.requestReason||"按建议提交"]].map(([k,v])=><div className="kv-row" key={k}><span className="kv-key">{k}</span><span className="kv-val">{v}</span></div>)}</div><div className="info-box">Mock 审批不会生成正式采购单或实际业务记录。</div></>}
+ {modal==="approval"&&p&&<><div className="kv-list">{[["系统建议",suggestion(p,cfg)+" 件"],["申请数量",(p.requestQty||qty)+" 件"],["申请原因",p.requestReason||"按建议提交"]].map(([k,v])=><div className="kv-row" key={k}><span className="kv-key">{k}</span><span className="kv-val">{v}</span></div>)}</div><div className="info-box">{p.backend?"正式采购申请：审核通过后更新批准数量；不自动生成采购订单。":"Mock 审批不会生成正式采购单或实际业务记录。"}</div></>}
  {modal==="config"&&(mode==="tracking"?<TrackingRuleConfigPanel />:<div className="np-rules-config"><div className="config-shell">
       {mode==="performance"&&<div className="card config-nav">{[["weights","评分权重"],["criteria","评分标准"],["grades","评级与采购数量"],["penalties","扣分与否决"],["version","规则版本"]].map(([key,name])=><button type="button" key={key} className={cfgTab===key?"active":""} onClick={()=>setCfgTab(key)}>{name}</button>)}</div>}
       <div className="card config-panel"><NewProductRulesPanel tab={cfgTab} draft={ruleDraft} onChange={setRuleDraft} version={version} products={items.filter(row=>!row.backend)}/></div>
@@ -589,7 +731,7 @@ export default function NewProductPages({page,mode}:Props){
           <span className="np-review-footer-note">{reviewFinal ? "成功与失败为最终判定，已锁定" : reviewWaiting ? "尚未开售，不产生打品结果" : "保存后更新当前商品的打品结果"}</span>
           <div className="np-review-footer-actions">
             <ReviewButton onClick={close}>{reviewReadOnly ? "关闭" : "取消"}</ReviewButton>
-            {!reviewReadOnly && <ReviewButton type="primary" onClick={saveReview}>保存打品结果</ReviewButton>}
+            {!reviewReadOnly && <ReviewButton type="primary" onClick={()=>{void saveReview();}} disabled={flowSaving}>保存打品结果</ReviewButton>}
           </div>
         </div>
       }
@@ -677,6 +819,14 @@ export default function NewProductPages({page,mode}:Props){
     </ReviewDrawer>
   )}
 
+  {mode==="performance"&&evaluationReviewItem&&(()=>{
+    const candidate=items.find(x=>x.id===evaluationReviewItem);
+    return candidate?.backend ? <NewProductEvaluationReviewModal key={candidate.id}
+      visible productName={candidate.name} itemId={candidate.item}
+      submitting={evaluationReviewSubmitting}
+      onClose={()=>{if(!evaluationReviewSubmitting)setEvaluationReviewItem(null);}}
+      onSubmit={submitEvaluationReview}/> : null;
+  })()}
   {notice&&<div className="np-native-toast">{notice}</div>}
  </div></div></PageShell>;
 }

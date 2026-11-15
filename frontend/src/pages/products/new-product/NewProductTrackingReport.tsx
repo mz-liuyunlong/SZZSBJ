@@ -258,7 +258,7 @@ function NewProductTrackingReport({ products, config, onReview, drill=null, onCl
       render: (_unused, row) => {
         const undecided = row.tracking === "等待开售" || row.tracking === "未判定";
         if (undecided) {
-          const launched = Boolean(row.launch?.trim() && row.arrival?.trim());
+          const launched = row.backend ? Boolean(row.backend.firstWfsDate) : Boolean(row.launch?.trim() && row.arrival?.trim());
           return <div><Tag>未判定</Tag>
             <div className="np-tracking-cell-sub">
               {launched ? "已开售 · 待人工判定" : "跟踪阶段：等待开售"}
@@ -277,7 +277,7 @@ function NewProductTrackingReport({ products, config, onReview, drill=null, onCl
         const terminal = row.tracking === "打品成功" || row.tracking === "打品失败";
         const undecided = row.tracking === "等待开售" || row.tracking === "未判定";
         // Only a Mock proxy. Real implementation requires explicit Listing sellable flag.
-        const launched = Boolean(row.launch?.trim() && row.arrival?.trim());
+        const launched = row.backend ? Boolean(row.backend.firstWfsDate) : Boolean(row.launch?.trim() && row.arrival?.trim());
         const label = terminal ? "查看结果" :
           undecided && !launched ? "查看阶段" :
           "人工判定";

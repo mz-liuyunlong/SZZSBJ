@@ -1,9 +1,10 @@
 /** V3 demo-only drawers: four independent business layouts, no approval endpoints. */
 import { Alert, Button, Descriptions, Drawer, Input, Modal, Table, Tag, Typography, message } from "antd";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { ApprovalItem } from "../approvalTypes";
 import { getDemoSeed, type DemoSeed } from "../approvalDemoData";
 import { demoProfiles, type ClearanceSku, type DemoBusinessProfile } from "../approvalDemoPresentation";
+import { fetchNewProductPurchaseDetail } from "../approvalApi";
 import PurchaseApprovalDecisionDrawer from "./PurchaseApprovalDecisionDrawer";
 import "./DemoApprovalDrawer.css";
 
@@ -247,10 +248,59 @@ function Side({seed}:{seed:DemoSeed}) {
     <Section heading="安全边界"><p className="approval-demo__copy">演示记录不调用审批 API。申请人不能审批自己的正式申请，真实业务须由后端校验授权和业务快照。</p></Section>
   </aside>;
 }
-function DemoApprovalDrawerContent({selected,onClose,initialAction,onAction}:Props) {
+function DemoApprovalDrawerContent({selected: selectedInput,onClose,initialAction,onAction}:Props) {
+  // NP_PURCHASE_WORKBENCH_REAL_API_V1_20261116: fetch persisted detail by ID.
+  const [purchaseDetail,setPurchaseDetail] = useState<ApprovalItem>();
+  useEffect(() => {
+    if (selectedInput?.approval_type !== "new_product_purchase") return;
+    let active = true;
+    void fetchNewProductPurchaseDetail(selectedInput.id).then(detail => {
+      if (active) setPurchaseDetail(detail);
+    }).catch(() => {if(active) setPurchaseDetail(undefined);});
+    return () => {active = false;};
+  },[selectedInput?.id,selectedInput?.approval_type]);
+  const selected = purchaseDetail?.id === selectedInput?.id ? purchaseDetail : selectedInput;
+  const livePurchase = selected?.approval_type === "new_product_purchase" ? selected : undefined;
+  const liveInfo = livePurchase?.purchase_details;
+  const purchaseSeed: DemoSeed | undefined = livePurchase ? {
+    id:livePurchase.id, approval_type:livePurchase.approval_type,
+    title:livePurchase.title, business_ref:livePurchase.business_ref,
+    applicant:livePurchase.applicant_id || "—",
+    store:liveInfo?.store_name || "—",
+    status:livePurchase.status as DemoSeed["status"],
+    risk:livePurchase.risk_level as DemoSeed["risk"],
+    amount:livePurchase.amount,
+    submitted_at:livePurchase.submitted_at || "",
+    reason:livePurchase.reason || "", evidence:"",
+    sku:liveInfo?.sku || "—", plan:"",
+  } : undefined;
+  const analysis = liveInfo?.analysis;
+  const purchaseProfile: DemoBusinessProfile | undefined = livePurchase ? {
+    kind:"purchase", purchaseKind:"initial", applicationSource:"operator",
+    product:liveInfo?.product_name ?? undefined,
+    sku:liveInfo?.sku ?? undefined, msku:liveInfo?.msku ?? undefined,
+    owner:liveInfo?.owner_name ?? undefined,
+    quantity:liveInfo?.requested_qty ?? undefined,
+    suggestedQty:liveInfo?.suggested_qty ?? undefined,
+    scoreTotal:liveInfo?.score_total ?? undefined,
+    initialGrade:liveInfo?.initial_grade ?? undefined,
+    supplier:liveInfo?.supplier_name ?? undefined,
+    delivery:liveInfo?.required_delivery_date ?? undefined,
+    purchaseAnalysis:analysis ? {
+      sellingPrice:analysis.sellingPrice ?? undefined,
+      grossMarginPct:analysis.grossMarginPct ?? undefined,
+      roi:analysis.roi ?? undefined,
+      acosPct:analysis.acosPct ?? undefined,
+      adSpend:analysis.adSpend ?? undefined,
+      adSales:analysis.adSales ?? undefined,
+      adClicks:analysis.adClicks ?? undefined,
+      validOrders14:analysis.validOrders14 ?? undefined,
+      firstOrderDays:analysis.firstOrderDays ?? undefined,
+    } : undefined,
+  } : undefined;
   const live = selected && selected.approval_type === "clearance_request" && !selected.id.startsWith("DEMO-") ? selected : undefined;
   const isLive = Boolean(live);
-  const seed: DemoSeed | undefined = selected ? getDemoSeed(selected.id) ?? (live ? {
+  const seed: DemoSeed | undefined = selected ? getDemoSeed(selected.id) ?? purchaseSeed ?? (live ? {
     id: live.id, approval_type: live.approval_type, title: live.title,
     business_ref: live.business_ref, applicant: live.applicant_id || "—",
     store: live.clearance_details?.store_name ?? live.source_account_ref ?? "—",
@@ -259,7 +309,7 @@ function DemoApprovalDrawerContent({selected,onClose,initialAction,onAction}:Pro
     submitted_at: live.submitted_at || "", reason: live.reason || "",
     evidence: "", sku: live.clearance_details?.sku || "—", plan: "",
   } : undefined) : undefined;
-  const p: DemoBusinessProfile | undefined = seed ? demoProfiles[seed.id] ?? (live ? {
+  const p: DemoBusinessProfile | undefined = seed ? demoProfiles[seed.id] ?? purchaseProfile ?? (live ? {
     kind: "clearance", owner: live.clearance_details?.owner_ref ?? live.applicant_id ?? "—",
     targetQty: live.clearance_details?.requested_qty,
     methods: live.clearance_details?.methods ?? [],

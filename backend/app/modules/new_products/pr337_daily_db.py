@@ -69,6 +69,8 @@ LEFT JOIN listing_wfs_first_stock_la_locked l
  AND l.store_id=s.store_id AND l.item_id=s.item_id
 LEFT JOIN biz_new_product_tracking_current t ON t.registry_id=r.id
 WHERE s.product_tags_json @> CAST(:tag AS jsonb)
+  AND (CAST(:id_account AS text) IS NULL OR (s.source_account_ref=:id_account
+    AND s.store_id=:id_store AND s.item_id=:id_item))
 ORDER BY s.source_account_ref,s.store_id,s.item_id
 LIMIT :limit
 """)
@@ -240,6 +242,9 @@ def batches(seq, size=BATCH):
 
 
 def guarded(row: Mapping[str, Any]) -> str | None:
+    saved = row.get("coverage")
+    if isinstance(saved, dict) and saved.get("evaluation_formal_trigger"):
+        return "FORMAL_EVALUATION_FROZEN"
     if row.get("final_score") is not None or row.get("final_grade") is not None:
         return "PUBLISHED_SCORE_PROTECTED"
     if row.get("final_result") is not None:
@@ -368,7 +373,21 @@ def _config(session: Session) -> tuple[str | None, int, dict]:
     return None, 0, {"weights": rules.DEFAULT_WEIGHTS, "confirmedScoring": rules.DEFAULT_PARAMETERS}
 
 
-def run_daily(session: Session, *, apply: bool = False, cutoff_la: date | None = None) -> dict:
+def run_daily(
+    session: Session,
+    *,
+    apply: bool = False,
+    cutoff_la: date | None = None,
+    identity_filter: tuple[str, str, str] | None = None,
+    recheck_source: bool = False,
+) -> dict:
+    # V2 retirement: real database writes must go through the one unified
+    # publisher that uses independent refund/sample-adjusted testing profit.
+    # Keep legacy dry-run/test planning for forensic comparison only.
+    if apply and isinstance(session, Session):
+        raise RuntimeError("LEGACY_PR337_DAILY_WRITER_RETIRED_USE_UNIFIED_PUBLISH")
+    if recheck_source and (apply or identity_filter is None):
+        raise ValueError("RECHECK_MUST_BE_SCOPED_READ_ONLY")
     cutoff_la = cutoff_la or datetime.now(LA).date() - timedelta(days=1)
     if not isinstance(cutoff_la, date) or cutoff_la > datetime.now(LA).date():
         raise ValueError("CUTOFF_INVALID")
@@ -380,8 +399,22 @@ def run_daily(session: Session, *, apply: bool = False, cutoff_la: date | None =
             raise RuntimeError("PR337_DAILY_LOCK_BUSY")
     candidates = [
         dict(r)
-        for r in session.execute(_CANDIDATES, {"tag": TAG, "limit": MAX_PRODUCTS + 1}).mappings()
+        for r in session.execute(
+            _CANDIDATES,
+            dict(
+                ({"tag": TAG, "limit": MAX_PRODUCTS + 1}),
+                id_account=identity_filter[0] if identity_filter else None,
+                id_store=identity_filter[1] if identity_filter else None,
+                id_item=identity_filter[2] if identity_filter else None,
+            ),
+        ).mappings()
     ]
+    if identity_filter is not None:
+        candidates = [
+            c for c in candidates if (c["account"], c["store"], c["item"]) == identity_filter
+        ]
+        if len(candidates) != 1:
+            raise RuntimeError("SINGLE_ITEM_IDENTITY_NOT_FOUND_OR_AMBIGUOUS")
     if len(candidates) > MAX_PRODUCTS:
         raise RuntimeError("CANDIDATE_LIMIT_EXCEEDED")
     if not candidates:
@@ -500,10 +533,15 @@ def run_daily(session: Session, *, apply: bool = False, cutoff_la: date | None =
         watermark.update({(x["account"], x["store"]): to_date(x["newest_day"]) for x in recs})
     outcomes = Counter()
     examples = []
+    recheck_proofs = []
     for c in candidates:
         try:
             if reason := guarded(c):
-                raise ValueError(reason)
+                if not (
+                    recheck_source
+                    and reason in ("PUBLISHED_SCORE_PROTECTED", "FORMAL_EVALUATION_FROZEN")
+                ):
+                    raise ValueError(reason)
             start = to_date(c.get("locked_start"))
             current_end = (
                 min(start + timedelta(days=13), cutoff_la) if start and start <= cutoff_la else None
@@ -539,6 +577,13 @@ def run_daily(session: Session, *, apply: bool = False, cutoff_la: date | None =
                     rule_version=cfg_version,
                     verified_singles=fact_singles.get(c["_idx"]),
                 )
+            if recheck_source:
+                if proof is not None:
+                    recheck_proofs.append(proof)
+                    outcomes["verified_recheck"] += 1
+                else:
+                    outcomes["recheck_no_verified_source"] += 1
+                continue
             result = plan(c, proof, cfg_id)
             if result is None:
                 if c.get("registered_tag") is False:
@@ -684,6 +729,18 @@ def run_daily(session: Session, *, apply: bool = False, cutoff_la: date | None =
             outcomes["written"] += 1
         except ValueError as e:
             outcomes[str(e)] += 1
+    automatic = {"status": "not_run"}
+    if apply and identity_filter is None and not recheck_source:
+        try:
+            from .evaluation_workflow import finalize_automatic
+
+            with session.begin_nested():
+                automatic = finalize_automatic(session, cutoff_la)
+        except Exception as exc:
+            import logging
+
+            logging.getLogger(__name__).exception("pr337_formal_gate_failed")
+            automatic = {"status": "failed", "error_type": type(exc).__name__}
     return {
         "status": "applied" if apply else "dry_run",
         "version": VERSION,
@@ -691,4 +748,6 @@ def run_daily(session: Session, *, apply: bool = False, cutoff_la: date | None =
         "candidates": len(candidates),
         "outcomes": dict(sorted(outcomes.items())),
         "examples": examples,
+        "recheck_proofs": recheck_proofs if recheck_source else [],
+        "automatic_evaluations": automatic,
     }

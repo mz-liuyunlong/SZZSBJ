@@ -554,12 +554,16 @@ class ApprovalService:
         account_refs: frozenset[str],
         actor: str,
         is_admin: bool,
+        np_may_review: bool = False,
+        wfs_may_review: bool = True,
     ) -> tuple[ApprovalListData, int]:
         """Page formal approvals and current WFS Case decisions without duplicates."""
         params: dict = {
             "accounts": list(account_refs),
             "actor": actor,
             "is_admin": is_admin,
+            "np_reviewer": np_may_review,
+            "wfs_reviewer": wfs_may_review,
             "limit": query.page_size,
             "offset": (query.page - 1) * query.page_size,
         }
@@ -573,7 +577,9 @@ class ApprovalService:
         formal_where = [
             "a.source_account_ref=any(:accounts)",
             formal_status,
-            "(a.approval_type='wfs_case_abandon' or a.applicant_id=:actor or :is_admin)",
+            "((a.approval_type='wfs_case_abandon' and :wfs_reviewer) "
+            "or a.applicant_id=:actor or :is_admin "
+            "or (a.approval_type='new_product_evaluation_review' and :np_reviewer))",
         ]
         case_status = (
             ["c.status='archive_pending'", "c.archive_review_status='pending'"]
@@ -604,6 +610,8 @@ class ApprovalService:
             formal_where.append("a.approval_type=:kind")
             if query.approval_type != "wfs_case_abandon":
                 legacy_where.append("false")
+        if not wfs_may_review and not is_admin:
+            legacy_where.append("false")
         pending_amount = "greatest(c.estimated_recover_amount-c.recovered_amount,0)"
         legacy_risk = (
             f"case when {pending_amount}>=500 then 'high' "
@@ -713,9 +721,15 @@ class ApprovalService:
         actor: str,
         may_review: bool,
         is_admin: bool = False,
+        np_may_review: bool = False,
+        wfs_may_review: bool | None = None,
     ) -> tuple[ApprovalListData, int]:
+        if wfs_may_review is None:
+            wfs_may_review = may_review
         if may_review and query.view != "created":
-            return self._list_pending_with_legacy(query, account_refs, actor, is_admin)
+            return self._list_pending_with_legacy(
+                query, account_refs, actor, is_admin, np_may_review, wfs_may_review
+            )
         status_clause = (
             "a.status in ('submitted','info_required')"
             if query.tab == "pending"
@@ -726,12 +740,16 @@ class ApprovalService:
         where = [
             "a.source_account_ref=any(:accounts)",
             status_clause,
-            "(a.approval_type='wfs_case_abandon' or a.applicant_id=:actor or :is_admin)",
+            "((a.approval_type='wfs_case_abandon' and :wfs_reviewer) "
+            "or a.applicant_id=:actor or :is_admin "
+            "or (a.approval_type='new_product_evaluation_review' and :np_reviewer))",
         ]
         params: dict = {
             "accounts": list(account_refs),
             "actor": actor,
             "is_admin": is_admin,
+            "np_reviewer": np_may_review,
+            "wfs_reviewer": wfs_may_review,
             "limit": query.page_size,
             "offset": (query.page - 1) * query.page_size,
         }
@@ -862,15 +880,22 @@ class ApprovalService:
         actor: str,
         may_review: bool,
         is_admin: bool = False,
+        np_may_review: bool = False,
     ) -> ApprovalDetail:
         record = self._record(approval_id, account_refs)
-        if (not may_review and record["applicant_id"] != actor) or (
-            record["approval_type"] != "wfs_case_abandon"
-            and not is_admin
-            and record["applicant_id"] != actor
-        ):
+        is_wfs = record["approval_type"] == "wfs_case_abandon"
+        is_np = record["approval_type"] == "new_product_evaluation_review"
+        authorized = (
+            is_admin
+            or record["applicant_id"] == actor
+            or (is_wfs and may_review)
+            or (is_np and np_may_review)
+        )
+        if not authorized:
             raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
-        item = self._as_item(record, actor, may_review)
+        item = self._as_item(
+            record, actor, may_review if is_wfs else np_may_review if is_np else is_admin
+        )
         events = (
             self.session.execute(
                 text("""
@@ -888,6 +913,7 @@ class ApprovalService:
             "finance_exception",
             "access_change",
             "operations_plan_ack",
+            "new_product_evaluation_review",
         ):
             return ApprovalDetail(
                 **item.model_dump(),

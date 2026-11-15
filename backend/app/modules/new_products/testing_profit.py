@@ -159,6 +159,7 @@ def calculate_testing_profit(
     data = list(rows)
     missing: set[str] = set()
     revenue = paid_units = paid_orders = ZERO
+    sample_units = ZERO
     purchase = first_leg = wfs = storage = commission = sem = ZERO
     first_order: date | None = None
 
@@ -188,6 +189,7 @@ def calculate_testing_profit(
         if "sample_exceeds_salestat_pending_review" in (row.get("calculation_warnings_json") or []):
             missing.add("sample_evidence_disputed")
             continue
+        sample_units += sample
         revenue += sales
         paid_units += quantity
         paid_orders += orders
@@ -279,6 +281,17 @@ def calculate_testing_profit(
         "gross_margin_pct": str(profit / revenue * HUNDRED) if valid else None,
         "sales_amount_usd": str(revenue),
         "sales_units": str(paid_units),
+        "sample_units": str(sample_units)
+        if not any(
+            x in missing
+            for x in (
+                "daily_sale_quantity_missing",
+                "negative_daily_values",
+                "cost_quantity_inconsistent",
+                "sample_evidence_disputed",
+            )
+        )
+        else None,
         "sales_orders": str(paid_orders),
         "sp_ad_spend_usd": str(sp)
         if "sp_ad_cost_missing_or_currency_unverified" not in missing

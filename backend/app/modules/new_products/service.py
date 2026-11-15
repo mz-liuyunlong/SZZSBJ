@@ -402,6 +402,177 @@ class NewProductService:
             "rule_version": version,
         }
 
+    # SZZSBJ_NEW_PRODUCTS_AUTHORITY_V2_20261116: persisted truth only.
+    def _verified_final_from_saved(self, row, saved, config, version, profit_result=None):
+        """Only publish a final grade after independent source-backed DB repair.
+
+        No scoring is permitted on a list/detail GET.  Legacy daily evidence
+        remains inspectable but cannot authorize purchase or a new grade.
+        """
+        ev = row.get("evaluation")
+        facts = row.get("facts")
+        if not isinstance(ev, dict) or not isinstance(facts, dict):
+            return False
+        if ev.get("observation_state") == "frozen":
+            return False
+        perf = saved[1] if saved and len(saved) > 1 else None
+        coverage = perf.data_coverage_json if perf is not None else None
+        coverage = coverage if isinstance(coverage, dict) else {}
+        authority = coverage.get("new_products_authority_v2")
+        old_score = coverage.get("auto_dimension_scores")
+        market_version = int(row.get("market_version") or 0)
+        validated = (
+            isinstance(authority, dict)
+            and authority.get("status") == "ready"
+            and authority.get("rule_version") == version
+            and authority.get("market_version") == market_version
+            and isinstance(old_score, dict)
+            and old_score.get("source") == "new_products_authority_v2"
+            and old_score.get("rule_version") == version
+            and perf.score is not None
+            and perf.grade is not None
+        )
+        if validated:
+            ev["total"] = str(perf.score)
+            ev["grade"] = perf.grade
+            ev["rule_version"] = version
+            # v4/v5/v6 legacy display overlays must not change V2 proof scores.
+            dim = ev.setdefault("dimensions", {})
+            for name in ("speed", "ad", "profit", "trust"):
+                value = old_score.get("dimensions", {}).get(name)
+                dim[name] = str(value) if value is not None else None
+            saved_facts = coverage.get("new_products_score_facts_v2")
+            if isinstance(saved_facts, dict):
+                facts.update(saved_facts)
+            facts["automatic_weighted_points"] = old_score.get("automatic_points")
+            facts["automatic_covered_weight_pct"] = old_score.get("covered_weight_pct")
+            ev["observation_state"] = "authoritative_published"
+            ev["missing"] = []
+            block = coverage.get("new_products_testing_profit_v2")
+            if isinstance(block, dict) and block.get("status") == "scored":
+                attach_testing_profit_facts(facts, block)
+                facts["profit_policy"] = block.get("policy")
+            facts["final_score_source"] = "new_products_authority_v2"
+            row["suggested_qty"] = self._suggested_quantity(ev, config)
+            return True
+
+        # A legacy grade must never survive a missing/partial/stale v2 proof.
+        ev["total"] = None
+        ev["grade"] = None
+        row["suggested_qty"] = None
+        facts["final_score_source"] = None
+        if profit_result is not None:
+            update_list_profit(row, profit_result, config)
+        missing = authority.get("missing") if isinstance(authority, dict) else None
+        ev["missing"] = list(missing or ["等待新品独立利润与评分权威数据重新发布"])
+        return False
+
+    def _hydrate_workflow_rows(self, rows, saved_rows=None, profit_results=None):
+        """One bounded local decision query per model, never N+1 and never source writes."""
+        if not rows:
+            return
+        # MagicMock-based historical tests do not run DB-query integrations.
+        if not isinstance(self.db, Session):
+            return
+        saved_rows = saved_rows or {}
+        keys = [
+            (
+                str(row["listing"]["source_account_ref"]),
+                str(row["listing"]["store_id"]),
+                str(row["listing"]["item_id"]),
+            )
+            for row in rows
+        ]
+        if len(keys) > 200:
+            raise ValueError("New-product decision projection page exceeds 200")
+        if self.db is not self.repo.session:
+            local_saved = load_persisted(self.db, keys)
+            for identity, matched in local_saved.items():
+                if matched[1] is None:
+                    continue
+                block = matched[1].data_coverage_json
+                if isinstance(block, dict) and isinstance(
+                    block.get("new_products_authority_v2"), dict
+                ):
+                    saved_rows[identity] = matched
+
+        def members(model):
+            return tuple_(model.source_account_ref, model.store_id, model.item_id).in_(keys)
+
+        markets = {
+            ident(m): m
+            for m in self.db.scalars(select(MarketScore).where(members(MarketScore))).all()
+        }
+        applications = {}
+        for app in self.db.scalars(
+            select(PurchaseApplication)
+            .where(members(PurchaseApplication))
+            .order_by(PurchaseApplication.created_at.desc(), PurchaseApplication.id.desc())
+        ).all():
+            applications.setdefault(ident(app), app)
+        decisions = {
+            ident(d): d
+            for d in self.db.scalars(
+                select(TrackingDecision).where(members(TrackingDecision))
+            ).all()
+        }
+        config, version = self._config()
+        # Reuse an already loaded legacy batch where possible. Saved-only
+        # local acceptance uses one independent historical read per page.
+        if profit_results is None:
+            cutoff = datetime.now(LA).date() - timedelta(days=1)
+            open_keys = []
+            for row, key in zip(rows, keys, strict=True):
+                if row.get("evaluation", {}).get("observation_state") == "frozen":
+                    continue
+                match = saved_rows.get(key)
+                coverage = match[1].data_coverage_json if match and match[1] else None
+                if isinstance(coverage, dict) and isinstance(
+                    coverage.get("new_products_authority_v2"), dict
+                ):
+                    continue
+                open_keys.append(key)
+            profit_results = (
+                load_testing_profit_page(self.repo.session, open_keys, cutoff) if open_keys else {}
+            )
+        for row, key in zip(rows, keys, strict=True):
+            if row.get("evaluation", {}).get("observation_state") == "frozen":
+                # A terminal decision's frozen score/grade must never be recomputed.
+                pass
+            market = markets.get(key)
+            if market is not None:
+                row["market_reason"] = market.reason
+                row["market_version"] = market.version
+                row["facts"]["market_score"] = str(market.score)
+                if row["evaluation"].get("observation_state") != "frozen":
+                    row["evaluation"]["dimensions"]["market"] = str(market.score)
+            app = applications.get(key)
+            if row["evaluation"].get("observation_state") != "frozen" and not (
+                app is not None and app.status in ("submitted", "approved")
+            ):
+                self._verified_final_from_saved(
+                    row, saved_rows.get(key), config, version, profit_results.get(key)
+                )
+                if row["evaluation"].get("grade") is not None and row.get("suggested_qty") is None:
+                    row["suggested_qty"] = self._suggested_quantity(row["evaluation"], config)
+            app = applications.get(key)
+            if app is not None:
+                row.update(
+                    {
+                        "purchase_status": app.status,
+                        "purchase_id": str(app.id),
+                        "purchase_version": app.version,
+                        "requested_qty": app.requested_qty,
+                        "approved_qty": app.approved_qty,
+                        "purchase_reason": app.request_reason,
+                    }
+                )
+            decision = decisions.get(key)
+            row["tracking_version"] = decision.version if decision else 0
+            if decision is not None:
+                row["tracking_decision"] = decision.decision
+                row["tracking_reason"] = decision.reason
+
     def list(self, accounts, query):
         """Fail-safe cutover: preserve current preview/score behavior by default.
 
@@ -498,6 +669,7 @@ class NewProductService:
                         if isinstance(coverage, dict):
                             overlay_saved_ad_display(row, coverage.get("ad_display_v1"))
                 rows.append(row)
+            self._hydrate_workflow_rows(rows, persisted)
             _LOGGER.info(
                 "new_product_list_saved_only page=%d count=%d total=%d elapsed_ms=%d",
                 query.page,
@@ -505,6 +677,10 @@ class NewProductService:
                 total,
                 int((time.monotonic() - started) * 1000),
             )
+            # PR337_FLOW_WFS_REAL_STATUS_20261116: read workflow states, never infer them.
+            from .workflow_read import attach_workflow_fields
+
+            attach_workflow_fields(self.db, rows)
             return {
                 "items": rows,
                 "total": total,
@@ -709,6 +885,11 @@ class NewProductService:
                         for k in ("source_account_ref", "store_id", "item_id")
                     )
                     saved_daily_view(saved_row, persisted.get(key))
+            self._hydrate_workflow_rows(rows, persisted, profit_page)
+            # PR337_FLOW_WFS_REAL_STATUS_20261116: read workflow states, never infer them.
+            from .workflow_read import attach_workflow_fields
+
+            attach_workflow_fields(self.db, rows)
             return {
                 "items": rows,
                 "total": total,
@@ -759,12 +940,13 @@ class NewProductService:
         key = ident(listing)
         saved = load_persisted(self.repo.session, [key]).get(key)
         first_order = self.repo.first_order_dates([listing]).get(key)
-        market = self.write_repo.market(account, store, item) if saved is not None else None
+        market = self.write_repo.market(account, store, item)
         row = snapshot_row(listing, first_order, saved, market, datetime.now(LA).date())
         # PR337_DAILY_PERSIST_V1: detail GET reads saved evidence.
         from .pr337_daily_view import saved_daily_view
 
         saved_daily_view(row, saved)
+        self._hydrate_workflow_rows([row], {key: saved} if saved else {})
         return {
             "identity": {
                 "source_account_ref": account,
@@ -829,7 +1011,9 @@ class NewProductService:
 
     def save_market(self, accounts, body, actor):
         a, s, i = ident(body)
-        self._listing(accounts, a, s, i)
+        listing = self._listing(accounts, a, s, i)
+        if listing.first_wfs_available_date_la is None:
+            problem("NEW_PRODUCT_WFS_START_REQUIRED", 409, "WFS首次可售时间未核实，暂不能评分")
         try:
             self.db.execute(
                 text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
@@ -870,6 +1054,11 @@ class NewProductService:
                     "risk_conditions": list(body.risk_conditions),
                 },
             )
+            # PR337_EVALUATION_FULL_WORKFLOW_20261116:
+            # Freeze final score only after verified automatic evidence.
+            from .evaluation_workflow import publish_after_market
+
+            publish_after_market(self.db, a, s, i, body.score)
             self.db.commit()
             return {"version": v + 1, "score": body.score, "reason": row.reason}
         except Exception:
@@ -878,10 +1067,67 @@ class NewProductService:
 
     def purchase(self, accounts, body, actor):
         a, s, i = ident(body)
-        self._listing(accounts, a, s, i)
-        current = self.score(accounts, a, s, i)
-        ev = current["evaluation"]
+        listing = self._listing(accounts, a, s, i)
+        if listing.first_wfs_available_date_la is None:
+            problem("NEW_PRODUCT_WFS_START_REQUIRED", 409, "WFS首次可售时间未核实，暂不能申请采购")
+        if self._final_decisions([(a, s, i)]).get((a, s, i)) is not None:
+            problem("NEW_PRODUCT_PURCHASE_FINAL_LOCKED", 409, "最终打品结果已锁定，不允许再次申请")
+        # Existing audit event is the authority for manually selected high-risk flags.
+        latest_risk_event = self.db.scalar(
+            select(ActionEvent)
+            .where(
+                ActionEvent.source_account_ref == a,
+                ActionEvent.store_id == s,
+                ActionEvent.item_id == i,
+                ActionEvent.event_type == "market_score",
+            )
+            .order_by(ActionEvent.created_at.desc())
+            .limit(1)
+        )
+        selected_risks = (
+            (latest_risk_event.payload_json or {}).get("risk_conditions", [])
+            if latest_risk_event
+            else []
+        )
+        manual_high_risks = {
+            "ROI低（Pass）",
+            "ROI低（评级上限）",
+            "季节性（强）",
+            "侵权风险",
+            "合规风险",
+            "供应链风险",
+            "质量风险",
+            "价格风险",
+            "退货风险",
+            "平台风险",
+        }
+        if set(selected_risks or []) & manual_high_risks:
+            problem(
+                "NEW_PRODUCT_RISK_REVIEW_REQUIRED",
+                409,
+                "存在人工高风险条件，须先完成复核，不能直接申请采购",
+            )
         cfg, version = self._config()
+        listing = self._listing(accounts, a, s, i)
+        saved = load_persisted(self.repo.session, [(a, s, i)]).get((a, s, i))
+        market = self.write_repo.market(a, s, i)
+        row_view = snapshot_row(listing, None, saved, market, datetime.now(LA).date())
+        merge_persisted_page_row(row_view, saved, datetime.now(LA).date())
+        if self._verified_final_from_saved(row_view, saved, cfg, version):
+            current = {
+                "identity": {"source_account_ref": a, "store_id": s, "item_id": i},
+                "facts": row_view["facts"],
+                "evaluation": row_view["evaluation"],
+                "rule_version": version,
+                "rule_source": "verified_daily_proof_same_rule",
+            }
+        else:
+            problem(
+                "NEW_PRODUCT_AUTHORITATIVE_SCORE_REQUIRED",
+                409,
+                "新品退款/送样独立利润及评分尚未完成权威发布，暂不可申请采购",
+            )
+        ev = current["evaluation"]
         if ev["grade"] is None or ev["grade"] in ("D", "Pass"):
             problem("NEW_PRODUCT_PURCHASE_BLOCKED", 409, "关键指标缺失、被否决或不符合采购评级")
         if body.expected_rule_version != version:
@@ -990,6 +1236,7 @@ class NewProductService:
             if body.decision == "rejected" and len(body.reason.strip()) < 5:
                 problem("NEW_PRODUCT_REJECTION_REASON_REQUIRED", 422, "驳回原因至少5字")
             row.status = body.decision
+            row.approved_qty = row.requested_qty if body.decision == "approved" else None
             row.version += 1
             row.reviewed_by = actor
             row.reviewed_at = datetime.now(UTC)

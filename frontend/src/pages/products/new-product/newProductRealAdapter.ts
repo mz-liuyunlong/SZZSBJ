@@ -3,6 +3,7 @@
  * business scoring, grade and purchase recommendation come from `evaluation`.
  */
 import type { Product } from './nativeData';
+import { resolveNewProductFlow, resolveNewProductEvaluationFlow } from './newProductFlowState';
 import type { NewProductListing, Identity, RealScore } from './newProductBusinessApi';
 import { confirmedScoringDefaults, speedResult, type ScoringFacts } from './NewProductConfirmedScoring';
 
@@ -108,7 +109,7 @@ export function toPersistedProduct(row: NewProductListing): PersistedProduct {
     }
   })();
 
-  const evaluation: RealScore =
+  const candidateEvaluation: RealScore =
     verifiedV4Speed === null
       ? e
       : {
@@ -119,6 +120,20 @@ export function toPersistedProduct(row: NewProductListing): PersistedProduct {
           },
         };
 
+  // PR337_FLOW_WFS_REAL_STATUS_20261116: no first WFS day means no open-period score.
+  // Finished items preserve their already frozen final snapshot.
+  const day = datePart(f.first_wfs_available_date_la) || datePart(listing.first_wfs_available_date_la);
+  const hasListingStart = Boolean(day || datePart(listing.launch_date_cn));
+  const frozen = e.observation_state === 'frozen' ||
+    ['打品成功', '打品失败'].includes(row.tracking_final_result || row.tracking_decision || '');
+  const evaluation: RealScore = !hasListingStart && !frozen
+    ? {
+        ...candidateEvaluation, total: null, grade: null,
+        dimensions: {...candidateEvaluation.dimensions, speed: null, ad: null, profit: null, trust: null},
+        missing: [...candidateEvaluation.missing, 'WFS首次可售时间未核实'],
+        observation_state: 'not_calculated',
+      }
+    : candidateEvaluation;
   const dimensions = evaluation.dimensions;
   const speed = finite(dimensions.speed), ad = finite(dimensions.ad);
   const profit = finite(dimensions.profit), trust = finite(dimensions.trust);
@@ -129,15 +144,11 @@ export function toPersistedProduct(row: NewProductListing): PersistedProduct {
   const inventory = finite(listing.wfs_available_quantity);
   const price = finite(listing.sale_price_amount);
   const acos = finite(f.acos_pct); // saved authoritative ACOS only; no inferred attribution
-  const day = datePart(f.first_wfs_available_date_la);
-  const awaitingCalculation = e.observation_state === 'not_calculated';
-  const state = awaitingCalculation ? '待计算'
-    : row.purchase_status === 'submitted' ? '审核中'
-    : market === null ? '待市场评分'
-    : e.grade === null ? '数据待评估'
-    : e.grade === 'D' || e.grade === 'Pass' ? '测评停止'
-    : '待采购确认';
-  const tracking = awaitingCalculation ? '未判定' : (row.tracking_decision ?? (day ? '未判定' : '等待开售'));
+  const awaitingCalculation = evaluation.observation_state === 'not_calculated';
+  const state = resolveNewProductFlow(row, evaluation);
+  const tracking = frozen
+    ? (row.tracking_final_result || row.tracking_decision || '未判定')
+    : awaitingCalculation ? '未判定' : (row.tracking_decision ?? (day ? '未判定' : '等待开售'));
   return {
     id:`${identity.source_account_ref}::${identity.store_id}::${identity.item_id}`,
     sku:listing.local_sku || '—',
@@ -156,17 +167,18 @@ export function toPersistedProduct(row: NewProductListing): PersistedProduct {
     spend:numberOrZero(spend),unitCost:0,price:numberOrZero(price),
     inventory:numberOrZero(inventory),
     risk:awaitingCalculation?'尚未执行后台计算':e.missing.length?`数据待评估：${e.missing.join('、')}`:(row.system_recommendation?.reasons || []).join('、'),
-    status:state,suggested:row.suggested_qty,requestQty:null,requestReason:'',
+    status:state,evaluationStatus:row.evaluation_status || resolveNewProductEvaluationFlow(row,evaluation),evaluationReviewStatus:row.evaluation_review_status ?? null,evaluationReviewId:row.evaluation_review_id ?? null,evaluationJobStatus:row.evaluation_job_status ?? null,evaluationManualException:row.evaluation_manual_exception ?? false,evaluationRecheckRequired:row.evaluation_recheck_required ?? false,suggested:row.suggested_qty,requestQty:row.requested_qty??null,requestReason:row.purchase_reason??'',
     tracking, sales60:0,sales90:0,margin60:0,acos60:0,
     launch:datePart(listing.launch_date_cn),arrival:day,
     sold30:numberOrZero(sales30),sold60:0,sold90:0,
-    actualQty:0,reasonFailure:row.tracking_reason ?? '',
+    actualQty:row.approved_qty??0,reasonFailure:row.tracking_reason ?? '',
     category:listing.category || undefined,
     developer:listing.product_developer_name || undefined,
     operator:listing.owner_name || undefined,
     imageUrl:listing.picture_url,msku:listing.msku,storeName:listing.store_name,
     backend:{identity,marketVersion:row.market_version??0,ruleVersion:row.evaluation.rule_version,
-      evaluation,scoringFacts:{...f},suggestedQty:row.suggested_qty ?? null,firstWfsDate:day || null,
+      purchaseId:row.purchase_id??null,purchaseVersion:row.purchase_version??0,trackingVersion:row.tracking_version??0,
+      evaluation,reviewApplication:row.tracking_review_application ?? null,scoringFacts:{...f},suggestedQty:row.suggested_qty ?? null,firstWfsDate:day || null,
       automaticWeightedPoints:finite(f.automatic_weighted_points),
       automaticCoveredWeightPct:finite(f.automatic_covered_weight_pct),
       firstOrderDate:datePart(f.first_order_date) || null,

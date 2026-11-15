@@ -14,6 +14,11 @@ from app.core.auth import Principal
 from app.core.permissions import require_any_permission, require_permission
 from app.db.session import get_db_session
 
+from .evaluation_schemas import (
+    EvaluationCalculate,
+    EvaluationReviewDecision,
+    EvaluationReviewRequest,
+)
 from .read_source import get_new_product_read_session, require_new_product_scope
 from .schemas import (
     ListingQuery,
@@ -66,6 +71,11 @@ def listings(
     source: Source,
 ):
     data = NewProductService(db, read_session=source).list(accounts, query)
+    # PR337_EVALUATION_FULL_WORKFLOW_20261116:
+    # One page-sized snapshot lookup, no per-item source scan.
+    from .evaluation_workflow import decorate_page
+
+    data = decorate_page(db, data)
     return success_response(
         request,
         data=data,
@@ -330,4 +340,122 @@ def export_listings(db: DB, _: Read, accounts: Scope, source: Source):
         "\ufeff" + output.getvalue(),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="new-products-real.csv"'},
+    )
+
+
+# PR337_EVALUATION_FULL_WORKFLOW_20261116:
+# Single-item and evaluation-review endpoints, independent of purchase/tracking.
+@router.post("/evaluations/calculate", response_model=SuccessEnvelope[dict, dict])
+def evaluate_manually(
+    request: Request,
+    payload: EvaluationCalculate,
+    db: DB,
+    principal: Score,
+    accounts: Scope,
+    source: Source,
+):
+    from .evaluation_workflow import calculate_once
+
+    a, s, i = payload.source_account_ref, payload.store_id, payload.item_id
+    listing = NewProductService(db, read_session=source)._listing(accounts, a, s, i)
+    return success_response(
+        request,
+        data=calculate_once(db, a, s, i, principal.user_id, listing),
+        meta={"source": "database"},
+    )
+
+
+@router.get(
+    "/evaluations/status/{account}/{store}/{item}", response_model=SuccessEnvelope[dict, dict]
+)
+def get_evaluation_job(
+    request: Request,
+    account: str,
+    store: str,
+    item: str,
+    db: DB,
+    _: Read,
+    accounts: Scope,
+    source: Source,
+):
+    from .evaluation_workflow import calculation_status
+
+    NewProductService(db, read_session=source)._listing(accounts, account, store, item)
+    return success_response(
+        request,
+        data=calculation_status(db, accounts, account, store, item),
+        meta={"source": "database"},
+    )
+
+
+@router.post("/evaluation-reviews", response_model=SuccessEnvelope[dict, dict])
+def apply_evaluation_review(
+    request: Request,
+    payload: EvaluationReviewRequest,
+    db: DB,
+    principal: Score,
+    accounts: Scope,
+    source: Source,
+):
+    from .evaluation_workflow import submit_review
+
+    a, s, i = payload.source_account_ref, payload.store_id, payload.item_id
+    NewProductService(db, read_session=source)._listing(accounts, a, s, i)
+    return success_response(
+        request,
+        data=submit_review(
+            db,
+            accounts,
+            a,
+            s,
+            i,
+            principal.user_id,
+            payload.reason_type,
+            payload.reason,
+            payload.evidence,
+        ),
+        meta={"source": "database"},
+    )
+
+
+@router.post(
+    "/evaluation-reviews/{application_id}/decision", response_model=SuccessEnvelope[dict, dict]
+)
+def decide_evaluation_review(
+    request: Request,
+    application_id: UUID,
+    payload: EvaluationReviewDecision,
+    db: DB,
+    principal: Review,
+    accounts: Scope,
+):
+    from .evaluation_workflow import decide_review
+
+    return success_response(
+        request,
+        data=decide_review(
+            db,
+            accounts,
+            application_id,
+            principal.user_id,
+            payload.decision,
+            payload.reason,
+            payload.expected_version,
+        ),
+        meta={"source": "database"},
+    )
+
+
+@router.post(
+    "/evaluation-reviews/{application_id}/recheck", response_model=SuccessEnvelope[dict, dict]
+)
+def recheck_evaluation_review(
+    request: Request, application_id: UUID, db: DB, principal: Score, accounts: Scope
+):
+    from .evaluation_workflow import recheck_once
+
+    return success_response(
+        request,
+        data=recheck_once(db, accounts, application_id, principal.user_id),
+        meta={"source": "database"},
     )

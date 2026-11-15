@@ -32,6 +32,19 @@ def enabled(key: str) -> bool:
 
 @celery_app.task(name="new_products.daily_score_tick", ignore_result=True)
 def daily_score_tick() -> dict:
+    # SZZSBJ_NEW_PRODUCTS_AUTHORITY_V2: no legacy MART profit writer.
+    if (
+        os.getenv("APP_ENV", "").strip().lower() == "production"
+        and enabled(SCHEDULE_FLAG)
+        and enabled(WRITE_FLAG)
+    ):
+        from .unified_publish import execute_unified_job
+
+        return {
+            "status": "complete",
+            "authority": "new_products_authority_v2",
+            "unified": execute_unified_job(limit=500, apply=True),
+        }
     if os.getenv("APP_ENV", "").strip().lower() != "production" or not enabled(SCHEDULE_FLAG):
         return {"status": "disabled"}
     apply = enabled(WRITE_FLAG)

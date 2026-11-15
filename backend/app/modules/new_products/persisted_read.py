@@ -112,6 +112,7 @@ def snapshot_row(listing, first_order_date, saved: Saved | None, market, today: 
             "ad_clicks": "ad_clicks",
             "ad_revenue_usd": "ad_sales_usd",
             "sales_units": "sales_units",
+            "sample_units": "sample_units",
             "sales_orders": "sales_orders",
             "sales_amount_usd": "sales_amount_usd",
             "profit_usd": "profit_usd",

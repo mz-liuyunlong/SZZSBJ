@@ -2,17 +2,18 @@
 export type Grade="S"|"A"|"B"|"C"|"D"|"Pass";
 export type Product={id:string;sku:string;name:string;item:string;owner:string;days:number;market:number|null;marketReason:string;
 scores:{speed:number;ad:number;profit:number;trust:number};penalties:number;penaltyFlags:string[];roi:number;margin:number;acos:number;
-clicks:number;orders:number;qty7:number;sales30:number;spend:number;unitCost:number;price:number;inventory:number;risk:string;status:string;
+clicks:number;orders:number;qty7:number;sales30:number;spend:number;unitCost:number;price:number;inventory:number;risk:string;status:string;evaluationStatus?:string;evaluationReviewStatus?:string|null;evaluationReviewId?:string|null;evaluationJobStatus?:string|null;evaluationManualException?:boolean;evaluationRecheckRequired?:boolean;
 suggested:number|null;requestQty:number|null;requestReason:string;tracking:string;sales60:number;sales90:number;margin60:number;acos60:number;
 launch:string;arrival:string;sold30:number;sold60:number;sold90:number;actualQty:number;reasonFailure:string;
 category?:string;developer?:string;operator?:string;overrides?:Partial<Record<"speed"|"ad"|"profit"|"trust",number>>;
 /** Backend is authoritative for real records; fields above preserve accepted UI layout only. */
 backend?:{
   identity:{source_account_ref:string;store_id:string;item_id:string};
-  marketVersion:number;ruleVersion:number;
+  marketVersion:number;ruleVersion:number;purchaseId?:string|null;purchaseVersion?:number;trackingVersion?:number;
   evaluation:{total:string|null;grade:Grade|null;dimensions:Record<"market"|"speed"|"ad"|"profit"|"trust",string|null>;missing:string[]};
   suggestedQty:number|null;available:Record<string,boolean>;firstWfsDate:string|null;firstOrderDate?:string|null;
   automaticWeightedPoints?:number|null;automaticCoveredWeightPct?:number|null; // PR337_PERSISTED_DISPLAY_V1
+  reviewApplication?: {proposed_result:string;reason:string;status:string;created_at:string|null}|null;
 }};
 export type Config={weights:{market:number;speed:number;ad:number;profit:number;trust:number};remindDays:number;successDays:30|60|90;successQty:number;successProfit:number;successAcos:number;
  gradeBands?:Partial<Record<"S"|"A"|"B"|"C"|"D",[number,number]>>;

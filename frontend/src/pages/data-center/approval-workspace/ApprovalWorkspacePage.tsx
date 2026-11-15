@@ -3,6 +3,7 @@ import {
   fetchWorkbenchList,
   isDemoApproval,
 } from "./approvalDemoData";
+import { decideNewProductPurchase } from "./approvalApi";
 import DemoApprovalDrawer from "./components/DemoApprovalDrawer";
 /** Enterprise approval workbench. Reuses shared table, search and column components. */
 import { Alert, Button, Card, Input, Modal, Popover, Segmented, Select, Space, Spin, Tooltip, message } from "antd";
@@ -65,6 +66,7 @@ const approvalBusinessIcons = {
  disposal: <DeleteOutlined />,
  price: <DollarCircleOutlined />,
  finance: <DollarCircleOutlined />,
+ newProduct: <FileTextOutlined />,
 };
 
 export default function ApprovalWorkspacePage({ page, permissions }: {
@@ -92,6 +94,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
  const [demoActionTarget, setDemoActionTarget] = useState<ApprovalItem>();
  const [demoActionNote, setDemoActionNote] = useState("");
  const [demoActionError, setDemoActionError] = useState(false);
+ const [purchaseDecisionSaving,setPurchaseDecisionSaving] = useState(false);
 
  const [reviewOnly, setReviewOnly] = useState(false);
  const [directReviewAction, setDirectReviewAction] =
@@ -371,11 +374,11 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   <BulkApprovalModal rows={bulkRows} onCancel={() => setBulkRows([])}
    onUpdated={() => {setSelectedBulkKeys([]);reload();}}/>
   <DemoApprovalDrawer
-    selected={selected && (isDemoApproval(selected) || selected.approval_type === "clearance_request") ? selected : undefined}
+    selected={selected && (isDemoApproval(selected) || selected.approval_type === "clearance_request" || selected.approval_type === "new_product_purchase") ? selected : undefined}
     onClose={() => setSelected(undefined)}
      // PR337_PURCHASE_DECISION_DETAIL_V3_PARENT: reuse existing mock confirmation modal.
      onAction={(item, action) => {
-       if (item.approval_type !== "purchase_exception" || !isDemoApproval(item)) return;
+       if (item.approval_type !== "new_product_purchase" && (item.approval_type !== "purchase_exception" || !isDemoApproval(item))) return;
        setSelected(undefined);
        setDemoActionTarget(item);
        setDemoActionIntent(action);
@@ -391,7 +394,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
     title={demoActionIntent === "approve" ? "审批通过" : "驳回申请"}
     okText={demoActionIntent === "approve" ? "确认通过" : "确认驳回"}
     cancelText="取消"
-    okButtonProps={{ danger: demoActionIntent === "reject" }}
+    okButtonProps={{ danger: demoActionIntent === "reject", loading:purchaseDecisionSaving }}
     destroyOnHidden
     onCancel={() => {
       setDemoActionTarget(undefined);
@@ -399,13 +402,37 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
       setDemoActionNote("");
       setDemoActionError(false);
     }}
-    onOk={() => {
-      if (!demoActionTarget || !demoActionIntent) return;
+    onOk={async () => {
+      if (!demoActionTarget || !demoActionIntent || purchaseDecisionSaving) return;
 
       const note = demoActionNote.trim();
 
       if (demoActionIntent === "reject" && !note) {
         setDemoActionError(true);
+        return;
+      }
+
+      // Real new-product purchase uses the existing transactional purchase decision.
+      if (demoActionTarget.approval_type === "new_product_purchase") {
+        if (!demoActionTarget.can_review) {void messageApi.error("无当前申请的审批权限");return;}
+        if (demoActionIntent === "reject" && note.length < 5) {
+          setDemoActionError(true);return;
+        }
+        setPurchaseDecisionSaving(true);
+        try {
+          await decideNewProductPurchase(
+            demoActionTarget.id,demoActionTarget.version,
+            demoActionIntent === "approve" ? "approved" : "rejected",note
+          );
+          setDemoActionTarget(undefined);
+          setDemoActionIntent(undefined);
+          setDemoActionNote("");
+          setDemoActionError(false);
+          reload();
+          void messageApi.success("正式采购审批已保存");
+        } catch {
+          void messageApi.error("采购审批失败：请检查权限、版本或申请状态");
+        } finally {setPurchaseDecisionSaving(false);}
         return;
       }
 
@@ -504,9 +531,10 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   />
 
   <ApprovalDetailDrawer reviewOnly={reviewOnly} directReviewAction={directReviewAction}
-   selected={selected && !isDemoApproval(selected) && selected.approval_type !== "clearance_request" ? selected : undefined}
+   selected={selected && !isDemoApproval(selected) && selected.approval_type !== "clearance_request" && selected.approval_type !== "new_product_purchase" ? selected : undefined}
    canReview={hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-review")}
    canAdmin={hasPermission(permissions, "*")}
+   canNewProductReview={hasPermission(permissions, "action:products:new-product-analysis:review")}
    canSupplement={hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-request")}
    canPurchaseSupplement={hasPermission(permissions, "action:pmc:purchase-board:override")}
    onClose={() => { setSelected(undefined); setReviewOnly(false); setDirectReviewAction(undefined); }}
