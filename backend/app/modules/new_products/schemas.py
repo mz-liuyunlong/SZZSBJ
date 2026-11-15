@@ -41,7 +41,6 @@ class MarketWrite(Identity):
     reason: str = Field(min_length=5, max_length=4000)
     expected_version: int = Field(ge=0)
 
-
     # PR337_MANUAL_RISK_V1: enforced even if UI validation is bypassed.
     risk_conditions: list[str] = Field(min_length=1, max_length=14)
 
@@ -49,16 +48,28 @@ class MarketWrite(Identity):
     @classmethod
     def check_risk_conditions(cls, values: list[str]) -> list[str]:
         allowed = {
-            "无", "资金占用率高", "广告数据骤变", "季节性（一般）", "低价依赖",
-            "ROI低（Pass）", "ROI低（评级上限）", "季节性（强）",
-            "侵权风险", "合规风险", "供应链风险", "质量风险",
-            "价格风险", "退货风险", "平台风险",
+            "无",
+            "资金占用率高",
+            "广告数据骤变",
+            "季节性（一般）",
+            "低价依赖",
+            "ROI低（Pass）",
+            "ROI低（评级上限）",
+            "季节性（强）",
+            "侵权风险",
+            "合规风险",
+            "供应链风险",
+            "质量风险",
+            "价格风险",
+            "退货风险",
+            "平台风险",
         }
         if len(values) != len(set(values)) or any(v not in allowed for v in values):
             raise ValueError("风险条件含无效或重复选项")
         if "无" in values and len(values) != 1:
             raise ValueError("选择「无」时不能同时勾选其他风险")
         return values
+
 
 class TrackingWrite(Identity):
     decision: Literal["打品成功", "继续观察", "需要优化", "打品失败"]

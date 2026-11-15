@@ -27,8 +27,8 @@ from .models import ActionEvent, MarketScore, PurchaseApplication, RuleVersion, 
 from .persisted_projection import load_persisted_page, merge_persisted_page_row
 from .persisted_read import load_persisted, snapshot_row  # PR337_PERSISTED_DISPLAY_V1
 from .repository import NewProductRepository
-from .scoring import evaluate
 from .sale_stat_order_evidence import reconcile_sale_stat_order_evidence
+from .scoring import evaluate
 from .testing_profit import FINAL_RESULTS, load_final_decisions, load_testing_profit_page
 from .testing_profit_projection import (
     attach_testing_profit_facts,
@@ -204,15 +204,20 @@ class NewProductService:
         # line proof. Batch list remains in reconcile_pending_rows after
         # snapshot projection; preview MUST keep its one bounded snapshot.
         if (
-            snapshot is None and start is not None and end is not None
-            and end < today and rows and not order_evidence.fact_reconciled
+            snapshot is None
+            and start is not None
+            and end is not None
+            and end < today
+            and rows
+            and not order_evidence.fact_reconciled
             and os.getenv("APP_ENV", "").strip().lower() in {"local", "dev", "development"}
         ):
             from dataclasses import replace
+
             from .order_lineage_view import read_paid_order_summary
+
             paid = read_paid_order_summary(
-                self.repo.session, str(account), str(store), str(item),
-                start, end, rows
+                self.repo.session, str(account), str(store), str(item), start, end, rows
             )
             if paid is not None:
                 order_evidence = replace(
@@ -228,23 +233,28 @@ class NewProductService:
         fact_unknown = not order_evidence.fact_reconciled
         # PR337_MART_ONLY_DETAIL_V4_20261115
         if (
-            snapshot is None and start is not None and end is not None
-            and end < today and rows
-            and os.getenv('APP_ENV', '').strip().lower() in {'local','dev','development'}
+            snapshot is None
+            and start is not None
+            and end is not None
+            and end < today
+            and rows
+            and os.getenv("APP_ENV", "").strip().lower() in {"local", "dev", "development"}
         ):
             from dataclasses import replace as _pr337_replace
+
             from .mart_only_v4 import mart_deterministic_evidence
+
             _mart_only = mart_deterministic_evidence(start, end, rows)
             if _mart_only is not None:
                 order_evidence = _pr337_replace(
                     order_evidence,
-                    effective_orders=_mart_only['orders'],
-                    first_order_day=(_mart_only['first_date']-start).days+1,
-                    valid_orders=_mart_only['orders'],
-                    valid_units=Decimal(_mart_only['units']),
-                    single_orders=_mart_only['singles'],
+                    effective_orders=_mart_only["orders"],
+                    first_order_day=(_mart_only["first_date"] - start).days + 1,
+                    valid_orders=_mart_only["orders"],
+                    valid_units=Decimal(_mart_only["units"]),
+                    single_orders=_mart_only["singles"],
                     fact_reconciled=True,
-                    reason='MART_DAILY_SINGLE_COUNTS_PROVEN_V4',
+                    reason="MART_DAILY_SINGLE_COUNTS_PROVEN_V4",
                 )
                 fact_unknown = False
         ad_status = "unknown"
@@ -403,11 +413,16 @@ class NewProductService:
         # Production still fails closed in local_preview_item_ids().
         if os.getenv("PR337_LOCAL_PREVIEW_ITEM_IDS", "").strip():
             return self._list_legacy_live(accounts, query)
-        if (
-            os.getenv("APP_ENV", "").strip().lower() in {"local", "dev", "development"}
-            and os.getenv("SZZSBJ_NEW_PRODUCT_SAVED_LIST_ONLY", "1").strip().lower()
-                in {"1", "true", "yes", "on"}
-        ):
+        if os.getenv("APP_ENV", "").strip().lower() in {
+            "local",
+            "dev",
+            "development",
+        } and os.getenv("SZZSBJ_NEW_PRODUCT_SAVED_LIST_ONLY", "1").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }:
             return self._list_saved(accounts, query)
         return self._list_legacy_live(accounts, query)
 
@@ -424,9 +439,15 @@ class NewProductService:
             preview = local_preview_item_ids()
             filters = {"item_ids": preview} if preview is not None else {}
             data, total, last = self.repo.page(
-                accounts, page=query.page, page_size=query.page_size,
-                store_id=query.store_id, owner=query.owner, keyword=query.keyword,
-                search_field=query.search_field, status=query.status, **filters,
+                accounts,
+                page=query.page,
+                page_size=query.page_size,
+                store_id=query.store_id,
+                owner=query.owner,
+                keyword=query.keyword,
+                search_field=query.search_field,
+                status=query.status,
+                **filters,
             )
             if preview is not None and total > 4:
                 raise ValueError("本地四商品试算范围超过四条，已停止")
@@ -439,9 +460,11 @@ class NewProductService:
                     ident(m): m
                     for m in self.db.scalars(
                         select(MarketScore).where(
-                            tuple_(MarketScore.source_account_ref,
-                                   MarketScore.store_id,
-                                   MarketScore.item_id).in_(keys)
+                            tuple_(
+                                MarketScore.source_account_ref,
+                                MarketScore.store_id,
+                                MarketScore.item_id,
+                            ).in_(keys)
                         )
                     ).all()
                 }
@@ -452,13 +475,18 @@ class NewProductService:
                 key = ident(listing)
                 if key in finals:
                     row = closed_list_row(
-                        listing.model_dump(mode="json"), persisted.get(key),
-                        finals[key], today_la,
+                        listing.model_dump(mode="json"),
+                        persisted.get(key),
+                        finals[key],
+                        today_la,
                     )
                 else:
                     row = snapshot_row(
-                        listing, None, persisted.get(key),
-                        market_scores.get(key), today_la,
+                        listing,
+                        None,
+                        persisted.get(key),
+                        market_scores.get(key),
+                        today_la,
                     )
                     merge_persisted_page_row(row, persisted.get(key), today_la)
                     # Display-only fields from the writable new-product snapshot.
@@ -472,19 +500,26 @@ class NewProductService:
                 rows.append(row)
             _LOGGER.info(
                 "new_product_list_saved_only page=%d count=%d total=%d elapsed_ms=%d",
-                query.page, len(rows), total,
+                query.page,
+                len(rows),
+                total,
                 int((time.monotonic() - started) * 1000),
             )
             return {
-                "items": rows, "total": total, "page": query.page,
-                "page_size": query.page_size, "tag_filter": "小批量测品",
-                "last_listing_calculated_at": last, "rule_version": 0,
+                "items": rows,
+                "total": total,
+                "page": query.page,
+                "page_size": query.page_size,
+                "tag_filter": "小批量测品",
+                "last_listing_calculated_at": last,
+                "rule_version": 0,
                 "local_preview": preview is not None,
             }
         except Exception as exc:
             _LOGGER.warning(
                 "new_product_list_failed stage=saved_listing_page error_type=%s elapsed_ms=%d",
-                type(exc).__name__, int((time.monotonic()-started)*1000),
+                type(exc).__name__,
+                int((time.monotonic() - started) * 1000),
             )
             raise
 
@@ -518,14 +553,17 @@ class NewProductService:
             finals = self._final_decisions(page_keys)
             open_keys = [key for key in page_keys if key not in finals]
             cutoff_la = datetime.now(LA).date() - timedelta(days=1)
-            profit_page = load_testing_profit_page(
-                self.repo.session, open_keys, cutoff_la
-            ) if open_keys else {}
+            profit_page = (
+                load_testing_profit_page(self.repo.session, open_keys, cutoff_la)
+                if open_keys
+                else {}
+            )
             profit_config, _ = self._config()
             # One read-only, page-scoped SELECT; no per-product score calculation.
             persisted = (
                 load_persisted_page(self.repo.session, [ident(item) for item in data.items])
-                if preview is None else {}
+                if preview is None
+                else {}
             )
             rows = []
             today_la = datetime.now(LA).date()
@@ -573,9 +611,7 @@ class NewProductService:
                 record = listing.model_dump(mode="json")
                 key = ident(listing)
                 if key in finals:
-                    rows.append(closed_list_row(
-                        record, persisted.get(key), finals[key], today_la
-                    ))
+                    rows.append(closed_list_row(record, persisted.get(key), finals[key], today_la))
                     continue
                 first_date = first_orders.get(
                     (record["source_account_ref"], record["store_id"], record["item_id"])
@@ -595,14 +631,14 @@ class NewProductService:
                         preview is not None
                         and key not in snapshot.orders
                         and not snapshot.daily.get(key)
-                        and facts.get('effective_orders_14d') is None
-                        and facts.get('valid_orders_14d') is None
-                        and facts.get('valid_units_14d') is None
-                        and facts.get('single_unit_orders_14d') is None
+                        and facts.get("effective_orders_14d") is None
+                        and facts.get("valid_orders_14d") is None
+                        and facts.get("valid_units_14d") is None
+                        and facts.get("single_unit_orders_14d") is None
                     ):
-                        facts['effective_orders_14d'] = 0
-                        facts['valid_orders_14d'] = 0
-                        facts['single_unit_orders_14d'] = 0
+                        facts["effective_orders_14d"] = 0
+                        facts["valid_orders_14d"] = 0
+                        facts["single_unit_orders_14d"] = 0
                     facts["first_order_date"] = first_date.isoformat() if first_date else None
                     facts["orders_7d"] = snapshot.recent_orders.get(key, 0) if first_day else None
                     attach_testing_profit_facts(facts, profit_page.get(key))
@@ -629,8 +665,11 @@ class NewProductService:
                     continue
                 rows.append(
                     snapshot_row(
-                        listing, first_date, persisted.get(ident(listing)),
-                        market_scores.get(ident(listing)), today_la,
+                        listing,
+                        first_date,
+                        persisted.get(ident(listing)),
+                        market_scores.get(ident(listing)),
+                        today_la,
                     )
                 )
                 if preview is None:
@@ -649,20 +688,26 @@ class NewProductService:
                 # Independent SaleStat proof comes FIRST; no Order V2 read for
                 # rows whose daily singles are mathematically determined.
                 from .mart_only_v4 import reconcile_mart_only_pending_rows
+
                 reconcile_mart_only_pending_rows(self.repo.session, rows)
                 from .order_lineage_view import reconcile_pending_rows
+
                 reconcile_pending_rows(self.repo.session, rows)
                 # PR337_MART_TRUST_FINALIZE_V6_20261115
                 # Fill ONLY missing trust after existing V3/V4/V5 read-only logic.
                 from .mart_trust_finalize_v6 import finalize_missing_mart_trust
+
                 finalize_missing_mart_trust(self.repo.session, rows)
             # PR337_DAILY_PERSIST_V1: only the normal list reads saved facts.
             if preview is None:
                 from .pr337_daily_view import saved_daily_view
+
                 for saved_row in rows:
-                    listing_row = saved_row.get('listing', {})
-                    key = tuple(str(listing_row.get(k) or '') for k in
-                        ('source_account_ref', 'store_id', 'item_id'))
+                    listing_row = saved_row.get("listing", {})
+                    key = tuple(
+                        str(listing_row.get(k) or "")
+                        for k in ("source_account_ref", "store_id", "item_id")
+                    )
                     saved_daily_view(saved_row, persisted.get(key))
             return {
                 "items": rows,
@@ -715,11 +760,10 @@ class NewProductService:
         saved = load_persisted(self.repo.session, [key]).get(key)
         first_order = self.repo.first_order_dates([listing]).get(key)
         market = self.write_repo.market(account, store, item) if saved is not None else None
-        row = snapshot_row(
-            listing, first_order, saved, market, datetime.now(LA).date()
-        )
+        row = snapshot_row(listing, first_order, saved, market, datetime.now(LA).date())
         # PR337_DAILY_PERSIST_V1: detail GET reads saved evidence.
         from .pr337_daily_view import saved_daily_view
+
         saved_daily_view(row, saved)
         return {
             "identity": {
@@ -821,7 +865,10 @@ class NewProductService:
                 i,
                 "market_score",
                 actor,
-                {**{"score": body.score, "reason": body.reason.strip(), "version": v + 1}, "risk_conditions": list(body.risk_conditions)},
+                {
+                    **{"score": body.score, "reason": body.reason.strip(), "version": v + 1},
+                    "risk_conditions": list(body.risk_conditions),
+                },
             )
             self.db.commit()
             return {"version": v + 1, "score": body.score, "reason": row.reason}

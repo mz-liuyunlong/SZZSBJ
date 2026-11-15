@@ -415,7 +415,6 @@ def test_ad_metric_signature_treats_missing_and_zero_metrics_as_same() -> None:
     assert _ad_metric_signature(missing_metrics) == _ad_metric_signature(zero_metrics)
 
 
-
 def test_write_ads_persists_usd_attribution_currency() -> None:
     session = _CaptureSession()
     runner = _ad_writer_runner(session)
@@ -445,9 +444,7 @@ def test_write_ads_preserves_missing_amount_as_null() -> None:
     session = _CaptureSession()
     runner = _ad_writer_runner(session)
 
-    assert runner._write_ads([
-        {"advertiserId": "advertiser-us", "key": "missing-amount"}
-    ]) == 1
+    assert runner._write_ads([{"advertiserId": "advertiser-us", "key": "missing-amount"}]) == 1
 
     values = session.calls[-1][1]
     assert values["attributed_sales_amount"] is None

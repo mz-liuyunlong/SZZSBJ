@@ -4,6 +4,7 @@ DO NOT mutate score history, persisted JSONB or historical FACT identities.
 Only adjusts pending/unfrozen API rows when the V4 saved evidence agrees
 with the independent MART snapshot about source totals and its discrepancy.
 """
+
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
@@ -42,7 +43,9 @@ def _date(x: Any) -> date | None:
 
 def _score_equal(x: Any, y: Any) -> bool:
     a, b = _number(x), _number(y)
-    return a is not None and b is not None and a <= 10 and b <= 10 and abs(a-b) <= Decimal("0.015")
+    return (
+        a is not None and b is not None and a <= 10 and b <= 10 and abs(a - b) <= Decimal("0.015")
+    )
 
 
 def correct_pending_v4_projection(row: dict[str, Any], perf: Any, coverage: Any) -> bool:
@@ -65,28 +68,40 @@ def correct_pending_v4_projection(row: dict[str, Any], perf: Any, coverage: Any)
     quality = coverage.get("rebuild_quality")
     if not isinstance(saved, dict) or not isinstance(quality, dict):
         return False
-    if (saved.get("scoring_provenance") != "PR337_SOURCE_REBUILD_V4"
-            or _natural(saved.get("rule_version")) != 0
-            or quality.get("source_consistency") != "MART_ORDER_FACT_MISMATCH"
-            or _natural(quality.get("rule_version")) != 0):
+    if (
+        saved.get("scoring_provenance") != "PR337_SOURCE_REBUILD_V4"
+        or _natural(saved.get("rule_version")) != 0
+        or quality.get("source_consistency") != "MART_ORDER_FACT_MISMATCH"
+        or _natural(quality.get("rule_version")) != 0
+    ):
         return False
-    start, end = (_date(getattr(perf, key, None)) for key in
-                  ("metric_window_start_la", "metric_window_end_la"))
+    start, end = (
+        _date(getattr(perf, key, None))
+        for key in ("metric_window_start_la", "metric_window_end_la")
+    )
     if start is None or end != start + timedelta(days=13):
         return False
-    if (quality.get("source_date_start_la") != start.isoformat()
-            or quality.get("source_date_end_la") != end.isoformat()):
+    if (
+        quality.get("source_date_start_la") != start.isoformat()
+        or quality.get("source_date_end_la") != end.isoformat()
+    ):
         return False
 
     mart_orders = _natural(getattr(perf, "sales_orders", None))
     mart_units = _number(getattr(perf, "sales_units", None))
     fact_orders = _natural(quality.get("order_fact_orders"))
     fact_units = _number(quality.get("order_fact_units"))
-    if (mart_orders is None or mart_units is None or fact_orders is None
-            or fact_units is None or _natural(quality.get("mart_orders")) != mart_orders
-            or _number(quality.get("mart_units")) != mart_units
-            or (fact_orders, fact_units) == (mart_orders, mart_units)
-            or fact_orders > 100000000 or mart_orders > 100000000):
+    if (
+        mart_orders is None
+        or mart_units is None
+        or fact_orders is None
+        or fact_units is None
+        or _natural(quality.get("mart_orders")) != mart_orders
+        or _number(quality.get("mart_units")) != mart_units
+        or (fact_orders, fact_units) == (mart_orders, mart_units)
+        or fact_orders > 100000000
+        or mart_orders > 100000000
+    ):
         return False
     score_dimensions = ev.get("dimensions")
     saved_dimensions = saved.get("dimensions")
@@ -107,22 +122,29 @@ def correct_pending_v4_projection(row: dict[str, Any], perf: Any, coverage: Any)
     for dim, proof in (("speed", speed_proof), ("trust", trust_proof)):
         if saved_dimensions.get(dim) is None:
             continue
-        if (not isinstance(proof, dict) or proof.get("status") != "scored"
-                or proof.get("source") != "fact_walmart_order_items"
-                or _natural(proof.get("rule_version")) != 0
-                or proof.get("window_start_la") != start.isoformat()
-                or proof.get("window_end_la") != end.isoformat()
-                or not _score_equal(proof.get("score"), saved_dimensions[dim])
-                or _natural(proof.get("mart_orders")) != mart_orders):
+        if (
+            not isinstance(proof, dict)
+            or proof.get("status") != "scored"
+            or proof.get("source") != "fact_walmart_order_items"
+            or _natural(proof.get("rule_version")) != 0
+            or proof.get("window_start_la") != start.isoformat()
+            or proof.get("window_end_la") != end.isoformat()
+            or not _score_equal(proof.get("score"), saved_dimensions[dim])
+            or _natural(proof.get("mart_orders")) != mart_orders
+        ):
             return False
     if saved_dimensions.get("speed") is not None:
-        if (_natural(speed_proof.get("order_fact_orders")) != fact_orders
-                or _natural(speed_proof.get("effective_orders_14d")) != fact_orders):
+        if (
+            _natural(speed_proof.get("order_fact_orders")) != fact_orders
+            or _natural(speed_proof.get("effective_orders_14d")) != fact_orders
+        ):
             return False
     if saved_dimensions.get("trust") is not None:
-        if (_natural(trust_proof.get("valid_orders_14d")) != fact_orders
-                or _number(trust_proof.get("valid_units_14d")) != fact_units
-                or _number(trust_proof.get("mart_units")) != mart_units):
+        if (
+            _natural(trust_proof.get("valid_orders_14d")) != fact_orders
+            or _number(trust_proof.get("valid_units_14d")) != fact_units
+            or _number(trust_proof.get("mart_units")) != mart_units
+        ):
             return False
 
     # Only use first-order-day when the first-date evidence agrees with the
@@ -131,9 +153,13 @@ def correct_pending_v4_projection(row: dict[str, Any], perf: Any, coverage: Any)
     if isinstance(speed_proof, dict):
         day = _natural(speed_proof.get("first_order_day"))
         first_order_date = _date(getattr(perf, "first_order_date_la", None))
-        if (day is not None and 1 <= day <= 14 and first_order_date is not None
-                and first_order_date == start + timedelta(days=day-1)
-                and _natural(speed_proof.get("order_fact_orders")) == fact_orders):
+        if (
+            day is not None
+            and 1 <= day <= 14
+            and first_order_date is not None
+            and first_order_date == start + timedelta(days=day - 1)
+            and _natural(speed_proof.get("order_fact_orders")) == fact_orders
+        ):
             first_day = day
 
     too_many_fact_orders = fact_orders > mart_orders or fact_units > mart_units
@@ -145,9 +171,17 @@ def correct_pending_v4_projection(row: dict[str, Any], perf: Any, coverage: Any)
     if new_orders is not None and (new_orders == 0 or first_day is not None):
         params = {"confirmedScoring": DEFAULT_PARAMETERS, "weights": DEFAULT_WEIGHTS}
         # Same authoritative scoring engine as V4; no UI-specific score formula.
-        computed = evaluate({"elapsed_days": 14, "first_order_day": first_day,
-                             "effective_orders_14d": new_orders,
-                             "ad_status": "unknown", "market_score": None}, params, 0)
+        computed = evaluate(
+            {
+                "elapsed_days": 14,
+                "first_order_day": first_day,
+                "effective_orders_14d": new_orders,
+                "ad_status": "unknown",
+                "market_score": None,
+            },
+            params,
+            0,
+        )
         new_speed = computed["dimensions"].get("speed")
 
     facts["effective_orders_14d"] = new_orders
@@ -160,7 +194,9 @@ def correct_pending_v4_projection(row: dict[str, Any], perf: Any, coverage: Any)
     facts["order_unit_display_source"] = (
         "mart_daily_sales_item_day" if new_orders is not None else "unverified_conflict"
     )
-    facts["speed_evidence_source"] = "MART_WITH_VERIFIED_FIRST_DAY" if new_speed is not None else "MART_FIRST_DAY_NOT_VERIFIED"
+    facts["speed_evidence_source"] = (
+        "MART_WITH_VERIFIED_FIRST_DAY" if new_speed is not None else "MART_FIRST_DAY_NOT_VERIFIED"
+    )
     facts["trust_evidence_source"] = "FACT_MART_DISAGREEMENT_NOT_SCORED"
     facts["data_status"] = "partial"
     facts["order_reconciliation"] = {
@@ -169,7 +205,9 @@ def correct_pending_v4_projection(row: dict[str, Any], perf: Any, coverage: Any)
         "mart_units": str(mart_units),
         "current_fact_orders": fact_orders,
         "current_fact_units": str(fact_units),
-        "decision": "MART_SPEED_FACT_TRUST_BLOCKED" if new_speed is not None else "SOURCE_CONFLICT_NOT_SCORED",
+        "decision": "MART_SPEED_FACT_TRUST_BLOCKED"
+        if new_speed is not None
+        else "SOURCE_CONFLICT_NOT_SCORED",
     }
     score_dimensions["speed"] = new_speed
     score_dimensions["trust"] = None
@@ -177,14 +215,23 @@ def correct_pending_v4_projection(row: dict[str, Any], perf: Any, coverage: Any)
     ev["total"] = None
     ev["grade"] = None
     existing = ev.get("missing")
-    ev["missing"] = [*existing, _REASON] if isinstance(existing, list) and _REASON not in existing else (
-        existing if isinstance(existing, list) else [_REASON]
+    ev["missing"] = (
+        [*existing, _REASON]
+        if isinstance(existing, list) and _REASON not in existing
+        else (existing if isinstance(existing, list) else [_REASON])
     )
-    ev["automatic_points"] = str(sum(
-        ((_number(score_dimensions.get(k)) or Decimal(0)) * Decimal(DEFAULT_WEIGHTS[k]) / 100
-         for k in ("speed", "ad", "profit", "trust")), Decimal(0)))
+    ev["automatic_points"] = str(
+        sum(
+            (
+                (_number(score_dimensions.get(k)) or Decimal(0)) * Decimal(DEFAULT_WEIGHTS[k]) / 100
+                for k in ("speed", "ad", "profit", "trust")
+            ),
+            Decimal(0),
+        )
+    )
     ev["covered_weight_pct"] = sum(
-        DEFAULT_WEIGHTS[k] for k in ("speed", "ad", "profit", "trust")
+        DEFAULT_WEIGHTS[k]
+        for k in ("speed", "ad", "profit", "trust")
         if score_dimensions.get(k) is not None
     )
     if "suggested_qty" in row:

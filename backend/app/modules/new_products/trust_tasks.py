@@ -1,4 +1,5 @@
 """Feature-flagged Celery tick for saved trust evidence; no source writes."""
+
 from __future__ import annotations
 
 import os

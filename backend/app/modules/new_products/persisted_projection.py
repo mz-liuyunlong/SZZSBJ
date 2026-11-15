@@ -4,6 +4,7 @@ Existing source-account scoping happens in NewProductRepository.page().  This
 module queries *only* identities on that scoped page and never recalculates
 scores or changes the operational database.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -33,9 +34,7 @@ def load_persisted_page(
     statement = (
         select(registry, perf)
         .outerjoin(perf, perf.registry_id == registry.id)
-        .where(
-            tuple_(registry.source_account_ref, registry.store_id, registry.item_id).in_(keys)
-        )
+        .where(tuple_(registry.source_account_ref, registry.store_id, registry.item_id).in_(keys))
     )
     return {
         (r.source_account_ref, r.store_id, r.item_id): (r, p)
@@ -84,10 +83,11 @@ def _matches_saved_dimension(raw: Any, saved: Any) -> bool:
     actual = _evidence_decimal(raw)
     expected = _evidence_decimal(saved)
     return bool(
-        actual is not None and expected is not None
+        actual is not None
+        and expected is not None
         and Decimal(0) <= actual <= Decimal(10)
         and Decimal(0) <= expected <= Decimal(10)
-        and abs(actual - expected) <= Decimal('0.015')
+        and abs(actual - expected) <= Decimal("0.015")
     )
 
 
@@ -100,73 +100,84 @@ def _attach_saved_dimension_evidence(
     present it as the initial 14-day observation window. Check its own saved
     ad score before associating it with an existing dimension score.
     """
-    if row.get('evaluation', {}).get('observation_state') == 'frozen':
+    if row.get("evaluation", {}).get("observation_state") == "frozen":
         return
-    dimensions = row.get('evaluation', {}).get('dimensions', {})
+    dimensions = row.get("evaluation", {}).get("dimensions", {})
     if not isinstance(dimensions, dict):
         return
-    facts = row.get('facts')
+    facts = row.get("facts")
     if not isinstance(facts, dict):
         return
 
-    history = coverage.get('ad_history_full')
-    if isinstance(history, dict) and history.get('status') == 'scored':
-        spend = _evidence_decimal(history.get('spend_usd'))
-        sales = _evidence_decimal(history.get('attributed_sales_reported'))
-        clicks = _evidence_valid_integer(history.get('clicks'))
-        orders = _evidence_valid_integer(history.get('attributed_orders'))
-        rows = _evidence_valid_integer(history.get('ad_rows'))
-        invalid_core = _evidence_valid_integer(history.get('core_incomplete_rows'))
-        invalid_currency = _evidence_valid_integer(history.get('unverified_sales_rows'))
+    history = coverage.get("ad_history_full")
+    if isinstance(history, dict) and history.get("status") == "scored":
+        spend = _evidence_decimal(history.get("spend_usd"))
+        sales = _evidence_decimal(history.get("attributed_sales_reported"))
+        clicks = _evidence_valid_integer(history.get("clicks"))
+        orders = _evidence_valid_integer(history.get("attributed_orders"))
+        rows = _evidence_valid_integer(history.get("ad_rows"))
+        invalid_core = _evidence_valid_integer(history.get("core_incomplete_rows"))
+        invalid_currency = _evidence_valid_integer(history.get("unverified_sales_rows"))
         if (
-            history.get('source') == 'fact_walmart_ad_item_sp_daily'
-            and _matches_saved_dimension(history.get('ad_score'), dimensions.get('ad'))
-            and rows is not None and rows > 0
-            and invalid_core == 0 and invalid_currency == 0
-            and spend is not None and spend > 0
-            and clicks is not None and clicks > 0
-            and sales is not None and sales >= 0
-            and orders is not None and orders <= clicks
+            history.get("source") == "fact_walmart_ad_item_sp_daily"
+            and _matches_saved_dimension(history.get("ad_score"), dimensions.get("ad"))
+            and rows is not None
+            and rows > 0
+            and invalid_core == 0
+            and invalid_currency == 0
+            and spend is not None
+            and spend > 0
+            and clicks is not None
+            and clicks > 0
+            and sales is not None
+            and sales >= 0
+            and orders is not None
+            and orders <= clicks
             and ((orders == 0 and sales == 0) or (orders > 0 and sales > 0))
-            and isinstance(history.get('cutoff_la'), str)
+            and isinstance(history.get("cutoff_la"), str)
         ):
             # Override obsolete fields using the exact saved scoring snapshot.
-            facts.update({
-                'ad_status': 'active',
-                'ad_spend_usd': str(spend),
-                'ad_clicks': clicks,
-                'ad_orders': orders,
-                'ad_revenue_usd': str(sales),
-                'ad_evidence_cutoff_la': history['cutoff_la'],
-                'ad_evidence_source': 'saved_ad_history_full',
-            })
+            facts.update(
+                {
+                    "ad_status": "active",
+                    "ad_spend_usd": str(spend),
+                    "ad_clicks": clicks,
+                    "ad_orders": orders,
+                    "ad_revenue_usd": str(sales),
+                    "ad_evidence_cutoff_la": history["cutoff_la"],
+                    "ad_evidence_source": "saved_ad_history_full",
+                }
+            )
 
     # A saved, explicit single-order count takes precedence over any inference.
-    trust = coverage.get('trust_history_full')
+    trust = coverage.get("trust_history_full")
     if not isinstance(trust, dict):
-        trust = coverage.get('trust_evidence_v1')
-    if isinstance(trust, dict) and trust.get('status') == 'scored':
-        units = _evidence_decimal(trust.get('valid_units_14d'))
-        orders = _evidence_valid_integer(trust.get('valid_orders_14d'))
-        singles = _evidence_valid_integer(trust.get('single_unit_orders_14d'))
+        trust = coverage.get("trust_evidence_v1")
+    if isinstance(trust, dict) and trust.get("status") == "scored":
+        units = _evidence_decimal(trust.get("valid_units_14d"))
+        orders = _evidence_valid_integer(trust.get("valid_orders_14d"))
+        singles = _evidence_valid_integer(trust.get("single_unit_orders_14d"))
         if (
-            trust.get('source') == 'fact_walmart_order_items'
-            and units is not None and units >= 0
-            and orders is not None and orders > 0
-            and singles is not None and singles <= orders
+            trust.get("source") == "fact_walmart_order_items"
+            and units is not None
+            and units >= 0
+            and orders is not None
+            and orders > 0
+            and singles is not None
+            and singles <= orders
             and units >= orders
             and _evidence_decimal(perf.sales_units) == units
             and _evidence_valid_integer(perf.sales_orders) == orders
         ):
-            facts['single_unit_orders_14d'] = singles
-            facts['single_unit_orders_evidence'] = 'saved_order_fact_snapshot'
+            facts["single_unit_orders_14d"] = singles
+            facts["single_unit_orders_evidence"] = "saved_order_fact_snapshot"
             return
 
     # Narrow mathematical identity: when the SAME stored 14-day window has
     # N positive units across N positive orders, every order contains 1 unit.
     # Only accept default rule version and a matching saved trust score. This
     # derives from two persisted measurements, NEVER from the trust score.
-    if row.get('evaluation', {}).get('rule_version') != 0:
+    if row.get("evaluation", {}).get("rule_version") != 0:
         return
     units = _evidence_decimal(perf.sales_units)
     orders = _evidence_valid_integer(perf.sales_orders)
@@ -174,29 +185,35 @@ def _attach_saved_dimension_evidence(
     end = perf.metric_window_end_la
     first = perf.first_wfs_available_date_la
     if (
-        units is None or orders is None or orders < 1 or units != orders
-        or not isinstance(begin, date) or not isinstance(end, date)
+        units is None
+        or orders is None
+        or orders < 1
+        or units != orders
+        or not isinstance(begin, date)
+        or not isinstance(end, date)
         or not isinstance(first, date)
         or not (first <= begin <= end and end.toordinal() - first.toordinal() <= 13)
     ):
         return
     # Uses the documented default trust weighting, without rescore or write.
     from .rules import DEFAULT_PARAMETERS
-    p = DEFAULT_PARAMETERS['trust']
-    unit_component = min(Decimal(10), units / Decimal(str(p['targetUnits'])) * 10)
-    ratio_zero = Decimal(str(p['singleRatioZero']))
-    ratio_full = Decimal(str(p['singleRatioFull']))
+
+    p = DEFAULT_PARAMETERS["trust"]
+    unit_component = min(Decimal(10), units / Decimal(str(p["targetUnits"])) * 10)
+    ratio_zero = Decimal(str(p["singleRatioZero"]))
+    ratio_full = Decimal(str(p["singleRatioFull"]))
     if ratio_full <= ratio_zero:
         return
-    ratio_component = max(Decimal(0), min(Decimal(10),
-        (Decimal(100) - ratio_zero) * 10 / (ratio_full - ratio_zero)))
+    ratio_component = max(
+        Decimal(0), min(Decimal(10), (Decimal(100) - ratio_zero) * 10 / (ratio_full - ratio_zero))
+    )
     proof_score = (
-        unit_component * Decimal(str(p['unitsWeight']))
-        + ratio_component * Decimal(str(p['singleRatioWeight']))
+        unit_component * Decimal(str(p["unitsWeight"]))
+        + ratio_component * Decimal(str(p["singleRatioWeight"]))
     ) / 100
-    if _matches_saved_dimension(proof_score, dimensions.get('trust')):
-        facts['single_unit_orders_14d'] = orders
-        facts['single_unit_orders_evidence'] = 'derived_from_equal_saved_units_and_orders'
+    if _matches_saved_dimension(proof_score, dimensions.get("trust")):
+        facts["single_unit_orders_14d"] = orders
+        facts["single_unit_orders_evidence"] = "derived_from_equal_saved_units_and_orders"
 
 
 def merge_persisted_page_row(
@@ -206,7 +223,7 @@ def merge_persisted_page_row(
 ) -> None:
     """Enrich the existing API response in place, without changing its layout contract."""
     # Preserve finalized display exactly as captured at approval.
-    if row.get('evaluation', {}).get('observation_state') == 'frozen':
+    if row.get("evaluation", {}).get("observation_state") == "frozen":
         return
     if matched is None or row.get("evaluation", {}).get("observation_state") == "frozen":
         return
@@ -279,9 +296,7 @@ def merge_persisted_page_row(
     elif perf.calculated_at is not None:
         row["evaluation"]["observation_state"] = "insufficient_data"
         row["evaluation"]["missing"] = []
-    row["evaluation"]["automatic_points"] = _decimal(
-        block.get("automatic_points"), Decimal("8.5")
-    )
+    row["evaluation"]["automatic_points"] = _decimal(block.get("automatic_points"), Decimal("8.5"))
     row["evaluation"]["covered_weight_pct"] = _decimal(
         block.get("covered_weight_pct"), Decimal("85")
     )
@@ -290,10 +305,13 @@ def merge_persisted_page_row(
     _attach_saved_dimension_evidence(row, perf, coverage)
     # PR337_V4_EVIDENCE_READ_PROJECTION_20261114
     from .v4_evidence_projection import attach_v4_saved_evidence
+
     attach_v4_saved_evidence(row, perf, coverage)
     # PR337_SALESTAT_PERSISTED_VIEW_V5_20261114
     from .v5_reconciled_projection import correct_pending_v4_projection
+
     correct_pending_v4_projection(row, perf, coverage)
     # PR337_VERIFIED_SCORES_V6_LOCAL_20261114
     from .v6_sql_attested_view import apply_attested_current_view
+
     apply_attested_current_view(row, perf, coverage)

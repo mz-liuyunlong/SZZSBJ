@@ -33,10 +33,10 @@ from app.integrations.lingxing.token_manager import (
 from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 from app.modules.integration_sync.catalog import IntegrationCatalogService
 from app.modules.integration_sync.data_pages_catalog import DATA_PAGES_SYNC_INTERFACE_SPECS_BY_KEY
-from app.modules.integration_sync.parsers.lingxing_data_pages import DataPagesParserKey
 from app.modules.integration_sync.listing_product_tags_sync import (
     refresh_listing_product_tags,
 )
+from app.modules.integration_sync.parsers.lingxing_data_pages import DataPagesParserKey
 from app.modules.integration_sync.wfs_first_stock import (
     listing_identity,
     observe_first_wfs_stock,
@@ -407,7 +407,6 @@ def data_pages_response_succeeded(
     return code in {None, 0, 200}
 
 
-
 # Scoped provider data correction; RAW responses remain unchanged.
 YC00489_ALIAS_STORE_ID = "110711146247224320"
 YC00489_ALIAS_MSKU = "YC00489-1A"
@@ -446,9 +445,7 @@ def _normalize_yc00489_sale_rows(
         if raw_item_id == YC00489_BAD_ITEM_ID:
             if _single_scalar(row.get("msku")) != YC00489_ALIAS_MSKU:
                 raise DataPagesRealSyncError("DATA_PAGES_YC00489_ALIAS_MSKU_MISMATCH")
-            local_sku = _single_scalar(row.get("sku")) or _single_scalar(
-                row.get("local_sku")
-            )
+            local_sku = _single_scalar(row.get("sku")) or _single_scalar(row.get("local_sku"))
             if local_sku not in {None, YC00489_ALIAS_LOCAL_SKU}:
                 raise DataPagesRealSyncError("DATA_PAGES_YC00489_ALIAS_SKU_MISMATCH")
         elif _single_scalar(row.get("msku")) != YC00489_ALIAS_MSKU:
@@ -474,12 +471,9 @@ def _normalize_yc00489_sale_rows(
 
     # Preserve non-target rows and their original order/behavior. For each
     # SaleStat metric keep just one observation, preferring the correct ID.
-    output = [
-        row for index, row in enumerate(materialized) if index not in target_indices
-    ]
+    output = [row for index, row in enumerate(materialized) if index not in target_indices]
     output.extend(canonical[k] for k in sorted(canonical))
     return output
-
 
 
 class DataPagesRealSyncRunner:

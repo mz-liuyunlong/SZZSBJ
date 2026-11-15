@@ -1,11 +1,19 @@
 """Read-only view evidence for active new products; saved scores remain unchanged."""
+
 from __future__ import annotations
 
 from typing import Any
 
 FIELDS = (
-    "ad_status", "ad_spend_usd", "ad_clicks", "ad_orders", "ad_revenue_usd",
-    "ad_latest_sync", "valid_units_14d", "valid_orders_14d", "single_unit_orders_14d",
+    "ad_status",
+    "ad_spend_usd",
+    "ad_clicks",
+    "ad_orders",
+    "ad_revenue_usd",
+    "ad_latest_sync",
+    "valid_units_14d",
+    "valid_orders_14d",
+    "single_unit_orders_14d",
 )
 
 

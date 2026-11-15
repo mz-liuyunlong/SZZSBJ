@@ -1,4 +1,5 @@
 """Stored score API mapping: pure fake objects, no DB access."""
+
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -15,9 +16,16 @@ def _base():
         "listing": {"category": None, "launch_date_cn": None},
         "facts": {"first_wfs_available_date_la": None, "data_status": "not_calculated"},
         "evaluation": {
-            "total": None, "grade": None, "rule_version": 0,
-            "dimensions": {"market": None, "speed": None, "ad": None,
-                           "profit": None, "trust": None},
+            "total": None,
+            "grade": None,
+            "rule_version": 0,
+            "dimensions": {
+                "market": None,
+                "speed": None,
+                "ad": None,
+                "profit": None,
+                "trust": None,
+            },
             "missing": ["尚未执行后台评分"],
             "observation_state": "not_calculated",
         },
@@ -26,7 +34,8 @@ def _base():
 
 def _fake_record():
     registry = SimpleNamespace(
-        category_l1="Home", category_l2="Kitchen & Dining",
+        category_l1="Home",
+        category_l2="Kitchen & Dining",
         listing_date_la=date(2026, 10, 20),
     )
     perf = SimpleNamespace(
@@ -37,8 +46,10 @@ def _fake_record():
             },
             "auto_dimension_scores": {
                 "dimensions": {
-                    "speed": "6.222222", "ad": "0.000000",
-                    "profit": None, "trust": "3.50000",
+                    "speed": "6.222222",
+                    "ad": "0.000000",
+                    "profit": None,
+                    "trust": "3.50000",
                 },
                 "automatic_points": "2.566666",
                 "covered_weight_pct": "60",
@@ -88,7 +99,10 @@ def test_unknown_score_is_still_null_and_absent_registry_leaves_placeholder():
     assert original["evaluation"]["observation_state"] == "not_calculated"
     registry, perf = _fake_record()
     perf.data_coverage_json["auto_dimension_scores"]["dimensions"] = {
-        "speed": None, "ad": None, "profit": None, "trust": None
+        "speed": None,
+        "ad": None,
+        "profit": None,
+        "trust": None,
     }
     row = _base()
     merge_persisted_page_row(row, (registry, perf), date(2026, 11, 13))
@@ -99,9 +113,7 @@ def test_unknown_score_is_still_null_and_absent_registry_leaves_placeholder():
 def test_loader_is_page_scoped_and_does_no_database_write():
     session = MagicMock()
     keys = [("account", "store", "item")]
-    registry = SimpleNamespace(
-        source_account_ref="account", store_id="store", item_id="item"
-    )
+    registry = SimpleNamespace(source_account_ref="account", store_id="store", item_id="item")
     session.execute.return_value.all.return_value = [(registry, None)]
     result = load_persisted_page(session, keys)
     assert keys[0] in result

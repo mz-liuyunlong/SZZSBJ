@@ -8,10 +8,11 @@ into canonical rows: doing so could double-count superseded order lines.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -76,9 +77,7 @@ def reconcile_sale_stat_order_evidence(
     except (ValueError, TypeError):
         return OrderEvidence(None, None, None, None, None, False, "invalid_mart_evidence")
 
-    first_order_day = (
-        (min(positive_dates) - first_wfs_day).days + 1 if positive_dates else None
-    )
+    first_order_day = (min(positive_dates) - first_wfs_day).days + 1 if positive_dates else None
     count = int(total_orders)
 
     # FACT is not the sale authority. A conflict can block trust, NEVER speed.
@@ -90,10 +89,7 @@ def reconcile_sale_stat_order_evidence(
         try:
             fact_count = int(_natural(canonical_orders.get("order_count")))
             units_raw = canonical_orders.get("units")
-            fact_units = (
-                _natural(units_raw, allow_fraction=True)
-                if units_raw is not None else None
-            )
+            fact_units = _natural(units_raw, allow_fraction=True) if units_raw is not None else None
             fact_singles = int(_natural(canonical_orders.get("single_orders")))
             incomplete = bool(_natural(canonical_orders.get("unknown_lines", 0)))
         except (TypeError, ValueError):
@@ -116,8 +112,13 @@ def reconcile_sale_stat_order_evidence(
         valid_units=fact_units if match else None,
         single_orders=fact_singles if match else None,
         fact_reconciled=match,
-        reason=("matched" if match else "fact_orders_exceed_mart"
-                if fact_count is not None and fact_count > count else
-                "fact_units_exceed_mart" if fact_units is not None and fact_units > total_units
-                else "fact_mart_disagree"),
+        reason=(
+            "matched"
+            if match
+            else "fact_orders_exceed_mart"
+            if fact_count is not None and fact_count > count
+            else "fact_units_exceed_mart"
+            if fact_units is not None and fact_units > total_units
+            else "fact_mart_disagree"
+        ),
     )

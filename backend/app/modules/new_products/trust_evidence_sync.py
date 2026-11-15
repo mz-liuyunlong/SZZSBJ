@@ -185,19 +185,29 @@ def _valid_window(row: dict[str, Any]) -> bool:
     end = row.get("end_day")
     first = row.get("first_wfs")
     return (
-        isinstance(start, date) and isinstance(end, date) and isinstance(first, date)
-        and first <= start <= end and 0 <= (end - first).days <= 13
+        isinstance(start, date)
+        and isinstance(end, date)
+        and isinstance(first, date)
+        and first <= start <= end
+        and 0 <= (end - first).days <= 13
     )
 
 
 def trust_score(*, units: Decimal, orders: int, singles: int, params: dict[str, Any]) -> Decimal:
     """Exactly the trust part of scoring.evaluate; do not round intermediate values."""
-    return weighted([
-        (clamp(units / dec(params["targetUnits"]) * 10), dec(params["unitsWeight"])),
-        (up(Decimal(singles) / Decimal(orders) * 100,
-            dec(params["singleRatioZero"]), dec(params["singleRatioFull"])),
-         dec(params["singleRatioWeight"])),
-    ])
+    return weighted(
+        [
+            (clamp(units / dec(params["targetUnits"]) * 10), dec(params["unitsWeight"])),
+            (
+                up(
+                    Decimal(singles) / Decimal(orders) * 100,
+                    dec(params["singleRatioZero"]),
+                    dec(params["singleRatioFull"]),
+                ),
+                dec(params["singleRatioWeight"]),
+            ),
+        ]
+    )
 
 
 def verified_evidence(row: dict[str, Any], origin: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -219,12 +229,22 @@ def verified_evidence(row: dict[str, Any], origin: dict[str, Any] | None) -> dic
     invalid = _nonnegative_int(origin.get("invalid_lines"))
     missing = _nonnegative_int(origin.get("missing_refs"))
     if (
-        saved_score is None or saved_score < 0 or saved_score > 10
-        or saved_units is None or saved_orders is None or saved_orders <= 0
-        or actual_units is None or actual_orders is None or singles is None
-        or invalid != 0 or missing != 0 or actual_orders <= 0
-        or actual_units != saved_units or actual_orders != saved_orders
-        or actual_units < actual_orders or singles > actual_orders
+        saved_score is None
+        or saved_score < 0
+        or saved_score > 10
+        or saved_units is None
+        or saved_orders is None
+        or saved_orders <= 0
+        or actual_units is None
+        or actual_orders is None
+        or singles is None
+        or invalid != 0
+        or missing != 0
+        or actual_orders <= 0
+        or actual_units != saved_units
+        or actual_orders != saved_orders
+        or actual_units < actual_orders
+        or singles > actual_orders
     ):
         return None
     resolved = _trust_params(row)
@@ -232,8 +252,9 @@ def verified_evidence(row: dict[str, Any], origin: dict[str, Any] | None) -> dic
         return None
     params, version = resolved
     try:
-        check_score = trust_score(units=actual_units, orders=actual_orders,
-                                  singles=singles, params=params)
+        check_score = trust_score(
+            units=actual_units, orders=actual_orders, singles=singles, params=params
+        )
     except (ValueError, InvalidOperation, ZeroDivisionError, KeyError, TypeError):
         return None
     if abs(check_score - saved_score) > _TOLERANCE:
@@ -256,12 +277,20 @@ def verified_evidence(row: dict[str, Any], origin: dict[str, Any] | None) -> dic
 
 
 def _wanted(rows: list[dict[str, Any]]) -> str:
-    return json.dumps([{
-        "registry_id": r["registry_id"], "account": r["account"],
-        "store": r["store"], "item": r["item"],
-        "start_day": r["start_day"].isoformat(),
-        "end_day": r["end_day"].isoformat(),
-    } for r in rows], separators=(",", ":"))
+    return json.dumps(
+        [
+            {
+                "registry_id": r["registry_id"],
+                "account": r["account"],
+                "store": r["store"],
+                "item": r["item"],
+                "start_day": r["start_day"].isoformat(),
+                "end_day": r["end_day"].isoformat(),
+            }
+            for r in rows
+        ],
+        separators=(",", ":"),
+    )
 
 
 @dataclass(frozen=True)
@@ -275,7 +304,10 @@ class SyncResult:
 
 
 def sync_saved_trust_evidence(
-    session: Session, *, after_date: datetime, dry_run: bool = False,
+    session: Session,
+    *,
+    after_date: datetime,
+    dry_run: bool = False,
     batch_limit: int = _BATCH_LIMIT,
 ) -> SyncResult:
     """One bounded transaction; only appends proof to JSONB. No historical rewrites.
@@ -292,9 +324,18 @@ def sync_saved_trust_evidence(
     if not session.scalar(text("SELECT pg_try_advisory_xact_lock(337, 20261114)")):
         return SyncResult(locked=True)
 
-    rows = [dict(r) for r in session.execute(_CANDIDATES, {
-        "after_date": after_date.astimezone(UTC), "batch_limit": batch_limit,
-    }).mappings().all()]
+    rows = [
+        dict(r)
+        for r in session.execute(
+            _CANDIDATES,
+            {
+                "after_date": after_date.astimezone(UTC),
+                "batch_limit": batch_limit,
+            },
+        )
+        .mappings()
+        .all()
+    ]
     eligible = [r for r in rows if _valid_window(r)]
     if not eligible:
         return SyncResult(examined=len(rows), skipped=len(rows))
@@ -311,17 +352,23 @@ def sync_saved_trust_evidence(
         verified += 1
         if dry_run:
             continue
-        updated = session.execute(_UPDATE, {
-            "registry_id": r["registry_id"],
-            "calculated_at": r["calculated_at"],
-            "start_day": r["start_day"], "end_day": r["end_day"],
-            "saved_units": r["saved_units"], "saved_orders": r["saved_orders"],
-            "rule_version_id": r["rule_version_id"],
-            "old_coverage": json.dumps(r["coverage"], separators=(",", ":")),
-            "proof": json.dumps(proof, separators=(",", ":")),
-        })
+        updated = session.execute(
+            _UPDATE,
+            {
+                "registry_id": r["registry_id"],
+                "calculated_at": r["calculated_at"],
+                "start_day": r["start_day"],
+                "end_day": r["end_day"],
+                "saved_units": r["saved_units"],
+                "saved_orders": r["saved_orders"],
+                "rule_version_id": r["rule_version_id"],
+                "old_coverage": json.dumps(r["coverage"], separators=(",", ":")),
+                "proof": json.dumps(proof, separators=(",", ":")),
+            },
+        )
         if updated.rowcount != 1:
             raise RuntimeError("TRUST_EVIDENCE_CONCURRENT_UPDATE: rollback whole batch")
         written += 1
-    return SyncResult(examined=len(rows), verified=verified,
-                      written=written, skipped=len(rows) - verified)
+    return SyncResult(
+        examined=len(rows), verified=verified, written=written, skipped=len(rows) - verified
+    )

@@ -96,7 +96,10 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         LISTING_INTEGRATION_HEAD_REVISION,
     }
     assert script.get_heads() == [ROLE_PAGE_0092_REVISION]
-    assert script.get_revision(ROLE_PAGE_0092_REVISION).down_revision == FINANCE_WFS_REPORTS_0091_REVISION
+    assert (
+        script.get_revision(ROLE_PAGE_0092_REVISION).down_revision
+        == FINANCE_WFS_REPORTS_0091_REVISION
+    )
     assert (
         script.get_revision(FINANCE_WFS_REPORTS_0091_REVISION).down_revision
         == FINANCE_WFS_FEES_0090_REVISION

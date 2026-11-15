@@ -3,9 +3,11 @@
 Daily schedule and successful performance-rule application call this same job.
 This is NOT an ad-specific task. Disabled until a separate explicit rollout.
 """
+
 from __future__ import annotations
 
 from app.celery_app import celery_app
+
 from .unified_publish import execute_unified_job, permission_to_write
 
 
@@ -15,5 +17,4 @@ def publish_performance(trigger: str = "daily") -> dict:
         return {"status": "invalid_trigger"}
     if not permission_to_write():
         return {"status": "disabled"}
-    return {"status": "complete", "trigger": trigger,
-            **execute_unified_job(limit=500, apply=True)}
+    return {"status": "complete", "trigger": trigger, **execute_unified_job(limit=500, apply=True)}

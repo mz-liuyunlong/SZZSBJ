@@ -4,6 +4,7 @@ Do not reconstruct orders from score, do not infer mismatched mart sales, and do
 not query the source warehouse in a GET request. All evidence originates from
 the already-committed performance JSONB snapshot, with an explicit provenance.
 """
+
 from __future__ import annotations
 
 from datetime import date
@@ -18,7 +19,11 @@ _TOLERANCE = Decimal("0.015")
 
 
 def _decimal(value: Any) -> Decimal | None:
-    if value is None or isinstance(value, bool) or not isinstance(value, (str, int, float, Decimal)):
+    if (
+        value is None
+        or isinstance(value, bool)
+        or not isinstance(value, (str, int, float, Decimal))
+    ):
         return None
     try:
         result = Decimal(str(value))
@@ -36,7 +41,13 @@ def _integer(value: Any) -> int | None:
 
 def _score_match(a: Any, b: Any) -> bool:
     x, y = _decimal(a), _decimal(b)
-    return bool(x is not None and y is not None and 0 <= x <= 10 and 0 <= y <= 10 and abs(x-y) <= _TOLERANCE)
+    return bool(
+        x is not None
+        and y is not None
+        and 0 <= x <= 10
+        and 0 <= y <= 10
+        and abs(x - y) <= _TOLERANCE
+    )
 
 
 def _date(value: Any) -> str | None:
@@ -47,7 +58,9 @@ def _calculate(facts: dict[str, Any], dimension: str) -> Any:
     # Always reuse the actual core scoring evaluator. Missing market, ad and
     # profit ensure the function returns only independent dimension scores.
     snapshot = {
-        "market_score": None, "ad_status": "unknown", "elapsed_days": 14,
+        "market_score": None,
+        "ad_status": "unknown",
+        "elapsed_days": 14,
         **facts,
     }
     result = evaluate(snapshot, {"confirmedScoring": DEFAULT_PARAMETERS, "weights": {}}, 0)
@@ -94,14 +107,17 @@ def attach_v4_saved_evidence(row: dict[str, Any], perf: Any, coverage: dict[str,
         orders = _integer(speed.get("effective_orders_14d"))
         original_mart_orders = _integer(getattr(perf, "sales_orders", None))
         if (
-            first_day is not None and 1 <= first_day <= 14
-            and orders is not None and orders > 0
+            first_day is not None
+            and 1 <= first_day <= 14
+            and orders is not None
+            and orders > 0
             and _integer(speed.get("mart_orders")) == original_mart_orders
             and _integer(speed.get("order_fact_orders")) == orders
             and _score_match(speed.get("score"), dimensions.get("speed"))
         ):
-            expected_speed = _calculate({"first_order_day": first_day,
-                                         "effective_orders_14d": orders}, "speed")
+            expected_speed = _calculate(
+                {"first_order_day": first_day, "effective_orders_14d": orders}, "speed"
+            )
             if _score_match(expected_speed, dimensions.get("speed")):
                 facts["first_order_day"] = first_day
                 facts["effective_orders_14d"] = orders
@@ -116,19 +132,26 @@ def attach_v4_saved_evidence(row: dict[str, Any], perf: Any, coverage: dict[str,
         original_mart_units = _decimal(getattr(perf, "sales_units", None))
         original_mart_orders = _integer(getattr(perf, "sales_orders", None))
         if (
-            units is not None and units > 0
-            and orders is not None and orders > 0
-            and singles is not None and 0 <= singles <= orders
+            units is not None
+            and units > 0
+            and orders is not None
+            and orders > 0
+            and singles is not None
+            and 0 <= singles <= orders
             and units >= orders
-            and mart_units is not None and original_mart_units == mart_units
+            and mart_units is not None
+            and original_mart_units == mart_units
             and _integer(trust.get("mart_orders")) == original_mart_orders
             and _score_match(trust.get("score"), dimensions.get("trust"))
         ):
-            expected_trust = _calculate({
-                "valid_units_14d": units,
-                "valid_orders_14d": orders,
-                "single_unit_orders_14d": singles,
-            }, "trust")
+            expected_trust = _calculate(
+                {
+                    "valid_units_14d": units,
+                    "valid_orders_14d": orders,
+                    "single_unit_orders_14d": singles,
+                },
+                "trust",
+            )
             if _score_match(expected_trust, dimensions.get("trust")):
                 facts["valid_units_14d"] = str(units)
                 facts["valid_orders_14d"] = orders

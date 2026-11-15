@@ -4,11 +4,11 @@ The operational read session may point at the production read-only tunnel while
 manual market scores remain in the separate local decision DB. This module does
 not write, recalculate, or publish any scores.
 """
+
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date
-from decimal import Decimal
-from typing import Iterable
 
 from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session
@@ -41,8 +41,7 @@ def load_persisted(session: Session, keys: Iterable[Key]) -> dict[Key, Saved]:
         )
     )
     return {
-        (registry.source_account_ref, registry.store_id, registry.item_id):
-            (registry, performance)
+        (registry.source_account_ref, registry.store_id, registry.item_id): (registry, performance)
         for registry, performance in session.execute(statement).all()
     }
 
@@ -167,8 +166,9 @@ def snapshot_row(listing, first_order_date, saved: Saved | None, market, today: 
         "tracking_reason": None,
         "system_recommendation": {
             "value": "待计算" if observation_state == "not_calculated" else "暂无法判定",
-            "reasons": ["尚未执行后台计算"] if observation_state == "not_calculated"
-                       else ["尚无完整系统建议依据"],
+            "reasons": ["尚未执行后台计算"]
+            if observation_state == "not_calculated"
+            else ["尚无完整系统建议依据"],
         },
         "suggested_qty": None,
     }

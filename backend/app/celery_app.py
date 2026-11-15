@@ -175,8 +175,7 @@ def create_celery_app(
             },
         }
     # PR337_DAILY_PERSIST_V1: separate daily scoring task, explicitly disabled by default.
-    if (_is_production_env() and
-        _env_truthy(os.getenv("SZZSBJ_NEW_PRODUCTS_DAILY_ENABLED"))):
+    if _is_production_env() and _env_truthy(os.getenv("SZZSBJ_NEW_PRODUCTS_DAILY_ENABLED")):
         celery.conf.beat_schedule = {
             **celery.conf.beat_schedule,
             "new-products-daily-score": {

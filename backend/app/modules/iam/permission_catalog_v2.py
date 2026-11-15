@@ -67,9 +67,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
         "dashboard",
         "工作台",
         10,
-        (
-            _page("dashboard", "today_sales", "工作台", 10),
-        ),
+        (_page("dashboard", "today_sales", "工作台", 10),),
     ),
     ModuleDefinition(
         "products",
