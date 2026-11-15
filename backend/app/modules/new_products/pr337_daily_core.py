@@ -96,7 +96,6 @@ def compute(
     profit = Decimal(0)
     cost = Decimal(0)
     revenue_ok = profit_ok = True
-    invalid_rows = 0
     daily_out = []
     for raw in mart:
         day = to_date(raw.get("day"))

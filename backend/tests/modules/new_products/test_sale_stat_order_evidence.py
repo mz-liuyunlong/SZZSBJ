@@ -1,6 +1,8 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
+import pytest
+
 from app.modules.new_products.sale_stat_order_evidence import (
     reconcile_sale_stat_order_evidence as reconcile,
 )
@@ -146,7 +148,6 @@ def test_fact_malformed_does_not_block_paid_sales_score():
 
 # Production READ ONLY audit of 2026-11-14: all fourteen conflicting identities.
 # These cases protect the source boundary, not a production data rewrite.
-import pytest
 
 
 @pytest.mark.parametrize(

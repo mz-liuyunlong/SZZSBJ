@@ -336,7 +336,7 @@ def reconcile_mart_only_pending_rows(session: Any, rows: list[dict[str, Any]]) -
             _key(m): dict(m) for m in session.execute(_SNAP_SQL, {"wanted": wanted}).mappings()
         }
         windows = []
-        for key, row in eligible.items():
+        for key in eligible:
             snap = snapshots.get(key)
             if snap is None:
                 continue

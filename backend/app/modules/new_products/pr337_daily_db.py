@@ -574,7 +574,8 @@ def run_daily(session: Session, *, apply: bool = False, cutoff_la: date | None =
                 if c.get("has_performance")
                 else session.scalar(
                     text(
-                        "SELECT updated_at FROM biz_new_product_performance_current WHERE registry_id=CAST(:id AS uuid)"
+                        "SELECT updated_at FROM biz_new_product_performance_current "
+                        "WHERE registry_id=CAST(:id AS uuid)"
                     ),
                     {"id": rg_id},
                 ),

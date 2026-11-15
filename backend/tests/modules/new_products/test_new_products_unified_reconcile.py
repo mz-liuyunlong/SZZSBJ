@@ -53,7 +53,7 @@ def _order_rows(*, extra=False, changed_version=False, cross_item=False):
     ]
     quantities = [1] * 17
     quantities[4], quantities[7] = 2, 2
-    for i, (d, q) in enumerate(zip(dates, quantities)):
+    for i, (d, q) in enumerate(zip(dates, quantities, strict=True)):
         r = {
             "account": KEY[0],
             "store": KEY[1],

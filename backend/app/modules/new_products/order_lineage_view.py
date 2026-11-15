@@ -657,7 +657,7 @@ def reconcile_pending_rows(session: Any, rows: list[dict[str, Any]]) -> None:
             for r in session.execute(_SNAPSHOTS_SQL, {"wanted": wanted}).mappings()
         }
         windows: list[dict[str, str]] = []
-        for key, row in candidates.items():
+        for key in candidates:
             snap = snaps.get(key)
             if snap is None:
                 continue
