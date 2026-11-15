@@ -125,7 +125,7 @@ export function toPersistedProduct(row: NewProductListing): PersistedProduct {
   const roi = finite(f.roi), margin = finite(f.gross_margin_pct);
   const spend = finite(f.ad_spend_usd), clicks = finite(f.ad_clicks);
   // The source Listing sales_7d is units, not order count.
-  const qty7 = finite(listing.sales_7d), sales30 = finite(listing.sales_30d); // PR337_PERSISTED_DISPLAY_V1: Listing is units
+  const qty7 = finite(f.orders_7d), sales30 = finite(listing.sales_30d); // 7-day order count is authoritative, not Listing units
   const inventory = finite(listing.wfs_available_quantity);
   const price = finite(listing.sale_price_amount);
   const acos = finite(f.acos_pct); // saved authoritative ACOS only; no inferred attribution
