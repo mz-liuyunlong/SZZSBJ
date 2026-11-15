@@ -81,6 +81,8 @@ export interface FeishuPaid {
 
 export interface FeishuApproval {
   serial: string;
+  /** 第二家公司（另一个飞书企业）的单：公司名；主公司的单不填 */
+  org?: string;
   kind: string;
   status: string;
   start: string;

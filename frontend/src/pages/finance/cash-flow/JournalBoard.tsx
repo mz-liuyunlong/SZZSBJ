@@ -12,7 +12,7 @@ import ImportDrawer from "@/pages/finance/cash-flow/ImportDrawer";
 import { ManualEntryButton } from "@/pages/finance/cash-flow/ManualEntry";
 import { CellText, PartCategoryCell, PartTextCell } from "@/pages/finance/cash-flow/LineActions";
 import { isPartRow, lineHasCat, splitSummary, wholeCompareLine, withPartRows, type PartRow } from "@/pages/finance/cash-flow/journalParts";
-import { asLive, cashErrorText, exclNote, fxNote, useAlertClosures, postLineEvent, syncErrorText, syncFailedText, useApprovalSync, useRefreshJournal, type LineEventKind, type LiveCashLine } from "@/pages/finance/cash-flow/journalApi";
+import { asLive, attachedText, cashErrorText, exclNote, fxNote, useAlertClosures, postLineEvent, syncErrorText, syncFailedText, useApprovalSync, useRefreshJournal, type LineEventKind, type LineEventResult, type LiveCashLine } from "@/pages/finance/cash-flow/journalApi";
 import { ALERT_GUIDE, alertShort, toCashAlerts, useApprovals, type CashAlert, type FsDetail, alertTagView } from "@/pages/finance/cash-flow/data";
 import { accountLabel, fmtMoney, type CashLine, type CashSnapshot, type FeishuApproval } from "@/pages/finance/localFinData";
 import ReportFacetSelect from "@/shared/report-filters";
@@ -102,14 +102,14 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
   /* 接口模式重读后，详情要用最新的那一行，否则带着旧版本号去写会被拒。 */
   const freshLine = lineOpen ? data.lines.find((line) => line.id === lineOpen.id) ?? lineOpen : undefined;
   /* 接口模式：写一条事件，成功或失败都重读（失败多半是别人刚改过）；返回是否写成功。 */
-  const send = async (line: CashLine, kind: LineEventKind, fields: { payload?: Record<string, unknown>; reason?: string } = {}, done?: string): Promise<boolean> => {
+  const send = async (line: CashLine, kind: LineEventKind, fields: { payload?: Record<string, unknown>; reason?: string } = {}, done?: string | ((result: LineEventResult) => string)): Promise<boolean> => {
     const target = asLive(line);
     if (!target) return false;
     let ok = false;
     try {
       const result = await postLineEvent(target, kind, fields);
       ok = true;
-      if (done) void messageApi.success(done);
+      if (done) void messageApi.success(typeof done === "function" ? done(result) : done);
       if (result.auto_reset) void messageApi.info("这笔已审过，改动后自动退回待初审");
     } catch (error) {
       void messageApi.error(cashErrorText(error));
@@ -246,8 +246,8 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
     refs: [{ key: "refs", title: "审批单", dataIndex: "refs", width: 230, tooltip: "这笔付款对应哪张飞书审批单。自动：备注里有单号直接关联；金额 + 收款人 + 45 天内唯一候选自动关联。对不上的在这里输入或选未付审批单", render: (_, row) => (
       <span className="finance-board__stack">
         {row.refs.length > 0 && <Space size={4} wrap>{row.refs.map((ref) => { const item = approvals.get(ref); return <Tooltip key={ref} title={item ? `${item.kind} · ${item.state} · 点击看审批单` : "飞书里没找到"}><Tag bordered={false} className="finance-board__ref" color={item ? STATE_COLOR[item.state] ?? "blue" : "red"} closable={live} onClose={(event) => { event.preventDefault(); void send(row, "detach_ref", { payload: { ref } }); }} onClick={() => item && setApprovalOpen(item)}>{ref}</Tag></Tooltip>; })}</Space>}
-        {live && !row.refs.length && (asLive(row)?.candidates.length ?? 0) > 0 && <Space size={4} wrap className="fin-cash-flow__candidates"><Typography.Text type="secondary">候选：</Typography.Text>{asLive(row)?.candidates.map((ref) => { const item = approvals.get(ref); return <Tooltip key={ref} title={item ? `点击挂上 · ${item.kind} · ${fmtMoney(item.amount, item.cur)} · 收款人 ${item.payee || EMPTY} · ${maskCards(item.reason || "").slice(0, 30)}` : "点击挂上"}><Tag bordered={false} color="gold" className="finance-board__ref" onClick={() => { void send(row, "attach_ref", { payload: { ref } }, `已挂上 ${ref}`); }}>{ref}</Tag></Tooltip>; })}</Space>}
-        {live ? <ApprovalPicker approvals={openApprovals} candidates={asLive(row)?.candidates} onPreview={setApprovalOpen} onPick={(ref) => send(row, "attach_ref", { payload: { ref } }, `已挂上 ${ref}`)} /> : <Tooltip title={LOCKED_TIP}><AutoComplete size="small" disabled style={{ width: 200 }} placeholder="关联审批单（输入或选未付单）" options={openApprovalOptions} /></Tooltip>}
+        {live && !row.refs.length && (asLive(row)?.candidates.length ?? 0) > 0 && <Space size={4} wrap className="fin-cash-flow__candidates"><Typography.Text type="secondary">候选：</Typography.Text>{asLive(row)?.candidates.map((ref) => { const item = approvals.get(ref); return <Tooltip key={ref} title={item ? `点击挂上 · ${item.kind} · ${fmtMoney(item.amount, item.cur)} · 收款人 ${item.payee || EMPTY} · ${maskCards(item.reason || "").slice(0, 30)}` : "点击挂上"}><Tag bordered={false} color="gold" className="finance-board__ref" onClick={() => { void send(row, "attach_ref", { payload: { ref } }, (result) => attachedText(result, ref)); }}>{ref}</Tag></Tooltip>; })}</Space>}
+        {live ? <ApprovalPicker approvals={openApprovals} candidates={asLive(row)?.candidates} onPreview={setApprovalOpen} onPick={(ref) => send(row, "attach_ref", { payload: { ref } }, (result) => attachedText(result, ref))} /> : <Tooltip title={LOCKED_TIP}><AutoComplete size="small" disabled style={{ width: 200 }} placeholder="关联审批单（输入或选未付单）" options={openApprovalOptions} /></Tooltip>}
       </span>) }],
     alert: [{ key: "alert", title: "异常", width: 150, tooltip: "这笔流水上待处理的异常（灰色是数据提示，不算异常）；点详情看说明和处理方法", render: (_, row) => {
       const list = alertsOf(row);
@@ -290,7 +290,7 @@ export function JournalBoard({ data, live = false, liveDetails }: { data: CashSn
       return (
         <span className="finance-board__stack">
           {refs.length > 0 && <Space size={4} wrap>{refs.map((ref) => { const item = approvals.get(ref); return <Tooltip key={ref} title={item ? `${item.kind} · ${item.state} · 点击看审批单` : "飞书里没找到"}><Tag bordered={false} className="finance-board__ref" color={item ? STATE_COLOR[item.state] ?? "blue" : "red"} closable={Boolean(parent)} onClose={(event) => { event.preventDefault(); if (parent) void send(parent, "detach_part_ref", { payload: { index: row.partIndex, ref } }); }} onClick={() => item && setApprovalOpen(item)}>{ref}</Tag></Tooltip>; })}</Space>}
-          {parent && <ApprovalPicker approvals={openApprovals} width={190} placeholder="这一行挂审批单" onPreview={setApprovalOpen} onPick={(ref) => send(parent, "attach_part_ref", { payload: { index: row.partIndex, ref } }, `第 ${row.partIndex + 1} 行已挂上 ${ref}`)} />}
+          {parent && <ApprovalPicker approvals={openApprovals} width={190} placeholder="这一行挂审批单" onPreview={setApprovalOpen} onPick={(ref) => send(parent, "attach_part_ref", { payload: { index: row.partIndex, ref } }, (result) => attachedText(result, ref, `第 ${row.partIndex + 1} 行`))} />}
         </span>
       );
     }

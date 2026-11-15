@@ -65,7 +65,8 @@ export interface LiveCashLine extends CashLine { uid: string; version: number; s
   cnyReason?: string }
 
 export interface ApiApproval {
-  serial: string; kind: string; status: string; status_text: string; state: string; started_at: string; completed_at: string; handled_at: string; applicant: string;
+  /** org：zsbj = 主公司，其他 = 第二家公司（单号带 YC-）；org_label 是公司名 */
+  serial: string; org?: string; org_label?: string; kind: string; status: string; status_text: string; state: string; started_at: string; completed_at: string; handled_at: string; applicant: string;
   reason: string; amount: string | null; currency_code: string; amount_cny: string | null; pay_method: string; invoice: string; payee: string; bank: string; last4: string;
   fee_category: string; related_serial: string; items: { content: string; amount: string | null; category: string }[];
   attachments: { source: string; what: string; item: number; is_image: boolean; title: string }[];
@@ -157,7 +158,7 @@ export function toFeishuApproval(row: ApiApproval, idOfLine: Map<string, string>
     return line ? [{ line, date: "", acct: "", amt: item.amount_cny == null ? null : Number(item.amount_cny), cur: "CNY" }] : [];
   });
   return {
-    serial: row.serial, kind: row.kind, status: row.status_text, start: row.started_at.slice(0, 10), end: row.completed_at.slice(0, 10), applicant: row.applicant, reason: row.reason,
+    serial: row.serial, org: row.org && row.org !== "zsbj" ? row.org_label || row.org : undefined, kind: row.kind, status: row.status_text, start: row.started_at.slice(0, 10), end: row.completed_at.slice(0, 10), applicant: row.applicant, reason: row.reason,
     amount: num(row.amount), cur: row.currency_code, pay: row.pay_method, payee: row.payee, bank: row.bank, last4: row.last4,
     items: row.items.map((item) => ({ c: item.content, a: num(item.amount) })), rel: row.related_serial, invoice: row.invoice, src: "飞书审批同步", cat: "", masked: false,
     paid, paid_sum: Number(row.paid_sum), cny: num(row.amount_cny), state: row.state,
@@ -256,8 +257,12 @@ export function syncErrorText(error: unknown): string {
 }
 export const syncFailedText = (code: string | null) => `同步失败${code ? `（${code}）` : ""}，已同步的单子不受影响，可以再点一次`;
 
+/** ref：挂单时后端最终存下的单号（第二家公司是 YC- + 原号），别的操作为 null。 */
+export type LineEventResult = { stage: string; version: number; auto_reset: boolean; ref?: string | null };
+export const attachedText = (result: LineEventResult, typed: string, prefix = "") => `${prefix}已挂上 ${result.ref || typed}`;
+
 export async function postLineEvent(line: LiveCashLine, kind: LineEventKind, fields: { payload?: Record<string, unknown>; reason?: string } = {}) {
-  const { data } = await backendRequest<{ stage: string; version: number; auto_reset: boolean }>(`${BASE}/lines/${line.uid}/events`, {
+  const { data } = await backendRequest<LineEventResult>(`${BASE}/lines/${line.uid}/events`, {
     method: "POST",
     body: JSON.stringify({ kind, payload: fields.payload ?? {}, reason: fields.reason, expected_version: line.version, idempotency_key: crypto.randomUUID() }),
   });

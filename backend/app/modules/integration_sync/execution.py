@@ -52,6 +52,9 @@ from app.modules.integration_sync.handlers.lingxing_wfs_settlement_sync import (
     LingxingWfsSettlementSyncHandler,
     WfsSettlementSyncError,
 )
+from app.modules.integration_sync.handlers.walmart_wfs_fee_reports import (
+    WalmartWfsFeeReportsHandler,
+)
 from app.modules.integration_sync.models import (
     IntegrationSyncConfig,
     IntegrationSyncLock,
@@ -61,6 +64,7 @@ from app.modules.integration_sync.models import (
 )
 from app.modules.integration_sync.product_info_runner import ProductInfoOneTimeRunError
 from app.modules.integration_sync.repository import IntegrationSyncRepository
+from app.modules.integration_sync.wfs_report_catalog import WFS_REPORT_PROVIDER
 
 LOCK_LEASE_DURATION = timedelta(minutes=5)
 DATA_PAGES_LA_TZ = ZoneInfo("America/Los_Angeles")
@@ -98,6 +102,12 @@ class SyncRunExecutionService:
             and interface.handler_key == FeishuFinanceApprovalSyncHandler.handler_key
         ):
             FeishuFinanceApprovalSyncHandler(self.session).execute(run, interface)
+            return
+        if (
+            run.provider == WFS_REPORT_PROVIDER
+            and interface.handler_key == WalmartWfsFeeReportsHandler.handler_key
+        ):
+            WalmartWfsFeeReportsHandler(self.session).execute(run, interface)
             return
         is_data_pages = (
             run.provider == "lingxing"

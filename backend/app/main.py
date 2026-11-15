@@ -59,6 +59,7 @@ from app.modules.walmart_monitor_targets.router import router as walmart_monitor
 from app.modules.walmart_remote.router import router as walmart_remote_router
 from app.modules.walmart_scf.router import router as walmart_scf_router
 from app.modules.warehouse_wfs.router import router as warehouse_wfs_router
+from app.modules.wfs_fees.router import router as wfs_fees_router
 
 
 class HealthData(BaseModel):
@@ -108,6 +109,7 @@ def create_app() -> FastAPI:
     application.include_router(finance_cashflow_router)
     application.include_router(walmart_bills_router)
     application.include_router(payout_recon_router)
+    application.include_router(wfs_fees_router)
     application.include_router(operation_plans_router)
     application.include_router(pmc_purchase_router)
     application.include_router(pmc_domestic_router)

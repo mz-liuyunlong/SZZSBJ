@@ -17,6 +17,7 @@ from app.core.config import Settings
 TOKEN_PATH = "/open-apis/auth/v3/tenant_access_token/internal"
 LIST_PATH = "/open-apis/approval/v4/instances"
 DETAIL_PATH = "/open-apis/approval/v4/instances/{instance_code}"
+USER_PATH = "/open-apis/contact/v3/users/{user_id}"
 TOKEN_REFRESH_SECONDS = 5400
 MAX_ATTEMPTS = 3
 
@@ -52,20 +53,43 @@ class FeishuApprovalClient(Protocol):
     def close(self) -> None: ...
 
 
+class FeishuUserDirectory(Protocol):
+    """能按 user_id 查姓名的客户端（第二家公司用；查不到返回空）。"""
+
+    def get_user_name(self, user_id: str) -> str: ...
+
+
 class HttpFeishuApprovalClient:
     def __init__(
         self,
         settings: Settings,
         *,
         http_client: httpx.Client | None = None,
+        second_company: bool = False,
     ) -> None:
-        secret = settings.feishu_app_secret
-        if not settings.feishu_app_id or secret is None:
-            raise FeishuApprovalError("FEISHU_APPROVAL_CREDENTIALS_MISSING")
-        self._app_id = settings.feishu_app_id
+        """second_company=True：用第二家公司飞书的 YC_FEISHU_* 凭证（另一个飞书企业）。"""
+        if second_company:
+            app_id, secret, base_url = (
+                settings.yc_feishu_app_id,
+                settings.yc_feishu_app_secret,
+                settings.yc_feishu_base_url,
+            )
+        else:
+            app_id, secret, base_url = (
+                settings.feishu_app_id,
+                settings.feishu_app_secret,
+                settings.feishu_base_url,
+            )
+        if not app_id or secret is None:
+            raise FeishuApprovalError(
+                "FEISHU_APPROVAL_YC_CREDENTIALS_MISSING"
+                if second_company
+                else "FEISHU_APPROVAL_CREDENTIALS_MISSING"
+            )
+        self._app_id = app_id
         self._secret = secret.get_secret_value()
         self._http = http_client or httpx.Client(
-            base_url=settings.feishu_base_url,
+            base_url=base_url,
             timeout=settings.feishu_request_timeout_ms / 1000,
         )
         self._token = ""
@@ -160,3 +184,16 @@ class HttpFeishuApprovalClient:
         )
         data = body.get("data")
         return data if isinstance(data, dict) else {}
+
+    def get_user_name(self, user_id: str) -> str:
+        """通讯录里这个人的姓名（第二家公司的人不在系统员工表里，靠这个显示姓名）；查不到返回空。"""
+        body = self._call(
+            "USER",
+            "GET",
+            USER_PATH.format(user_id=quote(user_id, safe="")),
+            params={"user_id_type": "user_id"},
+            token=self._bearer(),
+        )
+        user = (body.get("data") or {}).get("user") or {}
+        name = user.get("name") if isinstance(user, dict) else None
+        return name.strip() if isinstance(name, str) else ""

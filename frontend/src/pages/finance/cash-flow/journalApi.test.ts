@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildLiveSnapshot, syncErrorText, syncFailedText, toFsDetail, type ApiApproval, cashErrorText, cashViewSource, fxNote, nextImportNode, postLineEvent, resolveCashSource, toCashLine, type ApiAccount, type ApiAnomaly, type ApiCategory, type ApiLine } from "@/pages/finance/cash-flow/journalApi";
+import { attachedText, buildLiveSnapshot, syncErrorText, syncFailedText, toFsDetail, type ApiApproval, cashErrorText, cashViewSource, fxNote, nextImportNode, postLineEvent, resolveCashSource, toCashLine, type ApiAccount, type ApiAnomaly, type ApiCategory, type ApiLine } from "@/pages/finance/cash-flow/journalApi";
 import { pairLines } from "@/pages/finance/cash-flow/journalPair";
 import { backendRequest, BackendRequestError } from "@/api/backendApi";
 
@@ -82,6 +82,17 @@ describe("postLineEvent", () => {
   });
 });
 
+describe("attachedText", () => {
+  it("用后端最终存下的单号，第二家公司带 YC-", () => {
+    const base = { stage: "todo", version: 2, auto_reset: false };
+    expect(attachedText({ ...base, ref: "YC-209901010001" }, "209901010001")).toBe("已挂上 YC-209901010001");
+    expect(attachedText({ ...base, ref: "YC-209901010001" }, "209901010001", "第 2 行")).toBe("第 2 行已挂上 YC-209901010001");
+  });
+  it("后端没回单号（旧版本）时用输入的", () => {
+    expect(attachedText({ stage: "todo", version: 2, auto_reset: false }, "209901010001")).toBe("已挂上 209901010001");
+  });
+});
+
 describe("buildLiveSnapshot", () => {
   it("maps lines to the page shape, keeping empty cny as null", () => {
     const data = buildLiveSnapshot([account], [category], [line()], []);
@@ -144,6 +155,11 @@ describe("approvals in the live snapshot", () => {
     expect(item.end).toBe("2026-10-02");
     expect(item.amount).toBe(100);
     expect(item.paid.map((row) => row.line)).toEqual([snapshot.lines[0].id]);
+  });
+
+  it("labels the second company's approvals and leaves the main company's unlabelled", () => {
+    const snapshot = buildLiveSnapshot([account], [category], [line()], [], [approval(), approval({ serial: "YC-209901010001", org: "yc", org_label: "合成二", paid: [] })]);
+    expect(snapshot.feishu.map((item) => [item.serial, item.org])).toEqual([["209901010001", undefined], ["YC-209901010001", "合成二"]]);
   });
 
   it("keeps an unknown paid amount empty instead of 0", () => {

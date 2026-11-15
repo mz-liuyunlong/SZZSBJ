@@ -180,6 +180,8 @@ class CashflowLineEventData(BaseModel):
     version: int
     auto_reset: bool = False
     replayed: bool = False
+    # 挂单时最终存下的单号（第二家公司是 YC- + 原号），页面提示用它；别的操作为 None
+    ref: str | None = None
 
 
 class CashflowPairLineRef(BaseModel):
@@ -241,6 +243,8 @@ class CashflowApprovalPaidRead(BaseModel):
 class CashflowApprovalRead(BaseModel):
     serial: str
     kind: str
+    org: str = "zsbj"  # 哪家公司的飞书；第二家的单号带 YC-
+    org_label: str = ""
     status: str
     status_text: str
     state: str
