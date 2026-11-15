@@ -240,7 +240,7 @@ def test_saved_view_uses_only_new_matching_persisted_proof():
     )
     row = {
         "listing": {"source_account_ref": "primary", "store_id": "A", "item_id": "42"},
-        "facts": {"single_unit_orders_14d": 999},
+        "facts": {"single_unit_orders_14d": 999, "first_order_date": "2026-09-09"},
         "evaluation": {
             "dimensions": {
                 "speed": None,
@@ -254,6 +254,8 @@ def test_saved_view_uses_only_new_matching_persisted_proof():
     }
     assert saved_daily_view(row, (reg, perf))
     assert row["facts"]["single_unit_orders_14d"] == 1
+    assert row["facts"]["first_order_date"] == "2026-09-09"
+    assert row["facts"]["observation_first_order_date_la"] == p["first_order_date"]
     assert row["evaluation"]["dimensions"]["trust"] == p["dimensions"]["trust"]
     assert row["facts"]["effective_orders_14d"] == 2
     assert row["facts"]["sales_amount_usd"] == "30"
@@ -316,10 +318,11 @@ class FakeRows:
 
 
 class FakeDB:
-    def __init__(self, candidates, mart, ads=(), watermark=None):
+    def __init__(self, candidates, mart, ads=(), watermark=None, fact=()):
         self.candidates = candidates
         self.mart = mart
         self.ads = ads
+        self.fact = fact
         self.watermark = watermark
         self.writes = []
         self.reads = []
@@ -328,6 +331,7 @@ class FakeDB:
         from app.modules.new_products.pr337_daily_db import (
             _ADS,
             _CANDIDATES,
+            _FACT_TRUST,
             _MART,
             _RULE,
             _WATERMARKS,
@@ -340,6 +344,8 @@ class FakeDB:
             return FakeRows(self.mart)
         if query is _ADS:
             return FakeRows(self.ads)
+        if query is _FACT_TRUST:
+            return FakeRows(self.fact)
         if query is _WATERMARKS:
             if self.watermark is None:
                 return FakeRows([])
@@ -481,3 +487,96 @@ def test_full_job_mature_watermark_required_for_open_window():
     r = run_daily(db, apply=False, cutoff_la=date(2026, 11, 14))
     assert r["outcomes"]["STORE_MART_WATERMARK_PENDING"] == 1
     assert not db.writes
+
+
+def test_historical_first_order_is_not_observation_first_order():
+    from app.modules.new_products.pr337_daily_db import _UPDATE
+
+    computed = proof([day(3, 2, 2)])
+    row = candidate(
+        saved_start=START,
+        saved_begin=START,
+        saved_end=START + timedelta(days=13),
+        saved_orders=2,
+        saved_units=2,
+        saved_first=START - timedelta(days=30),
+    )
+    planned = plan(row, computed, None)
+    assert planned is not None
+    assert planned["proof"]["first_order_date"] == "2026-10-12"
+    assert "first_order_date_la=" not in str(_UPDATE)
+
+
+def test_verified_fact_singles_fill_ambiguous_trust_without_formula_change():
+    kwargs = dict(first_wfs=START, cutoff=START + timedelta(days=13), mart=[day(3, 3, 5)], ads=[])
+    missing = compute(**kwargs)
+    assert missing["dimensions"]["trust"] is None
+    restored = compute(**kwargs, verified_singles=2)
+    assert restored["singles"] == 2
+    assert restored["dimensions"]["trust"] is not None
+    assert restored["trust_evidence_source"] == "PR337_FACT_MART_RECONCILED_V1"
+    with pytest.raises(ValueError, match="FACT_SINGLE_ORDERS_INVALID"):
+        compute(**kwargs, verified_singles=4)
+
+
+def test_full_job_fact_daily_reconciled_and_mismatched_sources():
+    from app.modules.new_products.pr337_daily_db import _FACT_TRUST, run_daily
+
+    c, _ = fake_yc00665()
+    c.update(
+        saved_begin=None, saved_end=None, saved_first=None, saved_orders=None, saved_units=None
+    )
+    mart = [day(3, 3, 5)]
+    mart[0]["idx"] = "0"
+    fact = [
+        {
+            "idx": "0",
+            "day": START + timedelta(days=2),
+            "orders": 3,
+            "units": Decimal(5),
+            "singles": 2,
+            "bad_lines": 0,
+            "invalid_orders": 0,
+        }
+    ]
+    db = FakeDB([c], mart, fact=fact)
+    result = run_daily(db, apply=False, cutoff_la=date(2026, 11, 14))
+    assert result["outcomes"]["would_write"] == 1
+    assert result["examples"][0]["trust"] is not None
+    assert _FACT_TRUST in db.reads
+    assert db.writes == []
+
+    bad_fact = [dict(fact[0], orders=4)]
+    db_bad = FakeDB([c], mart, fact=bad_fact)
+    result_bad = run_daily(db_bad, apply=False, cutoff_la=date(2026, 11, 14))
+    assert result_bad["outcomes"]["would_write"] == 1
+    assert result_bad["examples"][0]["speed"] is not None
+    assert result_bad["examples"][0]["trust"] is None
+
+
+def test_fact_same_total_but_wrong_day_is_rejected():
+    from app.modules.new_products.pr337_daily_db import run_daily
+
+    candidate_row, _ = fake_yc00665()
+    candidate_row.update(
+        saved_begin=None, saved_end=None, saved_first=None, saved_orders=None, saved_units=None
+    )
+    mart = [day(3, 3, 5)]
+    mart[0]["idx"] = "0"
+    # Matching 3 orders/5 units is not enough: the day must match too.
+    fact = [
+        {
+            "idx": "0",
+            "day": START + timedelta(days=3),
+            "orders": 3,
+            "units": Decimal(5),
+            "singles": 2,
+            "bad_lines": 0,
+            "invalid_orders": 0,
+        }
+    ]
+    result = run_daily(
+        FakeDB([candidate_row], mart, fact=fact), apply=False, cutoff_la=date(2026, 11, 14)
+    )
+    assert result["outcomes"]["would_write"] == 1
+    assert result["examples"][0]["trust"] is None

@@ -85,6 +85,7 @@ def compute(
     ads: Sequence[Mapping[str, Any]],
     config: dict | None = None,
     rule_version: int = 0,
+    verified_singles: int | None = None,
 ) -> dict[str, Any]:
     start, end = window(first_wfs, cutoff)
     params = config or {"confirmedScoring": DEFAULT_PARAMETERS, "weights": DEFAULT_WEIGHTS}
@@ -147,6 +148,15 @@ def compute(
         raise ValueError("MART_ROWS_UNAVAILABLE")  # Never turn absent rows into zero.
     if units < orders or (orders and first_order is None):
         raise ValueError("MART_TOTALS_INVALID")
+    # FACT is only a verifier for ambiguous MART daily single-order splits.
+    fact_verified = False
+    if not all_singles_known and verified_singles is not None:
+        checked = natural(verified_singles)
+        if checked is None or checked > orders:
+            raise ValueError("FACT_SINGLE_ORDERS_INVALID")
+        singles = checked
+        all_singles_known = True
+        fact_verified = True
 
     ad_spend = ad_clicks = ad_orders = ad_sales = None
     ad_status = "unknown"
@@ -251,4 +261,6 @@ def compute(
         "covered_weight_pct": str(covered),
         "rule_version": rule_version,
         "version": VERSION,
+        # Keep the existing fingerprint stable unless FACT supplied new evidence.
+        **({"trust_evidence_source": "PR337_FACT_MART_RECONCILED_V1"} if fact_verified else {}),
     }

@@ -160,41 +160,16 @@ def create_celery_app(
                 ),
             },
         }
-    # PR337: never activate source-fact reads or DB writes on deployment alone.
-    # Explicit production flag and UTC lower-bound are both mandatory.
-    if (
-        _is_production_env()
-        and _env_truthy(os.getenv("SZZSBJ_NEW_PRODUCT_TRUST_SYNC_ENABLED"))
-        and (os.getenv("SZZSBJ_NEW_PRODUCT_TRUST_MIN_CALCULATED_AT") or "").strip()
-    ):
-        celery.conf.beat_schedule = {
-            **celery.conf.beat_schedule,
-            "new-product-trust-evidence-daily": {
-                "task": "new_products.trust_evidence_sync",
-                "schedule": crontab(hour=12, minute=30),
-            },
-        }
-    # PR337_DAILY_PERSIST_V1: separate daily scoring task, explicitly disabled by default.
+    # Exactly one PR337 scheduler. The other business functions have no Beat entry.
+    # LA calendar midnight, DST-aware, while all unrelated jobs keep UTC.
     if _is_production_env() and _env_truthy(os.getenv("SZZSBJ_NEW_PRODUCTS_DAILY_ENABLED")):
+        from app.modules.new_products.la_midnight_schedule import LosAngelesMidnightSchedule
+
         celery.conf.beat_schedule = {
             **celery.conf.beat_schedule,
-            "new-products-daily-score": {
+            "new-products-la-midnight": {
                 "task": "new_products.daily_score_tick",
-                # UTC 13:30 = LA 05:30/06:30, source maturity is checked in task.
-                "schedule": crontab(hour=13, minute=30),
-            },
-        }
-    # One guarded PR337 publisher, never an independent advertising scheduler.
-    if (
-        _is_production_env()
-        and _env_truthy(os.getenv("SZZSBJ_PR337_UNIFIED_PUBLISH_ENABLED"))
-        and _env_truthy(os.getenv("SZZSBJ_PR337_UNIFIED_PRODUCTION_WRITE_APPROVED"))
-    ):
-        celery.conf.beat_schedule = {
-            **celery.conf.beat_schedule,
-            "new-product-performance-unified-daily": {
-                "task": "new_products.performance_unified_publish",
-                "schedule": crontab(hour=13, minute=0),
+                "schedule": LosAngelesMidnightSchedule(app=celery),
             },
         }
     return celery
