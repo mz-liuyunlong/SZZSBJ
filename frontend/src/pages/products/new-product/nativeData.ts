@@ -12,6 +12,7 @@ backend?:{
   marketVersion:number;ruleVersion:number;
   evaluation:{total:string|null;grade:Grade|null;dimensions:Record<"market"|"speed"|"ad"|"profit"|"trust",string|null>;missing:string[]};
   suggestedQty:number|null;available:Record<string,boolean>;firstWfsDate:string|null;firstOrderDate?:string|null;
+  automaticWeightedPoints?:number|null;automaticCoveredWeightPct?:number|null; // PR337_PERSISTED_DISPLAY_V1
 }};
 export type Config={weights:{market:number;speed:number;ad:number;profit:number;trust:number};remindDays:number;successDays:30|60|90;successQty:number;successProfit:number;successAcos:number;
  gradeBands?:Partial<Record<"S"|"A"|"B"|"C"|"D",[number,number]>>;

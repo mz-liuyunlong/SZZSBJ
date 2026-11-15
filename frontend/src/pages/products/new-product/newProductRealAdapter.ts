@@ -4,6 +4,7 @@
  */
 import type { Product } from './nativeData';
 import type { NewProductListing, Identity, RealScore } from './newProductBusinessApi';
+import { confirmedScoringDefaults, speedResult, type ScoringFacts } from './NewProductConfirmedScoring';
 
 export type PersistedProduct = Product & {
   backend: {
@@ -11,7 +12,10 @@ export type PersistedProduct = Product & {
     marketVersion: number;
     ruleVersion: number;
     evaluation: RealScore;
+    scoringFacts: Record<string, unknown>;
     suggestedQty: number | null;
+    automaticWeightedPoints: number | null;
+    automaticCoveredWeightPct: number | null;
     available: Record<string, boolean>;
     firstWfsDate: string | null;
     firstOrderDate: string | null;
@@ -40,17 +44,91 @@ export function toPersistedProduct(row: NewProductListing): PersistedProduct {
     item_id:listing.item_id,
   };
   const market = finite(f.market_score);
-  const dimensions = e.dimensions;
+  // PR337_V4_VERIFIED_SPEED_DISPLAY_20261114
+  // Only verified V4 facts can replace a stale display score.
+  const verifiedV4Speed = (() => {
+    if (
+      e.rule_version !== 0 ||
+      e.observation_state === 'frozen' ||
+      e.grade !== null ||
+      e.total !== null ||
+      row.tracking_decision === '打品成功' ||
+      row.tracking_decision === '打品失败' ||
+      f.auto_scoring_provenance !== 'PR337_SOURCE_REBUILD_V4' ||
+      f.speed_evidence_source !== 'PR337_V4_VERIFIED_ORDER_FACT'
+    ) return null;
+
+    const first = finite(f.first_order_day);
+    const elapsed = finite(f.elapsed_days);
+    const orders = finite(f.effective_orders_14d);
+
+    if (
+      first === null ||
+      !Number.isInteger(first) ||
+      first < 1 ||
+      first > 14 ||
+      elapsed === null ||
+      elapsed < 0 ||
+      orders === null ||
+      !Number.isInteger(orders) ||
+      orders < 1
+    ) return null;
+
+    const input: ScoringFacts = {
+      firstOrderDay: first,
+      elapsedDays: elapsed,
+      ordersInWindow: orders,
+      adStatus: 'unknown',
+      adClicks: null,
+      adSpend: null,
+      adOrders: null,
+      adRevenue: null,
+      roi: null,
+      grossMarginPct: null,
+      validSoldUnits: null,
+      validOrders: null,
+      singleUnitOrders: null,
+      marketScore: null,
+    };
+
+    try {
+      const value = speedResult(
+        input,
+        confirmedScoringDefaults
+      ).score;
+
+      return value !== null &&
+        Number.isFinite(value) &&
+        value >= 0 &&
+        value <= 10
+          ? value.toFixed(2)
+          : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const evaluation: RealScore =
+    verifiedV4Speed === null
+      ? e
+      : {
+          ...e,
+          dimensions: {
+            ...e.dimensions,
+            speed: verifiedV4Speed,
+          },
+        };
+
+  const dimensions = evaluation.dimensions;
   const speed = finite(dimensions.speed), ad = finite(dimensions.ad);
   const profit = finite(dimensions.profit), trust = finite(dimensions.trust);
   const roi = finite(f.roi), margin = finite(f.gross_margin_pct);
   const spend = finite(f.ad_spend_usd), clicks = finite(f.ad_clicks);
   // The source Listing sales_7d is units, not order count.
-  const qty7 = finite(f.orders_7d), sales30 = finite(listing.sales_30d);
+  const qty7 = finite(listing.sales_7d), sales30 = finite(listing.sales_30d); // PR337_PERSISTED_DISPLAY_V1: Listing is units
   const inventory = finite(listing.wfs_available_quantity);
   const price = finite(listing.sale_price_amount);
-  const attributedRevenue = finite(f.ad_revenue_usd);
-  const acos = spend!==null && attributedRevenue!==null && attributedRevenue>0 ? spend/attributedRevenue*100:null;
+  const acos = finite(f.acos_pct); // saved authoritative ACOS only; no inferred attribution
   const day = datePart(f.first_wfs_available_date_la);
   const awaitingCalculation = e.observation_state === 'not_calculated';
   const state = awaitingCalculation ? '待计算'
@@ -88,7 +166,9 @@ export function toPersistedProduct(row: NewProductListing): PersistedProduct {
     operator:listing.owner_name || undefined,
     imageUrl:listing.picture_url,msku:listing.msku,storeName:listing.store_name,
     backend:{identity,marketVersion:row.market_version??0,ruleVersion:row.evaluation.rule_version,
-      evaluation:e,suggestedQty:row.suggested_qty ?? null,firstWfsDate:day || null,
+      evaluation,scoringFacts:{...f},suggestedQty:row.suggested_qty ?? null,firstWfsDate:day || null,
+      automaticWeightedPoints:finite(f.automatic_weighted_points),
+      automaticCoveredWeightPct:finite(f.automatic_covered_weight_pct),
       firstOrderDate:datePart(f.first_order_date) || null,
       available:{elapsedDays:finite(f.elapsed_days)!==null,speed:speed!==null,ad:ad!==null,profit:profit!==null,trust:trust!==null,
         roi:roi!==null,margin:margin!==null,orders14:finite(f.valid_orders_14d)!==null,

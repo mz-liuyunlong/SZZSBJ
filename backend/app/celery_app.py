@@ -28,7 +28,10 @@ TASK_IMPORTS = (
     "app.modules.business_connectors.tasks",
     "app.modules.listing_rule_config.tasks",
     "app.modules.clearance.tasks",
+    "app.modules.new_products.trust_tasks",  # PR337_TRUST_EVIDENCE_V7_0092
+    "app.modules.new_products.pr337_daily_tasks",  # PR337_DAILY_PERSIST_V1
     "app.modules.ai_runtime.tasks",
+    "app.modules.new_products.unified_tasks",
 )
 
 TASK_ROUTES = {
@@ -38,6 +41,7 @@ TASK_ROUTES = {
     "listing_evaluation.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "listing_lifecycle.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "clearance.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
+    "new_products.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "ai_runtime.*": {"queue": AI_QUEUE, "routing_key": AI_QUEUE},
     "walmart_scf.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "walmart_remote.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
@@ -154,6 +158,44 @@ def create_celery_app(
                     hour=0,
                     nowfun=lambda: datetime.now(ZoneInfo("America/Los_Angeles")),
                 ),
+            },
+        }
+    # PR337: never activate source-fact reads or DB writes on deployment alone.
+    # Explicit production flag and UTC lower-bound are both mandatory.
+    if (
+        _is_production_env()
+        and _env_truthy(os.getenv("SZZSBJ_NEW_PRODUCT_TRUST_SYNC_ENABLED"))
+        and (os.getenv("SZZSBJ_NEW_PRODUCT_TRUST_MIN_CALCULATED_AT") or "").strip()
+    ):
+        celery.conf.beat_schedule = {
+            **celery.conf.beat_schedule,
+            "new-product-trust-evidence-daily": {
+                "task": "new_products.trust_evidence_sync",
+                "schedule": crontab(hour=12, minute=30),
+            },
+        }
+    # PR337_DAILY_PERSIST_V1: separate daily scoring task, explicitly disabled by default.
+    if (_is_production_env() and
+        _env_truthy(os.getenv("SZZSBJ_NEW_PRODUCTS_DAILY_ENABLED"))):
+        celery.conf.beat_schedule = {
+            **celery.conf.beat_schedule,
+            "new-products-daily-score": {
+                "task": "new_products.daily_score_tick",
+                # UTC 13:30 = LA 05:30/06:30, source maturity is checked in task.
+                "schedule": crontab(hour=13, minute=30),
+            },
+        }
+    # One guarded PR337 publisher, never an independent advertising scheduler.
+    if (
+        _is_production_env()
+        and _env_truthy(os.getenv("SZZSBJ_PR337_UNIFIED_PUBLISH_ENABLED"))
+        and _env_truthy(os.getenv("SZZSBJ_PR337_UNIFIED_PRODUCTION_WRITE_APPROVED"))
+    ):
+        celery.conf.beat_schedule = {
+            **celery.conf.beat_schedule,
+            "new-product-performance-unified-daily": {
+                "task": "new_products.performance_unified_publish",
+                "schedule": crontab(hour=13, minute=0),
             },
         }
     return celery

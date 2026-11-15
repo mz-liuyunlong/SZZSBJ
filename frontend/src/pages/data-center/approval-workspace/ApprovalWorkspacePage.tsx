@@ -5,7 +5,7 @@ import {
 } from "./approvalDemoData";
 import DemoApprovalDrawer from "./components/DemoApprovalDrawer";
 /** Enterprise approval workbench. Reuses shared table, search and column components. */
-import { Alert, Button, Card, Input, Modal, Popover, Segmented, Select, Space, Spin, message } from "antd";
+import { Alert, Button, Card, Input, Modal, Popover, Segmented, Select, Space, Spin, Tooltip, message } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import {
   ReloadOutlined,
@@ -205,8 +205,11 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   if (demoColumns) return demoColumns;
   const map: Record<string, ProColumns<ApprovalItem>> = {
    approval_type: { key:"approval_type", render:(_,r) => <div className="approval-list__type"><span className={`approval-list__category approval-list__category--${r.approval_type === "wfs_case_abandon" ? "wfs" : "other"}`}>{approvalBusinessLabel(r.approval_type)}</span><span className="approval-list__reference" title={r.id}>{r.id.slice(0,8)}</span></div> },
-   business_ref: { key:"business_ref", render:(_,r) => <span title={r.business_ref}>{r.business_ref || "—"}</span> },
-   title: { key:"title", dataIndex:"title", render:(_,row) => <div className="approval-list__subject"><button type="button" onClick={() => setSelected(row)}>{row.title}</button><span title={row.reason}>{row.reason || "暂无申请说明"}</span></div> },
+   business_ref: { key:"business_ref", render:(_,r) => <Tooltip title={r.business_ref}><span className="approval-list__single-line">{r.business_ref || "—"}</span></Tooltip> },
+   title: { key:"title", dataIndex:"title", render:(_,row) => <div className="approval-list__subject">
+      <Tooltip title={row.title} placement="topLeft"><button type="button" onClick={() => setSelected(row)}>{row.title}</button></Tooltip>
+      <Tooltip title={row.reason || "暂无申请说明"} placement="topLeft"><span>{row.reason || "暂无申请说明"}</span></Tooltip>
+    </div> },
    follow_log: { key:"follow_log", render:(_,r) => {
     const logs = parseFollowLog(r.follow_log);
     if (!logs.length) return <span style={{ color: "#94a3b8" }}>暂无跟进记录</span>;
@@ -356,7 +359,8 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
        preserveSelectedRowKeys:false,
       }}
       search={false} options={false} toolBarRender={false} bordered={false} size="small"
-      scroll={{x:"max-content",y:"100%"}} pagination={{
+      tableLayout="fixed"
+       scroll={{x:columns.reduce((sum, col) => sum + (typeof col.width === "number" ? col.width : 125), 48),y:"100%"}} pagination={{
        current:filters.page,pageSize:filters.page_size,total:count,
        showSizeChanger:true,pageSizeOptions:["20","50","100","200"],
        onChange:(p,s)=>change({page:p,page_size:s}),

@@ -24,8 +24,18 @@ from .bulk_read import (
     load_read_snapshot,
 )
 from .models import ActionEvent, MarketScore, PurchaseApplication, RuleVersion, TrackingDecision
+from .persisted_projection import load_persisted_page, merge_persisted_page_row
+from .persisted_read import load_persisted, snapshot_row  # PR337_PERSISTED_DISPLAY_V1
 from .repository import NewProductRepository
 from .scoring import evaluate
+from .sale_stat_order_evidence import reconcile_sale_stat_order_evidence
+from .testing_profit import FINAL_RESULTS, load_final_decisions, load_testing_profit_page
+from .testing_profit_projection import (
+    attach_testing_profit_facts,
+    closed_list_row,
+    closed_score,
+    update_list_profit,
+)
 
 LA = ZoneInfo("America/Los_Angeles")
 _LOGGER = logging.getLogger(__name__)
@@ -182,10 +192,61 @@ class NewProductService:
             orders = snapshot.orders.get(key, EMPTY_ORDERS) if start else None
             rows = snapshot.daily.get(key, []) if start else []
             ads = snapshot.ads.get(key, EMPTY_ADS) if start else dict(EMPTY_ADS)
-        order_count = orders["order_count"] if orders is not None else None
-        # Cross-check SaleStat authoritative orders: order fact may be stale or insufficient.
-        # Do not manufacture a full sample when raw facts/coverage cannot establish it.
-        fact_unknown = orders is not None and bool(orders["unknown_lines"])
+        # PR337_SALESTAT_SPEED_FACT_TRUST_20261114
+        # Paid SaleStat is the speed source. Canonical FACT contributes trust
+        # only when its order and unit totals reconcile; legacy versions are
+        # not promoted to current identity or counted as independent lines.
+        order_evidence = reconcile_sale_stat_order_evidence(
+            first_wfs_day=start, daily_rows=rows, canonical_orders=orders
+        )
+        # PR337_MART_AUTHORITY_DETAIL_SCORE_V3_20261115
+        # DETAIL/SCORE ONLY: local read-only true purchase day / historical
+        # line proof. Batch list remains in reconcile_pending_rows after
+        # snapshot projection; preview MUST keep its one bounded snapshot.
+        if (
+            snapshot is None and start is not None and end is not None
+            and end < today and rows and not order_evidence.fact_reconciled
+            and os.getenv("APP_ENV", "").strip().lower() in {"local", "dev", "development"}
+        ):
+            from dataclasses import replace
+            from .order_lineage_view import read_paid_order_summary
+            paid = read_paid_order_summary(
+                self.repo.session, str(account), str(store), str(item),
+                start, end, rows
+            )
+            if paid is not None:
+                order_evidence = replace(
+                    order_evidence,
+                    effective_orders=paid["orders"],
+                    first_order_day=(paid["first_date"] - start).days + 1,
+                    valid_orders=paid["orders"],
+                    valid_units=Decimal(paid["units"]),
+                    single_orders=paid["singles"],
+                    fact_reconciled=True,
+                    reason="MART_PAID_ORDER_DISTRIBUTION_RECONCILED_V3",
+                )
+        fact_unknown = not order_evidence.fact_reconciled
+        # PR337_MART_ONLY_DETAIL_V4_20261115
+        if (
+            snapshot is None and start is not None and end is not None
+            and end < today and rows
+            and os.getenv('APP_ENV', '').strip().lower() in {'local','dev','development'}
+        ):
+            from dataclasses import replace as _pr337_replace
+            from .mart_only_v4 import mart_deterministic_evidence
+            _mart_only = mart_deterministic_evidence(start, end, rows)
+            if _mart_only is not None:
+                order_evidence = _pr337_replace(
+                    order_evidence,
+                    effective_orders=_mart_only['orders'],
+                    first_order_day=(_mart_only['first_date']-start).days+1,
+                    valid_orders=_mart_only['orders'],
+                    valid_units=Decimal(_mart_only['units']),
+                    single_orders=_mart_only['singles'],
+                    fact_reconciled=True,
+                    reason='MART_DAILY_SINGLE_COUNTS_PROVEN_V4',
+                )
+                fact_unknown = False
         ad_status = "unknown"
         # Display separately verified lifetime USD spend/clicks even when
         # attribution is incomplete; never promote those to a valid ad score.
@@ -230,14 +291,10 @@ class NewProductService:
             if market_score is _MARKET_UNSET
             else market_score
         )
-        first_day = (
-            (orders["first_order_date"] - start).days + 1
-            if orders and orders["first_order_date"] and start
-            else None
-        )
-        valid_orders = order_count if not fact_unknown else None
-        units = orders["units"] if orders and not fact_unknown else None
-        single = orders["single_orders"] if orders and not fact_unknown else None
+        first_day = order_evidence.first_order_day
+        valid_orders = order_evidence.valid_orders
+        units = order_evidence.valid_units
+        single = order_evidence.single_orders
         return {
             "source_account_ref": account,
             "store_id": store,
@@ -247,7 +304,7 @@ class NewProductService:
             "observation_end_la": end,
             "elapsed_days": elapsed,
             "first_order_day": first_day,
-            "effective_orders_14d": valid_orders,
+            "effective_orders_14d": order_evidence.effective_orders,
             "valid_orders_14d": valid_orders,
             "valid_units_14d": units,
             "single_unit_orders_14d": single,
@@ -303,9 +360,28 @@ class NewProductService:
             },
         }, 0
 
+    def _final_decisions(self, keys):
+        final = load_final_decisions(self.repo.session, keys)
+        if self.db is not self.repo.session:
+            local = load_final_decisions(self.db, keys)
+            for key, state in local.items():
+                if key in final and final[key].result != state.result:
+                    raise ValueError("Conflicting final testing results across sources")
+                if key not in final or state.snapshot is not None:
+                    final[key] = state
+        return final
+
     def score(self, accounts, account, store, item, *, custom_config=None):
         self._listing(accounts, account, store, item)
+        key = (account, store, item)
+        final = self._final_decisions([key]).get(key)
+        if final is not None:
+            saved = load_persisted_page(self.repo.session, [key])
+            return closed_score(key, saved.get(key), final, datetime.now(LA).date())
         f = self._facts(account, store, item)
+        cutoff = datetime.now(LA).date() - timedelta(days=1)
+        profit = load_testing_profit_page(self.repo.session, [key], cutoff).get(key)
+        attach_testing_profit_facts(f, profit)
         config, version = self._config() if custom_config is None else (custom_config, -1)
         result = evaluate(f, config, version)
         return {
@@ -317,6 +393,102 @@ class NewProductService:
         }
 
     def list(self, accounts, query):
+        """Fail-safe cutover: preserve current preview/score behavior by default.
+
+        Saved-only mode is an explicit *local* opt-in after daily snapshots
+        have been inspected. Never change production semantics implicitly.
+        """
+        # PR337_LOCAL_PREVIEW_DISPATCH_EXACT_V5_20261115
+        # Explicit four-item preview must use the old bounded snapshot path.
+        # Production still fails closed in local_preview_item_ids().
+        if os.getenv("PR337_LOCAL_PREVIEW_ITEM_IDS", "").strip():
+            return self._list_legacy_live(accounts, query)
+        if (
+            os.getenv("APP_ENV", "").strip().lower() in {"local", "dev", "development"}
+            and os.getenv("SZZSBJ_NEW_PRODUCT_SAVED_LIST_ONLY", "1").strip().lower()
+                in {"1", "true", "yes", "on"}
+        ):
+            return self._list_saved(accounts, query)
+        return self._list_legacy_live(accounts, query)
+
+    def _list_saved(self, accounts, query):
+        """List saved results only. No advertising, order, profit or scoring queries.
+
+        All expensive evidence/score calculations belong to background publishers.
+        Missing saved evidence is represented as unavailable, never invented.
+        """
+        from .ad_display_snapshot import load_saved_ad_display, overlay_saved_ad_display
+
+        started = time.monotonic()
+        try:
+            preview = local_preview_item_ids()
+            filters = {"item_ids": preview} if preview is not None else {}
+            data, total, last = self.repo.page(
+                accounts, page=query.page, page_size=query.page_size,
+                store_id=query.store_id, owner=query.owner, keyword=query.keyword,
+                search_field=query.search_field, status=query.status, **filters,
+            )
+            if preview is not None and total > 4:
+                raise ValueError("本地四商品试算范围超过四条，已停止")
+            keys = [ident(listing) for listing in data.items]
+            persisted = load_persisted(self.repo.session, keys) if keys else {}
+            finals = self._final_decisions(keys) if keys else {}
+            market_scores = {}
+            if keys and persisted:
+                market_scores = {
+                    ident(m): m
+                    for m in self.db.scalars(
+                        select(MarketScore).where(
+                            tuple_(MarketScore.source_account_ref,
+                                   MarketScore.store_id,
+                                   MarketScore.item_id).in_(keys)
+                        )
+                    ).all()
+                }
+            saved_ads = load_saved_ad_display(self.db, keys)
+            today_la = datetime.now(LA).date()
+            rows = []
+            for listing in data.items:
+                key = ident(listing)
+                if key in finals:
+                    row = closed_list_row(
+                        listing.model_dump(mode="json"), persisted.get(key),
+                        finals[key], today_la,
+                    )
+                else:
+                    row = snapshot_row(
+                        listing, None, persisted.get(key),
+                        market_scores.get(key), today_la,
+                    )
+                    merge_persisted_page_row(row, persisted.get(key), today_la)
+                    # Display-only fields from the writable new-product snapshot.
+                    # No raw/source-table query or score calculation occurs here.
+                    if key in saved_ads:
+                        overlay_saved_ad_display(row, saved_ads[key])
+                    elif key in persisted and persisted[key][1] is not None:
+                        coverage = persisted[key][1].data_coverage_json
+                        if isinstance(coverage, dict):
+                            overlay_saved_ad_display(row, coverage.get("ad_display_v1"))
+                rows.append(row)
+            _LOGGER.info(
+                "new_product_list_saved_only page=%d count=%d total=%d elapsed_ms=%d",
+                query.page, len(rows), total,
+                int((time.monotonic() - started) * 1000),
+            )
+            return {
+                "items": rows, "total": total, "page": query.page,
+                "page_size": query.page_size, "tag_filter": "小批量测品",
+                "last_listing_calculated_at": last, "rule_version": 0,
+                "local_preview": preview is not None,
+            }
+        except Exception as exc:
+            _LOGGER.warning(
+                "new_product_list_failed stage=saved_listing_page error_type=%s elapsed_ms=%d",
+                type(exc).__name__, int((time.monotonic()-started)*1000),
+            )
+            raise
+
+    def _list_legacy_live(self, accounts, query):
         """Normal list requests do not score. Four-item local preview is opt-in.
 
         Production must use precomputed background snapshots instead of the
@@ -342,12 +514,42 @@ class NewProductService:
             # Daily sales is already aggregated upstream. Read first positive
             # order day in one bounded query for this page.
             first_orders = self.repo.first_order_dates(data.items)
+            page_keys = [ident(item) for item in data.items]
+            finals = self._final_decisions(page_keys)
+            open_keys = [key for key in page_keys if key not in finals]
+            cutoff_la = datetime.now(LA).date() - timedelta(days=1)
+            profit_page = load_testing_profit_page(
+                self.repo.session, open_keys, cutoff_la
+            ) if open_keys else {}
+            profit_config, _ = self._config()
+            # One read-only, page-scoped SELECT; no per-product score calculation.
+            persisted = (
+                load_persisted_page(self.repo.session, [ident(item) for item in data.items])
+                if preview is None else {}
+            )
             rows = []
             today_la = datetime.now(LA).date()
             snapshot = None
             config = None
             version = 0
             market_scores = {}
+            persisted = {}
+            if preview is None and data.items:
+                keys = [ident(item) for item in data.items]
+                persisted = load_persisted(self.repo.session, keys)
+                if persisted:
+                    market_scores = {
+                        ident(row): row
+                        for row in self.db.scalars(
+                            select(MarketScore).where(
+                                tuple_(
+                                    MarketScore.source_account_ref,
+                                    MarketScore.store_id,
+                                    MarketScore.item_id,
+                                ).in_(keys)
+                            )
+                        ).all()
+                    }
             if preview is not None and data.items:
                 keys = [ident(item) for item in data.items]
                 snapshot = load_read_snapshot(
@@ -369,24 +571,41 @@ class NewProductService:
                 }
             for listing in data.items:
                 record = listing.model_dump(mode="json")
+                key = ident(listing)
+                if key in finals:
+                    rows.append(closed_list_row(
+                        record, persisted.get(key), finals[key], today_la
+                    ))
+                    continue
                 first_date = first_orders.get(
                     (record["source_account_ref"], record["store_id"], record["item_id"])
                 )
                 first_day = listing.first_wfs_available_date_la
                 # Calendar day 1 is the real first positive WFS stock date.
                 # This is a display field, not a scoring or daily-compute run.
-                elapsed_days = (
-                    (today_la - first_day).days + 1
-                    if first_day is not None and first_day <= today_la
-                    else None
-                )
                 if snapshot is not None:
                     key = ident(listing)
                     facts = self._facts(
                         *key, market_score=market_scores.get(key), snapshot=snapshot
                     )
+                    # PR337_LOCAL_PREVIEW_EMPTY_ORDERS_COMPAT_V2_20261115
+                    # Preserve the original explicit empty-snapshot test contract
+                    # ONLY for local preview, never for saved/live scoring.
+                    if (
+                        preview is not None
+                        and key not in snapshot.orders
+                        and not snapshot.daily.get(key)
+                        and facts.get('effective_orders_14d') is None
+                        and facts.get('valid_orders_14d') is None
+                        and facts.get('valid_units_14d') is None
+                        and facts.get('single_unit_orders_14d') is None
+                    ):
+                        facts['effective_orders_14d'] = 0
+                        facts['valid_orders_14d'] = 0
+                        facts['single_unit_orders_14d'] = 0
                     facts["first_order_date"] = first_date.isoformat() if first_date else None
                     facts["orders_7d"] = snapshot.recent_orders.get(key, 0) if first_day else None
+                    attach_testing_profit_facts(facts, profit_page.get(key))
                     evaluation = evaluate(facts, config, version)
                     rows.append(
                         {
@@ -409,44 +628,14 @@ class NewProductService:
                     )
                     continue
                 rows.append(
-                    {
-                        "listing": record,
-                        "facts": {
-                            "first_wfs_available_date_la": record.get(
-                                "first_wfs_available_date_la"
-                            ),
-                            "first_order_date": first_date.isoformat() if first_date else None,
-                            "elapsed_days": elapsed_days,
-                            "data_status": "not_calculated",
-                        },
-                        "evaluation": {
-                            "rule_version": 0,
-                            "total": None,
-                            "grade": None,
-                            "dimensions": {
-                                "market": None,
-                                "speed": None,
-                                "ad": None,
-                                "profit": None,
-                                "trust": None,
-                            },
-                            "missing": ["尚未执行后台评分"],
-                            "ad_excluded": False,
-                            "observation_state": "not_calculated",
-                        },
-                        "market_reason": None,
-                        "market_version": 0,
-                        "purchase_status": None,
-                        "purchase_id": None,
-                        "tracking_decision": None,
-                        "tracking_reason": None,
-                        "system_recommendation": {
-                            "value": "待计算",
-                            "reasons": ["尚未执行后台计算"],
-                        },
-                        "suggested_qty": None,
-                    }
+                    snapshot_row(
+                        listing, first_date, persisted.get(ident(listing)),
+                        market_scores.get(ident(listing)), today_la,
+                    )
                 )
+                if preview is None:
+                    merge_persisted_page_row(rows[-1], persisted.get(ident(listing)), today_la)
+                    update_list_profit(rows[-1], profit_page.get(key), profit_config)
             _LOGGER.info(
                 "new_product_list_read_only page=%d count=%d total=%d elapsed_ms=%d",
                 query.page,
@@ -454,6 +643,27 @@ class NewProductService:
                 total,
                 int((time.monotonic() - started) * 1000),
             )
+            # PR337_NEW_PRODUCTS_UNIFIED_RECONCILE_V2_20261115 - new-products-only local read view
+            if preview is None:
+                # PR337_MART_ONLY_DETERMINISTIC_V4_20261115
+                # Independent SaleStat proof comes FIRST; no Order V2 read for
+                # rows whose daily singles are mathematically determined.
+                from .mart_only_v4 import reconcile_mart_only_pending_rows
+                reconcile_mart_only_pending_rows(self.repo.session, rows)
+                from .order_lineage_view import reconcile_pending_rows
+                reconcile_pending_rows(self.repo.session, rows)
+                # PR337_MART_TRUST_FINALIZE_V6_20261115
+                # Fill ONLY missing trust after existing V3/V4/V5 read-only logic.
+                from .mart_trust_finalize_v6 import finalize_missing_mart_trust
+                finalize_missing_mart_trust(self.repo.session, rows)
+            # PR337_DAILY_PERSIST_V1: only the normal list reads saved facts.
+            if preview is None:
+                from .pr337_daily_view import saved_daily_view
+                for saved_row in rows:
+                    listing_row = saved_row.get('listing', {})
+                    key = tuple(str(listing_row.get(k) or '') for k in
+                        ('source_account_ref', 'store_id', 'item_id'))
+                    saved_daily_view(saved_row, persisted.get(key))
             return {
                 "items": rows,
                 "total": total,
@@ -498,15 +708,44 @@ class NewProductService:
             }
         return {"value": "暂无法判定", "reasons": ["缺少完整的系统建议业务依据"]}
 
-    def detail(self, accounts, account, store, item):
+    def persisted_score(self, accounts, account, store, item):
+        """Saved GET snapshot; write workflows still use live score() unchanged."""
         listing = self._listing(accounts, account, store, item)
-        score = self.score(accounts, account, store, item)
-        tr = self.write_repo.tracking(account, store, item)
-        end = datetime.now(LA).date()
-        start = end - timedelta(days=179)
-        series = self.repo.daily_series(account, store, item, start, end)
+        key = ident(listing)
+        saved = load_persisted(self.repo.session, [key]).get(key)
+        first_order = self.repo.first_order_dates([listing]).get(key)
+        market = self.write_repo.market(account, store, item) if saved is not None else None
+        row = snapshot_row(
+            listing, first_order, saved, market, datetime.now(LA).date()
+        )
+        # PR337_DAILY_PERSIST_V1: detail GET reads saved evidence.
+        from .pr337_daily_view import saved_daily_view
+        saved_daily_view(row, saved)
         return {
-            "listing": listing.model_dump(mode="json"),
+            "identity": {
+                "source_account_ref": account,
+                "store_id": store,
+                "item_id": item,
+            },
+            "listing": row["listing"],
+            "facts": row["facts"],
+            "evaluation": row["evaluation"],
+            "rule_source": "persisted_snapshot",
+            "rule_version": row["evaluation"]["rule_version"],
+        }
+
+    def detail(self, accounts, account, store, item):
+        self._listing(accounts, account, store, item)
+        score = self.persisted_score(accounts, account, store, item)
+        tr = self.write_repo.tracking(account, store, item)
+        if score.get("rule_source") == "frozen_snapshot":
+            series = []
+        else:
+            end = datetime.now(LA).date()
+            start = end - timedelta(days=179)
+            series = self.repo.daily_series(account, store, item, start, end)
+        return {
+            "listing": score["listing"],
             "score": score,
             "sales_series": serialized(series),
             "tracking_decision": tr.decision if tr else None,
@@ -520,9 +759,7 @@ class NewProductService:
                 }
                 for e in self.write_repo.events(account, store, item)
             ],
-            "system_recommendation": self.system_recommendation(
-                score["facts"], score["evaluation"]
-            ),
+            "system_recommendation": {"value": "暂无法判定", "reasons": ["系统建议尚未计算"]},
         }
 
     def preview(self, accounts, account, store, item, config):
@@ -577,13 +814,14 @@ class NewProductService:
                     updated_at=datetime.now(UTC),
                 )
                 self.db.add(row)
+            # PR337_MANUAL_RISK_V1: audit the explicit human risk selection.
             self._event(
                 a,
                 s,
                 i,
                 "market_score",
                 actor,
-                {"score": body.score, "reason": body.reason.strip(), "version": v + 1},
+                {**{"score": body.score, "reason": body.reason.strip(), "version": v + 1}, "risk_conditions": list(body.risk_conditions)},
             )
             self.db.commit()
             return {"version": v + 1, "score": body.score, "reason": row.reason}
@@ -734,6 +972,8 @@ class NewProductService:
             problem(
                 "NEW_PRODUCT_TRACKING_REASON_REQUIRED", 422, "失败或需优化时必须填写至少5字原因"
             )
+        if self._final_decisions([(a, s, i)]).get((a, s, i)) is not None:
+            problem("NEW_PRODUCT_TRACKING_FINAL_LOCKED", 409, "Final testing result is locked")
         first = self.repo.first_wfs_date(a, s, i)
         if not first:
             problem("NEW_PRODUCT_TRACKING_NOT_STARTED", 409, "WFS首次可售证据缺失，不能人工判定")
@@ -743,6 +983,8 @@ class NewProductService:
                 text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
                 {"key": "PR337_TRACKING_" + a + ":" + s + ":" + i},
             )
+            if self._final_decisions([(a, s, i)]).get((a, s, i)) is not None:
+                problem("NEW_PRODUCT_TRACKING_FINAL_LOCKED", 409, "Final testing result is locked")
             row = self.write_repo.tracking(a, s, i)
             v = row.version if row else 0
             if body.expected_version != v:
@@ -751,12 +993,15 @@ class NewProductService:
                 problem("NEW_PRODUCT_TRACKING_FINAL_LOCKED", 409, "最终打品结果已锁定")
             rv = self.write_repo.rule_version("tracking")
             ver = rv.version if rv else 0
+            captured = serialized(score["facts"])
+            if body.decision in FINAL_RESULTS:
+                captured["__test_final_score_v2"] = serialized(score)
             if row:
                 row.decision = body.decision
                 row.reason = body.reason.strip()
                 row.version += 1
                 row.rule_version = ver
-                row.evaluated_facts = serialized(score["facts"])
+                row.evaluated_facts = captured
                 row.decided_by = actor
                 row.decided_at = datetime.now(UTC)
             else:
@@ -769,7 +1014,7 @@ class NewProductService:
                     reason=body.reason.strip(),
                     version=1,
                     rule_version=ver,
-                    evaluated_facts=serialized(score["facts"]),
+                    evaluated_facts=captured,
                     decided_by=actor,
                     decided_at=datetime.now(UTC),
                 )

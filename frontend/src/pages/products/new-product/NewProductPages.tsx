@@ -1,10 +1,10 @@
-import {useLocation} from "react-router-dom";
+import {usePageStateCache} from "@/shared/page-state/pageStateCache";
 // PR337_TRACKING_EDITABLE_PENDING_V4
 // PR337_TRACKING_OUTCOME_LOCK_V3
 /* PR337_APPROVED_CARD_FILTER_V53 */
 /* PR337_MANAGEMENT_STAT_FILTER_V51 */
 // PR337_FLOW_ACCEPTANCE_20261111
-import {useMemo, useState,type ReactNode, useCallback, useEffect} from "react";
+import {useMemo, useState,type ReactNode, useCallback, useEffect, useRef} from "react";
 import { Drawer as AntdDrawer } from "antd";
 import ManagementStatCards from "@/components/report-table/ManagementStatCards";
 import NewProductPerformanceReport from "./NewProductPerformanceReport";
@@ -20,14 +20,19 @@ import NewProductRulesPanel from "./NewProductRulesPanel";
 import { getNewProductRules, applyNewProductRules, listNewProducts,
   saveNewProductMarketScore, exportNewProductListings } from "./newProductBusinessApi";
 import {toPersistedProduct, type PersistedProduct} from "./newProductRealAdapter";
-import { createInitialRuleDraft, cloneRuleDraft, validateRuleDraft, validateTrackingRuleDraft, type RuleDraft } from "./NewProductRulesModel";
+import { createInitialRuleDraft, cloneRuleDraft, retainFourAutomaticRisks, validateRuleDraft, validateTrackingRuleDraft, type RuleDraft } from "./NewProductRulesModel";
 import TrackingRuleConfigPanel from "./components/TrackingRuleConfigPanel";
+import NewProductDimensionEvidence from "./NewProductDimensionEvidence";
+import NewProductManualRisk, {type ManualRiskCode} from "./NewProductManualRisk";
+import NewProductEvaluationData from "./NewProductEvaluationData";
 import "./nativeWorkflow.css";
 import "./newProductReviewDrawer.css";
+import "./newProductDimensionCards.css";
+import "./newProductMarketCompetitionVisual.css";
 import { Button as ReviewButton, Descriptions as ReviewDescriptions, Drawer as ReviewDrawer, Input as ReviewInput, Radio as ReviewRadio, Tag as ReviewTag } from "antd";
 type Mode="performance"|"tracking";
 type Props={page:NavigationPage;mode:Mode;username?:string;canManage?:boolean;canConfigure?:boolean;canScore?:boolean;canRequest?:boolean;canReview?:boolean;canViewCost?:boolean};
-type ModalType="detail"|"market"|"purchase"|"approval"|"review"|"config"|"correction"|null;
+type ModalType="detail"|"market"|"purchase"|"approval"|"review"|"config"|null;
 type Correction={id:number;sku:string;dimension:"speed"|"ad"|"profit"|"trust";from:number;to:number;reason:string;status:"待审核"|"已通过"|"已驳回"};
 function Status({text}:{text:string}){return <span className={"badge "+(text.includes("审核")?"b-purple":text.includes("批准")||text.includes("成功")?"b-green":text.includes("失败")||text.includes("驳回")?"b-red":text.includes("待")?"b-orange":"b-blue")}>{text}</span>}
 function LegacyDrawer({title,sub,close,children,footer,wide}:{title:string;sub:string;close:()=>void;children:ReactNode;footer:ReactNode;wide?:boolean}){return <div className="drawer-mask open" onMouseDown={e=>{if(e.target===e.currentTarget)close()}}><div className={"drawer "+(wide?"wide":"")} role="dialog" aria-modal="true"><div className="drawer-head"><div><h2>{title}</h2><p>{sub}</p></div><button className="close" onClick={close}>×</button></div><div className="drawer-body">{children}</div><div className="drawer-foot"><button className="btn" onClick={close}>取消</button><div className="right">{footer}</div></div></div></div>}
@@ -88,20 +93,65 @@ function Drawer(props: AcceptanceDrawerProps) {
   );
 }
 
+// PR337_MARKET_SCORE_FAST_V6: local input state prevents the full 365-item page rerender.
+type MarketScoringDraftProps = {
+  initialScore: number | null;
+  initialReason: string;
+  saving: boolean;
+  onSave: (value: number | null, reason: string) => void;
+};
+function MarketScoringDraft({initialScore, initialReason, saving, onSave}: MarketScoringDraftProps) {
+  const [draftScore, setDraftScore] = useState<number | null>(initialScore);
+  const [draftReason, setDraftReason] = useState(initialReason);
+  return (
+    <div className="np-market-v3-form">
+      <div className="np-market-v3-form-row">
+        <div className="np-market-v3-label">市场竞争分数 <span aria-hidden="true">*</span></div>
+        <div className="np-market-v3-scale" role="group" aria-label="市场竞争分数">
+          {Array.from({length: 11}, (_, i) => (
+            <button type="button" key={i} disabled={saving}
+              aria-pressed={draftScore === i}
+              className={"market-score-btn " + (draftScore === i ? "active" : "")}
+              onClick={() => setDraftScore(i)}>{i}</button>
+          ))}
+        </div>
+      </div>
+      <div className="np-market-v3-form-row np-market-v3-note-row">
+        <label htmlFor="np-market-v3-note" className="np-market-v3-label">市场竞争评价依据 <span aria-hidden="true">*</span></label>
+        <div className="np-market-v3-textarea-shell">
+          <textarea id="np-market-v3-note" className="textarea" rows={3}
+            style={{resize:"none"}} disabled={saving}
+            aria-label="市场竞争评价依据" value={draftReason}
+            onChange={e => setDraftReason(e.target.value)}
+            placeholder="填写竞品数量、价格、评价和差异化依据……" />
+          <span className="np-market-v3-count">{draftReason.length} / 500</span>
+        </div>
+      </div>
+      <div className="np-market-v3-actions">
+        <button type="button" className="btn primary" disabled={saving}
+          onClick={() => onSave(draftScore, draftReason)}>保存市场评分并计算</button>
+      </div>
+    </div>
+  );
+}
+
 export default function NewProductPages({page,mode}:Props){
  const [items,setItems]=useState<Product[]>([]),[cfg,setCfg]=useState<Config>(defaultConfig);
  const [savedRuleDraft,setSavedRuleDraft]=useState<RuleDraft>(()=>createInitialRuleDraft(defaultConfig));
  const [ruleDraft,setRuleDraft]=useState<RuleDraft>(()=>createInitialRuleDraft(defaultConfig));
- const pr337BoardLocation=useLocation();
- const pr337NavKey=`${mode}:${pr337BoardLocation.pathname}:${pr337BoardLocation.key}`;
- const [pr337BoardTabState,setPr337BoardTabState]=useState<{navKey:string;view:"list"|"board"}>(()=>({navKey:pr337NavKey,view:"board"}));
- const tab=pr337BoardTabState.navKey===pr337NavKey?pr337BoardTabState.view:"board";
- const setTab=useCallback((view:"list"|"board")=>setPr337BoardTabState({navKey:pr337NavKey,view}),[pr337NavKey]);
+ // First visit opens analysis; store both modes in the shared page-state cache.
+ // A stable cache key also works if React reuses this component across routes.
+ const [boardViews,setBoardViews]=usePageStateCache<Record<Mode,"list"|"board">>(
+   "new-product:board-views",{performance:"board",tracking:"board"});
+ const tab=boardViews[mode]??"board";
+ const setTab=(view:"list"|"board")=>setBoardViews((current)=>({...current,[mode]:view}));
  const [phase,setPhase]=useState("all"),[reportRevision,setReportRevision]=useState(0);
  const [modal,setModal]=useState<ModalType>(null),[selected,setSelected]=useState<string|null>(null),[scoreValue,setScoreValue]=useState<number|null>(null),[qty,setQty]=useState(0),[note,setNote]=useState(""),[review,setReview]=useState("继续观察");
- const [correctionDim,setCorrectionDim]=useState<Correction["dimension"]>("speed"),[,setCorrections]=useState<Correction[]>([]),[cfgTab,setCfgTab]=useState("weights"),[version,setVersion]=useState(0),[notice,setNotice]=useState("");
+ const [,setCorrections]=useState<Correction[]>([]),[cfgTab,setCfgTab]=useState("weights"),[version,setVersion]=useState(0),[notice,setNotice]=useState("");
  const [ruleLoaded,setRuleLoaded]=useState(false);
  const [marketSaving,setMarketSaving]=useState(false);
+ // PR337_MANUAL_RISK_V1: selection stays local to risk component; ref avoids full page rerender.
+ const riskSelectionRef=useRef<ManualRiskCode[]>([]);
  const refreshReal=useCallback(async(isActive:()=>boolean=()=>true)=>{
    // Both dashboard and original ProTable consume one complete real Product[].
    // A partial snapshot is never displayed as the full business total.
@@ -145,7 +195,7 @@ export default function NewProductPages({page,mode}:Props){
      setVersion(row.version);
      setRuleLoaded(true);
      if (row.config) {
-       const remote = cloneRuleDraft(row.config as RuleDraft);
+       const remote = retainFourAutomaticRisks(cloneRuleDraft(row.config as RuleDraft));
        setSavedRuleDraft(remote);
        setRuleDraft(cloneRuleDraft(remote));
        setCfg(current => ({...current,weights:{...remote.weights},remindDays:remote.remindDays,
@@ -194,6 +244,7 @@ export default function NewProductPages({page,mode}:Props){
    setModal(kind==="market"?"detail":kind);
    if(item){
      setSelected(item.id);
+     riskSelectionRef.current=[];
      setScoreValue(item.market);
      setQty(item.requestQty??suggestion(item,cfg));
      setNote(kind==="purchase"?(item.requestReason||""):(item.marketReason||""));
@@ -246,15 +297,18 @@ export default function NewProductPages({page,mode}:Props){
    exportNewProductListings().catch(error=>msg(`导出失败：${error instanceof Error?error.message:'未知错误'}`));
  };
  const pending=items.filter(x=>x.status==="待市场评分").length,purchase=items.filter(x=>x.status==="待采购确认").length,approval=items.filter(x=>x.status==="审核中").length;
- const saveMarket=async()=>{
+ const saveMarket=async(chosenScore: number|null=scoreValue, chosenReason: string=note)=>{
    if(!p||!p.backend){msg('仅真实商品允许保存市场评分');return;}
    if(marketSaving)return;
-   if(scoreValue===null||!Number.isInteger(scoreValue)||scoreValue<0||scoreValue>10||note.trim().length<5){
+   if(riskSelectionRef.current.length===0){
+     msg('风险条件为必填；如无风险，请主动选择「无」');return;
+   }
+   if(chosenScore===null||!Number.isInteger(chosenScore)||chosenScore<0||chosenScore>10||chosenReason.trim().length<5){
      msg('市场竞争分数与至少5个字符的评价依据均为必填');return;
    }
    setMarketSaving(true);
    try {
-     await saveNewProductMarketScore(p.backend.identity,scoreValue,note.trim(),p.backend.marketVersion);
+     await saveNewProductMarketScore(p.backend.identity,chosenScore,chosenReason.trim(),p.backend.marketVersion,riskSelectionRef.current);
      try {await refreshReal();msg('市场评分已保存；综合评分与评级已按当前规则重算');}
      catch(error){msg(`市场评分已保存，商品刷新失败：${error instanceof Error?error.message:'未知错误'}`);}
    }catch(error){
@@ -303,7 +357,21 @@ export default function NewProductPages({page,mode}:Props){
       return;
     }
     if(!p)return;if(["需要优化","打品失败"].includes(review)&&note.trim().length<5){msg("请填写复盘说明");return}patch(p.id,{tracking:review,reasonFailure:note});close();msg("模拟复盘已保存")};
- const correct=()=>{if(p?.backend){msg('正式评分修正流程未接通，此处不生成模拟申请');return;}if(!p||scoreValue===null||note.trim().length<5){msg("请填写分数和原因");return}setCorrections(s=>[...s,{id:s.length+1,sku:p.sku,dimension:correctionDim,from:p.scores[correctionDim],to:scoreValue,reason:note,status:"待审核"}]);close();msg("评分修正申请已提交")};
+ // PR337_CORRECTION_POPOVER_V7: preserve original correction submission semantics.
+ const correct=(dimension:Correction["dimension"], requestedScore:number, requestedReason:string):{ok:boolean;error?:string}=>{
+   if(!p) return {ok:false,error:"当前商品不可用"};
+   if(p.backend) return {ok:false,error:"正式评分修正接口尚未接通，本次不会创建模拟申请"};
+   if(!Number.isFinite(requestedScore) || requestedScore<0 || requestedScore>10 || requestedReason.trim().length<5){
+     return {ok:false,error:"请填写有效的申请分数和至少5字的修正依据"};
+   }
+   setCorrections(s=>[...s,{
+     id:s.length+1,sku:p.sku,dimension,
+     from:p.overrides?.[dimension]??p.scores[dimension],to:requestedScore,
+     reason:requestedReason.trim(),status:"待审核"
+   }]);
+   msg("模拟评分修正申请已提交");
+   return {ok:true};
+ };
  return <PageShell page={page}><div className="np-original-v4"><div className="content">
 
 <header className="np-workspace-title">
@@ -391,50 +459,88 @@ export default function NewProductPages({page,mode}:Props){
  </>}
  </div>
 </section>
-{modal&&modal!=="review"&&<Drawer title={{detail:"新品测评详情",market:"市场竞争评分",purchase:"确认采购数量",approval:"新品采购审核",review:"打品结果复盘",config:mode==="tracking"?"打品辅助规则配置":"新品表现配置",correction:"评分修正申请"}[modal]} sub={p?p.sku+" · "+p.name:"当前规则 · 保存后立即生效"} close={close} wide={modal==="config"} footer={modal==="detail"?null:modal==="market"?<button className="btn primary" onClick={saveMarket}>保存市场评分</button>:modal==="purchase"?<button className="btn primary" onClick={sendPurchase}>提交领导审核</button>:modal==="approval"?<><button className="btn" onClick={()=>decide(false)}>驳回</button><button className="btn primary" onClick={()=>decide(true)}>审核通过</button></>:modal==="correction"?<button className="btn primary" onClick={correct}>提交申请</button>:mode==="tracking"?<span className="muted">请在面板右上角保存浏览器本地草稿</span>:<button className="btn primary" onClick={saveRuleConfiguration}>保存并应用</button>}>
- {p&&modal!=="config"&&<div className="product-summary"><div className="thumb">▤</div><div><div className="summary-name">{p.name}</div><div className="summary-meta">{p.sku} · Item ID {p.item} · 负责人 {p.owner}</div><Status text={p.status}/></div><div className="summary-right"><div className="score-main">{score(p,cfg)?.toFixed(2)||"—"}</div><div className="cell-sub">{grade(p,cfg)||"待评分"} 级</div></div></div>}
- {modal==="detail"&&p&&<><div className="section-title">自动评分明细</div><div className="score-grid">{(["speed","ad","profit","trust"] as const).map((d,i)=><div className="score-item" key={d}><div className="score-item-top"><span className="score-item-name">{["出单速度","广告有效性","利润空间","数据可信度"][i]}</span><span className="score-item-value">{p.backend && !p.backend.available[d] ? '—' : (p.overrides?.[d]??p.scores[d])} /10</span></div><p>源于业务经营数据 · 权重 {cfg.weights[d]}%</p><button className="btn small" onClick={()=>{setCorrectionDim(d);setScoreValue(p.scores[d]);setNote("");setModal("correction")}}>申请修正</button></div>)}</div>
-<div className="section-title">市场竞争评分
-      <span className="cell-sub">{p.status==="待市场评分"?"必填":"已保存"}</span>
-    </div>
-    {p.status==="待市场评分"?(
-      <div className="score-item">
-        <div className="score-item-top"><b>市场竞争分数（必填）</b>
-          <b>{scoreValue===null?"未评分":`${scoreValue} /10`}</b>
+{modal&&modal!=="review"&&<Drawer title={{detail:"新品测评详情",market:"市场竞争评分",purchase:"确认采购数量",approval:"新品采购审核",review:"打品结果复盘",config:mode==="tracking"?"打品辅助规则配置":"新品表现配置"}[modal]} sub={p?p.sku+" · "+p.name:"当前规则 · 保存后立即生效"} close={close} wide={modal==="config"} footer={modal==="detail"?null:modal==="market"?<button className="btn primary" onClick={() => { void saveMarket(); }}>保存市场评分</button>:modal==="purchase"?<button className="btn primary" onClick={sendPurchase}>提交领导审核</button>:modal==="approval"?<><button className="btn" onClick={()=>decide(false)}>驳回</button><button className="btn primary" onClick={()=>decide(true)}>审核通过</button></>:mode==="tracking"?<span className="muted">请在面板右上角保存浏览器本地草稿</span>:<button className="btn primary" onClick={saveRuleConfiguration}>保存并应用</button>}>
+ {p&&modal!=="config"&&(modal==="detail" ? (
+   <div className="np-detail-identity-strip" aria-label="商品基础信息">
+     <div className="np-detail-identity-fields">
+       <span className="np-detail-identity-field"><span className="np-detail-identity-label">Item ID</span><strong>{p.item || "—"}</strong></span>
+       <span className="np-detail-identity-separator" aria-hidden="true" />
+       <span className="np-detail-identity-field"><span className="np-detail-identity-label">负责人</span><strong>{p.owner || "—"}</strong></span>
+     </div>
+     <div className="np-detail-identity-states">
+       <Status text={p.status}/>
+       {grade(p,cfg) && <span className="np-detail-identity-grade">评级 {grade(p,cfg)}</span>}
+     </div>
+   </div>
+ ) : (
+   <div className="product-summary"><div className="thumb">▤</div><div><div className="summary-name">{p.name}</div><div className="summary-meta">{p.sku} · Item ID {p.item} · 负责人 {p.owner}</div><Status text={p.status}/></div><div className="summary-right"><div className="score-main">{score(p,cfg)?.toFixed(2)||"—"}</div><div className="cell-sub">{grade(p,cfg)||"待评分"} 级</div></div></div>
+ ))}
+ {modal==="detail"&&p&&<><NewProductEvaluationData product={p} />
+<div className="section-title">自动评分明细</div><div className="score-grid np-score-visual-grid">
+  {(["speed","ad","profit","trust"] as const).map((d,i) => (
+    <div className="score-item np-score-visual-card" key={d}>
+      <div className="np-score-visual-header">
+        <span className="np-score-visual-weight">权重 {cfg.weights[d]}%</span>
+        <div className="np-score-visual-heading">
+          <span className="np-score-visual-title">
+            {["出单速度","广告有效性","利润空间","数据可信度"][i]}
+          </span>
+          <span className="np-score-visual-score">
+            {p.backend && !p.backend.available[d]
+              ? "—"
+              : Number(p.overrides?.[d] ?? p.scores[d]).toFixed(2)}
+            <span className="np-score-visual-out-of"> /10</span>
+          </span>
         </div>
-        <div className="market-scale">{Array.from({length:11},(_,i)=>(
-          <button type="button" key={i}
-            className={"market-score-btn "+(scoreValue===i?"active":"")}
-            onClick={()=>setScoreValue(i)}>{i}</button>
-        ))}</div>
-        <div className="form-field"><label className="form-label">
-          市场竞争评价依据（必填，至少5个字符）
-        </label><textarea className="textarea" rows={3} style={{resize:"none"}}
-          aria-label="市场竞争评价依据" value={note}
-          onChange={e=>setNote(e.target.value)}
-          placeholder="填写竞品数量、价格、评价和差异化依据" /></div>
-        <div className="row-buttons"><button type="button" className="btn primary"
-          onClick={saveMarket}>保存市场评分并计算</button>
-          <span className="cell-sub">保存后显示评级与采购建议，无需下一步</span></div>
       </div>
-    ):(
-      <div className="score-item">
-        <div className="score-item-top"><b>市场竞争分数（已保存）</b>
-          <b>{p.market===null?"未评分":`${p.market} /10`}</b></div>
-        <p>评价依据：{p.marketReason||"—"}</p>
-      </div>
-    )}
-    <div className="section-title">测品数据</div>
-    <div className="kv-list">
-      <div className="kv-row"><span className="kv-key">首单与订单</span>
-        <span className="kv-val">{p.backend ? (p.backend.firstWfsDate ? `WFS首次可售 ${p.backend.firstWfsDate}` : '首次可售日待同步') : '首单时间待接入'} · 近7天 {p.backend&&!p.backend.available.qty7?'—':p.qty7} 单 · 14天有效订单 {p.backend && !p.backend.available.orders14?'—':p.orders}</span></div>
-      <div className="kv-row"><span className="kv-key">广告表现</span>
-        <span className="kv-val">花费 {p.backend&&!p.backend.available.spend?'—':`$${p.spend}`} · 点击 {p.backend&&!p.backend.available.clicks?'—':p.clicks} · ACOS {p.backend&&!p.backend.available.acos?'—':`${p.acos}%`}</span></div>
-      <div className="kv-row"><span className="kv-key">盈利能力</span>
-        <span className="kv-val">ROI {p.backend&&!p.backend.available.roi?'—':p.roi} · 毛利率 {p.backend&&!p.backend.available.margin?'—':`${p.margin}%`}</span></div>
-      <div className="kv-row"><span className="kv-key">数据扣分</span>
-        <span className="kv-val">{p.backend?'通用扣分未自动确认（不使用示例数值）':p.penalties>0?`当前示例扣 ${p.penalties} 分`:"当前示例未触发通用扣分"}</span></div>
+      <NewProductDimensionEvidence
+        product={p}
+        dimension={d}
+        parameters={savedRuleDraft.confirmedScoring}
+        loaded={ruleLoaded}
+        currentVersion={version}
+        onRequestCorrection={(requestedScore, reason)=>correct(d,requestedScore,reason)}
+      />
     </div>
+  ))}
+</div>
+{/* PR337_MANUAL_RISK_V1: manually assessed, never preselected. */}
+{p.market===null && <NewProductManualRisk key={p.id}
+  disabled={marketSaving} onChange={names=>{riskSelectionRef.current=names;}} />}
+<div className="np-market-v3">
+  <div className="np-market-v3-weight">权重 {cfg.weights.market}%</div>
+  <h3 className="np-market-v3-title">市场竞争评分{p.status === "待市场评分" ? "（必填）" : "（已保存）"}</h3>
+  <div className="np-market-v3-rule-wrap">
+    <table className="np-market-v3-rule-table" aria-label="市场竞争评分判断标准">
+      <thead><tr><th>评分判断标准</th><th>评分区间</th></tr></thead>
+      <tbody>
+        {([
+          ["竞争不大，评价少的也能卖，价格还能涨，有差异化空间", "9–10", "excellent"],
+          ["有竞争，但大品牌没垄断，价格还能涨，后期靠价格、套装或规格抢销量", "7–8", "good"],
+          ["竞争较强，售价上升空间小，但仍有少量切入机会", "5–6", "medium"],
+          ["头部评价高，售价基本已经没有空间，同质化严重", "3–4", "low"],
+          ["大品牌垄断，低价严重，低 review 新品几乎没有机会", "0–2", "poor"],
+        ] as const).map(([description, range, tone]) => (
+          <tr key={range}>
+            <td><span className={`np-market-v3-dot np-market-v3-${tone}`} aria-hidden="true" />{description}</td>
+            <td><span className={`np-market-v3-range np-market-v3-${tone}`}>{range}</span></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+  {p.status === "待市场评分" ? (
+    <MarketScoringDraft key={p.id} initialScore={p.market}
+      initialReason={p.marketReason || ""} saving={marketSaving}
+      onSave={(value, reason) => { void saveMarket(value, reason); }} />
+  ) : (
+    <div className="np-market-v3-saved">
+      <div><strong>已保存分数：</strong>{p.market === null ? "未评分" : `${p.market} /10`}</div>
+      <div><strong>评价依据：</strong>{p.marketReason || "—"}</div>
+    </div>
+  )}
+</div>
+
     {p.market!==null&&p.marketReason.trim().length>=5&&score(p,cfg)!==null?(
       <>
         <div className="section-title">评分结果与采购建议</div>
@@ -457,7 +563,6 @@ export default function NewProductPages({page,mode}:Props){
  {modal==="market"&&<><div className="section-title">市场竞争评分（0–10 分）</div><div className="market-scale">{Array.from({length:11},(_,i)=><button key={i} className={"market-score-btn "+(scoreValue===i?"active":"")} onClick={()=>setScoreValue(i)}>{i}</button>)}</div><div className="form-field"><label className="form-label">市场竞争评价依据</label><textarea className="textarea" rows={4} value={note} onChange={e=>setNote(e.target.value)} placeholder="竞品数量、售价、Review、差异化空间等"/></div></>}
  {modal==="purchase"&&p&&<><div className="kv-list"><div className="kv-row"><span className="kv-key">系统建议采购量</span><b>{suggestion(p,cfg)} 件</b></div><div className="kv-row"><span className="kv-key">当前评级范围</span><span>{(cfg.quantities?.[grade(p,cfg)||"D"]??bands[grade(p,cfg)||"D"]).join("–")} 件</span></div></div><div className="form-field"><label className="form-label">运营申请采购数量</label><input className="input" type="number" min={1} value={qty} onChange={e=>setQty(Number(e.target.value))}/></div>{qty>(cfg.quantities?.[grade(p,cfg)||"D"]??bands[grade(p,cfg)||"D"])[1]&&<div className="warning-box">超过当前等级采购范围，需要说明原因。</div>}<div className="form-field"><label className="form-label">调整原因</label><textarea className="textarea" rows={4} value={note} onChange={e=>setNote(e.target.value)}/></div></>}
  {modal==="approval"&&p&&<><div className="kv-list">{[["系统建议",suggestion(p,cfg)+" 件"],["申请数量",(p.requestQty||qty)+" 件"],["申请原因",p.requestReason||"按建议提交"]].map(([k,v])=><div className="kv-row" key={k}><span className="kv-key">{k}</span><span className="kv-val">{v}</span></div>)}</div><div className="info-box">Mock 审批不会生成正式采购单或实际业务记录。</div></>}
- {modal==="correction"&&p&&<><div className="form-field"><label className="form-label">评分维度</label><select className="select" value={correctionDim} onChange={e=>setCorrectionDim(e.target.value as Correction["dimension"])}>{[["speed","出单速度"],["ad","广告有效性"],["profit","利润空间"],["trust","数据可信度"]].map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></div><div className="form-field"><label className="form-label">申请分数</label><input className="input" type="number" min={0} max={10} value={scoreValue??""} onChange={e=>setScoreValue(Number(e.target.value))}/></div><div className="form-field"><label className="form-label">修正依据</label><textarea className="textarea" rows={4} value={note} onChange={e=>setNote(e.target.value)}/></div></>}
  {modal==="config"&&(mode==="tracking"?<TrackingRuleConfigPanel />:<div className="np-rules-config"><div className="config-shell">
       {mode==="performance"&&<div className="card config-nav">{[["weights","评分权重"],["criteria","评分标准"],["grades","评级与采购数量"],["penalties","扣分与否决"],["version","规则版本"]].map(([key,name])=><button type="button" key={key} className={cfgTab===key?"active":""} onClick={()=>setCfgTab(key)}>{name}</button>)}</div>}
       <div className="card config-panel"><NewProductRulesPanel tab={cfgTab} draft={ruleDraft} onChange={setRuleDraft} version={version} products={items.filter(row=>!row.backend)}/></div>

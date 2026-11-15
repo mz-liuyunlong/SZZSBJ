@@ -148,28 +148,24 @@ export function createInitialRuleDraft(config: Config): RuleDraft {
     quantities: { S: [400, 600], A: [300, 500], B: [200, 400], C: [150, 250], D: [0, 0], Pass: [0, 0] },
     quantityStrategy: "mid",
     penalties: [
-      { name: "资金占用率高", condition: "订货周期 > 20 天", deduct: 1, enabled: true },
       { name: "广告数据不足", condition: "曝光/点击过少但已有少量订单", deduct: 1, enabled: true },
       { name: "广告占比过高", condition: "广告占比 > 25%", deduct: 1, enabled: true },
-      { name: "季节性", condition: "淡季销量明显低于旺季", deduct: 1, enabled: true },
-      { name: "低价依赖", condition: "同质化严重，依赖极低售价", deduct: 1, enabled: true },
     ],
     vetoes: [
-      { name: "ROI 低（Pass）", condition: "复核后 ROI < 0.5", action: "Pass", enabled: true },
-      { name: "ROI 低（评级上限）", condition: "0.5 ≤ ROI < 0.8，最高 B 级", action: "最多 B 级", enabled: true },
-      { name: "强季节性", condition: "淡季销量不足旺季 30%，持续超过 3 个月", action: "Pass", enabled: true },
-      { name: "侵权风险", condition: "品牌词 / 专利 / 版权风险无法解决", action: "Pass", enabled: true },
-      { name: "合规风险", condition: "认证、禁售或敏感类目风险无法解决", action: "Pass", enabled: true },
-      { name: "单一货源", condition: "仅有单一货源", action: "最多 B 级", enabled: true },
       { name: "毛利率过低", condition: "测品毛利率 < 10%", action: "Pass", enabled: true },
       { name: "广告失控", condition: "花费明显失控且几乎无成交", action: "最多 C 级", enabled: true },
-      { name: "质量风险", condition: "10 单内出现明显质量投诉", action: "Pass", enabled: true },
-      { name: "价格风险", condition: "恢复正常售价后无竞争力", action: "最多 C 级", enabled: true },
-      { name: "退货风险", condition: "天然高退货产品", action: "最多 B 级", enabled: true },
-      { name: "平台风险", condition: "容易触发审核、下架或违规", action: "最多 C 级", enabled: true },
     ],
     success: { sales30: 60, margin: 15, acos: 30, needProfitDays: 7 },
   };
+}
+
+// PR337_MANUAL_RISK_V1: manual risks are no longer configurable automatic penalties/vetoes.
+export function retainFourAutomaticRisks(value: RuleDraft): RuleDraft {
+  const penalties = new Set(["广告数据不足", "广告占比过高"]);
+  const vetoes = new Set(["毛利率过低", "广告失控"]);
+  return {...value,
+    penalties:value.penalties.filter(x=>penalties.has(x.name)),
+    vetoes:value.vetoes.filter(x=>vetoes.has(x.name))};
 }
 
 export function cloneRuleDraft(value: RuleDraft): RuleDraft {

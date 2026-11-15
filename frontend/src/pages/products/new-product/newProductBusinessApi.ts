@@ -18,7 +18,7 @@ export type NewProductListing = {
     msku: string | null; local_sku: string | null; title: string | null;
     local_name: string | null; store_name: string | null; owner_name: string | null;
     picture_url: string | null; wfs_available_quantity: string | null;
-    launch_date_cn?: string | null; category?: string | null;
+    launch_date_cn?: string | null; category?: string | null; category_path?: string | null; // PR337_PERSISTED_DISPLAY_V1
     product_developer_name?: string | null; sale_price_amount?: string | number | null;
     sales_7d?: string | number | null; sales_30d?: string | number | null;
     ad_spend_30d_amount?: string | number | null;
@@ -59,9 +59,10 @@ export async function getNewProductDetail(identity:Identity) {
   const {source_account_ref:a,store_id:s,item_id:i}=identity;
   return (await backendRequest<Record<string,unknown>>(`/api/new-products/listings/${encodeURIComponent(a)}/${encodeURIComponent(s)}/${encodeURIComponent(i)}`)).data;
 }
-export async function saveNewProductMarketScore(identity:Identity,score:number,reason:string,expectedVersion:number) {
+// PR337_MANUAL_RISK_V1: explicit human risk selection is required by the API.
+export async function saveNewProductMarketScore(identity:Identity,score:number,reason:string,expectedVersion:number,riskConditions:string[]) {
   return (await backendRequest<{version:number;score:number;reason:string}>("/api/new-products/market-score",{
-    method:"PUT",body:JSON.stringify({...identity,score,reason,expected_version:expectedVersion})
+    method:"PUT",body:JSON.stringify({...identity,score,reason,expected_version:expectedVersion,risk_conditions:riskConditions})
   })).data;
 }
 export async function saveNewProductTrackingDecision(identity:Identity,decision:string,reason:string,expectedVersion:number) {

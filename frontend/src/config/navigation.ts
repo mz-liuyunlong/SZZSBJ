@@ -161,11 +161,11 @@ export const navigation: NavigationGroup[] = [
       page('products', 'listing_management', 'Listing管理', '/products/listing-management'),
       page('products', 'clearance_center', '清货中心', '/products/clearance-center', {
         status: 'testing', readOnly: true, migrationMode: 'native',
-        viewPermissionKey: 'page:products:product-management:view',
+        viewPermissionKey: 'page:products:clearance-center:view',
       }),
       page('products', 'claim_center', '认领中心', '/products/claim-center'),
       page('products', 'new_product_analysis', '新品表现', '/products/new-product-analysis', {status:'testing',migrationMode:'native',source:'pending'}),
-      page('products', 'launch_tracking', '打品跟踪', '/products/launch-tracking', {status:'testing',migrationMode:'native',source:'pending',viewPermissionKey:'page:products:new-product-analysis:view'}),
+      page('products', 'launch_tracking', '打品跟踪', '/products/launch-tracking', {status:'testing',migrationMode:'native',source:'pending',viewPermissionKey:'page:products:launch-tracking:view'}),
       page('products', 'lifecycle', '产品生命周期', '/products/lifecycle'),
       page('products', 'grade', '产品等级', '/products/grade'),
     ],

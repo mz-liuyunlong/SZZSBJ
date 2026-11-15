@@ -1,6 +1,6 @@
 import {buildDemoDailySales90} from "./purchaseApprovalDemoMetrics";
 /** V3 demo-only business-specific columns and evidence. Never used for WFS cases. */
-import { Button, Tag, Typography } from "antd";
+import { Button, Tag, Tooltip, Typography } from "antd";
 import type { ProColumns } from "@ant-design/pro-components";
 import type { ReactNode } from "react";
 import type { ApprovalItem } from "./approvalTypes";
@@ -108,7 +108,7 @@ export function demoColumnsForBusiness(
   if (!["purchase", "clearance", "listing", "price"].includes(business)) return null;
   const profile = (row: ApprovalItem) => demoProfiles[row.id];
   const common = {
-    title: col("title", business === "purchase" ? "采购事项" : business === "clearance" ? "申请单 / 商品" : business === "listing" ? "归档申请 / 商品" : "调价申请 / 商品", 235, r => <div className="approval-demo__subject"><Button type="link" size="small" onClick={() => onDetail(r)}>{r.title}</Button><small>{r.business_ref} · {r.source_account_ref}</small></div>),
+    title: col("title", business === "purchase" ? "采购事项" : business === "clearance" ? "申请单 / 商品" : business === "listing" ? "归档申请 / 商品" : "调价申请 / 商品", 235, r => <div className="approval-demo__subject"><Tooltip title={r.title}><Button type="link" size="small" onClick={() => onDetail(r)}>{r.title}</Button></Tooltip><small>{r.business_ref} · {r.source_account_ref}</small></div>),
     risk: col("risk", "风险", 90, r => <Tag color={r.risk_level === "high" ? "red" : r.risk_level === "medium" ? "orange" : "green"}>{riskNames[r.risk_level]}</Tag>),
     applicant: col("applicant", "申请人", 105, r => r.applicant_id),
     submitted: col("submitted", "提交时间", 144, r => r.submitted_at ? new Date(r.submitted_at).toLocaleString("zh-CN", {month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"),
@@ -143,7 +143,7 @@ export function demoColumnsForBusiness(
     };
     const stacked = (main: ReactNode, secondary: ReactNode) => (
       <div className="approval-demo__subject">
-        <strong>{main}</strong>
+        <Tooltip title={typeof main === "string" ? main : undefined}><strong>{main}</strong></Tooltip>
         <small>{secondary}</small>
       </div>
     );
@@ -243,7 +243,7 @@ export function demoColumnsForBusiness(
       col("title", "商品 ID / 品名", 205, (row) => {
         const item=actual(row), extra=live(row);
         return <div className="approval-clearance-cell approval-clearance-cell--product">
-          <strong>{item?.name ?? row.title}</strong>
+          <Tooltip title={item?.name ?? row.title}><strong>{item?.name ?? row.title}</strong></Tooltip>
           <small>{item?.item ?? extra?.item_id ?? "—"}</small>
         </div>;
       }),

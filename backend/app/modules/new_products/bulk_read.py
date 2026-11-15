@@ -131,7 +131,10 @@ SELECT w.account,w.store,w.item,count(*) AS n,
        count(*) FILTER (WHERE a.ad_spend_amount IS NULL OR a.num_ads_clicks IS NULL
            OR a.attributed_orders IS NULL OR a.attributed_sales_amount IS NULL
            OR a.ad_spend_currency_code IS DISTINCT FROM 'USD'
-           OR a.attributed_sales_currency_code IS DISTINCT FROM 'USD') AS incomplete,
+           OR (
+               (a.attributed_orders <> 0 OR a.attributed_sales_amount <> 0)
+               AND COALESCE(NULLIF(BTRIM(a.attributed_sales_currency_code), ''), a.ad_spend_currency_code) IS DISTINCT FROM 'USD'
+           )) AS incomplete,
        count(*) FILTER (WHERE a.ad_spend_amount IS NULL
              OR a.ad_spend_currency_code IS DISTINCT FROM 'USD') AS spend_missing,
        count(*) FILTER (WHERE a.num_ads_clicks IS NULL) AS clicks_missing,

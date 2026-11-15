@@ -68,16 +68,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
         "工作台",
         10,
         (
-            _page("dashboard", "today_sales", "今日销售", 10),
-            _page("dashboard", "today_profit", "今日利润", 20),
-            _page("dashboard", "ad_spend", "广告花费", 30),
-            _page("dashboard", "refund_rate", "退款率", 40),
-            _page("dashboard", "inventory_alert", "库存预警", 50),
-            _page("dashboard", "review_alert", "Review预警", 60),
-            _page("dashboard", "ads_alert", "广告异常", 70),
-            _page("dashboard", "listing_alert", "Listing异常", 80),
-            _page("dashboard", "wfs_alert", "WFS异常", 90),
-            _page("dashboard", "todo", "待办任务", 100),
+            _page("dashboard", "today_sales", "工作台", 10),
         ),
     ),
     ModuleDefinition(
@@ -86,11 +77,10 @@ MODULES: tuple[ModuleDefinition, ...] = (
         20,
         (
             _page("products", "product_management", "产品管理", 10),
+            _page("products", "clearance_center", "清货中心", 15),
             _page("products", "listing_management", "Listing管理", 20),
-            _page("products", "claim_center", "认领中心", 30),
-            _page("products", "new_product_analysis", "新品分析", 40),
-            _page("products", "lifecycle", "产品生命周期", 50),
-            _page("products", "grade", "产品等级", 60),
+            _page("products", "new_product_analysis", "新品表现", 40),
+            _page("products", "launch_tracking", "打品跟踪", 45),
         ),
     ),
     ModuleDefinition(
@@ -159,11 +149,18 @@ MODULES: tuple[ModuleDefinition, ...] = (
         (
             _page("finance", "profit_center", "利润中心", 10),
             _page("finance", "sku_cash_profit", "单品现金利润", 20),
+            _page("finance", "settlement_profit", "结算利润", 25),
             _page("finance", "walmart_settlement", "沃尔玛返还明细", 30),
             _page("finance", "settlement_reconciliation", "回款对账", 40),
+            _page("finance", "wfs_fees", "WFS 费用明细", 45),
             _page("finance", "ad_cost", "广告费用", 50),
             _page("finance", "ad_bill", "广告账单", 60),
             _page("finance", "performance_report", "业绩报表", 70),
+            _page("finance", "balance_sheet", "资产负债表", 75),
+            _page("finance", "cash_flow", "资金流水", 80),
+            _page("finance", "cost_exception", "成本异常处理", 85),
+            _page("finance", "settings", "口径与设置", 90),
+            _page("finance", "data_import", "数据导入", 95),
         ),
     ),
     ModuleDefinition(
@@ -194,6 +191,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
         (
             _page("pmc", "purchase_board", "采购看板", 10),
             _page("pmc", "domestic_warehouse_board", "国内仓看板", 20),
+            _page("pmc", "logistics", "物流", 30),
         ),
     ),
     ModuleDefinition(
@@ -218,6 +216,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
         (
             _page("data_center", "approval_workspace", "审批工作台", 10),
             _page("data_center", "walmart_monitoring", "沃尔玛监控", 20),
+            _page("data_center", "walmart_remote", "沃尔玛采集", 25),
             _page("data_center", "alert_center", "预警中心", 30),
             _page("data_center", "data_import", "数据导入", 40),
             _page("data_center", "data_export", "数据导出", 50),
