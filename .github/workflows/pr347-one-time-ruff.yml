@@ -1,0 +1,59 @@
+name: PR347 one-time Ruff format
+on:
+  pull_request:
+    types: [synchronize]
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  format-only-pr347:
+    if: ${{ github.event.pull_request.number == 347 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'upload/all-local-fixes-20261115-195831' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Format only modified PR Python files
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          (cd backend && uv sync --frozen)
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import subprocess
+          raw = subprocess.check_output(["git","diff","--name-only","-z","--diff-filter=ACMR","origin/main...HEAD","--","backend/"])
+          paths = [p.decode() for p in raw.split(b"\0") if p and p.endswith(b".py")]
+          paths = sorted(p for p in paths if Path(p).is_file())
+          assert paths and len(paths) <= 90, f"Unexpected Python change scope: {len(paths)}"
+          print(f"FORMAT_FILES={len(paths)}", flush=True)
+          rel = [p.removeprefix("backend/") for p in paths]
+          def run(*args, check=True):
+              proc = subprocess.run(["uv","run","--no-sync","ruff",*args, *rel],cwd="backend",check=False)
+              if check:
+                  proc.check_returncode()
+          run("format")
+          run("check","--fix",check=False)
+          run("format")
+          run("check",check=False)
+          PY
+      - name: Remove one-time workflow, commit formatting to PR branch
+        run: |
+          set -euo pipefail
+          test "${{ github.head_ref }}" = "upload/all-local-fixes-20261115-195831"
+          test "$(git branch --show-current)" = ""
+          rm .github/workflows/pr347-one-time-ruff.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -u -- backend .github/workflows/pr347-one-time-ruff.yml
+          git diff --cached --check
+          git diff --cached --stat
+          git commit -m "style(pr347): Ruff format changed backend files and remove one-time job"
+          git push origin "HEAD:refs/heads/upload/all-local-fixes-20261115-195831"
