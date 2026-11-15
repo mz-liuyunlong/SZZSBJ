@@ -11,7 +11,7 @@ from app.modules.new_products.scoring import evaluate
 
 
 def _assert_usd_guard(sql):
-    compact = " ".join(str(sql).split())
+    compact = " ".join(str(sql).split()).replace("( ", "(").replace(" )", ")")
     assert "attributed_sales_amount IS NULL" in compact
     assert "attributed_orders IS NULL" in compact
     assert "ad_spend_currency_code IS DISTINCT FROM 'USD'" in compact
