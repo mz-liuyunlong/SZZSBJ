@@ -33,6 +33,7 @@ def test_saved_auto_dimensions_category_and_metrics_are_returned_without_grade()
         ad_clicks=None,
         ad_sales_usd=None,
         sales_units=Decimal("15"),
+        sample_units=None,
         sales_orders=12,
         sales_amount_usd=Decimal("300"),
         profit_usd=Decimal("75"),
