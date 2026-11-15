@@ -64,7 +64,7 @@
 .np-original-v4 .np-native-tabs button{border:0;background:transparent;color:#667085;font-size:12px;border-radius:8px;padding:8px 12px}
 .np-original-v4 .np-native-tabs button.active{background:#e6f4ff;color:#1677ff;font-weight:600}
 .np-original-v4 .np-columns{display:flex;gap:12px;flex-wrap:wrap;padding:10px;border:1px solid #e5eaf3;border-radius:8px;margin:0 0 10px}
-.np-original-v4 .np-native-toast{position:fixed;left:50%;bottom:40px;transform:translateX(-50%);z-index:12000;padding:10px 16px;background:#1f2937;color:#fff;border-radius:7px}
+.np-original-v4 .np-native-toast{position:fixed;left:50%;top:80px;bottom:auto;transform:translateX(-50%);z-index:12000;padding:10px 16px;background:#1f2937;color:#fff;border-radius:7px}
 
 /* PR337 acceptance: unified heading and underline tabs */
 .np-original-v4 .np-section-header {

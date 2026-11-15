@@ -214,7 +214,7 @@ function OperationPlanPage({ page }: OperationPlanPageProps) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabKey>("dashboard");
   const [periodMode, setPeriodMode] = useState<PeriodMode>("月度");
-  const [period, setPeriod] = useState<Dayjs>(dayjs("2026-09-01"));
+  const [period, setPeriod] = useState<Dayjs>(() => dayjs().startOf("month"));
   const [pageNo, setPageNo] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [selectedKeys, setSelectedKeys] = useState<Key[]>([]);

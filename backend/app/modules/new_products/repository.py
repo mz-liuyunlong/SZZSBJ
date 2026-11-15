@@ -365,7 +365,10 @@ class NewProductRepository:
               COUNT(*) FILTER (WHERE ad_spend_amount IS NULL OR num_ads_clicks IS NULL
                  OR attributed_orders IS NULL OR attributed_sales_amount IS NULL
                  OR ad_spend_currency_code IS DISTINCT FROM 'USD'
-                 OR attributed_sales_currency_code IS DISTINCT FROM 'USD') AS incomplete,
+                 OR COALESCE(
+                      NULLIF(BTRIM(attributed_sales_currency_code), ''),
+                      ad_spend_currency_code
+                  ) IS DISTINCT FROM 'USD') AS incomplete,
               sum(ad_spend_amount) AS spend, sum(num_ads_clicks) AS clicks,
               sum(attributed_orders) AS orders, sum(attributed_sales_amount) AS revenue,
               max(synced_at) AS latest_sync

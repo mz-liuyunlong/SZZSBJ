@@ -59,3 +59,33 @@
   .np-review-footer { justify-content: flex-end; }
   .np-review-section-heading { flex-wrap: wrap; }
 }
+
+/* PR337_DETAIL_COMPACT_IDENTITY_20261114 */
+.np-acceptance-drawer .np-acceptance-content .np-detail-identity-strip {
+  display: flex;
+  align-items: center; justify-content: space-between; gap: 16px;
+  min-height: 56px; margin-bottom: 12px; padding: 10px 16px;
+  background: #fff; border: 1px solid #dce3ed; border-radius: 10px;
+}
+.np-acceptance-drawer .np-detail-identity-fields,
+.np-acceptance-drawer .np-detail-identity-states {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-width: 0;
+}
+.np-acceptance-drawer .np-detail-identity-field {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 13px; min-width: 0; white-space: nowrap;
+}
+.np-acceptance-drawer .np-detail-identity-label { color: #667085; }
+.np-acceptance-drawer .np-detail-identity-field strong { font-weight: 600; color: #344054; }
+.np-acceptance-drawer .np-detail-identity-field:first-child strong { color: #0758e9; }
+.np-acceptance-drawer .np-detail-identity-separator { width: 1px; height: 15px; background: #dce3ed; }
+.np-acceptance-drawer .np-detail-identity-grade {
+  padding: 3px 8px; border-radius: 5px; font-size: 12px; font-weight: 600;
+  color: #0758e9; background: #eef5ff; white-space: nowrap;
+}
+@media (max-width: 700px) {
+  .np-acceptance-drawer .np-acceptance-content .np-detail-identity-strip {
+    flex-wrap: wrap; gap: 8px; padding: 10px 12px;
+  }
+  .np-acceptance-drawer .np-detail-identity-fields { gap: 8px; }
+}

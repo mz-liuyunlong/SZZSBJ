@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import SuccessEnvelope, success_response
 from app.core.auth import Principal
-from app.core.permissions import require_permission
+from app.core.permissions import require_any_permission, require_permission
 from app.db.session import get_db_session
 
 from .read_source import get_new_product_read_session, require_new_product_scope
@@ -30,7 +30,15 @@ router = APIRouter(prefix="/api/new-products", tags=["New Product Performance"])
 DB = Annotated[Session, Depends(get_db_session)]
 Source = Annotated[Session, Depends(get_new_product_read_session)]
 Scope = Annotated[frozenset[str], Depends(require_new_product_scope)]
-Read = Annotated[Principal, Depends(require_permission("page:products:new-product-analysis:view"))]
+Read = Annotated[
+    Principal,
+    Depends(
+        require_any_permission(
+            "page:products:new-product-analysis:view",
+            "page:products:launch-tracking:view",
+        )
+    ),
+]
 Configure = Annotated[
     Principal, Depends(require_permission("action:products:new-product-analysis:configure"))
 ]
@@ -96,7 +104,9 @@ def listing_score(
 ):
     return success_response(
         request,
-        data=NewProductService(db, read_session=source).score(accounts, account, store, item),
+        data=NewProductService(db, read_session=source).persisted_score(
+            accounts, account, store, item
+        ),  # PR337_PERSISTED_DISPLAY_V1
         meta={"source": "live"},
     )
 
@@ -119,7 +129,42 @@ def save_apply(request: Request, payload: RuleApply, db: DB, principal: Configur
         principal.user_id,
         payload.change_reason,
     )
-    return success_response(request, data=data, meta={"applied_immediately": True})
+    # Same guarded publisher is used by the daily tick and rule apply.
+    queued = False
+    recalc_status = "disabled"
+    if payload.kind == "performance" and not data.get("unchanged"):
+        import os
+
+        from .unified_publish import permission_to_write
+
+        if permission_to_write():
+            if not (os.getenv("CELERY_BROKER_URL") or "").strip():
+                recalc_status = "manual_execution_required"
+            else:
+                from app.celery_app import celery_app
+
+                try:
+                    celery_app.send_task(
+                        "new_products.performance_unified_publish",
+                        args=["rule_apply"],
+                        queue="integration",
+                    )
+                except Exception:
+                    recalc_status = "enqueue_failed"
+                else:
+                    recalc_status = "queued"
+                    queued = True
+    elif data.get("unchanged"):
+        recalc_status = "unchanged"
+    return success_response(
+        request,
+        data=data,
+        meta={
+            **{"applied_immediately": True},
+            "unified_recalculation_queued": queued,
+            "unified_recalculation_status": recalc_status,
+        },
+    )
 
 
 @router.get("/rules/history", response_model=SuccessEnvelope[dict, dict])

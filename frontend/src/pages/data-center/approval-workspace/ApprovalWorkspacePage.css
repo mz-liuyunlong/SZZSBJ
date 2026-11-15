@@ -1463,3 +1463,23 @@
   padding-top: 12px;
   border-top: 1px solid #edf1f6;
 }
+
+/* LOCAL_APPROVAL_TABLE_ELLIPSIS_V1 */
+/* Scoped to the approval list; do not change global report tables or drawers. */
+.approval-workspace__table .approval-list__subject,
+.approval-workspace__table .approval-demo__subject,
+.approval-workspace__table .approval-clearance-cell--product {
+  width: 100%; min-width: 0; max-width: 100%; overflow: hidden;
+}
+.approval-workspace__table .approval-list__single-line,
+.approval-workspace__table .approval-list__subject > button,
+.approval-workspace__table .approval-list__subject > span,
+.approval-workspace__table .approval-demo__subject > .ant-btn,
+.approval-workspace__table .approval-demo__subject > strong,
+.approval-workspace__table .approval-demo__subject > small,
+.approval-workspace__table .approval-clearance-cell--product > strong,
+.approval-workspace__table .approval-clearance-cell__reason {
+  display: block; width: 100%; min-width: 0; max-width: 100%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* LOCAL_APPROVAL_TABLE_ELLIPSIS_V1_END */

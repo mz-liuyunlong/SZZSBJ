@@ -150,6 +150,11 @@ def test_stage_one_list_only_reads_scoped_tagged_listings():
         "product_tags": [{"label": "小批量测品"}],
         "first_wfs_available_date_la": None,
     }
+    listing.source_account_ref = listing.model_dump.return_value["source_account_ref"]
+    listing.store_id = listing.model_dump.return_value["store_id"]
+    listing.item_id = listing.model_dump.return_value["item_id"]
+    service._final_decisions = MagicMock(return_value={})
+    service._config = MagicMock(return_value=({"weights": {}, "confirmedScoring": {}}, 0))
     service.repo.page.return_value = (SimpleNamespace(items=[listing]), 1, None)
     service.repo.first_order_dates.return_value = {}
     query = SimpleNamespace(
@@ -190,6 +195,11 @@ def test_stage_one_shows_real_wfs_elapsed_days_without_scoring():
         "item_id": "i1",
         "first_wfs_available_date_la": "2026-10-01",
     }
+    listing.source_account_ref = listing.model_dump.return_value["source_account_ref"]
+    listing.store_id = listing.model_dump.return_value["store_id"]
+    listing.item_id = listing.model_dump.return_value["item_id"]
+    service._final_decisions = MagicMock(return_value={})
+    service._config = MagicMock(return_value=({"weights": {}, "confirmedScoring": {}}, 0))
     service.repo.page.return_value = (SimpleNamespace(items=[listing]), 1, None)
     service.repo.first_order_dates.return_value = {}
     query = SimpleNamespace(
@@ -220,6 +230,11 @@ def test_stage_one_renders_first_date_from_daily_sales_without_scoring():
         "item_id": "item1",
         "first_wfs_available_date_la": None,
     }
+    listing.source_account_ref = listing.model_dump.return_value["source_account_ref"]
+    listing.store_id = listing.model_dump.return_value["store_id"]
+    listing.item_id = listing.model_dump.return_value["item_id"]
+    service._final_decisions = MagicMock(return_value={})
+    service._config = MagicMock(return_value=({"weights": {}, "confirmedScoring": {}}, 0))
     service.repo.page.return_value = (SimpleNamespace(items=[listing]), 1, None)
     service.repo.first_order_dates.return_value = {
         ("primary", "store1", "item1"): date(2026, 10, 15),

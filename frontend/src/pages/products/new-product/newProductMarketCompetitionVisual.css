@@ -1,0 +1,875 @@
+/* PR337_MARKET_COMPETITION_V3 - scope: detail drawer market competition scoring */
+.np-acceptance-drawer .np-market-v3 {
+  box-sizing: border-box;
+  width: 100%; min-width: 0;
+  padding: 17px 18px 19px;
+  background: #fff;
+  border: 1px solid #cdddF8;
+  border-radius: 11px;
+  color: #17233b;
+}
+.np-acceptance-drawer .np-market-v3 *,
+.np-acceptance-drawer .np-market-v3 *::before,
+.np-acceptance-drawer .np-market-v3 *::after { box-sizing: border-box; }
+.np-acceptance-drawer .np-market-v3-weight {
+  display: inline-flex; align-items: center;
+  min-height: 28px; padding: 3px 9px;
+  border-radius: 8px; background: #e8f1ff;
+  color: #075cf3; font-weight: 700; font-size: 14px; line-height: 20px;
+}
+.np-acceptance-drawer .np-market-v3-title {
+  margin: 10px 0 15px; font-size: 19px;
+  font-weight: 700; line-height: 26px; color: #101828;
+}
+.np-acceptance-drawer .np-market-v3-rule-wrap {
+  border: 1px solid #dce7f8; border-radius: 8px; overflow: hidden;
+}
+.np-acceptance-drawer .np-market-v3-rule-table {
+  width: 100%; border-collapse: collapse; table-layout: fixed;
+  font-size: 12px; line-height: 1.5; color: #17233b;
+}
+.np-acceptance-drawer .np-market-v3-rule-table thead {
+  background: #eaf2ff;
+}
+.np-acceptance-drawer .np-market-v3-rule-table th {
+  height: 35px; padding: 7px 13px; border: 0;
+  font-size: 13px; font-weight: 700; text-align: left;
+}
+.np-acceptance-drawer .np-market-v3-rule-table th:last-child,
+.np-acceptance-drawer .np-market-v3-rule-table td:last-child {
+  width: 118px; text-align: center; border-left: 1px solid #e1eaf7;
+}
+.np-acceptance-drawer .np-market-v3-rule-table td {
+  padding: 7px 12px; border-top: 1px solid #e3ebf6;
+  vertical-align: middle; overflow-wrap: anywhere;
+}
+.np-acceptance-drawer .np-market-v3-rule-table td:first-child {
+  vertical-align: middle;
+}
+.np-acceptance-drawer .np-market-v3-dot {
+  display: inline-block; width: 10px; height: 10px;
+  border-radius: 50%; vertical-align: middle; margin-right: 10px;
+}
+.np-acceptance-drawer .np-market-v3-dot.np-market-v3-excellent { background: #008344; }
+.np-acceptance-drawer .np-market-v3-dot.np-market-v3-good { background: #62c545; }
+.np-acceptance-drawer .np-market-v3-dot.np-market-v3-medium { background: #ffcc00; }
+.np-acceptance-drawer .np-market-v3-dot.np-market-v3-low { background: #ff9210; }
+.np-acceptance-drawer .np-market-v3-dot.np-market-v3-poor { background: #f02030; }
+.np-acceptance-drawer .np-market-v3-range {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 64px; min-height: 26px; border-radius: 7px;
+  font-size: 13px; font-weight: 700; white-space: nowrap;
+}
+.np-acceptance-drawer .np-market-v3-range.np-market-v3-excellent { color: #027a48; background: #dbf6e8; }
+.np-acceptance-drawer .np-market-v3-range.np-market-v3-good { color: #32892b; background: #e8f7df; }
+.np-acceptance-drawer .np-market-v3-range.np-market-v3-medium { color: #9a8500; background: #fff7d6; }
+.np-acceptance-drawer .np-market-v3-range.np-market-v3-low { color: #cc6f05; background: #ffecd9; }
+.np-acceptance-drawer .np-market-v3-range.np-market-v3-poor { color: #e01d26; background: #ffe2e5; }
+.np-acceptance-drawer .np-market-v3-form {
+  margin-top: 15px; padding-top: 14px;
+  border-top: 1px solid #e1eaf7;
+}
+.np-acceptance-drawer .np-market-v3-form-row {
+  display: grid; grid-template-columns: 145px minmax(0, 1fr);
+  align-items: center; gap: 12px; margin-bottom: 13px;
+}
+.np-acceptance-drawer .np-market-v3-label {
+  display: block; margin: 0; font-size: 13px; font-weight: 650;
+  color: #1d2939; line-height: 1.45;
+}
+.np-acceptance-drawer .np-market-v3-label span { color: #f04438; }
+.np-acceptance-drawer .np-market-v3-scale {
+  display: grid; grid-template-columns: repeat(11, minmax(0, 1fr));
+  gap: 6px; min-width: 0;
+}
+.np-acceptance-drawer .np-market-v3-scale .market-score-btn {
+  box-sizing: border-box; width: 100%; min-width: 0; height: 34px;
+  border: 1px solid #d2dae7; border-radius: 6px;
+  background: #fff; font-size: 13px; color: #27364d;
+  cursor: pointer; transition: background-color .12s, border-color .12s;
+}
+.np-acceptance-drawer .np-market-v3-scale .market-score-btn:hover { border-color: #85adf8; }
+.np-acceptance-drawer .np-market-v3-scale .market-score-btn.active {
+  border-color: #1677ff; background: #e8f2ff; color: #075fe6;
+  box-shadow: inset 0 0 0 1px #1677ff; font-weight: 700;
+}
+.np-acceptance-drawer .np-market-v3-textarea-shell { position: relative; min-width: 0; }
+.np-acceptance-drawer .np-market-v3-textarea-shell .textarea {
+  display: block; width: 100%; height: 100px; min-height: 100px;
+  padding: 10px 12px 26px; margin: 0; resize: none;
+  border: 1px solid #d2dae7; border-radius: 7px;
+  background: #fff; font-size: 13px; line-height: 1.5; color: #243249;
+}
+.np-acceptance-drawer .np-market-v3-textarea-shell .textarea:focus {
+  outline: none; border-color: #1677ff; box-shadow: 0 0 0 2px #1677ff1c;
+}
+.np-acceptance-drawer .np-market-v3-count {
+  position: absolute; right: 11px; bottom: 7px;
+  pointer-events: none; font-size: 11px; color: #8a97ad;
+}
+.np-acceptance-drawer .np-market-v3-actions {
+  display: flex; align-items: center; gap: 12px;
+  flex-wrap: wrap; margin-top: 16px;
+}
+.np-acceptance-drawer .np-market-v3-actions .btn.primary {
+  min-height: 37px; padding: 0 17px; font-size: 13px;
+  font-weight: 650; background: #0965ef; color: #fff; border-color: #0965ef;
+}
+.np-acceptance-drawer .np-market-v3-hint { color: #71819b; font-size: 12px; }
+.np-acceptance-drawer .np-market-v3-saved {
+  margin-top: 16px; padding-top: 12px; border-top: 1px solid #e1eaf7;
+  font-size: 13px; line-height: 1.8; color: #475467;
+}
+@media (max-width: 800px) {
+  .np-acceptance-drawer .np-market-v3 { padding: 13px; }
+  .np-acceptance-drawer .np-market-v3-form-row { grid-template-columns: 1fr; gap: 7px; }
+  .np-acceptance-drawer .np-market-v3-scale { gap: 4px; }
+  .np-acceptance-drawer .np-market-v3-rule-table th:last-child,
+  .np-acceptance-drawer .np-market-v3-rule-table td:last-child { width: 85px; }
+}
+@media (max-width: 510px) {
+  .np-acceptance-drawer .np-market-v3-scale { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .np-acceptance-drawer .np-market-v3-rule-table td { padding: 6px; }
+}
+
+/* PR337_MARKET_MAX400_V4 - visual-only compact market scoring section.
+   Total card height never exceeds 400px. In narrow layouts only the
+   criteria area/number selector/textarea may scroll independently. */
+.np-acceptance-drawer .np-market-v3 {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-rows: 26px minmax(0, auto) auto;
+  column-gap: 10px;
+  row-gap: 7px;
+  width: 100%;
+  height: auto;
+  max-height: 400px;
+  min-height: 0;
+  padding: 11px 13px 12px;
+  overflow: hidden;
+}
+.np-acceptance-drawer .np-market-v3-weight {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 20px;
+  border-radius: 6px;
+}
+.np-acceptance-drawer .np-market-v3-title {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 16px;
+  line-height: 24px;
+}
+.np-acceptance-drawer .np-market-v3-rule-wrap {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-height: 0;
+  max-height: 174px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.np-acceptance-drawer .np-market-v3-rule-table {
+  font-size: 11px;
+  line-height: 1.25;
+}
+.np-acceptance-drawer .np-market-v3-rule-table th {
+  height: 25px;
+  padding: 3px 9px;
+  font-size: 11px;
+  line-height: 17px;
+}
+.np-acceptance-drawer .np-market-v3-rule-table th:last-child,
+.np-acceptance-drawer .np-market-v3-rule-table td:last-child {
+  width: 87px;
+}
+.np-acceptance-drawer .np-market-v3-rule-table td {
+  padding: 3px 9px;
+  line-height: 17px;
+}
+.np-acceptance-drawer .np-market-v3-dot {
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+}
+.np-acceptance-drawer .np-market-v3-range {
+  width: 55px;
+  min-height: 19px;
+  padding: 0 3px;
+  font-size: 11px;
+  line-height: 19px;
+  border-radius: 5px;
+}
+.np-acceptance-drawer .np-market-v3-form {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  min-height: 0;
+  margin-top: 0;
+  padding-top: 7px;
+}
+.np-acceptance-drawer .np-market-v3-form-row {
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.np-acceptance-drawer .np-market-v3-label {
+  font-size: 12px;
+  line-height: 17px;
+}
+.np-acceptance-drawer .np-market-v3-scale {
+  gap: 4px;
+}
+.np-acceptance-drawer .np-market-v3-scale .market-score-btn {
+  height: 28px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+.np-acceptance-drawer .np-market-v3-textarea-shell .textarea {
+  height: 52px;
+  min-height: 52px;
+  max-height: 52px;
+  padding: 6px 10px 18px;
+  line-height: 17px;
+  font-size: 12px;
+  overflow-y: auto;
+}
+.np-acceptance-drawer .np-market-v3-count {
+  right: 9px;
+  bottom: 4px;
+  font-size: 10px;
+}
+.np-acceptance-drawer .np-market-v3-actions {
+  flex-wrap: nowrap;
+  gap: 9px;
+  min-width: 0;
+  margin-top: 7px;
+}
+.np-acceptance-drawer .np-market-v3-actions .btn.primary {
+  min-height: 29px;
+  height: 29px;
+  padding: 0 12px;
+  font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.np-acceptance-drawer .np-market-v3-hint {
+  min-width: 0;
+  font-size: 11px;
+  line-height: 16px;
+}
+.np-acceptance-drawer .np-market-v3-saved {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  min-width: 0;
+  min-height: 0;
+  max-height: 85px;
+  overflow-y: auto;
+  margin-top: 0;
+  padding-top: 7px;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 800px) {
+  .np-acceptance-drawer .np-market-v3 {
+    padding: 10px;
+    row-gap: 5px;
+  }
+  .np-acceptance-drawer .np-market-v3-form-row {
+    grid-template-columns: 132px minmax(0, 1fr);
+    gap: 7px;
+  }
+  .np-acceptance-drawer .np-market-v3-rule-table td {
+    padding: 3px 6px;
+  }
+  .np-acceptance-drawer .np-market-v3-rule-table th:last-child,
+  .np-acceptance-drawer .np-market-v3-rule-table td:last-child {
+    width: 70px;
+  }
+}
+@media (max-width: 620px) {
+  .np-acceptance-drawer .np-market-v3 {
+    grid-template-rows: 25px minmax(0, auto) auto;
+    row-gap: 5px;
+    padding: 9px;
+  }
+  .np-acceptance-drawer .np-market-v3-rule-wrap {
+    max-height: 143px;
+  }
+  .np-acceptance-drawer .np-market-v3-form-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+    margin-bottom: 5px;
+  }
+  .np-acceptance-drawer .np-market-v3-scale {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    gap: 3px;
+    min-height: 26px;
+  }
+  .np-acceptance-drawer .np-market-v3-scale .market-score-btn {
+    flex: 0 0 30px;
+    width: 30px;
+    height: 26px;
+  }
+  .np-acceptance-drawer .np-market-v3-textarea-shell .textarea {
+    height: 43px;
+    min-height: 43px;
+    max-height: 43px;
+  }
+  .np-acceptance-drawer .np-market-v3-actions {
+    margin-top: 5px;
+  }
+}
+
+/* PR337_MARKET_SCORE_FAST_V6: compact, clear single-layer selected state. */
+.np-acceptance-drawer .np-market-v3-scale .market-score-btn {
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  box-shadow: none;
+  border: 1px solid #d5dfef;
+  border-radius: 7px;
+  background: #f7f9fd;
+  color: #35445b;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background-color 80ms ease, color 80ms ease, border-color 80ms ease;
+  touch-action: manipulation;
+}
+.np-acceptance-drawer .np-market-v3-scale .market-score-btn:not(.active):hover {
+  background: #edf4ff;
+  border-color: #93b5f8;
+  color: #0959cf;
+}
+.np-acceptance-drawer .np-market-v3-scale .market-score-btn.active,
+.np-acceptance-drawer .np-market-v3-scale .market-score-btn.active:hover {
+  background: #1664e8;
+  border-color: #1664e8;
+  color: #fff;
+  font-weight: 700;
+  box-shadow: none;
+  outline: none;
+}
+.np-acceptance-drawer .np-market-v3-scale .market-score-btn:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+.np-acceptance-drawer .np-market-v3-scale .market-score-btn:focus-visible {
+  outline: 2px solid #90b5ff;
+  outline-offset: 2px;
+}
+.np-acceptance-drawer .np-market-v3-scale .market-score-btn:disabled {
+  cursor: not-allowed;
+  opacity: .65;
+}
+
+
+/* PR337_MARKET_AUTO_HEIGHT_NO_SCROLL_V7 */
+
+/* 外层容器根据内容自动增高 */
+.np-acceptance-drawer .np-market-v3 {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    grid-template-rows: 26px auto auto;
+    align-content: start;
+}
+
+/* 五档评分标准完整展开 */
+.np-acceptance-drawer .np-market-v3-rule-wrap {
+    height: auto !important;
+    min-height: 0;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+/* 表格内容不截断、不滚动 */
+.np-acceptance-drawer .np-market-v3-rule-table {
+    height: auto;
+}
+
+.np-acceptance-drawer .np-market-v3-rule-table thead th {
+    position: static;
+}
+
+.np-acceptance-drawer .np-market-v3-rule-table tbody td {
+    height: auto;
+    vertical-align: middle;
+}
+
+/* 已保存评分内容也自然展开 */
+.np-acceptance-drawer .np-market-v3-saved {
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+/* PR337_MARKET_SIDE_BY_SIDE_V5: layout changes only. Existing V3/V4 colors, text, handlers and rules are unchanged. */
+.np-acceptance-drawer .np-market-v3 {
+  display: grid;
+  grid-template-columns: minmax(0, 1.44fr) minmax(0, 1fr);
+  grid-template-rows: 30px minmax(0, 1fr);
+  gap: 8px 18px;
+  width: 100%;
+  height: 386px;
+  max-height: 400px;
+  min-height: 0;
+  overflow: hidden;
+  align-items: stretch;
+}
+/* Left: keep the weight and current heading together, above the five existing criteria. */
+.np-acceptance-drawer .np-market-v3-weight {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  align-self: center;
+}
+.np-acceptance-drawer .np-market-v3-title {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: end;
+  align-self: center;
+  margin: 0;
+  min-width: 0;
+}
+.np-acceptance-drawer .np-market-v3-rule-wrap {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+/* Right: score selector -> evidence -> save, strictly top-to-bottom. */
+.np-acceptance-drawer .np-market-v3-form {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.np-acceptance-drawer .np-market-v3-form-row,
+.np-acceptance-drawer .np-market-v3-note-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  margin: 0 0 12px;
+  min-width: 0;
+}
+.np-acceptance-drawer .np-market-v3-label {
+  align-self: flex-start;
+}
+.np-acceptance-drawer .np-market-v3-scale {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  overflow: visible;
+  min-width: 0;
+}
+.np-acceptance-drawer .np-market-v3-scale .market-score-btn {
+  flex: initial;
+  width: 100%;
+  min-width: 0;
+  height: 31px;
+}
+.np-acceptance-drawer .np-market-v3-textarea-shell {
+  min-width: 0;
+  flex: 0 0 auto;
+}
+.np-acceptance-drawer .np-market-v3-textarea-shell .textarea {
+  display: block;
+  width: 100%;
+  height: 94px;
+  min-height: 94px;
+  max-height: 94px;
+  resize: none;
+  overflow-y: auto;
+}
+.np-acceptance-drawer .np-market-v3-actions {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-end;
+  flex-wrap: nowrap;
+  gap: 5px;
+  margin-top: auto;
+  min-height: 0;
+}
+.np-acceptance-drawer .np-market-v3-hint {
+  align-self: flex-end;
+  text-align: right;
+}
+.np-acceptance-drawer .np-market-v3-actions .btn.primary {
+  align-self: flex-end;
+}
+/* Saved-state content follows the same right-hand panel, with no form behavior changes. */
+.np-acceptance-drawer .np-market-v3-saved {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  min-width: 0;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px 0 0;
+}
+/* Stack only on genuinely narrow screens; keep the original 400px cap. */
+@media (max-width: 700px) {
+  .np-acceptance-drawer .np-market-v3 {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 26px minmax(0, 0.9fr) minmax(0, 1.1fr);
+    column-gap: 0;
+    row-gap: 6px;
+    height: 398px;
+  }
+  .np-acceptance-drawer .np-market-v3-rule-wrap {
+    grid-column: 1;
+    grid-row: 2;
+    max-height: none;
+    overflow-y: auto;
+  }
+  .np-acceptance-drawer .np-market-v3-form {
+    grid-column: 1;
+    grid-row: 3;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .np-acceptance-drawer .np-market-v3-saved {
+    grid-column: 1;
+    grid-row: 3;
+  }
+  .np-acceptance-drawer .np-market-v3-form-row,
+  .np-acceptance-drawer .np-market-v3-note-row { margin-bottom: 8px; }
+  .np-acceptance-drawer .np-market-v3-scale {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 4px;
+  }
+  .np-acceptance-drawer .np-market-v3-textarea-shell .textarea {
+    height: 55px;
+    min-height: 55px;
+    max-height: 55px;
+  }
+  .np-acceptance-drawer .np-market-v3-actions { margin-top: 5px; }
+}
+
+/* PR337_MARKET_FULL_WIDTH_HEADER_V6: CSS-only position changes.
+   Header: weight and title on ONE full-width top row.
+   Body: rule standards on left, scoring form on right, center divider. */
+.np-acceptance-drawer .np-market-v3 {
+  grid-template-columns: minmax(0, 1.44fr) minmax(0, 1fr);
+  grid-template-rows: 43px minmax(0, 1fr);
+  column-gap: 17px;
+  row-gap: 10px;
+  height: 386px;
+  max-height: 400px;
+}
+/* A single header line across BOTH columns, followed by one horizontal rule. */
+.np-acceptance-drawer .np-market-v3::before {
+  content: "";
+  grid-column: 1 / -1;
+  grid-row: 1;
+  align-self: stretch;
+  border-bottom: 1px solid #dbe6f7;
+  pointer-events: none;
+}
+.np-acceptance-drawer .np-market-v3-weight {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  justify-self: start;
+  align-self: start;
+  margin: 2px 0 0;
+}
+.np-acceptance-drawer .np-market-v3-title {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  justify-self: start;
+  align-self: start;
+  margin: 2px 0 0 110px;
+  line-height: 26px;
+  white-space: nowrap;
+}
+/* Content BELOW the header, not alongside the title. */
+.np-acceptance-drawer .np-market-v3-rule-wrap {
+  grid-column: 1;
+  grid-row: 2;
+  min-height: 0;
+  overflow-y: auto;
+}
+.np-acceptance-drawer .np-market-v3-form {
+  grid-column: 2;
+  grid-row: 2;
+  height: 100%;
+  min-height: 0;
+  border-left: 1px solid #dbe6f7;
+  padding: 2px 0 0 16px;
+  margin: 0;
+}
+.np-acceptance-drawer .np-market-v3-saved {
+  grid-column: 2;
+  grid-row: 2;
+  border-left: 1px solid #dbe6f7;
+  padding: 5px 0 0 16px;
+}
+@media (max-width: 700px) {
+  .np-acceptance-drawer .np-market-v3 {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 42px minmax(0, 0.9fr) minmax(0, 1.1fr);
+    height: 398px;
+    row-gap: 6px;
+  }
+  .np-acceptance-drawer .np-market-v3-rule-wrap {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .np-acceptance-drawer .np-market-v3-form {
+    grid-column: 1;
+    grid-row: 3;
+    height: 100%;
+    min-height: 0;
+    border-left: 0;
+    border-top: 1px solid #dbe6f7;
+    padding: 6px 0 0;
+    overflow-y: auto;
+  }
+  .np-acceptance-drawer .np-market-v3-saved {
+    grid-column: 1;
+    grid-row: 3;
+    border-left: 0;
+    border-top: 1px solid #dbe6f7;
+    padding: 6px 0 0;
+  }
+}
+
+
+/* PR337_MARKET_WRAP_ALIGN_V8 */
+.np-acceptance-drawer .np-market-v3-rule-wrap,
+.np-acceptance-drawer .np-market-v3-form {
+  min-width: 0;
+  min-height: 0;
+  align-self: stretch;
+}
+
+.np-acceptance-drawer .np-market-v3-rule-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.np-acceptance-drawer .np-market-v3-rule-table td:first-child {
+  display: table-cell !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  vertical-align: middle;
+  line-height: 1.5;
+}
+
+.np-acceptance-drawer .np-market-v3-rule-table th:last-child,
+.np-acceptance-drawer .np-market-v3-rule-table td:last-child {
+  width: 95px;
+  min-width: 95px;
+  max-width: 95px;
+  text-align: center;
+}
+
+.np-acceptance-drawer .np-market-v3-form {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.np-acceptance-drawer .np-market-v3-actions {
+  margin-top: auto;
+  justify-content: flex-end;
+}
+
+/* PR337_MARKET_LAYOUT_V9: 三层布局 */
+
+.np-acceptance-drawer .np-market-v3 {
+  display: grid;
+  grid-template-columns: max-content minmax(0,1.18fr) minmax(0,1fr);
+  grid-template-rows: 38px 112px minmax(0,1fr) 42px;
+  gap: 8px 16px;
+  height: 386px;
+  max-height: 400px;
+  overflow: hidden;
+  align-items: stretch;
+}
+
+/* 顶部：标题独占整行 */
+.np-acceptance-drawer .np-market-v3::before {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.np-acceptance-drawer .np-market-v3-weight {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  align-self: center;
+  margin: 0;
+}
+
+.np-acceptance-drawer .np-market-v3-title {
+  grid-column: 2 / -1;
+  grid-row: 1;
+  justify-self: start;
+  align-self: center;
+  margin: 0;
+  white-space: nowrap;
+}
+
+/* 中间左侧：评分标准 */
+.np-acceptance-drawer .np-market-v3-rule-wrap {
+  grid-column: 1 / 3;
+  grid-row: 2 / 4;
+  min-width: 0;
+  min-height: 0;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.np-acceptance-drawer .np-market-v3-rule-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.np-acceptance-drawer .np-market-v3-rule-table td:first-child {
+  display: table-cell !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* 中间右侧：分数在上，依据在下 */
+.np-acceptance-drawer .np-market-v3-form {
+  display: contents;
+}
+
+.np-acceptance-drawer .np-market-v3-form-row:not(.np-market-v3-note-row) {
+  grid-column: 3;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+}
+
+.np-acceptance-drawer .np-market-v3-note-row {
+  grid-column: 3;
+  grid-row: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+}
+
+.np-acceptance-drawer .np-market-v3-note-row .np-market-v3-textarea-shell {
+  flex: 1;
+  min-height: 0;
+}
+
+.np-acceptance-drawer .np-market-v3-note-row .textarea {
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+/* 底部：按钮独占一整行，靠左 */
+.np-acceptance-drawer .np-market-v3-actions {
+  grid-column: 1 / -1;
+  grid-row: 4;
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  min-height: 0;
+  margin: 0;
+  padding-top: 8px;
+  border-top: 1px solid #dbe6f7;
+}
+
+.np-acceptance-drawer .np-market-v3-actions .btn.primary {
+  align-self: center;
+}
+
+/* 已保存内容兼容 */
+.np-acceptance-drawer .np-market-v3-saved {
+  grid-column: 3;
+  grid-row: 2 / 4;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+}
+
+@media (max-width: 700px) {
+  .np-acceptance-drawer .np-market-v3 {
+    grid-template-columns: max-content minmax(0,1fr);
+    grid-template-rows: 32px minmax(0,1fr) 83px 102px 36px;
+    gap: 5px 8px;
+    height: 398px;
+  }
+  .np-acceptance-drawer .np-market-v3-title {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .np-acceptance-drawer .np-market-v3-rule-wrap {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .np-acceptance-drawer .np-market-v3-form-row:not(.np-market-v3-note-row) {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+  .np-acceptance-drawer .np-market-v3-note-row {
+    grid-column: 1 / -1;
+    grid-row: 4;
+  }
+  .np-acceptance-drawer .np-market-v3-actions {
+    grid-column: 1 / -1;
+    grid-row: 5;
+    padding-top: 3px;
+  }
+  .np-acceptance-drawer .np-market-v3-saved {
+    grid-column: 1 / -1;
+    grid-row: 3 / 5;
+  }
+  .np-acceptance-drawer .np-market-v3-scale {
+    display: flex;
+    overflow-x: auto;
+    gap: 4px;
+  }
+  .np-acceptance-drawer .np-market-v3-scale .market-score-btn {
+    flex: 0 0 30px;
+  }
+}
+
+
+/* PR337_MARKET_ROW_HEIGHT_V10 */
+.np-acceptance-drawer .np-market-v3-rule-table tbody td {
+  padding-top: 12px !important;
+  padding-bottom: 12px !important;
+  vertical-align: middle;
+}
