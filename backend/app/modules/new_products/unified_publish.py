@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session
 
-from .unified_ad_evidence import load_ad_snapshots, load_campaign_catalog
+from .unified_ad_evidence import load_ad_snapshots
 
 LOG = logging.getLogger(__name__)
 LA = ZoneInfo("America/Los_Angeles")
@@ -568,7 +568,13 @@ def publish_unified(
             ).all()
         }
         summary["missing_local_registry"] = sum(key not in present for key in keys)
-    catalog = load_campaign_catalog(source, cutoff)
+    # Reuse the bounded, official-source catalog already used by daily ad evidence.
+    # Import inside the function: pr337_daily_pipeline imports _save_one from this module.
+    from .pr337_daily_pipeline import load_scoped_campaign_catalog
+
+    catalog, catalog_state, catalog_rows = load_scoped_campaign_catalog(source, cutoff)
+    summary["catalog_state"] = catalog_state
+    summary["catalog_rows"] = catalog_rows
     for at in range(0, len(keys), BATCH):
         batch = keys[at : at + BATCH]
         score_map = _candidate_scores(source, target, batch, cutoff)
