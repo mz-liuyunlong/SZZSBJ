@@ -189,47 +189,84 @@ def test_unified_dry_run_scoped_advertiser_source_and_missing_types(monkeypatch)
                 assert params["row_limit"] == 1501
                 if not self.has_labels:
                     return Rows([])
-                return Rows([{"payload_json": {
-                    "advertiserId": "31",
-                    "data": [{"campaignId": "101",
-                              "campaignAndTargetingType": "sponsoredProducts+auto"}],
-                }}])
+                return Rows(
+                    [
+                        {
+                            "payload_json": {
+                                "advertiserId": "31",
+                                "data": [
+                                    {
+                                        "campaignId": "101",
+                                        "campaignAndTargetingType": "sponsoredProducts+auto",
+                                    }
+                                ],
+                            }
+                        }
+                    ]
+                )
             if "JOIN fact_walmart_ad_item_sp_daily" in sql:
-                return Rows([{
-                    "account": key[0], "store": key[1], "item": key[2],
-                    "advertiser_id": "31", "campaign_id": "101",
-                    "source_rows": 1, "invalid_rows": 0,
-                    "spend": Decimal("10"), "clicks": 20,
-                    "impressions": 100, "orders": 2,
-                    "attributed_sales": Decimal("20"),
-                }])
+                return Rows(
+                    [
+                        {
+                            "account": key[0],
+                            "store": key[1],
+                            "item": key[2],
+                            "advertiser_id": "31",
+                            "campaign_id": "101",
+                            "source_rows": 1,
+                            "invalid_rows": 0,
+                            "spend": Decimal("10"),
+                            "clicks": 20,
+                            "impressions": 100,
+                            "orders": 2,
+                            "attributed_sales": Decimal("20"),
+                        }
+                    ]
+                )
             if "LEFT JOIN mart_daily_sales_item_day" in sql:
-                return Rows([{
-                    "account": key[0], "store": key[1], "item": key[2],
-                    "n": 1, "invalid": 0, "revenue": Decimal("100"),
-                }])
+                return Rows(
+                    [
+                        {
+                            "account": key[0],
+                            "store": key[1],
+                            "item": key[2],
+                            "n": 1,
+                            "invalid": 0,
+                            "revenue": Decimal("100"),
+                        }
+                    ]
+                )
             raise AssertionError(f"Unexpected SQL: {sql[:90]}")
 
     class Target:
         def scalars(self, statement):
-            return SimpleNamespace(all=lambda: [SimpleNamespace(
-                source_account_ref=key[0], store_id=key[1], item_id=key[2],
-            )])
+            return SimpleNamespace(
+                all=lambda: [
+                    SimpleNamespace(
+                        source_account_ref=key[0],
+                        store_id=key[1],
+                        item_id=key[2],
+                    )
+                ]
+            )
 
         def commit(self):
             raise AssertionError("Read-only preview cannot commit")
 
     monkeypatch.setattr(
-        unified_publish, "_eligible_rows",
+        unified_publish,
+        "_eligible_rows",
         lambda source, item_ids, limit: [{"key": key, "registry_id": "fake"}],
     )
     monkeypatch.setattr(
-        unified_publish, "_candidate_scores",
+        unified_publish,
+        "_candidate_scores",
         lambda source, target, keys, cutoff: {
             item: {"facts": {"first_wfs_available_date_la": first}, "evaluation": None}
             for item in keys
         },
     )
+
     def reject_legacy(*args, **kwargs):
         raise AssertionError("Legacy unscoped catalog was called")
 
@@ -237,8 +274,12 @@ def test_unified_dry_run_scoped_advertiser_source_and_missing_types(monkeypatch)
     for has_labels in (True, False):
         source = Source(has_labels)
         summary = unified_publish.publish_unified(
-            source, Target(), item_ids={key[2]}, limit=1,
-            cutoff=cutoff, apply=False,
+            source,
+            Target(),
+            item_ids={key[2]},
+            limit=1,
+            cutoff=cutoff,
+            apply=False,
         )
         assert summary["dry_run"] is True
         assert summary["written"] == 0
