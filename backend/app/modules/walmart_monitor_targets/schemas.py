@@ -39,6 +39,11 @@ class MonitorTargetListData(TargetSourceSchema):
 class MonitorTargetReadMeta(TargetSourceSchema):
     source: str = "listing_management"
     source_tables: list[str] = Field(
-        default_factory=lambda: ["mart_listing_management_current", "listing_archive_states"]
+        default_factory=lambda: [
+            "mart_listing_management_current",
+            "listing_archive_states",
+            "dwd_lingxing_sku_identity_index",
+            "dwd_lingxing_sku_product_info_current",
+        ]
     )
     latest_calculated_at: datetime | None = None

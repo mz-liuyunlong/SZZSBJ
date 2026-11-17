@@ -343,7 +343,7 @@
 | Directory | `backend/app/modules/walmart_monitor_targets/` |
 | Purpose | 通过专用只读 machine contract 向 Walmart 监控程序稳定分页提供未归档 Listing 目标 |
 | API | `GET /api/integrations/walmart-monitor/targets`；统一 envelope、response model 与 OpenAPI metadata |
-| Data source | `mart_listing_management_current`；用 `listing_archive_states` 排除归档商品；`REBUILD_SYNC`；不读取 RAW、旧系统或外部 provider |
+| Data source | `mart_listing_management_current`；用 `listing_archive_states` 排除归档商品；负责人为空时从当前 SKU 身份/产品负责人 DWD 唯一匹配；`REBUILD_SYNC`；不读取 RAW、旧系统或外部 provider |
 | Stable key | `source_account_ref + store_id + item_id`，同时作为稳定分页顺序 |
 | Fields | 店铺、SKU/MSKU、负责人、来源商品名、来源类目、可空 WFS 库存、V1 固定 `monitoring_eligible=true` |
 | Permission | 专用 principal + `integrations:walmart-monitor:read`；独立 Bearer Token；普通用户会话不可用 |
