@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Collection
 from datetime import date
 from typing import Any
@@ -61,6 +62,7 @@ class NewProductRepository:
         search_field: str = "item_id",
         status: str = "",
         item_ids: Collection[str] | None = None,
+        item_keys: Collection[tuple[str, str, str]] | None = None,
     ):
         # Stage 1 must only read existing Listing MART rows. Reusing the full
         # Listing Management page would COUNT/MAX/ORDER a six-table joined
@@ -74,6 +76,18 @@ class NewProductRepository:
         # Explicit local preview only: filter at the source before count and page.
         if item_ids is not None:
             stmt = stmt.where(mart.item_id.in_(sorted(item_ids)))
+        # Exact-scoped server filters. Never use SKU or item_id alone across stores.
+        if item_keys is not None:
+            if not item_keys:
+                stmt = stmt.where(text("false"))
+            else:
+                stmt = stmt.where(
+                    tuple_(
+                        mart.source_account_ref,
+                        mart.store_id,
+                        mart.item_id,
+                    ).in_(sorted(item_keys))
+                )
         stores = [v.strip() for v in store_id.split(",") if v.strip()]
         if stores:
             stmt = stmt.where(or_(mart.store_id.in_(stores), mart.store_name.in_(stores)))
@@ -231,6 +245,86 @@ class NewProductRepository:
             )
         return ListingManagementListData(items=enriched), total, None
 
+    def paid_order_days_for_list(
+        self, rows, cutoff: date
+    ) -> dict[tuple[str, str, str], int | None]:
+        """One page-scoped read of verified paid-order dates, never a detail or score job.
+
+        MART order_count is already sample-excluded and not refund-netted.
+        Count DISTINCT business dates across any MSKU of the exact item.
+        A completely absent MART source is unknown (None), not zero.
+        """
+        # NP_LIST_ORDER_DAYS_FAST_20261118
+        windows: dict[tuple[str, str, str], str] = {}
+        for row in rows:
+            listing = row.get("listing") or {}
+            facts = row.get("facts") or {}
+            key = tuple(
+                str(listing.get(k) or "") for k in ("source_account_ref", "store_id", "item_id")
+            )
+            if len(key) != 3 or not all(key):
+                raise ValueError("NP_ORDER_DAYS_IDENTITY_MISSING")
+            first = facts.get("first_wfs_available_date_la") or listing.get(
+                "first_wfs_available_date_la"
+            )
+            try:
+                first_day = date.fromisoformat(str(first)[:10])
+            except (ValueError, TypeError):
+                continue
+            if first_day > cutoff:
+                continue
+            encoded = first_day.isoformat()
+            if key in windows and windows[key] != encoded:
+                raise ValueError("NP_ORDER_DAYS_DUPLICATE_IDENTITY_CONFLICT")
+            windows[key] = encoded
+        if len(windows) > 200:
+            raise ValueError("NP_ORDER_DAYS_PAGE_SCOPE_EXCEEDED")
+        if not windows:
+            return {}
+
+        wanted = json.dumps(
+            [
+                {"account": a, "store": s, "item": i, "start_day": start}
+                for (a, s, i), start in sorted(windows.items())
+            ],
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
+        # The indexed MART is already aggregated to LA day + MSKU. A single
+        # bounded group query is much smaller than per-item detail/PNL loads.
+        statement = text("""
+          WITH wanted AS (
+            SELECT account, store, item, start_day
+            FROM jsonb_to_recordset(CAST(:wanted AS jsonb))
+              AS w(account text, store text, item text, start_day date)
+          )
+          SELECT w.account, w.store, w.item,
+                 COUNT(d.business_date_la) AS source_rows,
+                 COUNT(DISTINCT d.business_date_la)
+                   FILTER (WHERE d.order_count > 0) AS paid_days
+          FROM wanted w
+          LEFT JOIN mart_daily_sales_item_day d
+            ON d.source_account_ref=w.account AND d.store_id=w.store
+           AND d.item_id=w.item AND d.business_date_la >= w.start_day
+           AND d.business_date_la <= :cutoff
+          GROUP BY w.account,w.store,w.item
+        """)
+        counts: dict[tuple[str, str, str], int | None] = {}
+        for record in self.session.execute(
+            statement, {"wanted": wanted, "cutoff": cutoff}
+        ).mappings():
+            key = (str(record["account"]), str(record["store"]), str(record["item"]))
+            if key not in windows or key in counts:
+                raise ValueError("NP_ORDER_DAYS_QUERY_IDENTITY_MISMATCH")
+            sources = int(record["source_rows"])
+            count = int(record["paid_days"])
+            observed_max = (cutoff - date.fromisoformat(windows[key])).days + 1
+            if sources < 0 or count < 0 or count > observed_max:
+                raise ValueError("NP_ORDER_DAYS_COUNT_INVALID")
+            counts[key] = count if sources > 0 else None
+        # Missing source evidence must not be rendered as a false zero.
+        return {key: counts.get(key) for key in windows}
+
     def first_order_dates(self, items):
         """Read the earliest positive-order LA day for only the current page.
 
@@ -343,6 +437,8 @@ class NewProductRepository:
                 text("""
           SELECT business_date_la AS day, sales_qty,order_count,sales_amount,
                  gross_profit_amount,cost_status,roi,gross_margin,ad_spend_amount,
+                 sem_ad_spend_amount,ad_spend_currency_code,
+                 sample_qty,cost_quantity,calculation_warnings_json,
                  sales_currency_code,gross_profit_currency_code,
                  purchase_cost_total_usd,first_leg_cost_total_usd,
                  missing_cost_codes_json,calculated_at

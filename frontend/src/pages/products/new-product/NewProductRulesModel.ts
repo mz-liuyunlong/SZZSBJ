@@ -8,6 +8,117 @@ export type RuleTier = Exclude<Grade, "Pass">;
 export type RuleAction = "Pass" | "最多 B 级" | "最多 C 级";
 export interface RulePenalty { name: string; condition: string; enabled: boolean; deduct: number }
 export interface RuleVeto { name: string; condition: string; enabled: boolean; action: RuleAction }
+export type RiskSource = "system" | "manual";
+export type RiskLimit = "none" | "B" | "C" | "D" | "recommend_not_pass";
+export interface RiskConditionRule {
+  code: string;
+  name: string;
+  source: RiskSource;
+  enabled: boolean;
+  limit: RiskLimit;
+  params: Record<string, number | null>;
+}
+
+// Keep the same immutable codes and defaults as backend risk_conditions.py.
+// Numeric rules not yet confirmed by the owner are disabled by default.
+const risk = (code:string,name:string,source:RiskSource,enabled:boolean,limit:RiskLimit,params:Record<string,number|null> = {}):RiskConditionRule =>
+  ({code,name,source,enabled,limit,params});
+export function defaultRiskConditions():RiskConditionRule[] {return [
+  risk("ad_sample_insufficient","广告数据不足","system",false,"B",{clicks_below:20}),
+  risk("ad_uncontrolled","广告失控","system",false,"C",{min_clicks:100,cvr_below_pct:2}),
+  risk("low_margin","毛利率过低","system",true,"C",{margin_below_pct:10}),
+  risk("high_ad_spend_ratio","广告占比过高","system",false,"B",{share_above_pct:25}),
+  risk("funding","资金占用率高","manual",true,"none"),
+  risk("seasonal_normal","季节性（一般）","manual",true,"none"),
+  risk("low_price_dependency","低价依赖","manual",true,"none"),
+  risk("roi_very_low","ROI低（Pass）","manual",true,"recommend_not_pass"),
+  risk("roi_low","ROI低（评级上限）","manual",true,"B"),
+  risk("seasonal_severe","季节性（强）","manual",true,"recommend_not_pass"),
+  risk("ip_risk","侵权风险","manual",true,"recommend_not_pass"),
+  risk("compliance_risk","合规风险","manual",true,"recommend_not_pass"),
+  risk("supply_risk","供应链风险","manual",true,"B"),
+  risk("quality_risk","质量风险","manual",true,"recommend_not_pass"),
+  risk("price_risk","价格风险","manual",true,"C"),
+  risk("return_risk","退货风险","manual",true,"B"),
+  risk("platform_risk","平台风险","manual",true,"C"),
+]}
+
+// Legacy saved DB rule versions do not have riskConditions yet. Normalize only
+// that absence, preserving every existing rule. Reject any malformed new block.
+export function normalizeRiskConditions(raw:unknown):RiskConditionRule[] {
+  const defaults=defaultRiskConditions();
+  if(raw===undefined||raw===null)return defaults;
+  if(!Array.isArray(raw))throw new Error("风险规则必须完整包含17项");
+  let rows=raw;
+  // Read-only conversion of an older 18-rule version; never mutate the saved version.
+  if(rows.length===defaults.length+1){
+    const obsolete=rows.filter(x=>x && typeof x==="object" && !Array.isArray(x) &&
+      (x as RiskConditionRule).code==="ad_sudden_change");
+    if(obsolete.length!==1)throw new Error("旧版风险配置结构不正确");
+    const old=obsolete[0] as RiskConditionRule;
+    if(old.name!=="广告数据骤变" || old.source!=="manual" ||
+      typeof old.enabled!=="boolean" ||
+      !["none","B","C","D","recommend_not_pass"].includes(old.limit) ||
+      !old.params || Object.keys(old.params).length!==0 ||
+      Object.keys(old).sort().join(",")!=="code,enabled,limit,name,params,source"){
+      throw new Error("旧版风险配置中已删除的选项无效");
+    }
+    rows=rows.filter(x=>x!==old);
+  }
+  if(rows.length!==defaults.length)throw new Error("风险规则必须完整包含17项");
+  const expected=new Map(defaults.map(row=>[row.code,row]));
+  const seen=new Set<string>();
+  const validated:RiskConditionRule[]=[];
+  for(const item of rows){
+    if(item===null||typeof item!=="object"||Array.isArray(item))throw new Error("风险规则结构不正确");
+    const row=item as RiskConditionRule;
+    const source=expected.get(row.code);
+    if(!source||seen.has(row.code)||row.name!==source.name||row.source!==source.source){
+      throw new Error("风险规则标识重复或发生变化");
+    }
+    if(Object.keys(row).sort().join(",")!=="code,enabled,limit,name,params,source"){
+      throw new Error("风险规则字段结构不正确");
+    }
+    if(typeof row.enabled!=="boolean"||!["none","B","C","D","recommend_not_pass"].includes(row.limit)){
+      throw new Error("风险规则开关或等级限制不正确");
+    }
+    if(row.source==="system"&&(row.limit==="none"||row.limit==="recommend_not_pass")){
+      throw new Error("系统风险只能限制最高等级");
+    }
+    if(row.params===null||typeof row.params!=="object"||Array.isArray(row.params)){
+      throw new Error("风险条件阈值格式错误");
+    }
+    // Legacy Stage 2 had spend/order fields; only disabled saved rules
+    // can be migrated, without silently activating a changed predicate.
+    const oldAdFields=row.code==="ad_uncontrolled" &&
+      Object.keys(row.params).sort().join(",")==="max_ad_orders,min_spend_usd";
+    if(oldAdFields && row.enabled)throw new Error("旧版广告失控已启用，请先停用旧规则并重新配置点击/CVR阈值");
+    const params=oldAdFields?{...source.params}:row.params;
+    const fields=Object.keys(source.params).sort();
+    if(Object.keys(params).sort().join(",")!==fields.join(","))throw new Error("风险条件阈值字段不一致");
+    for(const key of fields){
+      const value=params[key];
+      if(value===null){
+        throw new Error("风险条件阈值缺失");
+      }else if(typeof value!=="number"||!Number.isFinite(value)||value<0){
+        throw new Error("风险条件阈值无效");
+      }
+      if(value!==null&&["clicks_below","min_clicks"].includes(key)&&!Number.isInteger(value)){
+        throw new Error("点击和订单阈值必须为整数");
+      }
+      if(value!==null&&["margin_below_pct","share_above_pct","cvr_below_pct"].includes(key)&&value>100){
+        throw new Error("比例阈值不能超过100%");
+      }
+    }
+    if(row.code==="ad_uncontrolled" && (params.min_clicks===null || params.min_clicks<=0)){
+      throw new Error("广告失控的最低点击量必须大于0");
+    }
+    seen.add(row.code);
+    validated.push({...row,params:{...params}});
+  }
+  return defaults.map(row=>validated.find(x=>x.code===row.code)!);
+}
+
 /* PR337 STRUCTURED SCORE CONDITIONS V2 */
 
 /** Structure of a score criterion: descriptions are unchanged human guidance, numbers are editable. */
@@ -86,6 +197,7 @@ export interface RuleDraft {
   quantityStrategy: "min" | "mid" | "max";
   penalties: RulePenalty[];
   vetoes: RuleVeto[];
+  riskConditions: RiskConditionRule[];
   success: { sales30: number; margin: number; acos: number; needProfitDays: number };
 }
 
@@ -147,25 +259,21 @@ export function createInitialRuleDraft(config: Config): RuleDraft {
     gradeBands: { S: [9, 10], A: [8, 8.99], B: [7, 7.99], C: [6, 6.99], D: [0, 5.99] },
     quantities: { S: [400, 600], A: [300, 500], B: [200, 400], C: [150, 250], D: [0, 0], Pass: [0, 0] },
     quantityStrategy: "mid",
-    penalties: [
-      { name: "广告数据不足", condition: "曝光/点击过少但已有少量订单", deduct: 1, enabled: true },
-      { name: "广告占比过高", condition: "广告占比 > 25%", deduct: 1, enabled: true },
-    ],
-    vetoes: [
-      { name: "毛利率过低", condition: "测品毛利率 < 10%", action: "Pass", enabled: true },
-      { name: "广告失控", condition: "花费明显失控且几乎无成交", action: "最多 C 级", enabled: true },
-    ],
+    // Legacy arrays stay empty for backward-compatible JSON shape only.
+    // New configurations use riskConditions; no second deduction/veto.
+    penalties: [],
+    vetoes: [],
+    riskConditions: defaultRiskConditions(),
     success: { sales30: 60, margin: 15, acos: 30, needProfitDays: 7 },
   };
 }
 
-// PR337_MANUAL_RISK_V1: manual risks are no longer configurable automatic penalties/vetoes.
+// Historical function name retained for page-state import compatibility.
+// Legacy saved configs may lack riskConditions, but new versions never run
+// the old double-deduction or veto rules.
 export function retainFourAutomaticRisks(value: RuleDraft): RuleDraft {
-  const penalties = new Set(["广告数据不足", "广告占比过高"]);
-  const vetoes = new Set(["毛利率过低", "广告失控"]);
-  return {...value,
-    penalties:value.penalties.filter(x=>penalties.has(x.name)),
-    vetoes:value.vetoes.filter(x=>vetoes.has(x.name))};
+  return {...value, penalties: [], vetoes: [],
+    riskConditions: normalizeRiskConditions((value as Partial<RuleDraft>).riskConditions)};
 }
 
 export function cloneRuleDraft(value: RuleDraft): RuleDraft {
@@ -207,7 +315,9 @@ export function validateRuleDraft(d: RuleDraft): string | null {
     if (Math.round((d.gradeBands[high][0] - d.gradeBands[low][1]) * 100) !== 1) return `${high} / ${low} 级分数区间必须连续且不能重叠`;
   }
   if (d.quantities.D.some(x => x !== 0) || d.quantities.Pass.some(x => x !== 0)) return "D / Pass 不生成采购建议";
-  if (d.penalties.some(x => !Number.isFinite(x.deduct) || x.deduct < 0 || x.deduct > 10)) return "通用扣分必须为 0–10 分";
+  if (d.penalties.length || d.vetoes.length) return "已取消通用扣分与一票否决，请改用配置风险条件";
+  try { normalizeRiskConditions(d.riskConditions); }
+  catch (error) { return error instanceof Error ? error.message : "风险条件配置无效"; }
   if (![d.success.sales30, d.success.margin, d.success.acos, d.success.needProfitDays].every(Number.isFinite)) return "打品成功目标必须填写有效数值";
   return null;
 }

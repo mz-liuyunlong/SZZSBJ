@@ -1,0 +1,223 @@
+"""Read-only, permission-scoped listing projection for New Product performance.
+
+A small, exact-identity projection drives the global cards and server filters.
+Operations MART and decision DB can be different read targets (Hybrid safety).
+No scoring or mutation takes place during list/summary requests.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import time
+from collections import Counter
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from sqlalchemy import func, select, text, tuple_
+
+from app.modules.data_pages.models import ListingManagementCurrentMart
+from app.modules.data_pages.repository import LISTING_WFS_LA_LOCKED, PRODUCT_INFO_CURRENT
+from .evaluation_policy import evaluation_status
+
+SAMPLE_TAG = "小批量测品"
+LA = ZoneInfo("America/Los_Angeles")
+_STATUSES = ("待到货", "测评中", "待市场评分", "测评通过", "测评未通过")
+_GRADES = ("S", "A", "B", "C", "D", "Pass")
+_LOGGER = logging.getLogger(__name__)
+
+
+def scoped_projection(source, db, accounts: frozenset[str]) -> list[dict]:
+    """One MART read + one decision read + one owner lookup, never N+1."""
+    if not accounts:
+        return []
+    started = time.monotonic()
+    m = ListingManagementCurrentMart
+    stmt = select(
+        m.source_account_ref,
+        m.store_id,
+        m.item_id,
+        m.local_sku,
+        m.listing_start_at_utc,
+    ).where(
+        m.source_account_ref.in_(accounts),
+        m.product_tags_json.contains([{"label": SAMPLE_TAG}]),
+    )
+    has_locked = (
+        source.scalar(text("SELECT to_regclass('public.listing_wfs_first_stock_la_locked')"))
+        is not None
+    )
+    if has_locked:
+        locked = LISTING_WFS_LA_LOCKED
+        stmt = stmt.add_columns(locked.c.first_wfs_available_date_la.label("source_first_wfs"))
+        stmt = stmt.outerjoin(
+            locked,
+            (locked.c.source_account_ref == m.source_account_ref)
+            & (locked.c.store_id == m.store_id)
+            & (locked.c.item_id == m.item_id),
+        )
+    rows = source.execute(stmt).mappings().all()
+    mart_ms = int((time.monotonic() - started) * 1000)
+    if len(rows) > 5000:
+        raise ValueError("NEW_PRODUCT_SUMMARY_OVER_5000")
+    if not rows:
+        return []
+
+    keys = [(str(r["source_account_ref"]), str(r["store_id"]), str(r["item_id"])) for r in rows]
+    # Decision rows are read on the actual application DB, never through
+    # an unsafe cross-database JOIN or a source write credential.
+    decision = (
+        db.execute(
+            text("""
+        WITH wanted AS (
+          SELECT a,s,i FROM jsonb_to_recordset(CAST(:wants AS jsonb))
+          AS w(a text,s text,i text)
+        )
+        SELECT w.a,w.s,w.i,r.listing_date_la,
+          p.first_wfs_available_date_la, p.score,p.grade,
+          p.data_coverage_json #>> '{evaluation_formal_trigger,status}' AS formal_status,
+          p.data_coverage_json ? 'auto_dimension_scores' AS has_auto
+        FROM wanted w
+        LEFT JOIN biz_new_product_registry r
+          ON r.source_account_ref=w.a AND r.store_id=w.s AND r.item_id=w.i
+        LEFT JOIN biz_new_product_performance_current p ON p.registry_id=r.id
+    """),
+            {"wants": json.dumps([{"a": a, "s": s, "i": i} for a, s, i in keys])},
+        )
+        .mappings()
+        .all()
+    )
+    proofs = {(str(x["a"]), str(x["s"]), str(x["i"])): x for x in decision}
+    decision_ms = int((time.monotonic() - started) * 1000) - mart_ms
+
+    sku_keys = sorted(
+        {(str(r["source_account_ref"]), str(r["local_sku"])) for r in rows if r["local_sku"]}
+    )
+    owners = {}
+    if sku_keys:
+        owner_rows = (
+            source.execute(
+                select(
+                    PRODUCT_INFO_CURRENT.c.source_account_ref,
+                    PRODUCT_INFO_CURRENT.c.lingxing_sku_code,
+                    func.max(PRODUCT_INFO_CURRENT.c.owner_name).label("owner_name"),
+                )
+                .where(
+                    tuple_(
+                        PRODUCT_INFO_CURRENT.c.source_account_ref,
+                        PRODUCT_INFO_CURRENT.c.lingxing_sku_code,
+                    ).in_(sku_keys)
+                )
+                .group_by(
+                    PRODUCT_INFO_CURRENT.c.source_account_ref,
+                    PRODUCT_INFO_CURRENT.c.lingxing_sku_code,
+                )
+            )
+            .mappings()
+            .all()
+        )
+        owners = {
+            (str(x["source_account_ref"]), str(x["lingxing_sku_code"])): x["owner_name"]
+            for x in owner_rows
+        }
+
+    result = []
+    for r in rows:
+        key = (str(r["source_account_ref"]), str(r["store_id"]), str(r["item_id"]))
+        p = proofs.get(key) or {}
+        raw_start = r["listing_start_at_utc"]
+        # For status the date is only a presence witness; never infer WFS
+        # first-stock from an order or from a synthetic default date.
+        listing_day = p.get("listing_date_la")
+        if listing_day is None and isinstance(raw_start, datetime):
+            listing_day = raw_start.astimezone(LA).date() if raw_start.tzinfo else raw_start.date()
+        first_wfs = p.get("first_wfs_available_date_la") or (
+            r.get("source_first_wfs") if has_locked else None
+        )
+        formal = p.get("formal_status") == "completed" and bool(p.get("has_auto"))
+        coverage = (
+            {"evaluation_formal_trigger": {"status": "completed"}, "auto_dimension_scores": {}}
+            if formal
+            else {}
+        )
+        status = evaluation_status(
+            listing_date=listing_day,
+            first_wfs=first_wfs,
+            coverage=coverage,
+            grade=p.get("grade"),
+            total=p.get("score"),
+        )
+        grade = (
+            str(p["grade"])
+            if p.get("grade") in _GRADES and p.get("score") is not None
+            else "pending"
+        )
+        owner = owners.get((key[0], str(r["local_sku"]))) if r["local_sku"] else None
+        result.append(
+            {
+                "identity": key,
+                "status": status,
+                "grade": grade,
+                "owner": str(owner) if owner else "未分配",
+            }
+        )
+    _LOGGER.info(
+        "new_product_scope_summary rows=%d mart_ms=%d decision_ms=%d total_ms=%d",
+        len(result),
+        mart_ms,
+        decision_ms,
+        int((time.monotonic() - started) * 1000),
+    )
+    return result
+
+
+def summary(source, db, accounts: frozenset[str]) -> dict:
+    rows = scoped_projection(source, db, accounts)
+    states = Counter(r["status"] for r in rows)
+    owners = Counter(r["owner"] for r in rows)
+    grades = Counter(r["grade"] for r in rows)
+    return {
+        "counts": {
+            "all": len(rows),
+            "evaluating": states["测评中"],
+            "market": states["待市场评分"],
+            "passed": states["测评通过"],
+            "failed": states["测评未通过"],
+        },
+        "status_options": [
+            {"value": s, "label": s, "count": states[s]} for s in _STATUSES if states[s] > 0
+        ],
+        "owner_options": [{"value": o, "label": o, "count": c} for o, c in sorted(owners.items())],
+        "rating_options": [
+            {"value": g, "label": ("待评分" if g == "pending" else g + " 级"), "count": grades[g]}
+            for g in (*_GRADES, "pending")
+        ],
+    }
+
+
+def matching_identities(
+    source,
+    db,
+    accounts: frozenset[str],
+    *,
+    statuses: str = "",
+    owners: str = "",
+    ratings: str = "",
+    owner_keyword: str = "",
+) -> list[tuple[str, str, str]]:
+    status_set = set(filter(None, (s.strip() for s in statuses.split(","))))
+    owner_set = set(filter(None, (s.strip() for s in owners.split(","))))
+    rating_set = set(filter(None, (s.strip() for s in ratings.split(","))))
+    needle = owner_keyword.strip().casefold()
+    if statuses == "__none__":
+        return []
+    if status_set - set(_STATUSES) or rating_set - set((*_GRADES, "pending")):
+        raise ValueError("NEW_PRODUCT_INVALID_PERFORMANCE_FILTER")
+    return [
+        r["identity"]
+        for r in scoped_projection(source, db, accounts)
+        if (not status_set or r["status"] in status_set)
+        and (not owner_set or r["owner"] in owner_set)
+        and (not rating_set or r["grade"] in rating_set)
+        and (not needle or needle in r["owner"].casefold())
+    ]

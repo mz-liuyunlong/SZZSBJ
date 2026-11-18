@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Product } from "./nativeData";
+import NewProductOperatingDaily from "./NewProductOperatingDaily";
 import "./newProductEvaluationData.css";
 
 // PR337_EVALUATION_DATA_V1 — rendering only. Uses the already-loaded /listings facts.
@@ -52,9 +53,6 @@ function integer(value: OptionalNumber, unit = ""): string {
 function percent(value: OptionalNumber): string {
   return value === null ? "—" : `${decimal(value)}%`;
 }
-function dateValue(value: unknown): string {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0,10) : "—";
-}
 
 // All split-ad fields are optional: the existing listing API does not currently
 // guarantee auto/manual breakdown. Never clone the total as either component.
@@ -104,17 +102,6 @@ export default function NewProductEvaluationData({product}: {product: Product}) 
   const [compare,setCompare] = useState(false);
   const backend = product.backend as (NonNullable<Product["backend"]> & {scoringFacts?: FactRecord}) | undefined;
   const facts = backend?.scoringFacts ?? {};
-  const qty14 = read(facts,"valid_units_14d");
-  const orders14 = read(facts,"valid_orders_14d");
-  const revenue = read(facts,"sales_amount_usd");
-  const profit = read(facts,"profit_usd");
-  const margin = read(facts,"gross_margin_pct");
-  const roi = read(facts,"roi");
-  const firstOrder = dateValue(facts.first_order_date ?? backend?.firstOrderDate);
-  // Count only days observed, with a maximum 14-day scoring window.
-  const days = read(facts, "elapsed_days");
-  const daily = divide(orders14, days === null ? null : Math.min(14, Math.max(1, days)));
-  const averagePrice = divide(revenue, qty14);
   const totalAds = adFacts(facts,"total");
   const autoAds = adFacts(facts,"auto");
   const manualAds = adFacts(facts,"manual");
@@ -141,23 +128,7 @@ export default function NewProductEvaluationData({product}: {product: Product}) 
         <button type="button" className={view==="ads"?"active":""} aria-pressed={view==="ads"} onClick={()=>setView("ads")}>广告数据</button>
       </div>
     </header>
-    {view==="operations" ? <div className="np-ed-main np-ed-operation">
-      <div className="np-ed-context"><span className="np-ed-dot"/> <b>经营表现总览</b><small>近14天</small><span className="np-ed-count">9 项指标</span></div>
-      <div className="np-ed-highlight np-ed-three">
-        <Metric label="销售额" value={dollars(revenue)}/>
-        <Metric label="订单利润" value={dollars(profit)}/>
-        <Metric label="利润率" value={percent(margin)}/>
-      </div>
-      <Heading title="经营明细" count="6 项指标"/>
-      <div className="np-ed-details np-ed-three np-ed-six">
-        <Metric label="近14天销量 / 订单量" value={`${integer(qty14,"件")} / ${integer(orders14,"单")}`}/>
-        <Metric label="平均售价" value={dollars(averagePrice)}/>
-        <Metric label="日均单量" value={daily===null?"—":`${decimal(daily,1)} 单`}/>
-        <Metric label="ROI" value={decimal(roi)}/>
-        <Metric label="上架时间" value={dateValue(facts.first_wfs_available_date_la ?? backend?.firstWfsDate)}/>
-        <Metric label="首单日期" value={firstOrder}/>
-      </div>
-    </div> : <div className="np-ed-main np-ed-advertising">
+    {view==="operations" ? <NewProductOperatingDaily product={product} /> : <div className="np-ed-main np-ed-advertising">
       <div className="np-ed-ad-toolbar">
         <div className="np-ed-ad-tabs" role="group" aria-label="广告类型">
           {([['total','广告总计'],['auto','自动广告'],['manual','手动广告']] as const).map(([key,label])=><button

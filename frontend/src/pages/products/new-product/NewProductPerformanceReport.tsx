@@ -1,6 +1,6 @@
 /* PR337_APPROVED_CARD_FILTER_V53 */
 // PR337_APPROVAL_ITEM_FILTER_20261111
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button, Tag, Popover } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import CommittedSearch from "@/components/report-table/CommittedSearch";
@@ -12,8 +12,21 @@ import type { ReportFilterOption } from "@/shared/report-filters";
 import { grade, score, type Config, type Product } from "./nativeData";
 
 type Action = "detail" | "market" | "purchase" | "approval" | "resultApproval" | 'calculate' | 'evaluationReview' | 'recheck';
+export type PerformanceReportQuery = {
+  page:number; pageSize:number; statuses:string[]; owners:string[];
+  ratings:string[]; searchField:string; keyword:string;
+  phase:string;
+};
+export type PerformanceRemote = {
+  loading:boolean; total:number; error?:string;
+  statusOptions:ReportFilterOption[];
+  ownerOptions:ReportFilterOption[];
+  ratingOptions:ReportFilterOption[];
+  onQueryChange:(query:PerformanceReportQuery)=>void;
+};
 type Props = {
   items: Product[];
+  remote?:PerformanceRemote;
   config: Config;
   phase: string;
   onOpen: (kind: Action, id: string) => void;
@@ -293,7 +306,7 @@ function automaticScoreExplanation(row: Product, config: Config) {
   );
 }
 
-function NewProductPerformanceReportBody({ items, config, phase, onOpen, onResetPhase, focusItemId, calculatingItemId }: Props) {
+function NewProductPerformanceReportBody({ items, config, phase, onOpen, onResetPhase, focusItemId, calculatingItemId, remote }: Props) {
   const [statuses, setStatuses] = useState<string[]>([]);
   const [owners, setOwners] = useState<string[]>([]);
   const [ratings, setRatings] = useState<string[]>([]);
@@ -301,6 +314,20 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
   const [keyword, setKeyword] = useState(focusItemId && phase === "approval" ? focusItemId : "");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const remoteQueryChanged = remote?.onQueryChange;
+  useEffect(() => {
+    if (!remoteQueryChanged) return;
+    let active = true;
+    // Defer parent state updates and ignore obsolete filters after unmount.
+    queueMicrotask(() => {
+      if (active) remoteQueryChanged({
+        page: currentPage, pageSize, statuses, owners, ratings,
+        searchField, keyword, phase,
+      });
+    });
+    return () => { active = false; };
+  }, [remoteQueryChanged, currentPage, pageSize,
+      statuses, owners, ratings, searchField, keyword, phase]);
 
 
 
@@ -327,7 +354,7 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
     })), [items, config]);
 
 
-  const filtered = useMemo(() => items.filter((row) => {
+  const filtered = useMemo(() => remote ? items : items.filter((row) => {
     const inPhase = phase === "all" ||
       (phase === "evaluating" && row.status === "测评中") ||
       (phase === "market" && row.status === "待市场评分") ||
@@ -341,7 +368,7 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
       (!keyword || (searchField === "item" && keyword === focusItemId
         ? row.item === keyword
         : String(fieldValue).toLowerCase().includes(keyword.toLowerCase())));
-  }), [items, config, phase, statuses, owners, ratings, searchField, keyword, focusItemId]);
+  }), [items, config, phase, statuses, owners, ratings, searchField, keyword, focusItemId, remote]);
 
   const reset = () => {
     setStatuses([]);
@@ -560,6 +587,7 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
       render: (_value, row) => {
         const state = row.status;
         if (state === "待到货") return <span className="muted">—</span>;
+        if (row.backend?.purchaseStatus === "submitted" && row.backend.purchaseId) return <Button size="small" type="primary" onClick={() => onOpen("approval",row.id)}>审核采购</Button>;
         if (state === "测评中") return <span style={{ display: "inline-flex", alignItems: "center", gap: 12, whiteSpace: "nowrap" }}>
           <Button size="small" onClick={() => onOpen("detail",row.id)} style={{ minWidth: 58, borderRadius: 8, borderColor: "#d0d5dd", color: "#344054", fontWeight: 500 }}>详情</Button>
           <Button size="small" type="primary" disabled={calculatingItemId === row.id}
@@ -567,8 +595,14 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
             {calculatingItemId === row.id ? "计算中" : "立即计算"}
           </Button>
         </span>;
-        if (state === "待市场评分") return <Button size="small" type="primary"
-          onClick={() => onOpen("market",row.id)}>去评分</Button>;
+        if (state === "待市场评分") return <span style={{ display: "inline-flex", alignItems: "center", gap: 12, whiteSpace: "nowrap" }}>
+          <Button size="small" disabled={calculatingItemId === row.id}
+            onClick={() => onOpen("calculate",row.id)}>
+            {calculatingItemId === row.id ? "计算中" : "立即计算"}
+          </Button>
+          <Button size="small" type="primary"
+            onClick={() => onOpen("market",row.id)}>去评分</Button>
+        </span>;
         if (state === "测评未通过") return <span style={{ display: "inline-flex", alignItems: "center", gap: 12, whiteSpace: "nowrap" }}>
           <Button size="small" onClick={() => onOpen("detail",row.id)} style={{ minWidth: 58, borderRadius: 8, borderColor: "#d0d5dd", color: "#344054", fontWeight: 500 }}>详情</Button>
           {row.evaluationRecheckRequired && row.evaluationReviewStatus === "approved" ?
@@ -594,13 +628,13 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
   return <section className={phase==="approved"?"np-performance-report np-approved-report":"np-performance-report"} aria-label="新品表现明细">
     <div className="np-performance-toolbar" role="search" aria-label="新品表现筛选">
       <ReportFacetSelect mode="multiple" ariaLabel="流程状态" placeholder="全部状态"
-        unit="项" value={statuses} options={statusOptions}
+        unit="项" value={statuses} options={remote?.statusOptions ?? statusOptions}
         onChange={(value) => { setStatuses(Array.isArray(value) ? value : []); setCurrentPage(1); }} />
       <ReportFacetSelect mode="multiple" ariaLabel="负责人" placeholder="全部负责人"
-        unit="人" value={owners} options={ownerOptions}
+        unit="人" value={owners} options={remote?.ownerOptions ?? ownerOptions}
         onChange={(value) => { setOwners(Array.isArray(value) ? value : []); setCurrentPage(1); }} />
       <ReportFacetSelect mode="multiple" ariaLabel="评级" placeholder="全部评级"
-        unit="项" value={ratings} options={ratingOptions}
+        unit="项" value={ratings} options={remote?.ratingOptions ?? ratingOptions}
         onChange={(value) => { setRatings(Array.isArray(value) ? value : []); setCurrentPage(1); }} />
       <CommittedSearch className="np-performance-search"
         typeAriaLabel="搜索类型" typeOptions={searchFields}
@@ -621,6 +655,8 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
         rowKey="id"
         columns={columns}
         dataSource={filtered}
+        loading={remote?.loading ?? false}
+        locale={remote?.error ? {emptyText: "商品读取失败，请点击刷新重试"} : undefined}
         search={false}
         options={false}
         toolBarRender={false}
@@ -628,7 +664,7 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
         pagination={{
           current: currentPage,
           pageSize,
-          total: filtered.length,
+          total: remote ? remote.total : filtered.length,
           showSizeChanger: true,
           pageSizeOptions: ["20", "50"],
           showTotal: (total, range) => `显示 ${range[0]}–${range[1]} 条，共 ${total} 条`,

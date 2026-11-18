@@ -18,63 +18,63 @@ def test_no_task_table_or_new_celery_request():
 
 
 @pytest.mark.parametrize(
-    "outcomes, expected",
+    "dimensions, outcome, expected",
     [
-        ({"written": 1}, "completed"),
-        ({"STORE_MART_WATERMARK_PENDING": 1}, "incomplete"),
+        ({"speed": "2", "ad": "3", "profit": "4", "trust": "5"}, {"reconciled": 1}, "incomplete"),
+        ({"speed": "2", "ad": None, "profit": "4", "trust": "5"}, {"reconciled": 1}, "incomplete"),
     ],
 )
-def test_single_item_calculation_scoped_and_fail_closed(monkeypatch, outcomes, expected):
+def test_single_item_manual_uses_unified_v2_without_formal_grade(
+    monkeypatch, dimensions, outcome, expected
+):
     from app.modules.new_products import evaluation_workflow as wf
-    from app.modules.new_products import pr337_daily_db as daily
+    from app.modules.new_products import unified_publish
 
     requested = []
 
-    def fake_run_daily(session, *, apply, cutoff_la, identity_filter):
-        requested.append((apply, cutoff_la, identity_filter))
-        return {"status": "applied", "outcomes": outcomes}
+    def fake_job(*, item_ids, limit, apply, auto_only, manual_identity):
+        assert manual_identity == ("acc", "store", "item")
+        requested.append((item_ids, limit, apply, auto_only))
+        return outcome
 
-    monkeypatch.setattr(daily, "run_daily", fake_run_daily)
-    monkeypatch.setattr(wf, "_cutoff", lambda: date(2026, 11, 10))
-    monkeypatch.setattr(wf, "_lock", lambda *_: None)
-    registry = SimpleNamespace(
-        id="registry-id", source_account_ref="acc", store_id="store", item_id="item"
+    monkeypatch.setattr(unified_publish, "execute_unified_job", fake_job)
+    monkeypatch.setattr(wf, "_cutoff", lambda: date(2026, 11, 14))
+    reg = SimpleNamespace(id="id")
+    perf = SimpleNamespace(
+        grade=None,
+        score=None,
+        first_wfs_available_date_la=date(2026, 11, 3),
+        sold_out_evidence_status=None,
+        first_batch_sold_out_date_la=None,
+        data_coverage_json={
+            "auto_dimension_scores": {"dimensions": dimensions, "missing": []},
+            "new_products_score_facts_v2": {"ad_status": "active"},
+        },
     )
-    performance = SimpleNamespace(grade=None, score=None, data_coverage_json={})
-    monkeypatch.setattr(wf, "_registry", lambda *args, **kwargs: registry)
-    monkeypatch.setattr(wf, "_performance", lambda *args, **kwargs: performance)
+    monkeypatch.setattr(wf, "_registry", lambda *args, **kwargs: reg)
+    monkeypatch.setattr(wf, "_performance", lambda *args, **kwargs: perf)
     monkeypatch.setattr(wf, "_protected", lambda *args, **kwargs: False)
-    monkeypatch.setattr(wf, "_verified_proof", lambda *_: {"orders": 1})
-    monkeypatch.setattr(wf, "_config", lambda *_: ({}, 0))
-    monkeypatch.setattr(wf, "_ready", lambda *_: (True, []))
-    completed = []
-    monkeypatch.setattr(wf, "_set_formal", lambda *args, **kwargs: completed.append(True) or True)
     monkeypatch.setattr(wf, "ActionEvent", lambda **kwargs: kwargs)
 
     class Session:
-        def __init__(self):
-            self.events = []
-            self.commits = 0
-            self.expired = False
+        events = []
+
+        def rollback(self):
+            pass
 
         def expire_all(self):
-            self.expired = True
+            pass
 
-        def scalar(self, *args, **kwargs):
-            return None
-
-        def add(self, x):
-            self.events.append(x)
+        def add(self, event):
+            self.events.append(event)
 
         def commit(self):
-            self.commits += 1
+            pass
 
-    db = Session()
     listing = SimpleNamespace(first_wfs_available_date_la=date(2026, 11, 3))
-    out = wf.calculate_once(db, "acc", "store", "item", "operator", listing)
-    assert requested == [(True, date(2026, 11, 10), ("acc", "store", "item"))]
-    assert out["status"] == expected
-    assert out["item_id"] == "item"
-    assert bool(completed) == (expected == "completed")
-    assert db.expired and db.commits == 1
-    assert len(db.events) == 1
+    got = wf.calculate_once(Session(), "acc", "store", "item", "operator", listing)
+    assert requested == [({"item"}, 1, True, True)]
+    assert got["status"] == expected
+    assert got["trigger"] == "manual_auto_only"
+    assert got["item_id"] == "item"
+    assert not hasattr(perf, "process_status")

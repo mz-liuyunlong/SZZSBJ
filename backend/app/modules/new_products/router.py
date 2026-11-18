@@ -27,6 +27,7 @@ from .schemas import (
     PurchaseWrite,
     RuleApply,
     RulePreview,
+    ScoreCorrectionWrite,
     TrackingWrite,
 )
 from .service import NewProductService
@@ -59,6 +60,15 @@ Review = Annotated[
 Tracking = Annotated[
     Principal, Depends(require_permission("action:products:new-product-analysis:tracking"))
 ]
+
+
+@router.get("/summary", response_model=SuccessEnvelope[dict, dict])
+def performance_summary(request: Request, db: DB, _: Read, accounts: Scope, source: Source):
+    from .performance_list_scope import summary
+
+    return success_response(
+        request, data=summary(source, db, accounts), meta={"source": "saved_projection"}
+    )
 
 
 @router.get("/listings", response_model=SuccessEnvelope[dict, dict])
@@ -226,6 +236,25 @@ def market_score(
     )
 
 
+# NP_OPERATOR_SCORE_CORRECTION_V1_20261119: same score permission, separate from approval.
+@router.put("/score-corrections", response_model=SuccessEnvelope[dict, dict])
+def save_operator_score_correction(
+    request: Request,
+    payload: ScoreCorrectionWrite,
+    db: DB,
+    principal: Score,
+    accounts: Scope,
+    source: Source,
+):
+    return success_response(
+        request,
+        data=NewProductService(db, read_session=source).save_score_correction(
+            accounts, payload, principal.user_id
+        ),
+        meta={"source": "database"},
+    )
+
+
 @router.put("/tracking/decision", response_model=SuccessEnvelope[dict, dict])
 def tracking_decision(
     request: Request,
@@ -257,6 +286,24 @@ def apply_purchase(
         request,
         data=NewProductService(db, read_session=source).purchase(
             accounts, payload, principal.user_id
+        ),
+        meta={"source": "database"},
+    )
+
+
+@router.get("/purchase-applications/{application_id}", response_model=SuccessEnvelope[dict, dict])
+def purchase_application_snapshot(
+    request: Request,
+    application_id: UUID,
+    db: DB,
+    principal: Review,
+    accounts: Scope,
+    source: Source,
+):
+    return success_response(
+        request,
+        data=NewProductService(db, read_session=source).purchase_application_snapshot(
+            accounts, application_id
         ),
         meta={"source": "database"},
     )

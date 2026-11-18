@@ -1,6 +1,6 @@
 /** Source: owner's original V4 HTML, sample only; no API or production writes. */
 export type Grade="S"|"A"|"B"|"C"|"D"|"Pass";
-export type Product={id:string;sku:string;name:string;item:string;owner:string;days:number;market:number|null;marketReason:string;
+export type Product={id:string;sku:string;name:string;item:string;owner:string;days:number;market:number|null;marketReason:string;marketCompetitorIds?:string[];marketNoCompetitors?:boolean;
 scores:{speed:number;ad:number;profit:number;trust:number};penalties:number;penaltyFlags:string[];roi:number;margin:number;acos:number;
 clicks:number;orders:number;qty7:number;sales30:number;spend:number;unitCost:number;price:number;inventory:number;risk:string;status:string;evaluationStatus?:string;evaluationReviewStatus?:string|null;evaluationReviewId?:string|null;evaluationJobStatus?:string|null;evaluationManualException?:boolean;evaluationRecheckRequired?:boolean;
 suggested:number|null;requestQty:number|null;requestReason:string;tracking:string;sales60:number;sales90:number;margin60:number;acos60:number;
@@ -9,9 +9,11 @@ category?:string;developer?:string;operator?:string;overrides?:Partial<Record<"s
 /** Backend is authoritative for real records; fields above preserve accepted UI layout only. */
 backend?:{
   identity:{source_account_ref:string;store_id:string;item_id:string};
+  scoreCorrection?:import("./newProductBusinessApi").ScoreCorrectionView|null;purchaseStatus?:string|null;
   marketVersion:number;ruleVersion:number;purchaseId?:string|null;purchaseVersion?:number;trackingVersion?:number;
   evaluation:{total:string|null;grade:Grade|null;dimensions:Record<"market"|"speed"|"ad"|"profit"|"trust",string|null>;missing:string[]};
   suggestedQty:number|null;available:Record<string,boolean>;firstWfsDate:string|null;firstOrderDate?:string|null;
+  systemRiskDisplay?:import("./newProductBusinessApi").SystemRiskDisplay|null;
   automaticWeightedPoints?:number|null;automaticCoveredWeightPct?:number|null; // PR337_PERSISTED_DISPLAY_V1
   reviewApplication?: {proposed_result:string;reason:string;status:string;created_at:string|null}|null;
 }};

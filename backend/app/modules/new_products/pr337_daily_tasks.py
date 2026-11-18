@@ -39,11 +39,22 @@ def daily_score_tick() -> dict:
         and enabled(WRITE_FLAG)
     ):
         from .unified_publish import execute_unified_job
+        from .evaluation_workflow import finalize_automatic
 
+        unified = execute_unified_job(limit=500, apply=True)
+        # The unified publisher has committed its bounded batches. Formal
+        # evaluation now checks that saved V2 proof, never reruns the score.
+        cutoff = datetime.now(LA).date() - timedelta(days=1)
+        with Session(bind=get_engine(), autoflush=False, expire_on_commit=False) as session:
+            with session.begin():
+                session.execute(text("SELECT set_config('statement_timeout','120000',true)"))
+                session.execute(text("SELECT set_config('lock_timeout','3000',true)"))
+                formal = finalize_automatic(session, cutoff)
         return {
             "status": "complete",
             "authority": "new_products_authority_v2",
-            "unified": execute_unified_job(limit=500, apply=True),
+            "unified": unified,
+            "automatic_evaluations": formal,
         }
     if os.getenv("APP_ENV", "").strip().lower() != "production" or not enabled(SCHEDULE_FLAG):
         return {"status": "disabled"}

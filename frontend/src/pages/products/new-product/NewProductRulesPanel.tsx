@@ -3,7 +3,7 @@ import type { ColumnsType } from "antd/es/table";
 import type { ReactNode } from "react";
 import type { Grade, Product } from "./nativeData";
 import { dimensionNames, dimensionKeys, tierNames } from "./NewProductRulesModel";
-import type { RuleDraft, RuleTier, RulePenalty, RuleVeto } from "./NewProductRulesModel";
+import type { RuleDraft, RuleTier, RiskConditionRule } from "./NewProductRulesModel";
 import NewProductConfirmedScoringPanel from "./NewProductConfirmedScoringPanel";
 
 interface Props { tab: string; draft: RuleDraft; onChange: (draft: RuleDraft) => void; version: number; products: Product[] }
@@ -79,31 +79,50 @@ export default function NewProductRulesPanel({ tab, draft, onChange, version, pr
   }
 
   if (tab === "penalties") {
-    const penaltiesCols: ColumnsType<RulePenalty & {key:number}> = [
-      {title:"启用",width:"9%",render:(_,row)=><Checkbox checked={row.enabled} onChange={e=>{
-        const penalties=draft.penalties.map((p,i)=>i===row.key?{...p,enabled:e.target.checked}:p);update({penalties});
-      }}/>},
-      {title:"扣分项",dataIndex:"name",width:"24%"},
-      {title:"触发条件",dataIndex:"condition",width:"50%"},
-      {title:"扣分",width:"17%",render:(_,row)=>number(row.deduct,v=>{
-        update({penalties:draft.penalties.map((p,i)=>i===row.key?{...p,deduct:v}:p)});
-      },{min:0,max:10})},
-    ];
-    const vetoCols: ColumnsType<RuleVeto & {key:number}> = [
-      {title:"启用",width:"9%",render:(_,row)=><Checkbox checked={row.enabled} onChange={e=>{
-        update({vetoes:draft.vetoes.map((p,i)=>i===row.key?{...p,enabled:e.target.checked}:p)});
-      }}/>},
-      {title:"规则",dataIndex:"name",width:"25%"},
-      {title:"条件",dataIndex:"condition",width:"43%"},
-      {title:"结果",width:"23%",render:(_,row)=><Select value={row.action} style={{width:"100%"}} onChange={v=>{
-        update({vetoes:draft.vetoes.map((p,i)=>i===row.key?{...p,action:v}:p)});
-      }} options={[{value:"Pass",label:"Pass"},{value:"最多 B 级",label:"最多 B 级"},{value:"最多 C 级",label:"最多 C 级"}]}/>},
+    // The existing config-navigation key is retained to avoid unnecessary
+    // page-state changes; all user-visible copy now says 配置风险条件.
+    const changeRisk=(code:string, patch:Partial<RiskConditionRule>)=>update({
+      riskConditions:draft.riskConditions.map(r=>r.code===code?{...r,...patch}:r),
+    });
+    const changeParameter=(r:RiskConditionRule,field:string,value:number|null)=>changeRisk(r.code,{
+      params:{...r.params,[field]:value},
+    });
+    const thresholds:Record<string,Array<[string,string]>>={
+      ad_sample_insufficient:[["clicks_below","累计点击少于"]],
+      ad_uncontrolled:[["min_clicks","累计点击至少"],["cvr_below_pct","广告CVR低于(%)"]],
+      low_margin:[["margin_below_pct","毛利率低于(%)"]],
+      high_ad_spend_ratio:[["share_above_pct","广告占比高于(%)"]],
+    };
+    const riskCols:ColumnsType<RiskConditionRule>=[
+      {title:"启用",width:"9%",render:(_,r)=><Checkbox checked={r.enabled} onChange={e=>changeRisk(r.code,{enabled:e.target.checked})}/>},
+      {title:"风险条件",dataIndex:"name",width:"23%",render:(name:string,r:RiskConditionRule)=>
+        r.code==="roi_very_low"?"ROI严重偏低":r.code==="roi_low"?"ROI偏低":name},
+      {title:"触发条件",width:"45%",render:(_,r)=>r.source==="manual"
+        ?<span>运营在市场评分时人工确认</span>
+        :<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {(thresholds[r.code]??[]).map(([field,label])=><label key={field} style={{display:"inline-flex",alignItems:"center",gap:4}}>
+            <span>{label}</span>
+            <InputNumber style={{width:92}} controls={false} min={0}
+              max={["margin_below_pct","share_above_pct","cvr_below_pct"].includes(field)?100:undefined}
+              precision={["clicks_below","min_clicks"].includes(field)?0:2}
+              placeholder="待配置" value={r.params[field]}
+              onChange={value=>changeParameter(r,field,value)}/>
+          </label>)}
+        </div>},
+      {title:"等级限制",width:"23%",render:(_,r)=><Select style={{width:"100%"}} value={r.limit}
+        options={(r.source==="system"?["B","C","D"]:["none","B","C","D","recommend_not_pass"]).map(value=>({
+          value,label:value==="none"?"仅提示 / 复核":value==="recommend_not_pass"?"系统不建议通过":`最高 ${value} 级`,
+        }))}
+        onChange={value=>changeRisk(r.code,{limit:value as RiskConditionRule["limit"]})}/>},
     ];
     return <div className="np-rule-panel">
-      {titleAndIntro("通用扣分与一票否决", "通用扣分影响最终得分；一票否决可以直接 Pass 或限制最高评级。结构化数据无法自动确认的风险，应由有权限人员确认。")}
-      {group("通用扣分项", "", <Table className="np-rule-table" size="small" rowKey="key" pagination={false}  columns={penaltiesCols} dataSource={draft.penalties.map((p,key)=>({...p,key}))}/>)}
-      {group("一票否决与评级上限", "", <Table className="np-rule-table" size="small" rowKey="key" pagination={false}  columns={vetoCols} dataSource={draft.vetoes.map((p,key)=>({...p,key}))}/>)}
-      <Alert type="warning" showIcon={false} message="待确认：原表 ROI 低的评级上限分别出现 ROI＜0.8 与 ROI＜0.7 两种口径。当前 Demo 暂按 ROI＜0.8 最高 B 级演示，发布前必须统一。" />
+      {titleAndIntro("配置风险条件","五维评分不额外扣分。系统风险按已启用的阈值自动识别；人工风险由运营勾选。命中风险时只限制建议等级，保留基础得分。")}
+      {group("系统识别风险","四项阈值已确认；可勾选启用。正式评分执行链路仍需单独接通，未接通前不自动限制等级。",
+        <Table className="np-rule-table" size="small" rowKey="code" pagination={false} columns={riskCols}
+          dataSource={draft.riskConditions.filter(r=>r.source==="system")}/>)}
+      {group("人工风险条件","运营在市场评分时选择实际风险；配置停用后不允许新选择。‘无’是人工选项，不是可配置风险。",
+        <Table className="np-rule-table" size="small" rowKey="code" pagination={false} columns={riskCols}
+          dataSource={draft.riskConditions.filter(r=>r.source==="manual")}/>)}
     </div>;
   }
 
@@ -133,7 +152,7 @@ export default function NewProductRulesPanel({ tab, draft, onChange, version, pr
     <div className="np-rule-result-list">{[
       ["当前草稿版本", `v${version}.0-demo`],
       ["生效方式", "发布后用于后续评分；已提交审核的申请保留原规则快照"],
-      ["修改记录", "权重、采购数量区间、扣分/否决、打品目标均应记录修改人、时间与原因"],
+      ["修改记录", "权重、采购数量区间、风险条件等修改需保留人员、时间与原因"],
       ["历史评分", "保留分项得分、数据截止时间、最终分数、评级和采购建议"],
     ].map(([name,value])=><div key={name}><strong>{name}</strong><span>{value}</span></div>)}</div>
     {group("正式发布前待确认", "", <Alert type="warning" showIcon={false} message="① 权重表头与评分行不一致；② 7.85 分示例评级 B/C 不一致；③ ROI 评级上限 0.7/0.8 不一致。Demo 不自动替你裁决这些业务规则。" />)}

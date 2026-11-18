@@ -79,8 +79,8 @@ def test_authority_v2_corrects_existing_unapproved_score_and_profit():
     perf = SimpleNamespace(
         data_coverage_json={},
         process_status=None,
-        score=Decimal("5.0"),
-        grade="D",
+        score=None,
+        grade=None,
         profit_usd=Decimal("-99"),
         roi=Decimal("-1"),
         profit_margin_pct=Decimal("-25"),
@@ -140,10 +140,11 @@ def test_authority_v2_corrects_existing_unapproved_score_and_profit():
     assert perf.sample_units is None
     assert perf.profit_usd == Decimal("62")
     assert perf.roi == Decimal("0.5167")
-    assert perf.score == Decimal("8.771")
-    assert perf.grade == "A"
+    # Authority V2 data is provisional until formal trigger + manual market score.
+    assert perf.score is None
+    assert perf.grade is None
     assert perf.data_coverage_json["new_products_authority_v2"]["status"] == "ready"
-    assert perf.data_coverage_json["new_products_legacy_before_authority_v2"]["score"] == "5.0"
+    assert perf.data_coverage_json["new_products_legacy_before_authority_v2"]["score"] is None
     assert perf.data_coverage_json["new_products_testing_profit_v2"]["policy"] == (
         "returns_ignored_samples_excluded_sample_ads_included"
     )
@@ -151,3 +152,67 @@ def test_authority_v2_corrects_existing_unapproved_score_and_profit():
     # The independent lifetime profit evidence preserves revenue explicitly;
     # existing 14-day SQL order columns must remain tied to their window.
     assert perf.data_coverage_json["new_products_testing_profit_v2"]["sales_amount_usd"] == "400"
+
+
+def test_official_grade_is_immutable_during_unified_daily_publish():
+    from datetime import date
+    from decimal import Decimal
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+    from uuid import uuid4
+
+    perf = SimpleNamespace(
+        grade="D",
+        score=Decimal("3.00"),
+        process_status="assessment_complete",
+        data_coverage_json={"frozen": True},
+    )
+    registry = SimpleNamespace(id=uuid4())
+    target = MagicMock(spec=Session)
+    # registry, frozen-decision, purchase, review, performance
+    target.scalar.side_effect = [registry, None, None, None, perf]
+    target.get.return_value = None
+    outcome = _save_one(
+        target,
+        ("source", "store", "item"),
+        {"status": "complete"},
+        {"evaluation": {"grade": "A"}},
+        cutoff=date(2026, 11, 14),
+    )
+    assert outcome == "graded_skipped"
+    assert perf.grade == "D" and perf.score == Decimal("3.00")
+    assert perf.data_coverage_json == {"frozen": True}
+
+
+def test_v2_waits_for_formal_market_result_and_freezes_trigger_v3():
+    """A formally triggered product awaits manual market scoring, unchanged."""
+    from datetime import date
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+    from uuid import uuid4
+
+    from sqlalchemy.orm import Session
+
+    from app.modules.new_products.unified_publish import _save_one
+
+    target = MagicMock(spec=Session)
+    registry = SimpleNamespace(id=uuid4())
+    perf = SimpleNamespace(
+        process_status="待市场评分",
+        data_coverage_json={"evaluation_formal_trigger": {"status": "completed"}},
+        score=None,
+        grade=None,
+    )
+    # Registry / final decision / purchase / review / performance.
+    target.scalar.side_effect = [registry, None, None, None, perf]
+    target.get.return_value = None
+    outcome = _save_one(
+        target,
+        ("account", "store", "20881463249"),
+        {"status": "complete"},
+        {"evaluation": {"dimensions": {}}},
+        cutoff=date(2026, 11, 15),
+    )
+    assert outcome == "frozen_formal"
+    assert perf.data_coverage_json["evaluation_formal_trigger"]["status"] == "completed"
+    assert perf.score is None and perf.grade is None

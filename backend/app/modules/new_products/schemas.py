@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 
 class Strict(BaseModel):
@@ -19,6 +27,11 @@ class ListingQuery(Strict):
     keyword: str = Field(default="", max_length=128)
     search_field: Literal["sku", "msku", "item_id", "title"] = "item_id"
     status: str = Field(default="", max_length=128)
+    # New-product evaluation filters, distinct from Listing-management status.
+    np_statuses: str = Field(default="", max_length=256)
+    np_owners: str = Field(default="", max_length=1024)
+    np_ratings: str = Field(default="", max_length=128)
+    np_owner_keyword: str = Field(default="", max_length=128)
 
 
 class RuleApply(Strict):
@@ -41,6 +54,25 @@ class MarketWrite(Identity):
     reason: str = Field(min_length=5, max_length=4000)
     expected_version: int = Field(ge=0)
 
+    # Manual Walmart competitor Item IDs, persisted alongside the market score.
+    competitor_ids: list[str]
+    no_competitors: bool
+
+    @field_validator("competitor_ids")
+    @classmethod
+    def validate_competitor_ids(cls, values: list[str]) -> list[str]:
+        if any(not (value.isascii() and value.isalnum()) for value in values):
+            raise ValueError("竞品 ID 只允许英文字母和数字")
+        return values
+
+    @model_validator(mode="after")
+    def validate_competitor_selection(self):
+        if self.no_competitors and self.competitor_ids:
+            raise ValueError("勾选无竞品时不得填写竞品 ID")
+        if not self.no_competitors and not self.competitor_ids:
+            raise ValueError("请填写竞品 ID，或勾选无")
+        return self
+
     # PR337_MANUAL_RISK_V1: enforced even if UI validation is bypassed.
     risk_conditions: list[str] = Field(min_length=1, max_length=14)
 
@@ -50,7 +82,6 @@ class MarketWrite(Identity):
         allowed = {
             "无",
             "资金占用率高",
-            "广告数据骤变",
             "季节性（一般）",
             "低价依赖",
             "ROI低（Pass）",
@@ -69,6 +100,14 @@ class MarketWrite(Identity):
         if "无" in values and len(values) != 1:
             raise ValueError("选择「无」时不能同时勾选其他风险")
         return values
+
+
+# NP_OPERATOR_SCORE_CORRECTION_V1_20261119: operator writes, no approval step.
+class ScoreCorrectionWrite(Identity):
+    dimension: Literal["speed", "ad", "profit", "trust"]
+    new_score: Decimal = Field(ge=0, le=10, decimal_places=2)
+    reason: str = Field(min_length=5, max_length=500)
+    expected_revision: int = Field(ge=0)
 
 
 class TrackingWrite(Identity):

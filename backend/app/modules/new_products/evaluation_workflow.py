@@ -14,7 +14,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select, text
+from sqlalchemy import select, text, tuple_
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError
@@ -135,6 +135,52 @@ def _facts_from_proof(proof: dict, market_score: int | None):
 
 def _verified_proof(perf):
     coverage = perf.data_coverage_json if isinstance(perf.data_coverage_json, dict) else {}
+    authority = coverage.get("new_products_authority_v2")
+    block = coverage.get("auto_dimension_scores")
+    facts = coverage.get("new_products_score_facts_v2")
+    if isinstance(authority, dict):
+        if not (
+            isinstance(block, dict)
+            and block.get("source") == "new_products_authority_v2"
+            and isinstance(facts, dict)
+            and authority.get("rule_version") == block.get("rule_version")
+            and authority.get("cutoff_la") == block.get("calculated_cutoff_la")
+            and day(facts.get("first_wfs_available_date_la"))
+            == day(perf.first_wfs_available_date_la)
+        ):
+            return None
+        dimensions = block.get("dimensions")
+        if not isinstance(dimensions, dict):
+            return None
+        zero = facts.get("zero_sales_verified") is True
+        ad_excluded = facts.get("ad_status") == "not_run"
+        if any(dimensions.get(name) is None for name in ("speed", "profit", "trust")) or (
+            dimensions.get("ad") is None and not ad_excluded
+        ):
+            return None
+        profit = coverage.get("new_products_testing_profit_v2")
+        if not zero and not (
+            isinstance(profit, dict)
+            and profit.get("status") == "scored"
+            and profit.get("policy") == "returns_ignored_samples_excluded_sample_ads_included"
+            and not profit.get("missing")
+        ):
+            return None
+        return {
+            "__source": "new_products_authority_v2",
+            "facts": facts,
+            "dimensions": dimensions,
+            "rule_version": block.get("rule_version"),
+            "market_version": authority.get("market_version"),
+            "window_start_la": str(perf.first_wfs_available_date_la),
+            "window_end_la": str(
+                min(
+                    day(facts.get("observation_end_la")) or day(perf.metric_window_end_la),
+                    day(authority["cutoff_la"]),
+                )
+            ),
+            "authority_cutoff_la": authority.get("cutoff_la"),
+        }
     proof = coverage.get("pr337_daily_verified_v1")
     block = coverage.get("auto_dimension_scores")
     if not isinstance(proof, dict) or not isinstance(block, dict):
@@ -155,17 +201,34 @@ def _verified_proof(perf):
 
 
 def _assess(proof: dict, config: dict, version: int, market: int):
+    if proof.get("__source") == "new_products_authority_v2":
+        facts = dict(proof["facts"])
+        facts["market_score"] = market
+        return evaluate(facts, config, version)
     return evaluate(_facts_from_proof(proof, market), config, version)
 
 
 def _ready(proof, config, version):
     # A test market score does not get persisted; this checks the complete
     # automatic evidence while retaining the existing score algorithm.
+    if (
+        proof.get("__source") == "new_products_authority_v2"
+        and proof.get("rule_version") != version
+    ):
+        return False, ["自动评分规则版本已变化，请重新计算"]
     check = _assess(proof, config, version, 0)
-    return (
-        check.get("grade") is not None and check.get("total") is not None,
-        check.get("missing") or [],
-    )
+    missing = check.get("missing") or []
+    if proof.get("__source") == "new_products_authority_v2":
+        for name, saved in proof["dimensions"].items():
+            actual = check.get("dimensions", {}).get(name)
+            if saved is None and actual is None:
+                continue
+            try:
+                if abs(Decimal(str(saved)) - Decimal(str(actual))) > Decimal("0.02"):
+                    return False, ["自动评分与保存证据不一致：" + name]
+            except (ValueError, ArithmeticError, TypeError):
+                return False, ["自动评分证据无法验证：" + name]
+    return check.get("grade") is not None and check.get("total") is not None, missing
 
 
 def _set_formal(perf, *, source, cutoff, proof, actor):
@@ -186,7 +249,14 @@ def _set_formal(perf, *, source, cutoff, proof, actor):
     return True
 
 
-def publish_after_market(session: Session, account: str, store: str, item: str, market_score: int):
+def publish_after_market(
+    session: Session,
+    account: str,
+    store: str,
+    item: str,
+    market_score: int,
+    market_version: int | None = None,
+):
     """Publish a formal result inside the same transaction as the market score.
 
     Returns False if the product has not completed the automatic evaluation.
@@ -211,6 +281,13 @@ def publish_after_market(session: Session, account: str, store: str, item: str, 
     config, version = _config(session)
     if trigger.get("rule_version") != proof.get("rule_version"):
         _error("NP_EVAL_RULE_STALE", 409, "自动评分规则版本不一致")
+    verified, missing = _ready(proof, config, version)
+    if not verified:
+        _error(
+            "NP_EVAL_INSUFFICIENT_EVIDENCE",
+            409,
+            "自动评分证据不完整：" + "、".join(missing),
+        )
     ev = _assess(proof, config, version, market_score)
     if ev.get("grade") is None or ev.get("total") is None:
         _error(
@@ -222,6 +299,29 @@ def publish_after_market(session: Session, account: str, store: str, item: str, 
     perf.grade = ev["grade"]
     perf.process_status = "assessment_complete"
     coverage = dict(coverage)
+    if proof.get("__source") == "new_products_authority_v2":
+        # V2 read-side grade validation needs the newly committed market version.
+        current = dict(coverage.get("new_products_authority_v2") or {})
+        current["market_version"] = (
+            market_version
+            if market_version is not None
+            else (
+                session.scalar(
+                    select(MarketScore.version).where(
+                        MarketScore.source_account_ref == account,
+                        MarketScore.store_id == store,
+                        MarketScore.item_id == item,
+                    )
+                )
+                or 0
+            )
+        )
+        current["status"] = "ready"
+        current["missing"] = []
+        coverage["new_products_authority_v2"] = current
+        facts_block = dict(coverage.get("new_products_score_facts_v2") or {})
+        facts_block["market_score"] = str(market_score)
+        coverage["new_products_score_facts_v2"] = facts_block
     coverage["evaluation_final_snapshot"] = {
         "grade": ev["grade"],
         "total": ev["total"],
@@ -309,28 +409,85 @@ def _sold_out_proof(session: Session, reg, first: date, cutoff: date):
     }
 
 
-def finalize_automatic(session: Session, cutoff: date | None = None) -> dict:
+def _iter_formal_candidates(
+    session: Session,
+    *,
+    identity: tuple[str, str, str] | None = None,
+    page_size: int = 500,
+):
+    """Stable identity-keyset scan, including candidates beyond the old 5000 cap."""
+    cursor: tuple[str, str, str] | None = None
+    while True:
+        r = NewProductRegistry
+        stmt = (
+            select(r, NewProductPerformanceCurrent)
+            .join(
+                NewProductPerformanceCurrent,
+                NewProductPerformanceCurrent.registry_id == r.id,
+            )
+            .where(r.is_currently_tagged.is_(True))
+        )
+        if identity is not None:
+            stmt = stmt.where(
+                r.source_account_ref == identity[0],
+                r.store_id == identity[1],
+                r.item_id == identity[2],
+            )
+        if cursor is not None:
+            stmt = stmt.where(tuple_(r.source_account_ref, r.store_id, r.item_id) > cursor)
+        rows = session.execute(
+            stmt.order_by(r.source_account_ref, r.store_id, r.item_id).limit(page_size)
+        ).all()
+        if not rows:
+            break
+        for reg, perf in rows:
+            yield reg, perf
+        if len(rows) < page_size or identity is not None:
+            break
+        reg = rows[-1][0]
+        cursor = (str(reg.source_account_ref), str(reg.store_id), str(reg.item_id))
+
+
+def finalize_automatic(
+    session: Session,
+    cutoff: date | None = None,
+    *,
+    identity: tuple[str, str, str] | None = None,
+    actor: str = "system",
+) -> dict:
     """Run once *inside existing PR337 master task* after evidence publication.
 
     No second scheduler. A completed trigger freezes its first published window.
     """
     cutoff = cutoff or _cutoff()
     config, version = _config(session)
-    rows = session.execute(
-        select(NewProductRegistry, NewProductPerformanceCurrent)
-        .join(
-            NewProductPerformanceCurrent,
-            NewProductPerformanceCurrent.registry_id == NewProductRegistry.id,
-        )
-        .where(NewProductRegistry.is_currently_tagged.is_(True))
-        .limit(5000)
-    ).all()
+    rows = _iter_formal_candidates(session, identity=identity)
     counts = {"checked": 0, "published": 0, "incomplete": 0, "sold_out_verified": 0}
     for reg, perf in rows:
         if perf.grade is not None or perf.score is not None or _protected(session, reg):
             continue
         coverage = perf.data_coverage_json if isinstance(perf.data_coverage_json, dict) else {}
-        if coverage.get("evaluation_formal_trigger"):
+        trigger = coverage.get("evaluation_formal_trigger")
+        if trigger:
+            if (
+                isinstance(trigger, dict)
+                and trigger.get("status") == "completed"
+                and perf.grade is None
+            ):
+                refreshed = _verified_proof(perf)
+                if (
+                    refreshed is not None
+                    and refreshed.get("__source") == "new_products_authority_v2"
+                ):
+                    ready_now, _ = _ready(refreshed, config, version)
+                    if ready_now and trigger.get("proof_hash") != _sha(refreshed):
+                        next_coverage = dict(coverage)
+                        next_trigger = dict(trigger)
+                        next_trigger["proof_hash"] = _sha(refreshed)
+                        next_trigger["rule_version"] = version
+                        next_coverage["evaluation_formal_trigger"] = next_trigger
+                        perf.data_coverage_json = next_coverage
+                        perf.updated_at = _now()
             continue
         first = day(perf.first_wfs_available_date_la)
         if not first or first > cutoff:
@@ -369,7 +526,7 @@ def finalize_automatic(session: Session, cutoff: date | None = None) -> dict:
         if not valid:
             counts["incomplete"] += 1
             continue
-        if _set_formal(perf, source=source, cutoff=cutoff, proof=proof, actor="system"):
+        if _set_formal(perf, source=source, cutoff=cutoff, proof=proof, actor=actor):
             # Market score may have been recorded during an older workflow.
             # Promote it only after all auto evidence is formally verified.
             market = session.scalar(
@@ -391,71 +548,128 @@ def finalize_automatic(session: Session, cutoff: date | None = None) -> dict:
 def calculate_once(
     session: Session, account: str, store: str, item: str, actor: str, listing
 ) -> dict:
-    """One synchronous, bounded PR337 calculation for one Item ID. No job table.
-
-    Persist only existing snapshot and audit rows; a proven-but-incomplete
-    calculation is reported as incomplete, never as a fabricated final score.
-    """
-    from .pr337_daily_db import run_daily
+    """Recalculate one exact-identity V2 snapshot; never fake a formal completion."""
+    from .unified_publish import execute_unified_job
 
     cutoff = _cutoff()
     first = day(getattr(listing, "first_wfs_available_date_la", None))
-    if first is None:
-        _error("NP_EVAL_FIRST_WFS_REQUIRED", 409, "商品尚未有WFS首次可售日期")
-    if first > cutoff:
-        _error("NP_EVAL_WINDOW_PENDING", 409, "尚无完整洛杉矶业务日；请次日计算")
-    _lock(session, account, store, item)
-    reg = _registry(session, account, store, item, lock=True)
-    if _protected(session, reg):
-        _error("NP_EVAL_FROZEN", 409, "商品已进入采购或打品流程，不允许重新评分")
-    if reg is not None:
-        perf = _performance(session, reg, lock=True)
-        if perf is not None:
-            if perf.grade is not None or perf.score is not None:
-                _error("NP_EVAL_RESULT_FROZEN", 409, "已有最终评级，请走测评复核")
-            cov = perf.data_coverage_json if isinstance(perf.data_coverage_json, dict) else {}
-            if cov.get("evaluation_formal_trigger"):
-                _error("NP_EVAL_ALREADY_COMPLETE", 409, "自动评分已完成，请进行市场评分")
-    # The exact identity is constrained in the SQL candidate query, before LIMIT.
-    outcome = run_daily(
-        session, apply=True, cutoff_la=cutoff, identity_filter=(account, store, item)
+    if first is None or first > cutoff:
+        _error("NP_EVAL_FIRST_WFS_REQUIRED", 409, "WFS首次可售日期未核实或尚无完整业务日")
+    reg = _registry(session, account, store, item)
+    if reg is None:
+        _error("NP_EVAL_NO_REGISTRY", 409, "没有可评分的真实新品")
+    perf = _performance(session, reg)
+    if _protected(session, reg) or (
+        perf is not None and (perf.grade is not None or perf.score is not None)
+    ):
+        _error("NP_EVAL_RESULT_FROZEN", 409, "已有正式等级或审批结果，不允许再次计算")
+    coverage = (
+        perf.data_coverage_json
+        if perf is not None and isinstance(perf.data_coverage_json, dict)
+        else {}
     )
-    # The PR337 publisher uses SQL text updates. Refresh identity-map snapshots
-    # so the same request evaluates the just-persisted evidence, not stale ORM state.
-    session.expire_all()
-    reg = _registry(session, account, store, item, lock=True)
-    perf = _performance(session, reg, lock=True) if reg else None
-    if perf is None or _protected(session, reg):
-        raise ValueError("NP_EVAL_SNAPSHOT_UNAVAILABLE")
-    proof = _verified_proof(perf)
-    outcomes = outcome.get("outcomes", {})
-    succeeded = int(outcomes.get("written", 0)) + int(outcomes.get("unchanged", 0)) == 1
-    if not succeeded:
-        # Never approve a stale saved proof when today's MART watermark, stock,
-        # FACT or the guarded persistence writer rejected this invocation.
-        missing = [
-            str(k)
-            for k, v in outcomes.items()
-            if v and k not in {"registry_created", "performance_created", "retagged"}
-        ] or ["SOURCE_NOT_READY"]
-    elif proof is None:
-        missing = ["MART_WFS_EVIDENCE_NOT_VERIFIED"]
-    else:
+    old_trigger = coverage.get("evaluation_formal_trigger")
+    if isinstance(old_trigger, dict) and old_trigger.get("status") == "completed":
+        # A formal trigger is immutable; do not run the ordinary publisher over it.
+        proof = _verified_proof(perf)
         config, version = _config(session)
-        valid, missing = _ready(proof, config, version)
+        valid, _ = _ready(proof, config, version) if proof else (False, [])
+        if not valid or old_trigger.get("proof_hash") != _sha(proof):
+            _error("NP_EVAL_FORMAL_EVIDENCE_CHANGED", 409, "正式测评证据已变化，请走复核")
+        return {
+            "status": "completed",
+            "trigger": "already_formal",
+            "item_id": item,
+            "cutoff_la": str(cutoff),
+            "missing": [],
+            "dimensions": (coverage.get("auto_dimension_scores") or {}).get("dimensions", {}),
+        }
+
+    # Release the API request's source read transaction before separate source/target
+    # publisher sessions acquire locks. Production still needs standard write approval.
+    session.rollback()
+    result = execute_unified_job(
+        item_ids={item},
+        limit=1,
+        apply=True,
+        auto_only=True,
+        manual_identity=(account, store, item),
+    )
+    session.expire_all()
+    reg = _registry(session, account, store, item)
+    perf = _performance(session, reg) if reg is not None else None
+    if perf is None:
+        _error("NP_EVAL_SNAPSHOT_UNAVAILABLE", 409, "自动评分未生成结果")
+    if _protected(session, reg) or perf.grade is not None or perf.score is not None:
+        _error("NP_EVAL_RESULT_FROZEN", 409, "正式结果或业务审批已锁定")
+    if result.get("graded_skipped") or result.get("frozen") or result.get("frozen_formal"):
+        _error("NP_EVAL_RESULT_FROZEN", 409, "正式结果已锁定，不能重复计算")
+
+    coverage = perf.data_coverage_json if isinstance(perf.data_coverage_json, dict) else {}
+    block = coverage.get("auto_dimension_scores")
+    dimensions = block.get("dimensions") if isinstance(block, dict) else {}
+    facts = coverage.get("new_products_score_facts_v2") or {}
+    labels = {"speed": "出单速度", "ad": "广告有效性", "profit": "利润空间", "trust": "数据可信度"}
+    missing = [
+        label
+        for key, label in labels.items()
+        if not isinstance(dimensions, dict)
+        or (
+            dimensions.get(key) is None
+            and not (key == "ad" and facts.get("ad_status") == "not_run")
+        )
+    ]
+    processed = result.get("written", 0) + result.get("reconciled", 0) == 1
+    if not processed:
+        missing.append("本次自动评分未成功发布")
     status = "incomplete"
-    if succeeded and proof is not None and valid:
-        if _set_formal(perf, source="manual", cutoff=cutoff, proof=proof, actor=actor):
-            market = session.scalar(
-                select(MarketScore).where(
-                    MarketScore.source_account_ref == account,
-                    MarketScore.store_id == store,
-                    MarketScore.item_id == item,
-                )
+    if processed and not missing:
+        eligible_now, eligible_reason = eligible(
+            first_wfs=day(perf.first_wfs_available_date_la),
+            cutoff=cutoff,
+            sold_status=perf.sold_out_evidence_status,
+            sold_day=perf.first_batch_sold_out_date_la,
+        )
+        if eligible_now:
+            # Same gate as nightly formalization, but restricted to this full identity.
+            finalize_automatic(
+                session,
+                cutoff,
+                identity=(account, store, item),
+                actor=actor,
             )
-            if market is not None:
-                publish_after_market(session, account, store, item, market.score)
-        status = "completed"
+            coverage = perf.data_coverage_json if isinstance(perf.data_coverage_json, dict) else {}
+            trigger = coverage.get("evaluation_formal_trigger")
+            proof = _verified_proof(perf)
+            config, version = _config(session)
+            ready, reasons = _ready(proof, config, version) if proof else (False, ["V2证据未核实"])
+            final_snapshot = coverage.get("evaluation_final_snapshot")
+            verified_final = (
+                perf.grade is not None
+                and perf.score is not None
+                and isinstance(final_snapshot, dict)
+            )
+            verified_pending = (
+                (proof is not None and trigger.get("proof_hash") == _sha(proof) and ready)
+                if isinstance(trigger, dict)
+                else False
+            )
+            if (
+                isinstance(trigger, dict)
+                and trigger.get("status") == "completed"
+                and (verified_pending or verified_final)
+            ):
+                status = "completed"
+            else:
+                missing.extend(reasons or ["正式测评窗口或证据条件尚未满足"])
+        else:
+            missing.append("尚未满足14天或经过核实的提前售罄条件：" + eligible_reason)
+    if status == "incomplete":
+        details = (block or {}).get("missing") if isinstance(block, dict) else []
+        missing.extend(x for x in (details or []) if x != "市场竞争人工评分" and x not in missing)
+        if not missing:
+            missing.append("正式测评未完成")
+
     session.add(
         ActionEvent(
             id=uuid4(),
@@ -465,11 +679,11 @@ def calculate_once(
             event_type="evaluation_completed" if status == "completed" else "evaluation_incomplete",
             actor_id=actor,
             payload_json={
-                "trigger": "manual",
+                "trigger": "manual_auto_only",
                 "cutoff_la": str(cutoff),
                 "status": status,
-                "missing": missing if status != "completed" else [],
-                "outcomes": outcome.get("outcomes", {}),
+                "missing": missing,
+                "unified": result,
             },
             created_at=_now(),
         )
@@ -477,10 +691,11 @@ def calculate_once(
     session.commit()
     return {
         "status": status,
-        "trigger": "manual",
+        "trigger": "manual_auto_only",
         "item_id": item,
         "cutoff_la": str(cutoff),
-        "missing": missing if status != "completed" else [],
+        "missing": missing,
+        "dimensions": dimensions if isinstance(dimensions, dict) else {},
     }
 
 
@@ -1010,6 +1225,12 @@ def decorate_page(session: Session, data: dict) -> dict:
     items = data.get("items") or []
     if not items:
         return data
+    # NP_SYSTEM_RISK_DISPLAY_V1: one config read; no source-table scans in GET.
+    from .risk_display import build_saved_risk_display
+
+    config, risk_rule_version = NewProductService(session)._config()
+    risk_config = config.get("riskConditions") if isinstance(config, dict) else None
+    risk_cutoff = _cutoff()
     wants = []
     for entry in items:
         listing_row = entry.get("listing") or {}
@@ -1031,7 +1252,14 @@ def decorate_page(session: Session, data: dict) -> dict:
       )
       SELECT w.a,w.s,w.i,r.id AS registry_id,
              p.first_wfs_available_date_la,p.first_batch_sold_out_date_la,
-             p.sold_out_evidence_status,p.score,p.grade,p.data_coverage_json,
+             p.sold_out_evidence_status,p.score,p.grade,
+             jsonb_strip_nulls(jsonb_build_object(
+               'evaluation_final_snapshot',p.data_coverage_json->'evaluation_final_snapshot',
+               'evaluation_manual_exception',p.data_coverage_json->'evaluation_manual_exception',
+               'evaluation_recheck_required',p.data_coverage_json->'evaluation_recheck_required',
+               'evaluation_formal_trigger',p.data_coverage_json->'evaluation_formal_trigger',
+               'auto_dimension_scores',p.data_coverage_json->'auto_dimension_scores'
+             )) AS data_coverage_json,
              r.listing_date_la,
              (SELECT a.status FROM app_approval_requests a
                WHERE a.approval_type=:kind AND a.business_ref=r.id::text
@@ -1060,6 +1288,13 @@ def decorate_page(session: Session, data: dict) -> dict:
         if not r:
             continue
         coverage = r["data_coverage_json"] if isinstance(r["data_coverage_json"], dict) else {}
+        entry["system_risk_display"] = build_saved_risk_display(
+            coverage,
+            risk_config,
+            cutoff_la=risk_cutoff,
+            first_wfs=r["first_wfs_available_date_la"],
+            rule_version=risk_rule_version,
+        )
         listing_date = r["listing_date_la"] or listing_row.get("launch_date_cn")
         status = evaluation_status(
             listing_date=listing_date,

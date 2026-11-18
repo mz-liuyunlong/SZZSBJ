@@ -4,16 +4,18 @@
  */
 import type { Product } from './nativeData';
 import { resolveNewProductFlow, resolveNewProductEvaluationFlow } from './newProductFlowState';
-import type { NewProductListing, Identity, RealScore } from './newProductBusinessApi';
+import type { NewProductListing, Identity, RealScore, SystemRiskDisplay } from './newProductBusinessApi';
 import { confirmedScoringDefaults, speedResult, type ScoringFacts } from './NewProductConfirmedScoring';
 
 export type PersistedProduct = Product & {
   backend: {
     identity: Identity;
     marketVersion: number;
+    scoreCorrection?:import("./newProductBusinessApi").ScoreCorrectionView|null;
     ruleVersion: number;
     evaluation: RealScore;
     scoringFacts: Record<string, unknown>;
+    systemRiskDisplay?: SystemRiskDisplay | null;
     suggestedQty: number | null;
     automaticWeightedPoints: number | null;
     automaticCoveredWeightPct: number | null;
@@ -158,6 +160,8 @@ export function toPersistedProduct(row: NewProductListing): PersistedProduct {
     days:finite(f.elapsed_days) ?? 0,
     market,
     marketReason:row.market_reason ?? '',
+    marketCompetitorIds:Array.isArray(row.market_competitor_ids) ? row.market_competitor_ids : [],
+    marketNoCompetitors:row.market_no_competitors === true,
     scores:{speed:numberOrZero(speed),ad:numberOrZero(ad),profit:numberOrZero(profit),trust:numberOrZero(trust)},
     penalties:0,penaltyFlags:[],
     roi:numberOrZero(roi),margin:numberOrZero(margin),
@@ -176,7 +180,8 @@ export function toPersistedProduct(row: NewProductListing): PersistedProduct {
     developer:listing.product_developer_name || undefined,
     operator:listing.owner_name || undefined,
     imageUrl:listing.picture_url,msku:listing.msku,storeName:listing.store_name,
-    backend:{identity,marketVersion:row.market_version??0,ruleVersion:row.evaluation.rule_version,
+    backend:{identity,scoreCorrection:row.score_correction??null,purchaseStatus:row.purchase_status??null,systemRiskDisplay:row.system_risk_display ?? null,
+      marketVersion:row.market_version??0,ruleVersion:row.evaluation.rule_version,
       purchaseId:row.purchase_id??null,purchaseVersion:row.purchase_version??0,trackingVersion:row.tracking_version??0,
       evaluation,reviewApplication:row.tracking_review_application ?? null,scoringFacts:{...f},suggestedQty:row.suggested_qty ?? null,firstWfsDate:day || null,
       automaticWeightedPoints:finite(f.automatic_weighted_points),
