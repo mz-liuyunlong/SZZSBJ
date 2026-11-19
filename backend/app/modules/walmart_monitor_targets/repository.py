@@ -4,10 +4,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.modules.data_pages.models import ListingArchiveState, ListingManagementCurrentMart
+from app.modules.sku_detail.models import (
+    LingxingSkuIdentity,
+    LingxingSkuProductInfoCurrent,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +38,32 @@ class WalmartMonitorTargetRepository:
         page: int,
         page_size: int,
     ) -> tuple[list[MonitorTargetRecord], int, datetime | None]:
+        product_owner = func.coalesce(
+            func.nullif(func.trim(LingxingSkuProductInfoCurrent.owner_name), ""),
+            func.nullif(func.trim(LingxingSkuProductInfoCurrent.owner_uid), ""),
+        )
+        product_sku_key = func.lower(func.trim(LingxingSkuIdentity.lingxing_sku_code))
+        unique_product_owner = (
+            select(
+                LingxingSkuIdentity.source_account_ref.label("source_account_ref"),
+                product_sku_key.label("sku_key"),
+                case(
+                    (func.count(func.distinct(product_owner)) == 1, func.max(product_owner)),
+                    else_=None,
+                ).label("owner"),
+            )
+            .join(
+                LingxingSkuProductInfoCurrent,
+                LingxingSkuProductInfoCurrent.identity_id == LingxingSkuIdentity.id,
+            )
+            .where(
+                LingxingSkuIdentity.is_active.is_(True),
+                LingxingSkuIdentity.lingxing_sku_code.is_not(None),
+                product_owner.is_not(None),
+            )
+            .group_by(LingxingSkuIdentity.source_account_ref, product_sku_key)
+            .subquery()
+        )
         not_archived = (
             ~select(ListingArchiveState.id)
             .where(
@@ -48,6 +78,10 @@ class WalmartMonitorTargetRepository:
                 func.max(ListingManagementCurrentMart.calculated_at),
             ).where(not_archived)
         ).one()
+        listing_owner = func.coalesce(
+            func.nullif(func.trim(ListingManagementCurrentMart.owner_ref), ""),
+            unique_product_owner.c.owner,
+        )
         statement = (
             select(
                 ListingManagementCurrentMart.source_account_ref,
@@ -56,10 +90,21 @@ class WalmartMonitorTargetRepository:
                 ListingManagementCurrentMart.store_name,
                 ListingManagementCurrentMart.local_sku.label("sku"),
                 ListingManagementCurrentMart.msku,
-                ListingManagementCurrentMart.owner_ref.label("owner"),
+                listing_owner.label("owner"),
                 ListingManagementCurrentMart.local_name.label("product_name"),
                 ListingManagementCurrentMart.category.label("product_category"),
                 ListingManagementCurrentMart.wfs_available_quantity.label("wfs_inventory"),
+            )
+            .outerjoin(
+                unique_product_owner,
+                (
+                    unique_product_owner.c.source_account_ref
+                    == ListingManagementCurrentMart.source_account_ref
+                )
+                & (
+                    unique_product_owner.c.sku_key
+                    == func.lower(func.trim(ListingManagementCurrentMart.local_sku))
+                ),
             )
             .where(not_archived)
             .order_by(

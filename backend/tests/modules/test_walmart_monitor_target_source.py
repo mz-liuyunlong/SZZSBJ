@@ -71,9 +71,15 @@ def test_service_maps_category_nullable_inventory_and_fixed_eligibility() -> Non
 
     assert data.total == 2
     assert data.items[0].product_category == "Synthetic > Category"
+    assert data.items[0].owner == "synthetic-owner"
     assert data.items[0].wfs_inventory is None
     assert data.items[0].monitoring_eligible is True
-    assert meta.source_tables == ["mart_listing_management_current", "listing_archive_states"]
+    assert meta.source_tables == [
+        "mart_listing_management_current",
+        "listing_archive_states",
+        "dwd_lingxing_sku_identity_index",
+        "dwd_lingxing_sku_product_info_current",
+    ]
 
 
 def test_repository_excludes_archived_rows_from_count_and_page() -> None:
@@ -114,6 +120,10 @@ def test_repository_excludes_archived_rows_from_count_and_page() -> None:
     assert "order by mart_listing_management_current.source_account_ref" in sql
     assert "mart_listing_management_current.store_id" in sql
     assert "mart_listing_management_current.item_id" in sql
+    assert "dwd_lingxing_sku_identity_index" in sql
+    assert "dwd_lingxing_sku_product_info_current" in sql
+    assert "count(distinct" in sql
+    assert "lower(trim(mart_listing_management_current.local_sku))" in sql
     for forbidden in ("gross_profit", "gpt_analysis", "item_url", "picture_url"):
         assert forbidden not in sql
 
@@ -139,6 +149,7 @@ def test_target_route_requires_exact_machine_token_and_returns_unified_envelope(
     assert body["success"] is True
     assert body["error"] is None
     assert body["data"]["items"][0]["wfs_inventory"] is None
+    assert body["data"]["items"][0]["owner"] == "synthetic-owner"
     assert body["data"]["items"][0]["monitoring_eligible"] is True
     assert body["meta"]["source"] == "listing_management"
     assert body["request_id"]
