@@ -107,7 +107,6 @@ jobs:
           test "$finance_before" = "$(uv run python -c "$read_head")"
           # Check 0092 role permissions and forward-only history separately.
           uv run alembic upgrade 20261115_0092_role_page_catalog_alignment
-          uv run pytest -q -rs tests/modules/ai_runtime/test_postgresql_acceptance.py
           role_before="$(uv run python -c "$read_head")"
           test "$role_before" = "20261115_0092_role_page_catalog_alignment"
           if uv run alembic downgrade 20261113_0091_finance_wfs_fee_reports > /tmp/role-rollback-check.log 2>&1; then
@@ -118,6 +117,7 @@ jobs:
           test "$role_before" = "$(uv run python -c "$read_head")"
           uv run alembic upgrade head
           test "$(uv run python -c "$read_head")" = "20261119_0093_np_market_competitors"
+          uv run pytest -q -rs tests/modules/ai_runtime/test_postgresql_acceptance.py
 
   frontend-if-present:
     runs-on: ubuntu-latest
