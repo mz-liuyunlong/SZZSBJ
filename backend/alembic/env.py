@@ -14,6 +14,7 @@ import app.modules.integration_sync.models  # noqa: F401  # Register sync govern
 import app.modules.keyword_planning.models  # noqa: F401
 import app.modules.listing_rule_config.models  # noqa: F401  # Register Listing rule metadata.
 import app.modules.new_products.models  # noqa: F401  # PR337_PHASE2_REAL_API_V1
+import app.modules.new_products.ad_catalog_models  # noqa: F401  # Walmart ad 0094 catalog
 import app.modules.pmc_domestic.inbound_models  # noqa: F401
 import app.modules.pmc_domestic.models  # noqa: F401  # Register domestic warehouse tables.
 import app.modules.pmc_domestic.packing_models  # noqa: F401
