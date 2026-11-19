@@ -19,11 +19,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_index(
-        "ix_ad_raw_cursor", "ods_api_raw_blobs",
-        ["retention_policy_id", "received_at", "id"],
-        postgresql_where=sa.text("storage_mode = 'database' AND payload_json IS NOT NULL"),
-    )
     op.create_table(
         "biz_walmart_ad_item_history",
         sa.Column("source_blob_id", UUID(as_uuid=True), nullable=False),
@@ -112,4 +107,3 @@ def downgrade() -> None:
     op.drop_index("ix_wad_hist_campaign", table_name="biz_walmart_ad_item_history")
     op.drop_index("ix_wad_hist_item_seen", table_name="biz_walmart_ad_item_history")
     op.drop_table("biz_walmart_ad_item_history")
-    op.drop_index("ix_ad_raw_cursor", table_name="ods_api_raw_blobs")
