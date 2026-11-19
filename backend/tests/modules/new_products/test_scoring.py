@@ -3,6 +3,7 @@
 from copy import deepcopy
 from decimal import Decimal
 
+from app.modules.new_products.risk_conditions import default_risk_rules
 from app.modules.new_products.rules import DEFAULT_PARAMETERS, DEFAULT_WEIGHTS, validate
 from app.modules.new_products.scoring import evaluate
 
@@ -28,11 +29,8 @@ def config():
         },
         "scoreCriteria": {"market": [""] * 5},
         "penalties": [],
-        "vetoes": [
-            {"name": "ROI 低（Pass）", "enabled": True},
-            {"name": "ROI 低（评级上限）", "enabled": True},
-            {"name": "毛利率过低", "enabled": True},
-        ],
+        "vetoes": [],
+        "riskConditions": default_risk_rules(),
     }
 
 
@@ -114,12 +112,18 @@ def test_paid_ads_without_conversion_zero_acos_cvr_and_cpc_counts():
     assert r["dimensions"]["ad"] == "2"
 
 
-def test_roi_veto_and_cap():
+def test_roi_affects_score_without_retired_generic_veto():
     f = facts()
     f["roi"] = Decimal(".49")
-    assert evaluate(f, config(), 1)["grade"] == "Pass"
+    low = evaluate(f, config(), 1)
+    assert low["grade"] not in (None, "Pass")
+    assert low["risk"] == []
+
     f["roi"] = Decimal(".79")
-    assert evaluate(f, config(), 1)["grade"] in ["B", "C", "D"]
+    high = evaluate(f, config(), 1)
+    assert high["grade"] not in (None, "Pass")
+    assert Decimal(high["dimensions"]["profit"]) > Decimal(low["dimensions"]["profit"])
+    assert Decimal(high["total"]) > Decimal(low["total"])
 
 
 def test_missing_market_blocks_final_rating():

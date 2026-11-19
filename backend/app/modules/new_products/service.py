@@ -27,17 +27,17 @@ from .bulk_read import (
 from .models import (
     ActionEvent,
     MarketScore,
+    NewProductPerformanceCurrent,
+    NewProductRegistry,
     PurchaseApplication,
     RuleVersion,
     TrackingDecision,
-    NewProductRegistry,
-    NewProductPerformanceCurrent,
 )
-from .score_corrections import calculate_effective, overlay, public_correction
 from .persisted_projection import load_persisted_page, merge_persisted_page_row
 from .persisted_read import load_persisted, snapshot_row  # PR337_PERSISTED_DISPLAY_V1
 from .repository import NewProductRepository
 from .sale_stat_order_evidence import reconcile_sale_stat_order_evidence
+from .score_corrections import calculate_effective, overlay, public_correction
 from .scoring import evaluate
 from .testing_profit import FINAL_RESULTS, load_final_decisions, load_testing_profit_page
 from .testing_profit_projection import (
@@ -761,7 +761,7 @@ class NewProductService:
                 overrides[dimension] = str(after)
             try:
                 effective = calculate_effective(system, overrides, config)
-            except (ValueError, KeyError, ArithmeticError) as exc:
+            except (ValueError, KeyError, ArithmeticError):
                 problem("NP_CORRECTION_CALC_INVALID", 409, "无法对已保存的正式测评进行安全重算")
             updated_at = datetime.now(UTC).isoformat()
             event = {
@@ -820,17 +820,21 @@ class NewProductService:
         have been inspected. Never change production semantics implicitly.
         """
         item_keys = None
-        if any((query.np_statuses, query.np_owners, query.np_ratings, query.np_owner_keyword)):
+        np_filters = {
+            name: getattr(query, name, "")
+            for name in ("np_statuses", "np_owners", "np_ratings", "np_owner_keyword")
+        }
+        if any(np_filters.values()):
             from .performance_list_scope import matching_identities
 
             item_keys = matching_identities(
                 self.repo.session,
                 self.db,
                 accounts,
-                statuses=query.np_statuses,
-                owners=query.np_owners,
-                ratings=query.np_ratings,
-                owner_keyword=query.np_owner_keyword,
+                statuses=np_filters["np_statuses"],
+                owners=np_filters["np_owners"],
+                ratings=np_filters["np_ratings"],
+                owner_keyword=np_filters["np_owner_keyword"],
             )
         # PR337_LOCAL_PREVIEW_DISPATCH_EXACT_V5_20261115
         # Explicit four-item preview must use the old bounded snapshot path.

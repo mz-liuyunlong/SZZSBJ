@@ -6,7 +6,7 @@ This module is pure: no database or external API access. All scores 0..10.
 from __future__ import annotations
 
 from copy import deepcopy
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 
 DIMENSIONS = ("speed", "ad", "profit", "trust")
 ORDER = ("S", "A", "B", "C", "D", "Pass")

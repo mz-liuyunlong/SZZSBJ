@@ -253,11 +253,12 @@ def test_unified_dry_run_scoped_advertiser_source_and_missing_types(monkeypatch)
         def commit(self):
             raise AssertionError("Read-only preview cannot commit")
 
-    monkeypatch.setattr(
-        unified_publish,
-        "_eligible_rows",
-        lambda source, item_ids, limit: [{"key": key, "registry_id": "fake"}],
-    )
+    def eligible_for_dry_run(source, item_ids, limit, *, manual_identity=None, after=None):
+        assert manual_identity is None
+        assert after is None
+        return [{"key": key, "registry_id": "fake"}]
+
+    monkeypatch.setattr(unified_publish, "_eligible_rows", eligible_for_dry_run)
     monkeypatch.setattr(
         unified_publish,
         "_candidate_scores",

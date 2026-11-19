@@ -1,8 +1,7 @@
 """Regression: manual V2 scores, protected grades, MART truth, verified zeros."""
 
-from datetime import date, timedelta
+from datetime import date
 from types import SimpleNamespace
-from decimal import Decimal
 
 from app.modules.new_products.rules import DEFAULT_PARAMETERS, DEFAULT_WEIGHTS
 from app.modules.new_products.scoring import evaluate

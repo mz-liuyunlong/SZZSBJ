@@ -1,6 +1,7 @@
 """New-product fast list: status is authoritative and permission-scope safe."""
 
 from datetime import date
+
 from app.modules.new_products.evaluation_policy import evaluation_status
 from app.modules.new_products.performance_list_scope import matching_identities, summary
 

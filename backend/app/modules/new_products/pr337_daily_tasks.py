@@ -38,8 +38,8 @@ def daily_score_tick() -> dict:
         and enabled(SCHEDULE_FLAG)
         and enabled(WRITE_FLAG)
     ):
-        from .unified_publish import execute_unified_job
         from .evaluation_workflow import finalize_automatic
+        from .unified_publish import execute_unified_job
 
         unified = execute_unified_job(limit=500, apply=True)
         # The unified publisher has committed its bounded batches. Formal

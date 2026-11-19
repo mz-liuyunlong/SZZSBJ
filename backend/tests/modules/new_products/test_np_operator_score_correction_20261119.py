@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 import pytest
+
 from app.modules.new_products.score_corrections import calculate_effective, overlay
 
 CONFIG = {

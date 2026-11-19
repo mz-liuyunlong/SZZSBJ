@@ -18,6 +18,7 @@ from sqlalchemy import func, select, text, tuple_
 
 from app.modules.data_pages.models import ListingManagementCurrentMart
 from app.modules.data_pages.repository import LISTING_WFS_LA_LOCKED, PRODUCT_INFO_CURRENT
+
 from .evaluation_policy import evaluation_status
 
 SAMPLE_TAG = "小批量测品"

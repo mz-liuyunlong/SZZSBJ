@@ -7,8 +7,9 @@ Revises: 20261115_0092_role_page_catalog_alignment
 from __future__ import annotations
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
+
+from alembic import op
 
 revision = "20261119_0093_np_market_competitors"
 down_revision = "20261115_0092_role_page_catalog_alignment"
