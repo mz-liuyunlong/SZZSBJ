@@ -92,7 +92,9 @@ def test_yc00697_mart_not_order_v2():
     p = proof(r, start=start, cutoff=start + timedelta(days=13))
     assert (p["orders"], p["units"], p["singles"]) == (13, 15, 11)
     assert abs(Decimal(p["dimensions"]["speed"]) - Decimal("6.0818")) < Decimal(".005")
-    assert abs(Decimal(p["dimensions"]["trust"]) - Decimal("8.233333333333333333333333334")) < Decimal(".005")
+    assert abs(
+        Decimal(p["dimensions"]["trust"]) - Decimal("8.233333333333333333333333334")
+    ) < Decimal(".005")
 
 
 def test_yc00775_isolated_and_scored():

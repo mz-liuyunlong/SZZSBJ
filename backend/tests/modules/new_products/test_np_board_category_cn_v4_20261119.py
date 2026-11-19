@@ -20,15 +20,12 @@ def test_board_category_translations_keep_granularity_and_unknowns():
     )
     assert (
         translate_category(
-            "Auto & Tires > Interior Parts & Accessories > "
-            "Car Organizers > Back Seat Organizers"
+            "Auto & Tires > Interior Parts & Accessories > Car Organizers > Back Seat Organizers"
         )
         == "汽车收纳 / 后座收纳袋"
     )
     assert (
-        translate_category(
-            "Home > Kitchen & Dining > Dining & Entertaining > Drinkware"
-        )
+        translate_category("Home > Kitchen & Dining > Dining & Entertaining > Drinkware")
         == "餐桌用品 / 饮具"
     )
     assert translate_category(None) == "未分类"

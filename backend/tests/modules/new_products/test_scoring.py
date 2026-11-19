@@ -143,9 +143,7 @@ def test_mart_order_units_ratio_regression():
     result = evaluate(f, config(), 1)
     expected = Decimal("8.394736842105263157894736842")
 
-    assert abs(
-        Decimal(result["dimensions"]["trust"]) - expected
-    ) < Decimal("0.00000001")
+    assert abs(Decimal(result["dimensions"]["trust"]) - expected) < Decimal("0.00000001")
 
 
 def test_missing_mart_ratio_does_not_use_legacy_singles():

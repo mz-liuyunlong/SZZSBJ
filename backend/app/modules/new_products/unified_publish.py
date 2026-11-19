@@ -200,12 +200,14 @@ def _read_cumulative_trust_evidence(source, keys, first_dates, cutoff):
     for key in keys:
         first = (first_dates.get(key) or {}).get("day")
         if isinstance(first, date) and first <= cutoff:
-            wanted.append({
-                "account": key[0],
-                "store": key[1],
-                "item": key[2],
-                "start_day": first.isoformat(),
-            })
+            wanted.append(
+                {
+                    "account": key[0],
+                    "store": key[1],
+                    "item": key[2],
+                    "start_day": first.isoformat(),
+                }
+            )
 
     if not wanted:
         return {}
@@ -229,9 +231,7 @@ def _read_cumulative_trust_evidence(source, keys, first_dates, cutoff):
     """)
 
     daily = defaultdict(list)
-    for row in source.execute(
-        sql, {"wanted": json.dumps(wanted), "cutoff": cutoff}
-    ).mappings():
+    for row in source.execute(sql, {"wanted": json.dumps(wanted), "cutoff": cutoff}).mappings():
         key = (
             str(row["account"]),
             str(row["store"]),
@@ -273,13 +273,7 @@ def _read_cumulative_trust_evidence(source, keys, first_dates, cutoff):
             n = whole(row["order_count"])
             q = whole(row["sales_qty"])
 
-            if (
-                day in dates
-                or n is None
-                or q is None
-                or q < n
-                or (n == 0 and q != 0)
-            ):
+            if day in dates or n is None or q is None or q < n or (n == 0 and q != 0):
                 valid = False
                 break
 
@@ -414,9 +408,7 @@ def _candidate_scores(
             f["ad_spend_usd"] = score_window_ad_spend
             f["ad_scoring_window_start_la"] = f.get("first_wfs_available_date_la")
             f["ad_scoring_window_end_la"] = (
-                cutoff
-                if isinstance(f.get("ad_scoring_window_start_la"), date)
-                else None
+                cutoff if isinstance(f.get("ad_scoring_window_start_la"), date) else None
             )
             ev = evaluate(f, config, version)
             results[key] = {"facts": f, "evaluation": ev, "rule_version": version}

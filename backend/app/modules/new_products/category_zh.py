@@ -211,1837 +211,1207 @@ def _normalize(value: str) -> str:
 # User-verified source paths; exact lookup before broad term matching.
 _EXACT_CATEGORY_PATH_ZH = {
     (
-        'Arts Crafts & Sewing > Arts & Crafts Furniture and Storage > Craf'
-        't Storage > Craft & Hobby Storage Bags & Cases'
-    ):
-        '手工艺 / 手工材料收纳包及收纳盒',
+        "Arts Crafts & Sewing > Arts & Crafts Furniture and Storage > Craf"
+        "t Storage > Craft & Hobby Storage Bags & Cases"
+    ): "手工艺 / 手工材料收纳包及收纳盒",
     (
-        'Arts Crafts & Sewing > Beading & Jewelry Making > Beading Supplie'
-        's > Beading Storage'
-    ):
-        '手工艺 / 串珠材料收纳',
+        "Arts Crafts & Sewing > Beading & Jewelry Making > Beading Supplies > Beading Storage"
+    ): "手工艺 / 串珠材料收纳",
     (
-        'Arts Crafts & Sewing > Crafting > Craft Supplies > Basic Craft Su'
-        'pplies > Shop all Basic Craft Supplies'
-    ):
-        '手工艺 / 基础手工材料',
+        "Arts Crafts & Sewing > Crafting > Craft Supplies > Basic Craft Su"
+        "pplies > Shop all Basic Craft Supplies"
+    ): "手工艺 / 基础手工材料",
+    ("Arts Crafts & Sewing > Fabric > Shop Fabric by Size > Fabric by the Yard"): (
+        "缝纫布料 / 按码销售布料"
+    ),
+    ("Auto & Tires > Automotive Replacement Parts > Replacement Auto Parts"): (
+        "汽车用品 / 汽车替换零件"
+    ),
+    "Auto & Tires > Automotive Tools & Equipment > Auto Tool Storage": "汽车用品 / 车载工具收纳",
     (
-        'Arts Crafts & Sewing > Fabric '
-        '> Shop Fabric by Size > Fabric'
-        ' by the Yard'
-    ): (
-        '缝纫布料 / 按码销售布料'
+        "Auto & Tires > Car Safety & Car Security > Car Anti-Theft Devices > Steering Wheel Locks"
+    ): "汽车安全 / 方向盘防盗锁",
+    (
+        "Auto & Tires > Exterior Car Parts & Accessories > Car & Truck Rac"
+        "ks, Cargo Carriers & Ratchet Straps > Bungee Cords and Ratchet St"
+        "raps > Bungee Cords > Bungee Cords with Hooks"
+    ): "汽车用品 / 带钩弹力绑绳",
+    (
+        "Auto & Tires > Exterior Car Parts & Accessories > Towing Hitches,"
+        " Winches & Accessories > Tie Downs, Anchors & Bungees > Tie Downs"
+        " And Straps > Shop Tie Downs And Straps by Vehicle > Car Straps"
+    ): "汽车用品 / 车辆捆绑带",
+    (
+        "Auto & Tires > Interior Parts & Accessories > Car Organizers > Back Seat Organizers"
+    ): "汽车收纳 / 后座收纳袋",
+    (
+        "Auto & Tires > Interior Parts & Accessories > Car Organizers > Phone Car Mounts"
+    ): "车载配件 / 手机支架",
+    (
+        "Auto & Tires > Interior Parts & Accessories > Steering Wheel Cove"
+        "rs > Steering Wheel Covers by Color > Black Steering Wheel Covers"
+    ): "汽车内饰 / 黑色方向盘套",
+    (
+        "Auto & Tires > Tires & Accessories > Tire and Wheel Accessories >"
+        " Tire Inflators > Tire Inflators with Gauge"
+    ): "轮胎工具 / 带压力表充气泵",
+    "Baby > Health & Safety > Baby Proofing": "母婴安全 / 婴幼儿防护用品",
+    "Beauty > Makeup > Makeup Tools and Accessories": "美妆工具 / 化妆工具及配件",
+    "Beauty > Womens Hair Accessories": "美妆配饰 / 女士发饰",
+    "Clothing > Bags & Accessories > Accessories > Keychains": "服饰配件 / 钥匙扣",
+    "Electronics > Audio > Audio Visual Accessories": "电子影音 / 音视频配件",
+    (
+        "Electronics > Computers, Laptops and Tablets > Computer Accessori"
+        "es > Computer Keyboards & Mice > Computer Mouse & Mouse Pads > Mo"
+        "use Pads & Wrist Rests"
+    ): "电脑配件 / 鼠标垫与腕托",
+    "Electronics > Electronics Value Bundles": "电子产品 / 组合套装",
+    "Health and Medicine > Massage > Shop all Massagers": "健康按摩 / 按摩器",
+    (
+        "Health and Medicine > Sports Medicine & Injury Recovery Solution "
+        "> Return to Function After Injury > Recover From Surgery > Bathin"
+        "g After Surgery"
+    ): "康复护理 / 术后洗浴辅助用品",
+    (
+        "Home > Appliances > Appliances Parts & Accessories > Dishwasher P"
+        "arts > Dishwasher Accessories"
+    ): "家电配件 / 洗碗机配件",
+    "Home > Appliances > Appliances Parts & Accessories > Microwave Parts": "家电配件 / 微波炉零件",
+    (
+        "Home > Appliances > Appliances Parts & Accessories > Refrigerator"
+        " & Freezer Parts > Refrigerator Accessories"
+    ): "家电配件 / 冰箱配件",
+    (
+        "Home > Appliances > Appliances Parts & Accessories > Washer & Dry"
+        "er Parts > Dryer Lint Screens"
+    ): "家电配件 / 烘干机绒毛过滤网",
+    (
+        "Home > Appliances > Appliances Parts & Accessories > Washer & Dry"
+        "er Parts > Shop All Washer & Dryer Parts"
+    ): "家电配件 / 洗衣机及烘干机零件",
+    (
+        "Home > Appliances > Kitchen Appliances > Coffee Shop > Coffee Decanters & Carafes"
+    ): "咖啡器具 / 咖啡壶与玻璃分享壶",
+    (
+        "Home > Appliances > Kitchen Appliances > Kitchen Appliance Parts "
+        "& Accessories > Coffee & Espresso Parts and Accessories"
+    ): "咖啡器具 / 咖啡机及意式咖啡机配件",
+    (
+        "Home > Appliances > Kitchen Appliances > Mixers & Attachments > S"
+        "hop All Mixers & Attachments"
+    ): "厨房电器 / 搅拌机及配件",
+    (
+        "Home > Appliances > Vacuums, Steamers & Floor Care > Steam Mop Pads & Brushes"
+    ): "清洁电器 / 蒸汽拖把替换垫和刷头",
+    (
+        "Home > Appliances > Vacuums, Steamers & Floor Care > Vacuum Accessories & Parts"
+    ): "清洁电器 / 吸尘器配件与零件",
+    "Home > Bath > Bathroom Accessories > Soap Dispensers": "浴室用品 / 皂液器",
+    "Home > Bath > Bathroom Accessories > Tissue Box Cover": "浴室用品 / 纸巾盒罩",
+    "Home > Bath > Bathroom Rugs & Bath Mats > Bathtub Mats": "浴室防滑 / 浴缸防滑垫",
+    "Home > Bath > Bathroom Storage": "浴室用品 / 浴室收纳",
+    (
+        "Home > Decor > Artificial Plants and Flowers > All Artificial Plants and Flowers"
+    ): "家居装饰 / 仿真植物与花卉",
+    "Home > Decor > Artificial Plants and Flowers > Artificial Flowers": "家居装饰 / 仿真花",
+    "Home > Decor > Candles & Home Fragrance > Candle Holders": "家居香氛 / 烛台",
+    (
+        "Home > Decor > Curtains & Window Treatments > Curtain Hanging Acc"
+        "essories > Curtain Hardware"
+    ): "窗帘配件 / 窗帘五金",
+    (
+        "Home > Decor > Curtains & Window Treatments > Curtain Hanging Acc"
+        "essories > Curtain Tie Backs"
+    ): "窗帘配件 / 窗帘绑带",
+    ("Home > Decor > Curtains & Window Treatments > Curtain Rods > Shop Curtain Rods"): (
+        "窗帘配件 / 窗帘杆"
+    ),
+    "Home > Decor > Decorative Accents > Decorative Trays": "家居装饰 / 装饰托盘",
+    "Home > Decor > Decorative Accents > Knick-Knacks": "家居装饰 / 小摆件",
+    "Home > Decor > Decorative Accents > Vases": "家居装饰 / 花瓶",
+    "Home > Decor > Rugs > Rug Pads > All Rug Pads & Grippers": "地毯配件 / 防滑垫及固定用品",
+    "Home > Decor > Shop All Decor": "家居装饰 / 综合装饰用品",
+    "Home > Decor > Slipcovers": "家具防护 / 沙发家具罩",
+    "Home > Decor > Wall Art > Metal Wall Art": "墙面装饰 / 金属墙饰",
+    "Home > Decor > Wall Decor > Shop All Wall Decor": "墙面装饰 / 墙面装饰用品",
+    "Home > Furniture > Living Room Furniture > Recliners > All Recliners": "客厅家具 / 躺椅",
+    "Home > Holiday Decor > Christmas Decor > Christmas Trim a Home": "节庆装饰 / 圣诞家居饰品",
+    "Home > Kitchen & Dining > Bakeware > Measuring Cups": "厨房烘焙 / 量杯",
+    (
+        "Home > Kitchen & Dining > Dining & Entertaining > Bar & Wine Accessories > Bar Tools"
+    ): "餐酒工具 / 调酒工具",
+    ("Home > Kitchen & Dining > Dining & Entertaining > Barware > Moscow Mule Mugs"): (
+        "酒具 / 莫斯科骡子铜杯"
+    ),
+    "Home > Kitchen & Dining > Dining & Entertaining > Drinkware": "餐桌用品 / 饮具",
+    ("Home > Kitchen & Dining > Dining & Entertaining > Serveware > Cake Stands"): (
+        "餐桌摆设 / 蛋糕架"
+    ),
+    "Home > Kitchen & Dining > Dining & Entertaining > Serveware > Coasters": "餐桌用品 / 杯垫",
+    (
+        "Home > Kitchen & Dining > Dining & Entertaining > Serveware > Condiment Servers"
+    ): "餐桌用品 / 调味品盛放器",
+    "Home > Kitchen & Dining > Fridge Magnets": "厨房用品 / 冰箱贴",
+    (
+        "Home > Kitchen & Dining > Kitchen Storage & Organization > Pantry Organization"
+    ): "厨房收纳 / 食品储藏室整理",
+    "Home > Kitchen & Dining > Pots & Pans > Griddles & Grill Pans": "厨房锅具 / 平底煎盘与烤盘",
+    ("Home > Kitchen & Dining > Tools & Gadgets > Baking & Pastry Tools"): (
+        "厨房烘焙 / 烘焙与糕点工具"
+    ),
+    "Home > Kitchen & Dining > Tools & Gadgets > Can Openers": "厨房工具 / 开罐器",
+    "Home > Kitchen & Dining > Tools & Gadgets > Food Prep": "厨房工具 / 食材预处理工具",
+    (
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadgets > Cheese Slicers"
+    ): "厨房工具 / 奶酪切片器",
+    (
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadgets > Chopping & Slicing"
+    ): "厨房工具 / 切碎与切片工具",
+    (
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadgets > Cooking Utensils"
+    ): "厨房工具 / 烹饪用具",
+    (
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadgets > Food Peelers"
+    ): "厨房工具 / 食材削皮器",
+    (
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadgets > Pasta Tools"
+    ): "厨房工具 / 意面工具",
+    "Home > Luggage > Garment Bags": "旅行箱包 / 衣物防皱袋",
+    "Home > Luggage > Travel Accessories > Travel Pillows": "旅行用品 / 旅行枕",
+    (
+        "Home > Storage & Organization > Closet Organizers > Hanging Closet Organizers"
+    ): "衣柜收纳 / 悬挂式衣柜整理器",
+    ("Home > Storage & Organization > Laundry Storage & Organization > Drying Racks"): (
+        "洗衣收纳 / 晾衣架"
+    ),
+    "Home > Storage & Organization > Laundry Storage & Organization > Hangers": "洗衣收纳 / 衣架",
+    "Home > Storage & Organization > Shop all Storage & Organization": "家居收纳 / 综合收纳用品",
+    "Home > Storage & Organization > Storage Baskets & Bins > Baskets": "家居收纳 / 收纳篮",
+    ("Home > Storage & Organization > Storage Containers > Shop Storage Containers"): (
+        "家居收纳 / 收纳容器"
+    ),
+    "Home > Storage & Organization > Trash Cans > Shop All Trash Cans": "家居收纳 / 垃圾桶",
+    "Home Improvement > Building Materials > Stair Parts": "装修材料 / 楼梯配件",
+    (
+        "Home Improvement > Doors and Gates > Garage Door Openers and Hard"
+        "ware > Garage Door Hardware > All Garage Door Hardware"
+    ): "车库五金 / 车库门配件",
+    (
+        "Home Improvement > Electrical > Cable Management > Zip Ties > Zip"
+        " Tie Sizes > 12 Inch Zip Ties"
+    ): "电工配件 / 12英寸扎带",
+    (
+        "Home Improvement > Electrical > Extension Cord Reels > Extension Cord Holders"
+    ): "电工配件 / 延长线收纳架",
+    "Home Improvement > Emergency Prep > Storm & Flood Prep": "应急防护 / 暴风雨与洪水防护用品",
+    (
+        "Home Improvement > Hardware > Brackets and Angle Irons > All Brackets and Angle Irons"
+    ): "五金连接件 / 支架与角铁",
+    ("Home Improvement > Hardware > Door Hardware > Door Locks and Deadbolts"): (
+        "门窗五金 / 门锁与锁舌"
+    ),
+    "Home Improvement > Hardware > Furniture Hardware > Furniture Pads": "家具五金 / 家具防护垫",
+    "Home Improvement > Hardware > Hinges > Cabinet Hinges": "铰链五金 / 橱柜铰链",
+    "Home Improvement > Hardware > Hinges > Door Hinges": "铰链五金 / 门铰链",
+    "Home Improvement > Hardware > Hooks > Coat Hooks": "挂钩五金 / 衣帽挂钩",
+    "Home Improvement > Hardware > Hooks > House Hooks": "挂钩五金 / 家用挂钩",
+    ("Home Improvement > Hardware > Hooks > Picture Hangers > Picture Hanging Wire"): (
+        "挂画配件 / 挂画钢丝"
+    ),
+    "Home Improvement > Hardware > Hooks > Picture Hangers > Plate Hangers": "挂画配件 / 盘架挂钩",
+    (
+        "Home Improvement > Heating, Cooling, & Air Quality > Air Quality "
+        "> Air Purifier Filters > All Air Purifier Filters"
+    ): "空气净化 / 空气净化器滤芯",
+    (
+        "Home Improvement > Heating, Cooling, & Air Quality > Cooling > Ai"
+        "r Conditioners > Air Conditioner Parts & Accessories > All Air Co"
+        "nditioner Parts & Accessories"
+    ): "空调配件 / 空调零件及附件",
+    (
+        "Home Improvement > Heating, Cooling, & Air Quality > HVAC Ducting"
+        " and Ventilation > Ventilation"
+    ): "暖通配件 / 通风用品",
+    (
+        "Home Improvement > Plumbing > Shop Plumbing by Fixture > Kitchen "
+        "Sinks Plumbing > Kitchen Sink Drains"
+    ): "厨房水管 / 水槽排水配件",
+    (
+        "Home Improvement > Plumbing > Shop Plumbing by Fixture > Shower a"
+        "nd Bathtub Plumbing > Bathtub Stoppers"
+    ): "浴缸水管 / 浴缸排水塞",
+    (
+        "Home Improvement > Plumbing > Shop Plumbing by Fixture > Shower a"
+        "nd Bathtub Plumbing > Shower Traps"
+    ): "淋浴水管 / 淋浴排水存水弯",
+    (
+        "Home Improvement > Plumbing > Shop Plumbing by Fixture > Toilet P"
+        "lumbing > Toilet Installation & Repair Tools > Toilet Installatio"
+        "n Kits"
+    ): "马桶安装 / 马桶安装套件",
+    "Home Improvement > Tools > Hand Tools > Scrapers": "手动工具 / 刮刀",
+    ("Home Improvement > Tools > Tool Equipment & Storage > Wet"): (
+        "工具设备 / 湿用类别（源类目不完整）"
+    ),
+    "Home Improvement > Weatherproofing > Insulation > Attic Insulation": "保温隔热 / 阁楼隔热材料",
+    ("Home Improvement > Weatherproofing > Insulation > Fiberglass Insulation"): (
+        "保温隔热 / 玻璃纤维保温棉"
     ),
     (
-        'Auto & Tires > Automotive Repl'
-        'acement Parts > Replacement Au'
-        'to Parts'
-    ): (
-        '汽车用品 / 汽车替换零件'
-    ),
-    'Auto & Tires > Automotive Tools & Equipment > Auto Tool Storage': '汽车用品 / 车载工具收纳',
+        "Home Improvement > Windows & Window Supplies > Window Weatherproo"
+        "fing > Window Weatherstripping"
+    ): "门窗密封 / 窗户密封条",
     (
-        'Auto & Tires > Car Safety & Car Security > Car Anti-Theft Devices'
-        ' > Steering Wheel Locks'
-    ):
-        '汽车安全 / 方向盘防盗锁',
+        "Household Essentials > Cleaning Supplies > Cleaning Tools > Cleaning Refills"
+    ): "清洁用品 / 清洁工具替换件",
     (
-        'Auto & Tires > Exterior Car Parts & Accessories > Car & Truck Rac'
-        'ks, Cargo Carriers & Ratchet Straps > Bungee Cords and Ratchet St'
-        'raps > Bungee Cords > Bungee Cords with Hooks'
-    ):
-        '汽车用品 / 带钩弹力绑绳',
+        "Household Essentials > Cleaning Supplies > Cleaning Tools > Dusters > All Dusters"
+    ): "清洁用品 / 除尘掸",
     (
-        'Auto & Tires > Exterior Car Parts & Accessories > Towing Hitches,'
-        ' Winches & Accessories > Tie Downs, Anchors & Bungees > Tie Downs'
-        ' And Straps > Shop Tie Downs And Straps by Vehicle > Car Straps'
-    ):
-        '汽车用品 / 车辆捆绑带',
-    (
-        'Auto & Tires > Interior Parts & Accessories > Car Organizers > Ba'
-        'ck Seat Organizers'
-    ):
-        '汽车收纳 / 后座收纳袋',
-    (
-        'Auto & Tires > Interior Parts & Accessories > Car Organizers > Ph'
-        'one Car Mounts'
-    ):
-        '车载配件 / 手机支架',
-    (
-        'Auto & Tires > Interior Parts & Accessories > Steering Wheel Cove'
-        'rs > Steering Wheel Covers by Color > Black Steering Wheel Covers'
-    ):
-        '汽车内饰 / 黑色方向盘套',
-    (
-        'Auto & Tires > Tires & Accessories > Tire and Wheel Accessories >'
-        ' Tire Inflators > Tire Inflators with Gauge'
-    ):
-        '轮胎工具 / 带压力表充气泵',
-    'Baby > Health & Safety > Baby Proofing': '母婴安全 / 婴幼儿防护用品',
-    'Beauty > Makeup > Makeup Tools and Accessories': '美妆工具 / 化妆工具及配件',
-    'Beauty > Womens Hair Accessories': '美妆配饰 / 女士发饰',
-    'Clothing > Bags & Accessories > Accessories > Keychains': '服饰配件 / 钥匙扣',
-    'Electronics > Audio > Audio Visual Accessories': '电子影音 / 音视频配件',
-    (
-        'Electronics > Computers, Laptops and Tablets > Computer Accessori'
-        'es > Computer Keyboards & Mice > Computer Mouse & Mouse Pads > Mo'
-        'use Pads & Wrist Rests'
-    ):
-        '电脑配件 / 鼠标垫与腕托',
-    'Electronics > Electronics Value Bundles': '电子产品 / 组合套装',
-    'Health and Medicine > Massage > Shop all Massagers': '健康按摩 / 按摩器',
-    (
-        'Health and Medicine > Sports Medicine & Injury Recovery Solution '
-        '> Return to Function After Injury > Recover From Surgery > Bathin'
-        'g After Surgery'
-    ):
-        '康复护理 / 术后洗浴辅助用品',
-    (
-        'Home > Appliances > Appliances Parts & Accessories > Dishwasher P'
-        'arts > Dishwasher Accessories'
-    ):
-        '家电配件 / 洗碗机配件',
-    'Home > Appliances > Appliances Parts & Accessories > Microwave Parts': '家电配件 / 微波炉零件',
-    (
-        'Home > Appliances > Appliances Parts & Accessories > Refrigerator'
-        ' & Freezer Parts > Refrigerator Accessories'
-    ):
-        '家电配件 / 冰箱配件',
-    (
-        'Home > Appliances > Appliances Parts & Accessories > Washer & Dry'
-        'er Parts > Dryer Lint Screens'
-    ):
-        '家电配件 / 烘干机绒毛过滤网',
-    (
-        'Home > Appliances > Appliances Parts & Accessories > Washer & Dry'
-        'er Parts > Shop All Washer & Dryer Parts'
-    ):
-        '家电配件 / 洗衣机及烘干机零件',
-    (
-        'Home > Appliances > Kitchen Appliances > Coffee Shop > Coffee Dec'
-        'anters & Carafes'
-    ):
-        '咖啡器具 / 咖啡壶与玻璃分享壶',
-    (
-        'Home > Appliances > Kitchen Appliances > Kitchen Appliance Parts '
-        '& Accessories > Coffee & Espresso Parts and Accessories'
-    ):
-        '咖啡器具 / 咖啡机及意式咖啡机配件',
-    (
-        'Home > Appliances > Kitchen Appliances > Mixers & Attachments > S'
-        'hop All Mixers & Attachments'
-    ):
-        '厨房电器 / 搅拌机及配件',
-    (
-        'Home > Appliances > Vacuums, Steamers & Floor Care > Steam Mop Pa'
-        'ds & Brushes'
-    ):
-        '清洁电器 / 蒸汽拖把替换垫和刷头',
-    (
-        'Home > Appliances > Vacuums, Steamers & Floor Care > Vacuum Acces'
-        'sories & Parts'
-    ):
-        '清洁电器 / 吸尘器配件与零件',
-    'Home > Bath > Bathroom Accessories > Soap Dispensers': '浴室用品 / 皂液器',
-    'Home > Bath > Bathroom Accessories > Tissue Box Cover': '浴室用品 / 纸巾盒罩',
-    'Home > Bath > Bathroom Rugs & Bath Mats > Bathtub Mats': '浴室防滑 / 浴缸防滑垫',
-    'Home > Bath > Bathroom Storage': '浴室用品 / 浴室收纳',
-    (
-        'Home > Decor > Artificial Plants and Flowers > All Artificial Pla'
-        'nts and Flowers'
-    ):
-        '家居装饰 / 仿真植物与花卉',
-    'Home > Decor > Artificial Plants and Flowers > Artificial Flowers': '家居装饰 / 仿真花',
-    'Home > Decor > Candles & Home Fragrance > Candle Holders': '家居香氛 / 烛台',
-    (
-        'Home > Decor > Curtains & Window Treatments > Curtain Hanging Acc'
-        'essories > Curtain Hardware'
-    ):
-        '窗帘配件 / 窗帘五金',
-    (
-        'Home > Decor > Curtains & Window Treatments > Curtain Hanging Acc'
-        'essories > Curtain Tie Backs'
-    ):
-        '窗帘配件 / 窗帘绑带',
-    (
-        'Home > Decor > Curtains & Wind'
-        'ow Treatments > Curtain Rods >'
-        ' Shop Curtain Rods'
-    ): (
-        '窗帘配件 / 窗帘杆'
-    ),
-    'Home > Decor > Decorative Accents > Decorative Trays': '家居装饰 / 装饰托盘',
-    'Home > Decor > Decorative Accents > Knick-Knacks': '家居装饰 / 小摆件',
-    'Home > Decor > Decorative Accents > Vases': '家居装饰 / 花瓶',
-    'Home > Decor > Rugs > Rug Pads > All Rug Pads & Grippers': '地毯配件 / 防滑垫及固定用品',
-    'Home > Decor > Shop All Decor': '家居装饰 / 综合装饰用品',
-    'Home > Decor > Slipcovers': '家具防护 / 沙发家具罩',
-    'Home > Decor > Wall Art > Metal Wall Art': '墙面装饰 / 金属墙饰',
-    'Home > Decor > Wall Decor > Shop All Wall Decor': '墙面装饰 / 墙面装饰用品',
-    'Home > Furniture > Living Room Furniture > Recliners > All Recliners': '客厅家具 / 躺椅',
-    'Home > Holiday Decor > Christmas Decor > Christmas Trim a Home': '节庆装饰 / 圣诞家居饰品',
-    'Home > Kitchen & Dining > Bakeware > Measuring Cups': '厨房烘焙 / 量杯',
-    (
-        'Home > Kitchen & Dining > Dining & Entertaining > Bar & Wine Acce'
-        'ssories > Bar Tools'
-    ):
-        '餐酒工具 / 调酒工具',
-    (
-        'Home > Kitchen & Dining > Dini'
-        'ng & Entertaining > Barware > '
-        'Moscow Mule Mugs'
-    ): (
-        '酒具 / 莫斯科骡子铜杯'
-    ),
-    'Home > Kitchen & Dining > Dining & Entertaining > Drinkware': '餐桌用品 / 饮具',
-    (
-        'Home > Kitchen & Dining > Dini'
-        'ng & Entertaining > Serveware '
-        '> Cake Stands'
-    ): (
-        '餐桌摆设 / 蛋糕架'
-    ),
-    'Home > Kitchen & Dining > Dining & Entertaining > Serveware > Coasters': '餐桌用品 / 杯垫',
-    (
-        'Home > Kitchen & Dining > Dining & Entertaining > Serveware > Con'
-        'diment Servers'
-    ):
-        '餐桌用品 / 调味品盛放器',
-    'Home > Kitchen & Dining > Fridge Magnets': '厨房用品 / 冰箱贴',
-    (
-        'Home > Kitchen & Dining > Kitchen Storage & Organization > Pantry'
-        ' Organization'
-    ):
-        '厨房收纳 / 食品储藏室整理',
-    'Home > Kitchen & Dining > Pots & Pans > Griddles & Grill Pans': '厨房锅具 / 平底煎盘与烤盘',
-    (
-        'Home > Kitchen & Dining > Tool'
-        's & Gadgets > Baking & Pastry '
-        'Tools'
-    ): (
-        '厨房烘焙 / 烘焙与糕点工具'
-    ),
-    'Home > Kitchen & Dining > Tools & Gadgets > Can Openers': '厨房工具 / 开罐器',
-    'Home > Kitchen & Dining > Tools & Gadgets > Food Prep': '厨房工具 / 食材预处理工具',
-    (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Cheese Slicers'
-    ):
-        '厨房工具 / 奶酪切片器',
-    (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Chopping & Slicing'
-    ):
-        '厨房工具 / 切碎与切片工具',
-    (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Cooking Utensils'
-    ):
-        '厨房工具 / 烹饪用具',
-    (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Food Peelers'
-    ):
-        '厨房工具 / 食材削皮器',
-    (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Pasta Tools'
-    ):
-        '厨房工具 / 意面工具',
-    'Home > Luggage > Garment Bags': '旅行箱包 / 衣物防皱袋',
-    'Home > Luggage > Travel Accessories > Travel Pillows': '旅行用品 / 旅行枕',
-    (
-        'Home > Storage & Organization > Closet Organizers > Hanging Close'
-        't Organizers'
-    ):
-        '衣柜收纳 / 悬挂式衣柜整理器',
-    (
-        'Home > Storage & Organization '
-        '> Laundry Storage & Organizati'
-        'on > Drying Racks'
-    ): (
-        '洗衣收纳 / 晾衣架'
-    ),
-    'Home > Storage & Organization > Laundry Storage & Organization > Hangers': '洗衣收纳 / 衣架',
-    'Home > Storage & Organization > Shop all Storage & Organization': '家居收纳 / 综合收纳用品',
-    'Home > Storage & Organization > Storage Baskets & Bins > Baskets': '家居收纳 / 收纳篮',
-    (
-        'Home > Storage & Organization '
-        '> Storage Containers > Shop St'
-        'orage Containers'
-    ): (
-        '家居收纳 / 收纳容器'
-    ),
-    'Home > Storage & Organization > Trash Cans > Shop All Trash Cans': '家居收纳 / 垃圾桶',
-    'Home Improvement > Building Materials > Stair Parts': '装修材料 / 楼梯配件',
-    (
-        'Home Improvement > Doors and Gates > Garage Door Openers and Hard'
-        'ware > Garage Door Hardware > All Garage Door Hardware'
-    ):
-        '车库五金 / 车库门配件',
-    (
-        'Home Improvement > Electrical > Cable Management > Zip Ties > Zip'
-        ' Tie Sizes > 12 Inch Zip Ties'
-    ):
-        '电工配件 / 12英寸扎带',
-    (
-        'Home Improvement > Electrical > Extension Cord Reels > Extension '
-        'Cord Holders'
-    ):
-        '电工配件 / 延长线收纳架',
-    'Home Improvement > Emergency Prep > Storm & Flood Prep': '应急防护 / 暴风雨与洪水防护用品',
-    (
-        'Home Improvement > Hardware > Brackets and Angle Irons > All Brac'
-        'kets and Angle Irons'
-    ):
-        '五金连接件 / 支架与角铁',
-    (
-        'Home Improvement > Hardware > '
-        'Door Hardware > Door Locks and'
-        ' Deadbolts'
-    ): (
-        '门窗五金 / 门锁与锁舌'
-    ),
-    'Home Improvement > Hardware > Furniture Hardware > Furniture Pads': '家具五金 / 家具防护垫',
-    'Home Improvement > Hardware > Hinges > Cabinet Hinges': '铰链五金 / 橱柜铰链',
-    'Home Improvement > Hardware > Hinges > Door Hinges': '铰链五金 / 门铰链',
-    'Home Improvement > Hardware > Hooks > Coat Hooks': '挂钩五金 / 衣帽挂钩',
-    'Home Improvement > Hardware > Hooks > House Hooks': '挂钩五金 / 家用挂钩',
-    (
-        'Home Improvement > Hardware > '
-        'Hooks > Picture Hangers > Pict'
-        'ure Hanging Wire'
-    ): (
-        '挂画配件 / 挂画钢丝'
-    ),
-    'Home Improvement > Hardware > Hooks > Picture Hangers > Plate Hangers': '挂画配件 / 盘架挂钩',
-    (
-        'Home Improvement > Heating, Cooling, & Air Quality > Air Quality '
-        '> Air Purifier Filters > All Air Purifier Filters'
-    ):
-        '空气净化 / 空气净化器滤芯',
-    (
-        'Home Improvement > Heating, Cooling, & Air Quality > Cooling > Ai'
-        'r Conditioners > Air Conditioner Parts & Accessories > All Air Co'
-        'nditioner Parts & Accessories'
-    ):
-        '空调配件 / 空调零件及附件',
-    (
-        'Home Improvement > Heating, Cooling, & Air Quality > HVAC Ducting'
-        ' and Ventilation > Ventilation'
-    ):
-        '暖通配件 / 通风用品',
-    (
-        'Home Improvement > Plumbing > Shop Plumbing by Fixture > Kitchen '
-        'Sinks Plumbing > Kitchen Sink Drains'
-    ):
-        '厨房水管 / 水槽排水配件',
-    (
-        'Home Improvement > Plumbing > Shop Plumbing by Fixture > Shower a'
-        'nd Bathtub Plumbing > Bathtub Stoppers'
-    ):
-        '浴缸水管 / 浴缸排水塞',
-    (
-        'Home Improvement > Plumbing > Shop Plumbing by Fixture > Shower a'
-        'nd Bathtub Plumbing > Shower Traps'
-    ):
-        '淋浴水管 / 淋浴排水存水弯',
-    (
-        'Home Improvement > Plumbing > Shop Plumbing by Fixture > Toilet P'
-        'lumbing > Toilet Installation & Repair Tools > Toilet Installatio'
-        'n Kits'
-    ):
-        '马桶安装 / 马桶安装套件',
-    'Home Improvement > Tools > Hand Tools > Scrapers': '手动工具 / 刮刀',
-    (
-        'Home Improvement > Tools > Too'
-        'l Equipment & Storage > Wet'
-    ): (
-        '工具设备 / 湿用类别（源类目不完整）'
-    ),
-    'Home Improvement > Weatherproofing > Insulation > Attic Insulation': '保温隔热 / 阁楼隔热材料',
-    (
-        'Home Improvement > Weatherproo'
-        'fing > Insulation > Fiberglass'
-        ' Insulation'
-    ): (
-        '保温隔热 / 玻璃纤维保温棉'
+        "Household Essentials > Cleaning Supplies > Cleaning Tools > Spong"
+        "es and Scrubbers > Scour Pads"
+    ): "清洁用品 / 百洁布与擦洗垫",
+    "Household Essentials > Cleaning Supplies > Mops > All Mops": "清洁用品 / 拖把",
+    ("Household Essentials > Paper & Plastic > Food Storage Bags > Food Bags"): (
+        "食品包装 / 食品保鲜袋"
     ),
     (
-        'Home Improvement > Windows & Window Supplies > Window Weatherproo'
-        'fing > Window Weatherstripping'
-    ):
-        '门窗密封 / 窗户密封条',
+        "Industrial & Scientific > Food Service Equipment & Supplies > Foo"
+        "d Holding and Warming Equipment > Steam Tables and Food Wells"
+    ): "商用餐饮 / 保温餐台与水浴保温槽",
     (
-        'Household Essentials > Cleaning Supplies > Cleaning Tools > Clean'
-        'ing Refills'
-    ):
-        '清洁用品 / 清洁工具替换件',
+        "Industrial & Scientific > Janitorial & Sanitation Supplies > Jani"
+        "torial Disposables > Commercial Toilet Paper Dispensers & Holders"
+    ): "商用清洁 / 卫生纸分配器及支架",
     (
-        'Household Essentials > Cleaning Supplies > Cleaning Tools > Duste'
-        'rs > All Dusters'
-    ):
-        '清洁用品 / 除尘掸',
+        "Industrial & Scientific > Janitorial & Sanitation Supplies > Odor"
+        " Maintainers > Commercial Air Fresheners & Deodorizers"
+    ): "商用清洁 / 空气清新及除臭用品",
+    "Industrial & Scientific > Store Fixtures & Equipment > Display Cases": "商用设备 / 展示柜",
     (
-        'Household Essentials > Cleaning Supplies > Cleaning Tools > Spong'
-        'es and Scrubbers > Scour Pads'
-    ):
-        '清洁用品 / 百洁布与擦洗垫',
-    'Household Essentials > Cleaning Supplies > Mops > All Mops': '清洁用品 / 拖把',
+        "Musical Instruments > Instrument Accessories > String Instrument Accessories > Stands"
+    ): "乐器配件 / 弦乐器支架",
+    "Office Supplies > Desk Organization > File Organizers": "办公收纳 / 文件整理架",
+    ("Office Supplies > Labels & Label Makers > Labels > All Labels & Stickers"): (
+        "办公文具 / 标签与贴纸"
+    ),
+    "Office Supplies > School Supplies > Shop All School Supplies": "学校用品 / 综合学习用品",
+    "Office Supplies > Shop All Office Supplies": "办公用品 / 综合办公用品",
     (
-        'Household Essentials > Paper &'
-        ' Plastic > Food Storage Bags >'
-        ' Food Bags'
-    ): (
-        '食品包装 / 食品保鲜袋'
+        "Party & Occasions > Birthday Shop > Birthday Party Supplies > Birthday Hanging Decorations"
+    ): "生日派对 / 悬挂装饰",
+    (
+        "Party & Occasions > Birthday Shop > Birthday Party Supplies > Birthday Party Decorations"
+    ): "生日派对 / 派对装饰",
+    ("Party & Occasions > Carnival Party Supplies > Carnival Party Decorations"): (
+        "嘉年华派对 / 装饰用品"
     ),
     (
-        'Industrial & Scientific > Food Service Equipment & Supplies > Foo'
-        'd Holding and Warming Equipment > Steam Tables and Food Wells'
-    ):
-        '商用餐饮 / 保温餐台与水浴保温槽',
+        "Party & Occasions > Christmas Trees & Christmas Decor > Christmas"
+        " Decor > Christmas Wreaths > Outdoor Christmas Wreaths"
+    ): "圣诞装饰 / 户外圣诞花环",
     (
-        'Industrial & Scientific > Janitorial & Sanitation Supplies > Jani'
-        'torial Disposables > Commercial Toilet Paper Dispensers & Holders'
-    ):
-        '商用清洁 / 卫生纸分配器及支架',
+        "Party & Occasions > Party Supplies > Party Supplies by Color > Gr"
+        "een Party Supplies > Green Party Decorations"
+    ): "派对装饰 / 绿色主题装饰",
     (
-        'Industrial & Scientific > Janitorial & Sanitation Supplies > Odor'
-        ' Maintainers > Commercial Air Fresheners & Deodorizers'
-    ):
-        '商用清洁 / 空气清新及除臭用品',
-    'Industrial & Scientific > Store Fixtures & Equipment > Display Cases': '商用设备 / 展示柜',
-    (
-        'Musical Instruments > Instrument Accessories > String Instrument '
-        'Accessories > Stands'
-    ):
-        '乐器配件 / 弦乐器支架',
-    'Office Supplies > Desk Organization > File Organizers': '办公收纳 / 文件整理架',
-    (
-        'Office Supplies > Labels & Lab'
-        'el Makers > Labels > All Label'
-        's & Stickers'
-    ): (
-        '办公文具 / 标签与贴纸'
+        "Party & Occasions > Party Supplies > Party Supplies by Color > Me"
+        "tallic Party Supplies > Metallic Party Decorations"
+    ): "派对装饰 / 金属色主题装饰",
+    ("Party & Occasions > Wedding Shop > The Wedding Day > Ceremony Essentials"): (
+        "婚礼用品 / 婚礼仪式用品"
     ),
-    'Office Supplies > School Supplies > Shop All School Supplies': '学校用品 / 综合学习用品',
-    'Office Supplies > Shop All Office Supplies': '办公用品 / 综合办公用品',
-    (
-        'Party & Occasions > Birthday Shop > Birthday Party Supplies > Bir'
-        'thday Hanging Decorations'
-    ):
-        '生日派对 / 悬挂装饰',
-    (
-        'Party & Occasions > Birthday Shop > Birthday Party Supplies > Bir'
-        'thday Party Decorations'
-    ):
-        '生日派对 / 派对装饰',
-    (
-        'Party & Occasions > Carnival P'
-        'arty Supplies > Carnival Party'
-        ' Decorations'
-    ): (
-        '嘉年华派对 / 装饰用品'
+    ("Patio & Garden > Clearance Patio & Garden > Clearance Outdoor Lighting"): (
+        "庭院照明 / 特价户外灯具"
     ),
+    "Patio & Garden > Decorative Stones": "庭院园艺 / 装饰石",
+    "Patio & Garden > Garden Center > Pots & Planters > Garden Planters": "花盆花器 / 园艺种植盆",
     (
-        'Party & Occasions > Christmas Trees & Christmas Decor > Christmas'
-        ' Decor > Christmas Wreaths > Outdoor Christmas Wreaths'
-    ):
-        '圣诞装饰 / 户外圣诞花环',
+        "Patio & Garden > Garden Center > Pots & Planters > Outdoor Planters > Hanging Planters"
+    ): "花盆花器 / 户外吊挂花盆",
+    "Patio & Garden > Garden Center > Pots & Planters > Plant Stands": "花盆花器 / 花架",
+    "Patio & Garden > Garden Center > Watering & Irrigation > Hose Nozzles": "园艺浇灌 / 水管喷头",
     (
-        'Party & Occasions > Party Supplies > Party Supplies by Color > Gr'
-        'een Party Supplies > Green Party Decorations'
-    ):
-        '派对装饰 / 绿色主题装饰',
+        "Patio & Garden > Outdoor Power Equipment > Outdoor Power Equipmen"
+        "t Parts and Accessories > Pressure Washer Accessories > Pressure "
+        "Washer Fittings"
+    ): "高压清洗 / 高压清洗机接头",
     (
-        'Party & Occasions > Party Supplies > Party Supplies by Color > Me'
-        'tallic Party Supplies > Metallic Party Decorations'
-    ):
-        '派对装饰 / 金属色主题装饰',
-    (
-        'Party & Occasions > Wedding Sh'
-        'op > The Wedding Day > Ceremon'
-        'y Essentials'
-    ): (
-        '婚礼用品 / 婚礼仪式用品'
+        "Patio & Garden > Sheds & Outdoor Storage > Patio Furniture Covers"
+        " > Waterproof Outdoor Furniture Covers"
+    ): "庭院家具 / 防水家具罩",
+    "Patio & Garden > Wild Bird Supplies > Bird Feeders > Ground Feeders": "野鸟用品 / 地面喂鸟器",
+    "Personal Care > Clear Bags > Clear Makeup Bags": "美妆收纳 / 透明化妆包",
+    "Pets > Cats > Cat Beds > All Cat Beds": "猫用品 / 猫窝",
+    "Pets > Dogs > Dog Bowls and Accessories > Dog Bowls and Feeders": "狗用品 / 狗食盆与喂食器",
+    ("Pets > Dogs > Dog Collars, Leashes, and Harnesses > No Pull Dog Harnesses"): (
+        "狗用品 / 防暴冲胸背带"
     ),
+    "Pets > Dogs > Dog Toys > All Dog Toys": "狗用品 / 狗玩具",
+    "Pets > Fish Supplies > Fish Tank Decoration > Aquarium Plants": "水族用品 / 鱼缸造景水草",
     (
-        'Patio & Garden > Clearance Pat'
-        'io & Garden > Clearance Outdoo'
-        'r Lighting'
-    ): (
-        '庭院照明 / 特价户外灯具'
+        "Sports & Outdoors > Exercise & Fitness > Treadmills > Treadmill A"
+        "ccessories > All Treadmill Accessories"
+    ): "跑步机配件 / 跑步机零配件",
+    "Sports & Outdoors > Exercise & Fitness > Yoga > Yoga Blocks": "瑜伽用品 / 瑜伽砖",
+    (
+        "Sports & Outdoors > Recreation > Game Room > Pool & Billiards > C"
+        "ue Sticks > All Pool and Billiard Sticks"
+    ): "台球用品 / 台球杆",
+    ("Sports & Outdoors > Sports > Tennis & Racquets > Tennis Training Aids"): (
+        "网球用品 / 网球训练辅助器"
     ),
-    'Patio & Garden > Decorative Stones': '庭院园艺 / 装饰石',
-    'Patio & Garden > Garden Center > Pots & Planters > Garden Planters': '花盆花器 / 园艺种植盆',
-    (
-        'Patio & Garden > Garden Center > Pots & Planters > Outdoor Plante'
-        'rs > Hanging Planters'
-    ):
-        '花盆花器 / 户外吊挂花盆',
-    'Patio & Garden > Garden Center > Pots & Planters > Plant Stands': '花盆花器 / 花架',
-    'Patio & Garden > Garden Center > Watering & Irrigation > Hose Nozzles': '园艺浇灌 / 水管喷头',
-    (
-        'Patio & Garden > Outdoor Power Equipment > Outdoor Power Equipmen'
-        't Parts and Accessories > Pressure Washer Accessories > Pressure '
-        'Washer Fittings'
-    ):
-        '高压清洗 / 高压清洗机接头',
-    (
-        'Patio & Garden > Sheds & Outdoor Storage > Patio Furniture Covers'
-        ' > Waterproof Outdoor Furniture Covers'
-    ):
-        '庭院家具 / 防水家具罩',
-    'Patio & Garden > Wild Bird Supplies > Bird Feeders > Ground Feeders': '野鸟用品 / 地面喂鸟器',
-    'Personal Care > Clear Bags > Clear Makeup Bags': '美妆收纳 / 透明化妆包',
-    'Pets > Cats > Cat Beds > All Cat Beds': '猫用品 / 猫窝',
-    'Pets > Dogs > Dog Bowls and Accessories > Dog Bowls and Feeders': '狗用品 / 狗食盆与喂食器',
-    (
-        'Pets > Dogs > Dog Collars, Lea'
-        'shes, and Harnesses > No Pull '
-        'Dog Harnesses'
-    ): (
-        '狗用品 / 防暴冲胸背带'
+    ("Toys > Action Figures and Playsets > Action Figures > Action Figure Core"): (
+        "玩具手办 / 可动人偶"
     ),
-    'Pets > Dogs > Dog Toys > All Dog Toys': '狗用品 / 狗玩具',
-    'Pets > Fish Supplies > Fish Tank Decoration > Aquarium Plants': '水族用品 / 鱼缸造景水草',
-    (
-        'Sports & Outdoors > Exercise & Fitness > Treadmills > Treadmill A'
-        'ccessories > All Treadmill Accessories'
-    ):
-        '跑步机配件 / 跑步机零配件',
-    'Sports & Outdoors > Exercise & Fitness > Yoga > Yoga Blocks': '瑜伽用品 / 瑜伽砖',
-    (
-        'Sports & Outdoors > Recreation > Game Room > Pool & Billiards > C'
-        'ue Sticks > All Pool and Billiard Sticks'
-    ):
-        '台球用品 / 台球杆',
-    (
-        'Sports & Outdoors > Sports > T'
-        'ennis & Racquets > Tennis Trai'
-        'ning Aids'
-    ): (
-        '网球用品 / 网球训练辅助器'
-    ),
-    (
-        'Toys > Action Figures and Play'
-        'sets > Action Figures > Action'
-        ' Figure Core'
-    ): (
-        '玩具手办 / 可动人偶'
-    ),
-    'Toys > Arts & Crafts for Kids > Kid Art Easels & Stations': '儿童手工 / 儿童画架',
-    'Toys > Bikes > Bike Accessories > Bike Bags & Carriers': '儿童骑行 / 自行车包与置物架',
-    'Toys > Bikes > Bike Accessories > Bike Baskets': '儿童骑行 / 自行车车篮',
-    'Toys > Games & Puzzles > Classic Games': '玩具游戏 / 经典桌面游戏',
-    (
-        'Walmart for Business > Retail '
-        'Essentials > Pricemaking Suppl'
-        'ies > Price Guns'
-    ): (
-        '零售设备 / 标价枪'
+    "Toys > Arts & Crafts for Kids > Kid Art Easels & Stations": "儿童手工 / 儿童画架",
+    "Toys > Bikes > Bike Accessories > Bike Bags & Carriers": "儿童骑行 / 自行车包与置物架",
+    "Toys > Bikes > Bike Accessories > Bike Baskets": "儿童骑行 / 自行车车篮",
+    "Toys > Games & Puzzles > Classic Games": "玩具游戏 / 经典桌面游戏",
+    ("Walmart for Business > Retail Essentials > Pricemaking Supplies > Price Guns"): (
+        "零售设备 / 标价枪"
     ),
 }
 
 _V6_EXACT_CATEGORY_PATH_ZH = {
     (
-        'Arts Crafts & Sewing > Art Supplies > Art Painting Supplies > Sho'
-        'p Art Painting Supplies'
-    ):
-        '手工艺用品 / 选购绘画用品',
-    'Arts Crafts & Sewing > Art Supplies > Shop Art Supplies': '手工艺用品 / 选购美术用品',
+        "Arts Crafts & Sewing > Art Supplies > Art Painting Supplies > Shop Art Painting Supplies"
+    ): "手工艺用品 / 选购绘画用品",
+    "Arts Crafts & Sewing > Art Supplies > Shop Art Supplies": "手工艺用品 / 选购美术用品",
     (
-        'Arts Crafts & Sewing > Arts & Crafts Furniture and Storage > Arti'
-        'st Easels > Wooden Easels'
-    ):
-        '手工艺用品 / 木质画架',
+        "Arts Crafts & Sewing > Arts & Crafts Furniture and Storage > Artist Easels > Wooden Easels"
+    ): "手工艺用品 / 木质画架",
     (
-        'Arts Crafts & Sewing > Arts & Crafts Furniture and Storage > Craf'
-        't Storage > Art and Poster Tubes'
-    ):
-        '手工艺用品 / 画作与海报收纳筒',
+        "Arts Crafts & Sewing > Arts & Crafts Furniture and Storage > Craf"
+        "t Storage > Art and Poster Tubes"
+    ): "手工艺用品 / 画作与海报收纳筒",
     (
-        'Arts Crafts & Sewing > Arts & Crafts Furniture and Storage > Craf'
-        't Storage > Sewing Storage > Thread and Fabric Storage'
-    ):
-        '手工艺用品 / 线材与布料收纳',
-    'Arts Crafts & Sewing > Beading & Jewelry Making > Beads > Spacer Beads': '手工艺用品 / 隔珠',
+        "Arts Crafts & Sewing > Arts & Crafts Furniture and Storage > Craf"
+        "t Storage > Sewing Storage > Thread and Fabric Storage"
+    ): "手工艺用品 / 线材与布料收纳",
+    "Arts Crafts & Sewing > Beading & Jewelry Making > Beads > Spacer Beads": "手工艺用品 / 隔珠",
     (
-        'Arts Crafts & Sewing > Crafting > Craft Supplies > Basic Craft Su'
-        'pplies > Craft Shells'
-    ):
-        '手工艺用品 / 手工贝壳材料',
-    (
-        'Arts Crafts & Sewing > Craftin'
-        'g > Paper Crafting > Junk Jour'
-        'nal Supplies'
-    ): (
-        '手工艺用品 / 拼贴手账材料'
+        "Arts Crafts & Sewing > Crafting > Craft Supplies > Basic Craft Supplies > Craft Shells"
+    ): "手工艺用品 / 手工贝壳材料",
+    ("Arts Crafts & Sewing > Crafting > Paper Crafting > Junk Journal Supplies"): (
+        "手工艺用品 / 拼贴手账材料"
     ),
     (
-        'Arts Crafts & Sewing > Crafting > Shop All Arts & Craft Kits > Ar'
-        't & Craft Kits'
-    ):
-        '手工艺用品 / 美术与手工套装',
+        "Arts Crafts & Sewing > Crafting > Shop All Arts & Craft Kits > Art & Craft Kits"
+    ): "手工艺用品 / 美术与手工套装",
     (
-        'Arts Crafts & Sewing > Crafting > Speciality Crafts & Hobbies > F'
-        'loral Arranging > All Floral Arranging Supplies'
-    ):
-        '手工艺用品 / 全部插花用品',
-    (
-        'Arts Crafts & Sewing > Die Cut'
-        'ting > Craft Vinyl > Shop All '
-        'Craft Vinyl'
-    ): (
-        '手工艺用品 / 全部手工刻字贴膜'
+        "Arts Crafts & Sewing > Crafting > Speciality Crafts & Hobbies > F"
+        "loral Arranging > All Floral Arranging Supplies"
+    ): "手工艺用品 / 全部插花用品",
+    ("Arts Crafts & Sewing > Die Cutting > Craft Vinyl > Shop All Craft Vinyl"): (
+        "手工艺用品 / 全部手工刻字贴膜"
     ),
-    'Arts Crafts & Sewing > Die Cutting > Shop All Die Cutting': '手工艺用品 / 全部模切用品',
-    'Arts Crafts & Sewing > Die Cutting > Transfer Papers': '手工艺用品 / 转印纸',
-    'Arts Crafts & Sewing > Resin > Resin Molds': '手工艺用品 / 树脂模具',
-    'Arts Crafts & Sewing > Scrapbooking > Stencils & Templates': '手工艺用品 / 镂空模板与样板',
+    "Arts Crafts & Sewing > Die Cutting > Shop All Die Cutting": "手工艺用品 / 全部模切用品",
+    "Arts Crafts & Sewing > Die Cutting > Transfer Papers": "手工艺用品 / 转印纸",
+    "Arts Crafts & Sewing > Resin > Resin Molds": "手工艺用品 / 树脂模具",
+    "Arts Crafts & Sewing > Scrapbooking > Stencils & Templates": "手工艺用品 / 镂空模板与样板",
     (
-        'Arts Crafts & Sewing > Sewing > Fills, Foam and Pillow Forms > Sh'
-        'op Fills, Foam and Pillows'
-    ):
-        '手工艺用品 / 全部填充材料、泡棉与抱枕芯',
-    (
-        'Arts Crafts & Sewing > Sewing '
-        '> Notions & Sewing Accessories'
-        ' > Bobbins'
-    ): (
-        '手工艺用品 / 缝纫机梭芯'
+        "Arts Crafts & Sewing > Sewing > Fills, Foam and Pillow Forms > Sh"
+        "op Fills, Foam and Pillows"
+    ): "手工艺用品 / 全部填充材料、泡棉与抱枕芯",
+    ("Arts Crafts & Sewing > Sewing > Notions & Sewing Accessories > Bobbins"): (
+        "手工艺用品 / 缝纫机梭芯"
     ),
-    'Arts Crafts & Sewing > Sewing > Sewing & Cutting Tools > Cutting Mats': '手工艺用品 / 切割垫',
+    "Arts Crafts & Sewing > Sewing > Sewing & Cutting Tools > Cutting Mats": "手工艺用品 / 切割垫",
     (
-        'Arts Crafts & Sewing > Yarn & Needle Arts > Needle Arts > Embroid'
-        'ery > Embroidery Floss & Thread > Floss Organizer Sets'
-    ):
-        '手工艺用品 / 绣线收纳套装',
+        "Arts Crafts & Sewing > Yarn & Needle Arts > Needle Arts > Embroid"
+        "ery > Embroidery Floss & Thread > Floss Organizer Sets"
+    ): "手工艺用品 / 绣线收纳套装",
     (
-        'Auto & Tires > Auto Body > Auto Paint Tools > Auto Sandpaper and '
-        'Abrasives'
-    ):
-        '汽车用品 / 汽车打磨砂纸与磨料',
-    (
-        'Auto & Tires > Automotive Pain'
-        't > Interior Repair & Restorat'
-        'ion'
-    ): (
-        '汽车用品 / 汽车内饰维修与修复'
+        "Auto & Tires > Auto Body > Auto Paint Tools > Auto Sandpaper and Abrasives"
+    ): "汽车用品 / 汽车打磨砂纸与磨料",
+    ("Auto & Tires > Automotive Paint > Interior Repair & Restoration"): (
+        "汽车用品 / 汽车内饰维修与修复"
     ),
-    'Auto & Tires > Automotive Tools & Equipment > Automotive Electrical': '汽车用品 / 汽车电气',
+    "Auto & Tires > Automotive Tools & Equipment > Automotive Electrical": "汽车用品 / 汽车电气",
     (
-        'Auto & Tires > Automotive Tools & Equipment > Automotive Stands a'
-        'nd Supports > Jack Accessories > Jack Pads'
-    ):
-        '汽车用品 / 千斤顶支撑垫',
+        "Auto & Tires > Automotive Tools & Equipment > Automotive Stands a"
+        "nd Supports > Jack Accessories > Jack Pads"
+    ): "汽车用品 / 千斤顶支撑垫",
     (
-        'Auto & Tires > Automotive Tools & Equipment > Garage and Shop > G'
-        'arage Roller Seats And Creepers'
-    ):
-        '汽车用品 / 车库维修滑轮凳与躺板',
+        "Auto & Tires > Automotive Tools & Equipment > Garage and Shop > G"
+        "arage Roller Seats And Creepers"
+    ): "汽车用品 / 车库维修滑轮凳与躺板",
     (
-        'Auto & Tires > Car Detailing > Car Wash Supplies > Car Polishing '
-        'Pads > 6 Inch Polishing Pads'
-    ):
-        '汽车用品 / 6英寸抛光垫',
+        "Auto & Tires > Car Detailing > Car Wash Supplies > Car Polishing "
+        "Pads > 6 Inch Polishing Pads"
+    ): "汽车用品 / 6英寸抛光垫",
     (
-        'Auto & Tires > Car Detailing > Car Wash Supplies > Car Wash Brush'
-        'es > Car Wash Brush with Handle'
-    ):
-        '汽车用品 / 带手柄洗车刷',
+        "Auto & Tires > Car Detailing > Car Wash Supplies > Car Wash Brush"
+        "es > Car Wash Brush with Handle"
+    ): "汽车用品 / 带手柄洗车刷",
     (
-        'Auto & Tires > Car Detailing > Car Wash Supplies > Car Wash Mitts'
-        ' > Microfiber Wash Mitts'
-    ):
-        '汽车用品 / 超细纤维洗车手套',
-    'Auto & Tires > Car Detailing > Car Wash Supplies > Car Wash Sponges': '汽车用品 / 洗车海绵',
+        "Auto & Tires > Car Detailing > Car Wash Supplies > Car Wash Mitts > Microfiber Wash Mitts"
+    ): "汽车用品 / 超细纤维洗车手套",
+    "Auto & Tires > Car Detailing > Car Wash Supplies > Car Wash Sponges": "汽车用品 / 洗车海绵",
     (
-        'Auto & Tires > EV Parts & Accessories > EV Chargers > EV Chargers'
-        ' by Type > Electric Vehicle Supply Equipment (EVSE)'
-    ):
-        '汽车用品 / 电动汽车供电设备',
+        "Auto & Tires > EV Parts & Accessories > EV Chargers > EV Chargers"
+        " by Type > Electric Vehicle Supply Equipment (EVSE)"
+    ): "汽车用品 / 电动汽车供电设备",
     (
-        'Auto & Tires > Exterior Car Parts & Accessories > Mud Flaps & Spl'
-        'ash Guards > Mud Flaps'
-    ):
-        '汽车用品 / 汽车挡泥板',
+        "Auto & Tires > Exterior Car Parts & Accessories > Mud Flaps & Splash Guards > Mud Flaps"
+    ): "汽车用品 / 汽车挡泥板",
     (
-        'Auto & Tires > Exterior Car Parts & Accessories > Truck Bed Acces'
-        'sories > Truck Bed Organizers'
-    ):
-        '汽车用品 / 皮卡车货箱收纳用品',
+        "Auto & Tires > Exterior Car Parts & Accessories > Truck Bed Acces"
+        "sories > Truck Bed Organizers"
+    ): "汽车用品 / 皮卡车货箱收纳用品",
     (
-        'Auto & Tires > Exterior Car Parts & Accessories > Truck Bed Acces'
-        'sories > Truck Bed Rail Caps'
-    ):
-        '汽车用品 / 皮卡车货箱栏板盖条',
+        "Auto & Tires > Exterior Car Parts & Accessories > Truck Bed Acces"
+        "sories > Truck Bed Rail Caps"
+    ): "汽车用品 / 皮卡车货箱栏板盖条",
     (
-        'Auto & Tires > Interior Parts & Accessories > Car Organizers > Ca'
-        'r Console Organizers'
-    ):
-        '汽车用品 / 汽车中控台收纳用品',
-    (
-        'Auto & Tires > Interior Parts '
-        '& Accessories > Car Organizers'
-        ' > Car Trash Cans'
-    ): (
-        '汽车用品 / 车载垃圾桶'
+        "Auto & Tires > Interior Parts & Accessories > Car Organizers > Car Console Organizers"
+    ): "汽车用品 / 汽车中控台收纳用品",
+    ("Auto & Tires > Interior Parts & Accessories > Car Organizers > Car Trash Cans"): (
+        "汽车用品 / 车载垃圾桶"
     ),
     (
-        'Auto & Tires > Interior Parts & Accessories > Car Organizers > Cl'
-        'othes Hanging Rods for Cars'
-    ):
-        '汽车用品 / 车用挂衣杆',
+        "Auto & Tires > Interior Parts & Accessories > Car Organizers > Cl"
+        "othes Hanging Rods for Cars"
+    ): "汽车用品 / 车用挂衣杆",
     (
-        'Auto & Tires > Interior Parts & Accessories > Car Seat Covers > C'
-        'ar Seat Covers by Feature > Universal Seat Covers'
-    ):
-        '汽车用品 / 通用座椅套',
+        "Auto & Tires > Interior Parts & Accessories > Car Seat Covers > C"
+        "ar Seat Covers by Feature > Universal Seat Covers"
+    ): "汽车用品 / 通用座椅套",
     (
-        'Auto & Tires > Powersport Parts & Accessories > Dirt Bike Parts &'
-        ' Accessories > Dirt Bike Parts > Dirt Bike Hand Controls > Dirt B'
-        'ike Handlebar Crossbars'
-    ):
-        '汽车用品 / 越野摩托车车把横杆',
-    (
-        'Auto & Tires > RV Parts & Acce'
-        'ssories > RV Levelers > All RV'
-        ' Levelers'
-    ): (
-        '汽车用品 / 全部房车调平器'
+        "Auto & Tires > Powersport Parts & Accessories > Dirt Bike Parts &"
+        " Accessories > Dirt Bike Parts > Dirt Bike Hand Controls > Dirt B"
+        "ike Handlebar Crossbars"
+    ): "汽车用品 / 越野摩托车车把横杆",
+    ("Auto & Tires > RV Parts & Accessories > RV Levelers > All RV Levelers"): (
+        "汽车用品 / 全部房车调平器"
     ),
     (
-        'Auto & Tires > RV Parts & Accessories > RV Waste Water and Sanita'
-        'tion > RV Water Filters > All RV Water Filters'
-    ):
-        '汽车用品 / 全部房车净水滤芯',
+        "Auto & Tires > RV Parts & Accessories > RV Waste Water and Sanita"
+        "tion > RV Water Filters > All RV Water Filters"
+    ): "汽车用品 / 全部房车净水滤芯",
     (
-        'Auto & Tires > Wheel Accessories > Lug Nuts, Lug Nut Covers & Lug'
-        ' Nut Keys > Lug Nuts & Lug Nut Sets'
-    ):
-        '汽车用品 / 车轮螺母与套装',
-    'Baby > Diapering > Diaper Organizers > Diaper Caddy': '母婴用品 / 尿布收纳篮',
-    'Baby > Diapering > Potty Training > Potties': '母婴用品 / 儿童便盆',
-    'Baby > Diapering > Wipe Warmers & Holders > Baby Wipe Dispenser': '母婴用品 / 婴儿湿巾盒',
-    'Baby > Feeding > Bottle Feeding': '母婴用品 / 奶瓶喂养',
-    'Baby > Nursery & Decor > Baby Decor > Crib Mobiles': '母婴用品 / 婴儿床旋转挂饰',
+        "Auto & Tires > Wheel Accessories > Lug Nuts, Lug Nut Covers & Lug"
+        " Nut Keys > Lug Nuts & Lug Nut Sets"
+    ): "汽车用品 / 车轮螺母与套装",
+    "Baby > Diapering > Diaper Organizers > Diaper Caddy": "母婴用品 / 尿布收纳篮",
+    "Baby > Diapering > Potty Training > Potties": "母婴用品 / 儿童便盆",
+    "Baby > Diapering > Wipe Warmers & Holders > Baby Wipe Dispenser": "母婴用品 / 婴儿湿巾盒",
+    "Baby > Feeding > Bottle Feeding": "母婴用品 / 奶瓶喂养",
+    "Baby > Nursery & Decor > Baby Decor > Crib Mobiles": "母婴用品 / 婴儿床旋转挂饰",
     (
-        'Baby > Nursery & Decor > Nursery Storage and Organizers > All Nur'
-        'sery Storage'
-    ):
-        '母婴用品 / 全部婴儿房收纳用品',
-    (
-        'Beauty > Hair Care > Hair Acce'
-        'ssories > Hair Tools & Accesso'
-        'ries Combined'
-    ): (
-        '美妆个护 / 美发工具及配件'
+        "Baby > Nursery & Decor > Nursery Storage and Organizers > All Nursery Storage"
+    ): "母婴用品 / 全部婴儿房收纳用品",
+    ("Beauty > Hair Care > Hair Accessories > Hair Tools & Accessories Combined"): (
+        "美妆个护 / 美发工具及配件"
     ),
-    'Beauty > Makeup > Makeup Tools & Brushes > Cosmetic Cottons > Cotton Swabs': '美妆个护 / 棉签',
-    'Clothing > Bags & Accessories > Handbags > Clear Bags': '服饰配件 / 透明包袋',
-    (
-        'Clothing > Womens Clothing > W'
-        'omens Coats > Womens Faux Fur '
-        'Coats'
-    ): (
-        '服饰配件 / 女士仿皮草外套'
+    "Beauty > Makeup > Makeup Tools & Brushes > Cosmetic Cottons > Cotton Swabs": "美妆个护 / 棉签",
+    "Clothing > Bags & Accessories > Handbags > Clear Bags": "服饰配件 / 透明包袋",
+    ("Clothing > Womens Clothing > Womens Coats > Womens Faux Fur Coats"): (
+        "服饰配件 / 女士仿皮草外套"
+    ),
+    ("Collectibles > Trading Cards > Trading Card Binders & Sleeves"): (
+        "收藏卡牌 / 收藏卡活页夹与保护套"
     ),
     (
-        'Collectibles > Trading Cards >'
-        ' Trading Card Binders & Sleeve'
-        's'
-    ): (
-        '收藏卡牌 / 收藏卡活页夹与保护套'
+        "Electronics > Computers, Laptops and Tablets > Computer Accessori"
+        "es > Blank Media > Blank Media"
+    ): "电子数码 / 空白存储介质",
+    (
+        "Electronics > Electronics Accessories > General Electronic Access"
+        "ories > All Electronics Carrying Cases"
+    ): "电子数码 / 全部电子设备收纳包",
+    ("Electronics > TV & Home Theater > TV Accessories > TV Cables & Connectors"): (
+        "电子数码 / 电视线缆与连接器"
     ),
     (
-        'Electronics > Computers, Laptops and Tablets > Computer Accessori'
-        'es > Blank Media > Blank Media'
-    ):
-        '电子数码 / 空白存储介质',
+        "Electronics > Walmart Restored > Restored Home > Walmart Restored"
+        " Cooling and Heating > All Walmart Restored Cooling and Heating"
+    ): "电子数码 / 全部沃尔玛翻新制冷与供暖设备",
     (
-        'Electronics > Electronics Accessories > General Electronic Access'
-        'ories > All Electronics Carrying Cases'
-    ):
-        '电子数码 / 全部电子设备收纳包',
+        "Electronics > Walmart Restored > Restored Home > Walmart Restored"
+        " Small Appliances > All Walmart Restored Small Appliances"
+    ): "电子数码 / 全部沃尔玛翻新小家电",
     (
-        'Electronics > TV & Home Theate'
-        'r > TV Accessories > TV Cables'
-        ' & Connectors'
-    ): (
-        '电子数码 / 电视线缆与连接器'
+        "Food > Baking > Baking Ingredients > Frosting, Toppings & Decorat"
+        "ions > All Frosting, Toppings, & Decorations"
+    ): "食品杂货 / 全部糖霜、配料与烘焙装饰",
+    (
+        "Food > Baking > Baking Ingredients > Frosting, Toppings & Decorations > Baking Decorations"
+    ): "食品杂货 / 烘焙装饰用品",
+    "Health and Medicine > Foot Care > Insoles > Shop All Insoles": "健康护理 / 全部鞋垫",
+    (
+        "Health and Medicine > Home Health Care > Daily Living Aids > Shop all Daily Living Aids"
+    ): "健康护理 / 全部日常生活辅助用品",
+    ("Health and Medicine > Home Health Care > Medical Supplies & Equipment"): (
+        "健康护理 / 医疗用品与设备"
+    ),
+    ("Home > Appliances > Appliances Parts & Accessories > Appliance Belts"): (
+        "家用电器 / 家电传动皮带"
+    ),
+    "Home > Appliances > Appliances Parts & Accessories > Appliance Handles": "家用电器 / 家电把手",
+    (
+        "Home > Appliances > Appliances Parts & Accessories > Dishwasher P"
+        "arts > Dishwasher Baskets & Racks"
+    ): "家用电器 / 洗碗机篮筐与碗架",
+    (
+        "Home > Appliances > Appliances Parts & Accessories > Refrigerator"
+        " & Freezer Parts > Refrigerator Bins"
+    ): "家用电器 / 冰箱收纳盒",
+    "Home > Appliances > Kitchen Appliances > Fryers > Deep Fryers": "厨房用品 / 油炸锅",
+    "Home > Bath > Bath Towels > Bath Towel Sets": "浴室用品 / 浴巾套装",
+    "Home > Bath > Bath Towels > Hand Towels": "浴室用品 / 擦手巾",
+    "Home > Bath > Bathroom Accessories > Bathroom Soap Dispenser Set": "浴室用品 / 浴室皂液器套装",
+    "Home > Bath > Bathroom Sets": "浴室用品 / 浴室用品套装",
+    ("Home > Bedding > Mattress Covers & Protectors > Fitted Mattress Protectors"): (
+        "床上用品 / 床垫保护套"
+    ),
+    "Home > Decor > Blinds & Shades > Blinds > Door Blinds": "家居装饰 / 门用百叶帘",
+    "Home > Decor > Candles & Home Fragrance > Glass Candle Holders": "家居装饰 / 玻璃烛台",
+    (
+        "Home > Decor > Curtains & Window Treatments > Curtain Hanging Acc"
+        "essories > Drapery & Curtain Hooks"
+    ): "家居装饰 / 窗帘挂钩",
+    "Home > Decor > Decorative Accents > Decorative Balls": "家居装饰 / 装饰球",
+    "Home > Decor > Decorative Accents > Decorative Bowls": "家居装饰 / 装饰碗",
+    "Home > Decor > Decorative Accents > Decorative Boxes": "家居装饰 / 装饰盒",
+    "Home > Decor > Decorative Accents > Suncatchers": "家居装饰 / 捕光挂饰",
+    (
+        "Home > Decor > Decorative Pillows & Throws > Decorative Pillows & Throws Shop All"
+    ): "家居装饰 / 全部装饰抱枕与盖毯",
+    "Home > Decor > Wall Art > Framed Wall Art": "家居装饰 / 装框墙面装饰画",
+    "Home > Decor > Wall Decor > Shadow Boxes": "家居装饰 / 立体展示框",
+    "Home > Decor > Wall Decor > Wall Hangings > Macrame Wall Hangings": "家居装饰 / 绳编墙饰",
+    "Home > Decor > Wall Decor > Wall Shelves > Floating Shelves": "家居装饰 / 悬浮置物架",
+    "Home > Decor > Wall Decor > Wall Shelves > Wood Floating Shelves": "家居装饰 / 木质悬浮置物架",
+    ("Home > Furniture > Bedroom Furniture > Nightstands > 3 Drawer Nightstand"): (
+        "家具用品 / 三抽屉床头柜"
+    ),
+    "Home > Furniture > Entryway Furniture > Coat Racks": "家具用品 / 衣帽架",
+    "Home > Furniture > Entryway Furniture > Umbrella Racks & Stands": "家具用品 / 雨伞架",
+    ("Home > Furniture > Kitchen & Dining Furniture > Kitchen Islands & Carts"): (
+        "家具用品 / 厨房中岛与推车"
+    ),
+    ("Home > Furniture > Living Room Furniture > Coffee Tables > Wood Coffee Tables"): (
+        "家具用品 / 木质茶几"
+    ),
+    ("Home > Furniture > Living Room Furniture > End Tables > Wood End Tables"): (
+        "家具用品 / 木质边几"
+    ),
+    "Home > Furniture > TV Stands & Entertainment Centers > TV Stands": "家具用品 / 电视柜",
+    "Home > Holiday Decor > Fall Decor > Fall Indoor Decor": "家居装饰 / 秋季室内装饰",
+    (
+        "Home > Holiday Decor > Halloween Decor > Indoor Halloween Decor > Halloween Tabletop Decor"
+    ): "家居装饰 / 万圣节餐桌装饰",
+    "Home > Kids' Rooms > Kids' Furniture > Shop All Kids' Furniture": "儿童家居 / 全部儿童家具",
+    ("Home > Kids' Rooms > Kids' Room Decor > Kids' Wall Decals & Stickers"): (
+        "儿童家居 / 儿童墙贴与装饰贴纸"
+    ),
+    "Home > Kitchen & Dining > Bakeware > Bakeware Sets": "厨房用品 / 烘焙器具套装",
+    "Home > Kitchen & Dining > Bakeware > Baking & Cookie Sheets": "厨房用品 / 烘焙烤盘与饼干烤盘",
+    "Home > Kitchen & Dining > Bakeware > Baking Dishes": "厨房用品 / 烘焙烤皿",
+    "Home > Kitchen & Dining > Bakeware > Cake & Bundt Pans": "厨房用品 / 蛋糕烤模与环形蛋糕模",
+    "Home > Kitchen & Dining > Bakeware > Pizza Stones & Pans": "厨房用品 / 披萨烤石与烤盘",
+    "Home > Kitchen & Dining > Bakeware > Shop Bakeware": "厨房用品 / 全部烘焙器具",
+    "Home > Kitchen & Dining > Bowls > Shop Bowls": "厨房用品 / 全部碗具",
+    "Home > Kitchen & Dining > Cutting Boards > All Cutting Boards": "厨房用品 / 全部砧板",
+    (
+        "Home > Kitchen & Dining > Dining & Entertaining > Bar & Wine Accessories > Koozies"
+    ): "厨房用品 / 饮料保冷杯套",
+    (
+        "Home > Kitchen & Dining > Dining & Entertaining > Bar & Wine Acce"
+        "ssories > Shop All Bar & Wine Accessories"
+    ): "厨房用品 / 全部酒吧与葡萄酒配件",
+    (
+        "Home > Kitchen & Dining > Dining & Entertaining > Bar & Wine Acce"
+        "ssories > Wine Aerators & Pourers"
+    ): "厨房用品 / 葡萄酒醒酒器与倒酒器",
+    (
+        "Home > Kitchen & Dining > Dining & Entertaining > Barware > Beer & Wine Glasses"
+    ): "厨房用品 / 啤酒杯与葡萄酒杯",
+    ("Home > Kitchen & Dining > Dining & Entertaining > Drinkware > Coffee Mugs"): (
+        "厨房用品 / 咖啡杯"
     ),
     (
-        'Electronics > Walmart Restored > Restored Home > Walmart Restored'
-        ' Cooling and Heating > All Walmart Restored Cooling and Heating'
-    ):
-        '电子数码 / 全部沃尔玛翻新制冷与供暖设备',
-    (
-        'Electronics > Walmart Restored > Restored Home > Walmart Restored'
-        ' Small Appliances > All Walmart Restored Small Appliances'
-    ):
-        '电子数码 / 全部沃尔玛翻新小家电',
-    (
-        'Food > Baking > Baking Ingredients > Frosting, Toppings & Decorat'
-        'ions > All Frosting, Toppings, & Decorations'
-    ):
-        '食品杂货 / 全部糖霜、配料与烘焙装饰',
-    (
-        'Food > Baking > Baking Ingredients > Frosting, Toppings & Decorat'
-        'ions > Baking Decorations'
-    ):
-        '食品杂货 / 烘焙装饰用品',
-    'Health and Medicine > Foot Care > Insoles > Shop All Insoles': '健康护理 / 全部鞋垫',
-    (
-        'Health and Medicine > Home Health Care > Daily Living Aids > Shop'
-        ' all Daily Living Aids'
-    ):
-        '健康护理 / 全部日常生活辅助用品',
-    (
-        'Health and Medicine > Home Hea'
-        'lth Care > Medical Supplies & '
-        'Equipment'
-    ): (
-        '健康护理 / 医疗用品与设备'
+        "Home > Kitchen & Dining > Dining & Entertaining > Drinkware > Drinking Glasses"
+    ): "厨房用品 / 饮用玻璃杯",
+    ("Home > Kitchen & Dining > Dining & Entertaining > Drinkware Accessories"): (
+        "厨房用品 / 饮具配件"
     ),
     (
-        'Home > Appliances > Appliances'
-        ' Parts & Accessories > Applian'
-        'ce Belts'
-    ): (
-        '家用电器 / 家电传动皮带'
-    ),
-    'Home > Appliances > Appliances Parts & Accessories > Appliance Handles': '家用电器 / 家电把手',
+        "Home > Kitchen & Dining > Dining & Entertaining > Flatware > Flatware Serving Utensils"
+    ): "厨房用品 / 分餐用刀叉勺",
     (
-        'Home > Appliances > Appliances Parts & Accessories > Dishwasher P'
-        'arts > Dishwasher Baskets & Racks'
-    ):
-        '家用电器 / 洗碗机篮筐与碗架',
+        "Home > Kitchen & Dining > Dining & Entertaining > Serveware > Pitchers & Carafes"
+    ): "厨房用品 / 冷水壶与玻璃分享壶",
     (
-        'Home > Appliances > Appliances Parts & Accessories > Refrigerator'
-        ' & Freezer Parts > Refrigerator Bins'
-    ):
-        '家用电器 / 冰箱收纳盒',
-    'Home > Appliances > Kitchen Appliances > Fryers > Deep Fryers': '厨房用品 / 油炸锅',
-    'Home > Bath > Bath Towels > Bath Towel Sets': '浴室用品 / 浴巾套装',
-    'Home > Bath > Bath Towels > Hand Towels': '浴室用品 / 擦手巾',
-    'Home > Bath > Bathroom Accessories > Bathroom Soap Dispenser Set': '浴室用品 / 浴室皂液器套装',
-    'Home > Bath > Bathroom Sets': '浴室用品 / 浴室用品套装',
+        "Home > Kitchen & Dining > Dining & Entertaining > Serveware > Salt & Pepper Shakers"
+    ): "厨房用品 / 盐与胡椒调味罐",
     (
-        'Home > Bedding > Mattress Cove'
-        'rs & Protectors > Fitted Mattr'
-        'ess Protectors'
-    ): (
-        '床上用品 / 床垫保护套'
-    ),
-    'Home > Decor > Blinds & Shades > Blinds > Door Blinds': '家居装饰 / 门用百叶帘',
-    'Home > Decor > Candles & Home Fragrance > Glass Candle Holders': '家居装饰 / 玻璃烛台',
+        "Home > Kitchen & Dining > Dining & Entertaining > Serveware > Serving Platters & Trays"
+    ): "厨房用品 / 餐盘与托盘",
     (
-        'Home > Decor > Curtains & Window Treatments > Curtain Hanging Acc'
-        'essories > Drapery & Curtain Hooks'
-    ):
-        '家居装饰 / 窗帘挂钩',
-    'Home > Decor > Decorative Accents > Decorative Balls': '家居装饰 / 装饰球',
-    'Home > Decor > Decorative Accents > Decorative Bowls': '家居装饰 / 装饰碗',
-    'Home > Decor > Decorative Accents > Decorative Boxes': '家居装饰 / 装饰盒',
-    'Home > Decor > Decorative Accents > Suncatchers': '家居装饰 / 捕光挂饰',
+        "Home > Kitchen & Dining > Dining & Entertaining > Serveware > Sugar Bowls & Creamers"
+    ): "厨房用品 / 糖罐与奶盅",
     (
-        'Home > Decor > Decorative Pillows & Throws > Decorative Pillows &'
-        ' Throws Shop All'
-    ):
-        '家居装饰 / 全部装饰抱枕与盖毯',
-    'Home > Decor > Wall Art > Framed Wall Art': '家居装饰 / 装框墙面装饰画',
-    'Home > Decor > Wall Decor > Shadow Boxes': '家居装饰 / 立体展示框',
-    'Home > Decor > Wall Decor > Wall Hangings > Macrame Wall Hangings': '家居装饰 / 绳编墙饰',
-    'Home > Decor > Wall Decor > Wall Shelves > Floating Shelves': '家居装饰 / 悬浮置物架',
-    'Home > Decor > Wall Decor > Wall Shelves > Wood Floating Shelves': '家居装饰 / 木质悬浮置物架',
-    (
-        'Home > Furniture > Bedroom Fur'
-        'niture > Nightstands > 3 Drawe'
-        'r Nightstand'
-    ): (
-        '家具用品 / 三抽屉床头柜'
-    ),
-    'Home > Furniture > Entryway Furniture > Coat Racks': '家具用品 / 衣帽架',
-    'Home > Furniture > Entryway Furniture > Umbrella Racks & Stands': '家具用品 / 雨伞架',
-    (
-        'Home > Furniture > Kitchen & D'
-        'ining Furniture > Kitchen Isla'
-        'nds & Carts'
-    ): (
-        '家具用品 / 厨房中岛与推车'
-    ),
-    (
-        'Home > Furniture > Living Room'
-        ' Furniture > Coffee Tables > W'
-        'ood Coffee Tables'
-    ): (
-        '家具用品 / 木质茶几'
-    ),
-    (
-        'Home > Furniture > Living Room'
-        ' Furniture > End Tables > Wood'
-        ' End Tables'
-    ): (
-        '家具用品 / 木质边几'
-    ),
-    'Home > Furniture > TV Stands & Entertainment Centers > TV Stands': '家具用品 / 电视柜',
-    'Home > Holiday Decor > Fall Decor > Fall Indoor Decor': '家居装饰 / 秋季室内装饰',
-    (
-        'Home > Holiday Decor > Halloween Decor > Indoor Halloween Decor >'
-        ' Halloween Tabletop Decor'
-    ):
-        '家居装饰 / 万圣节餐桌装饰',
-    "Home > Kids' Rooms > Kids' Furniture > Shop All Kids' Furniture": '儿童家居 / 全部儿童家具',
-    (
-        "Home > Kids' Rooms > Kids' Roo"
-        "m Decor > Kids' Wall Decals & "
-        'Stickers'
-    ): (
-        '儿童家居 / 儿童墙贴与装饰贴纸'
-    ),
-    'Home > Kitchen & Dining > Bakeware > Bakeware Sets': '厨房用品 / 烘焙器具套装',
-    'Home > Kitchen & Dining > Bakeware > Baking & Cookie Sheets': '厨房用品 / 烘焙烤盘与饼干烤盘',
-    'Home > Kitchen & Dining > Bakeware > Baking Dishes': '厨房用品 / 烘焙烤皿',
-    'Home > Kitchen & Dining > Bakeware > Cake & Bundt Pans': '厨房用品 / 蛋糕烤模与环形蛋糕模',
-    'Home > Kitchen & Dining > Bakeware > Pizza Stones & Pans': '厨房用品 / 披萨烤石与烤盘',
-    'Home > Kitchen & Dining > Bakeware > Shop Bakeware': '厨房用品 / 全部烘焙器具',
-    'Home > Kitchen & Dining > Bowls > Shop Bowls': '厨房用品 / 全部碗具',
-    'Home > Kitchen & Dining > Cutting Boards > All Cutting Boards': '厨房用品 / 全部砧板',
-    (
-        'Home > Kitchen & Dining > Dining & Entertaining > Bar & Wine Acce'
-        'ssories > Koozies'
-    ):
-        '厨房用品 / 饮料保冷杯套',
-    (
-        'Home > Kitchen & Dining > Dining & Entertaining > Bar & Wine Acce'
-        'ssories > Shop All Bar & Wine Accessories'
-    ):
-        '厨房用品 / 全部酒吧与葡萄酒配件',
-    (
-        'Home > Kitchen & Dining > Dining & Entertaining > Bar & Wine Acce'
-        'ssories > Wine Aerators & Pourers'
-    ):
-        '厨房用品 / 葡萄酒醒酒器与倒酒器',
-    (
-        'Home > Kitchen & Dining > Dining & Entertaining > Barware > Beer '
-        '& Wine Glasses'
-    ):
-        '厨房用品 / 啤酒杯与葡萄酒杯',
-    (
-        'Home > Kitchen & Dining > Dini'
-        'ng & Entertaining > Drinkware '
-        '> Coffee Mugs'
-    ): (
-        '厨房用品 / 咖啡杯'
-    ),
-    (
-        'Home > Kitchen & Dining > Dining & Entertaining > Drinkware > Dri'
-        'nking Glasses'
-    ):
-        '厨房用品 / 饮用玻璃杯',
-    (
-        'Home > Kitchen & Dining > Dini'
-        'ng & Entertaining > Drinkware '
-        'Accessories'
-    ): (
-        '厨房用品 / 饮具配件'
-    ),
-    (
-        'Home > Kitchen & Dining > Dining & Entertaining > Flatware > Flat'
-        'ware Serving Utensils'
-    ):
-        '厨房用品 / 分餐用刀叉勺',
-    (
-        'Home > Kitchen & Dining > Dining & Entertaining > Serveware > Pit'
-        'chers & Carafes'
-    ):
-        '厨房用品 / 冷水壶与玻璃分享壶',
-    (
-        'Home > Kitchen & Dining > Dining & Entertaining > Serveware > Sal'
-        't & Pepper Shakers'
-    ):
-        '厨房用品 / 盐与胡椒调味罐',
-    (
-        'Home > Kitchen & Dining > Dining & Entertaining > Serveware > Ser'
-        'ving Platters & Trays'
-    ):
-        '厨房用品 / 餐盘与托盘',
-    (
-        'Home > Kitchen & Dining > Dining & Entertaining > Serveware > Sug'
-        'ar Bowls & Creamers'
-    ):
-        '厨房用品 / 糖罐与奶盅',
-    (
-        'Home > Kitchen & Dining > Dining & Entertaining > Travel Drinkwar'
+        "Home > Kitchen & Dining > Dining & Entertaining > Travel Drinkwar"
         "e > Water Bottles > Kids' Water Bottles"
-    ):
-        '厨房用品 / 儿童水壶',
+    ): "厨房用品 / 儿童水壶",
     (
-        'Home > Kitchen & Dining > Kitchen & Table Linens > Table Linens >'
-        ' Chair Sashes'
-    ):
-        '厨房用品 / 椅背装饰带',
-    (
-        'Home > Kitchen & Dining > Kitc'
-        'hen & Table Linens > Table Lin'
-        'ens > Placemats'
-    ): (
-        '厨房用品 / 餐垫'
+        "Home > Kitchen & Dining > Kitchen & Table Linens > Table Linens > Chair Sashes"
+    ): "厨房用品 / 椅背装饰带",
+    ("Home > Kitchen & Dining > Kitchen & Table Linens > Table Linens > Placemats"): (
+        "厨房用品 / 餐垫"
+    ),
+    ("Home > Kitchen & Dining > Kitchen & Table Linens > Table Linens > Table Runners"): (
+        "厨房用品 / 桌旗"
+    ),
+    ("Home > Kitchen & Dining > Kitchen & Table Linens > Table Linens > Tablecloths"): (
+        "厨房用品 / 桌布"
     ),
     (
-        'Home > Kitchen & Dining > Kitc'
-        'hen & Table Linens > Table Lin'
-        'ens > Table Runners'
-    ): (
-        '厨房用品 / 桌旗'
+        "Home > Kitchen & Dining > Kitchen Storage & Organization > Counter Organizers"
+    ): "厨房用品 / 厨房台面收纳用品",
+    (
+        "Home > Kitchen & Dining > Kitchen Storage & Organization > Dinnerware & Serving Storage"
+    ): "厨房用品 / 餐具与上菜器皿收纳",
+    (
+        "Home > Kitchen & Dining > Kitchen Storage & Organization > Food S"
+        "torage Containers > Glass Storage Containers"
+    ): "厨房用品 / 玻璃收纳容器",
+    (
+        "Home > Kitchen & Dining > Kitchen Storage & Organization > Food S"
+        "torage Containers > Hunting Food Storage"
+    ): "厨房用品 / 狩猎食品储存用品",
+    (
+        "Home > Kitchen & Dining > Kitchen Storage & Organization > Food S"
+        "torage Containers > Kitchen Canisters"
+    ): "厨房用品 / 厨房储物罐",
+    (
+        "Home > Kitchen & Dining > Kitchen Storage & Organization > Food S"
+        "torage Containers > Shop All Food Storage Containers"
+    ): "厨房用品 / 全部食品保鲜容器",
+    (
+        "Home > Kitchen & Dining > Kitchen Storage & Organization > Kitchen Drawer Organizers"
+    ): "厨房用品 / 厨房抽屉收纳用品",
+    ("Home > Kitchen & Dining > Kitchen Storage & Organization > Mason Jars"): (
+        "厨房用品 / 梅森玻璃罐"
     ),
     (
-        'Home > Kitchen & Dining > Kitc'
-        'hen & Table Linens > Table Lin'
-        'ens > Tablecloths'
-    ): (
-        '厨房用品 / 桌布'
+        "Home > Kitchen & Dining > Kitchen Storage & Organization > Pot Racks & Organizers"
+    ): "厨房用品 / 锅具置物架与整理架",
+    ("Home > Kitchen & Dining > Kitchen Storage & Organization > Sink Accessories"): (
+        "厨房用品 / 水槽配件"
+    ),
+    "Home > Kitchen & Dining > Kitchen Storage & Organization > Spice Racks": "厨房用品 / 调味料架",
+    "Home > Kitchen & Dining > Kitchen Storage & Organization > Wine Racks": "厨房用品 / 酒架",
+    "Home > Kitchen & Dining > Pots & Pans > Frying Pans & Skillets": "厨房用品 / 煎锅和平底锅",
+    (
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadgets > Avocado Slicers"
+    ): "厨房用品 / 牛油果切片器",
+    (
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadgets > Bag & Chip Clips"
+    ): "厨房用品 / 包装袋与零食封口夹",
+    (
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadgets > Batter Dispensers"
+    ): "厨房用品 / 面糊分配器",
+    (
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadgets > Burger Press"
+    ): "厨房用品 / 汉堡肉饼压模",
+    (
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadgets > Egg Slicers"
+    ): "厨房用品 / 鸡蛋切片器",
+    (
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadgets > Food Choppers"
+    ): "厨房用品 / 食物切碎器",
+    (
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadgets > Food Thermometers"
+    ): "厨房用品 / 食物温度计",
+    (
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge"
+        "ts > Fruit & Vegetable Tools"
+    ): "厨房用品 / 水果与蔬菜工具",
+    ("Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadgets > Graters"): (
+        "厨房用品 / 刨丝器"
     ),
     (
-        'Home > Kitchen & Dining > Kitchen Storage & Organization > Counte'
-        'r Organizers'
-    ):
-        '厨房用品 / 厨房台面收纳用品',
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadgets > Kitchen Spatulas"
+    ): "厨房用品 / 厨房铲勺",
     (
-        'Home > Kitchen & Dining > Kitchen Storage & Organization > Dinner'
-        'ware & Serving Storage'
-    ):
-        '厨房用品 / 餐具与上菜器皿收纳',
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadgets > Lemon Squeezer"
+    ): "厨房用品 / 柠檬榨汁器",
     (
-        'Home > Kitchen & Dining > Kitchen Storage & Organization > Food S'
-        'torage Containers > Glass Storage Containers'
-    ):
-        '厨房用品 / 玻璃收纳容器',
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadgets > Meat Tools"
+    ): "厨房用品 / 肉类处理工具",
     (
-        'Home > Kitchen & Dining > Kitchen Storage & Organization > Food S'
-        'torage Containers > Hunting Food Storage'
-    ):
-        '厨房用品 / 狩猎食品储存用品',
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge"
+        "ts > Potato Mashers & Ricers"
+    ): "厨房用品 / 土豆捣泥器与压泥器",
     (
-        'Home > Kitchen & Dining > Kitchen Storage & Organization > Food S'
-        'torage Containers > Kitchen Canisters'
-    ):
-        '厨房用品 / 厨房储物罐',
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadgets > Salad Spinners"
+    ): "厨房用品 / 沙拉甩干篮",
     (
-        'Home > Kitchen & Dining > Kitchen Storage & Organization > Food S'
-        'torage Containers > Shop All Food Storage Containers'
-    ):
-        '厨房用品 / 全部食品保鲜容器',
-    (
-        'Home > Kitchen & Dining > Kitchen Storage & Organization > Kitche'
-        'n Drawer Organizers'
-    ):
-        '厨房用品 / 厨房抽屉收纳用品',
-    (
-        'Home > Kitchen & Dining > Kitc'
-        'hen Storage & Organization > M'
-        'ason Jars'
-    ): (
-        '厨房用品 / 梅森玻璃罐'
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge"
+        "ts > Turkey & Meat Basters"
+    ): "厨房用品 / 火鸡及肉类浇汁器",
+    "Home > Kitchen & Dining > Tools & Gadgets > Tea Kettles": "厨房用品 / 茶壶",
+    "Home > Luggage > Carry On Luggage": "旅行用品 / 随身登机箱",
+    "Home > Luggage > Duffel Bags": "旅行用品 / 旅行圆筒包",
+    "Home > Luggage > Travel Accessories > Luggage Racks": "旅行用品 / 行李架",
+    "Home > Luggage > Travel Accessories > Packing Cubes": "旅行用品 / 行李收纳袋",
+    "Home > Luggage > Travel Accessories > Toiletry Bags": "旅行用品 / 洗漱包",
+    "Home > Luggage > Travel Accessories > Travel Wallets": "旅行用品 / 旅行证件钱包",
+    ("Home > Storage & Organization > Closet Organizers > Clothes Protectors"): (
+        "家居收纳 / 衣物防护罩"
+    ),
+    ("Home > Storage & Organization > Closet Organizers > shoe storage > Shoe Racks"): (
+        "家居收纳 / 鞋架"
+    ),
+    ("Home > Storage & Organization > Laundry Storage & Organization > Laundry Bags"): (
+        "家居收纳 / 洗衣袋"
     ),
     (
-        'Home > Kitchen & Dining > Kitchen Storage & Organization > Pot Ra'
-        'cks & Organizers'
-    ):
-        '厨房用品 / 锅具置物架与整理架',
+        "Home > Storage & Organization > Laundry Storage & Organization > Laundry Hampers"
+    ): "家居收纳 / 脏衣篮",
     (
-        'Home > Kitchen & Dining > Kitc'
-        'hen Storage & Organization > S'
-        'ink Accessories'
-    ): (
-        '厨房用品 / 水槽配件'
+        "Home > Storage & Organization > Laundry Storage & Organization > Wicker Laundry Baskets"
+    ): "家居收纳 / 藤编洗衣篮",
+    (
+        "Home > Storage & Organization > Storage Baskets & Bins > Shop All Storage Baskets & Bins"
+    ): "家居收纳 / 全部收纳篮与收纳箱",
+    "Home > Storage & Organization > Storage Baskets & Bins > Wood Crates": "家居收纳 / 木箱",
+    (
+        "Home > Storage & Organization > Storage Containers > Plastic Stor"
+        "age Bins & Boxes > Clear Storage Bins"
+    ): "家居收纳 / 透明收纳箱",
+    "Home > Teens' Rooms > Teens' Bathroom": "儿童家居 / 青少年浴室用品",
+    (
+        "Home Improvement > Bathroom Renovation > Bathroom Cabinets & Fixt"
+        "ures > Corner Shower Shelves"
+    ): "水暖卫浴 / 淋浴房转角置物架",
+    (
+        "Home Improvement > Bathroom Renovation > Bathroom Cabinets & Fixtures > Medicine Cabinets"
+    ): "水暖卫浴 / 医药柜",
+    (
+        "Home Improvement > Bathroom Renovation > Bathroom Cabinets & Fixtures > Shower Shelving"
+    ): "水暖卫浴 / 淋浴置物架",
+    (
+        "Home Improvement > Bathroom Renovation > Bathroom Hardware > Hand Towel Holders"
+    ): "水暖卫浴 / 擦手巾架",
+    (
+        "Home Improvement > Bathroom Renovation > Bathroom Hardware > Toilet Paper Holders"
+    ): "水暖卫浴 / 卫生纸架",
+    "Home Improvement > Bathroom Renovation > Bathroom Hardware > Towel Racks": "水暖卫浴 / 毛巾架",
+    (
+        "Home Improvement > Bathroom Renovation > Bathroom Plumbing > Plum"
+        "bing Parts and Repairs > Drains"
+    ): "水暖卫浴 / 排水配件",
+    "Home Improvement > Electrical > Cable Management > Cable Concealer": "五金工具 / 线缆隐藏槽",
+    (
+        "Home Improvement > Electrical > Cable Management > Zip Ties > Heavy Duty Zip Ties"
+    ): "五金工具 / 重型扎带",
+    (
+        "Home Improvement > Electrical > Cable Management > Zip Ties > Zip"
+        " Tie Colors > White Zip Ties"
+    ): "五金工具 / 白色扎带",
+    (
+        "Home Improvement > Electrical > Cable Management > Zip Ties > Zip"
+        " Tie Sizes > 8 Inch Zip Ties"
+    ): "五金工具 / 8英寸扎带",
+    (
+        "Home Improvement > Electrical > Dimmers, Switches, and Wall Plate"
+        "s > Wall Plates > Outlet Wall Plates"
+    ): "五金工具 / 插座面板",
+    "Home Improvement > Emergency Prep > Wildfire Prep": "家居装修 / 野火应急用品",
+    "Home Improvement > Flooring > Flooring Shims & Spacers": "家居装修 / 地板安装垫片与间隔件",
+    ("Home Improvement > Garage Storage > Wall Organization > Pegboard Hooks"): (
+        "家居装修 / 洞洞板挂钩"
     ),
-    'Home > Kitchen & Dining > Kitchen Storage & Organization > Spice Racks': '厨房用品 / 调味料架',
-    'Home > Kitchen & Dining > Kitchen Storage & Organization > Wine Racks': '厨房用品 / 酒架',
-    'Home > Kitchen & Dining > Pots & Pans > Frying Pans & Skillets': '厨房用品 / 煎锅和平底锅',
+    "Home Improvement > Hardware > Door Hardware > All Door Hardware": "五金工具 / 全部门用五金",
     (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Avocado Slicers'
-    ):
-        '厨房用品 / 牛油果切片器',
+        "Home Improvement > Hardware > Door Hardware > Entry Door Hardware > Door Closers"
+    ): "五金工具 / 闭门器",
     (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Bag & Chip Clips'
-    ):
-        '厨房用品 / 包装袋与零食封口夹',
-    (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Batter Dispensers'
-    ):
-        '厨房用品 / 面糊分配器',
-    (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Burger Press'
-    ):
-        '厨房用品 / 汉堡肉饼压模',
-    (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Egg Slicers'
-    ):
-        '厨房用品 / 鸡蛋切片器',
-    (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Food Choppers'
-    ):
-        '厨房用品 / 食物切碎器',
-    (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Food Thermometers'
-    ):
-        '厨房用品 / 食物温度计',
-    (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Fruit & Vegetable Tools'
-    ):
-        '厨房用品 / 水果与蔬菜工具',
-    (
-        'Home > Kitchen & Dining > Tool'
-        's & Gadgets > Kitchen Tools & '
-        'Gadgets > Graters'
-    ): (
-        '厨房用品 / 刨丝器'
-    ),
-    (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Kitchen Spatulas'
-    ):
-        '厨房用品 / 厨房铲勺',
-    (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Lemon Squeezer'
-    ):
-        '厨房用品 / 柠檬榨汁器',
-    (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Meat Tools'
-    ):
-        '厨房用品 / 肉类处理工具',
-    (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Potato Mashers & Ricers'
-    ):
-        '厨房用品 / 土豆捣泥器与压泥器',
-    (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Salad Spinners'
-    ):
-        '厨房用品 / 沙拉甩干篮',
-    (
-        'Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadge'
-        'ts > Turkey & Meat Basters'
-    ):
-        '厨房用品 / 火鸡及肉类浇汁器',
-    'Home > Kitchen & Dining > Tools & Gadgets > Tea Kettles': '厨房用品 / 茶壶',
-    'Home > Luggage > Carry On Luggage': '旅行用品 / 随身登机箱',
-    'Home > Luggage > Duffel Bags': '旅行用品 / 旅行圆筒包',
-    'Home > Luggage > Travel Accessories > Luggage Racks': '旅行用品 / 行李架',
-    'Home > Luggage > Travel Accessories > Packing Cubes': '旅行用品 / 行李收纳袋',
-    'Home > Luggage > Travel Accessories > Toiletry Bags': '旅行用品 / 洗漱包',
-    'Home > Luggage > Travel Accessories > Travel Wallets': '旅行用品 / 旅行证件钱包',
-    (
-        'Home > Storage & Organization '
-        '> Closet Organizers > Clothes '
-        'Protectors'
-    ): (
-        '家居收纳 / 衣物防护罩'
+        "Home Improvement > Hardware > Fasteners > Bolts > Round Head Bolt"
+        "s > Shop all Round Head Bolts"
+    ): "五金工具 / 全部圆头螺栓",
+    "Home Improvement > Hardware > Furniture Hardware > Door Stops": "五金工具 / 门挡",
+    "Home Improvement > Hardware > Furniture Hardware > Furniture Legs": "五金工具 / 家具腿",
+    "Home Improvement > Heating, Cooling, & Air Quality > Water Heaters": "家居装修 / 热水器",
+    ("Home Improvement > Ladders and Step Stools > Step Stools > All Step Stools"): (
+        "家居装修 / 全部踏脚凳"
     ),
     (
-        'Home > Storage & Organization '
-        '> Closet Organizers > shoe sto'
-        'rage > Shoe Racks'
-    ): (
-        '家居收纳 / 鞋架'
+        "Home Improvement > Paint > Paint Supplies & Tools > Hardware Tape > Waterproof Tape"
+    ): "家居装修 / 防水胶带",
+    ("Home Improvement > Paint > Paint Supplies & Tools > Sandpaper and Abrasives"): (
+        "家居装修 / 砂纸与磨料"
     ),
     (
-        'Home > Storage & Organization '
-        '> Laundry Storage & Organizati'
-        'on > Laundry Bags'
-    ): (
-        '家居收纳 / 洗衣袋'
+        "Home Improvement > Plumbing > Shop Plumbing by Fixture > Bathroom"
+        " Sink Plumbing > Bathroom Sink Drains"
+    ): "水暖卫浴 / 浴室洗手盆排水配件",
+    (
+        "Home Improvement > Plumbing > Shop Plumbing by Fixture > Shower a"
+        "nd Bathtub Plumbing > Shower Cartridges"
+    ): "水暖卫浴 / 淋浴阀芯",
+    (
+        "Home Improvement > Plumbing > Shop Plumbing by Fixture > Toilet P"
+        "lumbing > Bidet & Washlet Accessories > Bidet Sprayers"
+    ): "水暖卫浴 / 冲洗喷枪",
+    (
+        "Home Improvement > Tools > Air Tools > Air Compressors > Air Compressor Accessories"
+    ): "五金工具 / 空气压缩机配件",
+    "Home Improvement > Tools > Hand Tools > Chalk Lines and Reels": "五金工具 / 墨斗线与卷线器",
+    "Home Improvement > Tools > Hand Tools > Hammers > Mallets": "五金工具 / 木槌与橡胶锤",
+    (
+        "Home Improvement > Tools > Hand Tools > Ratchets & Sockets > Ratc"
+        "het & Socket Combination Sets"
+    ): "五金工具 / 棘轮扳手与套筒组合套装",
+    "Home Improvement > Tools > Hand Tools > Sharpeners": "五金工具 / 磨刀器与磨具",
+    "Home Improvement > Tools > Mechanics Tools": "五金工具 / 机械维修工具",
+    ("Home Improvement > Tools > Personal Protective Equipment > Safety Glasses"): (
+        "五金工具 / 安全防护眼镜"
     ),
     (
-        'Home > Storage & Organization > Laundry Storage & Organization > '
-        'Laundry Hampers'
-    ):
-        '家居收纳 / 脏衣篮',
+        "Home Improvement > Tools > Power Tool Accessories > Drill Bits > All Drill Bits"
+    ): "五金工具 / 全部钻头",
     (
-        'Home > Storage & Organization > Laundry Storage & Organization > '
-        'Wicker Laundry Baskets'
-    ):
-        '家居收纳 / 藤编洗衣篮',
+        "Home Improvement > Tools > Power Tool Accessories > Power Saw Acc"
+        "essories > Saw Blades > Circular Saw Blades"
+    ): "五金工具 / 圆锯片",
     (
-        'Home > Storage & Organization > Storage Baskets & Bins > Shop All'
-        ' Storage Baskets & Bins'
-    ):
-        '家居收纳 / 全部收纳篮与收纳箱',
-    'Home > Storage & Organization > Storage Baskets & Bins > Wood Crates': '家居收纳 / 木箱',
+        "Home Improvement > Tools > Power Tool Accessories > Power Saw Acc"
+        "essories > Saw Blades > Reciprocating Saw Blades"
+    ): "五金工具 / 往复锯片",
+    "Home Improvement > Tools > Power Tools > Power Saws > Jigsaws": "五金工具 / 曲线锯",
     (
-        'Home > Storage & Organization > Storage Containers > Plastic Stor'
-        'age Bins & Boxes > Clear Storage Bins'
-    ):
-        '家居收纳 / 透明收纳箱',
-    "Home > Teens' Rooms > Teens' Bathroom": '儿童家居 / 青少年浴室用品',
+        "Home Improvement > Tools > Tool Equipment & Storage > Dollies & Hand Trucks > Hand Trucks"
+    ): "五金工具 / 手推搬运车",
     (
-        'Home Improvement > Bathroom Renovation > Bathroom Cabinets & Fixt'
-        'ures > Corner Shower Shelves'
-    ):
-        '水暖卫浴 / 淋浴房转角置物架',
-    (
-        'Home Improvement > Bathroom Renovation > Bathroom Cabinets & Fixt'
-        'ures > Medicine Cabinets'
-    ):
-        '水暖卫浴 / 医药柜',
-    (
-        'Home Improvement > Bathroom Renovation > Bathroom Cabinets & Fixt'
-        'ures > Shower Shelving'
-    ):
-        '水暖卫浴 / 淋浴置物架',
-    (
-        'Home Improvement > Bathroom Renovation > Bathroom Hardware > Hand'
-        ' Towel Holders'
-    ):
-        '水暖卫浴 / 擦手巾架',
-    (
-        'Home Improvement > Bathroom Renovation > Bathroom Hardware > Toil'
-        'et Paper Holders'
-    ):
-        '水暖卫浴 / 卫生纸架',
-    'Home Improvement > Bathroom Renovation > Bathroom Hardware > Towel Racks': '水暖卫浴 / 毛巾架',
-    (
-        'Home Improvement > Bathroom Renovation > Bathroom Plumbing > Plum'
-        'bing Parts and Repairs > Drains'
-    ):
-        '水暖卫浴 / 排水配件',
-    'Home Improvement > Electrical > Cable Management > Cable Concealer': '五金工具 / 线缆隐藏槽',
-    (
-        'Home Improvement > Electrical > Cable Management > Zip Ties > Hea'
-        'vy Duty Zip Ties'
-    ):
-        '五金工具 / 重型扎带',
-    (
-        'Home Improvement > Electrical > Cable Management > Zip Ties > Zip'
-        ' Tie Colors > White Zip Ties'
-    ):
-        '五金工具 / 白色扎带',
-    (
-        'Home Improvement > Electrical > Cable Management > Zip Ties > Zip'
-        ' Tie Sizes > 8 Inch Zip Ties'
-    ):
-        '五金工具 / 8英寸扎带',
-    (
-        'Home Improvement > Electrical > Dimmers, Switches, and Wall Plate'
-        's > Wall Plates > Outlet Wall Plates'
-    ):
-        '五金工具 / 插座面板',
-    'Home Improvement > Emergency Prep > Wildfire Prep': '家居装修 / 野火应急用品',
-    'Home Improvement > Flooring > Flooring Shims & Spacers': '家居装修 / 地板安装垫片与间隔件',
-    (
-        'Home Improvement > Garage Stor'
-        'age > Wall Organization > Pegb'
-        'oard Hooks'
-    ): (
-        '家居装修 / 洞洞板挂钩'
+        "Home Improvement > Weatherproofing > Door Weatherproofing > Door Weatherstripping"
+    ): "家居装修 / 门缝密封条",
+    ("Home Improvement > Windows & Window Supplies > Window Screens and Films"): (
+        "家居装修 / 窗纱与玻璃贴膜"
     ),
-    'Home Improvement > Hardware > Door Hardware > All Door Hardware': '五金工具 / 全部门用五金',
+    "Household Essentials > Bathroom Cleaning Supplies > Toilet Brushes": "清洁用品 / 马桶刷",
+    "Household Essentials > Cleaning Supplies > Brooms > Brooms": "清洁用品 / 扫帚",
     (
-        'Home Improvement > Hardware > Door Hardware > Entry Door Hardware'
-        ' > Door Closers'
-    ):
-        '五金工具 / 闭门器',
+        "Household Essentials > Cleaning Supplies > Cleaning Tools > Clean"
+        "ing Brushes > Dish Brushes"
+    ): "清洁用品 / 洗碗刷",
     (
-        'Home Improvement > Hardware > Fasteners > Bolts > Round Head Bolt'
-        's > Shop all Round Head Bolts'
-    ):
-        '五金工具 / 全部圆头螺栓',
-    'Home Improvement > Hardware > Furniture Hardware > Door Stops': '五金工具 / 门挡',
-    'Home Improvement > Hardware > Furniture Hardware > Furniture Legs': '五金工具 / 家具腿',
-    'Home Improvement > Heating, Cooling, & Air Quality > Water Heaters': '家居装修 / 热水器',
+        "Household Essentials > Cleaning Supplies > Cleaning Tools > Clean"
+        "ing Brushes > Soap Dispensing Brushes"
+    ): "清洁用品 / 可加洗洁精的刷子",
     (
-        'Home Improvement > Ladders and'
-        ' Step Stools > Step Stools > A'
-        'll Step Stools'
-    ): (
-        '家居装修 / 全部踏脚凳'
+        "Household Essentials > Cleaning Supplies > Cleaning Tools > Spong"
+        "es and Scrubbers > Melamine Sponges"
+    ): "清洁用品 / 纳米清洁海绵",
+    (
+        "Household Essentials > Cleaning Supplies > Cleaning Tools > Spong"
+        "es and Scrubbers > Steel Wool"
+    ): "清洁用品 / 钢丝绒清洁球",
+    ("Household Essentials > Cleaning Supplies > Cleaning Tools > Spray Bottles"): (
+        "清洁用品 / 喷雾瓶"
+    ),
+    "Household Essentials > Laundry > Dryer Sheets > Wool Dryer Balls": "家居日用 / 羊毛烘干球",
+    (
+        "Household Essentials > Paper & Plastic > Disposable Tableware > Disposable Bowls"
+    ): "家居日用 / 一次性碗",
+    (
+        "Household Essentials > Paper & Plastic > Disposable Tableware > Disposable Plates"
+    ): "家居日用 / 一次性盘子",
+    ("Household Essentials > Paper & Plastic > Food Storage Bags > Freezer Bags"): (
+        "家居日用 / 冷冻保鲜袋"
     ),
     (
-        'Home Improvement > Paint > Paint Supplies & Tools > Hardware Tape'
-        ' > Waterproof Tape'
-    ):
-        '家居装修 / 防水胶带',
+        "Industrial & Scientific > Food Service Equipment & Supplies > Sma"
+        "llwares > Pot and Pan Lids"
+    ): "工业商用 / 锅盖",
     (
-        'Home Improvement > Paint > Pai'
-        'nt Supplies & Tools > Sandpape'
-        'r and Abrasives'
-    ): (
-        '家居装修 / 砂纸与磨料'
+        "Industrial & Scientific > Janitorial & Sanitation Supplies > Clea"
+        "ning Tools > Commercial Disposable & Microfiber Cloths"
+    ): "工业商用 / 商用一次性及超细纤维抹布",
+    (
+        "Industrial & Scientific > Janitorial & Sanitation Supplies > Clea"
+        "ning Tools > Commercial Sponges & Scouring Pads"
+    ): "工业商用 / 商用海绵与百洁布",
+    "Industrial & Scientific > Medical & Dental > Medical Bags": "工业商用 / 医疗用品包",
+    (
+        "Industrial & Scientific > Occupational Health & Safety Products > Medical Safety"
+    ): "工业商用 / 医疗安全防护",
+    "Jewelry > Watches > Watch Boxes": "珠宝手表 / 手表收纳盒",
+    (
+        "Jewelry > Womens Jewelry & Watches > Womens Jewelry > Womens Rings > Womens Rings"
+    ): "珠宝手表 / 女士戒指",
+    ("Musical Instruments > Microphones > Microphone Stands and Booms"): (
+        "乐器配件 / 麦克风支架与悬臂"
+    ),
+    "Office Supplies > Binders & Accessories > Binding Supplies": "办公用品 / 装订用品",
+    "Office Supplies > Desk Organization > Bookends": "办公用品 / 书挡",
+    ("Office Supplies > Desk Organization > Mail & Literature Organizers"): (
+        "办公用品 / 信件与资料收纳架"
+    ),
+    "Office Supplies > Moving > All Moving Supplies": "搬家包装 / 全部搬家用品",
+    "Office Supplies > Moving > Moving Boxes > Small Moving Boxes": "搬家包装 / 小号搬家纸箱",
+    "Office Supplies > Moving > Packing Materials > Packing Tape": "搬家包装 / 封箱胶带",
+    "Office Supplies > Moving > Packing Materials > Poly Bags": "搬家包装 / 塑料包装袋",
+    "Office Supplies > Pencil Cases > Clear Pencil Boxes": "办公用品 / 透明文具盒",
+    ("Office Supplies > Presentation Boards & Presentation Easels > Poster Boards"): (
+        "办公用品 / 海报板"
     ),
     (
-        'Home Improvement > Plumbing > Shop Plumbing by Fixture > Bathroom'
-        ' Sink Plumbing > Bathroom Sink Drains'
-    ):
-        '水暖卫浴 / 浴室洗手盆排水配件',
-    (
-        'Home Improvement > Plumbing > Shop Plumbing by Fixture > Shower a'
-        'nd Bathtub Plumbing > Shower Cartridges'
-    ):
-        '水暖卫浴 / 淋浴阀芯',
-    (
-        'Home Improvement > Plumbing > Shop Plumbing by Fixture > Toilet P'
-        'lumbing > Bidet & Washlet Accessories > Bidet Sprayers'
-    ):
-        '水暖卫浴 / 冲洗喷枪',
-    (
-        'Home Improvement > Tools > Air Tools > Air Compressors > Air Comp'
-        'ressor Accessories'
-    ):
-        '五金工具 / 空气压缩机配件',
-    'Home Improvement > Tools > Hand Tools > Chalk Lines and Reels': '五金工具 / 墨斗线与卷线器',
-    'Home Improvement > Tools > Hand Tools > Hammers > Mallets': '五金工具 / 木槌与橡胶锤',
-    (
-        'Home Improvement > Tools > Hand Tools > Ratchets & Sockets > Ratc'
-        'het & Socket Combination Sets'
-    ):
-        '五金工具 / 棘轮扳手与套筒组合套装',
-    'Home Improvement > Tools > Hand Tools > Sharpeners': '五金工具 / 磨刀器与磨具',
-    'Home Improvement > Tools > Mechanics Tools': '五金工具 / 机械维修工具',
-    (
-        'Home Improvement > Tools > Per'
-        'sonal Protective Equipment > S'
-        'afety Glasses'
-    ): (
-        '五金工具 / 安全防护眼镜'
+        "Office Supplies > Presentation Boards & Presentation Easels > White Poster Board"
+    ): "办公用品 / 白色海报板",
+    ("Office Supplies > Retail Essentials > Money Handling > Money Deposit Bags"): (
+        "办公用品 / 现金存款袋"
+    ),
+    ("Office Supplies > Teaching and Classroom Supplies > Bulletin Board Borders"): (
+        "办公用品 / 公告板装饰边框"
     ),
     (
-        'Home Improvement > Tools > Power Tool Accessories > Drill Bits > '
-        'All Drill Bits'
-    ):
-        '五金工具 / 全部钻头',
+        "Office Supplies > Teaching and Classroom Supplies > Teaching Aids > Pocket Charts"
+    ): "办公用品 / 教学插袋挂图",
     (
-        'Home Improvement > Tools > Power Tool Accessories > Power Saw Acc'
-        'essories > Saw Blades > Circular Saw Blades'
-    ):
-        '五金工具 / 圆锯片',
+        "Party & Occasions > Bachelorette Party Supplies > Bachelorette Pa"
+        "rty Balloons & Decorations"
+    ): "派对节庆 / 单身派对气球与装饰",
     (
-        'Home Improvement > Tools > Power Tool Accessories > Power Saw Acc'
-        'essories > Saw Blades > Reciprocating Saw Blades'
-    ):
-        '五金工具 / 往复锯片',
-    'Home Improvement > Tools > Power Tools > Power Saws > Jigsaws': '五金工具 / 曲线锯',
-    (
-        'Home Improvement > Tools > Tool Equipment & Storage > Dollies & H'
-        'and Trucks > Hand Trucks'
-    ):
-        '五金工具 / 手推搬运车',
-    (
-        'Home Improvement > Weatherproofing > Door Weatherproofing > Door '
-        'Weatherstripping'
-    ):
-        '家居装修 / 门缝密封条',
-    (
-        'Home Improvement > Windows & W'
-        'indow Supplies > Window Screen'
-        's and Films'
-    ): (
-        '家居装修 / 窗纱与玻璃贴膜'
+        "Party & Occasions > Birthday Shop > Birthday Party Supplies > Birthday Party Favors"
+    ): "派对节庆 / 生日派对回礼",
+    ("Party & Occasions > Easter Party Supplies > Easter Hanging Decorations"): (
+        "派对节庆 / 复活节悬挂装饰"
     ),
-    'Household Essentials > Bathroom Cleaning Supplies > Toilet Brushes': '清洁用品 / 马桶刷',
-    'Household Essentials > Cleaning Supplies > Brooms > Brooms': '清洁用品 / 扫帚',
-    (
-        'Household Essentials > Cleaning Supplies > Cleaning Tools > Clean'
-        'ing Brushes > Dish Brushes'
-    ):
-        '清洁用品 / 洗碗刷',
-    (
-        'Household Essentials > Cleaning Supplies > Cleaning Tools > Clean'
-        'ing Brushes > Soap Dispensing Brushes'
-    ):
-        '清洁用品 / 可加洗洁精的刷子',
-    (
-        'Household Essentials > Cleaning Supplies > Cleaning Tools > Spong'
-        'es and Scrubbers > Melamine Sponges'
-    ):
-        '清洁用品 / 纳米清洁海绵',
-    (
-        'Household Essentials > Cleaning Supplies > Cleaning Tools > Spong'
-        'es and Scrubbers > Steel Wool'
-    ):
-        '清洁用品 / 钢丝绒清洁球',
-    (
-        'Household Essentials > Cleanin'
-        'g Supplies > Cleaning Tools > '
-        'Spray Bottles'
-    ): (
-        '清洁用品 / 喷雾瓶'
-    ),
-    'Household Essentials > Laundry > Dryer Sheets > Wool Dryer Balls': '家居日用 / 羊毛烘干球',
-    (
-        'Household Essentials > Paper & Plastic > Disposable Tableware > D'
-        'isposable Bowls'
-    ):
-        '家居日用 / 一次性碗',
-    (
-        'Household Essentials > Paper & Plastic > Disposable Tableware > D'
-        'isposable Plates'
-    ):
-        '家居日用 / 一次性盘子',
-    (
-        'Household Essentials > Paper &'
-        ' Plastic > Food Storage Bags >'
-        ' Freezer Bags'
-    ): (
-        '家居日用 / 冷冻保鲜袋'
+    ("Party & Occasions > Mermaid Party Supplies > Mermaid Party Decorations"): (
+        "派对节庆 / 美人鱼主题派对装饰"
     ),
     (
-        'Industrial & Scientific > Food Service Equipment & Supplies > Sma'
-        'llwares > Pot and Pan Lids'
-    ):
-        '工业商用 / 锅盖',
+        "Party & Occasions > Party Supplies > Baby Shower Party Supplies > Baby Shower Decorations"
+    ): "派对节庆 / 迎婴派对装饰",
     (
-        'Industrial & Scientific > Janitorial & Sanitation Supplies > Clea'
-        'ning Tools > Commercial Disposable & Microfiber Cloths'
-    ):
-        '工业商用 / 商用一次性及超细纤维抹布',
-    (
-        'Industrial & Scientific > Janitorial & Sanitation Supplies > Clea'
-        'ning Tools > Commercial Sponges & Scouring Pads'
-    ):
-        '工业商用 / 商用海绵与百洁布',
-    'Industrial & Scientific > Medical & Dental > Medical Bags': '工业商用 / 医疗用品包',
-    (
-        'Industrial & Scientific > Occupational Health & Safety Products >'
-        ' Medical Safety'
-    ):
-        '工业商用 / 医疗安全防护',
-    'Jewelry > Watches > Watch Boxes': '珠宝手表 / 手表收纳盒',
-    (
-        'Jewelry > Womens Jewelry & Watches > Womens Jewelry > Womens Ring'
-        's > Womens Rings'
-    ):
-        '珠宝手表 / 女士戒指',
-    (
-        'Musical Instruments > Micropho'
-        'nes > Microphone Stands and Bo'
-        'oms'
-    ): (
-        '乐器配件 / 麦克风支架与悬臂'
-    ),
-    'Office Supplies > Binders & Accessories > Binding Supplies': '办公用品 / 装订用品',
-    'Office Supplies > Desk Organization > Bookends': '办公用品 / 书挡',
-    (
-        'Office Supplies > Desk Organiz'
-        'ation > Mail & Literature Orga'
-        'nizers'
-    ): (
-        '办公用品 / 信件与资料收纳架'
-    ),
-    'Office Supplies > Moving > All Moving Supplies': '搬家包装 / 全部搬家用品',
-    'Office Supplies > Moving > Moving Boxes > Small Moving Boxes': '搬家包装 / 小号搬家纸箱',
-    'Office Supplies > Moving > Packing Materials > Packing Tape': '搬家包装 / 封箱胶带',
-    'Office Supplies > Moving > Packing Materials > Poly Bags': '搬家包装 / 塑料包装袋',
-    'Office Supplies > Pencil Cases > Clear Pencil Boxes': '办公用品 / 透明文具盒',
-    (
-        'Office Supplies > Presentation'
-        ' Boards & Presentation Easels '
-        '> Poster Boards'
-    ): (
-        '办公用品 / 海报板'
+        "Party & Occasions > Party Supplies > Party Decorations > Balloons"
+        " > Balloon Accessories > All Balloon Accessories"
+    ): "派对节庆 / 全部气球配件",
+    ("Party & Occasions > Party Supplies > Party Decorations > Hanging Decorations"): (
+        "派对节庆 / 悬挂装饰"
     ),
     (
-        'Office Supplies > Presentation Boards & Presentation Easels > Whi'
-        'te Poster Board'
-    ):
-        '办公用品 / 白色海报板',
-    (
-        'Office Supplies > Retail Essen'
-        'tials > Money Handling > Money'
-        ' Deposit Bags'
-    ): (
-        '办公用品 / 现金存款袋'
-    ),
-    (
-        'Office Supplies > Teaching and'
-        ' Classroom Supplies > Bulletin'
-        ' Board Borders'
-    ): (
-        '办公用品 / 公告板装饰边框'
-    ),
-    (
-        'Office Supplies > Teaching and Classroom Supplies > Teaching Aids'
-        ' > Pocket Charts'
-    ):
-        '办公用品 / 教学插袋挂图',
-    (
-        'Party & Occasions > Bachelorette Party Supplies > Bachelorette Pa'
-        'rty Balloons & Decorations'
-    ):
-        '派对节庆 / 单身派对气球与装饰',
-    (
-        'Party & Occasions > Birthday Shop > Birthday Party Supplies > Bir'
-        'thday Party Favors'
-    ):
-        '派对节庆 / 生日派对回礼',
-    (
-        'Party & Occasions > Easter Par'
-        'ty Supplies > Easter Hanging D'
-        'ecorations'
-    ): (
-        '派对节庆 / 复活节悬挂装饰'
-    ),
-    (
-        'Party & Occasions > Mermaid Pa'
-        'rty Supplies > Mermaid Party D'
-        'ecorations'
-    ): (
-        '派对节庆 / 美人鱼主题派对装饰'
-    ),
-    (
-        'Party & Occasions > Party Supplies > Baby Shower Party Supplies >'
-        ' Baby Shower Decorations'
-    ):
-        '派对节庆 / 迎婴派对装饰',
-    (
-        'Party & Occasions > Party Supplies > Party Decorations > Balloons'
-        ' > Balloon Accessories > All Balloon Accessories'
-    ):
-        '派对节庆 / 全部气球配件',
-    (
-        'Party & Occasions > Party Supp'
-        'lies > Party Decorations > Han'
-        'ging Decorations'
-    ): (
-        '派对节庆 / 悬挂装饰'
-    ),
-    (
-        'Party & Occasions > Party Supplies > Party Decorations > Party De'
-        'coration Kits'
-    ):
-        '派对节庆 / 派对装饰套装',
+        "Party & Occasions > Party Supplies > Party Decorations > Party Decoration Kits"
+    ): "派对节庆 / 派对装饰套装",
     (
         "Party & Occasions > Party Supplies > St. Patrick's Day Party Supp"
         "lies > St. Patrick's Day Decorations > St. Patrick's Day Home Dec"
-        'orations'
-    ):
-        '派对节庆 / 圣帕特里克节家居装饰',
+        "orations"
+    ): "派对节庆 / 圣帕特里克节家居装饰",
     (
-        'Party & Occasions > Thanksgiving Party Supplies > Thanksgiving De'
-        'ssert & Treat Decorating'
-    ):
-        '派对节庆 / 感恩节甜点装饰用品',
-    (
-        'Party & Occasions > Wedding Sh'
-        'op > The Wedding Day > Recepti'
-        'on Decor'
-    ): (
-        '派对节庆 / 婚宴接待装饰'
+        "Party & Occasions > Thanksgiving Party Supplies > Thanksgiving Dessert & Treat Decorating"
+    ): "派对节庆 / 感恩节甜点装饰用品",
+    ("Party & Occasions > Wedding Shop > The Wedding Day > Reception Decor"): (
+        "派对节庆 / 婚宴接待装饰"
     ),
-    'Party & Occasions > Wedding Shop > Wedding Accessories': '派对节庆 / 婚礼配件',
+    "Party & Occasions > Wedding Shop > Wedding Accessories": "派对节庆 / 婚礼配件",
     (
-        'Party & Occasions > Wedding Shop > Wedding Party Supplies > Weddi'
-        'ng Party Tableware'
-    ):
-        '派对节庆 / 婚礼派对餐具',
-    (
-        'Patio & Garden > Clearance Pat'
-        'io & Garden > Clearance Outdoo'
-        'r Cooking'
-    ): (
-        '庭院园艺 / 户外烹饪清仓专区'
+        "Party & Occasions > Wedding Shop > Wedding Party Supplies > Wedding Party Tableware"
+    ): "派对节庆 / 婚礼派对餐具",
+    ("Patio & Garden > Clearance Patio & Garden > Clearance Outdoor Cooking"): (
+        "庭院园艺 / 户外烹饪清仓专区"
     ),
-    'Patio & Garden > Garden Center > Composters > Shop All Composters': '庭院园艺 / 全部堆肥箱',
-    'Patio & Garden > Garden Center > Garden Tools > Garden Accessories': '庭院园艺 / 园艺配件',
-    (
-        'Patio & Garden > Garden Center'
-        ' > Garden Tools > Shop All Gar'
-        'den Tools'
-    ): (
-        '庭院园艺 / 全部园艺工具'
+    "Patio & Garden > Garden Center > Composters > Shop All Composters": "庭院园艺 / 全部堆肥箱",
+    "Patio & Garden > Garden Center > Garden Tools > Garden Accessories": "庭院园艺 / 园艺配件",
+    ("Patio & Garden > Garden Center > Garden Tools > Shop All Garden Tools"): (
+        "庭院园艺 / 全部园艺工具"
     ),
-    'Patio & Garden > Garden Center > Hose Reels & Storage > Hose Holders': '庭院园艺 / 水管固定架',
+    "Patio & Garden > Garden Center > Hose Reels & Storage > Hose Holders": "庭院园艺 / 水管固定架",
     (
-        'Patio & Garden > Garden Center > Hose Reels & Storage > Wall-Moun'
-        'ted Hose Reels'
-    ):
-        '庭院园艺 / 壁挂式水管卷盘',
-    'Patio & Garden > Garden Center > Landscaping > Fencing > Chicken Wire': '庭院园艺 / 养鸡围网',
-    'Patio & Garden > Garden Center > Lawn Care > Sprayers': '庭院园艺 / 喷洒器',
-    'Patio & Garden > Garden Center > Outdoor Trash Cans': '庭院园艺 / 户外垃圾桶',
-    (
-        'Patio & Garden > Garden Center'
-        ' > Plant Care > Plant Supports'
-        ' > Garden Stakes'
-    ): (
-        '庭院园艺 / 园艺固定桩'
+        "Patio & Garden > Garden Center > Hose Reels & Storage > Wall-Mounted Hose Reels"
+    ): "庭院园艺 / 壁挂式水管卷盘",
+    "Patio & Garden > Garden Center > Landscaping > Fencing > Chicken Wire": "庭院园艺 / 养鸡围网",
+    "Patio & Garden > Garden Center > Lawn Care > Sprayers": "庭院园艺 / 喷洒器",
+    "Patio & Garden > Garden Center > Outdoor Trash Cans": "庭院园艺 / 户外垃圾桶",
+    ("Patio & Garden > Garden Center > Plant Care > Plant Supports > Garden Stakes"): (
+        "庭院园艺 / 园艺固定桩"
     ),
     (
-        'Patio & Garden > Garden Center > Pots & Planters > Indoor Planter'
-        's > Indoor Hanging Planters'
-    ):
-        '庭院园艺 / 室内吊挂花盆',
+        "Patio & Garden > Garden Center > Pots & Planters > Indoor Planter"
+        "s > Indoor Hanging Planters"
+    ): "庭院园艺 / 室内吊挂花盆",
     (
-        'Patio & Garden > Garden Center > Pots & Planters > Indoor Planter'
-        's > Terrarium Planters'
-    ):
-        '庭院园艺 / 微景观植物盆',
-    'Patio & Garden > Garden Center > Pots & Planters > Plant Caddies': '庭院园艺 / 花盆移动托盘',
+        "Patio & Garden > Garden Center > Pots & Planters > Indoor Planters > Terrarium Planters"
+    ): "庭院园艺 / 微景观植物盆",
+    "Patio & Garden > Garden Center > Pots & Planters > Plant Caddies": "庭院园艺 / 花盆移动托盘",
     (
-        'Patio & Garden > Outdoor Cooking > Grill Accessories > Griddle & '
-        'Flat Top Accessories > Grill Mats'
-    ):
-        '庭院园艺 / 烧烤垫',
+        "Patio & Garden > Outdoor Cooking > Grill Accessories > Griddle & "
+        "Flat Top Accessories > Grill Mats"
+    ): "庭院园艺 / 烧烤垫",
     (
-        'Patio & Garden > Outdoor Cooking > Grill Accessories > Griddle & '
-        'Flat Top Accessories > Outdoor Griddle Tools & Accessories'
-    ):
-        '庭院园艺 / 户外煎烤盘工具与配件',
+        "Patio & Garden > Outdoor Cooking > Grill Accessories > Griddle & "
+        "Flat Top Accessories > Outdoor Griddle Tools & Accessories"
+    ): "庭院园艺 / 户外煎烤盘工具与配件",
     (
-        'Patio & Garden > Outdoor Cooking > Grill Accessories > Grill Clea'
-        'ning & Maintenance > Grill Cleaning Tools'
-    ):
-        '庭院园艺 / 烧烤炉清洁工具',
+        "Patio & Garden > Outdoor Cooking > Grill Accessories > Grill Clea"
+        "ning & Maintenance > Grill Cleaning Tools"
+    ): "庭院园艺 / 烧烤炉清洁工具",
     (
-        'Patio & Garden > Outdoor Cooking > Grill Accessories > Grill Cook'
-        'ware and Supplies > Grill Grates & Racks'
-    ):
-        '庭院园艺 / 烧烤炉烤网与烤架',
+        "Patio & Garden > Outdoor Cooking > Grill Accessories > Grill Cook"
+        "ware and Supplies > Grill Grates & Racks"
+    ): "庭院园艺 / 烧烤炉烤网与烤架",
     (
-        'Patio & Garden > Outdoor Power Equipment > Outdoor Power Equipmen'
-        't Parts and Accessories > Pressure Washer Accessories > Pressure '
-        'Washer Attachments'
-    ):
-        '庭院园艺 / 高压清洗机附件',
+        "Patio & Garden > Outdoor Power Equipment > Outdoor Power Equipmen"
+        "t Parts and Accessories > Pressure Washer Accessories > Pressure "
+        "Washer Attachments"
+    ): "庭院园艺 / 高压清洗机附件",
     (
-        'Patio & Garden > Outdoor Power Equipment > Outdoor Power Equipmen'
-        't Parts and Accessories > Trimmers and Edgers Parts and Accessori'
-        'es > String Trimmer Lines > .065 String Trimmer Lines'
-    ):
-        '庭院园艺 / 0.065英寸割草机尼龙线',
+        "Patio & Garden > Outdoor Power Equipment > Outdoor Power Equipmen"
+        "t Parts and Accessories > Trimmers and Edgers Parts and Accessori"
+        "es > String Trimmer Lines > .065 String Trimmer Lines"
+    ): "庭院园艺 / 0.065英寸割草机尼龙线",
     (
-        'Patio & Garden > Outdoor Shade > Outdoor Blinds & Shades > Shade '
-        'Cloth & Accessories'
-    ):
-        '庭院园艺 / 遮阳网及配件',
-    'Patio & Garden > Outdoor Shade > Outdoor Curtains': '庭院园艺 / 户外窗帘',
-    (
-        'Patio & Garden > Patio & Outdo'
-        'or Decor > Flagpoles > Shop Al'
-        'l Flagpoles'
-    ): (
-        '庭院园艺 / 全部旗杆'
+        "Patio & Garden > Outdoor Shade > Outdoor Blinds & Shades > Shade Cloth & Accessories"
+    ): "庭院园艺 / 遮阳网及配件",
+    "Patio & Garden > Outdoor Shade > Outdoor Curtains": "庭院园艺 / 户外窗帘",
+    ("Patio & Garden > Patio & Outdoor Decor > Flagpoles > Shop All Flagpoles"): (
+        "庭院园艺 / 全部旗杆"
     ),
     (
-        'Patio & Garden > Patio & Outdoor Decor > Garden Decorations > Pin'
-        'wheels & Spinners'
-    ):
-        '庭院园艺 / 风车与旋转装饰',
-    (
-        'Patio & Garden > Patio & Outdo'
-        'or Decor > Garden Statues > Go'
-        'ose Statues'
-    ): (
-        '庭院园艺 / 鹅造型雕像'
+        "Patio & Garden > Patio & Outdoor Decor > Garden Decorations > Pinwheels & Spinners"
+    ): "庭院园艺 / 风车与旋转装饰",
+    ("Patio & Garden > Patio & Outdoor Decor > Garden Statues > Goose Statues"): (
+        "庭院园艺 / 鹅造型雕像"
     ),
-    'Patio & Garden > Patio & Outdoor Decor > Porch Goose': '庭院园艺 / 门廊鹅装饰摆件',
-    'Patio & Garden > Patio & Outdoor Decor > Wind Chimes': '庭院园艺 / 风铃',
+    "Patio & Garden > Patio & Outdoor Decor > Porch Goose": "庭院园艺 / 门廊鹅装饰摆件",
+    "Patio & Garden > Patio & Outdoor Decor > Wind Chimes": "庭院园艺 / 风铃",
     (
-        'Patio & Garden > Patio Furniture > Patio Tables > Outdoor Side & '
-        'Accent Tables'
-    ):
-        '庭院园艺 / 户外边几与装饰桌',
-    (
-        'Patio & Garden > Wild Bird Sup'
-        'plies > Bird Feeders > Platfor'
-        'm Feeders'
-    ): (
-        '庭院园艺 / 平台式喂鸟器'
+        "Patio & Garden > Patio Furniture > Patio Tables > Outdoor Side & Accent Tables"
+    ): "庭院园艺 / 户外边几与装饰桌",
+    ("Patio & Garden > Wild Bird Supplies > Bird Feeders > Platform Feeders"): (
+        "庭院园艺 / 平台式喂鸟器"
     ),
-    (
-        'Patio & Garden > Wild Bird Sup'
-        'plies > Bird Houses > Bluebird'
-        ' Houses'
-    ): (
-        '庭院园艺 / 蓝知更鸟鸟屋'
+    ("Patio & Garden > Wild Bird Supplies > Bird Houses > Bluebird Houses"): (
+        "庭院园艺 / 蓝知更鸟鸟屋"
     ),
-    'Personal Care > Bath & Body > Bath & Shower > Loofahs': '美妆个护 / 丝瓜络沐浴擦',
-    'Personal Care > Incontinence > All Incontinence': '美妆个护 / 全部失禁护理用品',
+    "Personal Care > Bath & Body > Bath & Shower > Loofahs": "美妆个护 / 丝瓜络沐浴擦",
+    "Personal Care > Incontinence > All Incontinence": "美妆个护 / 全部失禁护理用品",
     (
-        "Personal Care > Regimens and Routines > Men's Shave Routine > Raz"
-        'ors and Trimmers'
-    ):
-        '美妆个护 / 剃须刀与修剪器',
-    'Pets > Birds > All Bird Supplies': '宠物用品 / 全部鸟类用品',
+        "Personal Care > Regimens and Routines > Men's Shave Routine > Razors and Trimmers"
+    ): "美妆个护 / 剃须刀与修剪器",
+    "Pets > Birds > All Bird Supplies": "宠物用品 / 全部鸟类用品",
     (
-        'Pets > Cats > Cat Feeders, Fountains, and Bowls > All Cat Feeders'
-        ', Fountains, and Bowls'
-    ):
-        '宠物用品 / 全部猫咪喂食器、饮水器与食盆',
+        "Pets > Cats > Cat Feeders, Fountains, and Bowls > All Cat Feeders, Fountains, and Bowls"
+    ): "宠物用品 / 全部猫咪喂食器、饮水器与食盆",
     (
-        'Pets > Cats > Cat Litter and Accessories > Cat Litter Box Accesso'
-        'ries > Cat Litter Scoops'
-    ):
-        '宠物用品 / 猫砂铲',
-    'Pets > Cats > Cat Scratchers > All Cat Scratchers': '宠物用品 / 全部猫抓板',
-    'Pets > Chickens > Chicken Feeders': '宠物用品 / 鸡用喂食器',
-    'Pets > Chickens > Chicken Roost': '宠物用品 / 鸡栖架',
-    (
-        'Pets > Dogs > Dog Bowls and Ac'
-        'cessories > All Dog Bowls and '
-        'Accessories'
-    ): (
-        '宠物用品 / 全部狗食盆及配件'
+        "Pets > Cats > Cat Litter and Accessories > Cat Litter Box Accessories > Cat Litter Scoops"
+    ): "宠物用品 / 猫砂铲",
+    "Pets > Cats > Cat Scratchers > All Cat Scratchers": "宠物用品 / 全部猫抓板",
+    "Pets > Chickens > Chicken Feeders": "宠物用品 / 鸡用喂食器",
+    "Pets > Chickens > Chicken Roost": "宠物用品 / 鸡栖架",
+    ("Pets > Dogs > Dog Bowls and Accessories > All Dog Bowls and Accessories"): (
+        "宠物用品 / 全部狗食盆及配件"
     ),
-    (
-        'Pets > Dogs > Dog Bowls and Ac'
-        'cessories > Dog Food Storage C'
-        'ontainers'
-    ): (
-        '宠物用品 / 狗粮储存容器'
+    ("Pets > Dogs > Dog Bowls and Accessories > Dog Food Storage Containers"): (
+        "宠物用品 / 狗粮储存容器"
     ),
-    'Pets > Dogs > Dog Carriers > All Dog Carriers': '宠物用品 / 全部狗狗外出箱包',
-    'Pets > Dogs > Dog Carriers > Dog Car Seats': '宠物用品 / 狗狗车载座椅',
+    "Pets > Dogs > Dog Carriers > All Dog Carriers": "宠物用品 / 全部狗狗外出箱包",
+    "Pets > Dogs > Dog Carriers > Dog Car Seats": "宠物用品 / 狗狗车载座椅",
     (
-        'Pets > Dogs > Dog Collars, Leashes, and Harnesses > All Dog Colla'
-        'rs & Leashes'
-    ):
-        '宠物用品 / 全部狗项圈与牵引绳',
-    'Pets > Dogs > Dog Crates > Dog Crate Mats': '宠物用品 / 狗笼垫',
-    'Pets > Dogs > Dog Grooming > All Dog Grooming': '宠物用品 / 全部狗狗美容护理用品',
-    'Pets > Dogs > Dog Health and Wellness > Dog Cones': '宠物用品 / 狗狗防舔伊丽莎白圈',
-    (
-        'Pets > Dogs > Dog Potty Traini'
-        'ng > All Dog Potty Training'
-    ): (
-        '宠物用品 / 全部狗狗定点如厕训练用品'
+        "Pets > Dogs > Dog Collars, Leashes, and Harnesses > All Dog Collars & Leashes"
+    ): "宠物用品 / 全部狗项圈与牵引绳",
+    "Pets > Dogs > Dog Crates > Dog Crate Mats": "宠物用品 / 狗笼垫",
+    "Pets > Dogs > Dog Grooming > All Dog Grooming": "宠物用品 / 全部狗狗美容护理用品",
+    "Pets > Dogs > Dog Health and Wellness > Dog Cones": "宠物用品 / 狗狗防舔伊丽莎白圈",
+    ("Pets > Dogs > Dog Potty Training > All Dog Potty Training"): (
+        "宠物用品 / 全部狗狗定点如厕训练用品"
     ),
-    'Pets > Dogs > Dog Potty Training > Puppy Pads > All Puppy Pads': '宠物用品 / 全部幼犬尿垫',
-    'Pets > Fish Supplies > All Fish Tanks and Supplies': '宠物用品 / 全部鱼缸及用品',
-    'Pets > Fish Supplies > Fish Aquarium Cleaners': '宠物用品 / 鱼缸清洁工具',
-    'Pets > Reptiles > Turtles > All Turtles': '宠物用品 / 全部宠物龟用品',
-    'Pets > Small Pets > All Small Pets': '宠物用品 / 全部小型宠物用品',
+    "Pets > Dogs > Dog Potty Training > Puppy Pads > All Puppy Pads": "宠物用品 / 全部幼犬尿垫",
+    "Pets > Fish Supplies > All Fish Tanks and Supplies": "宠物用品 / 全部鱼缸及用品",
+    "Pets > Fish Supplies > Fish Aquarium Cleaners": "宠物用品 / 鱼缸清洁工具",
+    "Pets > Reptiles > Turtles > All Turtles": "宠物用品 / 全部宠物龟用品",
+    "Pets > Small Pets > All Small Pets": "宠物用品 / 全部小型宠物用品",
     (
-        'Sports & Outdoors > Exercise & Fitness > Exercise & Fitness Acces'
-        'sories > All Exercise and Fitness Accessories'
-    ):
-        '运动户外 / 全部运动健身配件',
+        "Sports & Outdoors > Exercise & Fitness > Exercise & Fitness Acces"
+        "sories > All Exercise and Fitness Accessories"
+    ): "运动户外 / 全部运动健身配件",
     (
-        'Sports & Outdoors > Exercise & Fitness > Exercise & Fitness Acces'
-        'sories > Balance Boards > Surf Balance Boards'
-    ):
-        '运动户外 / 冲浪平衡训练板',
+        "Sports & Outdoors > Exercise & Fitness > Exercise & Fitness Acces"
+        "sories > Balance Boards > Surf Balance Boards"
+    ): "运动户外 / 冲浪平衡训练板",
     (
-        'Sports & Outdoors > Exercise & Fitness > Exercise & Fitness Acces'
-        'sories > Jump Ropes > All Jump Ropes'
-    ):
-        '运动户外 / 全部跳绳',
+        "Sports & Outdoors > Exercise & Fitness > Exercise & Fitness Acces"
+        "sories > Jump Ropes > All Jump Ropes"
+    ): "运动户外 / 全部跳绳",
     (
-        'Sports & Outdoors > Exercise & Fitness > Sports Recovery, Injury '
-        'Prevention > Foam Rollers > Muscle Roller Stick'
-    ):
-        '运动户外 / 肌肉按摩滚轮棒',
+        "Sports & Outdoors > Exercise & Fitness > Sports Recovery, Injury "
+        "Prevention > Foam Rollers > Muscle Roller Stick"
+    ): "运动户外 / 肌肉按摩滚轮棒",
     (
-        'Sports & Outdoors > Exercise & Fitness > Strength Training > Weig'
-        'ht Lifting Accessories > Landmine Attachments > All Landmine Atta'
-        'chments'
-    ):
-        '运动户外 / 全部杠铃地雷管配件',
+        "Sports & Outdoors > Exercise & Fitness > Strength Training > Weig"
+        "ht Lifting Accessories > Landmine Attachments > All Landmine Atta"
+        "chments"
+    ): "运动户外 / 全部杠铃地雷管配件",
     (
-        'Sports & Outdoors > Exercise & Fitness > Strength Training > Weig'
-        'ht Lifting Accessories > Weight Training Accessories'
-    ):
-        '运动户外 / 力量训练配件',
+        "Sports & Outdoors > Exercise & Fitness > Strength Training > Weig"
+        "ht Lifting Accessories > Weight Training Accessories"
+    ): "运动户外 / 力量训练配件",
     (
-        'Sports & Outdoors > Exercise & Fitness > Strength Training > Weig'
-        'hts > Weight Lifting Equipment'
-    ):
-        '运动户外 / 举重装备',
+        "Sports & Outdoors > Exercise & Fitness > Strength Training > Weig"
+        "hts > Weight Lifting Equipment"
+    ): "运动户外 / 举重装备",
     (
-        'Sports & Outdoors > Exercise & Fitness > Strength Training > Weig'
-        'hts > Weight Storage > Dumbbell Rack'
-    ):
-        '运动户外 / 哑铃架',
-    (
-        'Sports & Outdoors > Exercise &'
-        ' Fitness > Yoga > Gym Mats > A'
-        'll Gym Mats'
-    ): (
-        '运动户外 / 全部健身垫'
+        "Sports & Outdoors > Exercise & Fitness > Strength Training > Weig"
+        "hts > Weight Storage > Dumbbell Rack"
+    ): "运动户外 / 哑铃架",
+    ("Sports & Outdoors > Exercise & Fitness > Yoga > Gym Mats > All Gym Mats"): (
+        "运动户外 / 全部健身垫"
     ),
-    'Sports & Outdoors > Exercise & Fitness > Yoga > Yoga Mats': '运动户外 / 瑜伽垫',
-    'Sports & Outdoors > Outdoor Sports > Boating > Boat Accessories': '运动户外 / 船艇配件',
+    "Sports & Outdoors > Exercise & Fitness > Yoga > Yoga Mats": "运动户外 / 瑜伽垫",
+    "Sports & Outdoors > Outdoor Sports > Boating > Boat Accessories": "运动户外 / 船艇配件",
     (
-        'Sports & Outdoors > Outdoor Sports > Camping Gear > Camping Acces'
-        'sories > All Camping Accessories'
-    ):
-        '运动户外 / 全部露营配件',
+        "Sports & Outdoors > Outdoor Sports > Camping Gear > Camping Acces"
+        "sories > All Camping Accessories"
+    ): "运动户外 / 全部露营配件",
     (
-        'Sports & Outdoors > Outdoor Sports > Camping Gear > Camping Emerg'
-        'ency Preparedness'
-    ):
-        '运动户外 / 露营应急装备',
+        "Sports & Outdoors > Outdoor Sports > Camping Gear > Camping Emergency Preparedness"
+    ): "运动户外 / 露营应急装备",
     (
-        'Sports & Outdoors > Outdoor Sports > Camping Gear > Tents > Tent '
-        'Accessories > Tent Guylines'
-    ):
-        '运动户外 / 帐篷防风绳',
+        "Sports & Outdoors > Outdoor Sports > Camping Gear > Tents > Tent "
+        "Accessories > Tent Guylines"
+    ): "运动户外 / 帐篷防风绳",
     (
-        'Sports & Outdoors > Outdoor Sports > Fishing > Family Fishing Spe'
-        'cialty Shops > Saltwater Fishing'
-    ):
-        '运动户外 / 海水钓鱼',
+        "Sports & Outdoors > Outdoor Sports > Fishing > Family Fishing Spe"
+        "cialty Shops > Saltwater Fishing"
+    ): "运动户外 / 海水钓鱼",
     (
-        'Sports & Outdoors > Outdoor Sports > Fishing > Fishing Lures & Ba'
-        'its > Fish Attractants'
-    ):
-        '运动户外 / 诱鱼剂',
+        "Sports & Outdoors > Outdoor Sports > Fishing > Fishing Lures & Baits > Fish Attractants"
+    ): "运动户外 / 诱鱼剂",
     (
-        'Sports & Outdoors > Recreation > Game Room > Pool & Billiards > C'
-        'ue Stick Accessories > All Cue Stick Accessories'
-    ):
-        '运动户外 / 全部台球杆配件',
-    'Sports & Outdoors > Sports > Coaching Supplies': '运动户外 / 运动训练教练用品',
-    (
-        'Sports & Outdoors > Sports > G'
-        'olf Equipment > Driver Headcov'
-        'ers'
-    ): (
-        '运动户外 / 高尔夫木杆杆头套'
+        "Sports & Outdoors > Recreation > Game Room > Pool & Billiards > C"
+        "ue Stick Accessories > All Cue Stick Accessories"
+    ): "运动户外 / 全部台球杆配件",
+    "Sports & Outdoors > Sports > Coaching Supplies": "运动户外 / 运动训练教练用品",
+    ("Sports & Outdoors > Sports > Golf Equipment > Driver Headcovers"): (
+        "运动户外 / 高尔夫木杆杆头套"
     ),
     (
-        'Sports & Outdoors > Sports > Golf Equipment > Golf Balls > Golf B'
-        'alls By Type > Practice Golf Balls'
-    ):
-        '运动户外 / 高尔夫练习球',
-    (
-        'Sports & Outdoors > Sports > G'
-        'olf Equipment > Golf Swing Tra'
-        'iners'
-    ): (
-        '运动户外 / 高尔夫挥杆训练器'
+        "Sports & Outdoors > Sports > Golf Equipment > Golf Balls > Golf B"
+        "alls By Type > Practice Golf Balls"
+    ): "运动户外 / 高尔夫练习球",
+    ("Sports & Outdoors > Sports > Golf Equipment > Golf Swing Trainers"): (
+        "运动户外 / 高尔夫挥杆训练器"
     ),
     (
-        'Subscriptions > Subscription Household Essential > browse subscri'
-        'ption food prep and storage'
-    ):
-        '订阅商品 / 订阅商品：食品准备与收纳',
-    'Toys > All Toys & Games': '玩具用品 / 全部玩具与游戏',
-    'Toys > Bikes > Bike Accessories > Bike Water Bottle Cages': '玩具用品 / 自行车水壶架',
-    'Toys > Games & Puzzles > Mahjong Accessories': '玩具用品 / 麻将配件',
-    (
-        'Toys > Games & Puzzles > Puzzl'
-        'es > Puzzle Accessories > Puzz'
-        'le Accessories'
-    ): (
-        '玩具用品 / 拼图配件'
+        "Subscriptions > Subscription Household Essential > browse subscri"
+        "ption food prep and storage"
+    ): "订阅商品 / 订阅商品：食品准备与收纳",
+    "Toys > All Toys & Games": "玩具用品 / 全部玩具与游戏",
+    "Toys > Bikes > Bike Accessories > Bike Water Bottle Cages": "玩具用品 / 自行车水壶架",
+    "Toys > Games & Puzzles > Mahjong Accessories": "玩具用品 / 麻将配件",
+    ("Toys > Games & Puzzles > Puzzles > Puzzle Accessories > Puzzle Accessories"): (
+        "玩具用品 / 拼图配件"
     ),
 }
 
 
-_V5_SEGMENT_TRANSLATIONS = '''
+_V5_SEGMENT_TRANSLATIONS = """
 Accessories=配饰
 Action Figures=可动人偶
 Action Figures and Playsets=可动人偶与玩具套装
@@ -2927,7 +2297,8 @@ Yoga Mats=瑜伽垫
 Zip Tie Colors=扎带颜色
 browse subscription food prep and storage=订阅商品：食品准备与收纳
 shoe storage=鞋子收纳
-'''
+"""
+
 
 def translate_category(value: object) -> str:
     """Translate known category terms offline, retaining explicit unknowns."""
@@ -2955,13 +2326,13 @@ def translate_category(value: object) -> str:
 
 # NP_BOARD_BUSINESS_CATEGORY_V5: separate aggregate identity from raw taxonomy.
 # The full breadcrumb is translated per segment and never used as a group key.
-_V5_SEGMENT_ZH = dict(
-    line.split("=", 1) for line in _V5_SEGMENT_TRANSLATIONS.strip().splitlines()
+_V5_SEGMENT_ZH = dict(line.split("=", 1) for line in _V5_SEGMENT_TRANSLATIONS.strip().splitlines())
+_V5_SEGMENT_ZH.update(
+    {
+        "Kitchen Tools & Gadgets": "厨房工具与小配件",
+        "Tools & Gadgets": "工具与小配件",
+    }
 )
-_V5_SEGMENT_ZH.update({
-    "Kitchen Tools & Gadgets": "厨房工具与小配件",
-    "Tools & Gadgets": "工具与小配件",
-})
 
 
 def category_path_detail(raw: str) -> dict[str, str]:

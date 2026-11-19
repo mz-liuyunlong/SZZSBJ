@@ -37,26 +37,30 @@ def scoped_projection(source, db, accounts: frozenset[str]) -> list[dict]:
     started = time.monotonic()
     m = ListingManagementCurrentMart
     monitor = WalmartMonitorListingCurrent
-    stmt = select(
-        m.source_account_ref,
-        m.store_id,
-        m.item_id,
-        m.local_sku,
-        m.local_name,
-        m.title,
-        func.coalesce(
-            func.nullif(func.btrim(monitor.category), ""),
-            func.nullif(func.btrim(m.category), ""),
-        ).label("category_raw"),
-        m.listing_start_at_utc,
-    ).where(
-        m.source_account_ref.in_(accounts),
-        m.product_tags_json.contains([{"label": SAMPLE_TAG}]),
-    ).outerjoin(
-        monitor,
-        (monitor.source_account_ref == m.source_account_ref)
-        & (monitor.store_id == m.store_id)
-        & (monitor.item_id == m.item_id),
+    stmt = (
+        select(
+            m.source_account_ref,
+            m.store_id,
+            m.item_id,
+            m.local_sku,
+            m.local_name,
+            m.title,
+            func.coalesce(
+                func.nullif(func.btrim(monitor.category), ""),
+                func.nullif(func.btrim(m.category), ""),
+            ).label("category_raw"),
+            m.listing_start_at_utc,
+        )
+        .where(
+            m.source_account_ref.in_(accounts),
+            m.product_tags_json.contains([{"label": SAMPLE_TAG}]),
+        )
+        .outerjoin(
+            monitor,
+            (monitor.source_account_ref == m.source_account_ref)
+            & (monitor.store_id == m.store_id)
+            & (monitor.item_id == m.item_id),
+        )
     )
     has_locked = (
         source.scalar(text("SELECT to_regclass('public.listing_wfs_first_stock_la_locked')"))
@@ -118,7 +122,9 @@ def scoped_projection(source, db, accounts: frozenset[str]) -> list[dict]:
                     PRODUCT_INFO_CURRENT.c.source_account_ref,
                     PRODUCT_INFO_CURRENT.c.lingxing_sku_code,
                     func.max(PRODUCT_INFO_CURRENT.c.owner_name).label("owner_name"),
-                    func.max(PRODUCT_INFO_CURRENT.c.product_developer_name).label("product_developer_name"),
+                    func.max(PRODUCT_INFO_CURRENT.c.product_developer_name).label(
+                        "product_developer_name"
+                    ),
                 )
                 .where(
                     tuple_(
@@ -135,8 +141,7 @@ def scoped_projection(source, db, accounts: frozenset[str]) -> list[dict]:
             .all()
         )
         owners = {
-            (str(x["source_account_ref"]), str(x["lingxing_sku_code"])): x
-            for x in owner_rows
+            (str(x["source_account_ref"]), str(x["lingxing_sku_code"])): x for x in owner_rows
         }
 
     result = []
@@ -267,7 +272,8 @@ def _board_group(items: list[dict], title: str) -> dict:
         "rate": f"{len(passed) / len(scored) * 100:.1f}%" if scored else "—",
         "highRate": f"{len(high) / len(scored) * 100:.1f}%" if scored else "—",
         "avg": str((sum(valid_scores) / len(valid_scores)).quantize(Decimal("0.01")))
-        if valid_scores else "—",
+        if valid_scores
+        else "—",
         "grades": {g: sum(r["grade"] == g for r in scored) for g in _GRADES},
     }
 
@@ -279,7 +285,8 @@ def board_summary(source, db, accounts: frozenset[str], *, start_date, end_date,
     today = datetime.now(LA).date()
     allowed = {"测评中", "待市场评分", "测评通过", "测评未通过"}
     rows = [
-        r for r in scoped_projection(source, db, accounts)
+        r
+        for r in scoped_projection(source, db, accounts)
         if r["first_wfs"] is not None
         and start_date <= r["first_wfs"] <= end_date
         and r["status"] in allowed
@@ -287,8 +294,7 @@ def board_summary(source, db, accounts: frozenset[str], *, start_date, end_date,
     status = Counter(r["status"] for r in rows)
     completed = status["测评通过"] + status["测评未通过"]
     grades = {
-        g: sum(r["grade"] == g for r in rows
-               if r["status"] in ("测评通过", "测评未通过"))
+        g: sum(r["grade"] == g for r in rows if r["status"] in ("测评通过", "测评未通过"))
         for g in _GRADES
     }
     reasons = {k: 0 for k in ("market", "speed", "ad", "profit", "trust")}
@@ -305,6 +311,7 @@ def board_summary(source, db, accounts: frozenset[str], *, start_date, end_date,
                 continue
             try:
                 from decimal import Decimal
+
                 score = Decimal(str(value))
                 if score.is_finite() and 0 <= score <= 10:
                     numeric.append((score, key))
@@ -333,9 +340,9 @@ def board_summary(source, db, accounts: frozenset[str], *, start_date, end_date,
             category_paths.setdefault(category, {})[raw] = category_path_detail(raw)
         developer_groups.setdefault(r["developer"], []).append(r)
     due = [
-        r for r in rows
-        if r["status"] == "待市场评分"
-        and (today - r["first_wfs"]).days + 1 >= remind_days
+        r
+        for r in rows
+        if r["status"] == "待市场评分" and (today - r["first_wfs"]).days + 1 >= remind_days
     ]
     due.sort(key=lambda r: (r["first_wfs"], r["identity"]))
     return {

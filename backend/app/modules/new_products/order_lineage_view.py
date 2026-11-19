@@ -578,10 +578,8 @@ def apply_verified(
             "valid_orders_14d": verified["orders"],
             "single_unit_orders_14d": verified["singles"],
             "trust_order_units_ratio_pct": (
-                Decimal(verified["orders"])
-                / Decimal(verified["units"]) * 100
-                if verified["orders"] > 0
-                and verified["units"] >= verified["orders"]
+                Decimal(verified["orders"]) / Decimal(verified["units"]) * 100
+                if verified["orders"] > 0 and verified["units"] >= verified["orders"]
                 else None
             ),
             "ad_status": "unknown",

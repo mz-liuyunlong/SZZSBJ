@@ -329,11 +329,7 @@ def merge_persisted_page_row(
             ):
                 if field in saved_facts:
                     value = saved_facts[field]
-                    facts[field] = (
-                        value.isoformat()
-                        if isinstance(value, date)
-                        else value
-                    )
+                    facts[field] = value.isoformat() if isinstance(value, date) else value
         facts["single_unit_orders_14d"] = None
         facts.pop("single_unit_orders_evidence", None)
         if block.get("rule_version") is not None:

@@ -1,4 +1,5 @@
 """Regression tests: all 479 valid Listing category paths use full Chinese paths."""
+
 from app.modules.new_products.category_zh import (
     _EXACT_CATEGORY_PATH_ZH,
     _V6_EXACT_CATEGORY_PATH_ZH,
@@ -27,12 +28,10 @@ def test_v6_listing_category_full_chinese():
 
 def test_v6_listing_category_examples():
     kitchen = (
-        "Home > Kitchen & Dining > Tools & Gadgets > "
-        "Kitchen Tools & Gadgets > Chopping & Slicing"
+        "Home > Kitchen & Dining > Tools & Gadgets > Kitchen Tools & Gadgets > Chopping & Slicing"
     )
     assert category_path_detail(kitchen)["zh"] == (
-        "家居 > 厨房与餐饮 > 工具与小配件 > "
-        "厨房工具与小配件 > 切碎与切片工具"
+        "家居 > 厨房与餐饮 > 工具与小配件 > 厨房工具与小配件 > 切碎与切片工具"
     )
     assert business_category(kitchen) == "厨房用品"
     toilet = "Household Essentials > Bathroom Cleaning Supplies > Toilet Brushes"

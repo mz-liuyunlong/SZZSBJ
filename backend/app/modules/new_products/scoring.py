@@ -146,27 +146,28 @@ def evaluate(facts: dict[str, Any], config: dict[str, Any], rule_version: int) -
         or dec(orders) > dec(units)
         or dec(ratio) < 0
         or dec(ratio) > HUNDRED
-        or abs(dec(ratio) - dec(orders) / dec(units) * HUNDRED)
-        > Decimal("0.000001")
+        or abs(dec(ratio) - dec(orders) / dec(units) * HUNDRED) > Decimal("0.000001")
     ):
         d["trust"] = None
         missing.append("MART累计销售件数/订单数/订单件数比")
     else:
         tr = p["trust"]
-        d["trust"] = weighted([
-            (
-                clamp(dec(units) / dec(tr["targetUnits"]) * TEN),
-                dec(tr["unitsWeight"]),
-            ),
-            (
-                up(
-                    dec(ratio),
-                    dec(tr["singleRatioZero"]),
-                    dec(tr["singleRatioFull"]),
+        d["trust"] = weighted(
+            [
+                (
+                    clamp(dec(units) / dec(tr["targetUnits"]) * TEN),
+                    dec(tr["unitsWeight"]),
                 ),
-                dec(tr["singleRatioWeight"]),
-            ),
-        ])
+                (
+                    up(
+                        dec(ratio),
+                        dec(tr["singleRatioZero"]),
+                        dec(tr["singleRatioFull"]),
+                    ),
+                    dec(tr["singleRatioWeight"]),
+                ),
+            ]
+        )
     no_ads = ad_status == "not_run"
     no_orders = no_ads and qty == 0 and (orders is None or orders == 0)
     continuation = bool(

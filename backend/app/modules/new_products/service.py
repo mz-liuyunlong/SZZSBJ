@@ -1153,14 +1153,8 @@ class NewProductService:
                         )
                     )
                     matched_record = persisted.get(identity)
-                    performance = (
-                        matched_record[1]
-                        if matched_record is not None
-                        else None
-                    )
-                    coverage = getattr(
-                        performance, "data_coverage_json", None
-                    )
+                    performance = matched_record[1] if matched_record is not None else None
+                    coverage = getattr(performance, "data_coverage_json", None)
                     if isinstance(coverage, dict) and isinstance(
                         coverage.get("new_products_authority_v2"), dict
                     ):
