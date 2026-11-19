@@ -10,7 +10,7 @@ type Props = {
   dimension: CorrectionDimension;
   currentScore: number | null;
   children: ReactNode;
-  onSubmit: (requestedScore: number, reason: string) => CorrectionSubmission;
+  onSubmit: (requestedScore: number, reason: string) => Promise<CorrectionSubmission> | CorrectionSubmission;
 };
 
 const dimensionTitle: Record<CorrectionDimension, string> = {
@@ -28,6 +28,7 @@ export default function NewProductCorrectionPopover({
   onSubmit,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [requested, setRequested] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
@@ -41,7 +42,8 @@ export default function NewProductCorrectionPopover({
     setOpen(next);
   };
 
-  const submit = () => {
+  const submit = async () => {
+    if (saving) return;
     const value = requested.trim();
     // Only actual numbers 0..10, with at most two decimal places.
     const validNumber = /^(?:[0-9](?:\.\d{1,2})?|10(?:\.0{1,2})?)$/.test(value);
@@ -54,11 +56,15 @@ export default function NewProductCorrectionPopover({
       setError("修正依据至少5个字，最多500字");
       return;
     }
-    const result = onSubmit(Number(value), explanation);
-    if (result.ok) {
-      changeOpen(false);
-    } else {
-      setError(result.error || "未能提交申请，请检查当前申请流程");
+    setSaving(true);
+    try {
+      const result = await onSubmit(Number(value), explanation);
+      if (result.ok) changeOpen(false);
+      else setError(result.error || "保存修正失败");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存修正失败");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -75,13 +81,13 @@ export default function NewProductCorrectionPopover({
       content={
         <div className="np-score-correction-panel">
           <div className="np-score-correction-head">
-            <strong>申请修正 · {dimensionTitle[dimension]}</strong>
+            <strong>修正分数 · {dimensionTitle[dimension]}</strong>
             <span className="np-score-correction-current">
               当前评分 <b>{currentScore === null ? "—" : currentScore.toFixed(2)}</b><em> / 10</em>
             </span>
           </div>
           <div className="np-score-correction-field">
-            <label htmlFor={`np-correction-score-${dimension}`}>申请分数 <span>*</span></label>
+            <label htmlFor={`np-correction-score-${dimension}`}>修正分数 <span>*</span></label>
             <input
               id={`np-correction-score-${dimension}`}
               type="number"
@@ -111,7 +117,7 @@ export default function NewProductCorrectionPopover({
           {error ? <div className="np-score-correction-error" role="alert">{error}</div> : null}
           <div className="np-score-correction-footer">
             <button type="button" className="np-score-correction-cancel" onClick={() => changeOpen(false)}>取消</button>
-            <button type="button" className="np-score-correction-submit" onClick={submit}>提交申请</button>
+            <button type="button" className="np-score-correction-submit" onClick={submit} disabled={saving}>保存修正</button>
           </div>
         </div>
       }

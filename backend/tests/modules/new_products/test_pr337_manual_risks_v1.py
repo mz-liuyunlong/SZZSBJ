@@ -10,6 +10,8 @@ _ID = {
     "score": 7,
     "reason": "市场竞争情况分析完整",
     "expected_version": 0,
+    "competitor_ids": [],
+    "no_competitors": True,
 }
 
 

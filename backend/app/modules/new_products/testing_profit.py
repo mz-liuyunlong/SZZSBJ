@@ -148,6 +148,7 @@ def calculate_testing_profit(
     rows: Iterable[Mapping[str, Any]],
     *,
     sp_data: Mapping[str, Any] | None = None,
+    include_components: bool = False,
 ) -> dict[str, Any]:
     """Calculate complete pre-closure historical normal-sale profit.
 
@@ -273,7 +274,7 @@ def calculate_testing_profit(
     profit = revenue - (purchase + first_leg + wfs + storage + commission + ad_spend)
     invested = purchase + first_leg
     valid = not missing
-    return {
+    result = {
         "status": "scored" if valid else "partial",
         "missing": sorted(missing),
         "profit_usd": str(profit) if valid else None,
@@ -312,6 +313,17 @@ def calculate_testing_profit(
         "source": "mart_daily_sales_item_day+fact_walmart_ad_item_sp_daily",
         "policy": "returns_ignored_samples_excluded_sample_ads_included",
     }
+    if include_components:
+        # Optional read-only evidence only. The default score result is unchanged.
+        result["_components"] = {
+            "profit_usd": str(profit),
+            "invested_usd": str(invested),
+            "sales_amount_usd": str(revenue),
+            "ad_spend_usd": str(ad_spend),
+            "sp_ad_spend_usd": str(sp),
+            "sem_ad_spend_usd": str(sem),
+        }
+    return result
 
 
 def load_testing_profit_page(
@@ -333,3 +345,259 @@ def load_testing_profit_page(
         key: calculate_testing_profit(grouped.get(key, []), sp_data=sp_map.get(key))
         for key in requested
     }
+
+
+# NP_OPERATING_DAILY_SAME_SOURCE_V1: detail-only read of SAME independent profit engine.
+# Never used by /listings, nightly scoring, or the write/publish path.
+_ADS_BY_DAY_SQL = text("""
+SELECT a.business_date_la AS day,
+       COUNT(a.id) AS source_rows,
+       COUNT(a.id) FILTER (
+         WHERE a.ad_spend_amount IS NULL
+            OR a.ad_spend_currency_code IS DISTINCT FROM 'USD'
+       ) AS incomplete_spend_rows,
+       SUM(a.ad_spend_amount) FILTER (
+         WHERE a.ad_spend_currency_code = 'USD'
+       ) AS sp_spend
+FROM fact_walmart_ad_item_sp_daily a
+WHERE a.source_account_ref = :account
+  AND a.store_id = :store
+  AND a.item_id = :item
+  AND a.business_date_la <= :cutoff
+GROUP BY a.business_date_la
+ORDER BY a.business_date_la
+""")
+
+
+def build_operating_daily_same_source(
+    source_rows: list[dict[str, Any]],
+    sp_total: Mapping[str, Any] | None,
+    sp_by_day: list[dict[str, Any]],
+    *,
+    cutoff: date,
+    first_wfs: date | None,
+    saved_facts: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return daily evidence using calculate_testing_profit() ONLY.
+
+    The independent lifetime result must stay bit-for-bit compatible with the
+    automatic-score calculation. Per-day calls use the same function and SP
+    source choice; unverified evidence never becomes a numeric profit.
+    """
+    source_name = "new_products_testing_profit_full_history_v2"
+    policy = "returns_ignored_samples_excluded_sample_ads_included"
+    cutoff_str = cutoff.isoformat()
+
+    def unavailable(reason: str, *, data: dict[str, Any] | None = None) -> dict[str, Any]:
+        return {
+            "status": "unverified",
+            "reason": reason,
+            "source": source_name,
+            "policy": policy,
+            "cutoff_la": cutoff_str,
+            "first_wfs_date_la": first_wfs.isoformat() if first_wfs else None,
+            "rows": [],
+            "totals": None,
+            "missing": list(data.get("missing") or []) if data else [reason],
+            "score_comparison": "not_verified",
+        }
+
+    if first_wfs is None or first_wfs > cutoff:
+        return unavailable("first_wfs_date_unverified")
+    days: dict[date, list[dict[str, Any]]] = defaultdict(list)
+    for row in source_rows:
+        d = row.get("day")
+        if not isinstance(d, date) or isinstance(d, datetime):
+            return unavailable("invalid_business_date")
+        if d > cutoff:
+            return unavailable("historical_period_conflicts_with_first_wfs")
+        if d < first_wfs:
+            # Keep verified pre-WFS sample/ad history for financial reconciliation.
+            # Real paid sales before first WFS still require investigation.
+            paid = [
+                decimal_value(row.get(field))
+                for field in ("sales_qty", "order_count", "sales_amount")
+            ]
+            if any(value is None or value != ZERO for value in paid):
+                return unavailable("historical_period_conflicts_with_first_wfs")
+        days[d].append(row)
+
+    ads: dict[date, dict[str, Any]] = {}
+    for row in sp_by_day:
+        d = row.get("day")
+        if not isinstance(d, date) or isinstance(d, datetime):
+            return unavailable("invalid_ad_business_date")
+        # Automatic testing profit includes same-identity SP spend
+        # before first WFS availability. Preserve those actual dates.
+        if d > cutoff or d in ads:
+            return unavailable("ad_period_or_identity_inconsistent")
+        ads[d] = row
+
+    # Global SP-source choice must match the automatic score: use FACT if any
+    # source SP rows exist; otherwise use MART's daily SP fallback everywhere.
+    fact_sp_used = int((sp_total or {}).get("source_rows") or 0) > 0
+    if not fact_sp_used and ads:
+        return unavailable("sp_source_count_inconsistent")
+    if fact_sp_used:
+        daily_row_count = sum(int(x.get("source_rows") or 0) for x in ads.values())
+        daily_bad_count = sum(int(x.get("incomplete_spend_rows") or 0) for x in ads.values())
+        global_row_count = int((sp_total or {}).get("source_rows") or 0)
+        global_bad_count = int((sp_total or {}).get("incomplete_spend_rows") or 0)
+        global_sp = decimal_value((sp_total or {}).get("sp_spend"))
+        daily_sp = sum((decimal_value(x.get("sp_spend")) or ZERO for x in ads.values()), ZERO)
+        if (
+            daily_row_count != global_row_count
+            or daily_bad_count != global_bad_count
+            or global_sp is None
+            or global_sp != daily_sp
+        ):
+            return unavailable("sp_daily_aggregation_not_reconciled")
+
+    total = calculate_testing_profit(source_rows, sp_data=sp_total, include_components=True)
+    if total["status"] != "scored" or total.get("policy") != policy or total.get("missing"):
+        return unavailable("independent_profit_evidence_incomplete", data=total)
+
+    dailies = []
+    for d in sorted(set(days) | set(ads)):
+        rows = days.get(d, [])
+        # Even when there is no SP FACT record on a date, FACT is the global
+        # source when any SP rows exist: forbid day-specific MART fallback.
+        day_sp = (
+            {
+                "source_rows": 1,
+                "incomplete_spend_rows": 0,
+                "sp_spend": (ads[d].get("sp_spend") if d in ads else ZERO) or ZERO,
+            }
+            if fact_sp_used
+            else {"source_rows": 0, "incomplete_spend_rows": 0, "sp_spend": None}
+        )
+        single = calculate_testing_profit(rows, sp_data=day_sp, include_components=True)
+        components = single["_components"]
+        revenue = decimal_value(components["sales_amount_usd"])
+        profit = decimal_value(components["profit_usd"])
+        invested = decimal_value(components["invested_usd"])
+        ad = decimal_value(components["ad_spend_usd"])
+        if any(v is None for v in (revenue, profit, invested, ad)):
+            return unavailable("daily_components_not_numeric")
+        # Missing MART is not evidence of zero orders/sales. Keep the ad-only
+        # date for reconciliation, but never manufacture paid sales metrics.
+        has_mart = bool(rows)
+        dailies.append(
+            {
+                "date": d.isoformat(),
+                "sales_units": single["sales_units"] if has_mart else None,
+                "sales_orders": single["sales_orders"] if has_mart else None,
+                "sales_amount_usd": single["sales_amount_usd"] if has_mart else None,
+                "ad_spend_usd": str(ad),
+                "profit_usd": str(profit),
+                "invested_usd": str(invested),
+                "margin_pct": str(profit / revenue * HUNDRED) if revenue > ZERO else None,
+                "roi": str(profit / invested) if invested > ZERO else None,
+                "ad_share_pct": str(ad / revenue * HUNDRED) if revenue > ZERO else None,
+                "average_price_usd": (
+                    str(revenue / decimal_value(single["sales_units"]))
+                    if has_mart
+                    and decimal_value(single["sales_units"]) is not None
+                    and decimal_value(single["sales_units"]) > ZERO
+                    else None
+                ),
+                "has_mart_evidence": has_mart,
+            }
+        )
+
+    components = total["_components"]
+    for key, daily_key in (
+        ("profit_usd", "profit_usd"),
+        ("sales_amount_usd", "sales_amount_usd"),
+        ("ad_spend_usd", "ad_spend_usd"),
+        ("invested_usd", "invested_usd"),
+    ):
+        expected = decimal_value(components[key])
+        actual = sum((decimal_value(r[daily_key]) or ZERO for r in dailies), ZERO)
+        if expected is None or expected != actual:
+            return unavailable(f"daily_total_reconciliation_failed_{key}")
+    if sum((decimal_value(r["sales_units"]) or ZERO for r in dailies), ZERO) != decimal_value(
+        total["sales_units"]
+    ) or sum((decimal_value(r["sales_orders"]) or ZERO for r in dailies), ZERO) != decimal_value(
+        total["sales_orders"]
+    ):
+        return unavailable("daily_sales_reconciliation_failed")
+
+    # Current and saved score are comparable ONLY at an identical LA cutoff.
+    comparison = "not_comparable"
+    if saved_facts and saved_facts.get("profit_source") == source_name:
+        saved_cutoff = str(saved_facts.get("data_cutoff_la") or "")[:10]
+        if saved_cutoff == cutoff_str and saved_facts.get("profit_calc_status") == "scored":
+            checks = (
+                ("profit_usd", "profit_usd"),
+                ("roi", "roi"),
+                ("gross_margin_pct", "gross_margin_pct"),
+                ("sales_amount_usd", "sales_amount_usd"),
+                ("ad_spend_usd", "ad_spend_usd"),
+            )
+            # Some earlier snapshots omit certain fields. Compare only fully
+            # available proof; never interpret missing fields as agreement.
+            if all(saved_facts.get(a) is not None for a, _ in checks):
+                if any(decimal_value(saved_facts[a]) != decimal_value(total[b]) for a, b in checks):
+                    return unavailable("saved_score_proof_disagrees_with_daily")
+                comparison = "saved_score_reconciled"
+
+    # These are cumulative ratios from the SAME unrounded financial totals,
+    # not arithmetic averages of daily percentages / ROI values.
+    return {
+        "status": "scored",
+        "source": source_name,
+        "policy": policy,
+        "cutoff_la": cutoff_str,
+        "first_wfs_date_la": first_wfs.isoformat(),
+        "rows": list(reversed(dailies)),
+        "totals": {
+            "sales_units": total["sales_units"],
+            "sales_orders": total["sales_orders"],
+            "sales_amount_usd": total["sales_amount_usd"],
+            "ad_spend_usd": total["ad_spend_usd"],
+            "profit_usd": total["profit_usd"],
+            "roi": total["roi"],
+            "margin_pct": total["gross_margin_pct"],
+            "invested_usd": components["invested_usd"],
+        },
+        "score_comparison": comparison,
+        "missing": [],
+        "complete_calendar_days": (
+            sum(first_wfs <= business_day <= cutoff for business_day in days)
+            == (cutoff - first_wfs).days + 1
+        ),
+    }
+
+
+def load_testing_profit_daily_detail(
+    session: Session,
+    key: Key,
+    *,
+    cutoff: date,
+    first_wfs: date | None,
+    saved_facts: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Three bounded, read-only source queries on one authorized item detail GET."""
+    account, store, item = key
+    params = {"account": account, "store": store, "item": item, "cutoff": cutoff}
+    original = [
+        dict(row)
+        for row in session.execute(
+            _DAILY_SQL, {"wanted": keys_json([key]), "cutoff": cutoff}
+        ).mappings()
+    ]
+    # Full score uses the same aggregate SP SQL; group by date only for display.
+    global_sp = next(
+        iter(session.execute(_ADS_SQL, {"wanted": keys_json([key]), "cutoff": cutoff}).mappings()),
+        None,
+    )
+    daily_sp = [dict(row) for row in session.execute(_ADS_BY_DAY_SQL, params).mappings()]
+    return build_operating_daily_same_source(
+        original,
+        dict(global_sp) if global_sp is not None else None,
+        daily_sp,
+        cutoff=cutoff,
+        first_wfs=first_wfs,
+        saved_facts=saved_facts,
+    )

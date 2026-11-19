@@ -37,6 +37,36 @@ def evaluate(facts: dict[str, Any], config: dict[str, Any], rule_version: int) -
     d["market"] = dec(market) if market is not None and 0 <= dec(market) <= 10 else None
     if d["market"] is None:
         missing.append("市场竞争人工评分")
+    if facts.get("zero_sales_verified") is True:
+        # Verified 14-day 0 paid orders: all automatic sub-scores are 0.
+        # This is an explicit business rule, NOT fabricated ROI or ad ratios.
+        d.update({"speed": Z, "ad": Z, "profit": Z, "trust": Z})
+        grade = None
+        total = None
+        if d["market"] is not None:
+            total = Z
+            grade = next(
+                (
+                    name
+                    for name in ("S", "A", "B", "C", "D")
+                    if dec(config["gradeBands"][name][0]) <= Z <= dec(config["gradeBands"][name][1])
+                ),
+                None,
+            )
+            if grade is None:
+                missing.append("规则分级区间未覆盖零分")
+                total = None
+        return {
+            "rule_version": rule_version,
+            "dimensions": {k: str(v) if v is not None else None for k, v in d.items()},
+            "total": str(total) if total is not None else None,
+            "grade": grade,
+            "missing": missing,
+            "risk": ["已核实14天零销量"],
+            "ad_excluded": False,
+            "ad_sample_insufficient": False,
+            "observation_state": "scored" if grade else "insufficient_data",
+        }
     first = facts.get("first_order_day")
     qty = facts.get("effective_orders_14d")
     elapsed = facts.get("elapsed_days")

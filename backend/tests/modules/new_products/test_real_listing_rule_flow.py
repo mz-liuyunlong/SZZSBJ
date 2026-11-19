@@ -11,6 +11,7 @@ from sqlalchemy.dialects import postgresql
 from app.core.api import ApiError
 from app.modules.new_products.read_source import source_url
 from app.modules.new_products.repository import SAMPLE_TAG, _NewProductListingRepository
+from app.modules.new_products.risk_conditions import default_risk_rules
 from app.modules.new_products.rules import DEFAULT_PARAMETERS, DEFAULT_WEIGHTS, validate
 from app.modules.new_products.scoring import evaluate
 
@@ -60,6 +61,7 @@ def cfg():
         "scoreCriteria": {"market": ["evaluation"] * 5},
         "penalties": [],
         "vetoes": [],
+        "riskConditions": default_risk_rules(),
     }
 
 

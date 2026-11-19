@@ -5,6 +5,8 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from .risk_conditions import normalize_risk_rules
+
 DEFAULT_WEIGHTS = {"market": 15, "speed": 30, "ad": 20, "profit": 25, "trust": 10}
 DEFAULT_PARAMETERS = {
     "speed": {
@@ -147,8 +149,24 @@ def _validate_thresholds(cfg: dict):
         raise ValueError("D/Pass不建议采购")
     if not isinstance(cfg.get("scoreCriteria"), dict):
         raise ValueError("人工评分标准缺失")
-    if not isinstance(cfg.get("penalties"), list) or not isinstance(cfg.get("vetoes"), list):
-        raise ValueError("风险规则缺失")
+    if cfg.get("penalties") != [] or cfg.get("vetoes") != []:
+        raise ValueError("已取消通用扣分与一票否决，请使用配置风险条件")
+    if "riskConditions" not in cfg:
+        raise ValueError("缺少18项风险条件配置")
+    if not isinstance(cfg["riskConditions"], list) or any(
+        isinstance(r, dict) and r.get("code") == "ad_sudden_change" for r in cfg["riskConditions"]
+    ):
+        raise ValueError("RISK_RETIRED_RULE_CANNOT_BE_PUBLISHED")
+    risk_rules = normalize_risk_rules(cfg["riskConditions"])
+    if cfg["riskConditions"] != risk_rules:
+        # Read compatibility is allowed for a disabled legacy rule; publishing
+        # a new rule version must always store the current threshold schema.
+        if any(
+            row["code"] == "ad_uncontrolled"
+            and set(row["params"]) == {"min_spend_usd", "max_ad_orders"}
+            for row in cfg["riskConditions"]
+        ):
+            raise ValueError("旧版广告失控规则必须改为点击/CVR阈值后重新保存")
     return cfg
 
 

@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import time
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
@@ -23,11 +24,20 @@ from .bulk_read import (
     ReadSnapshot,
     load_read_snapshot,
 )
-from .models import ActionEvent, MarketScore, PurchaseApplication, RuleVersion, TrackingDecision
+from .models import (
+    ActionEvent,
+    MarketScore,
+    NewProductPerformanceCurrent,
+    NewProductRegistry,
+    PurchaseApplication,
+    RuleVersion,
+    TrackingDecision,
+)
 from .persisted_projection import load_persisted_page, merge_persisted_page_row
 from .persisted_read import load_persisted, snapshot_row  # PR337_PERSISTED_DISPLAY_V1
 from .repository import NewProductRepository
 from .sale_stat_order_evidence import reconcile_sale_stat_order_evidence
+from .score_corrections import calculate_effective, overlay, public_correction
 from .scoring import evaluate
 from .testing_profit import FINAL_RESULTS, load_final_decisions, load_testing_profit_page
 from .testing_profit_projection import (
@@ -421,6 +431,30 @@ class NewProductService:
         authority = coverage.get("new_products_authority_v2")
         old_score = coverage.get("auto_dimension_scores")
         market_version = int(row.get("market_version") or 0)
+        # A final grade is optional before market scoring, but V2 automatic
+        # evidence and its fact snapshot must not disappear in that state.
+        automatic_v2 = (
+            isinstance(authority, dict)
+            and authority.get("rule_version") == version
+            and isinstance(old_score, dict)
+            and old_score.get("source") == "new_products_authority_v2"
+            and old_score.get("rule_version") == version
+        )
+        if automatic_v2:
+            saved_facts = coverage.get("new_products_score_facts_v2")
+            if isinstance(saved_facts, dict):
+                facts.update(saved_facts)
+            dims = old_score.get("dimensions")
+            if isinstance(dims, dict):
+                ev["dimensions"].update(
+                    {
+                        name: str(dims[name]) if dims.get(name) is not None else None
+                        for name in ("speed", "ad", "profit", "trust")
+                    }
+                )
+            ev["rule_version"] = version
+            facts["automatic_weighted_points"] = old_score.get("automatic_points")
+            facts["automatic_covered_weight_pct"] = old_score.get("covered_weight_pct")
         validated = (
             isinstance(authority, dict)
             and authority.get("status") == "ready"
@@ -503,6 +537,20 @@ class NewProductService:
             ident(m): m
             for m in self.db.scalars(select(MarketScore).where(members(MarketScore))).all()
         }
+        # NP_MARKET_COMPETITOR_PERSIST_20261118: one already-loaded persisted page,
+        # no per-product detail/API call or source/MART query.
+        companion_rows = local_saved if self.db is not self.repo.session else saved_rows
+        competitor_blocks = {}
+        for identity, matched in companion_rows.items():
+            perf = matched[1] if matched else None
+            coverage = (
+                perf.data_coverage_json
+                if perf is not None and isinstance(perf.data_coverage_json, dict)
+                else {}
+            )
+            block = coverage.get("market_competitors_v1")
+            if isinstance(block, dict):
+                competitor_blocks[identity] = block
         applications = {}
         for app in self.db.scalars(
             select(PurchaseApplication)
@@ -544,6 +592,12 @@ class NewProductService:
                 row["market_reason"] = market.reason
                 row["market_version"] = market.version
                 row["facts"]["market_score"] = str(market.score)
+                block = competitor_blocks.get(key)
+                if isinstance(block, dict) and block.get("market_version") == market.version:
+                    ids = block.get("ids")
+                    if isinstance(ids, list) and all(isinstance(i, str) for i in ids):
+                        row["market_competitor_ids"] = ids
+                        row["market_no_competitors"] = block.get("none") is True
                 if row["evaluation"].get("observation_state") != "frozen":
                     row["evaluation"]["dimensions"]["market"] = str(market.score)
             app = applications.get(key)
@@ -572,6 +626,192 @@ class NewProductService:
             if decision is not None:
                 row["tracking_decision"] = decision.decision
                 row["tracking_reason"] = decision.reason
+        self._overlay_score_correction_rows(rows, keys, config)
+
+    # NP_OPERATOR_SCORE_CORRECTION_V1_20261119
+    def _score_correction_blocks(self, keys):
+        if not keys:
+            return {}
+        if len(keys) > 200:
+            raise ValueError("Correction read scope exceeds 200")
+        stmt = (
+            select(
+                NewProductRegistry.source_account_ref,
+                NewProductRegistry.store_id,
+                NewProductRegistry.item_id,
+                NewProductPerformanceCurrent.data_coverage_json,
+            )
+            .join(
+                NewProductPerformanceCurrent,
+                NewProductPerformanceCurrent.registry_id == NewProductRegistry.id,
+            )
+            .where(
+                tuple_(
+                    NewProductRegistry.source_account_ref,
+                    NewProductRegistry.store_id,
+                    NewProductRegistry.item_id,
+                ).in_(keys)
+            )
+        )
+        found = {}
+        for a, store, item, coverage in self.db.execute(stmt).all():
+            block = (
+                (coverage or {}).get("operator_score_correction_v1")
+                if isinstance(coverage, dict)
+                else None
+            )
+            if isinstance(block, dict):
+                found[(a, store, item)] = block
+        return found
+
+    def _overlay_score_correction_rows(self, rows, keys, config):
+        blocks = self._score_correction_blocks(keys)
+        for row, key in zip(rows, keys, strict=True):
+            block = blocks.get(key)
+            if block is not None and overlay(row, block, config):
+                row["suggested_qty"] = self._suggested_quantity(row["evaluation"], config)
+
+    def save_score_correction(self, accounts, body, actor):
+        from .evaluation_workflow import _protected
+
+        a, store, item = ident(body)
+        self._listing(accounts, a, store, item)
+        try:
+            self.db.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+                {"key": "NP_SCORE_CORRECTION:" + a + ":" + store + ":" + item},
+            )
+            reg = self.db.scalar(
+                select(NewProductRegistry).where(
+                    NewProductRegistry.source_account_ref == a,
+                    NewProductRegistry.store_id == store,
+                    NewProductRegistry.item_id == item,
+                )
+            )
+            if reg is None or _protected(self.db, reg):
+                problem("NP_CORRECTION_LOCKED", 409, "已采购申请或业务闭环，不能修改评分")
+            perf = self.db.scalar(
+                select(NewProductPerformanceCurrent)
+                .where(NewProductPerformanceCurrent.registry_id == reg.id)
+                .with_for_update()
+            )
+            if perf is None:
+                problem("NP_CORRECTION_NO_EVIDENCE", 409, "尚未保存自动评分证据")
+            config, current_rule_version = self._config()
+            coverage = deepcopy(perf.data_coverage_json or {})
+            block = coverage.get("operator_score_correction_v1")
+            revision = block.get("revision", 0) if isinstance(block, dict) else 0
+            if revision != body.expected_revision:
+                problem("NP_CORRECTION_VERSION_CONFLICT", 409, "评分已被其他运营修改，请刷新后重试")
+            if not isinstance(block, dict):
+                # Persist the original immutable official score BEFORE first edit.
+                current = self.persisted_score(accounts, a, store, item)["evaluation"]
+                if (
+                    current.get("rule_version") != current_rule_version
+                    or current.get("observation_state") == "frozen"
+                ):
+                    problem("NP_CORRECTION_UNVERIFIED", 409, "评分规则尚未核实或商品已冻结")
+                if perf.score is not None and (
+                    current.get("total") is None
+                    or current.get("grade") != perf.grade
+                    or Decimal(str(current["total"])) != Decimal(str(perf.score))
+                ):
+                    problem("NP_CORRECTION_UNVERIFIED", 409, "正式原始评分不一致")
+                source_block = coverage.get("auto_dimension_scores")
+                if (
+                    not isinstance(source_block, dict)
+                    or source_block.get("rule_version") != current_rule_version
+                    or not isinstance(source_block.get("dimensions"), dict)
+                ):
+                    problem("NP_CORRECTION_UNVERIFIED", 409, "自动评分原始证据不完整")
+                system = {
+                    "total": current["total"],
+                    "grade": current["grade"],
+                    "dimensions": deepcopy(current["dimensions"]),
+                    "rule_version": current_rule_version,
+                    "ad_excluded": bool(current.get("ad_excluded", False)),
+                    "risk": deepcopy(current.get("risk", [])),
+                }
+                block = {
+                    "revision": 0,
+                    "system": system,
+                    "overrides": {},
+                    "effective": {
+                        "dimensions": deepcopy(system["dimensions"]),
+                        "total": system["total"],
+                        "grade": system["grade"],
+                    },
+                    "history": [],
+                }
+            system = block["system"]
+            if system.get("rule_version") != current_rule_version:
+                problem("NP_CORRECTION_RULE_CONFLICT", 409, "评分规则已更新，原始快照需要核实")
+            dimension = body.dimension
+            original_dimension = system["dimensions"].get(dimension)
+            if original_dimension is None:
+                problem("NP_CORRECTION_MISSING_DIMENSION", 409, "未核实的维度不能人工修正")
+            before = Decimal(str(block["effective"]["dimensions"][dimension]))
+            after = body.new_score
+            if after == before:
+                problem("NP_CORRECTION_UNCHANGED", 422, "修正分数与当前有效分数相同")
+            overrides = dict(block["overrides"])
+            if after == Decimal(str(original_dimension)):
+                overrides.pop(dimension, None)
+            else:
+                overrides[dimension] = str(after)
+            try:
+                effective = calculate_effective(system, overrides, config)
+            except (ValueError, KeyError, ArithmeticError):
+                problem("NP_CORRECTION_CALC_INVALID", 409, "无法对已保存的正式测评进行安全重算")
+            updated_at = datetime.now(UTC).isoformat()
+            event = {
+                "revision": revision + 1,
+                "dimension": dimension,
+                "actor_id": actor,
+                "at": updated_at,
+                "system_score": str(original_dimension),
+                "before": str(before),
+                "after": str(after),
+                "delta": str(after - before),
+                "reason": body.reason.strip(),
+                "system_total": system["total"],
+                "effective_total": effective["total"],
+                "effective_grade": effective["grade"],
+            }
+            block["revision"] = revision + 1
+            block["overrides"] = overrides
+            block["effective"] = effective
+            block["history"] = [*block["history"], event]
+            coverage["operator_score_correction_v1"] = block
+            perf.data_coverage_json = coverage
+            perf.updated_at = datetime.now(UTC)
+            self._event(a, store, item, "score_correction_saved", actor, event)
+            self.db.commit()
+            return public_correction(block)
+        except Exception:
+            self.db.rollback()
+            raise
+
+    def purchase_application_snapshot(self, accounts, application_id):
+        row = self.db.scalar(
+            select(PurchaseApplication).where(
+                PurchaseApplication.id == application_id,
+                PurchaseApplication.source_account_ref.in_(accounts),
+            )
+        )
+        if row is None:
+            problem("NP_PURCHASE_NOT_FOUND", 404, "采购申请不存在或无权读取")
+        return {
+            "id": str(row.id),
+            "status": row.status,
+            "version": row.version,
+            "score_snapshot": row.score_snapshot,
+            "requested_qty": row.requested_qty,
+            "suggested_qty": row.suggested_qty,
+            "applicant": row.applicant_id,
+            "reason": row.request_reason,
+            "created_at": row.created_at.isoformat(),
+        }
 
     def list(self, accounts, query):
         """Fail-safe cutover: preserve current preview/score behavior by default.
@@ -579,11 +819,28 @@ class NewProductService:
         Saved-only mode is an explicit *local* opt-in after daily snapshots
         have been inspected. Never change production semantics implicitly.
         """
+        item_keys = None
+        np_filters = {
+            name: getattr(query, name, "")
+            for name in ("np_statuses", "np_owners", "np_ratings", "np_owner_keyword")
+        }
+        if any(np_filters.values()):
+            from .performance_list_scope import matching_identities
+
+            item_keys = matching_identities(
+                self.repo.session,
+                self.db,
+                accounts,
+                statuses=np_filters["np_statuses"],
+                owners=np_filters["np_owners"],
+                ratings=np_filters["np_ratings"],
+                owner_keyword=np_filters["np_owner_keyword"],
+            )
         # PR337_LOCAL_PREVIEW_DISPATCH_EXACT_V5_20261115
         # Explicit four-item preview must use the old bounded snapshot path.
         # Production still fails closed in local_preview_item_ids().
         if os.getenv("PR337_LOCAL_PREVIEW_ITEM_IDS", "").strip():
-            return self._list_legacy_live(accounts, query)
+            return self._list_legacy_live(accounts, query, item_keys=item_keys)
         if os.getenv("APP_ENV", "").strip().lower() in {
             "local",
             "dev",
@@ -594,10 +851,35 @@ class NewProductService:
             "yes",
             "on",
         }:
-            return self._list_saved(accounts, query)
-        return self._list_legacy_live(accounts, query)
+            return self._list_saved(accounts, query, item_keys=item_keys)
+        return self._list_legacy_live(accounts, query, item_keys=item_keys)
 
-    def _list_saved(self, accounts, query):
+    def _attach_order_days_for_list(self, rows, finals, cutoff):
+        """Expose paid order days on list DTO; never depend on the detail GET.
+
+        Real terminal snapshots are read-only and are not recalculated here.
+        Their captured count remains unchanged if one already exists.
+        """
+        # NP_LIST_ORDER_DAYS_FAST_20261118
+        active = []
+        for row in rows:
+            listing = row.get("listing") or {}
+            key = tuple(
+                str(listing.get(k) or "") for k in ("source_account_ref", "store_id", "item_id")
+            )
+            if key in finals or (row.get("evaluation") or {}).get("observation_state") == "frozen":
+                continue
+            active.append(row)
+        if not active:
+            return
+        counts = self.repo.paid_order_days_for_list(active, cutoff)
+        for row in active:
+            listing = row["listing"]
+            key = tuple(str(listing[k]) for k in ("source_account_ref", "store_id", "item_id"))
+            row["facts"]["order_days_count"] = counts.get(key)
+            row["facts"]["order_days_cutoff_la"] = cutoff.isoformat()
+
+    def _list_saved(self, accounts, query, *, item_keys=None):
         """List saved results only. No advertising, order, profit or scoring queries.
 
         All expensive evidence/score calculations belong to background publishers.
@@ -618,6 +900,7 @@ class NewProductService:
                 keyword=query.keyword,
                 search_field=query.search_field,
                 status=query.status,
+                item_keys=item_keys,
                 **filters,
             )
             if preview is not None and total > 4:
@@ -670,6 +953,7 @@ class NewProductService:
                             overlay_saved_ad_display(row, coverage.get("ad_display_v1"))
                 rows.append(row)
             self._hydrate_workflow_rows(rows, persisted)
+            self._attach_order_days_for_list(rows, finals, today_la - timedelta(days=1))
             _LOGGER.info(
                 "new_product_list_saved_only page=%d count=%d total=%d elapsed_ms=%d",
                 query.page,
@@ -699,7 +983,7 @@ class NewProductService:
             )
             raise
 
-    def _list_legacy_live(self, accounts, query):
+    def _list_legacy_live(self, accounts, query, *, item_keys=None):
         """Normal list requests do not score. Four-item local preview is opt-in.
 
         Production must use precomputed background snapshots instead of the
@@ -718,6 +1002,7 @@ class NewProductService:
                 keyword=query.keyword,
                 search_field=query.search_field,
                 status=query.status,
+                item_keys=item_keys,
                 **kwargs,
             )
             if preview is not None and total > 4:
@@ -735,12 +1020,6 @@ class NewProductService:
                 else {}
             )
             profit_config, _ = self._config()
-            # One read-only, page-scoped SELECT; no per-product score calculation.
-            persisted = (
-                load_persisted_page(self.repo.session, [ident(item) for item in data.items])
-                if preview is None
-                else {}
-            )
             rows = []
             today_la = datetime.now(LA).date()
             snapshot = None
@@ -886,6 +1165,7 @@ class NewProductService:
                     )
                     saved_daily_view(saved_row, persisted.get(key))
             self._hydrate_workflow_rows(rows, persisted, profit_page)
+            self._attach_order_days_for_list(rows, finals, cutoff_la)
             # PR337_FLOW_WFS_REAL_STATUS_20261116: read workflow states, never infer them.
             from .workflow_read import attach_workflow_fields
 
@@ -970,10 +1250,59 @@ class NewProductService:
             end = datetime.now(LA).date()
             start = end - timedelta(days=179)
             series = self.repo.daily_series(account, store, item, start, end)
+        # NP_OPERATING_DAILY_SAME_SOURCE_V1: SAME testing-profit engine,
+        # one authorized item detail GET; never write or rescore.
+        from datetime import date as _date
+
+        from .testing_profit import load_testing_profit_daily_detail
+
+        evidence = score.get("facts") if isinstance(score.get("facts"), dict) else {}
+        first_raw = evidence.get("first_wfs_available_date_la") or score["listing"].get(
+            "first_wfs_available_date_la"
+        )
+        try:
+            first_wfs = _date.fromisoformat(str(first_raw)[:10])
+        except (TypeError, ValueError):
+            first_wfs = None
+        cutoff = datetime.now(LA).date() - timedelta(days=1)
+        evaluation = score.get("evaluation") or {}
+        frozen = evaluation.get("grade") is not None and evaluation.get("total") is not None
+        reason = None
+        if frozen:
+            # Never reconstruct a historical final grade with NEWER daily facts.
+            try:
+                original_cutoff = _date.fromisoformat(str(evidence.get("data_cutoff_la"))[:10])
+                if original_cutoff > cutoff:
+                    reason = "frozen_profit_cutoff_in_future"
+                else:
+                    cutoff = original_cutoff
+            except (TypeError, ValueError):
+                reason = "frozen_profit_cutoff_missing"
+        if first_wfs is None:
+            reason = "first_wfs_date_unverified"
+        operating_daily = (
+            {
+                "status": "unverified",
+                "reason": reason,
+                "rows": [],
+                "totals": None,
+                "cutoff_la": cutoff.isoformat(),
+                "source": "new_products_testing_profit_full_history_v2",
+            }
+            if reason
+            else load_testing_profit_daily_detail(
+                self.repo.session,
+                (account, store, item),
+                cutoff=cutoff,
+                first_wfs=first_wfs,
+                saved_facts=evidence,
+            )
+        )
         return {
             "listing": score["listing"],
             "score": score,
             "sales_series": serialized(series),
+            "evaluation_operating_daily": operating_daily,
             "tracking_decision": tr.decision if tr else None,
             "tracking_reason": tr.reason if tr else None,
             "events": [
@@ -1052,13 +1381,43 @@ class NewProductService:
                 {
                     **{"score": body.score, "reason": body.reason.strip(), "version": v + 1},
                     "risk_conditions": list(body.risk_conditions),
+                    "competitor_ids": list(body.competitor_ids),
+                    "no_competitors": body.no_competitors,
                 },
             )
             # PR337_EVALUATION_FULL_WORKFLOW_20261116:
             # Freeze final score only after verified automatic evidence.
             from .evaluation_workflow import publish_after_market
 
-            publish_after_market(self.db, a, s, i, body.score)
+            publish_after_market(self.db, a, s, i, body.score, market_version=v + 1)
+            # Persist manual competitor selection in existing versioned JSONB.
+            from .models import NewProductPerformanceCurrent, NewProductRegistry
+
+            perf = self.db.scalar(
+                select(NewProductPerformanceCurrent)
+                .join(
+                    NewProductRegistry,
+                    NewProductRegistry.id == NewProductPerformanceCurrent.registry_id,
+                )
+                .where(
+                    NewProductRegistry.source_account_ref == a,
+                    NewProductRegistry.store_id == s,
+                    NewProductRegistry.item_id == i,
+                )
+                .with_for_update()
+            )
+            if perf is None:
+                problem("NP_MARKET_COMPETITOR_PERFORMANCE_MISSING", 409, "新品测评记录不存在")
+            old_coverage = perf.data_coverage_json
+            if old_coverage is not None and not isinstance(old_coverage, dict):
+                problem("NP_MARKET_COMPETITOR_INVALID_COVERAGE", 409, "新品测评数据格式无效")
+            coverage = dict(old_coverage or {})
+            coverage["market_competitors_v1"] = {
+                "market_version": v + 1,
+                "ids": list(body.competitor_ids),
+                "none": body.no_competitors,
+            }
+            perf.data_coverage_json = coverage
             self.db.commit()
             return {"version": v + 1, "score": body.score, "reason": row.reason}
         except Exception:
@@ -1127,6 +1486,10 @@ class NewProductService:
                 409,
                 "新品退款/送样独立利润及评分尚未完成权威发布，暂不可申请采购",
             )
+        block = self._score_correction_blocks([(a, s, i)]).get((a, s, i))
+        if block is not None:
+            if not overlay(current, block, cfg):
+                problem("NP_CORRECTION_STALE", 409, "评分修正证据与正式结果不一致")
         ev = current["evaluation"]
         if ev["grade"] is None or ev["grade"] in ("D", "Pass"):
             problem("NEW_PRODUCT_PURCHASE_BLOCKED", 409, "关键指标缺失、被否决或不符合采购评级")

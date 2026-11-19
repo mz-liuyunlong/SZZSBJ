@@ -18,7 +18,7 @@ type Props = {
   parameters: ScoringParameters;
   loaded: boolean;
   currentVersion: number;
-  onRequestCorrection: (requestedScore:number, reason:string) => {ok:boolean;error?:string};
+  onRequestCorrection: (requestedScore:number, reason:string) => Promise<{ok:boolean;error?:string}> | {ok:boolean;error?:string};
 };
 
 const num = (v: unknown): number | null => {
@@ -76,7 +76,7 @@ export default function NewProductDimensionEvidence({
         onSubmit={onRequestCorrection}
       >
         <button type="button" className="btn small np-evidence-visual-correction">
-          申请修正
+          修正分数
         </button>
       </NewProductCorrectionPopover>
     </div>
@@ -171,7 +171,14 @@ export default function NewProductDimensionEvidence({
     details.every((x) => x.score !== null && x.score !== undefined);
 
   if (!usable) {
-    return unavailable("原始指标不足，暂不展示拆分过程。");
+    const zero = raw.zero_sales_verified === true;
+    if (zero && stored === 0) {
+      return unavailable("已核实14天零销量：按零销量规则计0分，未伪造ROI或广告指标。");
+    }
+    const lack = calculation.missing?.filter(Boolean) ?? [];
+    return unavailable(lack.length
+      ? `缺失评分证据：${lack.join("、")}`
+      : "同一次评分的原始指标尚未齐备，请检查已保存证据。");
   }
 
   const parts = details.map((x, i) => Number(x.score) * weights[i] / 100);

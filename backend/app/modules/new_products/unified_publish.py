@@ -10,6 +10,7 @@ not a second scheduler or a second calculation pipeline.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 from datetime import UTC, date, datetime, timedelta
@@ -17,7 +18,7 @@ from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select, tuple_
+from sqlalchemy import select, text, tuple_
 from sqlalchemy.orm import Session
 
 from .unified_ad_evidence import load_ad_snapshots
@@ -52,24 +53,138 @@ def local_target_approved(database: str | None, host: str | None) -> bool:
     return database in {"szzsbj_hybrid", "szzsbj_dev"} and host in {"127.0.0.1", "localhost", "::1"}
 
 
-def _eligible_rows(source: Session, item_ids: set[str] | None, limit: int) -> list[dict[str, Any]]:
+def _eligible_rows(
+    source: Session,
+    item_ids: set[str] | None,
+    limit: int,
+    *,
+    manual_identity: Key | None = None,
+    after: Key | None = None,
+) -> list[dict[str, Any]]:
+    """Bounded deterministic page; exact identity is scoped before LIMIT."""
     from .models import NewProductRegistry
 
+    if not 1 <= limit <= 500:
+        raise ValueError("Limit must be between 1 and 500")
     r = NewProductRegistry
     stmt = select(r).where(r.is_currently_tagged.is_(True))
     if item_ids is not None:
         stmt = stmt.where(r.item_id.in_(item_ids))
-    if not 1 <= limit <= 500:
-        raise ValueError("Limit must be between 1 and 500")
+    if manual_identity is not None:
+        if after is not None or (item_ids is not None and manual_identity[2] not in item_ids):
+            raise PermissionError("NP_MANUAL_TARGET_IDENTITY_MISMATCH")
+        stmt = stmt.where(
+            r.source_account_ref == manual_identity[0],
+            r.store_id == manual_identity[1],
+            r.item_id == manual_identity[2],
+        )
+    if after is not None:
+        stmt = stmt.where(tuple_(r.source_account_ref, r.store_id, r.item_id) > after)
     records = source.scalars(
         stmt.order_by(r.source_account_ref, r.store_id, r.item_id).limit(limit + 1)
     ).all()
-    if len(records) > limit:
-        raise ValueError("PUBLISH_SCOPE_OVER_LIMIT: explicit limit required")
-    return [
+    output = [
         {"key": (str(r.source_account_ref), str(r.store_id), str(r.item_id)), "registry_id": r.id}
         for r in records
     ]
+    if manual_identity is not None and any(row["key"] != manual_identity for row in output):
+        raise PermissionError("NP_MANUAL_TARGET_IDENTITY_MISMATCH")
+    return output
+
+
+def _store_watermarks(
+    source: Session, keys: list[Key], cutoff: date
+) -> dict[tuple[str, str], date]:
+    """One bounded store-level MART freshness witness; no negative evidence without it."""
+    stores = sorted({(a, s) for a, s, _ in keys})
+    if not stores:
+        return {}
+    rows = source.execute(
+        text("""
+        WITH wanted AS (
+            SELECT a, s FROM jsonb_to_recordset(CAST(:stores AS jsonb))
+            AS v(a text, s text)
+        )
+        SELECT w.a, w.s, MAX(d.business_date_la) AS latest
+        FROM wanted w LEFT JOIN mart_daily_sales_item_day d
+          ON d.source_account_ref=w.a AND d.store_id=w.s
+         AND d.business_date_la BETWEEN :floor_day AND :cutoff
+        GROUP BY w.a, w.s
+        """),
+        {
+            "stores": json.dumps([{"a": a, "s": s} for a, s in stores]),
+            "floor_day": cutoff - timedelta(days=7),
+            "cutoff": cutoff,
+        },
+    ).mappings()
+    return {(r["a"], r["s"]): r["latest"] for r in rows if r["latest"] is not None}
+
+
+def _reconcile_mart_evidence(
+    f: dict[str, Any],
+    key: Key,
+    snapshot: Any,
+    profit: dict[str, Any] | None,
+    watermarks: dict[tuple[str, str], date],
+    cutoff: date,
+) -> None:
+    """MART owns paid orders. Only uniquely provable daily partitions own singles."""
+    from .mart_only_v4 import mart_deterministic_evidence
+
+    first = f.get("first_wfs_available_date_la")
+    if not isinstance(first, date):
+        return
+    days = snapshot.daily.get(key, [])
+    mature = first + timedelta(days=13) <= cutoff
+    if mature and f.get("valid_orders_14d") is None and days:
+        proof = mart_deterministic_evidence(first, first + timedelta(days=13), days)
+        if proof is not None and int(proof["orders"]) == int(f.get("effective_orders_14d") or 0):
+            f["valid_orders_14d"] = proof["orders"]
+            f["valid_units_14d"] = proof["units"]
+            f["single_unit_orders_14d"] = proof["singles"]
+            f["trust_evidence_source"] = "mart_daily_deterministic_14d"
+    if not mature:
+        return
+    # Product-day MART may omit days with no sales. No rows are a verified zero
+    # ONLY when the store has finished syncing through this same cutoff day.
+    synchronized = watermarks.get((key[0], key[1])) == cutoff
+
+    def is_proven_zero(value: Any) -> bool:
+        if value is None or isinstance(value, bool):
+            return False
+        try:
+            return Decimal(str(value)) == 0
+        except (ValueError, ArithmeticError):
+            return False
+
+    zero_buckets = bool(days) and all(
+        is_proven_zero(d.get("order_count")) and is_proven_zero(d.get("sales_qty")) for d in days
+    )
+    no_rows_zero = not days and synchronized
+    if ((zero_buckets and synchronized) or no_rows_zero) and isinstance(profit, dict):
+        paid = profit.get("sales_units")
+        if is_proven_zero(paid):
+            f["zero_sales_verified"] = True
+            f["zero_sales_evidence"] = (
+                "mart_14d_zero_buckets" if zero_buckets else "store_watermark_no_item_rows"
+            )
+            f["effective_orders_14d"] = 0
+            f["valid_orders_14d"] = 0
+            f["valid_units_14d"] = 0
+            f["single_unit_orders_14d"] = 0
+    # Total ads, not auto/manual campaign type, decide whether the ad dimension
+    # is active. Never equate missing campaign mapping with missing total ads.
+    ads = snapshot.ads.get(key)
+    no_sp_rows = ads is None or not int(ads.get("n") or 0)
+    if (
+        synchronized
+        and no_sp_rows
+        and isinstance(profit, dict)
+        and profit.get("status") == "scored"
+        and is_proven_zero(profit.get("ad_spend_usd"))
+    ):
+        f["ad_status"] = "not_run"
+        f["ad_evidence_source"] = "verified_total_sp_sem_zero"
 
 
 def _candidate_scores(
@@ -90,6 +205,7 @@ def _candidate_scores(
     config, version = svc._config()
     source_snap = load_read_snapshot(source, keys, cutoff)
     profit = load_testing_profit_page(source, keys, cutoff)
+    watermarks = _store_watermarks(source, keys, cutoff)
     markets = {
         (str(m.source_account_ref), str(m.store_id), str(m.item_id)): m
         for m in target.scalars(
@@ -104,6 +220,8 @@ def _candidate_scores(
     for key in keys:
         try:
             f = svc._facts(*key, market_score=markets.get(key), snapshot=source_snap)
+            _reconcile_mart_evidence(f, key, source_snap, profit.get(key), watermarks, cutoff)
+            score_window_ad_spend = f.get("ad_spend_usd")
             attach_testing_profit_facts(f, profit.get(key))
             real_profit = profit.get(key)
             expected_policy = "returns_ignored_samples_excluded_sample_ads_included"
@@ -151,6 +269,16 @@ def _candidate_scores(
                 f["profit_calc_missing"] = ["FIRST_PAID_ORDER_SOURCE_DISAGREEMENT"]
                 f["roi"] = None
                 f["gross_margin_pct"] = None
+            # Keep the full-history SP+SEM cost for financial display, but
+            # NEVER divide it by first-14-day clicks/orders/revenue in scoring.
+            f["ad_total_spend_usd"] = f.get("ad_spend_usd")
+            f["ad_spend_usd"] = score_window_ad_spend
+            f["ad_scoring_window_start_la"] = f.get("first_wfs_available_date_la")
+            f["ad_scoring_window_end_la"] = (
+                min(f["ad_scoring_window_start_la"] + timedelta(days=13), cutoff)
+                if isinstance(f.get("ad_scoring_window_start_la"), date)
+                else None
+            )
             ev = evaluate(f, config, version)
             results[key] = {"facts": f, "evaluation": ev, "rule_version": version}
             results[key].update(
@@ -197,6 +325,7 @@ def _save_one(
     score: dict[str, Any],
     *,
     cutoff: date,
+    auto_only: bool = False,
 ) -> str:
     """Single v2 write authority for non-approved/non-final new products.
 
@@ -273,6 +402,10 @@ def _save_one(
     if p is None:
         p = NewProductPerformanceCurrent(registry_id=r.id)
         target.add(p)
+    # A human market score plus an official grade freezes every ordinary writer.
+    # Check again under row lock: grading can race an already-running batch.
+    if p.grade is not None:
+        return "graded_skipped"
     if p.process_status not in (
         None,
         "观察期",
@@ -288,6 +421,23 @@ def _save_one(
         "待采购确认",
     ):
         return "protected_process_status"
+
+    # SZZSBJ_V2_FORMAL_TRIGGER_FREEZE_V3_20261118
+    # Final and triggered evaluations belong to the formal evaluation workflow.
+    # Midnight V2 may not overwrite either the evidence or the decision.
+    saved_coverage = p.data_coverage_json if isinstance(p.data_coverage_json, dict) else {}
+    recheck = saved_coverage.get("evaluation_recheck_required")
+    if (
+        isinstance(saved_coverage.get("evaluation_formal_trigger"), dict)
+        or isinstance(saved_coverage.get("evaluation_final_snapshot"), dict)
+        or saved_coverage.get("evaluation_manual_exception")
+        or (
+            isinstance(recheck, dict)
+            and recheck.get("status") == "awaiting_verified_source_correction"
+        )
+        or p.process_status == "assessment_complete"
+    ):
+        return "frozen_formal"
 
     # The current LA-midnight master also invokes an AD-DISPLAY-ONLY stage.
     # It passes evaluation=None and must never touch profit/score/grade.
@@ -348,7 +498,7 @@ def _save_one(
         and proof.get("status") == "scored"
         and proof.get("policy") == "returns_ignored_samples_excluded_sample_ads_included"
         and not proof.get("missing")
-    )
+    ) or score.get("facts", {}).get("zero_sales_verified") is True
     ev = score.get("evaluation")
     facts = score.get("facts") or {}
     if not isinstance(ev, dict) or not isinstance(ev.get("dimensions"), dict):
@@ -424,8 +574,15 @@ def _save_one(
         "valid_orders_14d",
         "valid_units_14d",
         "single_unit_orders_14d",
+        "zero_sales_verified",
+        "zero_sales_evidence",
+        "trust_evidence_source",
+        "ad_evidence_source",
         "ad_status",
         "ad_spend_usd",
+        "ad_total_spend_usd",
+        "ad_scoring_window_start_la",
+        "ad_scoring_window_end_la",
         "ad_clicks",
         "ad_orders",
         "ad_revenue_usd",
@@ -454,8 +611,21 @@ def _save_one(
         for k in saved_fact_fields
         if k in facts
     }
-    ready = (
+    # Daily scoring must never create the formal grade before the authorized
+    # automatic evaluation gate. The gate runs after this V2 batch commits.
+    formal = old.get("evaluation_formal_trigger")
+    # Verified automatic evidence is independent of the formal market result.
+    auto_dimensions = ev["dimensions"]
+    evidence_ready = (
         proof_ready
+        and all(auto_dimensions.get(key) is not None for key in ("speed", "profit", "trust"))
+        and (auto_dimensions.get("ad") is not None or facts.get("ad_status") == "not_run")
+    )
+    ready = (
+        isinstance(formal, dict)
+        and formal.get("status") == "completed"
+        and not auto_only
+        and evidence_ready
         and ev.get("total") is not None
         and ev.get("grade") in {"S", "A", "B", "C", "D", "Pass"}
     )
@@ -465,7 +635,7 @@ def _save_one(
         "cutoff_la": cutoff.isoformat(),
         "rule_version": active_version,
         "market_version": score.get("market_version", 0),
-        "status": "ready" if ready else "blocked",
+        "status": "ready" if evidence_ready else "blocked",
         "missing": list(ev.get("missing") or [])
         if proof_ready
         else list(facts.get("profit_calc_missing") or ["profit_unverified"]),
@@ -484,9 +654,21 @@ def _save_one(
         if isinstance(proof, dict) and proof.get("sample_units") is not None
         else None
     )
-    p.profit_usd = Decimal(str(proof["profit_usd"])) if proof_ready else None
-    p.roi = Decimal(str(proof["roi"])) if proof_ready else None
-    p.profit_margin_pct = Decimal(str(proof["gross_margin_pct"])) if proof_ready else None
+    p.profit_usd = (
+        Decimal(str(proof["profit_usd"]))
+        if proof_ready and isinstance(proof, dict) and proof.get("profit_usd") is not None
+        else None
+    )
+    p.roi = (
+        Decimal(str(proof["roi"]))
+        if proof_ready and isinstance(proof, dict) and proof.get("roi") is not None
+        else None
+    )
+    p.profit_margin_pct = (
+        Decimal(str(proof["gross_margin_pct"]))
+        if proof_ready and isinstance(proof, dict) and proof.get("gross_margin_pct") is not None
+        else None
+    )
     if proof_ready and proof.get("first_order_date"):
         p.first_order_date_la = date.fromisoformat(proof["first_order_date"])
     # The SQL ad_spend_usd now corresponds to full historical SP+SEM cost; its
@@ -500,15 +682,14 @@ def _save_one(
         total = Decimal(str(ev["total"]))
         if not total.is_finite() or not Decimal(0) <= total <= Decimal(10):
             raise ValueError("AUTHORITATIVE_SCORE_OUT_OF_RANGE")
-        p.score = total
-        p.grade = ev["grade"]
-    else:
-        # Quarantine an unverified historical grade: never show it as A/B/S
-        # or allow it to authorize a fresh purchase.
-        p.score = None
-        p.grade = None
+    # SZZSBJ_V2_FORMAL_GRADE_ONLY_AFTER_MARKET_V3_20261118
+    # V2 publishes verified automatic dimensions, not the formal result.
+    # A final score/grade is written only by publish_after_market after the
+    # formal trigger and the saved manual market score are validated.
+    p.score = None
+    p.grade = None
     p.rule_version_id = version_row.id if version_row else None
-    p.data_status = "available" if ready else "partial"
+    p.data_status = "available" if evidence_ready else "partial"
     p.data_coverage_json = updated
     p.calculated_at = now
     p.updated_at = now
@@ -533,6 +714,9 @@ def publish_unified(
     limit: int = 500,
     cutoff: date | None = None,
     apply: bool = False,
+    auto_only: bool = False,
+    after: Key | None = None,
+    manual_identity: Key | None = None,
 ) -> dict[str, Any]:
     """One publication plan; used by rule apply, daily tick and local CLI alike.
 
@@ -542,12 +726,23 @@ def publish_unified(
     if apply and not permission_to_write():
         raise PermissionError("PR337_UNIFIED_PUBLISH_NOT_AUTHORIZED")
     cutoff = cutoff or (datetime.now(LA).date() - timedelta(days=1))
-    product_rows = _eligible_rows(source, item_ids, limit)
-    keys = [r["key"] for r in product_rows]
+    product_rows = _eligible_rows(
+        source, item_ids, limit, manual_identity=manual_identity, after=after
+    )
+    has_more = len(product_rows) > limit
+    if item_ids is not None and manual_identity is None and has_more:
+        raise ValueError("PUBLISH_SCOPE_OVER_LIMIT: split explicit item IDs")
+    keys = [row["key"] for row in product_rows[:limit]]
+    next_after = list(keys[-1]) if has_more and keys else None
+    if manual_identity is not None and (len(keys) != 1 or keys[0] != manual_identity):
+        raise PermissionError("NP_MANUAL_TARGET_IDENTITY_MISMATCH")
     summary: dict[str, Any] = {
         "dry_run": not apply,
         "cutoff_la": cutoff.isoformat(),
         "products": len(keys),
+        "has_more": has_more,
+        "next_after": next_after,
+        "graded_skipped": 0,
         "written": 0,
         "frozen": 0,
         "missing_local_registry": 0,
@@ -557,6 +752,26 @@ def publish_unified(
     }
     if not keys:
         return summary
+    if apply:
+        # Exclude graded items BEFORE the source FACT/MART scoring queries.
+        from .models import NewProductPerformanceCurrent, NewProductRegistry
+
+        r, p = NewProductRegistry, NewProductPerformanceCurrent
+        graded = {
+            (str(a), str(s), str(i))
+            for a, s, i in target.execute(
+                select(r.source_account_ref, r.store_id, r.item_id)
+                .join(p, p.registry_id == r.id)
+                .where(
+                    tuple_(r.source_account_ref, r.store_id, r.item_id).in_(keys),
+                    p.grade.is_not(None),
+                )
+            ).all()
+        }
+        summary["graded_skipped"] = len(graded)
+        keys = [key for key in keys if key not in graded]
+        if not keys:
+            return summary
     if not apply:
         from .models import NewProductRegistry
 
@@ -603,7 +818,9 @@ def publish_unified(
                     }
                 )
             if apply:
-                outcome = _save_one(target, key, proof, score_map[key], cutoff=cutoff)
+                outcome = _save_one(
+                    target, key, proof, score_map[key], cutoff=cutoff, auto_only=auto_only
+                )
                 summary[outcome] = summary.get(outcome, 0) + 1
         if apply:
             # Commit each bounded batch only after its full computation succeeds;
@@ -613,30 +830,99 @@ def publish_unified(
 
 
 def execute_unified_job(
-    *, item_ids: set[str] | None = None, limit: int = 500, apply: bool = False
+    *,
+    item_ids: set[str] | None = None,
+    limit: int = 500,
+    apply: bool = False,
+    auto_only: bool = False,
+    manual_identity: Key | None = None,
 ) -> dict[str, Any]:
-    """Open existing source/read and decision/write sessions, no new database."""
+    """Single scoped publisher; production jobs traverse the full tagged catalog."""
     from app.db.session import get_engine
 
     from .read_source import get_new_product_read_session
 
-    if os.getenv("APP_ENV", "").strip().lower() not in {
-        "local",
-        "dev",
-        "development",
-        "production",
-    }:
+    env = os.getenv("APP_ENV", "").strip().lower()
+    if env not in {"local", "dev", "development", "production"}:
         raise RuntimeError("PR337_APP_ENV_REQUIRED: source/write identity cannot be verified")
     engine = get_engine()
-    if apply and os.getenv("APP_ENV", "").strip().lower() in {"local", "dev", "development"}:
+    if apply and env in {"local", "dev", "development"}:
+        # No local-to-production tunnel exception, even with old opt-in flags.
         if not local_target_approved(engine.url.database, engine.url.host):
             raise PermissionError("PR337_WRITE_TARGET_NOT_LOCAL_DEV_OR_HYBRID")
+    if apply and not permission_to_write():
+        raise PermissionError("PR337_UNIFIED_PUBLISH_NOT_AUTHORIZED")
     gen = get_new_product_read_session()
     source = next(gen)
     try:
         with Session(engine, autoflush=False, expire_on_commit=False) as target:
             try:
-                return publish_unified(source, target, item_ids=item_ids, limit=limit, apply=apply)
+                # A single-item request or explicit list retains strict bounded scope.
+                if item_ids is not None or not apply:
+                    return publish_unified(
+                        source,
+                        target,
+                        item_ids=item_ids,
+                        limit=limit,
+                        apply=apply,
+                        auto_only=auto_only,
+                        manual_identity=manual_identity,
+                    )
+                summary: dict[str, Any] | None = None
+                cursor: Key | None = None
+                for _page_number in range(10000):
+                    page = publish_unified(
+                        source,
+                        target,
+                        limit=limit,
+                        apply=apply,
+                        auto_only=auto_only,
+                        manual_identity=manual_identity,
+                        after=cursor,
+                    )
+                    if summary is None:
+                        summary = dict(page)
+                        summary["pages"] = 1
+                    else:
+                        # Sum only per-product counters, not catalog metadata.
+                        for field, value in page.items():
+                            if (
+                                field
+                                in {
+                                    "products",
+                                    "written",
+                                    "reconciled",
+                                    "graded_skipped",
+                                    "frozen",
+                                    "frozen_formal",
+                                    "missing_local_registry",
+                                    "incomplete_ads",
+                                    "unverified",
+                                    "protected_process_status",
+                                    "protected_workflow",
+                                    "unchanged",
+                                    "registry_created",
+                                    "performance_created",
+                                }
+                                and isinstance(value, int)
+                                and not isinstance(value, bool)
+                            ):
+                                summary[field] = summary.get(field, 0) + value
+                        if summary.get("catalog_state") != page.get("catalog_state"):
+                            summary["catalog_state"] = "MIXED"
+                        summary["pages"] += 1
+                    if not page.get("has_more"):
+                        summary["has_more"] = False
+                        summary["next_after"] = None
+                        return summary
+                    raw = page.get("next_after")
+                    if not isinstance(raw, list) or len(raw) != 3:
+                        raise RuntimeError("NP_PUBLISH_PAGE_CURSOR_MISSING")
+                    next_cursor: Key = (str(raw[0]), str(raw[1]), str(raw[2]))
+                    if cursor is not None and next_cursor <= cursor:
+                        raise RuntimeError("NP_PUBLISH_PAGE_CURSOR_NOT_ADVANCING")
+                    cursor = next_cursor
+                raise RuntimeError("NP_PUBLISH_PAGE_LIMIT_EXCEEDED")
             except Exception:
                 target.rollback()
                 raise

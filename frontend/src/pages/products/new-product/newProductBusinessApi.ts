@@ -3,6 +3,17 @@ import { backendRequest, backendDownload } from "@/api/backendApi";
 import type { RuleDraft } from "./NewProductRulesModel";
 
 export type Identity = { source_account_ref: string; store_id: string; item_id: string };
+/** Read-only risk status derived on the backend from saved real-data evidence. */
+export type SystemRiskStatus = "hit" | "clear" | "unverified" | "disabled";
+export type SystemRiskDisplay = {
+  source: "saved_verified_risk_evidence";
+  rule_version: number;
+  grade_cap_applied: boolean;
+  rules: Array<{
+    code:string; name:string; enabled:boolean; status:SystemRiskStatus;
+    basis:string; limit:string; cutoff_la:string|null;
+  }>;
+};
 export type RealScore = {
   rule_version: number;
   total: string | null;
@@ -12,7 +23,14 @@ export type RealScore = {
   ad_excluded: boolean;
   observation_state: string;
 };
+export type ScoreCorrectionView = {
+  revision: number;
+  system: {total:string|null;grade:string|null;dimensions:Record<string,string|null>;rule_version:number};
+  effective: {total:string|null;grade:string|null;dimensions:Record<string,string|null>};
+  history: Array<{revision:number;dimension:string;actor_id:string;at:string;system_score:string;before:string;after:string;delta:string;reason:string}>;
+};
 export type NewProductListing = {
+  system_risk_display?: SystemRiskDisplay | null;
   evaluation_status?: "待到货"|"测评中"|"待市场评分"|"测评通过"|"测评未通过";
   evaluation_review_status?: "submitted"|"info_required"|"approved"|"rejected"|null;
   evaluation_review_id?: string|null;
@@ -37,6 +55,9 @@ export type NewProductListing = {
   tracking_reason: string | null;
   market_reason: string | null;
   market_version: number;
+  score_correction?: ScoreCorrectionView | null;
+  market_competitor_ids?: string[];
+  market_no_competitors?: boolean;
   suggested_qty: number | null;
   purchase_status: string | null;
   purchase_id: string | null;
@@ -56,14 +77,27 @@ export type NewProductListing = {
   system_recommendation: { value: string; reasons: string[] };
 };
 export type PageResponse = { items: NewProductListing[]; total: number; page: number; page_size: number; rule_version: number };
+export type PerformanceSummary = {
+  counts: { all:number; evaluating:number; market:number; passed:number; failed:number };
+  status_options: Array<{value:string;label:string;count:number}>;
+  owner_options: Array<{value:string;label:string;count:number}>;
+  rating_options: Array<{value:string;label:string;count:number}>;
+};
+export async function getNewProductSummary(init?:RequestInit):Promise<PerformanceSummary> {
+  return (await backendRequest<PerformanceSummary>("/api/new-products/summary",init)).data;
+}
 export type RuleResponse = { kind: "performance" | "tracking"; version: number; config: RuleDraft | Record<string, unknown> | null; source: string; applied_at: string | null };
 export type RuleApplyResult = RuleResponse & { unchanged: boolean };
-export async function listNewProducts(params: {page?:number;pageSize?:number;storeId?:string;keyword?:string;searchField?:"sku"|"msku"|"item_id"|"title"} = {}):Promise<PageResponse> {
+export async function listNewProducts(params: {page?:number;pageSize?:number;storeId?:string;keyword?:string;searchField?:"sku"|"msku"|"item_id"|"title";npStatuses?:string;npOwners?:string;npRatings?:string;npOwnerKeyword?:string} = {},init?:RequestInit):Promise<PageResponse> {
   const query = new URLSearchParams({page:String(params.page??1),page_size:String(params.pageSize??50)});
   if(params.storeId) query.set("store_id",params.storeId);
   if(params.keyword) query.set("keyword",params.keyword);
   if(params.searchField) query.set("search_field",params.searchField);
-  const envelope = await backendRequest<PageResponse>(`/api/new-products/listings?${query}`);
+  if(params.npStatuses) query.set("np_statuses",params.npStatuses);
+  if(params.npOwners) query.set("np_owners",params.npOwners);
+  if(params.npRatings) query.set("np_ratings",params.npRatings);
+  if(params.npOwnerKeyword) query.set("np_owner_keyword",params.npOwnerKeyword);
+  const envelope = await backendRequest<PageResponse>(`/api/new-products/listings?${query}`,init);
   return envelope.data;
 }
 export async function getNewProductRules(kind:"performance"|"tracking"="performance"):Promise<RuleResponse> {
@@ -79,10 +113,20 @@ export async function getNewProductDetail(identity:Identity) {
   return (await backendRequest<Record<string,unknown>>(`/api/new-products/listings/${encodeURIComponent(a)}/${encodeURIComponent(s)}/${encodeURIComponent(i)}`)).data;
 }
 // PR337_MANUAL_RISK_V1: explicit human risk selection is required by the API.
-export async function saveNewProductMarketScore(identity:Identity,score:number,reason:string,expectedVersion:number,riskConditions:string[]) {
+export async function saveNewProductMarketScore(identity:Identity,score:number,reason:string,expectedVersion:number,riskConditions:string[],competitorIds:string[],noCompetitors:boolean) {
   return (await backendRequest<{version:number;score:number;reason:string}>("/api/new-products/market-score",{
-    method:"PUT",body:JSON.stringify({...identity,score,reason,expected_version:expectedVersion,risk_conditions:riskConditions})
+    method:"PUT",body:JSON.stringify({...identity,score,reason,expected_version:expectedVersion,risk_conditions:riskConditions,competitor_ids:competitorIds,no_competitors:noCompetitors})
   })).data;
+}
+// NP_OPERATOR_SCORE_CORRECTION_V1_20261119
+export async function saveNewProductScoreCorrection(identity:Identity,dimension:"speed"|"ad"|"profit"|"trust",newScore:number,reason:string,expectedRevision:number) {
+  return (await backendRequest<ScoreCorrectionView>("/api/new-products/score-corrections",{
+    method:"PUT",body:JSON.stringify({...identity,dimension,new_score:newScore,reason,expected_revision:expectedRevision})
+  })).data;
+}
+export async function getNewProductPurchaseSnapshot(applicationId:string) {
+  return (await backendRequest<{id:string;status:string;version:number;score_snapshot:{evaluation:RealScore;score_correction?:ScoreCorrectionView;facts?:Record<string,unknown>};requested_qty:number;suggested_qty:number;applicant:string;reason:string;created_at:string}>(
+    `/api/new-products/purchase-applications/${encodeURIComponent(applicationId)}`)).data;
 }
 export async function saveNewProductTrackingDecision(identity:Identity,decision:string,reason:string,expectedVersion:number) {
   return (await backendRequest<{version:number;decision:string}>("/api/new-products/tracking/decision",{
