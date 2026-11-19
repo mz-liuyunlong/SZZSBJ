@@ -744,6 +744,7 @@ def _save_one(
         "trust_scoring_window_start_la",
         "trust_scoring_window_end_la",
         "ad_clicks",
+        "ad_impressions",
         "ad_orders",
         "ad_revenue_usd",
         "market_score",
