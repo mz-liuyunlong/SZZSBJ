@@ -166,7 +166,10 @@ def _items(payload: Any) -> list[dict[str, Any]]:
     data = payload.get("data")
     if not isinstance(data, dict) or not isinstance(data.get("list"), list):
         return []
-    return [item for item in data["list"] if isinstance(item, dict)]
+    items = data["list"]
+    if any(not isinstance(item, dict) for item in items):
+        raise ValueError("AD_CATALOG_INVALID_ITEM_SHAPE")
+    return items
 
 
 def ingest_batch(source: Session, target: Session, *, limit: int = MAX_BATCH, apply: bool = False) -> dict:
