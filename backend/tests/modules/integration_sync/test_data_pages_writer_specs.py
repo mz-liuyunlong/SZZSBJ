@@ -11,7 +11,7 @@ from app.modules.integration_sync.parsers.lingxing_data_pages import DATA_PAGES_
 def test_writer_specs_cover_every_parser_and_sync_interface() -> None:
     assert data_pages_writer_parser_keys() == frozenset(DATA_PAGES_PARSER_SPECS)
     assert data_pages_writer_parser_keys() == frozenset(DATA_PAGES_SYNC_INTERFACE_SPECS_BY_KEY)
-    assert len(DATA_PAGES_WRITER_SPECS) == 7
+    assert len(DATA_PAGES_WRITER_SPECS) == 10
 
 
 def test_writer_specs_match_parser_targets_and_unique_keys() -> None:
@@ -39,7 +39,14 @@ def test_writer_specs_keep_required_source_and_lineage_metadata() -> None:
         assert "source_account_ref" in writer_spec.source_metadata_fields
         assert "source_raw_request_ref_id" in writer_spec.source_metadata_fields
         assert "synced_at" in writer_spec.source_metadata_fields
-        assert writer_spec.refresh_marts
+        if writer_spec.parser_key in {
+            "walmart_sp_campaign_list",
+            "walmart_sp_search_term_list",
+            "walmart_sp_keyword_list",
+        }:
+            assert writer_spec.refresh_marts == ()
+        else:
+            assert writer_spec.refresh_marts
 
 
 def test_writer_specs_are_limited_to_dim_and_fact_targets() -> None:
@@ -51,8 +58,15 @@ def test_writer_specs_are_limited_to_dim_and_fact_targets() -> None:
         "fact_walmart_order_items",
         "fact_walmart_refund_items",
         "fact_walmart_ad_item_sp_daily",
+        "ods_api_raw_blobs",
+        "fact_walmart_ad_search_term_daily",
+        "fact_walmart_keyword_sp_daily",
     }
-    assert {spec.target_layer for spec in DATA_PAGES_WRITER_SPECS} == {"DIM", "FACT"}
+    assert {spec.target_layer for spec in DATA_PAGES_WRITER_SPECS} == {
+        "DIM",
+        "FACT",
+        "RAW",
+    }
 
 
 def test_sales_writer_requires_explicit_sales_date_source() -> None:
