@@ -89,7 +89,17 @@ def evaluate(facts: dict[str, Any], config: dict[str, Any], rule_version: int) -
         spend, clicks, orders, revenue = (
             facts.get(k) for k in ("ad_spend_usd", "ad_clicks", "ad_orders", "ad_revenue_usd")
         )
+        impressions = facts.get("ad_impressions")
+        # Real positive impressions + verified zero clicks/attribution/spend:
+        # the advertisement delivered, but produced no observed results.
         if (
+            impressions is not None
+            and dec(impressions) > 0
+            and all(x is not None for x in (spend, clicks, orders, revenue))
+            and all(dec(x) == 0 for x in (spend, clicks, orders, revenue))
+        ):
+            d["ad"] = Z
+        elif (
             any(x is None for x in (spend, clicks, orders, revenue))
             or dec(clicks) <= 0
             or dec(spend) <= 0
