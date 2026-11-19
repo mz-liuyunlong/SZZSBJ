@@ -208,6 +208,13 @@ def compute(
         "valid_orders_14d": orders if orders > 0 and all_singles_known else None,
         "valid_units_14d": units if orders > 0 and all_singles_known else None,
         "single_unit_orders_14d": singles if orders > 0 and all_singles_known else None,
+        # Compatibility with the current MART order/units scoring contract.
+        # Preserve historical singles proof without using it as the ratio.
+        "trust_order_units_ratio_pct": (
+            Decimal(orders) / Decimal(units) * 100
+            if orders > 0 and units >= orders and all_singles_known
+            else None
+        ),
         "ad_status": ad_status,
         "ad_spend_usd": ad_spend if ad_status == "active" else None,
         "ad_clicks": ad_clicks if ad_status == "active" else None,

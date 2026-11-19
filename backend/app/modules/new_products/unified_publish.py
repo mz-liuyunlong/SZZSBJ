@@ -187,6 +187,120 @@ def _reconcile_mart_evidence(
         f["ad_evidence_source"] = "verified_total_sp_sem_zero"
 
 
+# SZZSBJ_CUMULATIVE_AD_TRUST_SCORING_20261119
+# Trust input: beginning of WFS availability through LA cutoff. Speed remains 14-day.
+# A daily order/units partition alone proves single-unit orders only where unique.
+# Otherwise current FACT is accepted exclusively when its order and unit totals
+# reconcile with the paid-sale MART over the identical complete window.
+def _read_cumulative_trust_evidence(source, keys, first_dates, cutoff):
+    """Cumulative MART orders / units. FACT is never consulted."""
+    from collections import defaultdict
+
+    wanted = []
+    for key in keys:
+        first = (first_dates.get(key) or {}).get("day")
+        if isinstance(first, date) and first <= cutoff:
+            wanted.append({
+                "account": key[0],
+                "store": key[1],
+                "item": key[2],
+                "start_day": first.isoformat(),
+            })
+
+    if not wanted:
+        return {}
+
+    sql = text("""
+        WITH wanted AS (
+            SELECT account, store, item, start_day
+            FROM jsonb_to_recordset(CAST(:wanted AS jsonb))
+            AS j(account text, store text, item text, start_day date)
+        )
+        SELECT w.account, w.store, w.item,
+               d.business_date_la AS day,
+               d.order_count, d.sales_qty
+        FROM wanted w
+        JOIN mart_daily_sales_item_day d
+          ON d.source_account_ref = w.account
+         AND d.store_id = w.store
+         AND d.item_id = w.item
+         AND d.business_date_la BETWEEN w.start_day AND :cutoff
+        ORDER BY w.account, w.store, w.item, d.business_date_la
+    """)
+
+    daily = defaultdict(list)
+    for row in source.execute(
+        sql, {"wanted": json.dumps(wanted), "cutoff": cutoff}
+    ).mappings():
+        key = (
+            str(row["account"]),
+            str(row["store"]),
+            str(row["item"]),
+        )
+        daily[key].append(row)
+
+    def whole(value):
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            number = Decimal(str(value))
+        except (ArithmeticError, ValueError, TypeError):
+            return None
+        if not number.is_finite() or number < 0:
+            return None
+        if number != number.to_integral_value():
+            return None
+        return int(number)
+
+    output = {}
+    for record in wanted:
+        key = (
+            record["account"],
+            record["store"],
+            record["item"],
+        )
+        rows = daily.get(key, [])
+        if not rows:
+            continue
+
+        dates = set()
+        orders = 0
+        units = 0
+        valid = True
+
+        for row in rows:
+            day = row["day"]
+            n = whole(row["order_count"])
+            q = whole(row["sales_qty"])
+
+            if (
+                day in dates
+                or n is None
+                or q is None
+                or q < n
+                or (n == 0 and q != 0)
+            ):
+                valid = False
+                break
+
+            dates.add(day)
+            orders += n
+            units += q
+
+        if not valid or orders <= 0 or units <= 0:
+            continue
+
+        output[key] = {
+            "orders": orders,
+            "units": units,
+            "ratio_pct": Decimal(orders) / Decimal(units) * 100,
+            "start": date.fromisoformat(record["start_day"]),
+            "source": "cumulative_mart_order_units_ratio",
+        }
+
+    return output
+
+
 def _candidate_scores(
     source: Session,
     target: Session,
@@ -203,9 +317,10 @@ def _candidate_scores(
 
     svc = NewProductService(target, read_session=source)
     config, version = svc._config()
-    source_snap = load_read_snapshot(source, keys, cutoff)
+    source_snap = load_read_snapshot(source, keys, cutoff, preview_since_first=True)
     profit = load_testing_profit_page(source, keys, cutoff)
     watermarks = _store_watermarks(source, keys, cutoff)
+    trust_history = _read_cumulative_trust_evidence(source, keys, source_snap.first, cutoff)
     markets = {
         (str(m.source_account_ref), str(m.store_id), str(m.item_id)): m
         for m in target.scalars(
@@ -221,6 +336,30 @@ def _candidate_scores(
         try:
             f = svc._facts(*key, market_score=markets.get(key), snapshot=source_snap)
             _reconcile_mart_evidence(f, key, source_snap, profit.get(key), watermarks, cutoff)
+            # Verified first-14-day zero cannot erase later paid sales.
+            cumulative_sales = profit.get(key)
+            if isinstance(cumulative_sales, dict):
+                try:
+                    if Decimal(str(cumulative_sales.get("sales_units") or 0)) > 0:
+                        f["zero_sales_verified"] = False
+                except (ArithmeticError, TypeError, ValueError):
+                    pass
+            cumulative = trust_history.get(key)
+            if cumulative is not None:
+                f["valid_orders_14d"] = cumulative["orders"]
+                f["valid_units_14d"] = cumulative["units"]
+                f["single_unit_orders_14d"] = None
+                f["trust_order_units_ratio_pct"] = cumulative["ratio_pct"]
+                f["trust_evidence_source"] = cumulative["source"]
+                f["trust_scoring_window_start_la"] = cumulative["start"]
+                f["trust_scoring_window_end_la"] = cutoff
+            else:
+                # The old first-14-day proof cannot authorize cumulative trust.
+                f["valid_orders_14d"] = None
+                f["valid_units_14d"] = None
+                f["single_unit_orders_14d"] = None
+                f["trust_order_units_ratio_pct"] = None
+                f["trust_evidence_source"] = "cumulative_unverified"
             score_window_ad_spend = f.get("ad_spend_usd")
             attach_testing_profit_facts(f, profit.get(key))
             real_profit = profit.get(key)
@@ -275,7 +414,7 @@ def _candidate_scores(
             f["ad_spend_usd"] = score_window_ad_spend
             f["ad_scoring_window_start_la"] = f.get("first_wfs_available_date_la")
             f["ad_scoring_window_end_la"] = (
-                min(f["ad_scoring_window_start_la"] + timedelta(days=13), cutoff)
+                cutoff
                 if isinstance(f.get("ad_scoring_window_start_la"), date)
                 else None
             )
@@ -577,12 +716,15 @@ def _save_one(
         "zero_sales_verified",
         "zero_sales_evidence",
         "trust_evidence_source",
+        "trust_order_units_ratio_pct",
         "ad_evidence_source",
         "ad_status",
         "ad_spend_usd",
         "ad_total_spend_usd",
         "ad_scoring_window_start_la",
         "ad_scoring_window_end_la",
+        "trust_scoring_window_start_la",
+        "trust_scoring_window_end_la",
         "ad_clicks",
         "ad_orders",
         "ad_revenue_usd",

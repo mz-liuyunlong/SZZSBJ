@@ -58,7 +58,7 @@ export default function NewProductDimensionEvidence({
         ? "按 ACOS / CPC / CVR 三项评分后加权汇总。"
         : dimension === "profit"
           ? "按 ROI / 毛利率 两项评分后加权汇总。"
-          : "按有效销量 / 单件订单占比 两项评分后加权汇总。";
+          : "按累计销售件数 / 订单件数比 两项评分后加权汇总。";
 
   const currentScore = product.backend
     ? num(product.backend.evaluation.dimensions[dimension])
@@ -130,7 +130,8 @@ export default function NewProductDimensionEvidence({
     grossMarginPct: num(raw.gross_margin_pct),
     validSoldUnits: num(raw.valid_units_14d),
     validOrders: num(raw.valid_orders_14d),
-    singleUnitOrders: num(raw.single_unit_orders_14d),
+    singleUnitOrders: null,
+    trustOrderUnitsRatioPct: num(raw.trust_order_units_ratio_pct),
     marketScore: num(raw.market_score),
   };
 

@@ -115,7 +115,7 @@ def test_verified_yc00656_two_scores_and_no_persisted_writes(monkeypatch):
         "9.10"
     )
     assert Decimal(row["evaluation"]["dimensions"]["trust"]).quantize(Decimal("0.01")) == Decimal(
-        "9.56"
+        "9.66"
     )
     assert row["evaluation"]["covered_weight_pct"] == 85
     assert row["evaluation"]["dimensions"]["ad"] == "5.18"

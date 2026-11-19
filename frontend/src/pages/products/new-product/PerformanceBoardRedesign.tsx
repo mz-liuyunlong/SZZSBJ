@@ -2,7 +2,9 @@
 /* PR337_BOARD_PROBLEM_KPIS_V74 */
 /** PR337_BOARD_GRADE_SORT_V68 PR337_BOARD_SIDE_BY_SIDE_FAIL_GRADE_V69 PR337_BOARD_COMPACT_NO_X_SCROLL_REASONS_V70 PR337_BOARD_COMPACT_SORT_REMINDERS_V67 PR337_BOARD_REASON_COLORS_GRADES_V66 PR337_PERFORMANCE_BOARD_DATERANGE_V63 PR337_PERFORMANCE_BOARD_V61_HOTFIX PR337_PERFORMANCE_BOARD_V6 - performance dashboard view; no data/API writes. */
 import { useLayoutEffect, useRef, useState } from "react";
-import { DatePicker } from "antd";
+import { useQuery } from "@tanstack/react-query";
+import { getNewProductBoardSummary, type NewProductBoardGroup } from "./newProductBusinessApi";
+import { DatePicker, Tooltip } from "antd";
 import dayjs from "dayjs";
 import {
   AppstoreOutlined,
@@ -16,8 +18,6 @@ import {
   TrophyOutlined,
 } from "@ant-design/icons";
 import {
-  grade,
-  score,
   type Config,
   type Grade,
   type Product,
@@ -31,72 +31,28 @@ type Props = {
   open: (which: string, id?: string) => void;
 };
 
-type Row = {
-  product: Product;
-  total: number | null;
-  rating: Grade | null;
-};
-
+type AnalysisGroupRow = NewProductBoardGroup;
 const gradeOrder: Grade[] = ["S", "A", "B", "C", "D", "Pass"];
-const successfulGrades = new Set<Grade>(["S", "A", "B", "C"]);
 type FailureDimension = "market" | keyof Product["scores"];
-const weakestDimensions: Array<{
-  key: FailureDimension;
-  label: string;
-  tone: string;
-}> = [
+const weakestDimensions: Array<{key: FailureDimension;label: string;tone: string}> = [
   { key: "market", label: "市场竞争", tone: "#9563e8" },
   { key: "speed", label: "出单速度", tone: "#3778f6" },
   { key: "ad", label: "广告有效性", tone: "#fa920e" },
   { key: "profit", label: "利润空间", tone: "#17a47c" },
   { key: "trust", label: "数据可信度", tone: "#7968e7" },
 ];
-
-function ratio(numerator: number, denominator: number): string {
-  return denominator > 0 ? `${(numerator / denominator * 100).toFixed(1)}%` : "—";
-}
-
-function average(rows: Row[]): string {
-  const values = rows.map((x) => x.total).filter((value): value is number => value !== null && Number.isFinite(value));
-  return values.length
-    ? (values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2)
-    : "—";
-}
-
-function groupStats(rows: Row[]) {
-  const completed = rows.filter((x) => x.total !== null && x.rating !== null);
-  const passed = completed.filter((x) => x.rating !== null && successfulGrades.has(x.rating));
-  const high = completed.filter((x) => x.rating === "S" || x.rating === "A");
-  const grades: Record<Grade, number> = { S: 0, A: 0, B: 0, C: 0, D: 0, Pass: 0 };
-  completed.forEach((x) => { if (x.rating !== null) grades[x.rating] += 1; });
-  return {
-    count: rows.length,
-    completed: completed.length,
-    passed: passed.length,
-    rate: ratio(passed.length, completed.length),
-    avg: average(completed),
-    highRate: ratio(high.length, completed.length),
-    grades,
-  };
-}
-
-
 function recommendationTone(completed: number, passed: number): "sample" | "risk" | "good" | "watch" {
   if (completed < 5) return "sample";
   if (passed === 0) return "risk";
   if (passed / completed >= 0.6) return "good";
   return "watch";
 }
-
 function recommendation(completed: number, passed: number): string {
   if (completed < 5) return "样本较少";
   if (passed === 0) return "关注通过率";
   if (passed / completed >= 0.6) return "持续观察";
   return "继续积累样本";
 }
-
-
-type AnalysisGroupRow = ReturnType<typeof groupStats> & { name: string };
 type BoardSort = "rate-desc" | "rate-asc";
 function sortedBoardRows(items: AnalysisGroupRow[], sort: BoardSort): AnalysisGroupRow[] {
   return [...items].sort((a, b) => {
@@ -108,7 +64,31 @@ function sortedBoardRows(items: AnalysisGroupRow[], sort: BoardSort): AnalysisGr
   });
 }
 
-export default function PerformanceBoardRedesign({ products, config, open }: Props) {
+
+// NP_BOARD_BUSINESS_CATEGORY_V5: each hover belongs to one raw taxonomy path.
+function CategoryCell({group}: {group: NewProductBoardGroup}) {
+  const children = group.subcategories ?? [];
+  const preview = children.slice(0, 3);
+  return <div className="np-pb-business-category">
+    <strong className="np-pb-row-label">{group.name}</strong>
+    <div className="np-pb-business-subtitle">
+      {preview.length ? preview.map((detail, index) => (
+        <Tooltip key={detail.raw} overlayClassName="np-pb-taxonomy-tooltip"
+          title={<div className="np-pb-taxonomy-tooltip-lines">
+            <div>原文：{detail.raw}</div>
+            <div>中文：{detail.zh}</div>
+          </div>}>
+          <span tabIndex={0} className="np-pb-taxonomy-trigger">
+            {detail.label}{index < preview.length - 1 ? "、" : ""}
+          </span>
+        </Tooltip>
+      )) : <span>来源分类缺失</span>}
+      {children.length > preview.length && <span>等</span>}
+    </div>
+  </div>;
+}
+
+export default function PerformanceBoardRedesign({ config, open }: Props) {
   // Fit below the actual tab/header position, including browser zoom changes.
   // Direct DOM style update avoids state effects or rerender loops.
   const viewportBoardRef = useRef<HTMLDivElement>(null);
@@ -135,61 +115,18 @@ export default function PerformanceBoardRedesign({ products, config, open }: Pro
   const [categorySort, setCategorySort] = useState<BoardSort>("rate-desc");
   const [developerSort, setDeveloperSort] = useState<BoardSort>("rate-desc");
 
-  const filteredProducts = products.filter((p) => {
-    // Product.launch is the actual listing date (not the mock "days" counter).
-    // ISO calendar dates compare lexicographically and both ends are inclusive.
-    const listingDate = p.launch?.slice(0, 10);
-    return Boolean(listingDate && /^\d{4}-\d{2}-\d{2}$/.test(listingDate)
-      && listingDate >= dateRange[0] && listingDate <= dateRange[1]);
+  const {data: board,isLoading,isError}=useQuery({
+    queryKey:["np-board","summary",dateRange[0],dateRange[1]],
+    queryFn:({signal})=>getNewProductBoardSummary(dateRange[0],dateRange[1],{signal}),
+    staleTime:15_000,retry:1,
   });
-  const rows: Row[] = filteredProducts.map((product) => ({
-    product,
-    total: score(product, config),
-    rating: grade(product, config),
-  }));
-  const completed = rows.filter((x) => x.total !== null && Number.isFinite(x.total) && x.rating !== null);
-  const passed = completed.filter((x) => x.rating !== null && successfulGrades.has(x.rating));
-  const failed = completed.filter((x) => x.rating === "D" || x.rating === "Pass");
-  const due = filteredProducts.filter((p) => p.market === null && p.days >= config.remindDays)
-    .sort((a, b) => b.days - a.days);
-  const lowGrade = completed.filter((x) => x.rating === "C");
-
-  const reminderDisplay = due;
-
-  const grades: Record<Grade, number> = { S: 0, A: 0, B: 0, C: 0, D: 0, Pass: 0 };
-  completed.forEach((x) => { if (x.rating !== null) grades[x.rating] += 1; });
-  const gradeMax = Math.max(1, ...gradeOrder.map((g) => grades[g]));
-
-  // Diagnostic only: lowest *available* five-dimensional score of D / Pass samples.
-  // This does not assert the root cause of a failed assessment.
-  // Use actual D/Pass items when present. Otherwise show a CLEARLY-LABELED weak-dimension reference
-  // computed from completed items; never present those counts as real failure causes.
-  const diagnosticRows = failed.length > 0 ? failed : completed;
-  const failureCounts = Object.fromEntries(weakestDimensions.map((x) => [x.key, 0])) as Record<FailureDimension, number>;
-  diagnosticRows.forEach(({ product }) => {
-    const available: Array<{ key: FailureDimension; value: number }> = [];
-    weakestDimensions.forEach((dim) => {
-      const value = dim.key === "market"
-        ? product.market
-        : (product.overrides?.[dim.key] ?? product.scores[dim.key]);
-      if (typeof value === "number" && Number.isFinite(value)) {
-        available.push({ key: dim.key, value });
-      }
-    });
-    available.sort((a, b) => a.value - b.value);
-    if (available[0]) failureCounts[available[0].key] += 1;
-  });
-  const failureMax = Math.max(1, ...Object.values(failureCounts));
-
-  const categories = [...new Set(rows.map(({ product }) => product.category || "未分类"))]
-    .map((name) => ({ name, ...groupStats(rows.filter(({ product }) => (product.category || "未分类") === name)) }))
-    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "zh"));
-  const developers = [...new Set(rows.map(({ product }) => product.developer || product.owner || "未分配"))]
-    .map((name) => ({ name, ...groupStats(rows.filter(({ product }) => (product.developer || product.owner || "未分配") === name)) }))
-    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "zh"));
-
-  const displayedCategories = sortedBoardRows(categories, categorySort);
-  const displayedDevelopers = sortedBoardRows(developers, developerSort);
+  const reminderDisplay=board?.reminders??[];
+  const grades:Record<Grade,number>=board?.grades??{S:0,A:0,B:0,C:0,D:0,Pass:0};
+  const gradeMax=Math.max(1,...gradeOrder.map(g=>grades[g]));
+  const failureCounts=board?.failure_dimensions??{market:0,speed:0,ad:0,profit:0,trust:0};
+  const failureMax=Math.max(1,...Object.values(failureCounts));
+  const displayedCategories=sortedBoardRows(board?.categories??[],categorySort);
+  const displayedDevelopers=sortedBoardRows(board?.developers??[],developerSort);
 
   return (
     <div ref={viewportBoardRef} className="np-pb" data-pr337-board="performance-v6">
@@ -197,7 +134,7 @@ export default function PerformanceBoardRedesign({ products, config, open }: Pro
 
       <div className="np-pb-filterbar np-pb-filterbar--dates">
         <div className="np-pb-date-filter">
-          <span className="np-pb-date-label">日期范围</span>
+          <span className="np-pb-date-label">{isError?"统计加载失败":isLoading?"数据加载中":"日期范围"}</span>
           <DatePicker.RangePicker
             allowClear={false}
             format="YYYY-MM-DD"
@@ -217,19 +154,19 @@ export default function PerformanceBoardRedesign({ products, config, open }: Pro
           <div className="np-pb-metrics">
             <article className="np-pb-metric np-pb-metric-blue">
               <div className="np-pb-metric-head"><span className="np-pb-metric-icon"><BarChartOutlined/></span><b>测评总数</b></div>
-              <strong>{rows.length}</strong><span>当前筛选范围内</span>
+              <strong>{board?.counts.total ?? "—"}</strong><span>当前筛选范围内</span>
             </article>
             <article className="np-pb-metric np-pb-metric-green">
               <div className="np-pb-metric-head"><span className="np-pb-metric-icon"><CheckCircleOutlined/></span><b>测评通过率</b></div>
-              <strong>{ratio(passed.length, completed.length)}</strong><span>通过 {passed.length} / 已完成 {completed.length}</span>
+              <strong>{board?.pass_rate ?? "—"}</strong><span>通过 {board?.counts.passed ?? 0} / 已完成 {board?.counts.completed ?? 0}</span>
             </article>
             <article className="np-pb-metric np-pb-metric-danger">
               <div className="np-pb-metric-head"><span className="np-pb-metric-icon"><CloseCircleOutlined/></span><b>测评不通过数</b></div>
-              <strong>{failed.length}</strong><span>D / Pass 级，重点复盘</span>
+              <strong>{board?.counts.failed ?? "—"}</strong><span>D / Pass 级，重点复盘</span>
             </article>
             <article className="np-pb-metric np-pb-metric-orange">
               <div className="np-pb-metric-head"><span className="np-pb-metric-icon"><ExclamationCircleOutlined/></span><b>低分待优化数</b></div>
-              <strong>{lowGrade.length}</strong><span>C 级新品，优先观察改进</span>
+              <strong>{board?.counts.low_grade ?? "—"}</strong><span>C 级新品，优先观察改进</span>
             </article>
           </div>
 
@@ -242,7 +179,7 @@ export default function PerformanceBoardRedesign({ products, config, open }: Pro
                   {reminderDisplay.map((item) => (
                     <tr key={item.id}>
                       <td><strong>{item.sku}</strong><small title={item.name}>{item.name}</small></td>
-                      <td>{item.developer || item.owner || "—"}</td>
+                      <td>{item.developer || "—"}</td>
                       <td><span className="np-pb-days">{item.days} 天</span></td>
                       <td><button type="button" className="np-pb-mini-button" onClick={() => open("market", item.id)}>去评分</button></td>
                     </tr>
@@ -268,7 +205,7 @@ export default function PerformanceBoardRedesign({ products, config, open }: Pro
               </div>
             </section>
             <section className="np-pb-panel np-pb-reason-panel">
-              <div className="np-pb-panel-head"><div className="np-pb-panel-title"><TrophyOutlined/><h2>测评失败原因</h2></div><span>{failed.length > 0 ? "D / Pass 样本 · 最低分维度" : completed.length > 0 ? "无不通过样本 · 展示低分维度参考" : "暂无已完成测评"}</span></div>
+              <div className="np-pb-panel-head"><div className="np-pb-panel-title"><TrophyOutlined/><h2>测评失败原因</h2></div><span>{(board?.counts.failed??0)>0 ? "D / Pass 样本 · 最低分维度" : (board?.counts.completed??0)>0 ? "无不通过样本 · 暂无失败维度" : "暂无已完成测评"}</span></div>
               <div className="np-pb-panel-body np-pb-barlist">
                 {weakestDimensions.map((dim) => (
                   <div className="np-pb-barrow" key={dim.key}>
@@ -277,14 +214,14 @@ export default function PerformanceBoardRedesign({ products, config, open }: Pro
                     <strong>{failureCounts[dim.key]}</strong>
                   </div>
                 ))}
-                {failed.length === 0 && <p className="np-pb-panel-note">{completed.length > 0 ? "当前无 D / Pass；柱形显示已完成商品的最低分维度参考，不代表实际失败原因。" : "当前范围没有已完成测评，暂无失败原因数据。"}</p>}
+                {(board?.counts.failed??0) === 0 && <p className="np-pb-panel-note">{(board?.counts.completed??0) > 0 ? "当前无 D / Pass，不产生失败原因统计。" : "当前范围没有已完成测评，暂无失败原因数据。"}</p>}
               </div>
             </section>
           </div>
 
           <section className="np-pb-panel np-pb-data-panel">
             <div className="np-pb-panel-head"><div className="np-pb-panel-title"><BarsOutlined/><h2>类目测评表现</h2><span className="np-pb-inline-sub">查看通过率及可继续拓展的类目</span></div>
-              <div className="np-pb-panel-actions"><span>{displayedCategories.length} 个类目</span>
+              <div className="np-pb-panel-actions"><span>{displayedCategories.length} 个类目{(board?.untranslated_categories??0)>0?"（含待补中文分类）":""}</span>
                 <button type="button" className="np-pb-sort-toggle"
                   aria-label={`类目通过率排序：${categorySort === "rate-desc" ? "从高到低" : "从低到高"}，点击切换`}
                   title={`按通过率${categorySort === "rate-desc" ? "从高到低" : "从低到高"}排序，点击切换`}
@@ -298,7 +235,7 @@ export default function PerformanceBoardRedesign({ products, config, open }: Pro
               <tbody>
                 {displayedCategories.map((x) => (
                   <tr key={x.name}>
-                    <td><strong className="np-pb-row-label">{x.name}</strong></td>
+                    <td><CategoryCell group={x}/></td>
                     <td>{x.count}</td><td>{x.passed}</td><td>{x.completed - x.passed}</td><td>{x.rate}</td><td>{x.highRate}</td>
                     <td><span className={`np-pb-pill np-pb-pill--${recommendationTone(x.completed, x.passed)}`}>{recommendation(x.completed, x.passed)}</span></td>
                   </tr>

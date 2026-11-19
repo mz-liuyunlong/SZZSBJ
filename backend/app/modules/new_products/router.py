@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -69,6 +70,33 @@ def performance_summary(request: Request, db: DB, _: Read, accounts: Scope, sour
     return success_response(
         request, data=summary(source, db, accounts), meta={"source": "saved_projection"}
     )
+
+
+@router.get("/board/summary", response_model=SuccessEnvelope[dict, dict])
+def new_product_board_summary(
+    request: Request,
+    start_date: date,
+    end_date: date,
+    db: DB,
+    _: Read,
+    accounts: Scope,
+    source: Source,
+):
+    from app.core.api import ApiError
+
+    from .performance_list_scope import board_summary
+
+    if start_date > end_date:
+        raise ApiError(code="NP_BOARD_DATE_RANGE_INVALID", status_code=422,
+                       message="开始日期不得晚于结束日期")
+    cfg, _ = NewProductService(db, read_session=source)._config()
+    remind_days = int(cfg.get("remindDays", 30))
+    data = board_summary(
+        source, db, accounts,
+        start_date=start_date, end_date=end_date,
+        remind_days=remind_days,
+    )
+    return success_response(request, data=data, meta={"source": "saved_board_projection"})
 
 
 @router.get("/listings", response_model=SuccessEnvelope[dict, dict])

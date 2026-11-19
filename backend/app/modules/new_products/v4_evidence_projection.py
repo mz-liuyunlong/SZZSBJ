@@ -55,15 +55,45 @@ def _date(value: Any) -> str | None:
 
 
 def _calculate(facts: dict[str, Any], dimension: str) -> Any:
-    # Always reuse the actual core scoring evaluator. Missing market, ad and
-    # profit ensure the function returns only independent dimension scores.
+    if dimension == "trust":
+        from .scoring import clamp, up, weighted
+
+        units = _decimal(facts.get("valid_units_14d"))
+        orders = _decimal(facts.get("valid_orders_14d"))
+        singles = _decimal(facts.get("single_unit_orders_14d"))
+        if (
+            units is None or orders is None or singles is None
+            or orders <= 0 or units < orders
+            or singles < 0 or singles > orders
+        ):
+            return None
+        p = DEFAULT_PARAMETERS["trust"]
+        return weighted([
+            (
+                clamp(units / Decimal(str(p["targetUnits"])) * 10),
+                Decimal(str(p["unitsWeight"])),
+            ),
+            (
+                up(
+                    singles / orders * 100,
+                    Decimal(str(p["singleRatioZero"])),
+                    Decimal(str(p["singleRatioFull"])),
+                ),
+                Decimal(str(p["singleRatioWeight"])),
+            ),
+        ])
+
     snapshot = {
         "market_score": None,
         "ad_status": "unknown",
         "elapsed_days": 14,
         **facts,
     }
-    result = evaluate(snapshot, {"confirmedScoring": DEFAULT_PARAMETERS, "weights": {}}, 0)
+    result = evaluate(
+        snapshot,
+        {"confirmedScoring": DEFAULT_PARAMETERS, "weights": {}},
+        0,
+    )
     return result["dimensions"].get(dimension)
 
 

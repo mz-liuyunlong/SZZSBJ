@@ -42,7 +42,7 @@ def facts():
         "effective_orders_14d": 20,
         "valid_orders_14d": 20,
         "valid_units_14d": 20,
-        "single_unit_orders_14d": 18,
+        "trust_order_units_ratio_pct": Decimal("100"),
         "ad_status": "active",
         "ad_spend_usd": Decimal("20"),
         "ad_clicks": 20,
@@ -130,3 +130,30 @@ def test_missing_market_blocks_final_rating():
     f = facts()
     f["market_score"] = None
     assert evaluate(f, config(), 1)["grade"] is None
+
+
+def test_mart_order_units_ratio_regression():
+    """14 orders / 19 units = 73.68%, without FACT singles."""
+    f = facts()
+    f["valid_orders_14d"] = 14
+    f["valid_units_14d"] = 19
+    f["trust_order_units_ratio_pct"] = Decimal(14) / Decimal(19) * 100
+    f.pop("single_unit_orders_14d", None)
+
+    result = evaluate(f, config(), 1)
+    expected = Decimal("8.394736842105263157894736842")
+
+    assert abs(
+        Decimal(result["dimensions"]["trust"]) - expected
+    ) < Decimal("0.00000001")
+
+
+def test_missing_mart_ratio_does_not_use_legacy_singles():
+    f = facts()
+    f.pop("trust_order_units_ratio_pct")
+    f["single_unit_orders_14d"] = 20
+
+    result = evaluate(f, config(), 1)
+
+    assert result["dimensions"]["trust"] is None
+    assert result["grade"] is None

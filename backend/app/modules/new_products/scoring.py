@@ -135,31 +135,38 @@ def evaluate(facts: dict[str, Any], config: dict[str, Any], rule_version: int) -
                 ),
             ]
         )
-    units, orders, singles = (
-        facts.get(k) for k in ("valid_units_14d", "valid_orders_14d", "single_unit_orders_14d")
-    )
+    units = facts.get("valid_units_14d")
+    orders = facts.get("valid_orders_14d")
+    ratio = facts.get("trust_order_units_ratio_pct")
+
     if (
-        any(x is None for x in (units, orders, singles))
+        any(v is None for v in (units, orders, ratio))
+        or dec(units) <= 0
         or dec(orders) <= 0
-        or dec(singles) > dec(orders)
+        or dec(orders) > dec(units)
+        or dec(ratio) < 0
+        or dec(ratio) > HUNDRED
+        or abs(dec(ratio) - dec(orders) / dec(units) * HUNDRED)
+        > Decimal("0.000001")
     ):
         d["trust"] = None
-        missing.append("销售件数/订单数/单件订单占比")
+        missing.append("MART累计销售件数/订单数/订单件数比")
     else:
         tr = p["trust"]
-        d["trust"] = weighted(
-            [
-                (clamp(dec(units) / dec(tr["targetUnits"]) * TEN), dec(tr["unitsWeight"])),
-                (
-                    up(
-                        dec(singles) / dec(orders) * HUNDRED,
-                        dec(tr["singleRatioZero"]),
-                        dec(tr["singleRatioFull"]),
-                    ),
-                    dec(tr["singleRatioWeight"]),
+        d["trust"] = weighted([
+            (
+                clamp(dec(units) / dec(tr["targetUnits"]) * TEN),
+                dec(tr["unitsWeight"]),
+            ),
+            (
+                up(
+                    dec(ratio),
+                    dec(tr["singleRatioZero"]),
+                    dec(tr["singleRatioFull"]),
                 ),
-            ]
-        )
+                dec(tr["singleRatioWeight"]),
+            ),
+        ])
     no_ads = ad_status == "not_run"
     no_orders = no_ads and qty == 0 and (orders is None or orders == 0)
     continuation = bool(

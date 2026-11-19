@@ -11,14 +11,16 @@ import json
 import logging
 import time
 from collections import Counter
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select, text, tuple_
 
 from app.modules.data_pages.models import ListingManagementCurrentMart
 from app.modules.data_pages.repository import LISTING_WFS_LA_LOCKED, PRODUCT_INFO_CURRENT
+from app.modules.walmart_monitor.models import WalmartMonitorListingCurrent
 
+from .category_zh import business_category, category_path_detail, translate_category
 from .evaluation_policy import evaluation_status
 
 SAMPLE_TAG = "小批量测品"
@@ -34,15 +36,27 @@ def scoped_projection(source, db, accounts: frozenset[str]) -> list[dict]:
         return []
     started = time.monotonic()
     m = ListingManagementCurrentMart
+    monitor = WalmartMonitorListingCurrent
     stmt = select(
         m.source_account_ref,
         m.store_id,
         m.item_id,
         m.local_sku,
+        m.local_name,
+        m.title,
+        func.coalesce(
+            func.nullif(func.btrim(monitor.category), ""),
+            func.nullif(func.btrim(m.category), ""),
+        ).label("category_raw"),
         m.listing_start_at_utc,
     ).where(
         m.source_account_ref.in_(accounts),
         m.product_tags_json.contains([{"label": SAMPLE_TAG}]),
+    ).outerjoin(
+        monitor,
+        (monitor.source_account_ref == m.source_account_ref)
+        & (monitor.store_id == m.store_id)
+        & (monitor.item_id == m.item_id),
     )
     has_locked = (
         source.scalar(text("SELECT to_regclass('public.listing_wfs_first_stock_la_locked')"))
@@ -76,6 +90,8 @@ def scoped_projection(source, db, accounts: frozenset[str]) -> list[dict]:
         )
         SELECT w.a,w.s,w.i,r.listing_date_la,
           p.first_wfs_available_date_la, p.score,p.grade,
+          p.data_coverage_json #> '{auto_dimension_scores,dimensions}' AS dimensions,
+          p.data_coverage_json #>> '{new_products_score_facts_v2,market_score}' AS market_score,
           p.data_coverage_json #>> '{evaluation_formal_trigger,status}' AS formal_status,
           p.data_coverage_json ? 'auto_dimension_scores' AS has_auto
         FROM wanted w
@@ -102,6 +118,7 @@ def scoped_projection(source, db, accounts: frozenset[str]) -> list[dict]:
                     PRODUCT_INFO_CURRENT.c.source_account_ref,
                     PRODUCT_INFO_CURRENT.c.lingxing_sku_code,
                     func.max(PRODUCT_INFO_CURRENT.c.owner_name).label("owner_name"),
+                    func.max(PRODUCT_INFO_CURRENT.c.product_developer_name).label("product_developer_name"),
                 )
                 .where(
                     tuple_(
@@ -118,7 +135,7 @@ def scoped_projection(source, db, accounts: frozenset[str]) -> list[dict]:
             .all()
         )
         owners = {
-            (str(x["source_account_ref"]), str(x["lingxing_sku_code"])): x["owner_name"]
+            (str(x["source_account_ref"]), str(x["lingxing_sku_code"])): x
             for x in owner_rows
         }
 
@@ -153,13 +170,23 @@ def scoped_projection(source, db, accounts: frozenset[str]) -> list[dict]:
             if p.get("grade") in _GRADES and p.get("score") is not None
             else "pending"
         )
-        owner = owners.get((key[0], str(r["local_sku"]))) if r["local_sku"] else None
+        owner_row = owners.get((key[0], str(r["local_sku"]))) if r["local_sku"] else None
+        owner_name = owner_row["owner_name"] if owner_row else None
+        developer_name = owner_row["product_developer_name"] if owner_row else None
         result.append(
             {
                 "identity": key,
                 "status": status,
                 "grade": grade,
-                "owner": str(owner) if owner else "未分配",
+                "owner": str(owner_name) if owner_name else "未分配",
+                "developer": str(developer_name) if developer_name else "未分配",
+                "first_wfs": first_wfs,
+                "category": r["category_raw"],
+                "sku": r["local_sku"],
+                "name": r["local_name"] or r["title"],
+                "total": str(p["score"]) if p.get("score") is not None else None,
+                "dimensions": p.get("dimensions"),
+                "market_score": p.get("market_score"),
             }
         )
     _LOGGER.info(
@@ -222,3 +249,136 @@ def matching_identities(
         and (not rating_set or r["grade"] in rating_set)
         and (not needle or needle in r["owner"].casefold())
     ]
+
+
+# NP_BOARD_INDEPENDENT_CN_20261119: read-only server statistics.
+def _board_group(items: list[dict], title: str) -> dict:
+    from decimal import Decimal
+
+    scored = [r for r in items if r["status"] in ("测评通过", "测评未通过")]
+    passed = [r for r in scored if r["status"] == "测评通过"]
+    high = [r for r in scored if r["grade"] in ("S", "A")]
+    valid_scores = [Decimal(str(r["total"])) for r in scored if r["total"] is not None]
+    return {
+        "name": title,
+        "count": len(items),
+        "completed": len(scored),
+        "passed": len(passed),
+        "rate": f"{len(passed) / len(scored) * 100:.1f}%" if scored else "—",
+        "highRate": f"{len(high) / len(scored) * 100:.1f}%" if scored else "—",
+        "avg": str((sum(valid_scores) / len(valid_scores)).quantize(Decimal("0.01")))
+        if valid_scores else "—",
+        "grades": {g: sum(r["grade"] == g for r in scored) for g in _GRADES},
+    }
+
+
+def board_summary(source, db, accounts: frozenset[str], *, start_date, end_date, remind_days=30):
+    """One scoped MART+decision projection, never a live item/detail scoring loop."""
+    if not isinstance(start_date, date) or not isinstance(end_date, date) or start_date > end_date:
+        raise ValueError("NP_BOARD_DATE_RANGE_INVALID")
+    today = datetime.now(LA).date()
+    allowed = {"测评中", "待市场评分", "测评通过", "测评未通过"}
+    rows = [
+        r for r in scoped_projection(source, db, accounts)
+        if r["first_wfs"] is not None
+        and start_date <= r["first_wfs"] <= end_date
+        and r["status"] in allowed
+    ]
+    status = Counter(r["status"] for r in rows)
+    completed = status["测评通过"] + status["测评未通过"]
+    grades = {
+        g: sum(r["grade"] == g for r in rows
+               if r["status"] in ("测评通过", "测评未通过"))
+        for g in _GRADES
+    }
+    reasons = {k: 0 for k in ("market", "speed", "ad", "profit", "trust")}
+    for r in rows:
+        if r["status"] != "测评未通过":
+            continue
+        dimensions = dict(r.get("dimensions") or {})
+        if r.get("market_score") is not None:
+            dimensions["market"] = r["market_score"]
+        numeric = []
+        for key in reasons:
+            value = dimensions.get(key)
+            if value is None:
+                continue
+            try:
+                from decimal import Decimal
+                score = Decimal(str(value))
+                if score.is_finite() and 0 <= score <= 10:
+                    numeric.append((score, key))
+            except (ValueError, ArithmeticError, TypeError):
+                continue
+        if numeric:
+            reasons[min(numeric)[1]] += 1
+    category_groups = {}
+    category_paths = {}
+    developer_groups = {}
+    unresolved = 0
+    source_missing = 0
+    unmapped_raw_categories: set[str] = set()
+    for r in rows:
+        raw = str(r.get("category") or "").strip()
+        # NP_BOARD_BUSINESS_CATEGORY_V5: original taxonomy remains attached.
+        translated = translate_category(raw)
+        category = business_category(raw)
+        if not raw:
+            source_missing += 1
+        if translated == "待补充中文分类":
+            unresolved += 1
+            unmapped_raw_categories.add(raw)
+        category_groups.setdefault(category, []).append(r)
+        if raw:
+            category_paths.setdefault(category, {})[raw] = category_path_detail(raw)
+        developer_groups.setdefault(r["developer"], []).append(r)
+    due = [
+        r for r in rows
+        if r["status"] == "待市场评分"
+        and (today - r["first_wfs"]).days + 1 >= remind_days
+    ]
+    due.sort(key=lambda r: (r["first_wfs"], r["identity"]))
+    return {
+        "date_basis": "first_wfs_available_date_la",
+        "status_basis": "latest_saved_evaluation",
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "counts": {
+            "total": len(rows),
+            "evaluating": status["测评中"],
+            "market": status["待市场评分"],
+            "passed": status["测评通过"],
+            "failed": status["测评未通过"],
+            "completed": completed,
+            "low_grade": grades["C"],
+            "due": len(due),
+        },
+        "pass_rate": f"{status['测评通过'] / completed * 100:.1f}%" if completed else "—",
+        "grades": grades,
+        # These are lowest verified dimensions, never asserted root causes.
+        "failure_dimensions": reasons,
+        "categories": [
+            {
+                **_board_group(values, category_name),
+                "subcategories": sorted(
+                    category_paths.get(category_name, {}).values(),
+                    key=lambda detail: (detail["label"], detail["raw"]),
+                ),
+            }
+            for category_name, values in sorted(category_groups.items())
+        ],
+        "developers": [_board_group(v, k) for k, v in sorted(developer_groups.items())],
+        "untranslated_categories": unresolved,
+        "missing_source_categories": source_missing,
+        "unmapped_raw_categories": sorted(unmapped_raw_categories),
+        "reminders": [
+            {
+                "id": "::".join(r["identity"]),
+                "sku": r["sku"] or "—",
+                "name": r["name"] or "品名待同步",
+                "developer": r["developer"],
+                "days": (today - r["first_wfs"]).days + 1,
+            }
+            for r in due
+        ],
+    }

@@ -3,7 +3,7 @@
  */
 import {useEffect, useState} from "react";
 import type {Product} from "./nativeData";
-import {getNewProductDetail} from "./newProductBusinessApi";
+import {getCachedNewProductDetail} from "./newProductBusinessApi";
 import "./newProductOperatingDaily.css";
 
 type RecordValue = Record<string,unknown>;
@@ -101,7 +101,7 @@ function NewProductOperatingDailyView({product}:{product:Product}) {
   useEffect(() => {
     if (!account || !store || !item) return;
     let live = true;
-    getNewProductDetail({source_account_ref:account,store_id:store,item_id:item}).then(data => {
+    getCachedNewProductDetail({source_account_ref:account,store_id:store,item_id:item}).then(data => {
       if (!live) return;
       const detail = asRecord(data.evaluation_operating_daily);
       if (!detail) {
