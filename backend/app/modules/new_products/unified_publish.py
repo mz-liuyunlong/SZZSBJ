@@ -426,11 +426,18 @@ def _candidate_scores(
             # The *speed* dimension must still use day 1..14 only.
             first_wfs = f.get("first_wfs_available_date_la")
             paid_first_text = real_profit.get("first_order_date") if isinstance(real_profit, dict) else None
+            first14_days = source_snap.daily.get(key, [])
+            first14_verified_empty = all(
+                Decimal(str(row.get("order_count") or 0)) == 0
+                and Decimal(str(row.get("sales_qty") or 0)) == 0
+                for row in first14_days
+            )
             if (
                 independent_ready
                 and isinstance(first_wfs, date)
                 and isinstance(paid_first_text, str)
                 and watermarks.get((key[0], key[1])) == cutoff
+                and first14_verified_empty
                 and date.fromisoformat(paid_first_text) > first_wfs + timedelta(days=13)
             ):
                 f["first_order_day"] = None
