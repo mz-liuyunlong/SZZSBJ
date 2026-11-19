@@ -276,8 +276,12 @@ class NewProductService:
             ads["n"]
             and not ads["incomplete"]
             and ads["spend"] is not None
-            and Decimal(str(ads["spend"])) > 0
+            and (
+                Decimal(str(ads["spend"])) > 0
+                or (ads.get("impressions") is not None and Decimal(str(ads["impressions"])) > 0)
+            )
         ):
+            # Verified impressions prove actual delivery even when spend and clicks are zero.
             ad_status = "active"
         # Note: no ad rows are NOT proof of no advertising. No 'not_run' inference.
         roi = None
