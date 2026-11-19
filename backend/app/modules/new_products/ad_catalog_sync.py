@@ -264,7 +264,7 @@ def sync_catalog(*, limit: int = MAX_BATCH, pages: int = 1, apply: bool = False)
     """Guarded source-to-target ingestion; separate source and transaction target."""
     import os
 
-    if pages < 1 or pages > 1000:
+    if pages < 1 or pages > 2000:
         raise ValueError("AD_CATALOG_PAGES_OUT_OF_RANGE")
     env = os.getenv("APP_ENV", "").strip().lower()
     if apply:
