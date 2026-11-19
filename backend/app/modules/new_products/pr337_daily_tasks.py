@@ -41,6 +41,15 @@ def daily_score_tick() -> dict:
         from .evaluation_workflow import finalize_automatic
         from .unified_publish import execute_unified_job
 
+        # The 0094 catalog is intentionally gated until migration and
+        # historical backfill are approved. One bounded incremental page
+        # precedes the unified publisher; it never edits ad spend FACTs.
+        catalog_sync = {"status": "disabled"}
+        if enabled("SZZSBJ_AD_CATALOG_DAILY_ENABLED"):
+            from .ad_catalog_sync import sync_catalog
+
+            catalog_sync = sync_catalog(limit=50, pages=10, apply=True)
+
         unified = execute_unified_job(limit=500, apply=True)
         # The unified publisher has committed its bounded batches. Formal
         # evaluation now checks that saved V2 proof, never reruns the score.
@@ -54,6 +63,7 @@ def daily_score_tick() -> dict:
             "status": "complete",
             "authority": "new_products_authority_v2",
             "unified": unified,
+            "ad_catalog_sync": catalog_sync,
             "automatic_evaluations": formal,
         }
     if os.getenv("APP_ENV", "").strip().lower() != "production" or not enabled(SCHEDULE_FLAG):
