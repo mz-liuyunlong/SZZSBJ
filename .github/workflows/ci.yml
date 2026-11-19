@@ -106,7 +106,7 @@ jobs:
           grep -F "finance SEM audit ledger has no destructive downgrade" /tmp/finance-rollback-check.log
           test "$finance_before" = "$(uv run python -c "$read_head")"
           # Check 0092 role permissions and forward-only history separately.
-          uv run alembic upgrade head
+          uv run alembic upgrade 20261115_0092_role_page_catalog_alignment
           uv run pytest -q -rs tests/modules/ai_runtime/test_postgresql_acceptance.py
           role_before="$(uv run python -c "$read_head")"
           test "$role_before" = "20261115_0092_role_page_catalog_alignment"
@@ -116,6 +116,8 @@ jobs:
           fi
           grep -F "Forward-only permission catalog migration: do not revoke role grants automatically" /tmp/role-rollback-check.log
           test "$role_before" = "$(uv run python -c "$read_head")"
+          uv run alembic upgrade head
+          test "$(uv run python -c "$read_head")" = "20261119_0093_np_market_competitors"
 
   frontend-if-present:
     runs-on: ubuntu-latest
@@ -396,7 +398,7 @@ jobs:
 
           engine = create_engine(get_test_database_url(Settings()))
           with engine.connect() as connection:
-              assert connection.scalar(text("select version_num from alembic_version")) == "20261115_0092_role_page_catalog_alignment"
+              assert connection.scalar(text("select version_num from alembic_version")) == "20261119_0093_np_market_competitors"
               assert connection.scalar(text("select to_regclass('public.audit_walmart_order_item_conflicts')")) is not None
               assert connection.scalar(text("select to_regclass('public.biz_finance_sample_disputes')")) is not None
               assert connection.scalar(text("select to_regclass('public.biz_finance_unallocated_sem_lines')")) is not None
