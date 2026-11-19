@@ -422,6 +422,20 @@ def _candidate_scores(
             f["ad_scoring_window_end_la"] = (
                 cutoff if isinstance(f.get("ad_scoring_window_start_la"), date) else None
             )
+            # Profit projection restores the actual lifetime first paid order.
+            # The *speed* dimension must still use day 1..14 only.
+            first_wfs = f.get("first_wfs_available_date_la")
+            paid_first_text = real_profit.get("first_order_date") if isinstance(real_profit, dict) else None
+            if (
+                independent_ready
+                and isinstance(first_wfs, date)
+                and isinstance(paid_first_text, str)
+                and watermarks.get((key[0], key[1])) == cutoff
+                and date.fromisoformat(paid_first_text) > first_wfs + timedelta(days=13)
+            ):
+                f["first_order_day"] = None
+                f["effective_orders_14d"] = 0
+                f["zero_sales_verified"] = False
             ev = evaluate(f, config, version)
             results[key] = {"facts": f, "evaluation": ev, "rule_version": version}
             results[key].update(
