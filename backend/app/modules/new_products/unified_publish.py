@@ -161,6 +161,18 @@ def _reconcile_mart_evidence(
         is_proven_zero(d.get("order_count")) and is_proven_zero(d.get("sales_qty")) for d in days
     )
     no_rows_zero = not days and synchronized
+    # A paid first order after the observation period proves no sale
+    # occurred inside the initial 14-day speed window. Later sales remain
+    # valid for cumulative trust and profit, never the all-zero shortcut.
+    if synchronized and isinstance(profit, dict):
+        first_paid = profit.get("first_order_date")
+        try:
+            first_paid_day = date.fromisoformat(str(first_paid)) if first_paid else None
+        except ValueError:
+            first_paid_day = None
+        if first_paid_day is not None and first_paid_day > first + timedelta(days=13):
+            f["effective_orders_14d"] = 0
+            f["first_order_day"] = None
     if ((zero_buckets and synchronized) or no_rows_zero) and isinstance(profit, dict):
         paid = profit.get("sales_units")
         if is_proven_zero(paid):
