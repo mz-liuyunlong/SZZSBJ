@@ -921,7 +921,7 @@ def publish_unified(
     # Import inside the function: pr337_daily_pipeline imports _save_one from this module.
     from .pr337_daily_pipeline import load_scoped_campaign_catalog
 
-    catalog, catalog_state, catalog_rows = load_scoped_campaign_catalog(source, cutoff)
+    catalog, catalog_state, catalog_rows = load_scoped_campaign_catalog(target, cutoff)
     summary["catalog_state"] = catalog_state
     summary["catalog_rows"] = catalog_rows
     for at in range(0, len(keys), BATCH):
