@@ -83,7 +83,7 @@ def test_grade_bands_are_enforced_on_server():
         "effective_orders_14d": 20,
         "valid_orders_14d": 20,
         "valid_units_14d": 20,
-        "single_unit_orders_14d": 18,
+        "trust_order_units_ratio_pct": Decimal("100"),
         "ad_status": "not_run",
         "roi": Decimal("1.5"),
         "gross_margin_pct": Decimal("25"),

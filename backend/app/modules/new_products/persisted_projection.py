@@ -302,6 +302,40 @@ def merge_persisted_page_row(
     )
     # Overall score and grade remain exactly as they were on the existing API:
     # NULL until approved business/human decision logic computes them.
+    # V2 saved facts and scores are authoritative.
+    # Never overlay them with legacy single-order projections.
+    authority = coverage.get("new_products_authority_v2")
+    if isinstance(authority, dict):
+        saved_facts = coverage.get("new_products_score_facts_v2")
+        if isinstance(saved_facts, dict):
+            for field in (
+                "first_order_day",
+                "elapsed_days",
+                "effective_orders_14d",
+                "valid_orders_14d",
+                "valid_units_14d",
+                "trust_order_units_ratio_pct",
+                "trust_evidence_source",
+                "ad_status",
+                "ad_spend_usd",
+                "ad_clicks",
+                "ad_orders",
+                "ad_revenue_usd",
+                "ad_scoring_window_start_la",
+                "ad_scoring_window_end_la",
+                "roi",
+                "gross_margin_pct",
+                "zero_sales_verified",
+            ):
+                if field in saved_facts:
+                    value = saved_facts[field]
+                    facts[field] = value.isoformat() if isinstance(value, date) else value
+        facts["single_unit_orders_14d"] = None
+        facts.pop("single_unit_orders_evidence", None)
+        if block.get("rule_version") is not None:
+            row["evaluation"]["rule_version"] = block["rule_version"]
+        return
+
     _attach_saved_dimension_evidence(row, perf, coverage)
     # PR337_V4_EVIDENCE_READ_PROJECTION_20261114
     from .v4_evidence_projection import attach_v4_saved_evidence

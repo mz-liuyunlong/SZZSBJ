@@ -240,6 +240,9 @@ def apply_attested_current_view(
             "valid_units_14d": units,
             "valid_orders_14d": orders,
             "single_unit_orders_14d": singles,
+            "trust_order_units_ratio_pct": (
+                Decimal(orders) / Decimal(units) * 100 if orders > 0 and units >= orders else None
+            ),
             "ad_status": "unknown",
         },
         {"confirmedScoring": DEFAULT_PARAMETERS, "weights": DEFAULT_WEIGHTS},

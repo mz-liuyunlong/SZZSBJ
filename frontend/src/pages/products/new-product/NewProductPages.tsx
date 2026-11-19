@@ -32,6 +32,7 @@ import TrackingRuleConfigPanel from "./components/TrackingRuleConfigPanel";
 import NewProductDimensionEvidence from "./NewProductDimensionEvidence";
 import NewProductManualRisk, {type ManualRiskCode} from "./NewProductManualRisk";
 import NewProductEvaluationData from "./NewProductEvaluationData";
+import { invalidateNewProductDetail } from "./newProductBusinessApi";
 import "./nativeWorkflow.css";
 import "./newProductReviewDrawer.css";
 import "./newProductDimensionCards.css";
@@ -232,6 +233,7 @@ export default function NewProductPages({page,mode}:Props){
    enabled:remoteEnabled,placeholderData:keepPreviousData,staleTime:15_000,retry:1,
  });
  const remoteProducts=useMemo(()=>(pagingQuery.data?.items??[]).map(toPersistedProduct),[pagingQuery.data]);
+ const [boardActionItem,setBoardActionItem]=useState<PersistedProduct|null>(null);
  const refreshAllReal=useCallback(async(isActive:()=>boolean=()=>true,progressive=false)=>{
    // Both dashboard and original ProTable consume one complete real Product[].
    // Performance shows completed pages early; final count is verified.
@@ -255,6 +257,8 @@ export default function NewProductPages({page,mode}:Props){
    return loaded;
  },[]);
  const refreshReal=useCallback(async(isActive:()=>boolean=()=>true,progressive=false)=>{
+   // NP_DETAIL_CACHE_V4_REFRESH_GUARD: invalidate only on explicit refresh/mutation.
+   void invalidateNewProductDetail();
    if(mode==="performance" && tab==="list"){
      void queryClient.invalidateQueries({queryKey:["np-performance","summary"]});
      const latest=await queryClient.fetchQuery({
@@ -264,16 +268,25 @@ export default function NewProductPages({page,mode}:Props){
      });
      return latest.items.map(toPersistedProduct);
    }
+   if(mode==="performance" && tab==="board"){
+     void queryClient.invalidateQueries({queryKey:["np-board"]});
+     if(!boardActionItem)return [];
+     const listing=await listNewProducts({page:1,pageSize:200,keyword:boardActionItem.item,searchField:"item_id"});
+     const found=listing.items.map(toPersistedProduct).find(p=>p.id===boardActionItem.id);
+     if(!found)throw new Error("看板商品刷新未找到完整身份");
+     setBoardActionItem(found);
+     return [found];
+   }
    return refreshAllReal(isActive,progressive);
- },[mode,tab,remoteQuery,queryClient,refreshAllReal]);
+ },[mode,tab,remoteQuery,queryClient,refreshAllReal,boardActionItem]);
  useEffect(()=>{
-   if(mode==="performance" && tab==="list") return;
+   if(mode==="performance") return;
    let active=true;
    // Defer the initial fetch so this Effect never synchronously cascades a state update.
    // Errors are shown explicitly; do not restore the seven demo records.
    void Promise.resolve().then(()=>{
      if(!active)return;
-     return refreshAllReal(()=>active,mode==="performance").catch(error=>{
+     return refreshAllReal(()=>active).catch(error=>{
        if(active){setItems([]);setNotice(`真实商品读取失败：${error instanceof Error?error.message:'未知错误'}`);}
      });
    });
@@ -305,7 +318,7 @@ export default function NewProductPages({page,mode}:Props){
  }, [mode]);
  const trackingProducts=useMemo(()=>mode==='tracking'
    ?withTrackingVisualSamples(items,trackingSampleAnchor):items,[items,mode,trackingSampleAnchor]);
- const activeItems=remoteEnabled?remoteProducts:items;
+ const activeItems=remoteEnabled?remoteProducts:(mode==="performance" && tab==="board" ? (boardActionItem?[boardActionItem]:[]):items);
  const p=activeItems.find(x=>x.id===selected);
  const reviewFinal = p?.tracking === "打品成功" || p?.tracking === "打品失败";
  // PR337 local Mock only: launch date + arrival date act as the tracking-start proxy.
@@ -594,6 +607,22 @@ export default function NewProductPages({page,mode}:Props){
      return {ok:false,error:error instanceof Error?error.message:"保存修正失败"};
    }
  };
+ const openBoardMarket=async(id:string)=>{
+   try{
+     const parts=id.split("::");
+     if(parts.length!==3 || !parts.every(Boolean))throw new Error("商品身份无效");
+     const result=await listNewProducts({page:1,pageSize:200,keyword:parts[2],searchField:"item_id"});
+     const found=result.items.map(toPersistedProduct).find(item=>item.id===id);
+     if(!found || !found.backend)throw new Error("未找到对应账号与店铺的真实商品");
+     setBoardActionItem(found);
+     setSelected(found.id);
+     riskSelectionRef.current=[];
+     setScoreValue(found.market);
+     setQty(found.requestQty??suggestion(found,cfg));
+     setNote(found.marketReason||"");
+     setModal("detail");
+   }catch(error){msg(`读取待评分商品失败：${error instanceof Error?error.message:"未知错误"}`);}
+ };
  return <PageShell page={page}><div className="np-original-v4"><div className="content">
 
 <header className="np-workspace-title">
@@ -639,7 +668,7 @@ export default function NewProductPages({page,mode}:Props){
   </div>
 
  <div className="np-workspace-body">
- {tab==="board"?<NativeBoard mode={mode} products={mode==="tracking"?trackingProducts:performanceItems} config={cfg} detail={()=>setTab("list")} onTrackingDrill={filter=>{setTrackingDrill(filter);setTab("list");}} open={(key,id)=>key==="export"?exportRows():show(key as ModalType,id)}/>:
+ {tab==="board"?<NativeBoard mode={mode} products={mode==="tracking"?trackingProducts:performanceItems} config={cfg} detail={()=>setTab("list")} onTrackingDrill={filter=>{setTrackingDrill(filter);setTab("list");}} open={(key,id)=>key==="export"?exportRows():(mode==="performance"&&key==="market"&&id?void openBoardMarket(id):show(key as ModalType,id))}/>:
  mode==="performance"?<>
  <ManagementStatCards ariaLabel="新品表现统计" className="np-performance-stats"
    activeKey={phase}

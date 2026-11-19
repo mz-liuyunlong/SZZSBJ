@@ -31,6 +31,7 @@ export interface ScoringFacts {
   validSoldUnits:number|null;
   validOrders:number|null;
   singleUnitOrders:number|null;
+  trustOrderUnitsRatioPct?:number|null;
   marketScore:number|null;
 }
 export interface DimensionResult { score:number|null; missing:string[]; details:Array<{name:string;raw:string;score:number|null}>; note?:string }
@@ -114,14 +115,35 @@ export function profitResult(f:ScoringFacts,p:ScoringParameters):DimensionResult
     detail('ROI',String(f.roi),roi),detail('毛利率',`${f.grossMarginPct}%`,margin)]};
 }
 export function trustResult(f:ScoringFacts,p:ScoringParameters):DimensionResult {
-  if(!nonnegative(f.validSoldUnits)||!nonnegative(f.validOrders)||!nonnegative(f.singleUnitOrders))return missing('有效销售件数','有效订单笔数','单件订单笔数');
-  if(!Number.isInteger(f.validSoldUnits)||!Number.isInteger(f.validOrders)||!Number.isInteger(f.singleUnitOrders)||f.singleUnitOrders>f.validOrders)return missing('订单与件数口径异常');
-  if(f.validOrders===0)return {...missing('没有有效订单，单件订单占比不可计算'),details:[detail('有效销售件数',`${f.validSoldUnits}件`,0)]};
-  const units=clamp(f.validSoldUnits/p.trust.targetUnits*10);
-  const ratio=f.singleUnitOrders/f.validOrders*100;
-  const ratioScore=higherBetter(ratio,p.trust.singleRatioZero,p.trust.singleRatioFull);
-  return {score:(units*p.trust.unitsWeight+ratioScore*p.trust.singleRatioWeight)/100,missing:[],details:[
-    detail('有效销售件数',`${f.validSoldUnits}件`,units),detail('单件订单占比',`${ratio.toFixed(2)}%`,ratioScore)]};
+  const units=f.validSoldUnits;
+  const orders=f.validOrders;
+  const ratio=f.trustOrderUnitsRatioPct;
+
+  if(!nonnegative(units)||!nonnegative(orders)||
+     ratio===null||ratio===undefined||!Number.isFinite(ratio)){
+    return missing('MART累计销售件数','MART累计订单数','订单件数比');
+  }
+  if(!Number.isInteger(units)||!Number.isInteger(orders)||
+     units<=0||orders<=0||orders>units||
+     ratio<0||ratio>100||
+     Math.abs(ratio-orders/units*100)>0.000001){
+    return missing('MART累计订单数、件数或比例异常');
+  }
+
+  const unitsScore=clamp(units/p.trust.targetUnits*10);
+  const ratioScore=higherBetter(
+    ratio,p.trust.singleRatioZero,p.trust.singleRatioFull
+  );
+
+  return {
+    score:(unitsScore*p.trust.unitsWeight+
+      ratioScore*p.trust.singleRatioWeight)/100,
+    missing:[],
+    details:[
+      detail('累计销售件数',`${units}件`,unitsScore),
+      detail('订单件数比',`${ratio.toFixed(2)}%`,ratioScore)
+    ]
+  };
 }
 export interface RiskRules {
   penalties?:Array<{name:string;enabled:boolean;deduct:number}>;

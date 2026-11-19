@@ -1,5 +1,6 @@
 /** PR337 Phase2: live backend API only; no mock or localStorage fallback. */
 import { backendRequest, backendDownload } from "@/api/backendApi";
+import { queryClient } from "@/api/queryClient";
 import type { RuleDraft } from "./NewProductRulesModel";
 
 export type Identity = { source_account_ref: string; store_id: string; item_id: string };
@@ -77,6 +78,30 @@ export type NewProductListing = {
   system_recommendation: { value: string; reasons: string[] };
 };
 export type PageResponse = { items: NewProductListing[]; total: number; page: number; page_size: number; rule_version: number };
+
+export type NewProductBoardGroup = {
+  name:string;count:number;completed:number;passed:number;
+  rate:string;highRate:string;avg:string;
+  grades:Record<"S"|"A"|"B"|"C"|"D"|"Pass",number>;
+  subcategories:Array<{raw:string;zh:string;label:string}>;
+};
+export type NewProductBoardSummary = {
+  date_basis:"first_wfs_available_date_la";
+  status_basis:"latest_saved_evaluation";
+  start_date:string;end_date:string;
+  counts:{total:number;evaluating:number;market:number;passed:number;failed:number;completed:number;low_grade:number;due:number};
+  pass_rate:string;
+  grades:Record<"S"|"A"|"B"|"C"|"D"|"Pass",number>;
+  failure_dimensions:Record<"market"|"speed"|"ad"|"profit"|"trust",number>;
+  categories:NewProductBoardGroup[];developers:NewProductBoardGroup[];
+  untranslated_categories:number;
+  reminders:Array<{id:string;sku:string;name:string;developer:string;days:number}>;
+};
+export async function getNewProductBoardSummary(startDate:string,endDate:string,init?:RequestInit):Promise<NewProductBoardSummary>{
+  const params=new URLSearchParams({start_date:startDate,end_date:endDate});
+  return (await backendRequest<NewProductBoardSummary>(`/api/new-products/board/summary?${params}`,init)).data;
+}
+
 export type PerformanceSummary = {
   counts: { all:number; evaluating:number; market:number; passed:number; failed:number };
   status_options: Array<{value:string;label:string;count:number}>;
@@ -112,6 +137,28 @@ export async function getNewProductDetail(identity:Identity) {
   const {source_account_ref:a,store_id:s,item_id:i}=identity;
   return (await backendRequest<Record<string,unknown>>(`/api/new-products/listings/${encodeURIComponent(a)}/${encodeURIComponent(s)}/${encodeURIComponent(i)}`)).data;
 }
+// NP_DETAIL_CACHE_V4_REFRESH_GUARD: share one existing QueryClient across tabs and drawer mounts.
+// Keys include account + store + Item ID; logout already clears all query cache.
+export const newProductDetailQueryKey = (identity:Identity) => [
+  "np-product-detail", identity.source_account_ref, identity.store_id, identity.item_id,
+] as const;
+export const newProductDetailQueryOptions = (identity:Identity) => ({
+  queryKey: newProductDetailQueryKey(identity),
+  queryFn: () => getNewProductDetail(identity),
+  staleTime: 5 * 60_000,
+  gcTime: 30 * 60_000,
+  retry: 1,
+});
+export const getCachedNewProductDetail = (identity:Identity) =>
+  queryClient.fetchQuery(newProductDetailQueryOptions(identity));
+export const prefetchNewProductDetail = (identity:Identity) =>
+  queryClient.prefetchQuery(newProductDetailQueryOptions(identity));
+export const invalidateNewProductDetail = (identity?:Identity) =>
+  queryClient.invalidateQueries({
+    queryKey: identity ? newProductDetailQueryKey(identity) : ["np-product-detail"],
+    exact: Boolean(identity),
+    refetchType: "none",
+  });
 // PR337_MANUAL_RISK_V1: explicit human risk selection is required by the API.
 export async function saveNewProductMarketScore(identity:Identity,score:number,reason:string,expectedVersion:number,riskConditions:string[],competitorIds:string[],noCompetitors:boolean) {
   return (await backendRequest<{version:number;score:number;reason:string}>("/api/new-products/market-score",{

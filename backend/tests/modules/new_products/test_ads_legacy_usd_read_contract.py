@@ -68,7 +68,7 @@ def test_default_formula_reproduces_ad_and_trust_scores_without_changing_weights
         "ad_revenue_usd": Decimal("20.99"),
         "valid_units_14d": 1,
         "valid_orders_14d": 1,
-        "single_unit_orders_14d": 1,
+        "trust_order_units_ratio_pct": Decimal("100"),
     }
     cfg = {
         "weights": DEFAULT_WEIGHTS,

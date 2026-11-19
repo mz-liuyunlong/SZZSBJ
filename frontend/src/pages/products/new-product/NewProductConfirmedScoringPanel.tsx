@@ -12,13 +12,13 @@ const fmt=(v:number|null)=>v===null?'待接数据':v.toFixed(2);
 const examples:{value:string;label:string;facts:ScoringFacts}[]=[
   {value:'sample',label:'完整模拟样本（只用于演示公式）',facts:{
     firstOrderDay:2,elapsedDays:14,ordersInWindow:14,adStatus:'active',adClicks:50,adSpend:29,adOrders:4,adRevenue:100,
-    roi:1,grossMarginPct:17.5,validSoldUnits:20,validOrders:14,singleUnitOrders:12,marketScore:7}},
+    roi:1,grossMarginPct:17.5,validSoldUnits:20,validOrders:14,singleUnitOrders:null,trustOrderUnitsRatioPct:70,marketScore:7}},
   {value:'organic',label:'模拟：未投广告但有自然订单',facts:{
     firstOrderDay:2,elapsedDays:14,ordersInWindow:12,adStatus:'not_run',adClicks:null,adSpend:null,adOrders:null,adRevenue:null,
-    roi:1.2,grossMarginPct:22,validSoldUnits:14,validOrders:12,singleUnitOrders:11,marketScore:8}},
+    roi:1.2,grossMarginPct:22,validSoldUnits:14,validOrders:12,singleUnitOrders:null,trustOrderUnitsRatioPct:12/14*100,marketScore:8}},
   {value:'no-orders',label:'模拟：14天未投广告、无订单',facts:{
     firstOrderDay:null,elapsedDays:14,ordersInWindow:0,adStatus:'not_run',adClicks:null,adSpend:null,adOrders:null,adRevenue:null,
-    roi:null,grossMarginPct:null,validSoldUnits:0,validOrders:0,singleUnitOrders:0,marketScore:7}},
+    roi:null,grossMarginPct:null,validSoldUnits:0,validOrders:0,singleUnitOrders:null,trustOrderUnitsRatioPct:null,marketScore:7}},
 ];
 function Field({label,tip,example,unit,value,min=0,max,step=1,onChange}:{label:string;tip:string;example:string;unit?:string;
   value:number;min?:number;max?:number;step?:number;onChange:(value:number)=>void}){
@@ -113,14 +113,14 @@ export default function NewProductConfirmedScoringPanel({draft,onChange,products
       {field('trust','targetUnits','满分有效销售件数','卖出多少件，有效销售件数子项得10分。','设置20件，卖出10件就是5分。','件')}
       {field('trust','unitsWeight','件数内部权重','销售件数占数据可信度的多少。','填60，件数得5分贡献3分。','%')}
     </Group>
-    <Group title="单件订单占比（40%）" description="有效订单里，恰好只买本商品1件的订单占比。">
-      {field('trust','singleRatioZero','占比零分阈值','单件成交订单太少时，占比子项得0分。','10单里只有3单是单件订单，占比30%，得0分。','%',.1)}
-      {field('trust','singleRatioFull','占比满分阈值','单件订单占比达到多少，得10分。','10单里9单都只买1件，占比90%，得10分。','%',.1)}
-      {field('trust','singleRatioWeight','占比内部权重','单件订单占比占可信度的多少。','填40，占比得5分贡献2分。','%')}
+    <Group title="订单件数比（40%）" description="MART累计订单数除以累计销售件数。比例越低，平均每单购买件数越多。">
+      {field('trust','singleRatioZero','占比零分阈值','订单件数比达到或低于零分阈值时，该子项得0分。','10单卖出25件，订单件数比40%，按40%的零分阈值计0分。','%',.1)}
+      {field('trust','singleRatioFull','占比满分阈值','订单件数比达到多少，得10分。','10单卖出10件，订单件数比100%，达到90%的满分阈值。','%',.1)}
+      {field('trust','singleRatioWeight','占比内部权重','订单件数比占可信度的多少。','填40，占比得5分贡献2分。','%')}
     </Group><SourceCopy label="数据可信度" lines={draft.scoreCriteria.trust}/></div>;
   const names:Record<Dimension,string>={market:'市场竞争',speed:'出单速度',ad:'广告有效性',profit:'利润空间',trust:'数据可信度'};
   const preview=<div className="np-confirm-tab"><h3>评分计算预览</h3>
-    <p>可以先用完整模拟样本验证公式；选择本地商品时只使用来源明确的数据，缺首单日期、广告归因或订单结构就显示待接数据，不会编造满分。</p>
+    <p>可以先用完整模拟样本验证公式；选择本地商品时只使用来源明确的数据，缺首单日期、广告归因或MART累计数据就显示待接数据，不会编造满分。</p>
     <Select style={{width:'100%',marginBottom:10}} value={previewType} onChange={setPreviewType} options={[
       ...examples.map(x=>({value:x.value,label:x.label})),{value:'current',label:'查看当前商品实际可用字段（部分缺失）'}]}/>
     {previewType==='current'&&<Select style={{width:'100%',marginBottom:10}} value={selected?.id} onChange={setProductId}

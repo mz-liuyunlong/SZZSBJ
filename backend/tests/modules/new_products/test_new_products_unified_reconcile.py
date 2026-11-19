@@ -314,7 +314,7 @@ def test_single_page_reconcile_succeeds_without_writing(monkeypatch):
     ) == Decimal("9.10")
     assert Decimal(str(row["evaluation"]["dimensions"]["trust"])).quantize(
         Decimal(".01")
-    ) == Decimal("9.56")
+    ) == Decimal("9.66")
     assert row["evaluation"]["dimensions"]["ad"] == "5.18"
     assert row["evaluation"]["dimensions"]["profit"] == "0.73"
     assert row["evaluation"]["total"] is None

@@ -1,6 +1,6 @@
 /* PR337_APPROVED_CARD_FILTER_V53 */
 // PR337_APPROVAL_ITEM_FILTER_20261111
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Tag, Popover } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import CommittedSearch from "@/components/report-table/CommittedSearch";
@@ -10,6 +10,7 @@ import { ImageCell, ProductIdentityCell, SkuMskuIdentityCell } from "@/component
 import ReportFacetSelect from "@/shared/report-filters";
 import type { ReportFilterOption } from "@/shared/report-filters";
 import { grade, score, type Config, type Product } from "./nativeData";
+import { prefetchNewProductDetail } from "./newProductBusinessApi";
 
 type Action = "detail" | "market" | "purchase" | "approval" | "resultApproval" | 'calculate' | 'evaluationReview' | 'recheck';
 export type PerformanceReportQuery = {
@@ -314,6 +315,29 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
   const [keyword, setKeyword] = useState(focusItemId && phase === "approval" ? focusItemId : "");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  // NP_DETAIL_CACHE_V4_REFRESH_GUARD: prefetch only after a focused 200ms intent delay.
+  const detailIntentTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const detailPrefetchInFlight = useRef(0);
+  const cancelDetailIntent = () => {
+    if (detailIntentTimer.current !== null) clearTimeout(detailIntentTimer.current);
+    detailIntentTimer.current = null;
+  };
+  const scheduleDetailIntent = (row:Product) => {
+    cancelDetailIntent();
+    const identity = row.backend?.identity;
+    if (!identity?.source_account_ref || !identity.store_id || !identity.item_id) return;
+    detailIntentTimer.current = setTimeout(() => {
+      detailIntentTimer.current = null;
+      if (detailPrefetchInFlight.current >= 2) return;
+      detailPrefetchInFlight.current += 1;
+      void prefetchNewProductDetail(identity).finally(() => {
+        detailPrefetchInFlight.current -= 1;
+      });
+    }, 200);
+  };
+  useEffect(() => () => {
+    if (detailIntentTimer.current !== null) clearTimeout(detailIntentTimer.current);
+  }, []);
   const remoteQueryChanged = remote?.onQueryChange;
   useEffect(() => {
     if (!remoteQueryChanged) return;
@@ -589,7 +613,7 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
         if (state === "待到货") return <span className="muted">—</span>;
         if (row.backend?.purchaseStatus === "submitted" && row.backend.purchaseId) return <Button size="small" type="primary" onClick={() => onOpen("approval",row.id)}>审核采购</Button>;
         if (state === "测评中") return <span style={{ display: "inline-flex", alignItems: "center", gap: 12, whiteSpace: "nowrap" }}>
-          <Button size="small" onClick={() => onOpen("detail",row.id)} style={{ minWidth: 58, borderRadius: 8, borderColor: "#d0d5dd", color: "#344054", fontWeight: 500 }}>详情</Button>
+          <Button size="small" onMouseEnter={() => scheduleDetailIntent(row)} onMouseLeave={cancelDetailIntent} onFocus={() => scheduleDetailIntent(row)} onBlur={cancelDetailIntent} onClick={() => onOpen("detail",row.id)} style={{ minWidth: 58, borderRadius: 8, borderColor: "#d0d5dd", color: "#344054", fontWeight: 500 }}>详情</Button>
           <Button size="small" type="primary" disabled={calculatingItemId === row.id}
             onClick={() => onOpen("calculate",row.id)}>
             {calculatingItemId === row.id ? "计算中" : "立即计算"}
@@ -604,7 +628,7 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
             onClick={() => onOpen("market",row.id)}>去评分</Button>
         </span>;
         if (state === "测评未通过") return <span style={{ display: "inline-flex", alignItems: "center", gap: 12, whiteSpace: "nowrap" }}>
-          <Button size="small" onClick={() => onOpen("detail",row.id)} style={{ minWidth: 58, borderRadius: 8, borderColor: "#d0d5dd", color: "#344054", fontWeight: 500 }}>详情</Button>
+          <Button size="small" onMouseEnter={() => scheduleDetailIntent(row)} onMouseLeave={cancelDetailIntent} onFocus={() => scheduleDetailIntent(row)} onBlur={cancelDetailIntent} onClick={() => onOpen("detail",row.id)} style={{ minWidth: 58, borderRadius: 8, borderColor: "#d0d5dd", color: "#344054", fontWeight: 500 }}>详情</Button>
           {row.evaluationRecheckRequired && row.evaluationReviewStatus === "approved" ?
             <Button size="small" type="primary" disabled={calculatingItemId === row.id}
               onClick={() => onOpen("recheck",row.id)}>重新核算</Button> :
@@ -617,7 +641,7 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
         </span>;
         if (state === "测评通过") return <span style={{ display: "inline-flex", alignItems: "center", gap: 12, whiteSpace: "nowrap" }}>
 <Button size="small"
-          onClick={() => onOpen("detail",row.id)} style={{ minWidth: 58, borderRadius: 8, borderColor: "#d0d5dd", color: "#344054", fontWeight: 500 }}>详情</Button>
+          onMouseEnter={() => scheduleDetailIntent(row)} onMouseLeave={cancelDetailIntent} onFocus={() => scheduleDetailIntent(row)} onBlur={cancelDetailIntent} onClick={() => onOpen("detail",row.id)} style={{ minWidth: 58, borderRadius: 8, borderColor: "#d0d5dd", color: "#344054", fontWeight: 500 }}>详情</Button>
 {row.backend && ["S","A","B","C"].includes(row.backend.evaluation.grade ?? "") && row.backend.evaluation.total !== null && (row.backend.suggestedQty ?? 0) > 0 && <Button size="small" type="primary" onClick={() => onOpen("purchase",row.id)}>申请采购</Button>}
 </span>;
         return <span className="muted">—</span>;

@@ -1139,20 +1139,42 @@ class NewProductService:
             )
             # PR337_NEW_PRODUCTS_UNIFIED_RECONCILE_V2_20261115 - new-products-only local read view
             if preview is None:
+                # V2 records own their persisted MART-only trust evidence.
+                # Legacy reconciliation is permitted for legacy rows only.
+                legacy_rows = []
+                for candidate in rows:
+                    listing_data = candidate.get("listing") or {}
+                    identity = tuple(
+                        str(listing_data.get(field) or "")
+                        for field in (
+                            "source_account_ref",
+                            "store_id",
+                            "item_id",
+                        )
+                    )
+                    matched_record = persisted.get(identity)
+                    performance = matched_record[1] if matched_record is not None else None
+                    coverage = getattr(performance, "data_coverage_json", None)
+                    if isinstance(coverage, dict) and isinstance(
+                        coverage.get("new_products_authority_v2"), dict
+                    ):
+                        continue
+                    legacy_rows.append(candidate)
+
                 # PR337_MART_ONLY_DETERMINISTIC_V4_20261115
                 # Independent SaleStat proof comes FIRST; no Order V2 read for
                 # rows whose daily singles are mathematically determined.
                 from .mart_only_v4 import reconcile_mart_only_pending_rows
 
-                reconcile_mart_only_pending_rows(self.repo.session, rows)
+                reconcile_mart_only_pending_rows(self.repo.session, legacy_rows)
                 from .order_lineage_view import reconcile_pending_rows
 
-                reconcile_pending_rows(self.repo.session, rows)
+                reconcile_pending_rows(self.repo.session, legacy_rows)
                 # PR337_MART_TRUST_FINALIZE_V6_20261115
                 # Fill ONLY missing trust after existing V3/V4/V5 read-only logic.
                 from .mart_trust_finalize_v6 import finalize_missing_mart_trust
 
-                finalize_missing_mart_trust(self.repo.session, rows)
+                finalize_missing_mart_trust(self.repo.session, legacy_rows)
             # PR337_DAILY_PERSIST_V1: only the normal list reads saved facts.
             if preview is None:
                 from .pr337_daily_view import saved_daily_view

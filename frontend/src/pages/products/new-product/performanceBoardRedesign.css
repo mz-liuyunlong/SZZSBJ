@@ -1008,3 +1008,44 @@
   overflow-x: hidden !important;
   overflow-y: auto;
 }
+
+/* NP_BOARD_BUSINESS_CATEGORY_V5: only the category column and two-line tooltip. */
+.np-original-v4 .np-pb-business-category {
+  max-width: 210px;
+  min-width: 0;
+  line-height: 1.4;
+  white-space: normal;
+}
+.np-original-v4 .np-pb-business-category .np-pb-row-label {
+  display: block;
+  font-size: 12px;
+}
+.np-original-v4 .np-pb-business-subtitle {
+  margin-top: 2px;
+  color: #8993a3;
+  font-size: 11px;
+  line-height: 1.4;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.np-original-v4 .np-pb-taxonomy-trigger {
+  cursor: help;
+}
+.np-original-v4 .np-pb-taxonomy-trigger:focus-visible {
+  outline: 2px solid #1677ff;
+  outline-offset: 2px;
+}
+.np-pb-taxonomy-tooltip {
+  max-width: calc(100vw - 32px);
+}
+.np-pb-taxonomy-tooltip .ant-tooltip-inner {
+  max-width: calc(100vw - 32px);
+}
+.np-pb-taxonomy-tooltip-lines {
+  max-width: calc(100vw - 56px);
+  overflow-x: auto;
+  white-space: nowrap;
+  line-height: 1.8;
+  font-size: 12px;
+}
