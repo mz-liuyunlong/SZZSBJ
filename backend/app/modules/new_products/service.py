@@ -336,6 +336,7 @@ class NewProductService:
             "ad_status": ad_status,
             "ad_spend_usd": ads["spend"] if spend_ok else None,
             "ad_clicks": ads["clicks"] if clicks_ok else None,
+            "ad_impressions": ads.get("impressions") if ads["n"] and not ads["incomplete"] else None,
             "ad_orders": ads["orders"] if ad_status == "active" else None,
             "ad_revenue_usd": ads["revenue"] if ad_status == "active" else None,
             "ad_latest_sync": ads["latest_sync"],
