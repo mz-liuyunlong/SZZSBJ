@@ -80,7 +80,7 @@ function parseRows(v: unknown): DayRow[] | null {
   if (new Set(parsed.map(r => r.date)).size !== parsed.length) return null;
   return parsed.sort((a,b) => b.date.localeCompare(a.date));
 }
-export default function NewProductOperatingDaily({product}:{product:Product}) {
+function NewProductOperatingDailyView({product}:{product:Product}) {
   const backend = product.backend;
   const identity = backend?.identity;
   const account = identity?.source_account_ref;
@@ -93,15 +93,14 @@ export default function NewProductOperatingDaily({product}:{product:Product}) {
   const paidDaysRaw = num(listFacts?.order_days_count);
   const paidDays = paidDaysRaw !== null && Number.isInteger(paidDaysRaw) &&
     paidDaysRaw >= 0 ? paidDaysRaw : null;
-  const [loaded,setLoaded] = useState<State>({state:"loading",rows:[]});
+  const [rawLoaded,setLoaded] = useState<State>({state:"loading",rows:[]});
+  const loaded: State = !account || !store || !item
+    ? {state:"error",rows:[],error:"商品身份未核实"} : rawLoaded;
   const ageDays = listedDays(first);
 
   useEffect(() => {
-    if (!account || !store || !item) {
-      setLoaded({state:"error",rows:[],error:"商品身份未核实"});return;
-    }
+    if (!account || !store || !item) return;
     let live = true;
-    setLoaded({state:"loading",rows:[]});
     getNewProductDetail({source_account_ref:account,store_id:store,item_id:item}).then(data => {
       if (!live) return;
       const detail = asRecord(data.evaluation_operating_daily);
@@ -189,4 +188,13 @@ export default function NewProductOperatingDaily({product}:{product:Product}) {
       {totalInvest === null ? "投入成本未核实。" : ""}
     </small>}
   </div>;
+}
+
+// Keyed state scope: a different account/store/Item ID starts a fresh read.
+export default function NewProductOperatingDaily({product}:{product:Product}) {
+  const identity = product.backend?.identity;
+  const identityKey = JSON.stringify([
+    identity?.source_account_ref, identity?.store_id, identity?.item_id,
+  ]);
+  return <NewProductOperatingDailyView key={identityKey} product={product}/>;
 }
