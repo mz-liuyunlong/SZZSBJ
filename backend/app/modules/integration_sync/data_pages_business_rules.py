@@ -250,9 +250,10 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         msku: str | None,
         local_sku: str | None,
     ) -> str | None:
-        """Require uniquely agreeing Listing and same-day direct SaleStat IDs.
+        """Resolve a unique Listing identity; SaleStat may legitimately omit samples.
 
-        Provider responses often omit item_id. Never invent one from SKU alone.
+        Reject any conflicting same-day SaleStat identity instead of guessing
+        from SKU or silently merging products.
         """
         if not store_id or not msku or not local_sku:
             return None
@@ -290,8 +291,13 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         )
         if (
             int(row["listing_count"]) == 1
-            and int(row["sales_count"]) == 1
-            and row["listing_id"] == row["sales_id"]
+            and (
+                int(row["sales_count"]) == 0
+                or (
+                    int(row["sales_count"]) == 1
+                    and row["listing_id"] == row["sales_id"]
+                )
+            )
         ):
             return str(row["listing_id"])
         return None
@@ -721,7 +727,8 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         )
 
         # SZZSBJ_ZERO_PAID_AUTO_V1
-        # Confirm zero-paid identity independently of SaleStat totals. A sample
+        # Use the source sample-order evidence as the authoritative zero-paid
+        # identity; order V2 FACT may have different line IDs or date windows.
         # can be real while SaleStat has a different date or reporting scope.
         # Finance MART still blocks over-deduction and disputed profit.
         self.session.execute(
@@ -746,16 +753,9 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 "and l.store_id=s.store_id "
                 "and l.item_id=s.item_id "
                 "and trim(l.msku)=trim(s.msku)) "
-                "and exists ("
-                "select 1 from fact_walmart_order_items o "
-                "where o.source_account_ref=s.source_account_ref "
-                "and o.store_id=s.store_id "
-                "and o.source_order_id=s.source_order_id "
-                "and o.source_order_line_id=s.source_order_line_id "
-                "and o.is_identity_current=true "
-                "and o.order_total_amount=0 "
-                "and o.item_id=s.item_id "
-                "and trim(o.msku)=trim(s.msku)) "
+                "and s.source_order_id is not null "
+                "and s.platform_order_no is not null "
+                "and s.source_order_line_id is not null "
             ),
             {
                 "account": self.source_account_ref,
