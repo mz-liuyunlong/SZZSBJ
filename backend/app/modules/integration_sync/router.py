@@ -11,6 +11,7 @@ from app.core.api import ErrorEnvelope, SuccessEnvelope, get_request_id, success
 from app.core.auth import Principal
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
+from app.modules.integration_sync.anomaly_diagnosis import diagnose_sync_anomaly
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.integration_sync.models import IntegrationSyncAnomaly, IntegrationSyncAnomalyAudit
 from app.modules.integration_sync.schemas import (
@@ -488,6 +489,104 @@ def list_sync_anomalies(
         request,
         data=SyncAnomalyListData(items=[SyncAnomalyRead.model_validate(row) for row in rows]),
         meta=_meta("gov_integration_sync_anomalies", page=page, page_size=page_size, total=total),
+    )
+
+
+class SyncAnomalyDiagnosisRead(BaseModel):
+    status: str
+    explanation: str
+    next_action: str
+    recognized_zero_paid_orders: int | None = None
+    recognized_zero_paid_qty: str | None = None
+    approved_sample_qty: str | None = None
+    approved_sample_amount: str | None = None
+    salestat_qty: str | None = None
+    salestat_amount: str | None = None
+    mart_sample_qty: str | None = None
+    mart_gross_qty: str | None = None
+
+
+def _scoped_anomaly(session: Session, anomaly_id: UUID, account_refs: frozenset[str]):
+    from app.core.api import ApiError
+
+    row = session.scalar(
+        select(IntegrationSyncAnomaly).where(
+            IntegrationSyncAnomaly.id == anomaly_id,
+            IntegrationSyncAnomaly.source_account_ref.in_(account_refs),
+        )
+    )
+    if row is None:
+        raise ApiError(code="SYNC_ANOMALY_NOT_FOUND", status_code=404)
+    return row
+
+
+@router.get(
+    "/sync-anomalies/{anomaly_id}/diagnosis",
+    response_model=SuccessEnvelope[SyncAnomalyDiagnosisRead, ReadMeta],
+    responses=READ_ERRORS,
+    operation_id="diagnoseIntegrationSyncAnomaly",
+)
+def get_sync_anomaly_diagnosis(
+    request: Request,
+    anomaly_id: UUID,
+    session: db_session,
+    _: read_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[SyncAnomalyDiagnosisRead, ReadMeta]:
+    row = _scoped_anomaly(session, anomaly_id, account_refs)
+    result = diagnose_sync_anomaly(session, row)
+    return success_response(
+        request,
+        data=SyncAnomalyDiagnosisRead(**result.as_dict()),
+        meta=_meta(
+            "gov_integration_sync_anomalies",
+            "fact_walmart_sample_order_items",
+            "fact_walmart_sales_item_daily",
+            "mart_daily_sales_item_day",
+        ),
+    )
+
+
+@router.post(
+    "/sync-anomalies/{anomaly_id}/recheck",
+    response_model=SuccessEnvelope[SyncAnomalyDiagnosisRead, ReadMeta],
+    responses=WRITE_ERRORS,
+    operation_id="recheckIntegrationSyncAnomaly",
+)
+def recheck_sync_anomaly(
+    request: Request,
+    anomaly_id: UUID,
+    session: db_session,
+    principal: update_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[SyncAnomalyDiagnosisRead, ReadMeta]:
+    """Only a verified sample reconciliation can close automatically.
+
+    This does not replay or mutate finance source facts.
+    """
+    row = _scoped_anomaly(session, anomaly_id, account_refs)
+    result = diagnose_sync_anomaly(session, row)
+    if result.status == "verified" and row.status not in {"resolved", "dismissed"}:
+        previous = row.status
+        row.status = "resolved"
+        row.resolved_at = datetime.now(UTC)
+        row.updated_by = principal.user_id
+        row.owner_note = "系统复核：当前送样、SaleStat、每日销售来源一致；无需重算。"
+        session.add(
+            IntegrationSyncAnomalyAudit(
+                id=uuid4(),
+                anomaly_id=row.id,
+                actor_ref=principal.user_id,
+                from_status=previous,
+                to_status="resolved",
+                note=row.owner_note,
+            )
+        )
+        session.commit()
+    return success_response(
+        request,
+        data=SyncAnomalyDiagnosisRead(**result.as_dict()),
+        meta=_meta("gov_integration_sync_anomalies", "fact_walmart_sample_order_items", "fact_walmart_sales_item_daily", "mart_daily_sales_item_day"),
     )
 
 
