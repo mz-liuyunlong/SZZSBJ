@@ -44,7 +44,9 @@ def _facts(
             "qty": Decimal(sale_qty),
             "amount": Decimal(sale_amount),
         },
-        None if mart_qty is None else {
+        None
+        if mart_qty is None
+        else {
             "sample_qty": Decimal(mart_qty),
             "gross_sales_qty": Decimal(mart_gross or "0"),
             "calculation_warnings_json": warnings or [],
@@ -59,8 +61,12 @@ def _diagnose(**overrides: object):
     ) as values:
         outcome = diagnose_sync_anomaly(MagicMock(), _anomaly())
         values.assert_called_once_with(
-            values.call_args.args[0], "synthetic", date(2026, 8, 11),
-            "store-1", "item-1", "SKU-1",
+            values.call_args.args[0],
+            "synthetic",
+            date(2026, 8, 11),
+            "store-1",
+            "item-1",
+            "SKU-1",
         )
         return outcome
 
