@@ -592,7 +592,12 @@ def recheck_sync_anomaly(
     return success_response(
         request,
         data=SyncAnomalyDiagnosisRead(**result.as_dict()),
-        meta=_meta("gov_integration_sync_anomalies", "fact_walmart_sample_order_items", "fact_walmart_sales_item_daily", "mart_daily_sales_item_day"),
+        meta=_meta(
+            "gov_integration_sync_anomalies",
+            "fact_walmart_sample_order_items",
+            "fact_walmart_sales_item_daily",
+            "mart_daily_sales_item_day",
+        ),
     )
 
 
@@ -681,7 +686,9 @@ def replay_sync_anomaly(
         previous = audit_row.status
         audit_row.status = "review_pending"
         audit_row.updated_by = principal.user_id
-        audit_row.owner_note = "已提交指定日期重算任务 " + str(run.run_id) + "；" + payload.reason.strip()
+        audit_row.owner_note = (
+            "已提交指定日期重算任务 " + str(run.run_id) + "；" + payload.reason.strip()
+        )
         session.add(
             IntegrationSyncAnomalyAudit(
                 id=uuid4(),
