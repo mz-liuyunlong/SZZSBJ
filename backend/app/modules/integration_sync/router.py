@@ -597,7 +597,8 @@ def recheck_sync_anomaly(
 
 
 class SyncAnomalyReplayRequest(BaseModel):
-    reason: str = Field(min_length=12, max_length=1000)
+    reason: str = Field(min_length=12, max_length=950)
+    confirm_all_stores_for_day: bool = False
 
 
 @router.post(
@@ -624,6 +625,10 @@ def replay_sync_anomaly(
         raise ApiError(code="SYNC_ANOMALY_REPLAY_NOT_SAFE", status_code=409)
     if anomaly.status in {"resolved", "dismissed"}:
         raise ApiError(code="SYNC_ANOMALY_ALREADY_CLOSED", status_code=409)
+    # Existing SaleStat backfill refreshes all stores in this source account
+    # for the selected day, not just the one anomalous item.
+    if not payload.confirm_all_stores_for_day:
+        raise ApiError(code="SYNC_ANOMALY_REPLAY_SCOPE_NOT_CONFIRMED", status_code=409)
 
     # Only the existing SaleStat reconciliation runner is eligible. Do not
     # guess a config, fall back to another account, or replay all stores/days.
