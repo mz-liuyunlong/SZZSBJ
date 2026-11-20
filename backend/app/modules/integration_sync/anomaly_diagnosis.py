@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.modules.integration_sync.models import IntegrationSyncAnomaly
 
 SAMPLE_EXCEEDANCE_CODE = "DATA_PAGES_CONFIRMED_SAMPLE_EXCEEDS_SALESTAT"
+ZERO_PAID_PENDING_CODE = "DATA_PAGES_ZERO_PAID_SAMPLE_PENDING"
 
 
 @dataclass(frozen=True)
@@ -114,11 +115,97 @@ def _sample_values(
     return samples, salestat, mart
 
 
+def _diagnose_zero_paid_candidate(
+    session: Session, anomaly: IntegrationSyncAnomaly
+) -> AnomalyDiagnosis:
+    """Recheck the same provider order without trusting stale anomaly JSON."""
+    if not anomaly.store_id or not anomaly.platform_order_no:
+        return AnomalyDiagnosis(
+            "manual_review",
+            "送样候选缺少完整的店铺或平台订单号，无法可靠定位。",
+            "补充来源订单号及店铺，并由同步程序重新识别。",
+        )
+    rows = session.execute(
+        text(
+            "select count(*) total_lines,"
+            "count(*) filter (where order_total_amount=0 and is_cancelled=false) zero_lines,"
+            "count(*) filter (where order_total_amount=0 and is_cancelled=false "
+            "and is_valid_sample=true) verified_lines,"
+            "count(distinct item_id) distinct_items,min(item_id) item_id,"
+            "count(distinct trim(msku)) distinct_mskus,min(trim(msku)) msku "
+            "from fact_walmart_sample_order_items "
+            "where source_account_ref=:account and business_date_utc_minus_7=:day "
+            "and store_id=:store and platform_order_no=:order_no"
+        ),
+        {
+            "account": anomaly.source_account_ref,
+            "day": anomaly.business_date,
+            "store": anomaly.store_id,
+            "order_no": anomaly.platform_order_no,
+        },
+    ).mappings().one()
+    total = int(rows["total_lines"])
+    zero = int(rows["zero_lines"])
+    verified = int(rows["verified_lines"])
+    if total == 0 or zero == 0:
+        return AnomalyDiagnosis(
+            "source_missing",
+            "当前找不到这笔零元未取消订单的有效候选记录。",
+            "检查是否改了订单号或业务日期；不要人工伪造一条送样。",
+        )
+    if total != zero or verified != zero or rows["distinct_items"] != 1 or rows["distinct_mskus"] != 1:
+        return AnomalyDiagnosis(
+            "needs_identity",
+            "这笔0元订单仍有订单行未完成唯一商品归属或送样核实。",
+            "请核对原始订单每个商品行的 Item ID、MSKU、单价与取消状态。",
+        )
+    samples, sale, mart = _sample_values(
+        session,
+        anomaly.source_account_ref,
+        anomaly.business_date,
+        str(anomaly.store_id),
+        str(rows["item_id"]),
+        str(rows["msku"]),
+    )
+    approved = _number(samples["approved_qty"])
+    gross = _number(sale["qty"])
+    if (
+        approved > gross
+        or _number(samples["approved_amount"]) > _number(sale["amount"])
+        or int(sale["facts"]) == 0
+    ):
+        return AnomalyDiagnosis(
+            "blocked_by_salestat",
+            "这笔送样已经确认，但该商品同日的 SaleStat 仍不足，不能自动完成财务复核。",
+            "核对 SaleStat 的统计口径及业务日期，不要删除真实送样。",
+        )
+    if mart is None or _number(mart["sample_qty"]) != approved or _number(mart["gross_sales_qty"]) != gross:
+        return AnomalyDiagnosis(
+            "ready_for_replay",
+            "这笔送样已核实，但每日销售结果还没有与当前来源数据对齐。",
+            "进入安全日期重算，完成后重新复验。",
+        )
+    warnings = mart["calculation_warnings_json"] or []
+    if isinstance(warnings, list) and "sample_exceeds_salestat_pending_review" in warnings:
+        return AnomalyDiagnosis(
+            "ready_for_replay",
+            "每日销售还保留旧的送样争议标记。",
+            "进行安全重算后再复核。",
+        )
+    return AnomalyDiagnosis(
+        "verified",
+        "这笔零元送样的每个订单行都已核实，且每日销售与 SaleStat 一致。",
+        "系统可以关闭这笔订单的待核对异常，保留核对历史。",
+    )
+
+
 def diagnose_sync_anomaly(
     session: Session,
     anomaly: IntegrationSyncAnomaly,
 ) -> AnomalyDiagnosis:
     """Re-evaluate a row from current FACT and MART, not stale details JSON."""
+    if anomaly.error_code == ZERO_PAID_PENDING_CODE:
+        return _diagnose_zero_paid_candidate(session, anomaly)
     if anomaly.error_code != SAMPLE_EXCEEDANCE_CODE:
         return AnomalyDiagnosis(
             "manual_review",
