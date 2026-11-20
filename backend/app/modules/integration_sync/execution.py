@@ -1,13 +1,15 @@
 import hashlib
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session_factory
+from app.modules.integration_sync.anomaly_diagnosis import diagnose_sync_anomaly
 from app.modules.integration_sync.data_pages_ad_spend_recovery import recover_standard_ad_spend
 from app.modules.integration_sync.data_pages_business_rules_v4 import DataPagesRealSyncRunner
 from app.modules.integration_sync.data_pages_mart_invariants import (
@@ -56,6 +58,8 @@ from app.modules.integration_sync.handlers.walmart_wfs_fee_reports import (
     WalmartWfsFeeReportsHandler,
 )
 from app.modules.integration_sync.models import (
+    IntegrationSyncAnomaly,
+    IntegrationSyncAnomalyAudit,
     IntegrationSyncConfig,
     IntegrationSyncLock,
     IntegrationSyncRun,
@@ -590,6 +594,60 @@ class SyncRunExecutionService:
             ),
         )
         self.session.commit()
+
+        # A source retry can fix a historic anomaly, but the write path never
+        # automatically retires stale anomaly rows. Only verify item-level
+        # sample anomalies on dates for which the MART was actually published.
+        # A failed verification must never retroactively fail a committed sync.
+        failed_days = {
+            error.business_date
+            for error in (*mart_failures, *capture_failures)
+            if error.business_date is not None
+        }
+        for completed_day in days:
+            if completed_day in failed_days:
+                continue
+            try:
+                self._close_verified_sample_anomalies(run.source_account_ref, completed_day)
+                self.session.commit()
+            except Exception:
+                self.session.rollback()
+
+    def _close_verified_sample_anomalies(self, account: str, business_day: date) -> None:
+        from app.modules.integration_sync.anomaly_diagnosis import SAMPLE_EXCEEDANCE_CODE
+
+        rows = self.session.scalars(
+            select(IntegrationSyncAnomaly)
+            .where(
+                IntegrationSyncAnomaly.source_account_ref == account,
+                IntegrationSyncAnomaly.business_date == business_day,
+                IntegrationSyncAnomaly.error_code == SAMPLE_EXCEEDANCE_CODE,
+                IntegrationSyncAnomaly.item_id.is_not(None),
+                IntegrationSyncAnomaly.status.in_(
+                    ("pending", "investigating", "fix_pending", "review_pending")
+                ),
+            )
+            .limit(200)
+            .with_for_update()
+        ).all()
+        for anomaly in rows:
+            if diagnose_sync_anomaly(self.session, anomaly).status != "verified":
+                continue
+            prior = anomaly.status
+            anomaly.status = "resolved"
+            anomaly.resolved_at = datetime.now(UTC)
+            anomaly.updated_by = "system:integration-sync"
+            anomaly.owner_note = "系统复核已通过：送样、SaleStat 与最新每日销售数据一致。"
+            self.session.add(
+                IntegrationSyncAnomalyAudit(
+                    id=uuid4(),
+                    anomaly_id=anomaly.id,
+                    actor_ref="system:integration-sync",
+                    from_status=prior,
+                    to_status="resolved",
+                    note=anomaly.owner_note,
+                )
+            )
 
     @staticmethod
     def _data_pages_source_row_count(summary: DataPagesRealSyncSummary) -> int:
