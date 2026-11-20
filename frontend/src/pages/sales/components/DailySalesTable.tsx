@@ -130,8 +130,10 @@ export function DailySalesSampleQuantityCell({ row }: { row: DailySalesRow }) {
   }
   if (state === "unknown") {
     return (
-      <Tooltip title="缺少该业务日商品维度的送样采集证据，不能确认送样量为 0">
-        <span className="report-table-metric">未知</span>
+      <Tooltip title="当前已记录的送样量；缺少该业务日商品维度的采集证据，数值不代表最终核实结果">
+        <span className="report-table-metric">
+          {(row.sampleQuantity ?? 0).toLocaleString("zh-CN")}
+        </span>
       </Tooltip>
     );
   }
@@ -305,7 +307,13 @@ function TotalCell({
       return <span className="report-table-metric">待核验</span>;
     }
     if (states.includes("unknown")) {
-      return <span className="report-table-metric">未知</span>;
+      return (
+        <Tooltip title="当前已记录的送样量合计；部分商品缺少采集证据，数值可能不完整">
+          <span className="report-table-metric">
+            {sum(rows, "sampleQuantity").toLocaleString("zh-CN")}
+          </span>
+        </Tooltip>
+      );
     }
   }
 
