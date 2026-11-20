@@ -314,6 +314,51 @@ class IntegrationSyncRepository:
             },
         )
 
+    def record_unresolved_zero_paid_samples(
+        self, *, run_id: UUID, account: str, interface_key: str, business_date: date
+    ) -> int:
+        """Queue zero-paid candidate identities requiring an operator, not a guessed FACT."""
+        rows = self.session.execute(
+            text(
+                "select store_id,item_id,msku,local_sku,platform_order_no,"
+                "source_order_id,source_order_line_id,quantity,unit_price_amount "
+                "from fact_walmart_sample_order_items "
+                "where source_account_ref=:account and business_date_utc_minus_7=:day "
+                "and is_cancelled=false and order_total_amount=0 "
+                "and is_valid_sample=false and quantity>0 "
+                "order by store_id,platform_order_no,source_order_line_id limit 200"
+            ),
+            {"account": account, "day": business_date},
+        ).mappings().all()
+        for row in rows:
+            identity = "|".join(
+                str(row[key] or "")
+                for key in ("store_id", "source_order_id", "platform_order_no", "source_order_line_id")
+            )
+            self.record_business_anomaly(
+                run_id=run_id,
+                account=account,
+                interface_key=interface_key,
+                business_date=business_date,
+                error_code="DATA_PAGES_ZERO_PAID_SAMPLE_PENDING",
+                subject_key=hashlib.sha256(identity.encode()).hexdigest(),
+                store_id=row["store_id"],
+                item_id=row["item_id"],
+                msku=row["msku"],
+                local_sku=row["local_sku"],
+                platform_order_no=row["platform_order_no"],
+                details={
+                    "zero_paid": True,
+                    "quantity": str(row["quantity"]),
+                    "unit_price_available": row["unit_price_amount"] is not None,
+                    "item_id_available": row["item_id"] is not None,
+                    "msku_available": bool(str(row["msku"] or "").strip()),
+                    "local_sku_available": bool(str(row["local_sku"] or "").strip()),
+                    "reason": "requires_unique_listing_or_finance_evidence",
+                },
+            )
+        return len(rows)
+
     def record_sample_exceedance_details(
         self, *, run_id: UUID, account: str, interface_key: str, business_date: date
     ) -> int:
