@@ -386,6 +386,13 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 if not isinstance(item, dict):
                     continue
                 item_price = _decimal(item.get("item_price_amount"))
+                discount = _decimal(item.get("discount_amount"))
+                full_discount = (
+                    item_price is not None
+                    and item_price > 0
+                    and discount is not None
+                    and abs(discount) >= item_price - Decimal("0.01")
+                )
                 if order_total != Decimal("0"):
                     # A previously verified zero-paid line cannot silently
                     # disappear when a provider replays it as a paid order.
@@ -415,7 +422,11 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                                 "DATA_PAGES_VERIFIED_SAMPLE_CHANGED",
                                 business_date=self.business_date,
                             )
-                    continue
+                    if not full_discount:
+                        continue
+                    # Full item discount alone is NOT evidence that the order
+                    # total is zero. Keep it as a candidate, never a verified
+                    # sample, so the existing operator workflow can investigate.
                 quantity = _decimal(item.get("quantity"))
                 if quantity is None or quantity <= 0:
                     self.summary.sample_unresolved_rows += 1
