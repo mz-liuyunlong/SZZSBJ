@@ -39,26 +39,30 @@ def test_unique_listing_can_resolve_zero_paid_sample_when_salestat_absent() -> N
 
 
 def test_conflicting_salestat_identity_does_not_get_auto_approved() -> None:
-    runner, _ = _runner([
-        {
-            "listing_count": 1,
-            "listing_id": "item-a",
-            "sales_count": 1,
-            "sales_id": "item-b",
-        }
-    ])
+    runner, _ = _runner(
+        [
+            {
+                "listing_count": 1,
+                "listing_id": "item-a",
+                "sales_count": 1,
+                "sales_id": "item-b",
+            }
+        ]
+    )
     assert runner._hotfix_unique_sample_item_id("store-a", "msku-a", "sku-a") is None
 
 
 def test_ambiguous_listing_identity_stays_unresolved() -> None:
-    runner, _ = _runner([
-        {
-            "listing_count": 2,
-            "listing_id": "item-a",
-            "sales_count": 0,
-            "sales_id": None,
-        }
-    ])
+    runner, _ = _runner(
+        [
+            {
+                "listing_count": 2,
+                "listing_id": "item-a",
+                "sales_count": 0,
+                "sales_id": None,
+            }
+        ]
+    )
     assert runner._hotfix_unique_sample_item_id("store-a", "msku-a", "sku-a") is None
 
 
