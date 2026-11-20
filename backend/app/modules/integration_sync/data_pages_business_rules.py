@@ -676,13 +676,10 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         return count
 
     def _resolve_sample_items(self) -> int:
-        """Resolve a missing item_id only when Listing and SaleStat agree uniquely.
+        """Enrich a sample only from one unique listing identity.
 
-        Samples affect sales only after the strict store_id + item_id + MSKU
-        identity is established. If the provider omits item_id, enrich it only
-        when the current Walmart listing and same-day direct SaleStat each yield
-        exactly one item_id for the same store + MSKU and those item_ids agree.
-        Ambiguous or disagreeing candidates remain unresolved.
+        SaleStat may not include zero-dollar orders, so its absence is not a
+        veto; an actual contradictory SaleStat Item ID remains a hard veto.
         """
 
         self.session.execute(
@@ -698,6 +695,8 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 "and s.item_id is null "
                 "and s.store_id is not null and s.msku is not null and trim(s.msku)<>'' "
                 "and l.item_id is not null "
+                "and s.local_sku is not null and trim(s.local_sku)<>'' "
+                "and trim(l.local_sku)=trim(s.local_sku) "
                 "group by s.id"
                 "), sales_candidates as ("
                 "select s.id, min(f.item_id) as item_id, count(distinct f.item_id) as item_count "
@@ -716,8 +715,9 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 "), resolved as ("
                 "select l.id, l.item_id "
                 "from listing_candidates l "
-                "join sales_candidates f on f.id=l.id "
-                "where l.item_count=1 and f.item_count=1 and l.item_id=f.item_id"
+                "left join sales_candidates f on f.id=l.id "
+                "where l.item_count=1 and (f.id is null or "
+                "(f.item_count=1 and l.item_id=f.item_id))"
                 ") "
                 "update fact_walmart_sample_order_items s "
                 "set item_id=r.item_id, updated_at=now() "
@@ -729,7 +729,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         # SZZSBJ_ZERO_PAID_AUTO_V1
         # Use the source sample-order evidence as the authoritative zero-paid
         # identity; order V2 FACT may have different line IDs or date windows.
-        # can be real while SaleStat has a different date or reporting scope.
+        # A sample may be real even if SaleStat omits it or reports another day.
         # Finance MART still blocks over-deduction and disputed profit.
         self.session.execute(
             text(
