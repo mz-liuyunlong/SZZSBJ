@@ -2,6 +2,19 @@
 
 Registry Status: `draft; approved only after owner review and merge`
 
+## 2026-11-20 同步异常中心：诊断与受控处理接口（开发中）
+
+| 接口／数据集 | 权威来源与粒度 | 本次接入与权限 | 状态／文档 |
+|---|---|---|---|
+| `GET /api/integrations/sync-anomalies/{id}/diagnosis` | `gov_integration_sync_anomalies` 按账号+异常ID；关联 `fact_walmart_sample_order_items` 的零元订单、`fact_walmart_sales_item_daily` 的 SaleStat 与 `mart_daily_sales_item_day` 的派生结果；按美国日期+店铺+Item ID+MSKU | `integrations:read`，真实来源只读、金额只以字符串展示，不把0元订单和可财务扣减混同 | `implementation_in_review`，未部署；[API](../api/integration-sync-anomaly-operations.md)、[来源决策](../data-sources/decisions/integration-sync-anomaly-diagnosis-replay-decision.md) |
+| `POST /api/integrations/sync-anomalies/{id}/recheck` | 同上，只读事实核对；`gov_integration_sync_anomalies` 状态与 `gov_integration_sync_anomaly_audit` 审计 | `integrations:update`；仅数据复核为 verified 自动结束，其他保留待处理 | `implementation_in_review`，未部署 |
+| `POST /api/integrations/sync-anomalies/{id}/replay` | 复用源账号 `saleStatPageList` 的同步配置、`gov_integration_sync_runs` 与现有 Celery 日同步 | `integrations:execute`；唯一启用配置、诊断通过、指定美国业务日、30天内、幂等；提交=入队，不等于计算成功 | `implementation_in_review`，未部署；历史锁账日默认禁止直接重放 |
+| `PATCH /api/integrations/sync-anomalies/{id}`（既有增强） | 既有治理异常状态、`owner_note`、append-only Audit | `integrations:update`；人工核对备注、误报依据，不允许直接 `resolved` 伪装财务复核 | `implementation_in_review`，未部署 |
+| `DATA_PAGES_ZERO_PAID_SAMPLE_PENDING`（新增治理异常） | `fact_walmart_sample_order_items`，按来源账号+美国日期+真实订单行 | 唯一订单来源未完成商品身份/单价等复核时留异常，RAW/FACT 不经前端人工覆盖；复验成功后关闭 | `implementation_in_review`，未部署 |
+
+本次不批准直接更新 Sales FACT/RAW、补写广告成本、历史财务解锁或无审计人工覆盖。临时备注不能替代人工修正审批。所有状态须以新 PR 对应的 CI、合并及部署验收为准。
+
+
 ## 2026-10-28 打包审批增量登记（验收暂停）
 
 字段纠错（负责人已批准）：arrival_received ← 同版本采购明细 ODS payload_json.quantity_entry（到货入库量）；arrival_pending ← quantity_receive（待到货量）。分别汇总原明细，不累加计划拆行或采集快照；缺字段不按差值推算。未新增物理字段，未运行修复后测试；前序测试结果不能代替此次验收。

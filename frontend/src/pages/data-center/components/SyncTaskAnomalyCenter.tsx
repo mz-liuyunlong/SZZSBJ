@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Button, Descriptions, Drawer, Input, Select, Space, Table, Tag, Typography, message } from "antd";
+import { Alert, Button, Checkbox, Descriptions, Drawer, Input, Select, Space, Table, Tag, Typography, message } from "antd";
 import { backendRequest } from "@/api/backendApi";
+import { describeSyncAnomaly } from "@/pages/data-center/syncTaskAnomalyGuidance";
 
 interface Anomaly {
   id: string;
@@ -23,6 +24,21 @@ interface Anomaly {
   last_seen_at: string;
 }
 
+interface AnomalyDiagnosis {
+  status: "manual_review" | "needs_identity" | "blocked_by_salestat" | "source_missing" |
+    "ready_for_replay" | "verified";
+  explanation: string;
+  next_action: string;
+  recognized_zero_paid_orders: number | null;
+  recognized_zero_paid_qty: string | null;
+  approved_sample_qty: string | null;
+  approved_sample_amount: string | null;
+  salestat_qty: string | null;
+  salestat_amount: string | null;
+  mart_sample_qty: string | null;
+  mart_gross_qty: string | null;
+}
+
 interface AnomalyAudit {
   id: string;
   actor_ref: string;
@@ -41,17 +57,6 @@ const statusNames: Record<string, string> = {
   dismissed: "误报关闭",
 };
 
-const guide: Record<string, string> = {
-  DATA_PAGES_SEM_SPEND_UNATTRIBUTED:
-    "在领星广告报表按店铺、业务日期查询 Campaign 和广告花费；核实商品归属。没有 Item ID 时不得猜测 SKU。",
-  DATA_PAGES_CONFIRMED_SAMPLE_EXCEEDS_SALESTAT:
-    "在领星订单查询按业务日期、店铺及订单号核对零金额、折扣、购买时间、订单行、取消状态，并与 SaleStat 对比。",
-  DATA_PAGES_SAMPLE_RULE_VERSION_UNSUPPORTED:
-    "核对订单的送样来源、判定规则版本及历史批准记录，不要批量重设送样标记。",
-  SYNC_EXECUTION_FAILED:
-    "在关联任务的执行日志核对异常堆栈；这是技术故障，不一定存在可供领星核对的订单。",
-};
-
 const display = (value: string | null | undefined) => value?.trim() || "待定位";
 
 export default function SyncTaskAnomalyCenter() {
@@ -68,6 +73,13 @@ export default function SyncTaskAnomalyCenter() {
   const [messageApi, contextHolder] = message.useMessage();
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [diagnosis, setDiagnosis] = useState<AnomalyDiagnosis | null>(null);
+  const [diagnosisLoading, setDiagnosisLoading] = useState(false);
+  const [recheckLoading, setRecheckLoading] = useState(false);
+  const [replayLoading, setReplayLoading] = useState(false);
+  const [confirmReplayScope, setConfirmReplayScope] = useState(false);
+  const selectedGuide = selected ? describeSyncAnomaly(selected) : null;
+  const selectedNeedsReview = nextStatus === "dismissed";
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -105,9 +117,71 @@ export default function SyncTaskAnomalyCenter() {
     return () => { cancelled = true; };
   }, [selected]);
 
+  const inspect = async (anomalyId: string) => {
+    setDiagnosisLoading(true);
+    try {
+      const response = await backendRequest<AnomalyDiagnosis>(
+        `/api/integrations/sync-anomalies/${anomalyId}/diagnosis`
+      );
+      setDiagnosis(response.data);
+    } catch {
+      messageApi.error("当前无法读取真实核对结果，请检查接口或权限");
+    } finally {
+      setDiagnosisLoading(false);
+    }
+  };
+
+  const recheck = async () => {
+    if (!selected) return;
+    setRecheckLoading(true);
+    try {
+      const response = await backendRequest<AnomalyDiagnosis>(
+        `/api/integrations/sync-anomalies/${selected.id}/recheck`,
+        { method: "POST" },
+      );
+      setDiagnosis(response.data);
+      messageApi.success(response.data.status === "verified"
+        ? "复核通过：数据已一致，异常已自动关闭"
+        : "复核完成：问题尚未解决，保留异常等待处理");
+      await refresh();
+    } catch {
+      messageApi.error("重新核对失败，异常状态没有改变；请检查操作权限");
+    } finally {
+      setRecheckLoading(false);
+    }
+  };
+
+  const replay = async () => {
+    if (!selected) return;
+    if (note.trim().length < 12) {
+      messageApi.warning("提交重算前请说明数据已确认的依据，至少12个字符");
+      return;
+    }
+    if (!confirmReplayScope) {
+      messageApi.warning("重算会涉及本来源账号指定日期的全部店铺，请先确认影响范围");
+      return;
+    }
+    setReplayLoading(true);
+    try {
+      const result = await backendRequest<{ run_id: string }>(
+        `/api/integrations/sync-anomalies/${selected.id}/replay`,
+        { method: "POST", body: JSON.stringify({ reason: note.trim(), confirm_all_stores_for_day: confirmReplayScope }) },
+      );
+      messageApi.success("已提交指定日期重新同步及重算任务：" + result.data.run_id +
+        "；任务完成后请再点击重新核对");
+      await refresh();
+    } catch {
+      messageApi.error("未提交重算：数据尚不满足安全重算条件、任务配置不可用或缺少执行权限");
+    } finally {
+      setReplayLoading(false);
+    }
+  };
+
   const submit = async () => {
-    if (!selected || note.trim().length < 3) {
-      messageApi.warning("请填写至少3个字符的核对说明");
+    if (!selected || note.trim().length < (selectedNeedsReview ? 30 : 3)) {
+      messageApi.warning(selectedNeedsReview
+        ? "人工判定误报需有完整依据，至少30个字符"
+        : "请填写至少3个字符的核对说明");
       return;
     }
     setSaving(true);
@@ -116,7 +190,9 @@ export default function SyncTaskAnomalyCenter() {
         method: "PATCH",
         body: JSON.stringify({ status: nextStatus, note: note.trim() }),
       });
-      messageApi.success("已记录核对结论");
+      messageApi.success(selectedNeedsReview
+        ? "已登记人工核对结论；本操作未重算销售和利润"
+        : "已记录核对进度；本操作未修改原始数据");
       setSelected(null);
       setNote("");
       await refresh();
@@ -155,21 +231,67 @@ export default function SyncTaskAnomalyCenter() {
           { title: "SKU / MSKU", width: 170, render: (_, row) => display(row.local_sku || row.msku) },
           { title: "订单号", dataIndex: "platform_order_no", width: 160, render: display },
           { title: "接口", dataIndex: "interface_key", width: 160 },
-          { title: "异常原因", dataIndex: "error_code", width: 250 },
+          { title: "异常原因", dataIndex: "error_code", width: 250,
+            render: (value: string, row: Anomaly) => <Space direction="vertical" size={0}>
+              <Typography.Text>{describeSyncAnomaly(row).title}</Typography.Text>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }} copyable={{ text: value }}>
+                {value}
+              </Typography.Text>
+            </Space> },
           { title: "状态", dataIndex: "status", width: 105,
             render: value => <Tag>{statusNames[value] ?? value}</Tag> },
           { title: "次数", dataIndex: "occurrence_count", width: 70 },
           { title: "操作", key: "view", fixed: "right", width: 90,
             render: (_, row) => <Button type="link" onClick={() => {
-              setHistory([]); setSelected(row); setNote(row.owner_note ?? ""); setNextStatus(row.status);
+              setHistory([]); setDiagnosis(null); setConfirmReplayScope(false); setSelected(row);
+              setNote(row.owner_note ?? ""); setNextStatus(row.status);
+              void inspect(row.id);
             }}>核对详情</Button> },
         ]}
       />
       <Drawer title="异常核对详情" width={680} open={!!selected}
-        onClose={() => { setSelected(null); setHistory([]); }}>
+        onClose={() => { setSelected(null); setHistory([]); setDiagnosis(null); setConfirmReplayScope(false); }}>
         {selected && <>
-          <Alert type="warning" showIcon style={{ marginBottom: 16 }}
-            message="异常不代表源接口同步失败；财务结果需独立校验" />
+          <Alert type="info" showIcon style={{ marginBottom: 16 }}
+            message={selectedGuide?.title ?? "异常待核对"}
+            description={selectedGuide?.explanation} />
+          {selectedGuide?.comparison && <Alert type="warning" showIcon style={{ marginBottom: 16 }}
+            message="发现的数据差异" description={selectedGuide.comparison} />}
+          <Typography.Title level={5}>当前真实数据核对</Typography.Title>
+          <Space direction="vertical" style={{ width: "100%", marginBottom: 16 }}>
+            {diagnosisLoading && <Typography.Text type="secondary">正在从最新数据检查…</Typography.Text>}
+            {diagnosis && <Alert showIcon type={
+              diagnosis.status === "verified" ? "success" :
+                diagnosis.status === "ready_for_replay" ? "info" : "warning"
+            } message={diagnosis.explanation} description={diagnosis.next_action} />}
+            {diagnosis?.approved_sample_qty !== null && diagnosis?.approved_sample_qty !== undefined && (
+              <Descriptions size="small" column={2} bordered items={[
+                { key: "zero", label: "零元未取消订单数", children: diagnosis.recognized_zero_paid_orders ?? "—" },
+                { key: "sample", label: "已核实送样数量", children: diagnosis.approved_sample_qty },
+                { key: "salestat", label: "SaleStat 数量", children: diagnosis.salestat_qty ?? "—" },
+                { key: "mart", label: "每日销售送样量", children: diagnosis.mart_sample_qty ?? "未计算" },
+              ]} />
+            )}
+            <Space wrap>
+              <Button loading={recheckLoading} onClick={() => { void recheck(); }}>重新核对并尝试自动关闭</Button>
+              {diagnosis?.status === "ready_for_replay" && <Button type="primary" loading={replayLoading}
+                onClick={() => { void replay(); }}>提交单日重算</Button>}
+            </Space>
+            {diagnosis?.status === "ready_for_replay" && <>
+              <Checkbox checked={confirmReplayScope} onChange={event => setConfirmReplayScope(event.target.checked)}>
+                我已了解：本次会重跑该来源账号在指定业务日的全部店铺，不只是当前商品；提交后还要再次复核
+              </Checkbox>
+              <Typography.Text type="secondary">
+                提交前请在下方填写至少12字核对理由。历史锁账日不会自动重算；任务入队不代表成功。
+              </Typography.Text>
+            </>}
+          </Space>
+          <Typography.Title level={5}>你需要先做什么？</Typography.Title>
+          <ol>{selectedGuide?.checks.map(step => <li key={step}>{step}</li>)}</ol>
+          <Typography.Title level={5}>需要准备哪些资料？</Typography.Title>
+          <ul>{selectedGuide?.requiredEvidence.map(item => <li key={item}>{item}</li>)}</ul>
+          <Alert type="info" showIcon style={{ marginBottom: 16 }}
+            message="下一步处理建议" description={selectedGuide?.safeNextStep} />
           <Descriptions column={1} bordered size="small" items={[
             { key: "date", label: "美国业务日期", children: selected.business_date },
             { key: "account", label: "来源账号", children: selected.source_account_ref },
@@ -185,9 +307,7 @@ export default function SyncTaskAnomalyCenter() {
             { key: "count", label: "累计发现次数", children: selected.occurrence_count },
             { key: "last", label: "最近发现", children: selected.last_seen_at },
           ]} />
-          <Typography.Title level={5} style={{ marginTop: 20 }}>领星核对指引</Typography.Title>
-          <Typography.Paragraph>{guide[selected.error_code] ??
-            "根据店铺、业务日期、商品与订单在领星核对来源数据；无法确认时标记待定位，不得直接修改财务数据。"}</Typography.Paragraph>
+          <Typography.Title level={5} style={{ marginTop: 20 }}>核对依据和原始信息</Typography.Title>
           <Typography.Title level={5}>异常证据（仅展示安全摘要）</Typography.Title>
           <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
             {JSON.stringify(selected.details, null, 2)}
@@ -201,13 +321,22 @@ export default function SyncTaskAnomalyCenter() {
                 render: value => statusNames[value] ?? value },
               { title: "核对备注", dataIndex: "note" },
             ]} />
-          <Typography.Title level={5}>处理状态与核对记录</Typography.Title>
+          <Typography.Title level={5}>记录你的核对结果</Typography.Title>
+          <Alert type="warning" showIcon style={{ marginBottom: 12 }}
+            message="注意：这里保存的是处理记录，不是补数或重算"
+            description="保存核对记录不会补数或重算。请使用上方的重新核对或符合条件时的单日重算；需要人工纠正来源字段时仍须走独立审核。" />
           <Space direction="vertical" style={{ width: "100%" }}>
             <Select value={nextStatus} onChange={setNextStatus}
-              options={Object.entries(statusNames).map(([value, label]) => ({ value, label }))} />
+              options={Object.entries(statusNames).filter(([value]) => value !== "resolved")
+                .map(([value, label]) => ({ value, label }))} />
+            {selectedNeedsReview && <Alert type="warning" showIcon
+              message="你正在人工关闭一条异常"
+              description="此操作只适用于已明确证明为误报或合法口径差异的情况；填写不少于30字的来源凭据。真正的数据修复只能经过重新核对，不能靠人工关闭。" />}
             <Input.TextArea rows={4} value={note} onChange={event => setNote(event.target.value)}
-              placeholder="填写领星核对结论、差异原因及处理依据；解决/误报关闭均须说明" />
-            <Button type="primary" loading={saving} onClick={() => { void submit(); }}>保存核对记录</Button>
+              placeholder="填写证据：订单号/商品ID、来源报表、美国业务日期、核实数量或金额、凭据链接或存放位置，以及是否需要补数据。误报关闭至少30字。" />
+            <Button type="primary" loading={saving} onClick={() => { void submit(); }}>
+              {selectedNeedsReview ? "凭据确认并关闭误报（不重算）" : "保存人工补充证据和处理状态"}
+            </Button>
           </Space>
         </>}
       </Drawer>
