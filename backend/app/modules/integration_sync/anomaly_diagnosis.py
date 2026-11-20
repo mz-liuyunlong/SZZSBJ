@@ -155,6 +155,13 @@ def diagnose_sync_anomaly(
         "mart_gross_qty": str(mart["gross_sales_qty"]) if mart is not None else None,
     }
 
+    if int(samples["zero_orders"]) == 0:
+        return AnomalyDiagnosis(
+            "source_missing",
+            "此商品目前没有可核对的零元未取消送样订单，不能凭历史异常推定已修复。",
+            "检查送样订单的商品归属和业务日期，保留异常待核对。",
+            **fields,
+        )
     # Do not lose real zero-dollar orders merely because only a subset has
     # passed attribution/accounting checks.
     if recognized > approved:
