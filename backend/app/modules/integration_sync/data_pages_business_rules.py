@@ -393,7 +393,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     and discount is not None
                     and abs(discount) >= item_price - Decimal("0.01")
                 )
-                if not (order_total == Decimal("0") or full_discount):
+                if order_total != Decimal("0"):
                     continue
                 quantity = _decimal(item.get("quantity"))
                 if quantity is None or quantity <= 0:
@@ -496,7 +496,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         _field(item, "msku"),
                         _field(item, "local_sku", "sku"),
                     )
-                    if strict_discount
+                    if order_total == Decimal("0") and not is_cancelled
                     else None
                 )
                 identity_agrees = resolved_item_id is not None and (
@@ -509,7 +509,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 if legacy_verified is not None:
                     # The writer's strict evidence comparison below still checks
                     # all other persisted fields and rejects any changed replay.
-                    if not strict_discount:
+                    if not _is_valid_sample(order_total, cancel_time_raw, order_status_raw):
                         raise DataPagesMartInvariantError(
                             "DATA_PAGES_VERIFIED_SAMPLE_CHANGED",
                             business_date=self.business_date,
@@ -718,6 +718,79 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 "from resolved r where s.id=r.id and s.item_id is null"
             ),
             {"account": self.source_account_ref, "day": self.business_date},
+        )
+
+        # SZZSBJ_ZERO_PAID_AUTO_V1
+        # Approve only identity-resolved, non-cancelled zero-paid lines
+        # backed by current order facts and non-disputed SaleStat.
+        self.session.execute(
+            text(
+                "update fact_walmart_sample_order_items s "
+                "set is_valid_sample=true, "
+                "sample_rule_version=:verified, updated_at=now() "
+                "where s.source_account_ref=:account "
+                "and s.business_date_utc_minus_7=:day "
+                "and s.is_valid_sample=false "
+                "and s.is_cancelled=false "
+                "and s.order_total_amount=0 "
+                "and s.quantity>0 "
+                "and s.unit_price_amount is not null "
+                "and s.store_id is not null "
+                "and s.item_id is not null "
+                "and s.msku is not null and trim(s.msku)<>'' "
+                "and s.local_sku is not null and trim(s.local_sku)<>'' "
+                "and exists ("
+                "select 1 from dim_walmart_listings l "
+                "where l.source_account_ref=s.source_account_ref "
+                "and l.store_id=s.store_id "
+                "and l.item_id=s.item_id "
+                "and trim(l.msku)=trim(s.msku)) "
+                "and exists ("
+                "select 1 from fact_walmart_order_items o "
+                "where o.source_account_ref=s.source_account_ref "
+                "and o.store_id=s.store_id "
+                "and o.source_order_id=s.source_order_id "
+                "and o.source_order_line_id=s.source_order_line_id "
+                "and o.is_identity_current=true "
+                "and o.order_total_amount=0 "
+                "and o.item_id=s.item_id "
+                "and trim(o.msku)=trim(s.msku)) "
+                "and exists ("
+                "select 1 from fact_walmart_sales_item_daily f "
+                "where f.source_account_ref=s.source_account_ref "
+                "and f.business_date_la=s.business_date_utc_minus_7 "
+                "and f.store_id=s.store_id "
+                "and f.item_id=s.item_id "
+                "and trim(f.msku)=trim(s.msku) "
+                "and f.allocation_status='direct' "
+                "and f.sales_qty >= ("
+                "select coalesce(sum(x.quantity),0) "
+                "from fact_walmart_sample_order_items x "
+                "where x.source_account_ref=s.source_account_ref "
+                "and x.business_date_utc_minus_7=s.business_date_utc_minus_7 "
+                "and x.store_id=s.store_id and x.item_id=s.item_id "
+                "and trim(x.msku)=trim(s.msku) "
+                "and x.is_cancelled=false "
+                "and (x.is_valid_sample=true or "
+                "(x.order_total_amount=0 and x.quantity>0 "
+                "and x.unit_price_amount is not null))) "
+                "and f.sales_amount >= ("
+                "select coalesce(sum(x.unit_price_amount*x.quantity),0) "
+                "from fact_walmart_sample_order_items x "
+                "where x.source_account_ref=s.source_account_ref "
+                "and x.business_date_utc_minus_7=s.business_date_utc_minus_7 "
+                "and x.store_id=s.store_id and x.item_id=s.item_id "
+                "and trim(x.msku)=trim(s.msku) "
+                "and x.is_cancelled=false "
+                "and (x.is_valid_sample=true or "
+                "(x.order_total_amount=0 and x.quantity>0 "
+                "and x.unit_price_amount is not null))))"
+            ),
+            {
+                "account": self.source_account_ref,
+                "day": self.business_date,
+                "verified": VERIFIED_SAMPLE_RULE_VERSION,
+            },
         )
 
         unresolved_candidates = int(
