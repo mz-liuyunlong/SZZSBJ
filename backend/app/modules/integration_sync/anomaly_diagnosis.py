@@ -280,7 +280,8 @@ def diagnose_sync_anomaly(
     if approved > gross or approved_amount > gross_amount:
         return AnomalyDiagnosis(
             "blocked_by_salestat",
-            "送样已经确认，但数量或参考金额超过同日 SaleStat。可能是统计口径或日期差异，不能直接把销售扣成负数。",
+            "送样已经确认，但数量或参考金额超过同日 SaleStat。"
+            "可能是统计口径或日期差异，不能直接把销售扣成负数。",
             "请先确认 SaleStat 是否包含零元送样，提供订单和 SaleStat 凭据；不要删减已确认送样。",
             **fields,
         )
