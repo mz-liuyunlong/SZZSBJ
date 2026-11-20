@@ -614,15 +614,19 @@ class SyncRunExecutionService:
                 self.session.rollback()
 
     def _close_verified_sample_anomalies(self, account: str, business_day: date) -> None:
-        from app.modules.integration_sync.anomaly_diagnosis import SAMPLE_EXCEEDANCE_CODE
+        from app.modules.integration_sync.anomaly_diagnosis import (
+            SAMPLE_EXCEEDANCE_CODE,
+            ZERO_PAID_PENDING_CODE,
+        )
 
         rows = self.session.scalars(
             select(IntegrationSyncAnomaly)
             .where(
                 IntegrationSyncAnomaly.source_account_ref == account,
                 IntegrationSyncAnomaly.business_date == business_day,
-                IntegrationSyncAnomaly.error_code == SAMPLE_EXCEEDANCE_CODE,
-                IntegrationSyncAnomaly.item_id.is_not(None),
+                IntegrationSyncAnomaly.error_code.in_(
+                    (SAMPLE_EXCEEDANCE_CODE, ZERO_PAID_PENDING_CODE)
+                ),
                 IntegrationSyncAnomaly.status.in_(
                     ("pending", "investigating", "fix_pending", "review_pending")
                 ),
