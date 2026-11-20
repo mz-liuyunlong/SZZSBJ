@@ -805,6 +805,14 @@ class SyncRunExecutionService:
         else:
             raise ValueError("unsupported Data Pages interface")
 
+        if interface_key == "saleStatPageList" and run_id is not None:
+            self.repository.record_unresolved_zero_paid_samples(
+                run_id=run_id,
+                account=runner.source_account_ref,
+                interface_key=interface_key,
+                business_date=runner.business_date,
+            )
+
         # Commit provider facts before financial MART validation. Financial failures
         # then roll back only the MART transaction, never already-captured facts.
         # An incomplete provider request still rolls back via the outer exception path.
