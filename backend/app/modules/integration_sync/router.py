@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated, Any
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -641,6 +641,12 @@ def replay_sync_anomaly(
     if len(configs) != 1:
         raise ApiError(code="SYNC_ANOMALY_REPLAY_CONFIG_UNAVAILABLE", status_code=409)
     tz = ZoneInfo("America/Los_Angeles")
+    # Historical finance snapshots can be locked or already settled. This
+    # endpoint is limited to recent dates; old days require an audited,
+    # separate backfill approval instead of silently rewriting past profit.
+    today_la = datetime.now(tz).date()
+    if anomaly.business_date > today_la or today_la - anomaly.business_date > timedelta(days=30):
+        raise ApiError(code="SYNC_ANOMALY_HISTORICAL_REPLAY_REQUIRES_APPROVAL", status_code=409)
     start_at = datetime.combine(anomaly.business_date, time.min, tzinfo=tz)
     end_at = datetime.combine(anomaly.business_date, time.max, tzinfo=tz)
     run = IntegrationSyncService(session).create_backfill_run(
