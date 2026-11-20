@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Button, Descriptions, Drawer, Input, Select, Space, Table, Tag, Typography, message } from "antd";
+import { Alert, Button, Checkbox, Descriptions, Drawer, Input, Select, Space, Table, Tag, Typography, message } from "antd";
 import { backendRequest } from "@/api/backendApi";
 import { describeSyncAnomaly } from "@/pages/data-center/syncTaskAnomalyGuidance";
 
@@ -77,6 +77,7 @@ export default function SyncTaskAnomalyCenter() {
   const [diagnosisLoading, setDiagnosisLoading] = useState(false);
   const [recheckLoading, setRecheckLoading] = useState(false);
   const [replayLoading, setReplayLoading] = useState(false);
+  const [confirmReplayScope, setConfirmReplayScope] = useState(false);
   const selectedGuide = selected ? describeSyncAnomaly(selected) : null;
   const selectedNeedsReview = nextStatus === "dismissed";
 
@@ -156,11 +157,15 @@ export default function SyncTaskAnomalyCenter() {
       messageApi.warning("提交重算前请说明数据已确认的依据，至少12个字符");
       return;
     }
+    if (!confirmReplayScope) {
+      messageApi.warning("重算会涉及本来源账号指定日期的全部店铺，请先确认影响范围");
+      return;
+    }
     setReplayLoading(true);
     try {
       const result = await backendRequest<{ run_id: string }>(
         `/api/integrations/sync-anomalies/${selected.id}/replay`,
-        { method: "POST", body: JSON.stringify({ reason: note.trim() }) },
+        { method: "POST", body: JSON.stringify({ reason: note.trim(), confirm_all_stores_for_day: confirmReplayScope }) },
       );
       messageApi.success("已提交指定日期重新同步及重算任务：" + result.data.run_id +
         "；任务完成后请再点击重新核对");
@@ -238,14 +243,14 @@ export default function SyncTaskAnomalyCenter() {
           { title: "次数", dataIndex: "occurrence_count", width: 70 },
           { title: "操作", key: "view", fixed: "right", width: 90,
             render: (_, row) => <Button type="link" onClick={() => {
-              setHistory([]); setDiagnosis(null); setSelected(row);
+              setHistory([]); setDiagnosis(null); setConfirmReplayScope(false); setSelected(row);
               setNote(row.owner_note ?? ""); setNextStatus(row.status);
               void inspect(row.id);
             }}>核对详情</Button> },
         ]}
       />
       <Drawer title="异常核对详情" width={680} open={!!selected}
-        onClose={() => { setSelected(null); setHistory([]); setDiagnosis(null); }}>
+        onClose={() => { setSelected(null); setHistory([]); setDiagnosis(null); setConfirmReplayScope(false); }}>
         {selected && <>
           <Alert type="info" showIcon style={{ marginBottom: 16 }}
             message={selectedGuide?.title ?? "异常待核对"}
@@ -272,9 +277,14 @@ export default function SyncTaskAnomalyCenter() {
               {diagnosis?.status === "ready_for_replay" && <Button type="primary" loading={replayLoading}
                 onClick={() => { void replay(); }}>提交单日重算</Button>}
             </Space>
-            {diagnosis?.status === "ready_for_replay" && <Typography.Text type="secondary">
-              重算仅在服务器已配置安全的同步任务时执行；提交前请在下方填写至少12字的核对理由。提交不代表成功，任务执行完需重新核对。
-            </Typography.Text>}
+            {diagnosis?.status === "ready_for_replay" && <>
+              <Checkbox checked={confirmReplayScope} onChange={event => setConfirmReplayScope(event.target.checked)}>
+                我已了解：本次会重跑该来源账号在指定业务日的全部店铺，不只是当前商品；提交后还要再次复核
+              </Checkbox>
+              <Typography.Text type="secondary">
+                提交前请在下方填写至少12字核对理由。历史锁账日不会自动重算；任务入队不代表成功。
+              </Typography.Text>
+            </>}
           </Space>
           <Typography.Title level={5}>你需要先做什么？</Typography.Title>
           <ol>{selectedGuide?.checks.map(step => <li key={step}>{step}</li>)}</ol>
