@@ -160,6 +160,17 @@ def create_celery_app(
                 ),
             },
         }
+    # 0094 local verification: reuse the current Celery Beat instance.
+    # No production schedule is added; catalog auto ingest starts only after
+    # the local test DB has migrated, as enforced in ad_catalog_tick.
+    if (os.getenv(APP_ENV_ENV) or "").strip().lower() in {"local", "dev", "development"}:
+        celery.conf.beat_schedule = {
+            **celery.conf.beat_schedule,
+            "walmart-ad-catalog-local-incremental": {
+                "task": "new_products.ad_catalog_tick",
+                "schedule": 600.0,
+            },
+        }
     # Exactly one PR337 scheduler. The other business functions have no Beat entry.
     # LA calendar midnight, DST-aware, while all unrelated jobs keep UTC.
     if _is_production_env() and _env_truthy(os.getenv("SZZSBJ_NEW_PRODUCTS_DAILY_ENABLED")):

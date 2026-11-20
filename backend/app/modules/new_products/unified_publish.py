@@ -161,6 +161,18 @@ def _reconcile_mart_evidence(
         is_proven_zero(d.get("order_count")) and is_proven_zero(d.get("sales_qty")) for d in days
     )
     no_rows_zero = not days and synchronized
+    # A paid first order after the observation period proves no sale
+    # occurred inside the initial 14-day speed window. Later sales remain
+    # valid for cumulative trust and profit, never the all-zero shortcut.
+    if synchronized and isinstance(profit, dict):
+        first_paid = profit.get("first_order_date")
+        try:
+            first_paid_day = date.fromisoformat(str(first_paid)) if first_paid else None
+        except ValueError:
+            first_paid_day = None
+        if first_paid_day is not None and first_paid_day > first + timedelta(days=13):
+            f["effective_orders_14d"] = 0
+            f["first_order_day"] = None
     if ((zero_buckets and synchronized) or no_rows_zero) and isinstance(profit, dict):
         paid = profit.get("sales_units")
         if is_proven_zero(paid):
@@ -410,6 +422,27 @@ def _candidate_scores(
             f["ad_scoring_window_end_la"] = (
                 cutoff if isinstance(f.get("ad_scoring_window_start_la"), date) else None
             )
+            # Profit projection restores the actual lifetime first paid order.
+            # The *speed* dimension must still use day 1..14 only.
+            first_wfs = f.get("first_wfs_available_date_la")
+            paid_first_text = real_profit.get("first_order_date") if isinstance(real_profit, dict) else None
+            first14_days = source_snap.daily.get(key, [])
+            first14_verified_empty = all(
+                Decimal(str(row.get("order_count") or 0)) == 0
+                and Decimal(str(row.get("sales_qty") or 0)) == 0
+                for row in first14_days
+            )
+            if (
+                independent_ready
+                and isinstance(first_wfs, date)
+                and isinstance(paid_first_text, str)
+                and watermarks.get((key[0], key[1])) == cutoff
+                and first14_verified_empty
+                and date.fromisoformat(paid_first_text) > first_wfs + timedelta(days=13)
+            ):
+                f["first_order_day"] = None
+                f["effective_orders_14d"] = 0
+                f["zero_sales_verified"] = False
             ev = evaluate(f, config, version)
             results[key] = {"facts": f, "evaluation": ev, "rule_version": version}
             results[key].update(
@@ -718,6 +751,7 @@ def _save_one(
         "trust_scoring_window_start_la",
         "trust_scoring_window_end_la",
         "ad_clicks",
+        "ad_impressions",
         "ad_orders",
         "ad_revenue_usd",
         "market_score",
@@ -921,7 +955,7 @@ def publish_unified(
     # Import inside the function: pr337_daily_pipeline imports _save_one from this module.
     from .pr337_daily_pipeline import load_scoped_campaign_catalog
 
-    catalog, catalog_state, catalog_rows = load_scoped_campaign_catalog(source, cutoff)
+    catalog, catalog_state, catalog_rows = load_scoped_campaign_catalog(target, cutoff)
     summary["catalog_state"] = catalog_state
     summary["catalog_rows"] = catalog_rows
     for at in range(0, len(keys), BATCH):
