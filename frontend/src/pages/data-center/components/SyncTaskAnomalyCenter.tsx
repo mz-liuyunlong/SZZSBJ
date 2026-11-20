@@ -78,7 +78,7 @@ export default function SyncTaskAnomalyCenter() {
   const [recheckLoading, setRecheckLoading] = useState(false);
   const [replayLoading, setReplayLoading] = useState(false);
   const selectedGuide = selected ? describeSyncAnomaly(selected) : null;
-  const selectedNeedsReview = nextStatus === "resolved" || nextStatus === "dismissed";
+  const selectedNeedsReview = nextStatus === "dismissed";
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -173,9 +173,9 @@ export default function SyncTaskAnomalyCenter() {
   };
 
   const submit = async () => {
-    if (!selected || note.trim().length < (selectedNeedsReview ? 12 : 3)) {
+    if (!selected || note.trim().length < (selectedNeedsReview ? 30 : 3)) {
       messageApi.warning(selectedNeedsReview
-        ? "关闭异常前，请写明核对依据及处理结论，至少12个字符"
+        ? "人工判定误报需有完整依据，至少30个字符"
         : "请填写至少3个字符的核对说明");
       return;
     }
@@ -317,14 +317,15 @@ export default function SyncTaskAnomalyCenter() {
             description="保存核对记录不会补数或重算。请使用上方的重新核对或符合条件时的单日重算；需要人工纠正来源字段时仍须走独立审核。" />
           <Space direction="vertical" style={{ width: "100%" }}>
             <Select value={nextStatus} onChange={setNextStatus}
-              options={Object.entries(statusNames).map(([value, label]) => ({ value, label }))} />
+              options={Object.entries(statusNames).filter(([value]) => value !== "resolved")
+                .map(([value, label]) => ({ value, label }))} />
             {selectedNeedsReview && <Alert type="warning" showIcon
               message="你正在人工关闭一条异常"
-              description="必须已有独立核对证据，确认业务数据无需修改或已由其他流程正确修复。关闭仅改变异常状态，不会补录或重算；如果问题再次出现，后续同步可能重新打开异常。" />}
+              description="此操作只适用于已明确证明为误报或合法口径差异的情况；填写不少于30字的来源凭据。真正的数据修复只能经过重新核对，不能靠人工关闭。" />}
             <Input.TextArea rows={4} value={note} onChange={event => setNote(event.target.value)}
-              placeholder="例如：核对日期、订单号、来源报表及差异原因；说明证据在哪里、是否需要进一步修复。关闭异常时至少12字。" />
+              placeholder="填写证据：订单号/商品ID、来源报表、美国业务日期、核实数量或金额、凭据链接或存放位置，以及是否需要补数据。误报关闭至少30字。" />
             <Button type="primary" loading={saving} onClick={() => { void submit(); }}>
-              {selectedNeedsReview ? "保存人工核对并关闭记录（不重算）" : "保存核对进度（不重算）"}
+              {selectedNeedsReview ? "凭据确认并关闭误报（不重算）" : "保存人工补充证据和处理状态"}
             </Button>
           </Space>
         </>}
