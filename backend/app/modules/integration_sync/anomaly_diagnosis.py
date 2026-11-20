@@ -86,7 +86,9 @@ def _sample_values(
                 "and store_id=:store and item_id=:item and trim(msku)=:msku"
             ),
             params,
-        ).mappings().one()
+        )
+        .mappings()
+        .one()
     )
     salestat = (
         session.execute(
@@ -99,7 +101,9 @@ def _sample_values(
                 "and allocation_status='direct'"
             ),
             params,
-        ).mappings().one()
+        )
+        .mappings()
+        .one()
     )
     mart = (
         session.execute(
@@ -110,7 +114,9 @@ def _sample_values(
                 "and trim(msku)=:msku limit 1"
             ),
             params,
-        ).mappings().first()
+        )
+        .mappings()
+        .first()
     )
     return samples, salestat, mart
 
@@ -125,25 +131,29 @@ def _diagnose_zero_paid_candidate(
             "送样候选缺少完整的店铺或平台订单号，无法可靠定位。",
             "补充来源订单号及店铺，并由同步程序重新识别。",
         )
-    rows = session.execute(
-        text(
-            "select count(*) total_lines,"
-            "count(*) filter (where order_total_amount=0 and is_cancelled=false) zero_lines,"
-            "count(*) filter (where order_total_amount=0 and is_cancelled=false "
-            "and is_valid_sample=true) verified_lines,"
-            "count(distinct item_id) distinct_items,min(item_id) item_id,"
-            "count(distinct trim(msku)) distinct_mskus,min(trim(msku)) msku "
-            "from fact_walmart_sample_order_items "
-            "where source_account_ref=:account and business_date_utc_minus_7=:day "
-            "and store_id=:store and platform_order_no=:order_no"
-        ),
-        {
-            "account": anomaly.source_account_ref,
-            "day": anomaly.business_date,
-            "store": anomaly.store_id,
-            "order_no": anomaly.platform_order_no,
-        },
-    ).mappings().one()
+    rows = (
+        session.execute(
+            text(
+                "select count(*) total_lines,"
+                "count(*) filter (where order_total_amount=0 and is_cancelled=false) zero_lines,"
+                "count(*) filter (where order_total_amount=0 and is_cancelled=false "
+                "and is_valid_sample=true) verified_lines,"
+                "count(distinct item_id) distinct_items,min(item_id) item_id,"
+                "count(distinct trim(msku)) distinct_mskus,min(trim(msku)) msku "
+                "from fact_walmart_sample_order_items "
+                "where source_account_ref=:account and business_date_utc_minus_7=:day "
+                "and store_id=:store and platform_order_no=:order_no"
+            ),
+            {
+                "account": anomaly.source_account_ref,
+                "day": anomaly.business_date,
+                "store": anomaly.store_id,
+                "order_no": anomaly.platform_order_no,
+            },
+        )
+        .mappings()
+        .one()
+    )
     total = int(rows["total_lines"])
     zero = int(rows["zero_lines"])
     verified = int(rows["verified_lines"])
@@ -153,7 +163,12 @@ def _diagnose_zero_paid_candidate(
             "当前找不到这笔零元未取消订单的有效候选记录。",
             "检查是否改了订单号或业务日期；不要人工伪造一条送样。",
         )
-    if total != zero or verified != zero or rows["distinct_items"] != 1 or rows["distinct_mskus"] != 1:
+    if (
+        total != zero
+        or verified != zero
+        or rows["distinct_items"] != 1
+        or rows["distinct_mskus"] != 1
+    ):
         return AnomalyDiagnosis(
             "needs_identity",
             "这笔0元订单仍有订单行未完成唯一商品归属或送样核实。",
@@ -179,7 +194,11 @@ def _diagnose_zero_paid_candidate(
             "这笔送样已经确认，但该商品同日的 SaleStat 仍不足，不能自动完成财务复核。",
             "核对 SaleStat 的统计口径及业务日期，不要删除真实送样。",
         )
-    if mart is None or _number(mart["sample_qty"]) != approved or _number(mart["gross_sales_qty"]) != gross:
+    if (
+        mart is None
+        or _number(mart["sample_qty"]) != approved
+        or _number(mart["gross_sales_qty"]) != gross
+    ):
         return AnomalyDiagnosis(
             "ready_for_replay",
             "这笔送样已核实，但每日销售结果还没有与当前来源数据对齐。",
