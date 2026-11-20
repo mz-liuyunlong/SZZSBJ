@@ -30,6 +30,31 @@ def enabled(key: str) -> bool:
     return os.getenv(key, "").strip().lower() in {"1", "yes", "true", "on"}
 
 
+@celery_app.task(name="new_products.ad_catalog_tick", ignore_result=True)
+def ad_catalog_tick() -> dict:
+    """Local automatic 0094 verification only; production uses the nightly master."""
+    env = os.getenv("APP_ENV", "").strip().lower()
+    if env not in {"local", "dev", "development"}:
+        return {"status": "disabled", "reason": "local_only"}
+    from .unified_publish import local_target_approved
+
+    engine = get_engine()
+    if not local_target_approved(engine.url.database, engine.url.host):
+        return {"status": "blocked", "reason": "unsafe_write_target"}
+    # Never crash local Beat when the 0094 migration has not been applied.
+    with Session(engine) as session:
+        available = session.scalar(text(
+            "SELECT to_regclass('public.biz_walmart_ad_ingest_cursor') IS NOT NULL"
+        ))
+        session.rollback()
+    if not available:
+        return {"status": "waiting_for_0094"}
+    from .ad_catalog_sync import sync_catalog
+
+    outcome = sync_catalog(limit=50, pages=10, apply=True)
+    return {"status": "partial" if outcome["has_more"] else "complete", **outcome}
+
+
 @celery_app.task(name="new_products.daily_score_tick", ignore_result=True)
 def daily_score_tick() -> dict:
     # SZZSBJ_NEW_PRODUCTS_AUTHORITY_V2: no legacy MART profit writer.
