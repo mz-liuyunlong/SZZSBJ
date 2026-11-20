@@ -289,15 +289,9 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
             .mappings()
             .one()
         )
-        if (
-            int(row["listing_count"]) == 1
-            and (
-                int(row["sales_count"]) == 0
-                or (
-                    int(row["sales_count"]) == 1
-                    and row["listing_id"] == row["sales_id"]
-                )
-            )
+        if int(row["listing_count"]) == 1 and (
+            int(row["sales_count"]) == 0
+            or (int(row["sales_count"]) == 1 and row["listing_id"] == row["sales_id"])
         ):
             return str(row["listing_id"])
         return None
@@ -400,6 +394,34 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     and abs(discount) >= item_price - Decimal("0.01")
                 )
                 if order_total != Decimal("0"):
+                    # A previously verified zero-paid line cannot silently
+                    # disappear when a provider replays it as a paid order.
+                    prior_order_no = _field(item, "platform_order_no") or _field(
+                        row, "platform_order_no", "reference_no", "referenceNo"
+                    )
+                    prior_line_id = _field(item, "order_item_no", "global_item_no", "id")
+                    if prior_order_no and prior_line_id:
+                        prior_verified = self.session.execute(
+                            text(
+                                "select exists (select 1 from fact_walmart_sample_order_items "
+                                "where source_account_ref=:account "
+                                "and platform_order_no=:order_no and source_order_line_id=:line_id "
+                                "and is_valid_sample=true and sample_rule_version in "
+                                "(:historical_rule,:verified_rule))"
+                            ),
+                            {
+                                "account": self.source_account_ref,
+                                "order_no": prior_order_no,
+                                "line_id": prior_line_id,
+                                "historical_rule": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
+                                "verified_rule": VERIFIED_SAMPLE_RULE_VERSION,
+                            },
+                        ).scalar_one()
+                        if prior_verified:
+                            raise DataPagesMartInvariantError(
+                                "DATA_PAGES_VERIFIED_SAMPLE_CHANGED",
+                                business_date=self.business_date,
+                            )
                     continue
                 quantity = _decimal(item.get("quantity"))
                 if quantity is None or quantity <= 0:
