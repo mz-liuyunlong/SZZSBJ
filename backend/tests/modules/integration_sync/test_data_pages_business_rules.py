@@ -27,6 +27,14 @@ class _ScalarResult:
     def first(self) -> None:
         return None
 
+    def one(self) -> dict[str, object]:
+        return {
+            "listing_count": 0,
+            "listing_id": None,
+            "sales_count": 0,
+            "sales_id": None,
+        }
+
 
 class _MappingResult:
     def __init__(self) -> None:
@@ -196,14 +204,14 @@ def test_sample_writer_keeps_required_business_fields() -> None:
     assert params["sample_rule_version"] == "candidate-unverified-v5"
 
 
-def test_sample_item_resolution_requires_unique_listing_and_salestat_agreement() -> None:
+def test_sample_item_resolution_requires_unique_listing_and_checks_conflicting_salestat() -> None:
     session = _CaptureSession()
     runner = _runner(session)
 
     unresolved = runner._resolve_sample_items()
 
     assert unresolved == 0
-    assert len(session.calls) == 3
+    assert len(session.calls) == 4
 
     enrich_sql = session.calls[0][0]
     assert "with listing_candidates as" in enrich_sql
@@ -211,14 +219,22 @@ def test_sample_item_resolution_requires_unique_listing_and_salestat_agreement()
     assert "count(distinct l.item_id) as item_count" in enrich_sql
     assert "join fact_walmart_sales_item_daily f" in enrich_sql
     assert "count(distinct f.item_id) as item_count" in enrich_sql
-    assert "l.item_count=1 and f.item_count=1 and l.item_id=f.item_id" in enrich_sql
+    assert "left join sales_candidates f" in enrich_sql
+    assert "l.item_count=1 and (f.id is null or " in enrich_sql
+    assert "f.item_count=1 and l.item_id=f.item_id" in enrich_sql
     assert "set item_id=r.item_id" in enrich_sql
 
-    validate_sql = session.calls[1][0]
-    assert "l.store_id=s.store_id and l.item_id=s.item_id" in validate_sql
-    assert "f.store_id=s.store_id and f.item_id=s.item_id" in validate_sql
-    assert "trim(f.msku)=trim(s.msku)" in validate_sql
-    assert "f.allocation_status='direct'" in validate_sql
+    approval_sql = session.calls[1][0]
+    assert "set is_valid_sample=true" in approval_sql
+    assert "s.order_total_amount=0" in approval_sql
+    assert "dim_walmart_listings" in approval_sql
+    assert "fact_walmart_sales_item_daily" not in approval_sql
+
+    unresolved_sql = session.calls[2][0]
+    assert "l.store_id=s.store_id and l.item_id=s.item_id" in unresolved_sql
+    assert "f.store_id=s.store_id and f.item_id=s.item_id" in unresolved_sql
+    assert "trim(f.msku)=trim(s.msku)" in unresolved_sql
+    assert "f.allocation_status='direct'" in unresolved_sql
 
 
 def test_sample_resolver_enriches_unverified_candidates_without_verifying() -> None:
@@ -230,7 +246,7 @@ def test_sample_resolver_enriches_unverified_candidates_without_verifying() -> N
     assert (
         "sample_rule_version in "
         "(:historical_rule,:verified_rule,'owner-approved-raw-zero-full-discount-v1')"
-    ) in session.calls[2][0]
+    ) in session.calls[3][0]
 
 
 def test_confirmed_sample_replay_is_protected_and_changes_block_mart() -> None:
