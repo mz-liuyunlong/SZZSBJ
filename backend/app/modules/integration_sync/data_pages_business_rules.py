@@ -721,8 +721,9 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         )
 
         # SZZSBJ_ZERO_PAID_AUTO_V1
-        # Approve only identity-resolved, non-cancelled zero-paid lines
-        # backed by current order facts and non-disputed SaleStat.
+        # Confirm zero-paid identity independently of SaleStat totals. A sample
+        # can be real while SaleStat has a different date or reporting scope.
+        # Finance MART still blocks over-deduction and disputed profit.
         self.session.execute(
             text(
                 "update fact_walmart_sample_order_items s "
@@ -755,36 +756,6 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 "and o.order_total_amount=0 "
                 "and o.item_id=s.item_id "
                 "and trim(o.msku)=trim(s.msku)) "
-                "and exists ("
-                "select 1 from fact_walmart_sales_item_daily f "
-                "where f.source_account_ref=s.source_account_ref "
-                "and f.business_date_la=s.business_date_utc_minus_7 "
-                "and f.store_id=s.store_id "
-                "and f.item_id=s.item_id "
-                "and trim(f.msku)=trim(s.msku) "
-                "and f.allocation_status='direct' "
-                "and f.sales_qty >= ("
-                "select coalesce(sum(x.quantity),0) "
-                "from fact_walmart_sample_order_items x "
-                "where x.source_account_ref=s.source_account_ref "
-                "and x.business_date_utc_minus_7=s.business_date_utc_minus_7 "
-                "and x.store_id=s.store_id and x.item_id=s.item_id "
-                "and trim(x.msku)=trim(s.msku) "
-                "and x.is_cancelled=false "
-                "and (x.is_valid_sample=true or "
-                "(x.order_total_amount=0 and x.quantity>0 "
-                "and x.unit_price_amount is not null))) "
-                "and f.sales_amount >= ("
-                "select coalesce(sum(x.unit_price_amount*x.quantity),0) "
-                "from fact_walmart_sample_order_items x "
-                "where x.source_account_ref=s.source_account_ref "
-                "and x.business_date_utc_minus_7=s.business_date_utc_minus_7 "
-                "and x.store_id=s.store_id and x.item_id=s.item_id "
-                "and trim(x.msku)=trim(s.msku) "
-                "and x.is_cancelled=false "
-                "and (x.is_valid_sample=true or "
-                "(x.order_total_amount=0 and x.quantity>0 "
-                "and x.unit_price_amount is not null))))"
             ),
             {
                 "account": self.source_account_ref,
@@ -831,11 +802,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     "where l.source_account_ref=s.source_account_ref "
                     "and l.store_id=s.store_id and l.item_id=s.item_id "
                     "and trim(l.msku)=trim(s.msku)) "
-                    "or not exists (select 1 from fact_walmart_sales_item_daily f "
-                    "where f.source_account_ref=s.source_account_ref "
-                    "and f.business_date_la=s.business_date_utc_minus_7 "
-                    "and f.store_id=s.store_id and f.item_id=s.item_id "
-                    "and trim(f.msku)=trim(s.msku) and f.allocation_status='direct'))"
+                    ")"
                 ),
                 {
                     "account": self.source_account_ref,
