@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Button, Descriptions, Drawer, Input, Select, Space, Table, Tag, Typography, message } from "antd";
 import { backendRequest } from "@/api/backendApi";
+import { describeSyncAnomaly } from "@/pages/data-center/syncTaskAnomalyGuidance";
 
 interface Anomaly {
   id: string;
@@ -41,17 +42,6 @@ const statusNames: Record<string, string> = {
   dismissed: "误报关闭",
 };
 
-const guide: Record<string, string> = {
-  DATA_PAGES_SEM_SPEND_UNATTRIBUTED:
-    "在领星广告报表按店铺、业务日期查询 Campaign 和广告花费；核实商品归属。没有 Item ID 时不得猜测 SKU。",
-  DATA_PAGES_CONFIRMED_SAMPLE_EXCEEDS_SALESTAT:
-    "在领星订单查询按业务日期、店铺及订单号核对零金额、折扣、购买时间、订单行、取消状态，并与 SaleStat 对比。",
-  DATA_PAGES_SAMPLE_RULE_VERSION_UNSUPPORTED:
-    "核对订单的送样来源、判定规则版本及历史批准记录，不要批量重设送样标记。",
-  SYNC_EXECUTION_FAILED:
-    "在关联任务的执行日志核对异常堆栈；这是技术故障，不一定存在可供领星核对的订单。",
-};
-
 const display = (value: string | null | undefined) => value?.trim() || "待定位";
 
 export default function SyncTaskAnomalyCenter() {
@@ -68,6 +58,8 @@ export default function SyncTaskAnomalyCenter() {
   const [messageApi, contextHolder] = message.useMessage();
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const selectedGuide = selected ? describeSyncAnomaly(selected) : null;
+  const selectedNeedsReview = nextStatus === "resolved" || nextStatus === "dismissed";
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -106,8 +98,10 @@ export default function SyncTaskAnomalyCenter() {
   }, [selected]);
 
   const submit = async () => {
-    if (!selected || note.trim().length < 3) {
-      messageApi.warning("请填写至少3个字符的核对说明");
+    if (!selected || note.trim().length < (selectedNeedsReview ? 12 : 3)) {
+      messageApi.warning(selectedNeedsReview
+        ? "关闭异常前，请写明核对依据及处理结论，至少12个字符"
+        : "请填写至少3个字符的核对说明");
       return;
     }
     setSaving(true);
@@ -116,7 +110,9 @@ export default function SyncTaskAnomalyCenter() {
         method: "PATCH",
         body: JSON.stringify({ status: nextStatus, note: note.trim() }),
       });
-      messageApi.success("已记录核对结论");
+      messageApi.success(selectedNeedsReview
+        ? "已登记人工核对结论；本操作未重算销售和利润"
+        : "已记录核对进度；本操作未修改原始数据");
       setSelected(null);
       setNote("");
       await refresh();
@@ -155,7 +151,13 @@ export default function SyncTaskAnomalyCenter() {
           { title: "SKU / MSKU", width: 170, render: (_, row) => display(row.local_sku || row.msku) },
           { title: "订单号", dataIndex: "platform_order_no", width: 160, render: display },
           { title: "接口", dataIndex: "interface_key", width: 160 },
-          { title: "异常原因", dataIndex: "error_code", width: 250 },
+          { title: "异常原因", dataIndex: "error_code", width: 250,
+            render: (value: string, row: Anomaly) => <Space direction="vertical" size={0}>
+              <Typography.Text>{describeSyncAnomaly(row).title}</Typography.Text>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }} copyable={{ text: value }}>
+                {value}
+              </Typography.Text>
+            </Space> },
           { title: "状态", dataIndex: "status", width: 105,
             render: value => <Tag>{statusNames[value] ?? value}</Tag> },
           { title: "次数", dataIndex: "occurrence_count", width: 70 },
@@ -168,8 +170,17 @@ export default function SyncTaskAnomalyCenter() {
       <Drawer title="异常核对详情" width={680} open={!!selected}
         onClose={() => { setSelected(null); setHistory([]); }}>
         {selected && <>
-          <Alert type="warning" showIcon style={{ marginBottom: 16 }}
-            message="异常不代表源接口同步失败；财务结果需独立校验" />
+          <Alert type="info" showIcon style={{ marginBottom: 16 }}
+            message={selectedGuide?.title ?? "异常待核对"}
+            description={selectedGuide?.explanation} />
+          {selectedGuide?.comparison && <Alert type="warning" showIcon style={{ marginBottom: 16 }}
+            message="发现的数据差异" description={selectedGuide.comparison} />}
+          <Typography.Title level={5}>你需要先做什么？</Typography.Title>
+          <ol>{selectedGuide?.checks.map(step => <li key={step}>{step}</li>)}</ol>
+          <Typography.Title level={5}>需要准备哪些资料？</Typography.Title>
+          <ul>{selectedGuide?.requiredEvidence.map(item => <li key={item}>{item}</li>)}</ul>
+          <Alert type="info" showIcon style={{ marginBottom: 16 }}
+            message="下一步处理建议" description={selectedGuide?.safeNextStep} />
           <Descriptions column={1} bordered size="small" items={[
             { key: "date", label: "美国业务日期", children: selected.business_date },
             { key: "account", label: "来源账号", children: selected.source_account_ref },
@@ -185,9 +196,7 @@ export default function SyncTaskAnomalyCenter() {
             { key: "count", label: "累计发现次数", children: selected.occurrence_count },
             { key: "last", label: "最近发现", children: selected.last_seen_at },
           ]} />
-          <Typography.Title level={5} style={{ marginTop: 20 }}>领星核对指引</Typography.Title>
-          <Typography.Paragraph>{guide[selected.error_code] ??
-            "根据店铺、业务日期、商品与订单在领星核对来源数据；无法确认时标记待定位，不得直接修改财务数据。"}</Typography.Paragraph>
+          <Typography.Title level={5} style={{ marginTop: 20 }}>核对依据和原始信息</Typography.Title>
           <Typography.Title level={5}>异常证据（仅展示安全摘要）</Typography.Title>
           <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
             {JSON.stringify(selected.details, null, 2)}
@@ -201,13 +210,21 @@ export default function SyncTaskAnomalyCenter() {
                 render: value => statusNames[value] ?? value },
               { title: "核对备注", dataIndex: "note" },
             ]} />
-          <Typography.Title level={5}>处理状态与核对记录</Typography.Title>
+          <Typography.Title level={5}>记录你的核对结果</Typography.Title>
+          <Alert type="warning" showIcon style={{ marginBottom: 12 }}
+            message="注意：这里保存的是处理记录，不是补数或重算"
+            description="目前系统尚未提供经过验证的单条异常补数、重算及自动复验接口。不要通过修改状态来代替财务修复。" />
           <Space direction="vertical" style={{ width: "100%" }}>
             <Select value={nextStatus} onChange={setNextStatus}
               options={Object.entries(statusNames).map(([value, label]) => ({ value, label }))} />
+            {selectedNeedsReview && <Alert type="warning" showIcon
+              message="你正在人工关闭一条异常"
+              description="必须已有独立核对证据，确认业务数据无需修改或已由其他流程正确修复。关闭仅改变异常状态，不会补录或重算；如果问题再次出现，后续同步可能重新打开异常。" />}
             <Input.TextArea rows={4} value={note} onChange={event => setNote(event.target.value)}
-              placeholder="填写领星核对结论、差异原因及处理依据；解决/误报关闭均须说明" />
-            <Button type="primary" loading={saving} onClick={() => { void submit(); }}>保存核对记录</Button>
+              placeholder="例如：核对日期、订单号、来源报表及差异原因；说明证据在哪里、是否需要进一步修复。关闭异常时至少12字。" />
+            <Button type="primary" loading={saving} onClick={() => { void submit(); }}>
+              {selectedNeedsReview ? "保存人工核对并关闭记录（不重算）" : "保存核对进度（不重算）"}
+            </Button>
           </Space>
         </>}
       </Drawer>
