@@ -318,22 +318,31 @@ class IntegrationSyncRepository:
         self, *, run_id: UUID, account: str, interface_key: str, business_date: date
     ) -> int:
         """Queue zero-paid candidate identities requiring an operator, not a guessed FACT."""
-        rows = self.session.execute(
-            text(
-                "select store_id,item_id,msku,local_sku,platform_order_no,"
-                "source_order_id,source_order_line_id,quantity,unit_price_amount "
-                "from fact_walmart_sample_order_items "
-                "where source_account_ref=:account and business_date_utc_minus_7=:day "
-                "and is_cancelled=false and order_total_amount=0 "
-                "and is_valid_sample=false and quantity>0 "
-                "order by store_id,platform_order_no,source_order_line_id limit 200"
-            ),
-            {"account": account, "day": business_date},
-        ).mappings().all()
+        rows = (
+            self.session.execute(
+                text(
+                    "select store_id,item_id,msku,local_sku,platform_order_no,"
+                    "source_order_id,source_order_line_id,quantity,unit_price_amount "
+                    "from fact_walmart_sample_order_items "
+                    "where source_account_ref=:account and business_date_utc_minus_7=:day "
+                    "and is_cancelled=false and order_total_amount=0 "
+                    "and is_valid_sample=false and quantity>0 "
+                    "order by store_id,platform_order_no,source_order_line_id limit 200"
+                ),
+                {"account": account, "day": business_date},
+            )
+            .mappings()
+            .all()
+        )
         for row in rows:
             identity = "|".join(
                 str(row[key] or "")
-                for key in ("store_id", "source_order_id", "platform_order_no", "source_order_line_id")
+                for key in (
+                    "store_id",
+                    "source_order_id",
+                    "platform_order_no",
+                    "source_order_line_id",
+                )
             )
             self.record_business_anomaly(
                 run_id=run_id,
