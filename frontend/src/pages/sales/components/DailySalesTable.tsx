@@ -123,8 +123,10 @@ export function DailySalesSampleQuantityCell({ row }: { row: DailySalesRow }) {
   const state = sampleEvidenceState(row);
   if (state === "pending") {
     return (
-      <Tooltip title="已采集潜在送样订单，等待平台证据核验">
-        <span className="report-table-metric">待核验</span>
+      <Tooltip title="存在尚未完成商品归属或财务对账的零元订单；这里仅显示当前已归属的送样数量，异常请到数据中心处理">
+        <span className="report-table-metric">
+          {(row.sampleQuantity ?? 0).toLocaleString("zh-CN")}
+        </span>
       </Tooltip>
     );
   }
@@ -304,7 +306,13 @@ function TotalCell({
   if (columnKey === "sampleQuantity") {
     const states = rows.map(sampleEvidenceState);
     if (states.includes("pending")) {
-      return <span className="report-table-metric">待核验</span>;
+      return (
+        <Tooltip title="合计仅包含已归属的送样数量；部分零元订单仍需在异常中心核对商品或财务数据">
+          <span className="report-table-metric">
+            {sum(rows, "sampleQuantity").toLocaleString("zh-CN")}
+          </span>
+        </Tooltip>
+      );
     }
     if (states.includes("unknown")) {
       return (
