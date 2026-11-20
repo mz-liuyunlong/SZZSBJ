@@ -6,10 +6,14 @@ from unittest.mock import MagicMock
 from app.modules.integration_sync.data_pages_business_rules import DataPagesRealSyncRunner
 
 
-def _runner(rows: list[dict[str, object]] | None = None) -> tuple[DataPagesRealSyncRunner, MagicMock]:
+def _runner(
+    rows: list[dict[str, object]] | None = None,
+) -> tuple[DataPagesRealSyncRunner, MagicMock]:
     session = MagicMock()
     session.execute.return_value.mappings.return_value.one.return_value = (
-        rows[0] if rows else {
+        rows[0]
+        if rows
+        else {
             "listing_count": 1,
             "listing_id": "item-a",
             "sales_count": 0,
