@@ -724,6 +724,12 @@ def update_sync_anomaly(
     )
     if row is None:
         raise ApiError(code="SYNC_ANOMALY_NOT_FOUND", status_code=404)
+    # A manually selected status is not evidence that financial facts reconcile.
+    # Only the dedicated recheck endpoint can mark a sample anomaly resolved.
+    if payload.status == "resolved":
+        raise ApiError(code="SYNC_ANOMALY_RECHECK_REQUIRED", status_code=409)
+    if payload.status == "dismissed" and len(payload.note.strip()) < 30:
+        raise ApiError(code="SYNC_ANOMALY_DISMISS_EVIDENCE_REQUIRED", status_code=422)
     previous_status = row.status
     session.add(
         IntegrationSyncAnomalyAudit(
