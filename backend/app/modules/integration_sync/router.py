@@ -1,6 +1,7 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from typing import Annotated, Any
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from pydantic import BaseModel, Field
@@ -13,7 +14,12 @@ from app.core.permissions import require_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.anomaly_diagnosis import diagnose_sync_anomaly
 from app.modules.integration_sync.dependencies import require_source_account_scope
-from app.modules.integration_sync.models import IntegrationSyncAnomaly, IntegrationSyncAnomalyAudit
+from app.modules.integration_sync.models import (
+    IntegrationInterface,
+    IntegrationSyncAnomaly,
+    IntegrationSyncAnomalyAudit,
+    IntegrationSyncConfig,
+)
 from app.modules.integration_sync.schemas import (
     BackfillRequest,
     InterfaceListData,
@@ -587,6 +593,99 @@ def recheck_sync_anomaly(
         request,
         data=SyncAnomalyDiagnosisRead(**result.as_dict()),
         meta=_meta("gov_integration_sync_anomalies", "fact_walmart_sample_order_items", "fact_walmart_sales_item_daily", "mart_daily_sales_item_day"),
+    )
+
+
+class SyncAnomalyReplayRequest(BaseModel):
+    reason: str = Field(min_length=12, max_length=1000)
+
+
+@router.post(
+    "/sync-anomalies/{anomaly_id}/replay",
+    response_model=SuccessEnvelope[SyncRunCreated, ReadMeta],
+    responses=WRITE_ERRORS,
+    status_code=status.HTTP_202_ACCEPTED,
+    operation_id="replayVerifiedIntegrationSyncAnomaly",
+)
+def replay_sync_anomaly(
+    request: Request,
+    anomaly_id: UUID,
+    payload: SyncAnomalyReplayRequest,
+    session: db_session,
+    principal: execute_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[SyncRunCreated, ReadMeta]:
+    """Queue an explicit one-day source replay, never an unchecked direct MART write."""
+    from app.core.api import ApiError
+
+    anomaly = _scoped_anomaly(session, anomaly_id, account_refs)
+    diagnosis = diagnose_sync_anomaly(session, anomaly)
+    if diagnosis.status != "ready_for_replay":
+        raise ApiError(code="SYNC_ANOMALY_REPLAY_NOT_SAFE", status_code=409)
+    if anomaly.status in {"resolved", "dismissed"}:
+        raise ApiError(code="SYNC_ANOMALY_ALREADY_CLOSED", status_code=409)
+
+    # Only the existing SaleStat reconciliation runner is eligible. Do not
+    # guess a config, fall back to another account, or replay all stores/days.
+    configs = session.scalars(
+        select(IntegrationSyncConfig)
+        .join(IntegrationInterface, IntegrationSyncConfig.interface_id == IntegrationInterface.id)
+        .where(
+            IntegrationSyncConfig.source_account_ref == anomaly.source_account_ref,
+            IntegrationSyncConfig.is_enabled.is_(True),
+            IntegrationInterface.provider == "lingxing",
+            IntegrationInterface.interface_key == "saleStatPageList",
+        )
+        .limit(2)
+    ).all()
+    if len(configs) != 1:
+        raise ApiError(code="SYNC_ANOMALY_REPLAY_CONFIG_UNAVAILABLE", status_code=409)
+    tz = ZoneInfo("America/Los_Angeles")
+    start_at = datetime.combine(anomaly.business_date, time.min, tzinfo=tz)
+    end_at = datetime.combine(anomaly.business_date, time.max, tzinfo=tz)
+    run = IntegrationSyncService(session).create_backfill_run(
+        configs[0].id,
+        BackfillRequest(
+            reason="异常中心按日重算：" + payload.reason.strip(),
+            idempotency_key=f"sync-anomaly-replay:{anomaly.id}:{anomaly.last_seen_at.isoformat()}",
+            window_start=start_at,
+            window_end=end_at,
+        ),
+        actor_ref=principal.user_id,
+        request_id=get_request_id(request),
+        account_refs=account_refs,
+    )
+    _dispatch(run.run_id)
+    # The async worker has only been queued. Do not mark resolved before
+    # the operator separately rechecks completed financial MART results.
+    audit_row = session.scalar(
+        select(IntegrationSyncAnomaly)
+        .where(
+            IntegrationSyncAnomaly.id == anomaly.id,
+            IntegrationSyncAnomaly.source_account_ref.in_(account_refs),
+        )
+        .with_for_update()
+    )
+    if audit_row is not None and audit_row.status not in {"resolved", "dismissed"}:
+        previous = audit_row.status
+        audit_row.status = "review_pending"
+        audit_row.updated_by = principal.user_id
+        audit_row.owner_note = "已提交指定日期重算任务 " + str(run.run_id) + "；" + payload.reason.strip()
+        session.add(
+            IntegrationSyncAnomalyAudit(
+                id=uuid4(),
+                anomaly_id=audit_row.id,
+                actor_ref=principal.user_id,
+                from_status=previous,
+                to_status="review_pending",
+                note=audit_row.owner_note,
+            )
+        )
+        session.commit()
+    return success_response(
+        request,
+        data=run,
+        meta=_meta("gov_integration_sync_runs", "gov_integration_sync_anomaly_audit"),
     )
 
 
