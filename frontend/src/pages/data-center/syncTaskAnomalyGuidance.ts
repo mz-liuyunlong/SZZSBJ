@@ -105,6 +105,24 @@ export function describeSyncAnomaly(input: AnomalyGuideInput): AnomalyGuide {
       safeNextStep: "确认准确归属后登记待修复。暂不直接改动订单、广告费或利润事实表。",
     };
   }
+  if (input.error_code === "DATA_PAGES_ZERO_PAID_SAMPLE_PENDING") {
+    return {
+      title: "发现零元送样订单，但还缺少商品归属或核算资料",
+      category: "sample",
+      explanation: "系统已经发现订单实付为0且未取消，但因为商品身份、订单行或单价资料不完整，暂时不能安全地把这笔送样用于财务计算。这不是付费订单，也不代表送样无效。",
+      checks: [
+        "先在 Walmart 或领星按订单号确认该笔是否取消、实付是否为0。",
+        "核对订单对应的店铺、Item ID、MSKU、本地 SKU，确保一对一匹配。",
+        "检查每件商品单价和美国业务日期；有跨日情况时以来源购买时间为准。",
+      ],
+      requiredEvidence: [
+        "平台订单号、订单行号、店铺和商品 Item ID",
+        "订单实付0美元和取消状态的截图或报表",
+        "缺少单价时，提供该订单原始商品单价；不要随意填写估算价格",
+      ],
+      safeNextStep: "确认并记录来源凭据后重新同步核对；在商品身份明确之前不自动扣减销售和利润。",
+    };
+  }
   if (input.error_code === "DATA_PAGES_SAMPLE_RULE_VERSION_UNSUPPORTED") {
     return {
       title: "送样使用了系统不支持的旧规则",
