@@ -386,13 +386,6 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 if not isinstance(item, dict):
                     continue
                 item_price = _decimal(item.get("item_price_amount"))
-                discount = _decimal(item.get("discount_amount"))
-                full_discount = (
-                    item_price is not None
-                    and item_price > 0
-                    and discount is not None
-                    and abs(discount) >= item_price - Decimal("0.01")
-                )
                 if order_total != Decimal("0"):
                     # A previously verified zero-paid line cannot silently
                     # disappear when a provider replays it as a paid order.
@@ -501,23 +494,9 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 # Do not invent an item ID for new samples. For an existing
                 # verified legacy line only, reuse its prior verified ID when
                 # the provider omits item_id and the catalog cannot resolve it.
-                # YC00512_OWNER_APPROVED_SAMPLE_HOTFIX_V1: strict provider evidence.
-                # This is deliberately opt-in for the approved backfill process.
+                # Source's verified zero-paid total is sufficient for sample identity;
+                # item attribution remains an independent strict listing check.
                 provider_item_id = _field(item, "item_id", "platform_product_id")
-                strict_discount = (
-                    order_total == Decimal("0")
-                    and str(order_status_raw).strip() == "9"
-                    and not is_cancelled
-                    and item_price is not None
-                    and item_price > 0
-                    and discount is not None
-                    and quantity is not None
-                    and quantity > 0
-                    and unit_price is not None
-                    and unit_price > 0
-                    and abs(item_price - discount) <= Decimal("0.01")
-                    and abs(unit_price * quantity - discount) <= Decimal("0.01")
-                )
                 resolved_item_id = (
                     self._hotfix_unique_sample_item_id(
                         store_id,
