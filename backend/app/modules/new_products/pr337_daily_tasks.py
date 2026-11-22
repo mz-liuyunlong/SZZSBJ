@@ -43,9 +43,9 @@ def ad_catalog_tick() -> dict:
         return {"status": "blocked", "reason": "unsafe_write_target"}
     # Never crash local Beat when the 0094 migration has not been applied.
     with Session(engine) as session:
-        available = session.scalar(text(
-            "SELECT to_regclass('public.biz_walmart_ad_ingest_cursor') IS NOT NULL"
-        ))
+        available = session.scalar(
+            text("SELECT to_regclass('public.biz_walmart_ad_ingest_cursor') IS NOT NULL")
+        )
         session.rollback()
     if not available:
         return {"status": "waiting_for_0094"}

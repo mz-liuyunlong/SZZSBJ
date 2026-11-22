@@ -1470,9 +1470,7 @@ class NewProductService:
             # Freeze final score only after verified automatic evidence.
             from .evaluation_workflow import publish_after_market
 
-            publish_after_market(
-                self.db, a, s, i, body.score, market_version=v + 1
-            )
+            publish_after_market(self.db, a, s, i, body.score, market_version=v + 1)
             # Persist manual competitor selection in existing versioned JSONB.
 
             perf = self.db.scalar(
@@ -1607,7 +1605,8 @@ class NewProductService:
 
         if self._final_decisions([(a, s, i)]).get((a, s, i)) is not None:
             problem(
-                "NEW_PRODUCT_PURCHASE_FINAL_LOCKED", 409,
+                "NEW_PRODUCT_PURCHASE_FINAL_LOCKED",
+                409,
                 "最终打品结果已锁定，不允许再次申请",
             )
 
@@ -1620,7 +1619,8 @@ class NewProductService:
 
             if self.write_repo.active_purchase(a, s, i, lock=True):
                 problem(
-                    "NEW_PRODUCT_PURCHASE_PENDING", 409,
+                    "NEW_PRODUCT_PURCHASE_PENDING",
+                    409,
                     "商品存在进行中的采购申请",
                 )
 
@@ -1628,8 +1628,7 @@ class NewProductService:
                 select(NewProductPerformanceCurrent)
                 .join(
                     NewProductRegistry,
-                    NewProductRegistry.id
-                    == NewProductPerformanceCurrent.registry_id,
+                    NewProductRegistry.id == NewProductPerformanceCurrent.registry_id,
                 )
                 .where(
                     NewProductRegistry.source_account_ref == a,
@@ -1639,19 +1638,13 @@ class NewProductService:
                 .with_for_update()
             )
 
-            coverage = (
-                dict(perf.data_coverage_json or {})
-                if perf is not None
-                else {}
-            )
+            coverage = dict(perf.data_coverage_json or {}) if perf is not None else {}
             manual = coverage.get("operator_assessment_v1")
 
-            if (
-                not isinstance(manual, dict)
-                or manual.get("decision") != "passed"
-            ):
+            if not isinstance(manual, dict) or manual.get("decision") != "passed":
                 problem(
-                    "NP_PURCHASE_MANUAL_PASS_REQUIRED", 409,
+                    "NP_PURCHASE_MANUAL_PASS_REQUIRED",
+                    409,
                     "须先确认人工测评通过",
                 )
 
@@ -1659,12 +1652,10 @@ class NewProductService:
             final = final if isinstance(final, dict) else {}
 
             grade = (
-                perf.grade if perf is not None and perf.grade is not None
-                else manual.get("grade")
+                perf.grade if perf is not None and perf.grade is not None else manual.get("grade")
             )
             total = (
-                perf.score if perf is not None and perf.score is not None
-                else manual.get("total")
+                perf.score if perf is not None and perf.score is not None else manual.get("total")
             )
 
             # The stored evaluation is evidence, not a new scoring task.
@@ -1697,12 +1688,10 @@ class NewProductService:
             )
             suggested = suggested if suggested is not None else 0
 
-            if (
-                body.requested_qty != suggested
-                and len("".join(body.reason.split())) < 10
-            ):
+            if body.requested_qty != suggested and len("".join(body.reason.split())) < 10:
                 problem(
-                    "NEW_PRODUCT_PURCHASE_REASON_REQUIRED", 422,
+                    "NEW_PRODUCT_PURCHASE_REASON_REQUIRED",
+                    422,
                     "申请数量不同于系统建议时，调整原因至少10个非空白字符",
                 )
 
@@ -1719,9 +1708,7 @@ class NewProductService:
                 .limit(1)
             )
             risks = (
-                (latest_risk_event.payload_json or {}).get(
-                    "risk_conditions", []
-                )
+                (latest_risk_event.payload_json or {}).get("risk_conditions", [])
                 if latest_risk_event is not None
                 else []
             )
@@ -1732,9 +1719,7 @@ class NewProductService:
                     "store_id": s,
                     "item_id": i,
                 },
-                "facts": dict(
-                    coverage.get("new_products_score_facts_v2") or {}
-                ),
+                "facts": dict(coverage.get("new_products_score_facts_v2") or {}),
                 "evaluation": evaluation,
                 "rule_version": rule_version,
                 "rule_source": "saved_manual_assessment",
@@ -1760,7 +1745,11 @@ class NewProductService:
             self.db.add(row)
 
             self._event(
-                a, s, i, "purchase_submitted", actor,
+                a,
+                s,
+                i,
+                "purchase_submitted",
+                actor,
                 {
                     "application_id": str(row.id),
                     "requested_qty": body.requested_qty,
@@ -1846,13 +1835,18 @@ class NewProductService:
             approved_qty = None
             purchase_store_id = None
             if body.decision == "approved":
-                approved_qty = body.approved_qty if body.approved_qty is not None else row.requested_qty
+                approved_qty = (
+                    body.approved_qty if body.approved_qty is not None else row.requested_qty
+                )
                 purchase_store_id = body.purchase_store_id or row.store_id
                 if approved_qty < 1 or approved_qty > 100000:
-                    problem("NP_PURCHASE_APPROVED_QTY_INVALID", 422, "批准采购数量应在1至100000之间")
+                    problem(
+                        "NP_PURCHASE_APPROVED_QTY_INVALID", 422, "批准采购数量应在1至100000之间"
+                    )
                 if body.purchase_store_id is not None:
-                    from app.modules.data_pages.models import LingxingStoreDimension
                     from sqlalchemy import or_
+
+                    from app.modules.data_pages.models import LingxingStoreDimension
                     matches = self.db.scalars(
                         select(LingxingStoreDimension).where(
                             LingxingStoreDimension.source_account_ref == row.source_account_ref,
@@ -1865,7 +1859,11 @@ class NewProductService:
                         )
                     ).all()
                     if len(matches) != 1:
-                        problem("NP_PURCHASE_STORE_NOT_ALLOWED", 422, "采购店铺无效或不属于当前授权数据账号")
+                        problem(
+                            "NP_PURCHASE_STORE_NOT_ALLOWED",
+                            422,
+                            "采购店铺无效或不属于当前授权数据账号",
+                        )
             row.status = body.decision
             row.approved_qty = approved_qty
             row.version += 1

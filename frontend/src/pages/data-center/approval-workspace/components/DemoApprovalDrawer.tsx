@@ -264,7 +264,9 @@ function DemoApprovalDrawerContent({selected: selectedInput,onClose,initialActio
   useEffect(() => {
     if (selectedInput?.approval_type !== "new_product_purchase") return;
     let active = true;
-    setPurchaseFetchFailed(false);
+    void Promise.resolve().then(() => {
+      if (active) setPurchaseFetchFailed(false);
+    });
     const id = selectedInput.id;
     void (async () => {
       try {

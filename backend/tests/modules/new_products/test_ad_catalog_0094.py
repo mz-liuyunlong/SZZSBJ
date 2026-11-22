@@ -77,10 +77,15 @@ def test_verified_zero_spend_delivery_receives_zero_score_not_missing():
         "weights": deepcopy(DEFAULT_WEIGHTS),
         "confirmedScoring": deepcopy(DEFAULT_PARAMETERS),
         "gradeBands": {
-            "S": [9, 10], "A": [8, 8.99], "B": [7, 7.99],
-            "C": [6, 6.99], "D": [0, 5.99],
+            "S": [9, 10],
+            "A": [8, 8.99],
+            "B": [7, 7.99],
+            "C": [6, 6.99],
+            "D": [0, 5.99],
         },
-        "penalties": [], "vetoes": [], "riskConditions": {},
+        "penalties": [],
+        "vetoes": [],
+        "riskConditions": {},
     }
     result = evaluate(f, cfg, 1)
     assert result["dimensions"]["ad"] == "0"
@@ -115,7 +120,7 @@ class FakeSource:
         self.sql.append(sql)
         assert "payload_json::text" not in sql
         assert "lingxing-data-pages-walmart-ad-item-sp-list-v1" in params["policy"]
-        return Rows(self.blobs[:params["limit"]])
+        return Rows(self.blobs[: params["limit"]])
 
 
 class FakeTarget:
@@ -139,14 +144,18 @@ def test_ingest_preview_is_read_only_and_keeps_source_payload():
         "received_at": datetime(2026, 11, 19, tzinfo=UTC),
         "payload_json": {
             "data": {
-                "list": [{
-                    "advertiserId": "574861", "campaignId": "6135050",
-                    "adGroupId": "7821560", "adItemId": "9",
-                    "itemId": "20968517371",
-                    "campaignAndTargetingType": "sponsoredProducts+auto",
-                    "adSpend": "0",
-                    "allFieldFuture": ["kept"],
-                }],
+                "list": [
+                    {
+                        "advertiserId": "574861",
+                        "campaignId": "6135050",
+                        "adGroupId": "7821560",
+                        "adItemId": "9",
+                        "itemId": "20968517371",
+                        "campaignAndTargetingType": "sponsoredProducts+auto",
+                        "adSpend": "0",
+                        "allFieldFuture": ["kept"],
+                    }
+                ],
             },
         },
     }
@@ -159,11 +168,15 @@ def test_ingest_preview_is_read_only_and_keeps_source_payload():
 
 
 def test_malformed_payload_fails_without_advancing_cursor():
-    source = FakeSource([{
-        "id": UUID("00000000-0000-0000-0000-000000000001"),
-        "received_at": datetime(2026, 11, 19, tzinfo=UTC),
-        "payload_json": {"data": {"unexpected": []}},
-    }])
+    source = FakeSource(
+        [
+            {
+                "id": UUID("00000000-0000-0000-0000-000000000001"),
+                "received_at": datetime(2026, 11, 19, tzinfo=UTC),
+                "payload_json": {"data": {"unexpected": []}},
+            }
+        ]
+    )
     target = FakeTarget()
     import pytest
 

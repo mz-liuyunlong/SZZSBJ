@@ -38,11 +38,13 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("source_blob_id", "source_ordinal", name="pk_wad_item_history"),
     )
     op.create_index(
-        "ix_wad_hist_item_seen", "biz_walmart_ad_item_history",
+        "ix_wad_hist_item_seen",
+        "biz_walmart_ad_item_history",
         ["item_id", "source_observed_at"],
     )
     op.create_index(
-        "ix_wad_hist_campaign", "biz_walmart_ad_item_history",
+        "ix_wad_hist_campaign",
+        "biz_walmart_ad_item_history",
         ["advertiser_id", "campaign_id"],
     )
     op.create_table(
@@ -51,7 +53,9 @@ def upgrade() -> None:
         sa.Column("campaign_id", sa.String(128), nullable=False),
         sa.Column("campaign_and_targeting_type", sa.String(128)),
         sa.Column("campaign_kind", sa.String(16)),
-        sa.Column("classification_conflict", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+        sa.Column(
+            "classification_conflict", sa.Boolean(), nullable=False, server_default=sa.text("false")
+        ),
         sa.Column("campaign_name", sa.Text()),
         sa.Column("campaign_status", sa.String(128)),
         sa.Column("first_seen_at", sa.DateTime(timezone=True), nullable=False),
@@ -60,9 +64,7 @@ def upgrade() -> None:
         sa.Column("payload_json", JSONB(), nullable=False),
         sa.PrimaryKeyConstraint("advertiser_id", "campaign_id", name="pk_wad_campaign_catalog"),
     )
-    op.create_index(
-        "ix_wad_campaign_kind", "biz_walmart_ad_campaign_catalog", ["campaign_kind"]
-    )
+    op.create_index("ix_wad_campaign_kind", "biz_walmart_ad_campaign_catalog", ["campaign_kind"])
     op.create_table(
         "biz_walmart_ad_item_current",
         sa.Column("advertiser_id", sa.String(128), nullable=False),
@@ -81,13 +83,15 @@ def upgrade() -> None:
         sa.Column("source_blob_id", UUID(as_uuid=True), nullable=False),
         sa.Column("payload_json", JSONB(), nullable=False),
         sa.PrimaryKeyConstraint(
-            "advertiser_id", "campaign_id", "ad_group_id", "ad_item_id", "item_id",
+            "advertiser_id",
+            "campaign_id",
+            "ad_group_id",
+            "ad_item_id",
+            "item_id",
             name="pk_wad_item_current",
         ),
     )
-    op.create_index(
-        "ix_wad_item_current_item", "biz_walmart_ad_item_current", ["item_id"]
-    )
+    op.create_index("ix_wad_item_current_item", "biz_walmart_ad_item_current", ["item_id"])
     op.create_table(
         "biz_walmart_ad_ingest_cursor",
         sa.Column("source_key", sa.String(128), primary_key=True),
@@ -95,7 +99,12 @@ def upgrade() -> None:
         sa.Column("last_blob_id", UUID(as_uuid=True)),
         sa.Column("processed_blobs", sa.BigInteger(), nullable=False, server_default="0"),
         sa.Column("processed_rows", sa.BigInteger(), nullable=False, server_default="0"),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
     )
 
 

@@ -470,6 +470,7 @@ export default function NewProductPages({page,mode}:Props){
    }catch(error){msg(`复核申请失败：${error instanceof Error?error.message:"未知错误"}`);}
    finally{setAssessmentSaving(false)}
  };
+ void requestManualDecisionChange;
  const confirmManualAssessment=async(goPurchase=false)=>{
    if(!p?.backend || assessmentSaving)return;
    if(!assessmentChoice || Array.from(assessmentReason.replace(/\s/g,"")).length<20){
@@ -594,6 +595,7 @@ export default function NewProductPages({page,mode}:Props){
      setFlowSaving(false);
    }
  };
+ void submitConfirmedPurchase;
  const decide=async(pass:boolean)=>{
    if(p?.backend){
      if(flowSaving)return;

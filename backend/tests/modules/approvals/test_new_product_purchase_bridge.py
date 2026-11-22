@@ -61,17 +61,26 @@ def test_requester_cannot_approve_own_purchase():
 
 def test_existing_purchase_registry_identity_fallback():
     row = SimpleNamespace(
-        item_id="20881463249", store_id="store-a", approved_qty=400,
-        requested_qty=400, suggested_qty=500,
+        item_id="20881463249",
+        store_id="store-a",
+        approved_qty=400,
+        requested_qty=400,
+        suggested_qty=500,
         score_snapshot={"evaluation": {"total": "9.37", "grade": "S"}},
     )
     registry = SimpleNamespace(
-        product_name="真实产品", sku="YC00722", msku="YC00722-1A",
-        store_name="真实店铺", owner_name="真实负责人",
+        product_name="真实产品",
+        sku="YC00722",
+        msku="YC00722-1A",
+        store_name="真实店铺",
+        owner_name="真实负责人",
     )
     data = _details(row, registry)
     assert (data["sku"], data["msku"], data["store_name"], data["owner_name"]) == (
-        "YC00722", "YC00722-1A", "真实店铺", "真实负责人"
+        "YC00722",
+        "YC00722-1A",
+        "真实店铺",
+        "真实负责人",
     )
     assert data["score_total"] == 9.37
     assert data["requested_qty"] == 400

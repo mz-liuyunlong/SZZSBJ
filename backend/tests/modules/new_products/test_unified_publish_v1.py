@@ -223,7 +223,16 @@ def test_unified_dry_run_scoped_advertiser_source_and_missing_types(monkeypatch)
             assert "biz_walmart_ad_campaign_catalog" in str(statement)
             if not self.has_labels:
                 return Rows([])
-            return Rows([{"advertiser_id": "31", "campaign_id": "101", "campaign_kind": "auto", "classification_conflict": False}])
+            return Rows(
+                [
+                    {
+                        "advertiser_id": "31",
+                        "campaign_id": "101",
+                        "campaign_kind": "auto",
+                        "classification_conflict": False,
+                    }
+                ]
+            )
 
         def scalars(self, statement):
             return SimpleNamespace(

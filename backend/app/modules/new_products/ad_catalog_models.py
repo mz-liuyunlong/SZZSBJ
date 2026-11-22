@@ -40,7 +40,9 @@ class WalmartAdCampaignCatalog(Base):
     campaign_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     campaign_and_targeting_type: Mapped[str | None] = mapped_column(String(128))
     campaign_kind: Mapped[str | None] = mapped_column(String(16))
-    classification_conflict: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    classification_conflict: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     campaign_name: Mapped[str | None] = mapped_column(Text)
     campaign_status: Mapped[str | None] = mapped_column(String(128))
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -78,4 +80,6 @@ class WalmartAdIngestCursor(Base):
     last_blob_id: Mapped[UUID | None] = mapped_column()
     processed_blobs: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
     processed_rows: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )

@@ -10,11 +10,11 @@ from math import isfinite
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import false, func, or_, select
+from sqlalchemy import false, func, or_, select, tuple_
 from sqlalchemy.orm import Session
-from sqlalchemy import tuple_
 
 from app.core.api import ApiError, ErrorCode
+from app.modules.approvals.purchase_reference_evidence import purchase_reference_evidence
 from app.modules.approvals.schemas import (
     ApprovalDetail,
     ApprovalEventRead,
@@ -24,10 +24,11 @@ from app.modules.approvals.schemas import (
     ApprovalQuery,
 )
 from app.modules.fx_rates.reader import (
-    load_usd_cny_rates, month_key, usd_cny_rate_for,
+    load_usd_cny_rates,
+    month_key,
+    usd_cny_rate_for,
 )
-from app.modules.new_products.models import PurchaseApplication, NewProductRegistry
-from app.modules.approvals.purchase_reference_evidence import purchase_reference_evidence
+from app.modules.new_products.models import NewProductRegistry, PurchaseApplication
 
 
 def _numeric(value):
@@ -126,10 +127,7 @@ class NewProductPurchaseBridge:
         result = self.session.scalars(
             select(NewProductRegistry).where(identity.in_(sorted(keys)))
         ).all()
-        return {
-            (r.source_account_ref, r.store_id, r.item_id): r
-            for r in result
-        }
+        return {(r.source_account_ref, r.store_id, r.item_id): r for r in result}
 
     @staticmethod
     def _item(row, actor, reviewer, registry=None):
@@ -192,11 +190,17 @@ class NewProductPurchaseBridge:
         ).all()
         registries = self._registries(rows)
         return (
-            ApprovalListData(items=[
-                self._item(r, actor, reviewer,
-                           registries.get((r.source_account_ref, r.store_id, r.item_id)))
-                for r in rows
-            ]),
+            ApprovalListData(
+                items=[
+                    self._item(
+                        r,
+                        actor,
+                        reviewer,
+                        registries.get((r.source_account_ref, r.store_id, r.item_id)),
+                    )
+                    for r in rows
+                ]
+            ),
             ApprovalMeta(page=query.page, page_size=query.page_size, total=total),
         )
 
@@ -208,26 +212,28 @@ class NewProductPurchaseBridge:
         if row is None:
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
         registries = self._registries([row])
-        item = self._item(row, actor, reviewer,
-                          registries.get((row.source_account_ref, row.store_id, row.item_id)))
+        item = self._item(
+            row,
+            actor,
+            reviewer,
+            registries.get((row.source_account_ref, row.store_id, row.item_id)),
+        )
 
         # PURCHASE_PROFIT_SYSTEM_FX_V1
         # Read the Lingxing USD my_rate for the application month.
         # The existing purchase detail authorization has already
         # verified the account scope and applicant/reviewer access.
-        fx_day = row.created_at.astimezone(
-            ZoneInfo("Asia/Shanghai")
-        ).date()
+        fx_day = row.created_at.astimezone(ZoneInfo("Asia/Shanghai")).date()
         fx_month = month_key(fx_day)
-        fx_rate = usd_cny_rate_for(
-            load_usd_cny_rates(self.session), fx_day
-        )
+        fx_rate = usd_cny_rate_for(load_usd_cny_rates(self.session), fx_day)
         if item.purchase_details is not None:
-            item.purchase_details.update({
-                "profit_fx_month": fx_month,
-                "profit_fx_rate": str(fx_rate) if fx_rate is not None else None,
-                "profit_fx_source": "lingxing_my_rate",
-            })
+            item.purchase_details.update(
+                {
+                    "profit_fx_month": fx_month,
+                    "profit_fx_rate": str(fx_rate) if fx_rate is not None else None,
+                    "profit_fx_source": "lingxing_my_rate",
+                }
+            )
 
         # PURCHASE_APPROVAL_REFERENCE_V1: only after record-level access check.
         if item.purchase_details is not None:
@@ -252,16 +258,20 @@ class NewProductPurchaseBridge:
                 )
             )
         from app.modules.new_products.models import ActionEvent
+
         approved_store_id = None
         if row.status == "approved":
             decision_event = self.session.scalar(
-                select(ActionEvent).where(
+                select(ActionEvent)
+                .where(
                     ActionEvent.source_account_ref == row.source_account_ref,
                     ActionEvent.store_id == row.store_id,
                     ActionEvent.item_id == row.item_id,
                     ActionEvent.event_type == "purchase_approved",
                     ActionEvent.payload_json["application_id"].as_string() == str(row.id),
-                ).order_by(ActionEvent.created_at.desc()).limit(1)
+                )
+                .order_by(ActionEvent.created_at.desc())
+                .limit(1)
             )
             if decision_event and isinstance(decision_event.payload_json, dict):
                 approved_store_id = decision_event.payload_json.get("purchase_store_id")
@@ -284,6 +294,7 @@ class NewProductPurchaseBridge:
             can_supplement=False,
             events=events,
         )
+
 
 # SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1
 

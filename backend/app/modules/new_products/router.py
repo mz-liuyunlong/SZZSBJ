@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import SuccessEnvelope, success_response
 from app.core.auth import Principal, require_principal
+from app.core.permissions import is_approval_admin
 from app.db.session import get_db_session
 
 from .evaluation_schemas import (
@@ -33,7 +34,6 @@ from .schemas import (
     TrackingWrite,
 )
 from .service import NewProductService
-from app.core.permissions import is_approval_admin
 
 router = APIRouter(prefix="/api/new-products", tags=["New Product Performance"])
 DB = Annotated[Session, Depends(get_db_session)]
@@ -124,8 +124,8 @@ def tracking_listings(
     drill_kind: str = "",
     drill_value: str = "",
     parent_category: str = "",
-    start_date: date | None = Query(None, alias="from"),
-    end_date: date | None = Query(None, alias="to"),
+    start_date: Annotated[date | None, Query(alias="from")] = None,
+    end_date: Annotated[date | None, Query(alias="to")] = None,
 ):
     from app.core.api import ApiError
 
@@ -139,14 +139,24 @@ def tracking_listings(
         )
 
     data = detail_list(
-        source, db, accounts,
-        page=page, page_size=page_size, keyword=keyword, owners=owners,
-        grades=grades, outcome=outcome, drill_kind=drill_kind,
-        drill_value=drill_value, parent_category=parent_category,
-        start_date=start_date, end_date=end_date,
+        source,
+        db,
+        accounts,
+        page=page,
+        page_size=page_size,
+        keyword=keyword,
+        owners=owners,
+        grades=grades,
+        outcome=outcome,
+        drill_kind=drill_kind,
+        drill_value=drill_value,
+        parent_category=parent_category,
+        start_date=start_date,
+        end_date=end_date,
     )
     return success_response(
-        request, data=data,
+        request,
+        data=data,
         meta={"source": "saved_tracking_page", "period": period},
     )
 
@@ -463,7 +473,10 @@ def decide_purchase(
     return success_response(
         request,
         data=NewProductService(db, read_session=source).decide_purchase(
-            accounts, application_id, payload, principal.user_id,
+            accounts,
+            application_id,
+            payload,
+            principal.user_id,
             allow_self=is_approval_admin(principal),
         ),
         meta={"source": "database"},

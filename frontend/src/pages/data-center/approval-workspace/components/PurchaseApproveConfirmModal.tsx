@@ -19,15 +19,21 @@ export default function PurchaseApproveConfirmModal({item,onCancel,onSaved}:Prop
   const [saving,setSaving] = useState(false);
   const [loadError,setLoadError] = useState("");
 
+  const purchaseId = item?.id;
+  const initialStore = item?.purchase_details?.store_id;
+  const initialQuantity = item?.purchase_details?.requested_qty;
   useEffect(() => {
-    if (!item) return;
+    if (!purchaseId) return;
     let active = true;
-    setStores([]);
-    setStoreId(item.purchase_details?.store_id ?? undefined);
-    setQuantity(item.purchase_details?.requested_qty ?? null);
-    setLoading(true);
-    setLoadError("");
-    void fetchNewProductPurchaseStoreOptions(item.id).then(data => {
+    void Promise.resolve().then(() => {
+      if (!active) return;
+      setStores([]);
+      setStoreId(initialStore ?? undefined);
+      setQuantity(initialQuantity ?? null);
+      setLoading(true);
+      setLoadError("");
+    });
+    void fetchNewProductPurchaseStoreOptions(purchaseId).then(data => {
       if (!active) return;
       setStores(data.stores);
       setStoreId(data.source_store_id);
@@ -36,7 +42,7 @@ export default function PurchaseApproveConfirmModal({item,onCancel,onSaved}:Prop
       setLoadError(error instanceof Error ? error.message : "采购店铺读取失败");
     }).finally(() => {if(active)setLoading(false);});
     return () => {active = false;};
-  },[item?.id]);
+  },[purchaseId,initialStore,initialQuantity]);
 
   const requested = item?.purchase_details?.requested_qty ?? null;
   const suggested = item?.purchase_details?.suggested_qty ?? null;

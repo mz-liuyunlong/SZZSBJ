@@ -100,9 +100,19 @@ def attach_workflow_fields(session: Session, rows: list[dict]) -> None:
             row["requested_qty"] = purchase.requested_qty
             row["purchase_reason"] = purchase.request_reason
             row["approved_qty"] = purchase.approved_qty
-            row["purchase_review_reason"] = purchase.review_reason if purchase.status == "rejected" else None
-            row["purchase_reviewed_by"] = str(purchase.reviewed_by) if purchase.status == "rejected" and purchase.reviewed_by else None
-            row["purchase_reviewed_at"] = purchase.reviewed_at.isoformat() if purchase.status == "rejected" and purchase.reviewed_at else None
+            row["purchase_review_reason"] = (
+                purchase.review_reason if purchase.status == "rejected" else None
+            )
+            row["purchase_reviewed_by"] = (
+                str(purchase.reviewed_by)
+                if purchase.status == "rejected" and purchase.reviewed_by
+                else None
+            )
+            row["purchase_reviewed_at"] = (
+                purchase.reviewed_at.isoformat()
+                if purchase.status == "rejected" and purchase.reviewed_at
+                else None
+            )
         reg_id = registries.get(key)
         track = tracking.get(reg_id)
         if track is not None:

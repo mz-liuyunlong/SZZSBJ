@@ -21,8 +21,7 @@ def has_any_permission(principal: Principal, permission_keys: tuple[str, ...]) -
 def is_approval_admin(principal: Principal) -> bool:
     """Full business-approval capability, never a general super-admin grant."""
     return (
-        "*" in principal.permissions
-        or "internal:approval:administrator" in principal.permissions
+        "*" in principal.permissions or "internal:approval:administrator" in principal.permissions
     )
 
 

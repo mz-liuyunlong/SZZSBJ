@@ -180,8 +180,7 @@ def test_same_cutoff_saved_score_equal_reconciles():
         "profit_calc_status": "scored",
         "data_cutoff_la": START.isoformat(),
         **{
-            key: score[key]
-            for key in ("profit_usd", "roi", "gross_margin_pct", "sales_amount_usd")
+            key: score[key] for key in ("profit_usd", "roi", "gross_margin_pct", "sales_amount_usd")
         },
         "ad_total_spend_usd": score["ad_spend_usd"],
         "ad_spend_usd": "0",

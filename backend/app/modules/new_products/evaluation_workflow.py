@@ -1121,7 +1121,15 @@ def submit_review(
 
 
 def decide_review(
-    session: Session, accounts, approval_id: UUID, actor, decision, reason, version, *, allow_self=False
+    session: Session,
+    accounts,
+    approval_id: UUID,
+    actor,
+    decision,
+    reason,
+    version,
+    *,
+    allow_self=False,
 ):
     if decision not in ("approved", "rejected"):
         _error("NP_EVAL_DECISION_INVALID", 422, "不支持的审批操作")

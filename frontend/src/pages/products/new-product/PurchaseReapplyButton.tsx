@@ -64,7 +64,7 @@ export default function PurchaseReapplyButton({product}:{product:Product}) {
       <div style={{display:"grid",gap:12}}>
         <div>上次驳回原因：{backend?.purchaseReviewReason||"历史记录未提供驳回原因"}</div>
         {backend?.purchaseReviewedAt && <div>驳回时间：{backend.purchaseReviewedAt.slice(0,19).replace("T"," ")}</div>}
-        <div>当前评级：{grade??"—"}　系统建议：{suggested===null?"未核实":`${suggested} 件`}</div>
+        <div>当前评级：{grade??"—"}{"\u3000"}系统建议：{suggested===null?"未核实":`${suggested} 件`}</div>
         <label>本次申请数量</label>
         <InputNumber style={{width:"100%"}} min={1} max={100000} precision={0}
           value={quantity} onChange={setQuantity}/>

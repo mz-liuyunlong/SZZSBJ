@@ -98,7 +98,11 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         LISTING_INTEGRATION_HEAD_REVISION,
     }
     assert script.get_heads() == [AD_CATALOG_0094_REVISION]
-    assert script.get_revision(AD_CATALOG_0094_REVISION).down_revision == NP_MARKET_COMPETITORS_0093_REVISION
+
+    assert (
+        script.get_revision(AD_CATALOG_0094_REVISION).down_revision
+        == NP_MARKET_COMPETITORS_0093_REVISION
+    )
     assert (
         script.get_revision(NP_MARKET_COMPETITORS_0093_REVISION).down_revision
         == ROLE_PAGE_0092_REVISION

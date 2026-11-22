@@ -22,6 +22,7 @@ const shown = (value: number | null) => value == null ? '—' : value.toFixed(2)
 const isRecorded = (value: string | null | undefined) => Boolean(value?.trim());
 
 /** Exported for component tests; counts describe actual net edits, not historical edit events. */
+// eslint-disable-next-line react-refresh/only-export-components
 export function evidenceDimensionStatus(evidence: PurchaseApprovalEvidenceView, key: Dimension) {
   const current = asScore(evidence.effective_dimensions?.[key]);
   const original = key === 'market' ? null : asScore(evidence.system_dimensions?.[key]);
@@ -33,6 +34,7 @@ export function evidenceDimensionStatus(evidence: PurchaseApprovalEvidenceView, 
   } as const;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function shouldShowPurchaseReason(requested: number | null | undefined, suggested: number | null | undefined): boolean {
   return Number.isSafeInteger(requested) && Number.isSafeInteger(suggested) && requested !== suggested;
 }

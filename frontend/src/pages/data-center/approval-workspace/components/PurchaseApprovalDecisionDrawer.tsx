@@ -340,11 +340,6 @@ export default function PurchaseApprovalDecisionDrawer({record, seed, profile, e
       ? `CNY ${numberText(matchedCost.amount, 2)}`
       : '—';
 
-  const resolvedPurchaseNote = purchaseAmount !== '—'
-    ? '采购申请已记录金额'
-    : matchedCost?.reason ??
-      (costKey ? '正在读取采购价…' : '商品身份或数量未核实');
-
   const source = profile.applicationSource === 'system' ? '系统自动申请' : profile.applicationSource === 'operator' ? '运营主动申请' : '来源待确认';
   // PURCHASE_PROFIT_SYSTEM_FX_V1
   // Display conversion only. The original USD profit is unchanged.

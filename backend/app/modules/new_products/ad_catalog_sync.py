@@ -172,7 +172,9 @@ def _items(payload: Any) -> list[dict[str, Any]]:
     return items
 
 
-def ingest_batch(source: Session, target: Session, *, limit: int = MAX_BATCH, apply: bool = False) -> dict:
+def ingest_batch(
+    source: Session, target: Session, *, limit: int = MAX_BATCH, apply: bool = False
+) -> dict:
     """One bounded source page and atomic checkpoint; caller owns transactions.
 
     Never read raw table by payload text or process without deterministic cursor.
@@ -186,18 +188,31 @@ def ingest_batch(source: Session, target: Session, *, limit: int = MAX_BATCH, ap
         target.execute(_INIT, {"key": SOURCE_KEY})
         cursor = target.execute(_CURSOR, {"key": SOURCE_KEY}).mappings().one()
     else:
-        cursor = target.execute(
-            text("SELECT last_received_at,last_blob_id FROM biz_walmart_ad_ingest_cursor WHERE source_key=:key"),
-            {"key": SOURCE_KEY},
-        ).mappings().first()
+        cursor = (
+            target.execute(
+                text(
+                    "SELECT last_received_at,last_blob_id "
+                    "FROM biz_walmart_ad_ingest_cursor WHERE source_key=:key"
+                ),
+                {"key": SOURCE_KEY},
+            )
+            .mappings()
+            .first()
+        )
     from datetime import UTC
     from uuid import UUID
 
-    last_at = cursor["last_received_at"] if cursor and cursor["last_received_at"] else datetime(1970, 1, 1, tzinfo=UTC)
+    last_at = (
+        cursor["last_received_at"]
+        if cursor and cursor["last_received_at"]
+        else datetime(1970, 1, 1, tzinfo=UTC)
+    )
     last_id = str(cursor["last_blob_id"]) if cursor and cursor["last_blob_id"] else str(UUID(int=0))
-    blobs = list(source.execute(_BLOBS, {
-        "policy": POLICY, "last_at": last_at, "last_id": last_id, "limit": limit
-    }).mappings())
+    blobs = list(
+        source.execute(
+            _BLOBS, {"policy": POLICY, "last_at": last_at, "last_id": last_id, "limit": limit}
+        ).mappings()
+    )
     counts = Counter()
     for blob in blobs:
         items = _items(blob["payload_json"])
@@ -215,10 +230,16 @@ def ingest_batch(source: Session, target: Session, *, limit: int = MAX_BATCH, ap
             product = _string(item.get("itemId"))
             kind = _kind(item.get("campaignAndTargetingType"))
             shared = {
-                "blob": blob["id"], "ordinal": ordinal, "seen": blob["received_at"],
-                "advertiser": advertiser, "campaign": campaign,
-                "group_id": group_id, "ad_item": ad_item, "item": product,
-                "kind": kind, "type_label": _string(item.get("campaignAndTargetingType")),
+                "blob": blob["id"],
+                "ordinal": ordinal,
+                "seen": blob["received_at"],
+                "advertiser": advertiser,
+                "campaign": campaign,
+                "group_id": group_id,
+                "ad_item": ad_item,
+                "item": product,
+                "kind": kind,
+                "type_label": _string(item.get("campaignAndTargetingType")),
                 "created": _string(item.get("entityCreateAt")),
                 "add_date": _string(item.get("addDate")),
                 "payload": __import__("json").dumps(item, ensure_ascii=False),
@@ -247,13 +268,19 @@ def ingest_batch(source: Session, target: Session, *, limit: int = MAX_BATCH, ap
             else:
                 counts["incomplete_identities"] += 1
     if apply and blobs:
-        target.execute(_ADVANCE, {
-            "key": SOURCE_KEY, "seen": blobs[-1]["received_at"],
-            "blob": blobs[-1]["id"], "blobs": len(blobs),
-            "rows": counts["history_rows"],
-        })
+        target.execute(
+            _ADVANCE,
+            {
+                "key": SOURCE_KEY,
+                "seen": blobs[-1]["received_at"],
+                "blob": blobs[-1]["id"],
+                "blobs": len(blobs),
+                "rows": counts["history_rows"],
+            },
+        )
     return {
-        "blobs": len(blobs), "has_more": len(blobs) == limit,
+        "blobs": len(blobs),
+        "has_more": len(blobs) == limit,
         "last_received_at": blobs[-1]["received_at"].isoformat() if blobs else None,
         **dict(counts),
         "applied": apply,
@@ -295,7 +322,13 @@ def sync_catalog(*, limit: int = MAX_BATCH, pages: int = 1, apply: bool = False)
             with Session(get_engine(), autoflush=False, expire_on_commit=False) as target:
                 with target.begin():
                     last = ingest_batch(source, target, limit=limit, apply=apply)
-            for name in ("blobs", "history_rows", "campaign_evidence", "item_evidence", "incomplete_identities"):
+            for name in (
+                "blobs",
+                "history_rows",
+                "campaign_evidence",
+                "item_evidence",
+                "incomplete_identities",
+            ):
                 total[name] += last.get(name, 0)
             if not last["has_more"] or not apply:
                 break
@@ -307,9 +340,14 @@ def sync_catalog(*, limit: int = MAX_BATCH, pages: int = 1, apply: bool = False)
 if __name__ == "__main__":
     import argparse
     import json
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--pages", type=int, default=1)
     parser.add_argument("--limit", type=int, default=MAX_BATCH)
     args = parser.parse_args()
-    print(json.dumps(sync_catalog(pages=args.pages, limit=args.limit, apply=args.apply), ensure_ascii=False))
+    print(
+        json.dumps(
+            sync_catalog(pages=args.pages, limit=args.limit, apply=args.apply), ensure_ascii=False
+        )
+    )

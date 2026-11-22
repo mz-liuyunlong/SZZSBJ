@@ -130,4 +130,5 @@ class BulkDecisionWrite(StrictSchema):
     expected_versions: dict[str, int]
     note: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=4000)]
 
+
 # SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1

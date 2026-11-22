@@ -680,7 +680,8 @@ class ApprovalService:
                    ({legacy_risk}), {pending_amount}::text, c.currency_code,
                    c.archive_requested_at, c.archive_reviewed_at, c.archive_reviewed_by,
                    coalesce(nullif(c.archive_reason, ''), '未填写申请原因'),
-                   (:case_tab='pending' and (:is_admin or c.archive_requested_by is distinct from :actor)),
+                   (:case_tab='pending' and
+                     (:is_admin or c.archive_requested_by is distinct from :actor)),
                    false, true,
                    case when :case_tab='pending' then c.archive_requested_at
                         else c.archive_reviewed_at end, c.follow_log as follow_log
@@ -1114,7 +1115,8 @@ class ApprovalService:
                   updated_by=:actor, updated_at=:now
                 where id=:id and status='archive_pending'
                   and archive_review_status='pending'
-                  and (:allow_self or :fresh_attestation or archive_requested_by is distinct from :actor)
+                  and (:allow_self or :fresh_attestation
+                       or archive_requested_by is distinct from :actor)
             """),
                 {
                     "case_status": case_status,
