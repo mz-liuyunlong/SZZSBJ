@@ -88,7 +88,6 @@ def new_product_board_summary(
     return success_response(request, data=data, meta={"source": "saved_board_projection"})
 
 
-
 # Tracking is intentionally split into two independent, read-only requests.
 # No shared full-Listing page loop is used for either view.
 @router.get("/tracking/board/summary", response_model=SuccessEnvelope[dict, dict])
@@ -644,5 +643,6 @@ def recheck_evaluation_review(
         data=recheck_once(db, accounts, application_id, principal.user_id),
         meta={"source": "database"},
     )
+
 
 # SZZSBJ_NP_PERMISSIONS_V3

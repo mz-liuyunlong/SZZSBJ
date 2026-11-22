@@ -138,4 +138,5 @@ def attach_workflow_fields(session: Session, rows: list[dict]) -> None:
                 "created_at": review.created_at.isoformat() if review.created_at else None,
             }
 
+
 # NP_PURCHASE_REAPPLY_SELF_CONTAINED_V5

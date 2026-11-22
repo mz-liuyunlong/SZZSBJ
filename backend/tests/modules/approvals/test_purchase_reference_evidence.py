@@ -1,4 +1,5 @@
 """As-submitted purchase evidence: no HTTP, credentials, network, or database writes."""
+
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 

@@ -87,4 +87,5 @@ def test_existing_purchase_registry_identity_fallback():
     assert data["approved_qty"] == 400
     assert data["amount"] is None
 
+
 # NP_APPROVAL_IDENTITY_REGISTRY_V2_20261122

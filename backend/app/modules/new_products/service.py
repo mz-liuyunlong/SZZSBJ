@@ -1847,6 +1847,7 @@ class NewProductService:
                     from sqlalchemy import or_
 
                     from app.modules.data_pages.models import LingxingStoreDimension
+
                     matches = self.db.scalars(
                         select(LingxingStoreDimension).where(
                             LingxingStoreDimension.source_account_ref == row.source_account_ref,
@@ -1964,5 +1965,6 @@ class NewProductService:
         except Exception:
             self.db.rollback()
             raise
+
 
 # SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1

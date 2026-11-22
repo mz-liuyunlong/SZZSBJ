@@ -154,4 +154,5 @@ class PurchaseDecision(Strict):
 class RulePreview(Identity):
     config: dict[str, Any]
 
+
 # SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1

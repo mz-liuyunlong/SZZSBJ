@@ -365,6 +365,7 @@ def detail_list(
     )
     result = service._list_saved(accounts, q, item_keys=keys)
     from .evaluation_workflow import decorate_page
+
     result = decorate_page(db, result)
     items_by_key = {
         tuple(str(x["listing"][k]) for k in ("source_account_ref", "store_id", "item_id")): x
