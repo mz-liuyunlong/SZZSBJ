@@ -180,7 +180,7 @@ export default function TrackingDashboard({onDrill}:Props){
             <Block title="二级类目分析" className="np-track-secondary-panel">
               {data.secondary.length?<Table<TrackingBoardSummary["secondary"][number]> {...tableDefaults} columns={secondaryColumns} dataSource={data.secondary} rowKey="key"/>:
                 <EmptyContent text="当前商品缺少二级类目字段，暂不编造类目数据"/>}
-              {data.noSecondary>0&&<div className="np-track-panel-foot">{data.noSecondary} 个商品暂无二级类目映射；映射补齐后自动展示。</div>}
+              {data.no_secondary>0&&<div className="np-track-panel-foot">{data.no_secondary} 个商品暂无二级类目映射；映射补齐后自动展示。</div>}
             </Block>
             <Block title="观察期分析" className="np-track-observation-panel">
               <Table<TrackingBoardSummary["observations"][number]> {...tableDefaults} columns={observationColumns} dataSource={data.observations} rowKey="key"/>
