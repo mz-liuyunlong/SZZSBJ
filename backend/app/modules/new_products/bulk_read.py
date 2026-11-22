@@ -143,6 +143,7 @@ SELECT w.account,w.store,w.item,count(*) AS n,
        count(*) FILTER (WHERE a.num_ads_clicks IS NULL) AS clicks_missing,
        sum(a.ad_spend_amount) FILTER (WHERE a.ad_spend_currency_code = 'USD') AS spend,
        sum(a.num_ads_clicks) AS clicks,
+       sum(a.num_ads_shown) AS impressions,
        sum(a.attributed_orders) AS orders,sum(a.attributed_sales_amount) AS revenue,
        max(a.synced_at) AS latest_sync
 FROM wanted w JOIN fact_walmart_ad_item_sp_daily a
@@ -163,6 +164,7 @@ EMPTY_ADS: dict[str, Any] = {
     "incomplete": 0,
     "spend": None,
     "clicks": None,
+    "impressions": None,
     "orders": None,
     "revenue": None,
     "latest_sync": None,

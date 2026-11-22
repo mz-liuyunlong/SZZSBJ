@@ -1069,6 +1069,8 @@ class ProductManagementService:
             manual_grade if manual_grade in {"A", "B", "C", "exception"} else "exception"
         )
         return ProductManagementListItem(
+            # SZZSBJ_NP_PURCHASE_TABLE_IDENTITY_AMOUNT_V5
+            source_account_ref=identity.source_account_ref,
             sku_id=identity.id,
             sku=(product.sku if product is not None else identity.lingxing_sku_code),
             product_name=(

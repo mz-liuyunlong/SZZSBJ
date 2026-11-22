@@ -33,40 +33,38 @@ def test_dst_transitions_keep_local_midnight():
 
 
 def test_campaign_source_is_bounded_and_policy_scoped():
-    from app.modules.new_products.pr337_daily_pipeline import _ADVERTISER_CATALOG
+    from app.modules.new_products.pr337_daily_pipeline import _CATALOG
 
-    sql = str(_ADVERTISER_CATALOG)
-    assert "retention_policy_id" in sql
-    assert "lingxing-data-pages-walmart-advertiser-list-v1" in sql
-    assert "LIMIT :row_limit" in sql
-    assert "payload_bytes BETWEEN 1 AND :max_payload_bytes" in sql
+    sql = str(_CATALOG)
+    assert "biz_walmart_ad_campaign_catalog" in sql
+    assert "campaign_kind" in sql
+    assert "classification_conflict" in sql
+    assert "LIMIT :limit" in sql
     assert "payload_json::text" not in sql
-    assert "LIKE" not in sql.upper()
 
 
 def test_bounded_catalog_no_labels_does_not_fabricate_auto_or_manual():
     from datetime import date
 
     from app.modules.new_products.pr337_daily_pipeline import (
-        _ADVERTISER_CATALOG,
+        _CATALOG,
         load_scoped_campaign_catalog,
     )
 
     class FakeRows:
         def mappings(self):
-            return iter([{"payload_json": {"data": {"list": []}}}])
+            return iter([])
 
     class FakeSource:
         def execute(self, statement, params):
-            assert statement is _ADVERTISER_CATALOG
-            assert params["row_limit"] == 1501
-            assert params["max_payload_bytes"] == 32768
+            assert statement is _CATALOG
+            assert params["limit"] == 200001
             return FakeRows()
 
     catalog, status, count = load_scoped_campaign_catalog(FakeSource(), date(2026, 11, 14))
     assert catalog == ({}, False)
     assert status == "NO_VERIFIED_TYPES"
-    assert count == 1
+    assert count == 0
 
 
 def test_unknown_campaign_types_preserve_totals_not_auto_manual():

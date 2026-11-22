@@ -8,11 +8,13 @@ from __future__ import annotations
 
 from math import isfinite
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import false, func, or_, select
+from sqlalchemy import false, func, or_, select, tuple_
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
+from app.modules.approvals.purchase_reference_evidence import purchase_reference_evidence
 from app.modules.approvals.schemas import (
     ApprovalDetail,
     ApprovalEventRead,
@@ -21,7 +23,12 @@ from app.modules.approvals.schemas import (
     ApprovalMeta,
     ApprovalQuery,
 )
-from app.modules.new_products.models import PurchaseApplication
+from app.modules.fx_rates.reader import (
+    load_usd_cny_rates,
+    month_key,
+    usd_cny_rate_for,
+)
+from app.modules.new_products.models import NewProductRegistry, PurchaseApplication
 
 
 def _numeric(value):
@@ -39,10 +46,20 @@ def _snapshot(row):
     return value if isinstance(value, dict) else {}
 
 
-def _details(row):
+def _details(row, registry=None):
     source = _snapshot(row)
     listing = source.get("listing")
-    listing = listing if isinstance(listing, dict) else {}
+    listing = dict(listing) if isinstance(listing, dict) else {}
+    if registry is not None:
+        for key, field in (
+            ("local_name", "product_name"),
+            ("local_sku", "sku"),
+            ("msku", "msku"),
+            ("store_name", "store_name"),
+            ("owner_name", "owner_name"),
+        ):
+            if not listing.get(key):
+                listing[key] = getattr(registry, field, None)
     facts = source.get("facts")
     facts = facts if isinstance(facts, dict) else {}
     evaluation = source.get("evaluation")
@@ -58,6 +75,7 @@ def _details(row):
         "msku": listing.get("msku"),
         "item_id": row.item_id,
         "store_name": listing.get("store_name"),
+        "store_id": row.store_id,
         "owner_name": listing.get("owner_name"),
         "supplier_name": None,
         "required_delivery_date": None,
@@ -67,6 +85,7 @@ def _details(row):
         "sales_30d": _numeric(listing.get("sales_30d")),
         "suggested_qty": row.suggested_qty,
         "requested_qty": row.requested_qty,
+        "approved_qty": row.approved_qty,
         "amount": None,  # never infer procurement spend from retail sale price
         "currency_code": None,
         "analysis": {
@@ -96,9 +115,23 @@ class NewProductPurchaseBridge:
             stmt = stmt.where(PurchaseApplication.applicant_id == actor)
         return stmt
 
+    def _registries(self, rows):
+        keys = {(r.source_account_ref, r.store_id, r.item_id) for r in rows}
+        if not keys:
+            return {}
+        identity = tuple_(
+            NewProductRegistry.source_account_ref,
+            NewProductRegistry.store_id,
+            NewProductRegistry.item_id,
+        )
+        result = self.session.scalars(
+            select(NewProductRegistry).where(identity.in_(sorted(keys)))
+        ).all()
+        return {(r.source_account_ref, r.store_id, r.item_id): r for r in result}
+
     @staticmethod
-    def _item(row, actor, reviewer):
-        details = _details(row)
+    def _item(row, actor, reviewer, registry=None):
+        details = _details(row, registry)
         return ApprovalItem(
             id=str(row.id),
             version=row.version,
@@ -126,8 +159,8 @@ class NewProductPurchaseBridge:
         stmt = stmt.where(PurchaseApplication.status == status)
         if query.view == "created":
             stmt = stmt.where(PurchaseApplication.applicant_id == actor)
-        elif query.view == "mine" and reviewer:
-            stmt = stmt.where(PurchaseApplication.applicant_id != actor)
+        # Include applications created by the current user in the workbench.
+        # Self-review remains disabled by _item(...).can_review.
         if query.risk_level:
             # Risk grade is unknown until a trusted snapshot is recorded.
             stmt = stmt.where(false())
@@ -155,8 +188,19 @@ class NewProductPurchaseBridge:
             .offset((query.page - 1) * query.page_size)
             .limit(query.page_size)
         ).all()
+        registries = self._registries(rows)
         return (
-            ApprovalListData(items=[self._item(r, actor, reviewer) for r in rows]),
+            ApprovalListData(
+                items=[
+                    self._item(
+                        r,
+                        actor,
+                        reviewer,
+                        registries.get((r.source_account_ref, r.store_id, r.item_id)),
+                    )
+                    for r in rows
+                ]
+            ),
             ApprovalMeta(page=query.page, page_size=query.page_size, total=total),
         )
 
@@ -167,7 +211,35 @@ class NewProductPurchaseBridge:
         row = self.session.scalar(stmt)
         if row is None:
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
-        item = self._item(row, actor, reviewer)
+        registries = self._registries([row])
+        item = self._item(
+            row,
+            actor,
+            reviewer,
+            registries.get((row.source_account_ref, row.store_id, row.item_id)),
+        )
+
+        # PURCHASE_PROFIT_SYSTEM_FX_V1
+        # Read the Lingxing USD my_rate for the application month.
+        # The existing purchase detail authorization has already
+        # verified the account scope and applicant/reviewer access.
+        fx_day = row.created_at.astimezone(ZoneInfo("Asia/Shanghai")).date()
+        fx_month = month_key(fx_day)
+        fx_rate = usd_cny_rate_for(load_usd_cny_rates(self.session), fx_day)
+        if item.purchase_details is not None:
+            item.purchase_details.update(
+                {
+                    "profit_fx_month": fx_month,
+                    "profit_fx_rate": str(fx_rate) if fx_rate is not None else None,
+                    "profit_fx_source": "lingxing_my_rate",
+                }
+            )
+
+        # PURCHASE_APPROVAL_REFERENCE_V1: only after record-level access check.
+        if item.purchase_details is not None:
+            item.purchase_details["approval_evidence"] = purchase_reference_evidence(
+                self.session, row
+            )
         events = [
             ApprovalEventRead(
                 event_type="purchase_submitted",
@@ -185,12 +257,32 @@ class NewProductPurchaseBridge:
                     created_at=row.reviewed_at,
                 )
             )
+        from app.modules.new_products.models import ActionEvent
+
+        approved_store_id = None
+        if row.status == "approved":
+            decision_event = self.session.scalar(
+                select(ActionEvent)
+                .where(
+                    ActionEvent.source_account_ref == row.source_account_ref,
+                    ActionEvent.store_id == row.store_id,
+                    ActionEvent.item_id == row.item_id,
+                    ActionEvent.event_type == "purchase_approved",
+                    ActionEvent.payload_json["application_id"].as_string() == str(row.id),
+                )
+                .order_by(ActionEvent.created_at.desc())
+                .limit(1)
+            )
+            if decision_event and isinstance(decision_event.payload_json, dict):
+                approved_store_id = decision_event.payload_json.get("purchase_store_id")
         return ApprovalDetail(
             **item.model_dump(),
             snapshot={
                 "score_snapshot": _snapshot(row),
                 "item_id": row.item_id,
                 "store_id": row.store_id,
+                "approved_purchase_store_id": approved_store_id,
+                "approved_qty": row.approved_qty,
                 "requested_qty": row.requested_qty,
                 "suggested_qty": row.suggested_qty,
                 "score_rule_version": row.score_rule_version,
@@ -202,3 +294,8 @@ class NewProductPurchaseBridge:
             can_supplement=False,
             events=events,
         )
+
+
+# SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1
+
+# NP_APPROVAL_IDENTITY_REGISTRY_V2_20261122

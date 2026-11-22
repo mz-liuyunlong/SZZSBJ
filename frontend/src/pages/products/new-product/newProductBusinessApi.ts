@@ -32,7 +32,8 @@ export type ScoreCorrectionView = {
 };
 export type NewProductListing = {
   system_risk_display?: SystemRiskDisplay | null;
-  evaluation_status?: "待到货"|"测评中"|"待市场评分"|"测评通过"|"测评未通过";
+  evaluation_status?: "待到货"|"测评中"|"待市场评分"|"待测评确认"|"测评通过"|"测评未通过";
+  evaluation_decision?: {decision:"passed"|"failed";reason:string;actor_id:string;confirmed_at:string;grade:string;total:string;revision:number}|null;
   evaluation_review_status?: "submitted"|"info_required"|"approved"|"rejected"|null;
   evaluation_review_id?: string|null;
   evaluation_job_status?: "none"|"queued"|"running"|"completed"|"failed"|null;
@@ -70,10 +71,15 @@ export type NewProductListing = {
   tracking_started_date_la?: string | null;
   tracking_start_status?: string | null;
   tracking_status?: string | null;
+  tracking_initial_grade?: RealScore["grade"] | "待评分";
+  tracking_page_decision?: string | null;
   purchase_version?: number | null;
   requested_qty?: number | null;
   approved_qty?: number | null;
   purchase_reason?: string | null;
+  purchase_review_reason?: string | null;
+  purchase_reviewed_by?: string | null;
+  purchase_reviewed_at?: string | null;
   tracking_version?: number;
   system_recommendation: { value: string; reasons: string[] };
 };
@@ -103,7 +109,7 @@ export async function getNewProductBoardSummary(startDate:string,endDate:string,
 }
 
 export type PerformanceSummary = {
-  counts: { all:number; evaluating:number; market:number; passed:number; failed:number };
+  counts: { all:number; evaluating:number; market:number; pending_confirmation:number; passed:number; failed:number };
   status_options: Array<{value:string;label:string;count:number}>;
   owner_options: Array<{value:string;label:string;count:number}>;
   rating_options: Array<{value:string;label:string;count:number}>;
@@ -160,6 +166,28 @@ export const invalidateNewProductDetail = (identity?:Identity) =>
     refetchType: "none",
   });
 // PR337_MANUAL_RISK_V1: explicit human risk selection is required by the API.
+export async function saveNewProductManualDecision(identity:Identity,decision:"passed"|"failed",reason:string) {
+  return (await backendRequest<{decision:string;reason:string;confirmed_at:string}>(
+    "/api/new-products/evaluations/manual-decision",
+    {method:"POST",body:JSON.stringify({...identity,decision,reason})}
+  )).data;
+}
+
+export async function confirmNewProductAndRequestPurchase(
+  identity:Identity, reason:string, requestedQty:number,
+  purchaseReason:string, expectedRuleVersion:number
+) {
+  return (await backendRequest<{
+    decision:"passed";assessment_saved:boolean;
+    purchase:{application_id:string;status:string;version:number}
+  }>("/api/new-products/evaluations/confirm-and-purchase",{
+    method:"POST",body:JSON.stringify({
+      ...identity,decision:"passed",reason,requested_qty:requestedQty,
+      purchase_reason:purchaseReason,expected_rule_version:expectedRuleVersion
+    })
+  })).data;
+}
+
 export async function saveNewProductMarketScore(identity:Identity,score:number,reason:string,expectedVersion:number,riskConditions:string[],competitorIds:string[],noCompetitors:boolean) {
   return (await backendRequest<{version:number;score:number;reason:string}>("/api/new-products/market-score",{
     method:"PUT",body:JSON.stringify({...identity,score,reason,expected_version:expectedVersion,risk_conditions:riskConditions,competitor_ids:competitorIds,no_competitors:noCompetitors})
@@ -205,6 +233,14 @@ export async function getNewProductEvaluationJob(identity: Identity) {
   return (await backendRequest<{status:string;item_id:string},null>(
     `/api/new-products/evaluations/status/${a}/${s}/${i}`)).data;
 }
+export async function requestNewProductManualDecisionReview(identity:Identity, newDecision:"passed"|"failed",reason:string) {
+  return (await backendRequest<{application_id:string;status:string;version:number},null>(
+    "/api/new-products/evaluation-reviews",{method:"POST",body:JSON.stringify({
+      ...identity,reason_type:"manual_decision_change",new_decision:newDecision,reason,evidence:""
+    })}
+  )).data;
+}
+
 export async function requestNewProductEvaluationReview(identity: Identity,
   reasonType:"calculation_error"|"scoring_basis_error"|"special_exception",reason:string,evidence:string) {
   return (await backendRequest<{application_id:string;status:string;version:number},null>(
@@ -216,4 +252,44 @@ export async function requestNewProductEvaluationRecheck(applicationId: string) 
   return (await backendRequest<{status:string;execution_id:string;grade:string},null>(
     "/api/new-products/evaluation-reviews/" + encodeURIComponent(applicationId) + "/recheck",
     {method:"POST"})).data;
+}
+
+// NP_PURCHASE_REAPPLY_SELF_CONTAINED_V5
+
+
+// NP_TRACKING_TWO_READ_APIS_V1 — independent board projection and paged detail.
+export type TrackingBoardSummary = {
+  date_basis:string;status_basis:string;start_date:string;end_date:string;
+  counts:{pool:number;success:number;failed:number;failed_categories:number;due:number};
+  success_rate:number|null;has_stored_initial_grade:boolean;
+  grades:Array<{key:string;grade:string;total:number}>;
+  owners:Array<{key:string;name:string;total:number;success:number;failed:number;rate:number|null}>;
+  categories:Array<{key:string;category:string;total:number;success:number;failed:number;pending:number;rate:number|null;recommendation:string}>;
+  secondary:Array<{key:string;category:string;parent_category:string;total:number;success:number;failed:number;rate:number|null}>;
+  observations:Array<{key:string;label:string;total:number;success:number;failed:number;stable:number;pending:number;unknown:number;rate:number|null}>;
+  no_secondary:number;
+  due:Array<{id:string;item:string;sku:string;name:string;owner:string;arrival:string}>;
+};
+export type TrackingListParams = {
+  page:number;page_size:number;keyword:string;owners:string;grades:string;outcome:string;
+  period:30|60|180;drill_kind?:string;drill_value?:string;parent_category?:string;
+  from?:string;to?:string;
+};
+export type TrackingListPage = {
+  items:NewProductListing[];total:number;page:number;page_size:number;
+  counts:{all:number;success:number;observe:number;optimize:number;failure:number;undecided:number};
+  owner_options:Array<{value:string;label:string;count:number}>;
+  grade_options:Array<{value:string;label:string;count:number}>;
+  status_basis:string;
+};
+export async function getTrackingBoardSummary(startDate:string,endDate:string,init?:RequestInit):Promise<TrackingBoardSummary>{
+  const params=new URLSearchParams({start_date:startDate,end_date:endDate});
+  return (await backendRequest<TrackingBoardSummary>(`/api/new-products/tracking/board/summary?${params}`,init)).data;
+}
+export async function listTrackingProducts(query:TrackingListParams,init?:RequestInit):Promise<TrackingListPage>{
+  const params=new URLSearchParams();
+  for(const [key,value] of Object.entries(query)){
+    if(value!==undefined&&value!==null&&String(value)!=='')params.set(key,String(value));
+  }
+  return (await backendRequest<TrackingListPage>(`/api/new-products/tracking/listings?${params}`,init)).data;
 }

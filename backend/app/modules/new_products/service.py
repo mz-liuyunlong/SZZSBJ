@@ -276,8 +276,12 @@ class NewProductService:
             ads["n"]
             and not ads["incomplete"]
             and ads["spend"] is not None
-            and Decimal(str(ads["spend"])) > 0
+            and (
+                Decimal(str(ads["spend"])) > 0
+                or (ads.get("impressions") is not None and Decimal(str(ads["impressions"])) > 0)
+            )
         ):
+            # Verified impressions prove actual delivery even when spend and clicks are zero.
             ad_status = "active"
         # Note: no ad rows are NOT proof of no advertising. No 'not_run' inference.
         roi = None
@@ -332,6 +336,9 @@ class NewProductService:
             "ad_status": ad_status,
             "ad_spend_usd": ads["spend"] if spend_ok else None,
             "ad_clicks": ads["clicks"] if clicks_ok else None,
+            "ad_impressions": ads.get("impressions")
+            if ads["n"] and not ads["incomplete"]
+            else None,
             "ad_orders": ads["orders"] if ad_status == "active" else None,
             "ad_revenue_usd": ads["revenue"] if ad_status == "active" else None,
             "ad_latest_sync": ads["latest_sync"],
@@ -697,6 +704,8 @@ class NewProductService:
             )
             if perf is None:
                 problem("NP_CORRECTION_NO_EVIDENCE", 409, "尚未保存自动评分证据")
+            if perf.grade is not None or perf.score is not None:
+                problem("NP_CORRECTION_FROZEN", 409, "正式评分已锁定，须通过复核流程处理")
             config, current_rule_version = self._config()
             coverage = deepcopy(perf.data_coverage_json or {})
             block = coverage.get("operator_score_correction_v1")
@@ -1302,29 +1311,60 @@ class NewProductService:
                 reason = "frozen_profit_cutoff_missing"
         if first_wfs is None:
             reason = "first_wfs_date_unverified"
-        operating_daily = (
-            {
-                "status": "unverified",
-                "reason": reason,
-                "rows": [],
-                "totals": None,
-                "cutoff_la": cutoff.isoformat(),
-                "source": "new_products_testing_profit_full_history_v2",
-            }
-            if reason
-            else load_testing_profit_daily_detail(
-                self.repo.session,
-                (account, store, item),
-                cutoff=cutoff,
-                first_wfs=first_wfs,
-                saved_facts=evidence,
+        # The local write DB owns final archived proof even in hybrid mode.
+        local_perf = self.db.scalar(
+            select(NewProductPerformanceCurrent)
+            .join(
+                NewProductRegistry,
+                NewProductRegistry.id == NewProductPerformanceCurrent.registry_id,
+            )
+            .where(
+                NewProductRegistry.source_account_ref == account,
+                NewProductRegistry.store_id == store,
+                NewProductRegistry.item_id == item,
             )
         )
+        coverage = (local_perf.data_coverage_json or {}) if local_perf else {}
+        archive = coverage.get("evaluation_operating_archive_v1")
+        archive = archive if isinstance(archive, dict) else None
+        archived_daily = archive.get("daily") if archive else None
+        if frozen and isinstance(archived_daily, dict):
+            operating_daily = archived_daily
+        else:
+            # Detail read fallback only; never republish the frozen score.
+            if reason == "frozen_profit_cutoff_missing":
+                reason = None
+            operating_daily = (
+                {
+                    "status": "unverified",
+                    "reason": reason,
+                    "rows": [],
+                    "totals": None,
+                    "cutoff_la": cutoff.isoformat(),
+                    "source": "new_products_testing_profit_full_history_v2",
+                }
+                if reason
+                else load_testing_profit_daily_detail(
+                    self.repo.session,
+                    (account, store, item),
+                    cutoff=cutoff,
+                    first_wfs=first_wfs,
+                    saved_facts=evidence,
+                )
+            )
+        if isinstance(operating_daily, dict):
+            operating_daily = dict(operating_daily)
+            operating_daily["frozen_overview"] = archive.get("overview") if archive else None
         return {
             "listing": score["listing"],
             "score": score,
             "sales_series": serialized(series),
             "evaluation_operating_daily": operating_daily,
+            "evaluation_archived_risks": (
+                coverage["market_risks_frozen_v1"].get("conditions")
+                if isinstance(coverage.get("market_risks_frozen_v1"), dict)
+                else None
+            ),
             "tracking_decision": tr.decision if tr else None,
             "tracking_reason": tr.reason if tr else None,
             "events": [
@@ -1374,6 +1414,25 @@ class NewProductService:
             v = row.version if row else 0
             if body.expected_version != v:
                 problem("NEW_PRODUCT_MARKET_CONFLICT", 409, "市场评分已被其他人员更新")
+            # No scored product may rewrite its market score, even via HTTP.
+            current_reg = self.db.scalar(
+                select(NewProductRegistry).where(
+                    NewProductRegistry.source_account_ref == a,
+                    NewProductRegistry.store_id == s,
+                    NewProductRegistry.item_id == i,
+                )
+            )
+            if current_reg is None:
+                problem("NP_EVAL_NO_REGISTRY", 409, "尚未建立真实新品记录")
+            current_perf = self.db.scalar(
+                select(NewProductPerformanceCurrent)
+                .where(NewProductPerformanceCurrent.registry_id == current_reg.id)
+                .with_for_update()
+            )
+            if current_perf is None:
+                problem("NP_EVAL_NO_EVIDENCE", 409, "尚未保存正式测评证据")
+            if current_perf.grade is not None or current_perf.score is not None:
+                problem("NP_EVAL_RESULT_FROZEN", 409, "正式评分已锁定，请走复核流程")
             if row:
                 row.score = body.score
                 row.reason = body.reason.strip()
@@ -1413,7 +1472,6 @@ class NewProductService:
 
             publish_after_market(self.db, a, s, i, body.score, market_version=v + 1)
             # Persist manual competitor selection in existing versioned JSONB.
-            from .models import NewProductPerformanceCurrent, NewProductRegistry
 
             perf = self.db.scalar(
                 select(NewProductPerformanceCurrent)
@@ -1439,6 +1497,13 @@ class NewProductService:
                 "ids": list(body.competitor_ids),
                 "none": body.no_competitors,
             }
+            coverage["market_risks_frozen_v1"] = {
+                "market_version": v + 1,
+                "conditions": list(body.risk_conditions),
+                "captured_at": datetime.now(UTC).isoformat(),
+            }
+            # Historical operating archive is not a prerequisite
+            # for the operator's market-score save transaction.
             perf.data_coverage_json = coverage
             self.db.commit()
             return {"version": v + 1, "score": body.score, "reason": row.reason}
@@ -1446,89 +1511,222 @@ class NewProductService:
             self.db.rollback()
             raise
 
-    def purchase(self, accounts, body, actor):
+    def save_manual_assessment(self, accounts, body, actor, *, commit=True):
         a, s, i = ident(body)
-        listing = self._listing(accounts, a, s, i)
-        if listing.first_wfs_available_date_la is None:
-            problem("NEW_PRODUCT_WFS_START_REQUIRED", 409, "WFS首次可售时间未核实，暂不能申请采购")
-        if self._final_decisions([(a, s, i)]).get((a, s, i)) is not None:
-            problem("NEW_PRODUCT_PURCHASE_FINAL_LOCKED", 409, "最终打品结果已锁定，不允许再次申请")
-        # Existing audit event is the authority for manually selected high-risk flags.
-        latest_risk_event = self.db.scalar(
-            select(ActionEvent)
-            .where(
-                ActionEvent.source_account_ref == a,
-                ActionEvent.store_id == s,
-                ActionEvent.item_id == i,
-                ActionEvent.event_type == "market_score",
-            )
-            .order_by(ActionEvent.created_at.desc())
-            .limit(1)
-        )
-        selected_risks = (
-            (latest_risk_event.payload_json or {}).get("risk_conditions", [])
-            if latest_risk_event
-            else []
-        )
-        manual_high_risks = {
-            "ROI低（Pass）",
-            "ROI低（评级上限）",
-            "季节性（强）",
-            "侵权风险",
-            "合规风险",
-            "供应链风险",
-            "质量风险",
-            "价格风险",
-            "退货风险",
-            "平台风险",
-        }
-        if set(selected_risks or []) & manual_high_risks:
-            problem(
-                "NEW_PRODUCT_RISK_REVIEW_REQUIRED",
-                409,
-                "存在人工高风险条件，须先完成复核，不能直接申请采购",
-            )
-        cfg, version = self._config()
-        listing = self._listing(accounts, a, s, i)
-        saved = load_persisted(self.repo.session, [(a, s, i)]).get((a, s, i))
-        market = self.write_repo.market(a, s, i)
-        row_view = snapshot_row(listing, None, saved, market, datetime.now(LA).date())
-        merge_persisted_page_row(row_view, saved, datetime.now(LA).date())
-        if self._verified_final_from_saved(row_view, saved, cfg, version):
-            current = {
-                "identity": {"source_account_ref": a, "store_id": s, "item_id": i},
-                "facts": row_view["facts"],
-                "evaluation": row_view["evaluation"],
-                "rule_version": version,
-                "rule_source": "verified_daily_proof_same_rule",
-            }
-        else:
-            problem(
-                "NEW_PRODUCT_AUTHORITATIVE_SCORE_REQUIRED",
-                409,
-                "新品退款/送样独立利润及评分尚未完成权威发布，暂不可申请采购",
-            )
-        block = self._score_correction_blocks([(a, s, i)]).get((a, s, i))
-        if block is not None:
-            if not overlay(current, block, cfg):
-                problem("NP_CORRECTION_STALE", 409, "评分修正证据与正式结果不一致")
-        ev = current["evaluation"]
-        if ev["grade"] is None or ev["grade"] in ("D", "Pass"):
-            problem("NEW_PRODUCT_PURCHASE_BLOCKED", 409, "关键指标缺失、被否决或不符合采购评级")
-        if body.expected_rule_version != version:
-            problem("NEW_PRODUCT_RULE_CONFLICT", 409, "评分规则已更新，请重新计算")
-        suggested = self._suggested_quantity(ev, cfg)
-        if suggested is None:
-            problem("NEW_PRODUCT_PURCHASE_BLOCKED", 409, "无有效采购建议")
-        if body.requested_qty != suggested and len(body.reason.strip()) < 5:
-            problem("NEW_PRODUCT_PURCHASE_REASON_REQUIRED", 422, "调整采购数量必须填写至少5字原因")
+        self._listing(accounts, a, s, i)
         try:
+            self.db.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+                {"key": "NP_ASSESSMENT_" + a + ":" + s + ":" + i},
+            )
+            perf = self.db.scalar(
+                select(NewProductPerformanceCurrent)
+                .join(
+                    NewProductRegistry,
+                    NewProductRegistry.id == NewProductPerformanceCurrent.registry_id,
+                )
+                .where(
+                    NewProductRegistry.source_account_ref == a,
+                    NewProductRegistry.store_id == s,
+                    NewProductRegistry.item_id == i,
+                )
+                .with_for_update()
+            )
+            if perf is None or perf.grade is None or perf.score is None:
+                problem("NP_ASSESSMENT_SCORE_REQUIRED", 409, "须先完成正式评分")
+            coverage = dict(perf.data_coverage_json or {})
+            if coverage.get("operator_assessment_v1") is not None:
+                problem("NP_ASSESSMENT_ALREADY_LOCKED", 409, "人工测评结论已锁定，请走复核流程")
+            if not isinstance(coverage.get("evaluation_final_snapshot"), dict):
+                problem("NP_ASSESSMENT_SNAPSHOT_MISSING", 409, "正式评分历史快照缺失")
+            record = {
+                "decision": body.decision,
+                "reason": body.reason,
+                "actor_id": actor,
+                "confirmed_at": datetime.now(UTC).isoformat(),
+                "grade": perf.grade,
+                "total": str(perf.score),
+                "revision": 1,
+            }
+            coverage["operator_assessment_v1"] = record
+            perf.data_coverage_json = coverage
+            perf.updated_at = datetime.now(UTC)
+            self._event(a, s, i, "operator_assessment_confirmed", actor, record)
+            if commit:
+                self.db.commit()
+            else:
+                self.db.flush()
+            return record
+        except Exception:
+            self.db.rollback()
+            raise
+
+    def save_assessment_and_purchase(self, accounts, body, actor):
+        from .schemas import AssessmentWrite, PurchaseWrite
+
+        # Construct validated DTOs without passing purchase-only fields to the
+        # strict standalone assessment schema.
+        common = dict(
+            source_account_ref=body.source_account_ref,
+            store_id=body.store_id,
+            item_id=body.item_id,
+        )
+        assessment = AssessmentWrite(**common, decision="passed", reason=body.reason)
+        purchase = PurchaseWrite(
+            **common,
+            requested_qty=body.requested_qty,
+            reason=body.purchase_reason,
+            expected_rule_version=body.expected_rule_version,
+        )
+        # Validate account/store/Item ID authorization before the archive lookup.
+        self._listing(accounts, body.source_account_ref, body.store_id, body.item_id)
+        try:
+            # Purchase() validates the saved final score,
+            # effective rule and recommended quantity.
+            # Do not require an unrelated operating archive.
+            self.save_manual_assessment(accounts, assessment, actor, commit=False)
+            purchase_result = self.purchase(accounts, purchase, actor, commit=False)
+            self.db.commit()
+            return {
+                "decision": "passed",
+                "assessment_saved": True,
+                "purchase": purchase_result,
+            }
+        except Exception:
+            self.db.rollback()
+            raise
+
+    def purchase(self, accounts, body, actor, *, commit=True):
+        """Submit an existing human-approved assessment for purchase review."""
+        a, s, i = ident(body)
+
+        # Existing identity and source-account isolation remain mandatory.
+        self._listing(accounts, a, s, i)
+
+        if self._final_decisions([(a, s, i)]).get((a, s, i)) is not None:
+            problem(
+                "NEW_PRODUCT_PURCHASE_FINAL_LOCKED",
+                409,
+                "最终打品结果已锁定，不允许再次申请",
+            )
+
+        try:
+            # Lock this item before checking or inserting the application.
             self.db.execute(
                 text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
                 {"key": "PR337_PURCHASE_" + a + ":" + s + ":" + i},
             )
+
             if self.write_repo.active_purchase(a, s, i, lock=True):
-                problem("NEW_PRODUCT_PURCHASE_PENDING", 409, "商品存在进行中的采购申请")
+                problem(
+                    "NEW_PRODUCT_PURCHASE_PENDING",
+                    409,
+                    "商品存在进行中的采购申请",
+                )
+
+            perf = self.db.scalar(
+                select(NewProductPerformanceCurrent)
+                .join(
+                    NewProductRegistry,
+                    NewProductRegistry.id == NewProductPerformanceCurrent.registry_id,
+                )
+                .where(
+                    NewProductRegistry.source_account_ref == a,
+                    NewProductRegistry.store_id == s,
+                    NewProductRegistry.item_id == i,
+                )
+                .with_for_update()
+            )
+
+            coverage = dict(perf.data_coverage_json or {}) if perf is not None else {}
+            manual = coverage.get("operator_assessment_v1")
+
+            if not isinstance(manual, dict) or manual.get("decision") != "passed":
+                problem(
+                    "NP_PURCHASE_MANUAL_PASS_REQUIRED",
+                    409,
+                    "须先确认人工测评通过",
+                )
+
+            final = coverage.get("evaluation_final_snapshot")
+            final = final if isinstance(final, dict) else {}
+
+            grade = (
+                perf.grade if perf is not None and perf.grade is not None else manual.get("grade")
+            )
+            total = (
+                perf.score if perf is not None and perf.score is not None else manual.get("total")
+            )
+
+            # The stored evaluation is evidence, not a new scoring task.
+            # Rule changes and missing operating archives do not block
+            # the submission of a human-approved request.
+            rule_version = final.get("rule_version")
+            if not isinstance(rule_version, int):
+                rule_version = body.expected_rule_version
+
+            evaluation = {
+                "grade": grade,
+                "total": str(total) if total is not None else None,
+                "rule_version": rule_version,
+                "dimensions": dict(final.get("dimensions") or {}),
+                "missing": [],
+            }
+
+            cfg, _ = self._config()
+            qty_archive = coverage.get("evaluation_operating_archive_v1")
+            archive_matches = (
+                isinstance(qty_archive, dict)
+                and qty_archive.get("rule_version") == rule_version
+                and type(qty_archive.get("suggested_qty")) is int
+            )
+
+            suggested = (
+                qty_archive["suggested_qty"]
+                if archive_matches
+                else self._suggested_quantity(evaluation, cfg)
+            )
+            suggested = suggested if suggested is not None else 0
+
+            if body.requested_qty != suggested and len("".join(body.reason.split())) < 10:
+                problem(
+                    "NEW_PRODUCT_PURCHASE_REASON_REQUIRED",
+                    422,
+                    "申请数量不同于系统建议时，调整原因至少10个非空白字符",
+                )
+
+            # Preserve manually selected risks for the approver.
+            latest_risk_event = self.db.scalar(
+                select(ActionEvent)
+                .where(
+                    ActionEvent.source_account_ref == a,
+                    ActionEvent.store_id == s,
+                    ActionEvent.item_id == i,
+                    ActionEvent.event_type == "market_score",
+                )
+                .order_by(ActionEvent.created_at.desc())
+                .limit(1)
+            )
+            risks = (
+                (latest_risk_event.payload_json or {}).get("risk_conditions", [])
+                if latest_risk_event is not None
+                else []
+            )
+
+            current = {
+                "identity": {
+                    "source_account_ref": a,
+                    "store_id": s,
+                    "item_id": i,
+                },
+                "facts": dict(coverage.get("new_products_score_facts_v2") or {}),
+                "evaluation": evaluation,
+                "rule_version": rule_version,
+                "rule_source": "saved_manual_assessment",
+                "manual_assessment": dict(manual),
+                "risk_conditions": list(risks or []),
+            }
+
             row = PurchaseApplication(
                 id=uuid4(),
                 source_account_ref=a,
@@ -1540,11 +1738,12 @@ class NewProductService:
                 suggested_qty=suggested,
                 request_reason=body.reason.strip(),
                 score_snapshot=serialized(current),
-                score_rule_version=version,
+                score_rule_version=rule_version,
                 applicant_id=actor,
                 created_at=datetime.now(UTC),
             )
             self.db.add(row)
+
             self._event(
                 a,
                 s,
@@ -1554,11 +1753,22 @@ class NewProductService:
                 {
                     "application_id": str(row.id),
                     "requested_qty": body.requested_qty,
-                    "rule_version": version,
+                    "suggested_qty": suggested,
+                    "rule_version": rule_version,
+                    "risk_conditions": list(risks or []),
                 },
             )
-            self.db.commit()
-            return {"application_id": str(row.id), "status": row.status, "version": row.version}
+
+            if commit:
+                self.db.commit()
+            else:
+                self.db.flush()
+
+            return {
+                "application_id": str(row.id),
+                "status": row.status,
+                "version": row.version,
+            }
         except Exception:
             self.db.rollback()
             raise
@@ -1602,7 +1812,7 @@ class NewProductService:
             "page_size": page_size,
         }
 
-    def decide_purchase(self, accounts, approval_id, body, actor):
+    def decide_purchase(self, accounts, approval_id, body, actor, *, allow_self=False):
         try:
             row = self.db.scalar(
                 select(PurchaseApplication)
@@ -1616,12 +1826,47 @@ class NewProductService:
                 problem("NEW_PRODUCT_APPROVAL_NOT_FOUND", 404, "申请不存在")
             if row.status != "submitted" or row.version != body.expected_version:
                 problem("NEW_PRODUCT_APPROVAL_CONFLICT", 409, "申请已被处理或版本已变化")
-            if row.applicant_id == actor:
+            if row.applicant_id == actor and not allow_self:
                 problem("NEW_PRODUCT_SELF_REVIEW", 403, "不能审核自己提交的申请")
             if body.decision == "rejected" and len(body.reason.strip()) < 5:
                 problem("NEW_PRODUCT_REJECTION_REASON_REQUIRED", 422, "驳回原因至少5字")
+            # SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1
+            # Never mutate source store identity or the frozen scoring snapshot.
+            approved_qty = None
+            purchase_store_id = None
+            if body.decision == "approved":
+                approved_qty = (
+                    body.approved_qty if body.approved_qty is not None else row.requested_qty
+                )
+                purchase_store_id = body.purchase_store_id or row.store_id
+                if approved_qty < 1 or approved_qty > 100000:
+                    problem(
+                        "NP_PURCHASE_APPROVED_QTY_INVALID", 422, "批准采购数量应在1至100000之间"
+                    )
+                if body.purchase_store_id is not None:
+                    from sqlalchemy import or_
+
+                    from app.modules.data_pages.models import LingxingStoreDimension
+
+                    matches = self.db.scalars(
+                        select(LingxingStoreDimension).where(
+                            LingxingStoreDimension.source_account_ref == row.source_account_ref,
+                            LingxingStoreDimension.store_id == purchase_store_id,
+                            or_(
+                                LingxingStoreDimension.platform_code == "walmart",
+                                LingxingStoreDimension.platform_code_raw == "10008",
+                            ),
+                            LingxingStoreDimension.is_sync.is_(True),
+                        )
+                    ).all()
+                    if len(matches) != 1:
+                        problem(
+                            "NP_PURCHASE_STORE_NOT_ALLOWED",
+                            422,
+                            "采购店铺无效或不属于当前授权数据账号",
+                        )
             row.status = body.decision
-            row.approved_qty = row.requested_qty if body.decision == "approved" else None
+            row.approved_qty = approved_qty
             row.version += 1
             row.reviewed_by = actor
             row.reviewed_at = datetime.now(UTC)
@@ -1636,6 +1881,10 @@ class NewProductService:
                     "application_id": str(row.id),
                     "reason": row.review_reason,
                     "snapshot_rule_version": row.score_rule_version,
+                    "source_store_id": row.store_id,
+                    "purchase_store_id": purchase_store_id,
+                    "requested_qty": row.requested_qty,
+                    "approved_qty": approved_qty,
                 },
             )
             self.db.commit()
@@ -1716,3 +1965,6 @@ class NewProductService:
         except Exception:
             self.db.rollback()
             raise
+
+
+# SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1

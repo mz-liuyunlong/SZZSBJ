@@ -17,7 +17,7 @@ from app.db.session import get_engine
 
 from .models import NewProductRegistry
 from .read_source import get_new_product_read_session
-from .unified_ad_evidence import load_ad_snapshots, verified_campaign_map
+from .unified_ad_evidence import load_ad_snapshots
 from .unified_publish import _save_one
 
 MAX_PRODUCTS = 5000
@@ -33,55 +33,41 @@ FROM wanted w LEFT JOIN listing_wfs_first_stock_la_locked l
 """)
 
 
-# This source has ~1,027 advertiser-list RAW records; the entire RAW table is
-# ~18 GB and has no usable created_at/payload text index. Do NOT search
-# payload_json::text over all policies. Only select a bounded official scope.
-_ADVERTISER_CATALOG = text("""
-SELECT b.payload_json
-FROM ods_api_raw_blobs b
-WHERE b.retention_policy_id = (
-    SELECT p.id FROM gov_raw_retention_policies p
-    WHERE p.policy_key = 'lingxing-data-pages-walmart-advertiser-list-v1'
-)
-  AND b.created_at >= :since
-  AND b.payload_json IS NOT NULL
-  AND b.payload_bytes BETWEEN 1 AND :max_payload_bytes
-ORDER BY b.created_at DESC
-LIMIT :row_limit
+# 0094: Read the persisted catalog, not the advertiser ACCOUNT listing.
+# The only category authority is immutable Lingxing ad-item evidence ingested
+# from campaignAndTargetingType; conflict rows are never used for classification.
+_CATALOG = text("""
+SELECT advertiser_id, campaign_id, campaign_kind, classification_conflict
+FROM biz_walmart_ad_campaign_catalog
+ORDER BY advertiser_id, campaign_id
+LIMIT :limit
 """)
 
 
-def load_scoped_campaign_catalog(source: Session, cutoff: date):
-    """Return only explicitly labeled campaign identities; never infer type.
+def load_scoped_campaign_catalog(target: Session, cutoff: date):
+    """Load verified ad types from 0094, with a finite completeness guard.
 
-    Scanning 18-GB raw JSON for a text key is prohibited. Absence/truncation
-    of source labels means that category evidence is unavailable, not zero.
-    All advertising totals still come from the independent fact table.
+    Empty catalog remains unverified until the guarded backfill runs.
+    Do not infer 'manual', 'auto' or no advertising from account names.
     """
-    from datetime import timedelta
-
-    max_rows = 1500
-    source_rows = list(
-        source.execute(
-            _ADVERTISER_CATALOG,
-            {
-                "since": cutoff - timedelta(days=180),
-                "row_limit": max_rows + 1,
-                "max_payload_bytes": 32768,
-            },
-        ).mappings()
-    )
-    if len(source_rows) > max_rows:
-        # Do not accept a partial catalog as a complete classification source.
-        return ({}, False), "SOURCE_SCOPE_TRUNCATED", len(source_rows)
-    mapping, conflicts = verified_campaign_map(r["payload_json"] for r in source_rows)
-    if conflicts:
-        # Colliding campaign labels are never used; verified_campaign_map drops
-        # all conflicting identities.
-        status = "VERIFIED_LABELS_WITH_CONFLICTS" if mapping else "NO_VERIFIED_TYPES"
+    del cutoff
+    limit = 200000
+    source_rows = list(target.execute(_CATALOG, {"limit": limit + 1}).mappings())
+    if len(source_rows) > limit:
+        return ({}, True), "SOURCE_SCOPE_TRUNCATED", len(source_rows)
+    classification = {
+        (str(r["advertiser_id"]), str(r["campaign_id"])): r["campaign_kind"]
+        for r in source_rows
+        if r["campaign_kind"] in ("auto", "manual") and not r["classification_conflict"]
+    }
+    conflicts = sum(bool(r["classification_conflict"]) for r in source_rows)
+    if not classification:
+        state = "NO_VERIFIED_TYPES"
+    elif conflicts:
+        state = "VERIFIED_LABELS_WITH_CONFLICTS"
     else:
-        status = "VERIFIED_LABELS" if mapping else "NO_VERIFIED_TYPES"
-    return (mapping, False), status, len(source_rows)
+        state = "VERIFIED_LABELS"
+    return (classification, False), state, len(source_rows)
 
 
 def publish_daily_ads(*, cutoff: date, apply: bool = True) -> dict:
@@ -110,7 +96,7 @@ def publish_daily_ads(*, cutoff: date, apply: bool = True) -> dict:
             # Initial SELECT opens an implicit Session transaction; close it
             # before using explicit one-batch-at-a-time write transactions.
             target.rollback()
-            catalog, catalog_state, catalog_rows = load_scoped_campaign_catalog(source, cutoff)
+            catalog, catalog_state, catalog_rows = load_scoped_campaign_catalog(target, cutoff)
             results["catalog_rows"] = catalog_rows
             results["catalog_verified_identities"] = len(catalog[0])
             for offset in range(0, len(keys), BATCH):

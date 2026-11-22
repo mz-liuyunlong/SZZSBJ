@@ -13,6 +13,8 @@ import argparse
 import json
 import logging
 import os
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -45,6 +47,47 @@ def permission_to_write() -> bool:
     return env == "production" and os.getenv(
         "SZZSBJ_PR337_UNIFIED_PRODUCTION_WRITE_APPROVED", ""
     ).strip().lower() in {"1", "yes", "true", "on"}
+
+
+_AUTHORIZED_MANUAL_IDENTITY: ContextVar[Key | None] = ContextVar(
+    "authorized_new_product_manual_identity", default=None
+)
+
+
+@contextmanager
+def authenticated_manual_publish(identity: Key):
+    """Temporary authorization for the existing authenticated score API."""
+    if len(identity) != 3 or not all(isinstance(v, str) and v.strip() for v in identity):
+        raise PermissionError("NP_MANUAL_TARGET_IDENTITY_MISMATCH")
+    token = _AUTHORIZED_MANUAL_IDENTITY.set(identity)
+    try:
+        yield
+    finally:
+        _AUTHORIZED_MANUAL_IDENTITY.reset(token)
+
+
+def manual_single_product_write_allowed(
+    *,
+    item_ids: set[str] | None,
+    limit: int,
+    auto_only: bool,
+    manual_identity: Key | None,
+) -> bool:
+    """Allow only the authenticated API's exact single-item production path.
+
+    The API must validate user score permission and account scope first.
+    Batch publication still requires the global production write gates.
+    """
+    return (
+        _AUTHORIZED_MANUAL_IDENTITY.get() == manual_identity
+        and os.getenv("APP_ENV", "").strip().lower() == "production"
+        and manual_identity is not None
+        and len(manual_identity) == 3
+        and all(isinstance(part, str) and bool(part.strip()) for part in manual_identity)
+        and item_ids == {manual_identity[2]}
+        and limit == 1
+        and auto_only is True
+    )
 
 
 def local_target_approved(database: str | None, host: str | None) -> bool:
@@ -161,6 +204,17 @@ def _reconcile_mart_evidence(
         is_proven_zero(d.get("order_count")) and is_proven_zero(d.get("sales_qty")) for d in days
     )
     no_rows_zero = not days and synchronized
+    # A verified first sale after day 14 means day-1..14 speed is zero.
+    # Later sales still contribute to cumulative trust and profit.
+    if synchronized and (zero_buckets or no_rows_zero) and isinstance(profit, dict):
+        first_paid = profit.get("first_order_date")
+        try:
+            first_paid_day = date.fromisoformat(str(first_paid)) if first_paid else None
+        except ValueError:
+            first_paid_day = None
+        if first_paid_day is not None and first_paid_day > first + timedelta(days=13):
+            f["effective_orders_14d"] = 0
+            f["first_order_day"] = None
     if ((zero_buckets and synchronized) or no_rows_zero) and isinstance(profit, dict):
         paid = profit.get("sales_units")
         if is_proven_zero(paid):
@@ -410,6 +464,29 @@ def _candidate_scores(
             f["ad_scoring_window_end_la"] = (
                 cutoff if isinstance(f.get("ad_scoring_window_start_la"), date) else None
             )
+            # Profit projection restores the actual lifetime first paid order.
+            # The *speed* dimension must still use day 1..14 only.
+            first_wfs = f.get("first_wfs_available_date_la")
+            paid_first_text = (
+                real_profit.get("first_order_date") if isinstance(real_profit, dict) else None
+            )
+            first14_days = source_snap.daily.get(key, [])
+            first14_verified_empty = all(
+                Decimal(str(row.get("order_count") or 0)) == 0
+                and Decimal(str(row.get("sales_qty") or 0)) == 0
+                for row in first14_days
+            )
+            if (
+                independent_ready
+                and isinstance(first_wfs, date)
+                and isinstance(paid_first_text, str)
+                and watermarks.get((key[0], key[1])) == cutoff
+                and first14_verified_empty
+                and date.fromisoformat(paid_first_text) > first_wfs + timedelta(days=13)
+            ):
+                f["first_order_day"] = None
+                f["effective_orders_14d"] = 0
+                f["zero_sales_verified"] = False
             ev = evaluate(f, config, version)
             results[key] = {"facts": f, "evaluation": ev, "rule_version": version}
             results[key].update(
@@ -718,6 +795,7 @@ def _save_one(
         "trust_scoring_window_start_la",
         "trust_scoring_window_end_la",
         "ad_clicks",
+        "ad_impressions",
         "ad_orders",
         "ad_revenue_usd",
         "market_score",
@@ -857,7 +935,15 @@ def publish_unified(
     Fail-closed if requested results are non-local or explicit permission missing.
     The operations/source session must be read-only; caller opens it accordingly.
     """
-    if apply and not permission_to_write():
+    if apply and not (
+        permission_to_write()
+        or manual_single_product_write_allowed(
+            item_ids=item_ids,
+            limit=limit,
+            auto_only=auto_only,
+            manual_identity=manual_identity,
+        )
+    ):
         raise PermissionError("PR337_UNIFIED_PUBLISH_NOT_AUTHORIZED")
     cutoff = cutoff or (datetime.now(LA).date() - timedelta(days=1))
     product_rows = _eligible_rows(
@@ -921,7 +1007,7 @@ def publish_unified(
     # Import inside the function: pr337_daily_pipeline imports _save_one from this module.
     from .pr337_daily_pipeline import load_scoped_campaign_catalog
 
-    catalog, catalog_state, catalog_rows = load_scoped_campaign_catalog(source, cutoff)
+    catalog, catalog_state, catalog_rows = load_scoped_campaign_catalog(target, cutoff)
     summary["catalog_state"] = catalog_state
     summary["catalog_rows"] = catalog_rows
     for at in range(0, len(keys), BATCH):
@@ -984,7 +1070,15 @@ def execute_unified_job(
         # No local-to-production tunnel exception, even with old opt-in flags.
         if not local_target_approved(engine.url.database, engine.url.host):
             raise PermissionError("PR337_WRITE_TARGET_NOT_LOCAL_DEV_OR_HYBRID")
-    if apply and not permission_to_write():
+    if apply and not (
+        permission_to_write()
+        or manual_single_product_write_allowed(
+            item_ids=item_ids,
+            limit=limit,
+            auto_only=auto_only,
+            manual_identity=manual_identity,
+        )
+    ):
         raise PermissionError("PR337_UNIFIED_PUBLISH_NOT_AUTHORIZED")
     gen = get_new_product_read_session()
     source = next(gen)

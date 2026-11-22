@@ -10,7 +10,11 @@ category?:string;developer?:string;operator?:string;overrides?:Partial<Record<"s
 backend?:{
   identity:{source_account_ref:string;store_id:string;item_id:string};
   scoreCorrection?:import("./newProductBusinessApi").ScoreCorrectionView|null;purchaseStatus?:string|null;
+  purchaseReviewReason?:string|null;
+  purchaseReviewedBy?:string|null;
+  purchaseReviewedAt?:string|null;
   marketVersion:number;ruleVersion:number;purchaseId?:string|null;purchaseVersion?:number;trackingVersion?:number;
+  evaluationDecision?:import("./newProductBusinessApi").NewProductListing["evaluation_decision"];
   evaluation:{total:string|null;grade:Grade|null;dimensions:Record<"market"|"speed"|"ad"|"profit"|"trust",string|null>;missing:string[]};
   suggestedQty:number|null;available:Record<string,boolean>;firstWfsDate:string|null;firstOrderDate?:string|null;
   systemRiskDisplay?:import("./newProductBusinessApi").SystemRiskDisplay|null;
@@ -82,11 +86,15 @@ export function grade(p:Product,c:Config):Grade|null{
   return g;
 }
 export function suggestion(p:Product,c:Config){
-  if(p.backend)return p.backend.suggestedQty??0;
   const g=grade(p,c);if(!g||g==="Pass"||g==="D")return 0;
+  if(p.backend && p.backend.suggestedQty!==null && p.backend.suggestedQty>0)
+    return p.backend.suggestedQty;
   const [lo,hi]=c.quantities?.[g]??bands[g];
   if(c.quantityStrategy==="min")return lo;
   if(c.quantityStrategy==="max")return hi;
+  if(p.backend)return Math.floor((lo+hi)/2);
   return Math.max(lo,Math.min(hi,Math.round((p.qty7/7*30)/10)*10));
 }
 export const percent=(n:number,d:number)=>d?(100*n/d).toFixed(1)+"%":"—";
+
+// NP_PURCHASE_REAPPLY_SELF_CONTAINED_V5

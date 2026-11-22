@@ -533,7 +533,7 @@ def build_operating_daily_same_source(
                 ("roi", "roi"),
                 ("gross_margin_pct", "gross_margin_pct"),
                 ("sales_amount_usd", "sales_amount_usd"),
-                ("ad_spend_usd", "ad_spend_usd"),
+                ("ad_total_spend_usd", "ad_spend_usd"),
             )
             # Some earlier snapshots omit certain fields. Compare only fully
             # available proof; never interpret missing fields as agreement.

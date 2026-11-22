@@ -96,6 +96,14 @@ class ApprovalDecisionWrite(StrictSchema):
     acknowledge_missing_applicant: bool = False
 
 
+class NewProductPurchaseDecisionWrite(StrictSchema):
+    decision: Literal["approved", "rejected"]
+    note: Annotated[str, StringConstraints(strip_whitespace=True, max_length=4000)] = ""
+    expected_version: int = Field(ge=1)
+    purchase_store_id: str | None = Field(default=None, min_length=1, max_length=128)
+    approved_qty: int | None = Field(default=None, ge=1, le=100000)
+
+
 class ApprovalSupplementWrite(StrictSchema):
     note: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=4000)]
     evidence: Annotated[str, StringConstraints(strip_whitespace=True, max_length=4000)] = ""
@@ -121,3 +129,6 @@ class BulkDecisionWrite(StrictSchema):
     approval_ids: list[str] = Field(min_length=1, max_length=20)
     expected_versions: dict[str, int]
     note: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=4000)]
+
+
+# SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1

@@ -161,9 +161,18 @@ export function demoColumnsForBusiness(
     const sourceText = (v: string | null | undefined) =>
       v === "system" ? "系统自动申请" : v === "operator" ? "运营主动申请" : "来源待确认";
     return [
+      // SZZSBJ_NP_PURCHASE_TABLE_IDENTITY_AMOUNT_V5
+      // Fixed 200px table column, SKU above product name. Tooltip exposes full text.
       col("product", "商品信息", 200, row => {
         const v = info(row);
-        return stacked(v.name ?? "商品待关联", v.sku ?? row.business_ref);
+        const sku = v.sku || "SKU 待关联";
+        const name = v.name || row.title || "商品待关联";
+        const clipped = {display:"block", width:"100%", minWidth:0,
+          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"} as const;
+        return <div style={{width:"100%", minWidth:0, maxWidth:"100%", overflow:"hidden"}}>
+          <Tooltip title={sku}><strong style={clipped}>{sku}</strong></Tooltip>
+          <Tooltip title={name}><small style={clipped}>{name}</small></Tooltip>
+        </div>;
       }),
       col("kindSource", "采购类型 / 申请来源", 175, row => {
         const v = info(row);

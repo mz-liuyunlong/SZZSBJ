@@ -96,7 +96,7 @@ function Heading({title,count}: {title:string;count:string}) {
     <b>{title}</b><small>{count}</small></div>;
 }
 
-export default function NewProductEvaluationData({product}: {product: Product}) {
+export default function NewProductEvaluationData({product,initialOperatingDaily}: {product: Product; initialOperatingDaily?: unknown}) {
   const [view,setView] = useState<View>("operations");
   const [adKind,setAdKind] = useState<AdKind>("total");
   const [compare,setCompare] = useState(false);
@@ -128,7 +128,7 @@ export default function NewProductEvaluationData({product}: {product: Product}) 
         <button type="button" className={view==="ads"?"active":""} aria-pressed={view==="ads"} onClick={()=>setView("ads")}>广告数据</button>
       </div>
     </header>
-    {view==="operations" ? <NewProductOperatingDaily product={product} /> : <div className="np-ed-main np-ed-advertising">
+    {view==="operations" ? <NewProductOperatingDaily product={product} initialOperatingDaily={initialOperatingDaily} /> : <div className="np-ed-main np-ed-advertising">
       <div className="np-ed-ad-toolbar">
         <div className="np-ed-ad-tabs" role="group" aria-label="广告类型">
           {([['total','广告总计'],['auto','自动广告'],['manual','手动广告']] as const).map(([key,label])=><button
@@ -167,3 +167,5 @@ export default function NewProductEvaluationData({product}: {product: Product}) 
     </div>}
   </section>;
 }
+
+// PURCHASE_DETAIL_SYNCHRONIZED_V1: optional approval-only warm data; ordinary product page unchanged.

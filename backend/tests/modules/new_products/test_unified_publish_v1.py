@@ -181,29 +181,6 @@ def test_unified_dry_run_scoped_advertiser_source_and_missing_types(monkeypatch)
             sql = str(statement)
             self.sql.append(sql)
             assert "payload_json::text" not in sql
-            if "FROM ods_api_raw_blobs" in sql:
-                assert "gov_raw_retention_policies" in sql
-                assert "lingxing-data-pages-walmart-advertiser-list-v1" in sql
-                assert "b.created_at >= :since" in sql
-                assert "b.payload_bytes BETWEEN 1 AND :max_payload_bytes" in sql
-                assert params["row_limit"] == 1501
-                if not self.has_labels:
-                    return Rows([])
-                return Rows(
-                    [
-                        {
-                            "payload_json": {
-                                "advertiserId": "31",
-                                "data": [
-                                    {
-                                        "campaignId": "101",
-                                        "campaignAndTargetingType": "sponsoredProducts+auto",
-                                    }
-                                ],
-                            }
-                        }
-                    ]
-                )
             if "JOIN fact_walmart_ad_item_sp_daily" in sql:
                 return Rows(
                     [
@@ -239,6 +216,24 @@ def test_unified_dry_run_scoped_advertiser_source_and_missing_types(monkeypatch)
             raise AssertionError(f"Unexpected SQL: {sql[:90]}")
 
     class Target:
+        def __init__(self, has_labels):
+            self.has_labels = has_labels
+
+        def execute(self, statement, params):
+            assert "biz_walmart_ad_campaign_catalog" in str(statement)
+            if not self.has_labels:
+                return Rows([])
+            return Rows(
+                [
+                    {
+                        "advertiser_id": "31",
+                        "campaign_id": "101",
+                        "campaign_kind": "auto",
+                        "classification_conflict": False,
+                    }
+                ]
+            )
+
         def scalars(self, statement):
             return SimpleNamespace(
                 all=lambda: [
@@ -276,7 +271,7 @@ def test_unified_dry_run_scoped_advertiser_source_and_missing_types(monkeypatch)
         source = Source(has_labels)
         summary = unified_publish.publish_unified(
             source,
-            Target(),
+            Target(has_labels),
             item_ids={key[2]},
             limit=1,
             cutoff=cutoff,
@@ -285,7 +280,7 @@ def test_unified_dry_run_scoped_advertiser_source_and_missing_types(monkeypatch)
         assert summary["dry_run"] is True
         assert summary["written"] == 0
         assert summary["catalog_rows"] == int(has_labels)
-        assert len(source.sql) == 3
+        assert len(source.sql) == 2
         sample = summary["samples"][0]
         assert sample["ad_total_spend_usd"] == "10"
         if has_labels:

@@ -9,6 +9,7 @@ type CorrectionDimension = "speed" | "ad" | "profit" | "trust";
 type Props = {
   dimension: CorrectionDimension;
   currentScore: number | null;
+  readOnly?: boolean;
   children: ReactNode;
   onSubmit: (requestedScore: number, reason: string) => Promise<CorrectionSubmission> | CorrectionSubmission;
 };
@@ -24,6 +25,7 @@ const dimensionTitle: Record<CorrectionDimension, string> = {
 export default function NewProductCorrectionPopover({
   dimension,
   currentScore,
+  readOnly=false,
   children,
   onSubmit,
 }: Props) {
@@ -34,6 +36,7 @@ export default function NewProductCorrectionPopover({
   const [error, setError] = useState("");
 
   const changeOpen = (next: boolean) => {
+    if(readOnly && next)return;
     if (next) {
       setRequested(currentScore === null ? "" : currentScore.toFixed(2));
       setReason("");
@@ -43,7 +46,7 @@ export default function NewProductCorrectionPopover({
   };
 
   const submit = async () => {
-    if (saving) return;
+    if (saving || readOnly) return;
     const value = requested.trim();
     // Only actual numbers 0..10, with at most two decimal places.
     const validNumber = /^(?:[0-9](?:\.\d{1,2})?|10(?:\.0{1,2})?)$/.test(value);
@@ -72,7 +75,7 @@ export default function NewProductCorrectionPopover({
     <Popover
       trigger="click"
       placement="topRight"
-      open={open}
+      open={readOnly ? false : open}
       onOpenChange={changeOpen}
       arrow
       autoAdjustOverflow

@@ -5,6 +5,7 @@ import {
 } from "./approvalDemoData";
 import { decideNewProductPurchase } from "./approvalApi";
 import DemoApprovalDrawer from "./components/DemoApprovalDrawer";
+import PurchaseApproveConfirmModal from "./components/PurchaseApproveConfirmModal";
 /** Enterprise approval workbench. Reuses shared table, search and column components. */
 import { Alert, Button, Card, Input, Modal, Popover, Segmented, Select, Space, Spin, Tooltip, message } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
@@ -40,8 +41,85 @@ import { parseFollowLog } from "./followLog";
 import { approvalBusinesses, approvalBusinessByKey, approvalBusinessLabel, type ApprovalBusinessKey } from "./approvalBusiness";
 import type { NavigationPage } from "@/config/navigation";
 import { hasPermission } from "@/shared/permissions/mockAccess";
+import { backendRequest } from "@/api/backendApi";
 import { demoColumnsForBusiness } from "./approvalDemoPresentation";
 import "./ApprovalWorkspacePage.css";
+
+// SZZSBJ_NP_PURCHASE_TABLE_IDENTITY_AMOUNT_V5
+// Same product-management purchase price used by purchase detail; field-level
+// cost permissions are enforced by the existing product-management API.
+// The product-management response exposes account identity within the already
+// authorized source scope. Join account + SKU, never SKU alone.
+type PurchaseCatalogItem = {
+  source_account_ref?: string | null;
+  sku: string | null;
+  owner_name?: string | null;
+  purchase_cost_cny?: number | string | null;
+};
+async function enrichVisiblePurchaseRows(items: ApprovalItem[]): Promise<ApprovalItem[]> {
+  const skus = Array.from(new Set(items
+    .filter(r => r.approval_type === "new_product_purchase")
+    .map(r => r.purchase_details?.sku?.trim())
+    .filter((v): v is string => Boolean(v))));
+  if (skus.length === 0) return items;
+
+  const catalogs: PurchaseCatalogItem[] = [];
+  // Batch read, never issue one request per approval row.
+  for (let i = 0; i < skus.length; i += 25) {
+    const batch = skus.slice(i, i + 25);
+    const search = new URLSearchParams({page: "1", page_size: "100"});
+    for (const sku of batch) search.append("sku_batch", sku);
+    const result = await backendRequest<{items: PurchaseCatalogItem[]}>(
+      `/api/product-management/skus?${search.toString()}`,
+    );
+    const fetched = result.data.items ?? [];
+    // A full page could conceal duplicate product rows; fail closed.
+    if (fetched.length >= 100) return items;
+    catalogs.push(...fetched);
+  }
+
+  const groups = new Map<string, PurchaseCatalogItem[]>();
+  for (const product of catalogs) {
+    const sku = product.sku?.trim();
+    const account = product.source_account_ref?.trim();
+    if (!sku || !account) continue;
+    const key = JSON.stringify([account, sku]);
+    groups.set(key, [...(groups.get(key) ?? []), product]);
+  }
+  const usableName = (value: string | null | undefined): boolean => {
+    if (typeof value !== "string") return false;
+    return Boolean(value.trim() && !["—", "未分配", "负责人待确认"].includes(value.trim()));
+  };
+
+  return items.map(row => {
+    const details = row.purchase_details;
+    if (row.approval_type !== "new_product_purchase" || !details?.sku) return row;
+    const found = groups.get(JSON.stringify([row.source_account_ref, details.sku.trim()]));
+    if (!found || found.length !== 1) return row;
+    const matched = found[0];
+    const owner = usableName(details.owner_name) ? details.owner_name
+      : (usableName(matched.owner_name) ? matched.owner_name : details.owner_name);
+
+    // Preserve a real authoritative amount if the bridge starts supplying one.
+    const existing = details.amount !== null && details.amount !== undefined && details.amount !== "";
+    const price = matched.purchase_cost_cny === null || matched.purchase_cost_cny === undefined ||
+      matched.purchase_cost_cny === "" ? null : Number(matched.purchase_cost_cny);
+    const qty = details.requested_qty;
+    const canEstimate = !existing && price !== null && Number.isFinite(price) && price >= 0 &&
+      typeof qty === "number" && Number.isSafeInteger(qty) && qty > 0;
+    const amount = canEstimate ? Number((price! * qty!).toFixed(2)) : details.amount;
+
+    return {
+      ...row,
+      purchase_details: {
+        ...details,
+        owner_name: owner ?? null,
+        amount,
+        currency_code: canEstimate ? "CNY" : details.currency_code,
+      },
+    };
+  });
+}
 
 const defaultFilters: ApprovalFilters = {
  tab: "pending", view: "mine", page: 1, page_size: 50,
@@ -128,6 +206,12 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
     if (!active) return;
     setLoadError(false);
     setRows(list.data.items);
+    // Enrich only the visible rows, preserving immediate table rendering.
+    void enrichVisiblePurchaseRows(list.data.items).then(enriched => {
+      if (active) setRows(enriched);
+    }).catch(() => {
+      // Permission denial or missing catalog must never block the approval list.
+    });
     setCount(list.meta.total);
    }).catch(() => {
     if (active) { setLoadError(true); setRows([]); setCount(0); void messageApi.error("审批数据加载失败"); }
@@ -260,7 +344,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
    applicant_id: { key:"applicant_id", render:(_,r) => <div className="approval-list__applicant"><span>{r.applicant_id || "申请人待核实"}</span></div> },
    submitted_at: { key:"submitted_at", render:(_,r) => <div className="approval-list__time"><span>{r.submitted_at ? new Date(r.submitted_at).toLocaleString("zh-CN", {month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"}</span></div> },
    status: { key:"status", render:(_,r) => <StatusTag label={statusNames[r.status]} semantic={statusTone[r.status]}/> },
-   action: { key:"action", render:(_,r) => <div className="approval-list__actions"><Button size="small" type="text" onClick={() => setSelected(r)}>详情 <ArrowRightOutlined/></Button>{filters.tab === "pending" && r.can_review && (r.approval_type === "clearance_request" ? r.can_review : r.approval_type === "wfs_case_abandon" ? hasPermission(permissions,"action:warehouse:wfs-fee-alert:archive-review") : hasPermission(permissions,"*")) && <><Button size="small" onClick={() => {
+   action: { key:"action", render:(_,r) => <div className="approval-list__actions"><Button size="small" type="text" onClick={() => setSelected(r)}>详情 <ArrowRightOutlined/></Button>{filters.tab === "pending" && r.can_review && (r.approval_type === "clearance_request" ? r.can_review : r.approval_type === "wfs_case_abandon" ? hasPermission(permissions,"action:warehouse:wfs-fee-alert:archive-review") : (hasPermission(permissions,"*") || hasPermission(permissions,"internal:approval:administrator"))) && <><Button size="small" onClick={() => {
           setDirectReviewAction("approved");
           setReviewOnly(true);
           setSelected(r);
@@ -379,16 +463,21 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
      // PR337_PURCHASE_DECISION_DETAIL_V3_PARENT: reuse existing mock confirmation modal.
      onAction={(item, action) => {
        if (item.approval_type !== "new_product_purchase" && (item.approval_type !== "purchase_exception" || !isDemoApproval(item))) return;
-       setSelected(undefined);
+       if (item.approval_type !== "new_product_purchase") setSelected(undefined);
        setDemoActionTarget(item);
        setDemoActionIntent(action);
        setDemoActionNote("");
        setDemoActionError(false);
      }}
    />
+  <PurchaseApproveConfirmModal
+    item={demoActionIntent === "approve" && demoActionTarget?.approval_type === "new_product_purchase" ? demoActionTarget : undefined}
+    onCancel={() => {setDemoActionTarget(undefined);setDemoActionIntent(undefined);}}
+    onSaved={() => {setSelected(undefined);setDemoActionTarget(undefined);setDemoActionIntent(undefined);reload();}}
+  />
  <Modal
     className="approval-workspace__clearance-action-modal"
-    open={Boolean(demoActionTarget && demoActionIntent)}
+    open={Boolean(demoActionTarget && demoActionIntent && !(demoActionIntent === "approve" && demoActionTarget.approval_type === "new_product_purchase"))}
     centered
     width={410}
     title={demoActionIntent === "approve" ? "审批通过" : "驳回申请"}
@@ -533,7 +622,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   <ApprovalDetailDrawer reviewOnly={reviewOnly} directReviewAction={directReviewAction}
    selected={selected && !isDemoApproval(selected) && selected.approval_type !== "clearance_request" && selected.approval_type !== "new_product_purchase" ? selected : undefined}
    canReview={hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-review")}
-   canAdmin={hasPermission(permissions, "*")}
+   canAdmin={hasPermission(permissions, "*") || hasPermission(permissions, "internal:approval:administrator")}
    canNewProductReview={hasPermission(permissions, "action:products:new-product-analysis:review")}
    canSupplement={hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-request")}
    canPurchaseSupplement={hasPermission(permissions, "action:pmc:purchase-board:override")}
@@ -542,3 +631,5 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   />
  </PageShell>;
 }
+
+// SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1
