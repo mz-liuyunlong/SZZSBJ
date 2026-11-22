@@ -10,11 +10,17 @@ from sqlalchemy.orm import Session
 
 from app.core.api import SuccessEnvelope, success_response
 from app.core.auth import Principal, require_principal
-from app.core.permissions import has_any_permission, has_permission, require_permission
+from app.core.permissions import (
+    has_any_permission,
+    has_permission,
+    is_approval_admin,
+    require_permission,
+)
 from app.db.session import get_db_session
 from app.modules.approvals.generic import GenericApprovalService
 from app.modules.approvals.schemas import (
     ApprovalDecisionWrite,
+    NewProductPurchaseDecisionWrite,
     ApprovalDetail,
     ApprovalListData,
     ApprovalMeta,
@@ -56,17 +62,17 @@ def list_approvals(
     accounts: account_scope,
 ):
     approved = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
-    np_reviewer = has_permission(principal, "action:products:new-product-analysis:review")
+    np_reviewer = True
     data, total = ApprovalService(session).list_requests(
         query,
         accounts,
         principal.user_id,
         approved or np_reviewer,
-        is_admin=has_permission(principal, "*"),
+        is_admin=is_approval_admin(principal),
         np_may_review=np_reviewer,
         wfs_may_review=approved,
     )
-    if np_reviewer and not approved and not has_permission(principal, "*"):
+    if np_reviewer and not approved and not is_approval_admin(principal):
         for item in data.items:
             if item.approval_type != "new_product_evaluation_review":
                 item.can_review = False
@@ -83,7 +89,7 @@ def summary(
 ):
     may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
     data = ApprovalService(session).summary(
-        accounts, principal.user_id, may_review, is_admin=has_permission(principal, "*")
+        accounts, principal.user_id, may_review, is_admin=is_approval_admin(principal)
     )
     return success_response(request, data=data, meta=None)
 
@@ -103,7 +109,9 @@ def legacy_detail(
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     return success_response(
         request,
-        data=ApprovalService(session).legacy_detail(case_id, accounts, principal.user_id),
+        data=ApprovalService(session).legacy_detail(
+            case_id, accounts, principal.user_id, allow_self=is_approval_admin(principal)
+        ),
         meta=None,
     )
 
@@ -136,7 +144,7 @@ def approve_bulk(
     principal: view_principal,
     accounts: account_scope,
 ):
-    if not has_permission(principal, "*"):
+    if not is_approval_admin(principal):
         from app.core.api import ApiError, ErrorCode
 
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
@@ -160,13 +168,13 @@ def get_approval(
     accounts: account_scope,
 ):
     may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
-    np_may_review = has_permission(principal, "action:products:new-product-analysis:review")
+    np_may_review = True
     data = ApprovalService(session).detail(
         approval_id,
         accounts,
         principal.user_id,
         may_review,
-        is_admin=has_permission(principal, "*"),
+        is_admin=is_approval_admin(principal),
         np_may_review=np_may_review,
     )
     return success_response(request, data=data, meta=None)
@@ -184,7 +192,9 @@ def review_current_wfs_case(
     principal: archive_review_principal,
     accounts: account_scope,
 ):
-    ApprovalService(session).review_pending_case(case_id, payload, accounts, principal.user_id)
+    ApprovalService(session).review_pending_case(
+        case_id, payload, accounts, principal.user_id, allow_self=is_approval_admin(principal)
+    )
     return success_response(request, data={"updated": True}, meta=None)
 
 
@@ -220,7 +230,7 @@ def decide(
     may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
     record = ApprovalService(session)._record(approval_id, accounts)
     if record["approval_type"] != "wfs_case_abandon":
-        if not has_permission(principal, "*"):
+        if not is_approval_admin(principal):
             from app.core.api import ApiError, ErrorCode
 
             raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
@@ -234,7 +244,8 @@ def decide(
         )
     else:
         ApprovalService(session).decide(
-            approval_id, payload, accounts, principal.user_id, may_review
+            approval_id, payload, accounts, principal.user_id, may_review,
+            allow_self=is_approval_admin(principal)
         )
     return success_response(request, data={"updated": True}, meta=None)
 
@@ -266,7 +277,7 @@ def supplement(
     if record["approval_type"] == "wfs_case_abandon":
         allowed = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-request")
     else:
-        allowed = has_permission(principal, "*") or (
+        allowed = is_approval_admin(principal) or (
             record["approval_type"] == "purchase_exception"
             and has_permission(principal, "action:pmc:purchase-board:override")
         )
@@ -291,11 +302,24 @@ def new_product_purchase_workbench_list(
 ):
     from app.modules.approvals.new_product_purchase_bridge import NewProductPurchaseBridge
 
-    can_review = has_permission(principal, "action:products:new-product-analysis:review")
-    can_review = can_review or has_permission(principal, "*")
-    data, meta = NewProductPurchaseBridge(session).list(
-        query, accounts, principal.user_id, can_review
+    can_review = (
+        is_approval_admin(principal)
+        or has_permission(
+            principal, "action:products:new-product-analysis:review"
+        )
     )
+    # An approval administrator sees all scoped pending purchase requests,
+    # including their own. Keep all other business/list filters unchanged.
+    purchase_query = (
+        query.model_copy(update={"view": "all"})
+        if is_approval_admin(principal) and query.view == "mine" else query
+    )
+    data, meta = NewProductPurchaseBridge(session).list(
+        purchase_query, accounts, principal.user_id, can_review
+    )
+    if is_approval_admin(principal):
+        for item in data.items:
+            item.can_review = item.status == "submitted"
     return success_response(request, data=data, meta=meta)
 
 
@@ -311,12 +335,79 @@ def new_product_purchase_workbench_detail(
 ):
     from app.modules.approvals.new_product_purchase_bridge import NewProductPurchaseBridge
 
-    can_review = has_permission(principal, "action:products:new-product-analysis:review")
-    can_review = can_review or has_permission(principal, "*")
+    can_review = (
+        is_approval_admin(principal)
+        or has_permission(
+            principal, "action:products:new-product-analysis:review"
+        )
+    )
     result = NewProductPurchaseBridge(session).detail(
         application_id, accounts, principal.user_id, can_review
     )
+    if is_approval_admin(principal):
+        result.can_review = result.status == "submitted"
     return success_response(request, data=result, meta=None)
+
+
+@router.get(
+    "/new-products/purchases/{application_id}/stores",
+    response_model=SuccessEnvelope[dict, None],
+)
+def new_product_purchase_store_options(
+    request: Request,
+    application_id: UUID,
+    session: db_session,
+    principal: view_principal,
+    accounts: account_scope,
+):
+    from sqlalchemy import or_, select
+    from app.core.api import ApiError, ErrorCode
+    from app.modules.data_pages.models import LingxingStoreDimension
+    from app.modules.new_products.models import PurchaseApplication
+
+    if not (
+        is_approval_admin(principal)
+        or has_permission(
+            principal, "action:products:new-product-analysis:review"
+        )
+    ):
+        raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+
+    application = session.scalar(
+        select(PurchaseApplication).where(
+            PurchaseApplication.id == application_id,
+            PurchaseApplication.source_account_ref.in_(accounts),
+        )
+    )
+    if application is None:
+        raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
+    if (
+        application.applicant_id == principal.user_id
+        and not is_approval_admin(principal)
+    ):
+        raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+    if application.status != "submitted":
+        raise ApiError(code="NP_PURCHASE_ALREADY_REVIEWED", status_code=409)
+
+    records = session.scalars(select(LingxingStoreDimension).where(
+        LingxingStoreDimension.source_account_ref == application.source_account_ref,
+        or_(
+            LingxingStoreDimension.platform_code == "walmart",
+            LingxingStoreDimension.platform_code_raw == "10008",
+        ),
+        LingxingStoreDimension.is_sync.is_(True),
+    ).order_by(LingxingStoreDimension.store_id)).all()
+    seen = set()
+    stores = []
+    for store in records:
+        if not store.store_id or store.store_id in seen:
+            continue
+        seen.add(store.store_id)
+        stores.append({"store_id":store.store_id,"store_name":store.store_name or store.store_id})
+    return success_response(request, data={
+        "source_store_id":application.store_id,
+        "stores":stores,
+    }, meta=None)
 
 
 @router.post(
@@ -326,16 +417,24 @@ def new_product_purchase_workbench_detail(
 def new_product_purchase_workbench_decision(
     request: Request,
     application_id: UUID,
-    payload: ApprovalDecisionWrite,
+    payload: NewProductPurchaseDecisionWrite,
     session: db_session,
     principal: Annotated[
-        Principal, Depends(require_permission("action:products:new-product-analysis:review"))
+        Principal, Depends(require_principal)
     ],
     accounts: account_scope,
 ):
     from app.core.api import ApiError, ErrorCode
     from app.modules.new_products.schemas import PurchaseDecision
     from app.modules.new_products.service import NewProductService
+
+    if not (
+        is_approval_admin(principal)
+        or has_permission(
+            principal, "action:products:new-product-analysis:review"
+        )
+    ):
+        raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
 
     if payload.decision not in ("approved", "rejected"):
         raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422)
@@ -347,7 +446,14 @@ def new_product_purchase_workbench_decision(
             decision=payload.decision,
             reason=payload.note,
             expected_version=payload.expected_version,
+            purchase_store_id=payload.purchase_store_id,
+            approved_qty=payload.approved_qty,
         ),
         principal.user_id,
+        allow_self=is_approval_admin(principal),
     )
     return success_response(request, data={"updated": True}, meta=None)
+
+# SZZSBJ_NP_PERMISSIONS_V3
+
+# SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1

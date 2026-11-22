@@ -20,10 +20,19 @@ def _fake_service():
     return SimpleNamespace(_listing=_listing, score=_score, db=_NoWrite())
 
 
-@pytest.mark.parametrize("method", ["save_market", "purchase"])
-def test_missing_wfs_day_blocks_write_before_touching_database(method):
+def test_missing_wfs_day_still_blocks_market_score():
     fake = _fake_service()
     body = SimpleNamespace(source_account_ref="a", store_id="s", item_id="123")
     with pytest.raises(Exception) as exc:
-        getattr(NewProductService, method)(fake, {"a"}, body, "actor")
+        NewProductService.save_market(fake, {"a"}, body, "actor")
     assert type(exc.value).__name__ == "ApiError"
+
+
+def test_missing_wfs_day_does_not_block_purchase():
+    fake = _fake_service()
+    fake._final_decisions = lambda _keys: {}
+    fake.db.rollback = lambda: None
+    body = SimpleNamespace(source_account_ref="a", store_id="s", item_id="123")
+    # Reaching the transaction lock proves the obsolete WFS gate is gone.
+    with pytest.raises(AssertionError, match="Missing WFS must reject before a database write"):
+        NewProductService.purchase(fake, {"a"}, body, "actor")

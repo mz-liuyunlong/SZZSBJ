@@ -116,6 +116,27 @@ class TrackingWrite(Identity):
     expected_version: int = Field(ge=0)
 
 
+class AssessmentWrite(Identity):
+    decision: Literal["passed", "failed"]
+    reason: str = Field(min_length=20, max_length=4000)
+
+    @field_validator("reason")
+    @classmethod
+    def validate_assessment_reason(cls, value: str) -> str:
+        trimmed = value.strip()
+        if len("".join(trimmed.split())) < 20:
+            raise ValueError("人工测评通过与不通过均须填写至少20个非空白字符")
+        return trimmed
+
+
+class AssessmentPurchaseWrite(AssessmentWrite):
+    # One write request, one business transaction. Purchase approval still follows.
+    decision: Literal["passed"]
+    requested_qty: int = Field(ge=1, le=100000)
+    purchase_reason: str = Field(default="", max_length=4000)
+    expected_rule_version: int = Field(ge=0)
+
+
 class PurchaseWrite(Identity):
     requested_qty: int = Field(ge=1, le=100000)
     reason: str = Field(default="", max_length=4000)
@@ -126,7 +147,11 @@ class PurchaseDecision(Strict):
     decision: Literal["approved", "rejected"]
     reason: str = Field(default="", max_length=4000)
     expected_version: int = Field(ge=1)
+    purchase_store_id: str | None = Field(default=None, min_length=1, max_length=128)
+    approved_qty: int | None = Field(default=None, ge=1, le=100000)
 
 
 class RulePreview(Identity):
     config: dict[str, Any]
+
+# SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1

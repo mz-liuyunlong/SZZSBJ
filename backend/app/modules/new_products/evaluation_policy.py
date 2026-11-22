@@ -50,10 +50,13 @@ def eligible(
 def evaluation_status(
     *, listing_date: Any, first_wfs: Any, coverage: dict | None, grade: Any, total: Any
 ) -> str:
-    if grade in PASS and total is not None:
-        return "测评通过"
-    if grade in FAIL and total is not None:
-        return "测评未通过"
+    if grade is not None and total is not None:
+        record = coverage.get("operator_assessment_v1") if isinstance(coverage, dict) else None
+        if isinstance(record, dict) and record.get("decision") == "passed":
+            return "测评通过"
+        if isinstance(record, dict) and record.get("decision") == "failed":
+            return "测评未通过"
+        return "待测评确认"
     if not (day(listing_date) or day(first_wfs)):
         return "待到货"
     coverage = coverage if isinstance(coverage, dict) else {}

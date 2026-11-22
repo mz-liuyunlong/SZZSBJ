@@ -26,7 +26,9 @@ describe('purchase approval decision detail V3', () => {
     expect(Number(total.toFixed(2))).toBe(p.scoreTotal);
   });
   it('keeps first-purchase and replenishment analysis independent', () => {
-    expect(drawerSource).toContain('FiveDimensions');
+    // SZZSBJ_NP_PURCHASE_TABLE_IDENTITY_AMOUNT_V5: assert the live five-dimension component.
+    expect(drawerSource).toContain('NewProductEvaluationData');
+    expect(drawerSource).toContain('product={evaluationProduct}');
     expect(drawerSource).toContain('ReplenishmentAnalysis');
     expect(drawerSource).toContain('DailySalesChart');
     expect(drawerSource).toContain("onAction?.(record, 'approve')");

@@ -712,9 +712,9 @@ def recheck_once(session: Session, accounts, approval_id: UUID, actor: str) -> d
     )
     if approval is None or approval["source_account_ref"] not in accounts:
         _error("NP_EVAL_APPROVAL_NOT_FOUND", 404, "申请不存在或没有数据权限")
-    if (
-        approval["status"] != "approved"
-        or approval["snapshot"].get("review_reason_type") == "special_exception"
+    if approval["status"] != "approved" or approval["snapshot"].get("review_reason_type") in (
+        "special_exception",
+        "manual_decision_change",
     ):
         _error("NP_EVAL_RECHECK_NOT_APPROVED", 409, "仅已批准纠错支持重新核算")
     snap = approval["snapshot"]
@@ -973,7 +973,16 @@ def calculation_status(session, accounts, account, store, item):
 
 
 def submit_review(
-    session: Session, accounts, account, store, item, actor, reason_type, reason, evidence
+    session: Session,
+    accounts,
+    account,
+    store,
+    item,
+    actor,
+    reason_type,
+    reason,
+    evidence,
+    new_decision=None,
 ):
     if account not in accounts:
         _error("NP_EVAL_NO_SCOPE", 404, "无权提交当前商品")
@@ -986,13 +995,30 @@ def submit_review(
     perf = _performance(session, reg, lock=True)
     if _protected(session, reg):
         _error("NP_EVAL_REVIEW_DOWNSTREAM_LOCK", 409, "已有后续业务记录，测评复核不可更改其历史")
-    if not perf or perf.grade not in ("D", "Pass") or perf.score is None:
-        _error("NP_EVAL_NOT_FAILED", 409, "只有已形成真实D/Pass评级的商品可申请复核")
+    if not perf or perf.grade is None or perf.score is None:
+        _error("NP_EVAL_NOT_SCORED", 409, "尚无正式评分")
     coverage = perf.data_coverage_json if isinstance(perf.data_coverage_json, dict) else {}
-    if coverage.get("evaluation_manual_exception"):
+    manual_change = reason_type == "manual_decision_change"
+    prior_verdict = coverage.get("operator_assessment_v1")
+    if manual_change:
+        if not isinstance(prior_verdict, dict):
+            _error("NP_ASSESSMENT_NOT_CONFIRMED", 409, "请先完成初次人工确认")
+        if new_decision not in ("passed", "failed") or new_decision == prior_verdict.get(
+            "decision"
+        ):
+            _error("NP_ASSESSMENT_REVIEW_CHOICE", 422, "变更结论须与原结论不同")
+        if len("".join(reason.split())) < 20:
+            _error("NP_ASSESSMENT_REVIEW_REASON", 422, "结论复核依据不少于20字")
+    elif perf.grade not in ("D", "Pass"):
+        _error("NP_EVAL_NOT_FAILED", 409, "此评分复核仅适用于D/Pass评级")
+    if not manual_change and coverage.get("evaluation_manual_exception"):
         _error("NP_EVAL_EXCEPTION_ALREADY_GRANTED", 409, "当前商品已有批准的人工特批")
     recheck = coverage.get("evaluation_recheck_required")
-    if isinstance(recheck, dict) and recheck.get("status") == "awaiting_verified_source_correction":
+    if (
+        not manual_change
+        and isinstance(recheck, dict)
+        and recheck.get("status") == "awaiting_verified_source_correction"
+    ):
         _error("NP_EVAL_RECHECK_ALREADY_APPROVED", 409, "已批准纠错等待重算，不能重复申请")
     pending = session.scalar(
         text("""
@@ -1032,6 +1058,10 @@ def submit_review(
         "rule_version_id": str(perf.rule_version_id) if perf.rule_version_id else None,
         "calculated_at": perf.calculated_at.isoformat() if perf.calculated_at else None,
         "review_reason_type": reason_type,
+        "operator_decision_before": dict(prior_verdict)
+        if isinstance(prior_verdict, dict)
+        else None,
+        "operator_decision_requested": new_decision if manual_change else None,
         "proof_hash": _sha(perf.data_coverage_json or {}),
         "approval_policy": {"required_steps": 1},
     }
@@ -1090,7 +1120,9 @@ def submit_review(
     return {"application_id": approval_id, "status": "submitted", "version": 1}
 
 
-def decide_review(session: Session, accounts, approval_id: UUID, actor, decision, reason, version):
+def decide_review(
+    session: Session, accounts, approval_id: UUID, actor, decision, reason, version, *, allow_self=False
+):
     if decision not in ("approved", "rejected"):
         _error("NP_EVAL_DECISION_INVALID", 422, "不支持的审批操作")
     if len(reason.strip()) < 5:
@@ -1109,7 +1141,7 @@ def decide_review(session: Session, accounts, approval_id: UUID, actor, decision
         _error("NP_EVAL_REVIEW_NOT_FOUND", 404, "找不到可访问的测评复核申请")
     if row["status"] != "submitted" or row["version"] != version:
         _error("NP_EVAL_REVIEW_CONFLICT", 409, "申请状态已变化，请刷新")
-    if row["applicant_id"] == actor:
+    if row["applicant_id"] == actor and not allow_self:
         _error("NP_EVAL_SELF_REVIEW", 403, "不能审批自己提交的申请")
     snap = row["snapshot"]
     reg = session.scalar(
@@ -1169,7 +1201,41 @@ def decide_review(session: Session, accounts, approval_id: UUID, actor, decision
     )
     coverage = dict(perf.data_coverage_json or {})
     if decision == "approved":
-        if snap["review_reason_type"] == "special_exception":
+        if snap["review_reason_type"] == "manual_decision_change":
+            old = coverage.get("operator_assessment_v1")
+            prior = snap.get("operator_decision_before")
+            if not isinstance(old, dict) or old != prior:
+                _error("NP_ASSESSMENT_REVIEW_STALE", 409, "历史人工结论已变化")
+            changed = dict(old)
+            changed.update(
+                {
+                    "decision": snap["operator_decision_requested"],
+                    "reason": row["reason"],
+                    "actor_id": row["applicant_id"],
+                    "confirmed_at": now.isoformat(),
+                    "approved_by": actor,
+                    "approval_id": str(approval_id),
+                    "revision": int(old.get("revision", 1)) + 1,
+                }
+            )
+            coverage["operator_assessment_history_v1"] = [
+                *coverage.get("operator_assessment_history_v1", []),
+                dict(old),
+            ]
+            coverage["operator_assessment_v1"] = changed
+            session.add(
+                ActionEvent(
+                    id=uuid4(),
+                    source_account_ref=reg.source_account_ref,
+                    store_id=reg.store_id,
+                    item_id=reg.item_id,
+                    event_type="operator_assessment_review_approved",
+                    actor_id=actor,
+                    payload_json={"before": old, "after": changed, "approval_id": str(approval_id)},
+                    created_at=now,
+                )
+            )
+        elif snap["review_reason_type"] == "special_exception":
             # Business exception is not a change to the original D/Pass grade.
             coverage["evaluation_manual_exception"] = {
                 "approval_id": str(approval_id),
@@ -1212,7 +1278,9 @@ def decide_review(session: Session, accounts, approval_id: UUID, actor, decision
         "id": str(approval_id),
         "status": decision,
         "version": version + 1,
-        "outcome": "manual_exception"
+        "outcome": "manual_decision_changed"
+        if decision == "approved" and snap["review_reason_type"] == "manual_decision_change"
+        else "manual_exception"
         if decision == "approved" and snap["review_reason_type"] == "special_exception"
         else "needs_source_recheck"
         if decision == "approved"
@@ -1255,12 +1323,15 @@ def decorate_page(session: Session, data: dict) -> dict:
              p.sold_out_evidence_status,p.score,p.grade,
              jsonb_strip_nulls(jsonb_build_object(
                'evaluation_final_snapshot',p.data_coverage_json->'evaluation_final_snapshot',
+               'operator_assessment_v1',p.data_coverage_json->'operator_assessment_v1',
                'evaluation_manual_exception',p.data_coverage_json->'evaluation_manual_exception',
                'evaluation_recheck_required',p.data_coverage_json->'evaluation_recheck_required',
                'evaluation_formal_trigger',p.data_coverage_json->'evaluation_formal_trigger',
                'auto_dimension_scores',p.data_coverage_json->'auto_dimension_scores'
              )) AS data_coverage_json,
              r.listing_date_la,
+             p.data_coverage_json #>> '{evaluation_operating_archive_v1,suggested_qty}'
+              AS frozen_suggested_qty,
              (SELECT a.status FROM app_approval_requests a
                WHERE a.approval_type=:kind AND a.business_ref=r.id::text
                ORDER BY a.submitted_at DESC,a.id DESC LIMIT 1) AS review_status,
@@ -1305,6 +1376,12 @@ def decorate_page(session: Session, data: dict) -> dict:
             total=r["score"],
         )
         entry["evaluation_status"] = status
+        verdict = coverage.get("operator_assessment_v1")
+        entry["evaluation_decision"] = verdict if isinstance(verdict, dict) else None
+        # Read only a scalar recommendation, never copy the full daily archive
+        # into a 200-item list response.
+        if r.get("frozen_suggested_qty") is not None:
+            entry["suggested_qty"] = int(r["frozen_suggested_qty"])
         # In hybrid local mode the list may read source evidence through a
         # separate read session. The local, audited final evaluation is the
         # authority for evaluation-only columns; never promote a provisional
@@ -1334,6 +1411,17 @@ def decorate_page(session: Session, data: dict) -> dict:
         facts["sold_out_evidence_status"] = r["sold_out_evidence_status"]
         facts["first_batch_sold_out_date_la"] = (
             str(r["first_batch_sold_out_date_la"]) if r["first_batch_sold_out_date_la"] else None
+        )
+        # NP_VERIFIED_LISTING_END_V2
+        final = coverage.get("evaluation_final_snapshot")
+        facts["evaluation_grade_published_at"] = (
+            final.get("published_at")
+            if isinstance(final, dict)
+            and final.get("grade") == r["grade"]
+            and r["grade"] is not None
+            and r["score"] is not None
+            and isinstance(final.get("published_at"), str)
+            else None
         )
         formal = coverage.get("evaluation_formal_trigger")
         facts["evaluation_trigger_source"] = (

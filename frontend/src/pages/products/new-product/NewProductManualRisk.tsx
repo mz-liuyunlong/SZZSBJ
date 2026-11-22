@@ -1,4 +1,5 @@
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
+import {getCachedNewProductDetail, type Identity} from './newProductBusinessApi';
 import type {RiskConditionRule} from './NewProductRulesModel';
 import type {SystemRiskDisplay} from './newProductBusinessApi';
 import './newProductManualRisk.css';
@@ -29,16 +30,61 @@ const riskItems:Item[] = [
 interface Props {
   onChange:(selected:ManualRiskCode[])=>void;
   disabled?:boolean;
+  readOnly?:boolean;
+  identity?:Identity;
+  marketVersion?:number;
   systemRiskRules:RiskConditionRule[];
   systemRiskDisplay?:SystemRiskDisplay|null;
   riskVersion:number;
   riskLoaded:boolean;
 }
 export default function NewProductManualRisk({
-  onChange,disabled=false,systemRiskRules,systemRiskDisplay,riskVersion,riskLoaded
+  onChange,disabled=false,readOnly=false,identity,marketVersion=0,systemRiskRules,systemRiskDisplay,riskVersion,riskLoaded
 }:Props){
   const [selected,setSelected]=useState<ManualRiskCode[]>([]);
   const [hover,setHover]=useState<string|null>(null);
+  const [savedRisk,setSavedRisk]=useState<{
+    key:string; values:ManualRiskCode[]|null
+  }|null>(null);
+  const scopeKey=JSON.stringify([
+    identity?.source_account_ref,
+    identity?.store_id,
+    identity?.item_id,
+    marketVersion
+  ]);
+  useEffect(()=>{
+    if(!readOnly || !identity || !marketVersion)return;
+    let active=true;
+    getCachedNewProductDetail(identity).then(data=>{
+      const events=Array.isArray(data.events)?data.events:[];
+      const event=events.find(e=>{
+        if(!e || typeof e!=="object")return false;
+        const row=e as Record<string,unknown>;
+        const payload=row.payload;
+        return row.type==="market_score" &&
+          payload!==null && typeof payload==="object" &&
+          (payload as Record<string,unknown>).version===marketVersion;
+      }) as Record<string,unknown>|undefined;
+      const payload=event?.payload as Record<string,unknown>|undefined;
+      const archived=data.evaluation_archived_risks;
+      const raw=Array.isArray(archived) ? archived : payload?.risk_conditions;
+      const allowed=new Set<string>(riskItems.map(x=>x.id));
+      const valid=Array.isArray(raw) && raw.length>0 &&
+        raw.every(x=>typeof x==="string" && allowed.has(x)) &&
+        new Set(raw).size===raw.length &&
+        (!raw.includes("无") || raw.length===1);
+      if(active)setSavedRisk({
+        key:scopeKey,
+        values:valid?raw as ManualRiskCode[]:null
+      });
+    }).catch(()=>{
+      if(active)setSavedRisk({key:scopeKey,values:null});
+    });
+    return ()=>{active=false};
+  },[readOnly,scopeKey]);
+  const displaySelected=readOnly
+    ? (savedRisk?.key===scopeKey?savedRisk.values??[]:[])
+    : selected;
   const systemItems=systemRiskRules
     .filter(x=>x.source==="system")
     .map(x=>{
@@ -66,11 +112,11 @@ export default function NewProductManualRisk({
       return {id:x.code,label:x.name,severe:true,basis:`${state}：${basis}${cutoff}`,
         result,hit};
     });
-  const focusId=hover??systemItems.find(x=>x.hit)?.id??selected[selected.length-1];
+  const focusId=hover??systemItems.find(x=>x.hit)?.id??displaySelected[displaySelected.length-1];
   const active=[...riskItems,...systemItems]
     .find(x=>x.id===focusId);
   const choose=(id:ManualRiskCode)=>{
-    if(disabled)return;
+    if(disabled || readOnly)return;
     let next:ManualRiskCode[];
     if(id==='无')next=selected.length===1 && selected[0]==='无'?[]:['无'];
     else if(selected.includes(id))next=selected.filter(x=>x!==id);
@@ -85,13 +131,13 @@ export default function NewProductManualRisk({
     </header>
     <div className="np-manual-risk-grid" role="group" aria-label="人工风险条件（必填）">
       {riskItems.map(x=><button type="button" key={x.id}
-        role="checkbox" aria-checked={selected.includes(x.id)}
+        role="checkbox" aria-checked={displaySelected.includes(x.id)}
         aria-label={x.label+(x.id.startsWith('ROI低')?'：'+x.result:'')}
         disabled={disabled}
-        className={'np-manual-risk-choice'+(selected.includes(x.id)?' checked':'')}
+        className={'np-manual-risk-choice'+(displaySelected.includes(x.id)?' checked':'')}
         onClick={()=>choose(x.id)} onMouseEnter={()=>setHover(x.id)}
         onMouseLeave={()=>setHover(null)} onFocus={()=>setHover(x.id)} onBlur={()=>setHover(null)}>
-        <span className="np-manual-risk-checkbox" aria-hidden="true">{selected.includes(x.id)?'✓':''}</span>
+        <span className="np-manual-risk-checkbox" aria-hidden="true">{displaySelected.includes(x.id)?'✓':''}</span>
         <span className="np-manual-risk-name">{x.label}</span>
         {x.id!=='无'&&<i className={x.severe?'severe':'normal'} aria-hidden="true"/>}
       </button>)}
@@ -116,7 +162,7 @@ export default function NewProductManualRisk({
     <div className="np-manual-risk-description" aria-live="polite">
       {active? <><b className={active.severe?'severe':''}>{active.label}</b>
         <span>{active.basis}</span><strong>{active.result}</strong></>
-       : <span className="np-manual-risk-help">将鼠标移至上方风险条件，查看对应的判断依据及处理结果。</span>}
+       : <span className="np-manual-risk-help">{readOnly && savedRisk?.key===scopeKey && savedRisk.values===null ? "历史风险选择未核实，请检查保存记录。" : "将鼠标移至上方风险条件，查看对应的判断依据及处理结果。"}</span>}
     </div>
   </section>;
 }

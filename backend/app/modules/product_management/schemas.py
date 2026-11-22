@@ -253,6 +253,8 @@ class SourceTagRead(StrictSchema):
 
 
 class ProductManagementListItem(StrictSchema):
+    # SZZSBJ_NP_PURCHASE_TABLE_IDENTITY_AMOUNT_V5: account-scoped identity
+    source_account_ref: str | None = None
     sku_id: UUID
     sku: str | None
     product_name: str | None

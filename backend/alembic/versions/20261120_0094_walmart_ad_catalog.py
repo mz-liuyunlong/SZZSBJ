@@ -9,8 +9,9 @@ Existing FACT spend remains authoritative. No backfill or data mutation in DDL.
 from __future__ import annotations
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+
+from alembic import op
 
 revision = "20261120_0094_walmart_ad_catalog"
 down_revision = "20261119_0093_np_market_competitors"

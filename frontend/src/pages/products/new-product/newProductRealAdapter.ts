@@ -2,15 +2,17 @@
  * Numeric compatibility fields are not evidence of valid observations. All
  * business scoring, grade and purchase recommendation come from `evaluation`.
  */
-import type { Product } from './nativeData';
+import type { Product, Grade } from './nativeData';
 import { resolveNewProductFlow, resolveNewProductEvaluationFlow } from './newProductFlowState';
 import type { NewProductListing, Identity, RealScore, SystemRiskDisplay } from './newProductBusinessApi';
 import { confirmedScoringDefaults, speedResult, type ScoringFacts } from './NewProductConfirmedScoring';
 
 export type PersistedProduct = Product & {
+  initialGrade?:Grade;
   backend: {
     identity: Identity;
     marketVersion: number;
+    evaluationDecision?: NewProductListing["evaluation_decision"];
     scoreCorrection?:import("./newProductBusinessApi").ScoreCorrectionView|null;
     ruleVersion: number;
     evaluation: RealScore;
@@ -148,11 +150,12 @@ export function toPersistedProduct(row: NewProductListing): PersistedProduct {
   const acos = finite(f.acos_pct); // saved authoritative ACOS only; no inferred attribution
   const awaitingCalculation = evaluation.observation_state === 'not_calculated';
   const state = resolveNewProductFlow(row, evaluation);
-  const tracking = frozen
+  const tracking = row.tracking_page_decision ?? (frozen
     ? (row.tracking_final_result || row.tracking_decision || '未判定')
-    : awaitingCalculation ? '未判定' : (row.tracking_decision ?? (day ? '未判定' : '等待开售'));
+    : awaitingCalculation ? '未判定' : (row.tracking_decision ?? (day ? '未判定' : '等待开售')));
   return {
     id:`${identity.source_account_ref}::${identity.store_id}::${identity.item_id}`,
+    initialGrade: row.tracking_initial_grade === "待评分" ? undefined : row.tracking_initial_grade ?? undefined,
     sku:listing.local_sku || '—',
     name:listing.local_name || listing.title || '品名待同步',
     item:listing.item_id,
@@ -180,8 +183,11 @@ export function toPersistedProduct(row: NewProductListing): PersistedProduct {
     developer:listing.product_developer_name || undefined,
     operator:listing.owner_name || undefined,
     imageUrl:listing.picture_url,msku:listing.msku,storeName:listing.store_name,
-    backend:{identity,scoreCorrection:row.score_correction??null,purchaseStatus:row.purchase_status??null,systemRiskDisplay:row.system_risk_display ?? null,
-      marketVersion:row.market_version??0,ruleVersion:row.evaluation.rule_version,
+    backend:{identity,scoreCorrection:row.score_correction??null,purchaseStatus:row.purchase_status??null,
+      purchaseReviewReason:row.purchase_review_reason??null,
+      purchaseReviewedBy:row.purchase_reviewed_by??null,
+      purchaseReviewedAt:row.purchase_reviewed_at??null,systemRiskDisplay:row.system_risk_display ?? null,
+      marketVersion:row.market_version??0,evaluationDecision:row.evaluation_decision??null,ruleVersion:row.evaluation.rule_version,
       purchaseId:row.purchase_id??null,purchaseVersion:row.purchase_version??0,trackingVersion:row.tracking_version??0,
       evaluation,reviewApplication:row.tracking_review_application ?? null,scoringFacts:{...f},suggestedQty:row.suggested_qty ?? null,firstWfsDate:day || null,
       automaticWeightedPoints:finite(f.automatic_weighted_points),
@@ -193,3 +199,5 @@ export function toPersistedProduct(row: NewProductListing): PersistedProduct {
         spend:spend!==null,inventory:inventory!==null,price:price!==null,clicks:clicks!==null,acos:acos!==null}},
   };
 }
+
+// NP_PURCHASE_REAPPLY_SELF_CONTAINED_V5

@@ -34,11 +34,18 @@ export function hasPermission(
   );
 }
 
+// SZZSBJ_NP_PERMISSIONS_V3
+function isOpenNewProductPage(page: NavigationPage) {
+  return page.key === "products_new_product_analysis"
+    || page.key === "products_launch_tracking";
+}
+
 export function isMockPageVisibleForRole(
   _role: MockUserRole,
   page: NavigationPage,
   permissions?: readonly string[],
 ) {
+  if (isOpenNewProductPage(page)) return isMockImplementedPage(page);
   if (page.status === "disabled" && page.showWhenDisabled) {
     return hasPermission(permissions, getPagePermissionKey(page));
   }
@@ -51,6 +58,7 @@ export function isMockPageAccessibleForRole(
   page: NavigationPage,
   permissions?: readonly string[],
 ) {
+  if (isOpenNewProductPage(page)) return isMockImplementedPage(page);
   if (page.status === "disabled" || page.status === "hidden") return false;
   return isMockImplementedPage(page) && hasPermission(permissions, getPagePermissionKey(page));
 }

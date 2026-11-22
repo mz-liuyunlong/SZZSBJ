@@ -11,8 +11,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.api import SuccessEnvelope, success_response
-from app.core.auth import Principal
-from app.core.permissions import require_any_permission, require_permission
+from app.core.auth import Principal, require_principal
 from app.db.session import get_db_session
 
 from .evaluation_schemas import (
@@ -22,6 +21,8 @@ from .evaluation_schemas import (
 )
 from .read_source import get_new_product_read_session, require_new_product_scope
 from .schemas import (
+    AssessmentPurchaseWrite,
+    AssessmentWrite,
     ListingQuery,
     MarketWrite,
     PurchaseDecision,
@@ -32,35 +33,19 @@ from .schemas import (
     TrackingWrite,
 )
 from .service import NewProductService
+from app.core.permissions import is_approval_admin
 
 router = APIRouter(prefix="/api/new-products", tags=["New Product Performance"])
 DB = Annotated[Session, Depends(get_db_session)]
 Source = Annotated[Session, Depends(get_new_product_read_session)]
 Scope = Annotated[frozenset[str], Depends(require_new_product_scope)]
-Read = Annotated[
-    Principal,
-    Depends(
-        require_any_permission(
-            "page:products:new-product-analysis:view",
-            "page:products:launch-tracking:view",
-        )
-    ),
-]
-Configure = Annotated[
-    Principal, Depends(require_permission("action:products:new-product-analysis:configure"))
-]
-Score = Annotated[
-    Principal, Depends(require_permission("action:products:new-product-analysis:score"))
-]
-PurchaseRequester = Annotated[
-    Principal, Depends(require_permission("action:products:new-product-analysis:request"))
-]
-Review = Annotated[
-    Principal, Depends(require_permission("action:products:new-product-analysis:review"))
-]
-Tracking = Annotated[
-    Principal, Depends(require_permission("action:products:new-product-analysis:tracking"))
-]
+Authenticated = Annotated[Principal, Depends(require_principal)]
+Read = Authenticated
+Configure = Authenticated
+Score = Authenticated
+PurchaseRequester = Authenticated
+Review = Authenticated
+Tracking = Authenticated
 
 
 @router.get("/summary", response_model=SuccessEnvelope[dict, dict])
@@ -101,6 +86,69 @@ def new_product_board_summary(
         remind_days=remind_days,
     )
     return success_response(request, data=data, meta={"source": "saved_board_projection"})
+
+
+
+# Tracking is intentionally split into two independent, read-only requests.
+# No shared full-Listing page loop is used for either view.
+@router.get("/tracking/board/summary", response_model=SuccessEnvelope[dict, dict])
+def tracking_board_summary(
+    request: Request,
+    start_date: date,
+    end_date: date,
+    db: DB,
+    _: Read,
+    accounts: Scope,
+    source: Source,
+):
+    from .tracking_read import board_summary
+
+    result = board_summary(source, db, accounts, start_date, end_date)
+    return success_response(request, data=result, meta={"source": "saved_tracking_projection"})
+
+
+@router.get("/tracking/listings", response_model=SuccessEnvelope[dict, dict])
+def tracking_listings(
+    request: Request,
+    db: DB,
+    _: Read,
+    accounts: Scope,
+    source: Source,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=20, le=50)] = 50,
+    keyword: str = "",
+    owners: str = "",
+    grades: str = "",
+    outcome: str = "all",
+    period: Annotated[int, Query()] = 30,
+    drill_kind: str = "",
+    drill_value: str = "",
+    parent_category: str = "",
+    start_date: date | None = Query(None, alias="from"),
+    end_date: date | None = Query(None, alias="to"),
+):
+    from app.core.api import ApiError
+
+    from .tracking_read import detail_list
+
+    if period not in (30, 60, 180):
+        raise ApiError(
+            code="NP_TRACKING_PERIOD_INVALID",
+            status_code=422,
+            message="数据周期仅支持30、60、180天",
+        )
+
+    data = detail_list(
+        source, db, accounts,
+        page=page, page_size=page_size, keyword=keyword, owners=owners,
+        grades=grades, outcome=outcome, drill_kind=drill_kind,
+        drill_value=drill_value, parent_category=parent_category,
+        start_date=start_date, end_date=end_date,
+    )
+    return success_response(
+        request, data=data,
+        meta={"source": "saved_tracking_page", "period": period},
+    )
 
 
 @router.get("/listings", response_model=SuccessEnvelope[dict, dict])
@@ -268,6 +316,45 @@ def market_score(
     )
 
 
+@router.post("/evaluations/manual-decision", response_model=SuccessEnvelope[dict, dict])
+def save_manual_evaluation_decision(
+    request: Request,
+    payload: AssessmentWrite,
+    db: DB,
+    principal: Score,
+    accounts: Scope,
+    source: Source,
+):
+    return success_response(
+        request,
+        data=NewProductService(db, read_session=source).save_manual_assessment(
+            accounts, payload, principal.user_id
+        ),
+        meta={"source": "database"},
+    )
+
+
+@router.post("/evaluations/confirm-and-purchase", response_model=SuccessEnvelope[dict, dict])
+def confirm_evaluation_and_request_purchase(
+    request: Request,
+    payload: AssessmentPurchaseWrite,
+    db: DB,
+    principal: Score,
+    purchase_authority: PurchaseRequester,
+    accounts: Scope,
+    source: Source,
+):
+    # Both Score and PurchaseRequester permissions are checked by FastAPI.
+    del purchase_authority
+    return success_response(
+        request,
+        data=NewProductService(db, read_session=source).save_assessment_and_purchase(
+            accounts, payload, principal.user_id
+        ),
+        meta={"source": "database"},
+    )
+
+
 # NP_OPERATOR_SCORE_CORRECTION_V1_20261119: same score permission, separate from approval.
 @router.put("/score-corrections", response_model=SuccessEnvelope[dict, dict])
 def save_operator_score_correction(
@@ -376,7 +463,8 @@ def decide_purchase(
     return success_response(
         request,
         data=NewProductService(db, read_session=source).decide_purchase(
-            accounts, application_id, payload, principal.user_id
+            accounts, application_id, payload, principal.user_id,
+            allow_self=is_approval_admin(principal),
         ),
         meta={"source": "database"},
     )
@@ -434,12 +522,15 @@ def evaluate_manually(
     source: Source,
 ):
     from .evaluation_workflow import calculate_once
+    from .unified_publish import authenticated_manual_publish
 
     a, s, i = payload.source_account_ref, payload.store_id, payload.item_id
     listing = NewProductService(db, read_session=source)._listing(accounts, a, s, i)
+    with authenticated_manual_publish((a, s, i)):
+        result = calculate_once(db, a, s, i, principal.user_id, listing)
     return success_response(
         request,
-        data=calculate_once(db, a, s, i, principal.user_id, listing),
+        data=result,
         meta={"source": "database"},
     )
 
@@ -492,6 +583,7 @@ def apply_evaluation_review(
             payload.reason_type,
             payload.reason,
             payload.evidence,
+            payload.new_decision,
         ),
         meta={"source": "database"},
     )
@@ -520,6 +612,7 @@ def decide_evaluation_review(
             payload.decision,
             payload.reason,
             payload.expected_version,
+            allow_self=is_approval_admin(principal),
         ),
         meta={"source": "database"},
     )
@@ -538,3 +631,5 @@ def recheck_evaluation_review(
         data=recheck_once(db, accounts, application_id, principal.user_id),
         meta={"source": "database"},
     )
+
+# SZZSBJ_NP_PERMISSIONS_V3

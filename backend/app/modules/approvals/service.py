@@ -252,7 +252,9 @@ class ApprovalService:
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
         return dict(row)
 
-    def _as_item(self, r: dict, actor: str, may_review: bool) -> ApprovalItem:
+    def _as_item(
+        self, r: dict, actor: str, may_review: bool, allow_self: bool = False
+    ) -> ApprovalItem:
         snapshot = r["snapshot"] if isinstance(r["snapshot"], dict) else {}
         return ApprovalItem(
             id=str(r["id"]),
@@ -273,7 +275,11 @@ class ApprovalService:
             reviewed_by=r["reviewed_by"],
             reason=r["reason"],
             follow_log=r.get("follow_log"),
-            can_review=(may_review and r["status"] == "submitted" and r["applicant_id"] != actor),
+            can_review=(
+                may_review
+                and r["status"] == "submitted"
+                and (allow_self or r["applicant_id"] != actor)
+            ),
         )
 
     def legacy_unverified(
@@ -372,7 +378,12 @@ class ApprovalService:
         )
 
     def legacy_detail(
-        self, case_id: UUID, account_refs: frozenset[str], actor: str = ""
+        self,
+        case_id: UUID,
+        account_refs: frozenset[str],
+        actor: str = "",
+        *,
+        allow_self: bool = False,
     ) -> ApprovalDetail:
         """Current pending WFS Case detail, with truthful source identity fields."""
         record = self._case(str(case_id), account_refs)
@@ -412,7 +423,7 @@ class ApprovalService:
             reviewed_at=record.get("archive_reviewed_at") if completed_case else None,
             reviewed_by=record.get("archive_reviewed_by") if completed_case else None,
             reason=record.get("archive_reason") or "当前 Case 未记录申请原因，请核查业务依据",
-            can_review=bool(actor) and pending_case and applicant != actor,
+            can_review=bool(actor) and pending_case and (allow_self or applicant != actor),
             requires_verification=False,
             case_review=True,
         )
@@ -448,6 +459,8 @@ class ApprovalService:
         payload: ApprovalDecisionWrite,
         account_refs: frozenset[str],
         actor: str,
+        *,
+        allow_self: bool = False,
     ) -> None:
         """Review current WFS archive request without creating a phantom applicant.
 
@@ -472,7 +485,7 @@ class ApprovalService:
         ).first():
             blocked()
         applicant = case.get("archive_requested_by")
-        if applicant and applicant == actor:
+        if applicant and applicant == actor and not allow_self:
             raise ApiError(
                 code=ErrorCode.FORBIDDEN,
                 status_code=403,
@@ -600,8 +613,9 @@ class ApprovalService:
             "a.approval_type='wfs_case_abandon' and a.business_ref=c.id::text)",
         ]
         if query.view == "mine":
-            formal_where.append("a.applicant_id<>:actor")
-            if query.tab == "pending":
+            if not is_admin:
+                formal_where.append("a.applicant_id<>:actor")
+            if query.tab == "pending" and not is_admin:
                 legacy_where.append("c.archive_requested_by is distinct from :actor")
             else:
                 legacy_where.append("c.archive_reviewed_by=:actor")
@@ -639,7 +653,11 @@ class ApprovalService:
                    a.snapshot->>'pending_recover_amount' as amount,
                    a.snapshot->>'currency_code' as currency_code,
                    a.submitted_at, a.reviewed_at, a.reviewed_by, a.reason,
-                   (a.status='submitted' and a.applicant_id<>:actor) as can_review,
+                   (a.status='submitted' and (
+                       :is_admin or (a.applicant_id<>:actor and
+                         ((a.approval_type='wfs_case_abandon' and :wfs_reviewer)
+                         or (a.approval_type='new_product_evaluation_review' and :np_reviewer))
+                       ))) as can_review,
                    false as requires_verification, false as case_review,
                    a.submitted_at as sort_time,
                    (select wc.follow_log from ops_wfs_fee_anomaly_cases wc
@@ -662,7 +680,7 @@ class ApprovalService:
                    ({legacy_risk}), {pending_amount}::text, c.currency_code,
                    c.archive_requested_at, c.archive_reviewed_at, c.archive_reviewed_by,
                    coalesce(nullif(c.archive_reason, ''), '未填写申请原因'),
-                   (:case_tab='pending' and c.archive_requested_by is distinct from :actor),
+                   (:case_tab='pending' and (:is_admin or c.archive_requested_by is distinct from :actor)),
                    false, true,
                    case when :case_tab='pending' then c.archive_requested_at
                         else c.archive_reviewed_at end, c.follow_log as follow_log
@@ -757,7 +775,7 @@ class ApprovalService:
             where.append("a.applicant_id=:actor")
         elif query.view == "created":
             where.append("a.applicant_id=:actor")
-        elif query.view == "mine":
+        elif query.view == "mine" and not is_admin:
             where.append("a.applicant_id<>:actor")
         if query.approval_type:
             where.append("a.approval_type=:kind")
@@ -793,7 +811,7 @@ class ApprovalService:
             .all()
         )
         return ApprovalListData(
-            items=[self._as_item(dict(r), actor, may_review) for r in rows]
+            items=[self._as_item(dict(r), actor, may_review, allow_self=is_admin) for r in rows]
         ), int(total)
 
     def summary(
@@ -894,7 +912,10 @@ class ApprovalService:
         if not authorized:
             raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
         item = self._as_item(
-            record, actor, may_review if is_wfs else np_may_review if is_np else is_admin
+            record,
+            actor,
+            may_review if is_wfs else np_may_review if is_np else is_admin,
+            allow_self=is_admin,
         )
         events = (
             self.session.execute(
@@ -955,6 +976,8 @@ class ApprovalService:
         account_refs: frozenset[str],
         actor: str,
         may_review: bool,
+        *,
+        allow_self: bool = False,
     ):
         if not may_review:
             raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
@@ -963,7 +986,7 @@ class ApprovalService:
         r = self._record(approval_id, account_refs, lock=True)
         if r["status"] != "submitted" or r["version"] != payload.expected_version:
             blocked()
-        if r["applicant_id"] == actor:
+        if r["applicant_id"] == actor and not allow_self:
             raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
         if r["approval_type"] != "wfs_case_abandon":
             blocked(422)
@@ -1091,7 +1114,7 @@ class ApprovalService:
                   updated_by=:actor, updated_at=:now
                 where id=:id and status='archive_pending'
                   and archive_review_status='pending'
-                  and (:fresh_attestation or archive_requested_by is distinct from :actor)
+                  and (:allow_self or :fresh_attestation or archive_requested_by is distinct from :actor)
             """),
                 {
                     "case_status": case_status,
@@ -1101,6 +1124,7 @@ class ApprovalService:
                     "now": now,
                     "id": r["business_ref"],
                     "fresh_attestation": fresh_attestation,
+                    "allow_self": allow_self,
                 },
             )
             if updated.rowcount != 1:

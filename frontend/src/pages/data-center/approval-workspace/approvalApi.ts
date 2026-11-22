@@ -81,11 +81,22 @@ export async function fetchNewProductPurchaseDetail(id: string): Promise<Approva
     "/api/approvals/new-products/purchases/" + encodeURIComponent(id)
   )).data;
 }
+export type PurchaseApprovalStoreOption = {store_id:string;store_name:string};
+export async function fetchNewProductPurchaseStoreOptions(id:string):Promise<{
+  source_store_id:string;stores:PurchaseApprovalStoreOption[];
+}> {
+  return (await backendRequest<{source_store_id:string;stores:PurchaseApprovalStoreOption[]},null>(
+    "/api/approvals/new-products/purchases/"+encodeURIComponent(id)+"/stores"
+  )).data;
+}
 export async function decideNewProductPurchase(
-  id: string, version: number, decision: "approved" | "rejected", note: string
+  id: string, version: number, decision: "approved" | "rejected", note: string,
+  approved?: {purchase_store_id:string;approved_qty:number}
 ): Promise<void> {
   await backendRequest<{updated:boolean},null>(
     "/api/approvals/new-products/purchases/" + encodeURIComponent(id) + "/decision",
-    {method:"POST", body:JSON.stringify({expected_version:version,decision,note})}
+    {method:"POST", body:JSON.stringify({expected_version:version,decision,note,...(approved??{})})}
   );
 }
+
+// SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1
