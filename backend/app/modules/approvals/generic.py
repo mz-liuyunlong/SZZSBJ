@@ -118,7 +118,7 @@ class GenericApprovalService:
         row = self.approvals._record(approval_id, accounts, lock=True)
         if row["approval_type"] not in BUSINESS_TYPES or row["status"] != "submitted":
             blocked()
-        if row["version"] != expected_version or row["applicant_id"] == actor:
+        if row["version"] != expected_version:
             blocked()
         snapshot = row["snapshot"]
         actual = self._source(row["approval_type"], row["business_ref"], row["source_account_ref"])
@@ -223,7 +223,6 @@ class GenericApprovalService:
                 row["approval_type"] != "operations_plan_ack"
                 or row["status"] != "submitted"
                 or row["risk_level"] != "low"
-                or row["applicant_id"] == actor
                 or row["version"] != expected_versions[str(row["id"])]
                 or row["snapshot"]["approval_policy"].get("required_steps") != 1
             ):

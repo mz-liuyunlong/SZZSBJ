@@ -2,12 +2,11 @@
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from types import SimpleNamespace
 from uuid import UUID
 
 from app.modules.new_products.ad_catalog_sync import _items, ingest_batch
-from app.modules.new_products.scoring import evaluate
 from app.modules.new_products.rules import DEFAULT_PARAMETERS, DEFAULT_WEIGHTS
+from app.modules.new_products.scoring import evaluate
 from app.modules.new_products.unified_ad_evidence import ad_snapshot, campaign_kind
 
 

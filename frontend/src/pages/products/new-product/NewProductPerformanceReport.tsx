@@ -10,9 +10,10 @@ import { ImageCell, ProductIdentityCell, SkuMskuIdentityCell } from "@/component
 import ReportFacetSelect from "@/shared/report-filters";
 import type { ReportFilterOption } from "@/shared/report-filters";
 import { grade, score, type Config, type Product } from "./nativeData";
+import PurchaseReapplyButton from "./PurchaseReapplyButton";
 import { prefetchNewProductDetail } from "./newProductBusinessApi";
 
-type Action = "detail" | "market" | "purchase" | "approval" | "resultApproval" | 'calculate' | 'evaluationReview' | 'recheck';
+type Action = "assessment" | "detail" | "market" | "purchase" | "approval" | "resultApproval" | 'calculate' | 'evaluationReview' | 'recheck';
 export type PerformanceReportQuery = {
   page:number; pageSize:number; statuses:string[]; owners:string[];
   ratings:string[]; searchField:string; keyword:string;
@@ -382,6 +383,7 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
     const inPhase = phase === "all" ||
       (phase === "evaluating" && row.status === "测评中") ||
       (phase === "market" && row.status === "待市场评分") ||
+      (phase === "pending_confirmation" && row.status === "待测评确认") ||
       (phase === "passed" && row.status === "测评通过") ||
       (phase === "failed" && row.status === "测评未通过");
     const fieldValue = searchField === "item" ? row.item :
@@ -603,6 +605,17 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
           row.status === "测评中" ? "blue" :
           row.status === "测评通过" ? "green" :
           row.status === "测评未通过" ? "red" : "default";
+        if (row.backend?.purchaseStatus === "rejected") return <span>
+          <Tag color={color}>{row.status}</Tag>
+          <Popover trigger="click" content={<div style={{maxWidth:360,whiteSpace:"pre-wrap"}}>
+            <strong>采购申请已驳回</strong>
+            <div>驳回原因：{row.backend.purchaseReviewReason || "历史记录未提供驳回原因"}</div>
+            {row.backend.purchaseReviewedBy && <div>审批人：{row.backend.purchaseReviewedBy}</div>}
+            {row.backend.purchaseReviewedAt && <div>审批时间：{row.backend.purchaseReviewedAt.slice(0,19).replace("T"," ")}</div>}
+          </div>}>
+            <Button type="link" size="small">采购已驳回 · 查看原因</Button>
+          </Popover>
+        </span>;
         return <Tag color={color}>{row.status}</Tag>;
       },
     },
@@ -611,7 +624,11 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
       render: (_value, row) => {
         const state = row.status;
         if (state === "待到货") return <span className="muted">—</span>;
-        if (row.backend?.purchaseStatus === "submitted" && row.backend.purchaseId) return <Button size="small" type="primary" onClick={() => onOpen("approval",row.id)}>审核采购</Button>;
+        if (row.backend?.purchaseStatus === "submitted" && row.backend.purchaseId) return <Button size="small" onMouseEnter={() => scheduleDetailIntent(row)} onMouseLeave={cancelDetailIntent} onFocus={() => scheduleDetailIntent(row)} onBlur={cancelDetailIntent} onClick={() => onOpen("detail",row.id)} style={{ minWidth: 58, borderRadius: 8, borderColor: "#d0d5dd", color: "#344054", fontWeight: 500 }}>详情</Button>;
+        if (row.backend?.purchaseStatus === "rejected") return <span style={{display:"inline-flex",gap:12,alignItems:"center",whiteSpace:"nowrap"}}>
+          <Button size="small" onClick={() => onOpen("detail",row.id)}>详情</Button>
+          <PurchaseReapplyButton product={row}/>
+        </span>;
         if (state === "测评中") return <span style={{ display: "inline-flex", alignItems: "center", gap: 12, whiteSpace: "nowrap" }}>
           <Button size="small" onMouseEnter={() => scheduleDetailIntent(row)} onMouseLeave={cancelDetailIntent} onFocus={() => scheduleDetailIntent(row)} onBlur={cancelDetailIntent} onClick={() => onOpen("detail",row.id)} style={{ minWidth: 58, borderRadius: 8, borderColor: "#d0d5dd", color: "#344054", fontWeight: 500 }}>详情</Button>
           <Button size="small" type="primary" disabled={calculatingItemId === row.id}
@@ -626,6 +643,10 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
           </Button>
           <Button size="small" type="primary"
             onClick={() => onOpen("market",row.id)}>去评分</Button>
+        </span>;
+        if (state === "待测评确认") return <span style={{ display: "inline-flex", alignItems: "center", gap: 12, whiteSpace: "nowrap" }}>
+          <Button size="small" onClick={() => onOpen("detail",row.id)}>详情</Button>
+          <Button size="small" type="primary" onClick={() => onOpen("assessment",row.id)}>确认测评</Button>
         </span>;
         if (state === "测评未通过") return <span style={{ display: "inline-flex", alignItems: "center", gap: 12, whiteSpace: "nowrap" }}>
           <Button size="small" onMouseEnter={() => scheduleDetailIntent(row)} onMouseLeave={cancelDetailIntent} onFocus={() => scheduleDetailIntent(row)} onBlur={cancelDetailIntent} onClick={() => onOpen("detail",row.id)} style={{ minWidth: 58, borderRadius: 8, borderColor: "#d0d5dd", color: "#344054", fontWeight: 500 }}>详情</Button>
@@ -705,3 +726,5 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
 export default function NewProductPerformanceReport(props: Props) {
   return <NewProductPerformanceReportBody key={`${props.phase}:${props.focusItemId ?? ""}`} {...props} />;
 }
+
+// NP_PURCHASE_REAPPLY_SELF_CONTAINED_V5

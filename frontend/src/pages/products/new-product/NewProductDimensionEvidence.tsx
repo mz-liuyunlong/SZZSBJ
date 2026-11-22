@@ -18,6 +18,7 @@ type Props = {
   parameters: ScoringParameters;
   loaded: boolean;
   currentVersion: number;
+  readOnly?: boolean;
   onRequestCorrection: (requestedScore:number, reason:string) => Promise<{ok:boolean;error?:string}> | {ok:boolean;error?:string};
 };
 
@@ -49,6 +50,7 @@ export default function NewProductDimensionEvidence({
   parameters,
   loaded,
   currentVersion,
+  readOnly=false,
   onRequestCorrection,
 }: Props) {
   const ruleText =
@@ -70,15 +72,16 @@ export default function NewProductDimensionEvidence({
         <span className="np-evidence-visual-info-icon" aria-hidden="true">i</span>
         <span>{ruleText}</span>
       </div>
-      <NewProductCorrectionPopover
+      {!readOnly && <NewProductCorrectionPopover
         dimension={dimension}
         currentScore={currentScore}
+        readOnly={readOnly}
         onSubmit={onRequestCorrection}
       >
         <button type="button" className="btn small np-evidence-visual-correction">
           修正分数
         </button>
-      </NewProductCorrectionPopover>
+      </NewProductCorrectionPopover>}
     </div>
   );
 

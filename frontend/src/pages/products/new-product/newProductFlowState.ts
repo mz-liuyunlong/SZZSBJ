@@ -49,8 +49,9 @@ export function resolveNewProductFlow(row: NewProductListing, evaluation: RealSc
   if (!hasAutomatic) return "数据待评估";
   if (number(f.market_score) === null) return "待市场评分";
   if (evaluation.grade === null || evaluation.total === null) return "数据待评估";
-  if (evaluation.grade === "D" || evaluation.grade === "Pass") return "测评未通过";
-  return "待采购";
+  if (row.evaluation_decision?.decision === "passed") return "测评通过";
+  if (row.evaluation_decision?.decision === "failed") return "测评未通过";
+  return "待测评确认";
 }
 
 /** PR337_PERFORMANCE_FIVE_STATES_20261116: evaluation-only business states.
@@ -68,8 +69,9 @@ export function resolveNewProductEvaluationFlow(row: NewProductListing, evaluati
   // A score published in the past is retained and cannot be rewritten here.
   const finalGrade = evaluation.grade;
   if (finalGrade !== null && evaluation.total !== null) {
-    if (finalGrade === "D" || finalGrade === "Pass") return "测评未通过";
-    if (["S", "A", "B", "C"].includes(finalGrade)) return "测评通过";
+    if (row.evaluation_decision?.decision === "passed") return "测评通过";
+    if (row.evaluation_decision?.decision === "failed") return "测评未通过";
+    return "待测评确认";
   }
 
   // The approved automatic triggers: 14 LA days OR verified first-batch sold-out

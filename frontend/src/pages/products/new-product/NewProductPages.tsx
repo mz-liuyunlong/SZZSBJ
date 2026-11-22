@@ -14,14 +14,14 @@ import NewProductEvaluationReviewModal, {type ReviewReasonType} from "./NewProdu
 import PageShell from "@/components/page/PageShell";
 import type {NavigationPage} from "@/config/navigation";
 import NativeBoard from "./TrackingBoardSwitch";
-import dayjs from "dayjs";
-import {withTrackingVisualSamples} from "./trackingBoardVisualSamples";
 import type {TrackingDrillFilter} from "./trackingBoardDrilldown";
 import NewProductTrackingReport from "./NewProductTrackingReport";
 import {defaultConfig,bands,score,grade,suggestion,type Product,type Config} from "./nativeData";
 import NewProductRulesPanel from "./NewProductRulesPanel";
 import { getNewProductRules, applyNewProductRules, listNewProducts, getNewProductSummary,
-  saveNewProductMarketScore, saveNewProductScoreCorrection, getNewProductPurchaseSnapshot, saveNewProductTrackingDecision, submitNewProductPurchase,
+  saveNewProductMarketScore, saveNewProductManualDecision, confirmNewProductAndRequestPurchase,
+  requestNewProductManualDecisionReview,
+  saveNewProductScoreCorrection, getNewProductPurchaseSnapshot, saveNewProductTrackingDecision, submitNewProductPurchase,
   reviewNewProductPurchase, exportNewProductListings,
   requestNewProductEvaluation,
   requestNewProductEvaluationReview,
@@ -34,10 +34,11 @@ import NewProductManualRisk, {type ManualRiskCode} from "./NewProductManualRisk"
 import NewProductEvaluationData from "./NewProductEvaluationData";
 import { invalidateNewProductDetail } from "./newProductBusinessApi";
 import "./nativeWorkflow.css";
+import "./newProductAssessmentTabs.css";
 import "./newProductReviewDrawer.css";
 import "./newProductDimensionCards.css";
 import "./newProductMarketCompetitionVisual.css";
-import { Button as ReviewButton, Descriptions as ReviewDescriptions, Drawer as ReviewDrawer, Input as ReviewInput, Radio as ReviewRadio, Tag as ReviewTag } from "antd";
+import { Button as ReviewButton, Descriptions as ReviewDescriptions, Drawer as ReviewDrawer, Input as ReviewInput, Radio as ReviewRadio, Tag as ReviewTag, Select as ReviewSelect } from "antd";
 type Mode="performance"|"tracking";
 const initialPerformanceQuery:PerformanceReportQuery = {
   page:1,pageSize:50,statuses:[],owners:[],ratings:[],
@@ -46,6 +47,7 @@ const initialPerformanceQuery:PerformanceReportQuery = {
 function performanceParams(q:PerformanceReportQuery) {
   const cardStatus:Record<string,string> = {
     evaluating:"测评中",market:"待市场评分",
+    pending_confirmation:"待测评确认",
     passed:"测评通过",failed:"测评未通过",
   };
   const selected = cardStatus[q.phase] ? [cardStatus[q.phase]] : [];
@@ -208,6 +210,16 @@ export default function NewProductPages({page,mode}:Props){
  const [cfgTab,setCfgTab]=useState("weights"),[version,setVersion]=useState(0),[notice,setNotice]=useState("");
  const [ruleLoaded,setRuleLoaded]=useState(false);
  const [marketSaving,setMarketSaving]=useState(false);
+ const [detailSection,setDetailSection]=useState<"details"|"assessment">("details");
+ const [assessmentChoice,setAssessmentChoice]=useState<""|"passed"|"failed">("");
+ const [assessmentReason,setAssessmentReason]=useState("");
+ const [assessmentSaving,setAssessmentSaving]=useState(false);
+ const [assessmentQty,setAssessmentQty]=useState("");
+ const [assessmentPurchaseReason,setAssessmentPurchaseReason]=useState("");
+ const [,setAssessmentReviewOpen]=useState(false);
+ const [assessmentReviewChoice]=useState<"passed"|"failed">("passed");
+ const [assessmentReviewReason,setAssessmentReviewReason]=useState("");
+ const [detailSnapshot,setDetailSnapshot]=useState<Product|null>(null);
  const [evaluationRequesting,setEvaluationRequesting]=useState<string|null>(null);
  const [evaluationReviewItem,setEvaluationReviewItem]=useState<string|null>(null);
  const [evaluationReviewSubmitting,setEvaluationReviewSubmitting]=useState(false);
@@ -234,29 +246,7 @@ export default function NewProductPages({page,mode}:Props){
  });
  const remoteProducts=useMemo(()=>(pagingQuery.data?.items??[]).map(toPersistedProduct),[pagingQuery.data]);
  const [boardActionItem,setBoardActionItem]=useState<PersistedProduct|null>(null);
- const refreshAllReal=useCallback(async(isActive:()=>boolean=()=>true,progressive=false)=>{
-   // Both dashboard and original ProTable consume one complete real Product[].
-   // Performance shows completed pages early; final count is verified.
-   const loaded:PersistedProduct[]=[];
-   let pageNumber=1;
-   let reportedTotal=0;
-   do{
-     const result=await listNewProducts({page:pageNumber,pageSize:200});
-     if(pageNumber===1)reportedTotal=result.total;
-     else if(result.total!==reportedTotal)throw new Error('商品列表更新中，请重新刷新');
-     if(reportedTotal>5000)throw new Error('真实商品超过5000条，当前全量看板请按数据范围查询');
-     loaded.push(...result.items.map(toPersistedProduct));
-     if(result.items.length===0 && loaded.length<reportedTotal)throw new Error('商品分页缺失，已拒绝使用不完整列表');
-     // NP_PERFORMANCE_PROGRESSIVE_PAGES_V1
-     if(progressive && loaded.length<reportedTotal && isActive())setItems([...loaded]);
-     pageNumber+=1;
-   }while(loaded.length<reportedTotal);
-   if(loaded.length!==reportedTotal)throw new Error('商品总数校验失败');
-   // Ignore an obsolete fetch after navigation or effect cleanup.
-   if(isActive())setItems(loaded);
-   return loaded;
- },[]);
- const refreshReal=useCallback(async(isActive:()=>boolean=()=>true,progressive=false)=>{
+ const refreshReal=useCallback(async()=>{
    // NP_DETAIL_CACHE_V4_REFRESH_GUARD: invalidate only on explicit refresh/mutation.
    void invalidateNewProductDetail();
    if(mode==="performance" && tab==="list"){
@@ -277,24 +267,11 @@ export default function NewProductPages({page,mode}:Props){
      setBoardActionItem(found);
      return [found];
    }
-   return refreshAllReal(isActive,progressive);
- },[mode,tab,remoteQuery,queryClient,refreshAllReal,boardActionItem]);
- useEffect(()=>{
-   if(mode==="performance") return;
-   let active=true;
-   // Defer the initial fetch so this Effect never synchronously cascades a state update.
-   // Errors are shown explicitly; do not restore the seven demo records.
-   void Promise.resolve().then(()=>{
-     if(!active)return;
-     return refreshAllReal(()=>active).catch(error=>{
-       if(active){setItems([]);setNotice(`真实商品读取失败：${error instanceof Error?error.message:'未知错误'}`);}
-     });
-   });
-   return ()=>{active=false};
- },[mode,tab,refreshAllReal]);
+   await queryClient.invalidateQueries({queryKey:["np-tracking"]});
+  return [];
+ },[mode,tab,remoteQuery,queryClient,boardActionItem]);
  const [approvalFocus,setApprovalFocus]=useState<string|null>(null);
  const [trackingDrill,setTrackingDrill]=useState<TrackingDrillFilter|null>(null);
- const [trackingSampleAnchor]=useState(()=>dayjs().format('YYYY-MM-DD'));
  // PR337_PHASE2_REAL_API_V1: hydrate the saved and applied rule; never fallback on fetch failure.
  useEffect(() => {
    if (mode !== "performance") return;
@@ -316,10 +293,9 @@ export default function NewProductPages({page,mode}:Props){
    });
    return () => { cancelled = true; };
  }, [mode]);
- const trackingProducts=useMemo(()=>mode==='tracking'
-   ?withTrackingVisualSamples(items,trackingSampleAnchor):items,[items,mode,trackingSampleAnchor]);
+ const trackingProducts=items;
  const activeItems=remoteEnabled?remoteProducts:(mode==="performance" && tab==="board" ? (boardActionItem?[boardActionItem]:[]):items);
- const p=activeItems.find(x=>x.id===selected);
+ const p=detailSnapshot?.id===selected ? detailSnapshot : activeItems.find(x=>x.id===selected);
  const reviewFinal = p?.tracking === "打品成功" || p?.tracking === "打品失败";
  // PR337 local Mock only: launch date + arrival date act as the tracking-start proxy.
  // Production must use an explicit "Listing is sellable" field instead.
@@ -329,7 +305,7 @@ export default function NewProductPages({page,mode}:Props){
  const reviewReadOnly = reviewFinal || reviewWaiting;
  const msg=(s:string)=>{setNotice(s);window.setTimeout(()=>setNotice(""),2600)};
  const patch=(id:string,change:Partial<Product>)=>setItems(prev=>prev.map(x=>x.id===id?{...x,...change}:x));
- const show=(kind:ModalType,id?:string)=>{
+ const show=(kind:ModalType|"assessment",id?:string)=>{
    const item=id?activeItems.find(x=>x.id===id):undefined;
    if(kind==="market"&&item?.backend&&!item.backend.firstWfsDate&&!item.launch){
      msg("WFS首次可售时间未核实，暂不能评分");return;
@@ -396,22 +372,27 @@ export default function NewProductPages({page,mode}:Props){
      return;
    }
    if(kind==="purchase"&&item){
-     if(!(item.backend ? item.evaluationStatus === "测评通过" : ["待采购确认","待采购","已驳回","采购已驳回"].includes(item.status))){
-       msg("当前状态不能确认采购");return;
-     }
-     const finalGrade=grade(item,cfg);
-     if(item.market===null||item.marketReason.trim().length<5||!finalGrade||
-        finalGrade==="D"||finalGrade==="Pass"||suggestion(item,cfg)<1){
-       msg("未完成有效测评或不符合采购条件，不能申请采购");return;
-     }
+     setSelected(item.id);
+     setDetailSnapshot(item);
+     setDetailSection("assessment");
+     setAssessmentQty(String(item.backend?.suggestedQty ?? ""));
+     setAssessmentPurchaseReason("");
+     setModal("detail");
+     return;
    }
-   setModal(kind==="market"?"detail":kind);
+   setDetailSection(kind==="assessment"?"assessment":"details");
+   setModal(kind==="market"||kind==="assessment"?"detail":kind);
    if(item){
      setSelected(item.id);
+      setDetailSnapshot(item);
      riskSelectionRef.current=[];
+     setAssessmentChoice("");
+     setAssessmentReason("");
+     setAssessmentQty(String(item.backend?.suggestedQty ?? ""));
+     setAssessmentPurchaseReason("");
      setScoreValue(item.market);
      setQty(item.requestQty??suggestion(item,cfg));
-     setNote(kind==="purchase"?(item.requestReason||""):(item.marketReason||""));
+     setNote(item.marketReason||"");
      setReview(item.tracking||"继续观察");
    }
  };
@@ -428,7 +409,7 @@ export default function NewProductPages({page,mode}:Props){
      msg(`复核申请失败：${error instanceof Error?error.message:"请检查权限及当前评级"}`);
    }finally{setEvaluationReviewSubmitting(false);}
  };
- const close=()=>{setModal(null);setNote("")};
+ const close=()=>{setModal(null);setDetailSnapshot(null);setDetailSection("details");setNote("")};
  const reset=()=>{setPhase("all");setReportRevision(n=>n+1)};
 
  const openConfigPanel=()=>{
@@ -474,6 +455,64 @@ export default function NewProductPages({page,mode}:Props){
    exportNewProductListings().catch(error=>msg(`导出失败：${error instanceof Error?error.message:'未知错误'}`));
  };
  const performanceItems=useMemo(() => activeItems.map(x => x.evaluationStatus ? {...x,status:x.evaluationStatus}:x),[activeItems]);
+ const requestManualDecisionChange=async()=>{
+   if(!p?.backend || !p.backend.evaluationDecision || assessmentSaving)return;
+   if(assessmentReviewChoice===p.backend.evaluationDecision.decision ||
+     Array.from(assessmentReviewReason.replace(/\s/g,"")).length<20){
+     msg("请选择不同的结论，填写至少20字变更原因");return;
+   }
+   setAssessmentSaving(true);
+   try{
+     await requestNewProductManualDecisionReview(
+       p.backend.identity,assessmentReviewChoice,assessmentReviewReason.trim());
+     setAssessmentReviewOpen(false);setAssessmentReviewReason("");
+     await refreshReal();msg("人工测评结论变更已提交审批，请等待复核");
+   }catch(error){msg(`复核申请失败：${error instanceof Error?error.message:"未知错误"}`);}
+   finally{setAssessmentSaving(false)}
+ };
+ const confirmManualAssessment=async(goPurchase=false)=>{
+   if(!p?.backend || assessmentSaving)return;
+   if(!assessmentChoice || Array.from(assessmentReason.replace(/\s/g,"")).length<20){
+     msg("请选择测评结论并填写不少于20字的原因");return;
+   }
+   if(goPurchase){
+     const requested=Number(assessmentQty);
+     if(assessmentChoice!=="passed" || !/^[1-9]\d*$/.test(assessmentQty) ||
+       !Number.isSafeInteger(requested) || requested>100000){
+       msg("请填写1–100000之间的有效采购数量");return;
+     }
+     const systemQty=p.backend.suggestedQty;
+     if(systemQty===null || systemQty===undefined){
+       msg("系统建议采购数量尚未核实，不能合并发起采购");return;
+     }
+     if(requested!==systemQty &&
+       Array.from(assessmentPurchaseReason.replace(/\s/g,"")).length<10){
+       msg("采购数量不同于系统建议时，调整原因至少10个字符");return;
+     }
+   }
+   setAssessmentSaving(true);
+   try{
+     if(goPurchase){
+       await confirmNewProductAndRequestPurchase(
+         p.backend.identity,assessmentReason.trim(),Number(assessmentQty),
+         assessmentPurchaseReason.trim(),p.backend.ruleVersion);
+     }else{
+       await saveNewProductManualDecision(
+         p.backend.identity,assessmentChoice,assessmentReason.trim());
+     }
+     const fresh=await listNewProducts({page:1,pageSize:200,keyword:p.item,searchField:"item_id"});
+     const updated=fresh.items.map(toPersistedProduct).find(row=>row.id===p.id);
+     if(updated)setDetailSnapshot(updated);
+     await refreshReal();
+     if(goPurchase){
+       close();
+       msg("人工测评通过且采购申请已提交，进入领导审核");
+     }else{
+       msg("人工测评结论已确认并锁定");
+     }
+   }catch(error){msg(`人工确认失败：${error instanceof Error?error.message:"未知错误"}`);}
+   finally{setAssessmentSaving(false)}
+ };
  // Global statistics are loaded independently, never derived from a partial page.
  const saveMarket=async(chosenScore: number|null=scoreValue, chosenReason: string=note, competitorIds: string[]=p?.marketCompetitorIds??[], noCompetitors: boolean=p?.marketNoCompetitors??false)=>{
    if(!p||!p.backend){msg('仅真实商品允许保存市场评分');return;}
@@ -492,12 +531,18 @@ export default function NewProductPages({page,mode}:Props){
      await saveNewProductMarketScore(p.backend.identity,chosenScore,chosenReason.trim(),p.backend.marketVersion,riskSelectionRef.current,competitorIds,noCompetitors);
      try {
        const fresh=await refreshReal();
-       const result=fresh.find(x=>x.id===p.id);
-       if(result?.backend?.evaluation.grade&&result.backend.evaluation.total!==null){
-         close();
-         msg(['D','Pass'].includes(result.backend.evaluation.grade)
-           ?`市场评分已保存，评级 ${result.backend.evaluation.grade}，当前不符合采购条件`
-           :`市场评分已保存，评级 ${result.backend.evaluation.grade}，可按流程申请采购`);
+       let result=fresh.find(x=>x.id===p.id);
+       if(!result){
+         const direct=await listNewProducts({
+           page:1,pageSize:200,keyword:p.item,searchField:"item_id"
+         });
+         result=direct.items.map(toPersistedProduct).find(x=>x.id===p.id);
+       }
+       if(!result)throw new Error("保存后未找到当前商品");
+       setDetailSnapshot(result);
+       if(result.backend?.evaluation.grade&&result.backend.evaluation.total!==null){
+         setDetailSection("assessment");
+         msg(`市场评分已保存，评级 ${result.backend.evaluation.grade}；请人工确认测评结论`);
        }else{
          // Preserve details: a market score is not proof of complete automatic evidence.
          msg(`市场评分已保存；${result?.backend?.evaluation.missing.join('、')||'后台评分证据尚未齐备'}，暂不生成评级`);
@@ -508,38 +553,46 @@ export default function NewProductPages({page,mode}:Props){
    }finally{setMarketSaving(false)}
  };
  // SZZSBJ_LOCAL_REAL_FLOW_20261115: business writes use the existing guarded API.
- const sendPurchase=async()=>{
-   if(p?.backend){
-     if(flowSaving)return;
-     if(p.evaluationStatus!=="测评通过"||!["S","A","B","C"].includes(p.backend.evaluation.grade??"")||p.backend.evaluation.total===null||(p.backend.suggestedQty??0)<1){
-       msg('当前商品没有有效评级或采购建议，不能发起采购申请');return;
-     }
-     if(!Number.isInteger(qty)||qty<1){msg('请填写有效采购数量');return;}
-     if(qty!==p.backend.suggestedQty&&note.trim().length<5){msg('调整数量需填写至少5字原因');return;}
-     setFlowSaving(true);
-     try{
-       await submitNewProductPurchase(p.backend.identity,qty,note.trim(),p.backend.ruleVersion);
-       await refreshReal();close();msg('正式采购申请已提交，进入审核中');
-     }catch(error){msg(`采购申请失败：${error instanceof Error?error.message:'未知错误'}`);}
-     finally{setFlowSaving(false);}
+
+ const submitConfirmedPurchase=async()=>{
+   if(!p?.backend || p.backend.evaluationDecision?.decision!=="passed"){
+     msg("请先确认测评通过");return;
+   }
+   if(flowSaving)return;
+   if(["submitted","approved"].includes(p.backend.purchaseStatus??"")){
+     msg("已有采购申请，请勿重复提交");return;
+   }
+   const requested=Number(assessmentQty);
+   if(!/^[1-9]\d*$/.test(assessmentQty)||requested>100000){
+     msg("请输入1至100000之间的整数采购数量");return;
+   }
+   const reason=assessmentPurchaseReason.trim();
+   if(requested!==p.backend.suggestedQty &&
+      Array.from(reason.replace(/\s/g,"")).length<10){
+     msg("采购数量不同于系统建议时，请填写至少10个非空白字符的调整原因");
      return;
    }
-   if(!p||!["待采购确认","待采购"].includes(p.status)){
-     msg("当前状态不能提交采购申请");return;
+   setFlowSaving(true);
+   try{
+     await submitNewProductPurchase(
+       p.backend.identity,requested,reason,p.backend.ruleVersion
+     );
+     const fresh=await refreshReal();
+     const updated=fresh.find(x=>x.id===p.id);
+     if(updated?.backend){
+       setDetailSnapshot(updated);
+     }else{
+       setDetailSnapshot({
+         ...p,
+         backend:{...p.backend,purchaseStatus:"submitted"}
+       });
+     }
+     msg("采购申请已提交，等待领导审批");
+   }catch(error){
+     msg(`采购申请失败：${error instanceof Error?error.message:"未知错误"}`);
+   }finally{
+     setFlowSaving(false);
    }
-   const finalGrade=grade(p,cfg);
-   if(p.market===null||p.marketReason.trim().length<5||!finalGrade||
-      finalGrade==="D"||finalGrade==="Pass"||suggestion(p,cfg)<1){
-     msg("请先完成有效市场评分并生成采购建议");return;
-   }
-   if(!Number.isInteger(qty)||qty<1){msg("请填写有效采购数量");return;}
-   if(qty!==suggestion(p,cfg)&&note.trim().length<5){
-     msg("调整采购数量必须填写至少5个字符的原因");return;
-   }
-   patch(p.id,{status:"审核中",requestQty:qty,
-     requestReason:qty===suggestion(p,cfg)?"":note.trim()});
-   close();
-   msg("模拟采购申请已提交，正在等待审核");
  };
  const decide=async(pass:boolean)=>{
    if(p?.backend){
@@ -595,6 +648,8 @@ export default function NewProductPages({page,mode}:Props){
  // NP_OPERATOR_SCORE_CORRECTION_V1_20261119: direct operator write, not an approval.
  const correct=async(dimension:Correction["dimension"], requestedScore:number, requestedReason:string):Promise<{ok:boolean;error?:string}>=>{
    if(!p||!p.backend)return {ok:false,error:"当前商品不可修改"};
+   if(p.backend.evaluation.grade !== null && p.backend.evaluation.total !== null)
+     return {ok:false,error:"正式评分已锁定，不允许修改"};
    if(!Number.isFinite(requestedScore)||requestedScore<0||requestedScore>10||requestedReason.trim().length<5){
      return {ok:false,error:"请输入0–10之间的分数及至少5字的修正依据"};
    }
@@ -676,6 +731,7 @@ export default function NewProductPages({page,mode}:Props){
      {key:"all",title:"全部新品",subtitle:"当前全部测评商品",value:summaryQuery.data?.counts.all ?? "—",tone:"normal",icon:<span>▦</span>},
      {key:"evaluating",title:"测评中",subtitle:"等待满足正式自动测评条件",value:summaryQuery.data?.counts.evaluating ?? "—",tone:"normal",icon:<span>◷</span>},
      {key:"market",title:"待市场评分",subtitle:"自动评分完成，等待运营判断",value:summaryQuery.data?.counts.market ?? "—",tone:"normal",icon:<span>✎</span>},
+     {key:"pending_confirmation",title:"待测评确认",subtitle:"评分已完成，等待人工确认",value:summaryQuery.data?.counts.pending_confirmation ?? "—",tone:"normal",icon:<span>◉</span>},
      {key:"passed",title:"测评通过",subtitle:"已形成有效通过评级",value:summaryQuery.data?.counts.passed ?? "—",tone:"success",icon:<span>✓</span>},
      {key:"failed",title:"测评未通过",subtitle:"已形成有效未通过评级",value:summaryQuery.data?.counts.failed ?? "—",tone:"warning",icon:<span>▤</span>},
    ]}
@@ -695,20 +751,8 @@ export default function NewProductPages({page,mode}:Props){
     onClearDrill={()=>setTrackingDrill(null)} onReview={(id, sourceRow) => {
       const selectedRow = items.find(item => item.id === id) ?? sourceRow;
       if (!selectedRow) return;
-      if (!items.some(item => item.id === id)) {
-        if (!id.startsWith("PR337_PREVIEW_") && !id.startsWith("TRACK-LAYOUT-")) return;
-        // Preview is local in-memory data: never calls the backend or writes to DB.
-        setItems(previous => {
-          const existing = new Set(previous.map(item => item.id));
-          const missing = trackingProducts.filter(
-            item => !existing.has(item.id)
-          );
-          return missing.length
-            ? [...previous, ...missing]
-            : previous;
-        });
-      }
       setSelected(id);
+      setDetailSnapshot(selectedRow);
       setReview(selectedRow.tracking);
       setNote(selectedRow.reasonFailure || "");
       setModal("review");
@@ -716,7 +760,7 @@ export default function NewProductPages({page,mode}:Props){
  </>}
  </div>
 </section>
-{modal&&modal!=="review"&&<Drawer title={{detail:"新品测评详情",market:"市场竞争评分",purchase:"确认采购数量",approval:"新品采购审核",resultApproval:"打品结果审核申请",calculate:"立即计算",evaluationReview:"测评复核申请",recheck:"复核重新核算",review:"打品结果复盘",config:mode==="tracking"?"打品辅助规则配置":"新品表现配置"}[modal]} sub={p?p.sku+" · "+p.name:"当前规则 · 保存后立即生效"} close={close} wide={modal==="config"} footer={modal==="detail"||modal==="resultApproval"?null:modal==="market"?<button className="btn primary" onClick={() => { void saveMarket(); }}>保存市场评分</button>:modal==="purchase"?<button className="btn primary" onClick={()=>{void sendPurchase();}} disabled={flowSaving}>提交领导审核</button>:modal==="approval"?<><button className="btn" onClick={()=>{void decide(false);}} disabled={flowSaving||purchaseReviewLoading||!purchaseReviewSnapshot}>驳回</button><button className="btn primary" onClick={()=>{void decide(true);}} disabled={flowSaving||purchaseReviewLoading||!purchaseReviewSnapshot}>审核通过</button></>:mode==="tracking"?<span className="muted">请在面板右上角保存浏览器本地草稿</span>:<button className="btn primary" onClick={saveRuleConfiguration}>保存并应用</button>}>
+{modal&&modal!=="review"&&<Drawer title={{detail:"新品测评详情",market:"市场竞争评分",purchase:"确认采购数量",approval:"新品采购审核",resultApproval:"打品结果审核申请",calculate:"立即计算",evaluationReview:"测评复核申请",recheck:"复核重新核算",review:"打品结果复盘",config:mode==="tracking"?"打品辅助规则配置":"新品表现配置"}[modal]} sub={p?p.sku+" · "+p.name:"当前规则 · 保存后立即生效"} close={close} wide={modal==="config"} footer={modal==="detail"||modal==="resultApproval"?null:modal==="market"?<button className="btn primary" onClick={() => { void saveMarket(); }}>保存市场评分</button>:modal==="approval"?<><button className="btn" onClick={()=>{void decide(false);}} disabled={flowSaving||purchaseReviewLoading||!purchaseReviewSnapshot}>驳回</button><button className="btn primary" onClick={()=>{void decide(true);}} disabled={flowSaving||purchaseReviewLoading||!purchaseReviewSnapshot}>审核通过</button></>:mode==="tracking"?<span className="muted">请在面板右上角保存浏览器本地草稿</span>:<button className="btn primary" onClick={saveRuleConfiguration}>保存并应用</button>}>
  {p&&modal!=="config"&&(modal==="detail" ? (
    <div className="np-detail-identity-strip" aria-label="商品基础信息">
      <div className="np-detail-identity-fields">
@@ -732,7 +776,25 @@ export default function NewProductPages({page,mode}:Props){
  ) : (
    <div className="product-summary"><div className="thumb">▤</div><div><div className="summary-name">{p.name}</div><div className="summary-meta">{p.sku} · Item ID {p.item} · 负责人 {p.owner}</div><Status text={mode==="performance" ? p.evaluationStatus ?? p.status : p.status}/></div><div className="summary-right"><div className="score-main">{score(p,cfg)?.toFixed(2)||"—"}</div><div className="cell-sub">{grade(p,cfg)||"待评分"} 级</div></div></div>
  ))}
- {modal==="detail"&&p&&<><NewProductEvaluationData product={p} />
+ {modal==="detail"&&p&&<>
+      {p.backend?.evaluationDecision &&
+        <div className="np-assessment-tabs" role="tablist" aria-label="新品测评详情标签">
+          <button type="button" role="tab" aria-selected={detailSection==="details"}
+            className={detailSection==="details"?"active":""}
+            onClick={()=>setDetailSection("details")}>测评详情</button>
+          <button type="button" role="tab" aria-selected={detailSection==="assessment"}
+            className={detailSection==="assessment"?"active":""}
+            onClick={()=>setDetailSection("assessment")}>测评结论与采购申请</button>
+        </div>}
+      {!p.backend?.evaluationDecision && p.backend && p.backend.evaluation.grade !== null &&
+        p.backend?.evaluation.total !== null && detailSection==="details" &&
+        <div className="np-assessment-pending-action">
+          <span>正式评级已保存，等待人工测评确认</span>
+          <button type="button" className="btn primary"
+            onClick={()=>setDetailSection("assessment")}>确认测评</button>
+        </div>}
+      {detailSection==="details" && <>
+      <NewProductEvaluationData product={p} />
 <div className="section-title">自动评分明细</div><div className="score-grid np-score-visual-grid">
   {(["speed","ad","profit","trust"] as const).map((d,i) => (
     <div className="score-item np-score-visual-card" key={d}>
@@ -756,6 +818,7 @@ export default function NewProductPages({page,mode}:Props){
         parameters={savedRuleDraft.confirmedScoring}
         loaded={ruleLoaded}
         currentVersion={version}
+        readOnly={Boolean(p.backend && p.backend.evaluation.grade !== null && p.backend.evaluation.total !== null)}
         onRequestCorrection={(requestedScore, reason)=>correct(d,requestedScore,reason)}
       />
     </div>
@@ -764,6 +827,9 @@ export default function NewProductPages({page,mode}:Props){
 {/* PR337_MANUAL_RISK_V1: manually assessed, never preselected. */}
 {<NewProductManualRisk key={`${p.id}:${p.backend?.marketVersion??0}`}
   disabled={marketSaving}
+  readOnly={Boolean(p.backend && p.backend.evaluation.grade !== null && p.backend.evaluation.total !== null)}
+  identity={p.backend?.identity}
+  marketVersion={p.backend?.marketVersion??0}
   systemRiskRules={savedRuleDraft.riskConditions}
   systemRiskDisplay={p.backend?.systemRiskDisplay}
   riskVersion={version}
@@ -791,7 +857,7 @@ export default function NewProductPages({page,mode}:Props){
       </tbody>
     </table>
   </div>
-  {(p.backend || p.status === "待市场评分") ? (
+  {p.market===null && (p.backend || p.status === "待市场评分") ? (
     <MarketScoringDraft key={`${p.id}:${p.backend?.marketVersion??0}`} initialScore={p.market}
       initialReason={p.marketReason || ""} initialCompetitorIds={p.marketCompetitorIds || []}
       initialNoCompetitors={p.marketNoCompetitors === true} saving={marketSaving}
@@ -805,22 +871,150 @@ export default function NewProductPages({page,mode}:Props){
   )}
 </div>
 
+      </>}
     {p.market!==null&&p.marketReason.trim().length>=5&&score(p,cfg)!==null?(
       <>
-        <div className="section-title">评分结果与采购建议</div>
-        <div className="qty-hero">
-          <div><div className="subline">最终得分 / 评级</div>
+        <div className="section-title np-assessment-result-heading"><span aria-hidden="true"><svg viewBox="0 0 24 24" width="31" height="31" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1" fill="currentColor" stroke="none"/><path d="m8 14 3 3 5-6"/></svg></span>评分结果与采购建议</div>
+        <div className="qty-hero np-assessment-hero">
+          <div><span className="np-assessment-hero-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m12 2 3.1 6.5 7.1 1-5.1 5 .9 7.1-6-3.3-6 3.3.9-7.1-5.1-5 7.1-1L12 2Z"/></svg></span><div className="subline">最终得分 / 评级</div>
             <div className="big">{score(p,cfg)?.toFixed(2)}
               <span className="grade">{grade(p,cfg)}</span></div>
             <div className="delta">评级采购范围 {(cfg.quantities?.[grade(p,cfg)||"D"]??bands[grade(p,cfg)||"D"]).join("–")} 件</div>
           </div>
           <div style={{textAlign:"right"}}>
-            <div className="subline">系统建议采购量</div>
+            <span className="np-assessment-hero-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m12 2 9 5v10l-9 5-9-5V7l9-5Z"/><path d="m3 7 9 5 9-5M12 12v10"/></svg></span><div className="subline">系统建议采购量</div>
             <div className="big">{suggestion(p,cfg)>0?`${suggestion(p,cfg)} 件`:"不建议采购"}</div>
             <div className="delta">{suggestion(p,cfg)>0?
               "严格限制在评级配置范围内":"当前评级不进入采购申请"}</div>
           </div>
         </div>
+        {detailSection==="assessment" && p.backend && <div className="np-assessment-panel">
+          {!p.backend.evaluationDecision &&
+            <button type="button" className="np-assessment-back" onClick={()=>setDetailSection("details")}>
+              ← 返回测评详情
+            </button>}
+          <div className="section-title np-assessment-panel-title">
+            <span aria-hidden="true"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9"/><path d="M7 8h8M7 12h4"/><path d="m13 18 6.8-6.8a1.8 1.8 0 0 1 2.6 2.6L15.6 20.6 12 21l1-3Z"/></svg></span>
+            {p.backend.evaluationDecision?"人工测评结论与采购记录":"提交采购申请（基于人工测评结论）"}
+          </div>
+          {p.backend.evaluationDecision ? <div className="np-assessment-confirmed">
+  <div className="np-assessment-form">
+
+    <div className="form-field">
+      <label className="form-label">是否测评通过</label>
+      <select className="input"
+        value={p.backend.evaluationDecision.decision}
+        disabled>
+        <option value="passed">测评通过</option>
+        <option value="failed">测评不通过</option>
+      </select>
+    </div>
+
+    <div className="form-field">
+      <label className="form-label">测评原因（至少20字符）</label>
+      <textarea className="textarea" rows={4}
+        value={p.backend.evaluationDecision.reason || ""}
+        disabled readOnly />
+    </div>
+
+    <div className="form-field">
+      <label className="form-label">申请采购数量（件）</label>
+      <input className="input" type="text"
+        value={p.requestQty == null ? "—" : String(p.requestQty)}
+        disabled readOnly />
+    </div>
+
+    <div className="form-field">
+      <label className="form-label">采购数量调整原因</label>
+      <textarea className="textarea" rows={4}
+        value={p.requestReason || ""}
+        disabled readOnly />
+    </div>
+
+    <div className="form-field">
+      <label className="form-label">确认人</label>
+      <input className="input" type="text"
+        value={String(p.backend.evaluationDecision.actor_id ?? "—")}
+        disabled readOnly />
+    </div>
+
+    <div className="form-field">
+      <label className="form-label">确认时间</label>
+      <input className="input" type="text"
+        value={p.backend.evaluationDecision.confirmed_at?.slice(0,10) || "—"}
+        disabled readOnly />
+    </div>
+
+    <div className="form-field">
+      <label className="form-label">采购状态</label>
+      <input className="input" type="text"
+        value={
+          p.backend.purchaseStatus === "submitted" ? "等待领导审批" :
+          p.backend.purchaseStatus === "approved" ? "已审批通过" :
+          p.backend.purchaseStatus === "rejected" ? "已驳回" :
+          "尚未提交采购申请"
+        }
+        disabled readOnly />
+    </div>
+
+  </div>
+</div> : <div className="np-assessment-form">
+            <div className="form-field">
+              <label className="form-label">是否测评通过 *</label>
+              <ReviewSelect<"passed" | "failed">
+                className="np-assessment-choice"
+                value={assessmentChoice || undefined}
+                placeholder="请选择"
+                options={[{value:"passed",label:"测评通过"},{value:"failed",label:"测评不通过"}]}
+                onChange={value=>setAssessmentChoice(value)}
+              />
+            </div>
+            <div className="form-field">
+              <label className="form-label">测评原因 *（至少20字符）</label>
+              <textarea className="textarea" rows={3} value={assessmentReason}
+                onChange={e=>setAssessmentReason(e.target.value)}
+                placeholder="请填写人工测评依据，不少于20字符"/>
+              <div className="cell-sub">
+                {Array.from(assessmentReason.replace(/\s/g,"")).length} / 20字符
+              </div>
+            </div>
+            {assessmentChoice==="passed" && <>
+              <div className="form-field">
+                <label className="form-label">申请采购数量（件）</label>
+                <input className="input" type="number" min={1} max={100000}
+                  value={assessmentQty} onChange={e=>setAssessmentQty(e.target.value)}/>
+                <div className="cell-sub">系统建议：
+                  {p.backend.suggestedQty===null?"未核实":`${p.backend.suggestedQty} 件`}
+                </div>
+              </div>
+              {Number(assessmentQty)!==p.backend.suggestedQty && <div className="form-field">
+                <label className="form-label">采购数量调整原因 *（至少10字符）</label>
+                <textarea className="textarea" rows={3} value={assessmentPurchaseReason}
+                  onChange={e=>setAssessmentPurchaseReason(e.target.value)}
+                  placeholder="说明申请数量不同于系统建议的具体原因"/>
+                <div className="cell-sub">
+                  {Array.from(assessmentPurchaseReason.replace(/\s/g,"")).length} / 10字符
+                </div>
+              </div>}
+            </>}
+            <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+              <button type="button" className="btn"
+                disabled={!assessmentChoice||Array.from(assessmentReason.replace(/\s/g,"")).length<20||assessmentSaving}
+                onClick={()=>{void confirmManualAssessment();}}>
+                {assessmentChoice==="failed"?"确认测评不通过":"仅确认测评"}
+              </button>
+              {assessmentChoice==="passed" && <button type="button" className="btn primary"
+                disabled={assessmentSaving||Array.from(assessmentReason.replace(/\s/g,"")).length<20||
+                  !/^[1-9]\d*$/.test(assessmentQty)||Number(assessmentQty)>100000||
+                  p.backend.suggestedQty==null||
+                  (Number(assessmentQty)!==p.backend.suggestedQty&&
+                    Array.from(assessmentPurchaseReason.replace(/\s/g,"")).length<10)}
+                onClick={()=>{void confirmManualAssessment(true);}}>
+                确认通过并提交采购申请
+              </button>}
+            </div>
+          </div>}
+        </div>}
       </>
     ):<div className="info-box">{p.market===null
       ?"请先保存市场竞争评分。"
@@ -835,7 +1029,6 @@ export default function NewProductPages({page,mode}:Props){
      <div className="kv-row"><span className="kv-key">审批状态</span><b>待审核</b></div>
    </div>
  )}
- {modal==="purchase"&&p&&<><div className="kv-list"><div className="kv-row"><span className="kv-key">系统建议采购量</span><b>{suggestion(p,cfg)} 件</b></div><div className="kv-row"><span className="kv-key">当前评级范围</span><span>{(cfg.quantities?.[grade(p,cfg)||"D"]??bands[grade(p,cfg)||"D"]).join("–")} 件</span></div></div><div className="form-field"><label className="form-label">运营申请采购数量</label><input className="input" type="number" min={1} value={qty} onChange={e=>setQty(Number(e.target.value))}/></div>{qty>(cfg.quantities?.[grade(p,cfg)||"D"]??bands[grade(p,cfg)||"D"])[1]&&<div className="warning-box">超过当前等级采购范围，需要说明原因。</div>}<div className="form-field"><label className="form-label">调整原因</label><textarea className="textarea" rows={4} value={note} onChange={e=>setNote(e.target.value)}/></div></>}
  {modal==="approval"&&p&&<>{purchaseReviewLoading?<div className="info-box">正在读取采购申请评分快照…</div>:purchaseReviewSnapshot?.score_snapshot&&<div className="kv-list">
     <div className="kv-row"><span className="kv-key">系统原始总分 / 评级</span><b>{purchaseReviewSnapshot.score_snapshot.score_correction?.system.total??purchaseReviewSnapshot.score_snapshot.evaluation.total??"—"} / {purchaseReviewSnapshot.score_snapshot.score_correction?.system.grade??purchaseReviewSnapshot.score_snapshot.evaluation.grade??"—"}</b></div>
     <div className="kv-row"><span className="kv-key">运营有效总分 / 评级</span><b>{purchaseReviewSnapshot.score_snapshot.evaluation.total??"—"} / {purchaseReviewSnapshot.score_snapshot.evaluation.grade??"—"}</b></div>

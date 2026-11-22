@@ -4,17 +4,18 @@ import { TrackingSystemRecommendation, TrackingTriggeredRules } from "./Tracking
 import { EditOutlined, EyeOutlined } from "@ant-design/icons";
 // PR337_TRACKING_EDITABLE_PENDING_V4
 // PR337_TRACKING_OUTCOME_LOCK_V3
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button, Segmented, Tag, Tooltip } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import ManagementStatCards from "@/components/report-table/ManagementStatCards";
 import ReportTableShell from "@/components/report-table/ReportTableShell";
 import { ImageCell, ProductIdentityCell, SkuMskuIdentityCell } from "@/components/report-table/cells";
 import ReportFacetSelect from "@/shared/report-filters";
-import type { ReportFilterOption } from "@/shared/report-filters";
-import { suggestion, type Config, type Product, type Grade } from "./nativeData";
-import { getTrackingPool } from "./trackingBoardMetrics";
-import { matchesTrackingBoardDrill, trackingOwner, trackingGrade, type TrackingDrillFilter } from "./trackingBoardDrilldown";
+import { suggestion, type Config, type Product } from "./nativeData";
+import { trackingOwner, trackingGrade, type TrackingDrillFilter } from "./trackingBoardDrilldown";
+import { listTrackingProducts } from "./newProductBusinessApi";
+import { toPersistedProduct } from "./newProductRealAdapter";
 import "./newProductTrackingReport.css";
 
 // PR337_TRACKING_COMPONENTS_V1 — page-specific composition of shared components.
@@ -36,31 +37,7 @@ type DisplayProduct = Product & {
 
 type StatKey = "all" | "success" | "observe" | "optimize" | "failure" | "undecided";
 
-const outcomeOf = (
-  row: Product
-): Exclude<StatKey, "all"> => {
-  switch (row.tracking) {
-    case "打品成功": return "success";
-    case "继续观察": return "observe";
-    case "需要优化": return "optimize";
-    case "打品失败": return "failure";
-    default: return "undecided";
-  }
-};
-const gradeChoices: Array<Grade|"待评分"> = ["S", "A", "B", "C", "D", "Pass", "待评分"];
-
-
-const optionsWithCounts = (
-  choices: string[],
-  rows: Product[],
-  test: (row: Product, choice: string) => boolean,
-): ReportFilterOption[] => choices.map((value) => ({
-  value,
-  label: value,
-  count: rows.filter((row) => test(row, value)).length,
-}));
-
-function NewProductTrackingReport({ products, config, onReview, drill=null, onClearDrill }: Props) {
+function NewProductTrackingReport({ config, onReview, drill=null, onClearDrill }: Props) {
   const [period, setPeriod] = useState<30 | 60 | 180>(30);
   const [grades, setGrades] = useState<string[]>(() => drill?.kind==='grade'&&drill.value?[drill.value]:[]);
   const [owners,setOwners] = useState<string[]>(() => drill?.kind==='owner'&&drill.value?[drill.value]:[]);
@@ -71,29 +48,18 @@ function NewProductTrackingReport({ products, config, onReview, drill=null, onCl
   const [scrollY, setScrollY] = useState(360);
   const viewport = useRef<HTMLDivElement>(null);
 
-  const rows=useMemo(()=>getTrackingPool(products),[products]);
-  const displayRows=rows;
-  const scopedRows=useMemo(()=>displayRows.filter(row=>matchesTrackingBoardDrill(row,drill)),[displayRows,drill]);
-  const ownerOptions=useMemo(()=>optionsWithCounts(
-    [...new Set(scopedRows.map(trackingOwner))].sort((a,b)=>a.localeCompare(b,'zh-CN')),
-    scopedRows,(row,value)=>trackingOwner(row)===value
-  ),[scopedRows]);
-  const gradeOptions = useMemo(() => optionsWithCounts(
-    gradeChoices, scopedRows, (row, value) => trackingGrade(row, config) === value,
-  ).map((item) => ({ ...item, label: item.value==="待评分"?"待评分":`${item.label} 级` })), [scopedRows, config]);
-
-
-  const visibleCohort = useMemo(() =>
-    scopedRows.filter(row =>
-      (grades.length===0 || grades.includes(trackingGrade(row,config))) &&
-      (owners.length===0 || owners.includes(trackingOwner(row))) &&
-      (!search.trim() || `${row.item} ${row.sku} ${row.name}`.toLowerCase().includes(search.trim().toLowerCase()))
-    ), [scopedRows, grades, owners, search, config]);
-
-  const filtered = useMemo(() =>
-    visibleCohort.filter(row =>
-      stat === "all" || outcomeOf(row) === stat
-    ), [visibleCohort, stat]);
+  const listingQuery=useQuery({
+    queryKey:['np-tracking','listings',page,pageSize,owners,grades,search,stat,period,drill],
+    queryFn:({signal})=>listTrackingProducts({
+      page,page_size:pageSize,keyword:search,owners:owners.join(','),grades:grades.join(','),
+      outcome:stat,period,drill_kind:drill?.kind,drill_value:drill?.value,
+      parent_category:drill?.parentCategory,from:drill?.from,to:drill?.to,
+    },{signal}),
+    placeholderData:keepPreviousData,staleTime:15_000,retry:1,
+  });
+  const filtered=(listingQuery.data?.items??[]).map(toPersistedProduct);
+  const ownerOptions=listingQuery.data?.owner_options??[];
+  const gradeOptions=listingQuery.data?.grade_options??[];
 
   useEffect(() => {
     const node = viewport.current;
@@ -120,11 +86,7 @@ function NewProductTrackingReport({ products, config, onReview, drill=null, onCl
 
   // PR337_SIX_RESULT_CARDS_V1
   const countByOutcome = (key: StatKey): number =>
-    key === "all"
-      ? visibleCohort.length
-      : visibleCohort.filter(
-          row => outcomeOf(row) === key
-        ).length;
+    listingQuery.data?.counts[key] ?? 0;
 
   const cards = [
     {
@@ -212,7 +174,7 @@ function NewProductTrackingReport({ products, config, onReview, drill=null, onCl
     },
     { title: "建议量 / 批准量", key: "qty", width: 151,
       render: (_unused, row) => <div>
-        <div className="np-tracking-cell-main">{row.backend && row.backend.suggestedQty===null ? "—" : suggestion(row, config)} / {row.actualQty > 0 ? row.actualQty : "—"} 件</div>
+        <div className="np-tracking-cell-main">{row.backend ? (row.backend.suggestedQty ?? "—") : suggestion(row, config)} / {row.actualQty > 0 ? row.actualQty : "—"} 件</div>
         <div className="np-tracking-cell-sub">建议 / 已有采购数量</div>
       </div>,
     },
@@ -239,7 +201,7 @@ function NewProductTrackingReport({ products, config, onReview, drill=null, onCl
       </div>,
     },
     { title: "利润率", key: "margin", width: 80,
-      render: (_unused, row) => <span>{row.backend ? (row.backend.available.margin ? `${row.margin}%` : '—') : `${row.margin60 || row.margin}%`}</span>,
+      render: (_unused, row) => <span>{row.backend ? (row.backend.available.margin ? `${row.margin.toFixed(2)}%` : '—') : `${(row.margin60 || row.margin).toFixed(2)}%`}</span>,
     },
     { title: "ACOS", key: "acos", width: 79,
       render: (_unused, row) => <span>{row.backend ? (row.backend.available.acos ? `${row.acos}%` : '—') : `${row.acos60 || row.acos}%`}</span>,
@@ -347,6 +309,8 @@ function NewProductTrackingReport({ products, config, onReview, drill=null, onCl
         />
       </div>
     </div>
+    {listingQuery.isError&&<div role="alert">打品详情读取失败，请刷新重试</div>}
+    {listingQuery.isFetching&&<span role="status">正在读取打品明细…</span>}
     {drill&&<div className="np-tracking-board-scope" role="status">
       <Tag closable onClose={()=>{setOwners([]);setGrades([]);setSearch('');onClearDrill?.();}}>
         来自打品看板：{drill.label}（{drill.from} 至 {drill.to}）
@@ -366,7 +330,7 @@ function NewProductTrackingReport({ products, config, onReview, drill=null, onCl
           pagination={{
             current: page,
             pageSize,
-            total: filtered.length,
+            total: listingQuery.data?.total ?? 0,
             showSizeChanger: true,
             pageSizeOptions: ["20", "50"],
             showTotal: (total, range) => `显示 ${range[0]}–${range[1]} 条，共 ${total} 条`,

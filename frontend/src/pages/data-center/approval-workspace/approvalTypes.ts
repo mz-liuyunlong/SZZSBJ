@@ -9,12 +9,33 @@ export type ApprovalRisk = "low" | "medium" | "high" | "unknown" | "none";
 export type ApprovalStatus = "submitted" | "info_required" | "approved" | "rejected" | "withdrawn" | "legacy_unverified";
 export type Decision = "approved" | "rejected" | "info_required";
 /** 采购审批专用字段，当前后端未提供时保留空值，禁止模拟为真实数据。 */
+/** Evidence frozen at purchase application; never read the latest scoring as its substitute. */
+export interface PurchaseApprovalEvidenceView {
+  frozen: boolean;
+  score_rule_version: number;
+  system_dimensions: Record<'speed'|'ad'|'profit'|'trust'|'market',string|null>;
+  effective_dimensions: Record<'speed'|'ad'|'profit'|'trust'|'market',string|null>;
+  weights: Record<'speed'|'ad'|'profit'|'trust'|'market',number> | null;
+  correction_history: Array<{
+    dimension: string; before: string|null; after: string|null;
+    reason: string|null; actor_id: string|null; at: string|null; revision: number|null;
+  }>;
+  manual_risks: string[] | null;
+  system_risks: string[] | null;
+  competitor_ids: string[] | null;
+  no_competitors: boolean | null;
+  market_reason: string | null;
+  manual_conclusion: {decision:string; reason:string|null} | null;
+}
 export interface PurchaseApprovalDetails {
+  approval_evidence?: PurchaseApprovalEvidenceView | null;
   purchase_kind?: "initial" | "replenishment" | null;
   application_source?: "system" | "operator" | null;
   product_name?: string | null;
   sku?: string | null;
   store_name?: string | null;
+  store_id?: string | null;
+  approved_qty?: number | null;
   owner_name?: string | null;
   supplier_name?: string | null;
   required_delivery_date?: string | null;
@@ -26,6 +47,9 @@ export interface PurchaseApprovalDetails {
   requested_qty?: number | null;
   amount?: number | string | null;
   currency_code?: string | null;
+  profit_fx_month?: string | null;
+  profit_fx_rate?: string | null;
+  profit_fx_source?: "lingxing_my_rate" | null;
   item_id?: string | null;
   msku?: string | null;
   analysis?: {
@@ -101,3 +125,5 @@ export const statusNames: Record<ApprovalStatus, string> = {
  approved: "已审批", rejected: "已驳回", withdrawn: "已撤回",
  legacy_unverified: "历史待核验",
 };
+
+// SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1

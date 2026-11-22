@@ -273,6 +273,7 @@ def sync_catalog(*, limit: int = MAX_BATCH, pages: int = 1, apply: bool = False)
                 raise PermissionError("AD_CATALOG_PRODUCTION_WRITE_NOT_APPROVED")
         elif env in {"local", "dev", "development"}:
             from app.db.session import get_engine
+
             from .unified_publish import local_target_approved
 
             engine = get_engine()
@@ -282,6 +283,7 @@ def sync_catalog(*, limit: int = MAX_BATCH, pages: int = 1, apply: bool = False)
             raise PermissionError("AD_CATALOG_WRITE_ENV_NOT_APPROVED")
 
     from app.db.session import get_engine
+
     from .read_source import get_new_product_read_session
 
     source_gen = get_new_product_read_session()

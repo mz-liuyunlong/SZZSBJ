@@ -45,5 +45,5 @@ def test_no_account_scope_returns_no_projection_and_no_query():
 
     n = Never()
     got = summary(n, n, frozenset())
-    assert got["counts"] == {"all": 0, "evaluating": 0, "market": 0, "passed": 0, "failed": 0}
+    assert got["counts"] == {"all": 0, "evaluating": 0, "market": 0, "pending_confirmation": 0, "passed": 0, "failed": 0}
     assert matching_identities(n, n, frozenset(), statuses="测评中") == []

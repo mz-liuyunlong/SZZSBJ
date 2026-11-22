@@ -163,7 +163,7 @@ def test_same_cutoff_saved_score_disagreement_blocks_proof():
         "roi": score["roi"],
         "gross_margin_pct": score["gross_margin_pct"],
         "sales_amount_usd": score["sales_amount_usd"],
-        "ad_spend_usd": score["ad_spend_usd"],
+        "ad_total_spend_usd": score["ad_spend_usd"],
     }
     result = build_operating_daily_same_source(
         [row], sp, by_day, cutoff=START, first_wfs=START, saved_facts=saved
@@ -181,8 +181,10 @@ def test_same_cutoff_saved_score_equal_reconciles():
         "data_cutoff_la": START.isoformat(),
         **{
             key: score[key]
-            for key in ("profit_usd", "roi", "gross_margin_pct", "sales_amount_usd", "ad_spend_usd")
+            for key in ("profit_usd", "roi", "gross_margin_pct", "sales_amount_usd")
         },
+        "ad_total_spend_usd": score["ad_spend_usd"],
+        "ad_spend_usd": "0",
     }
     result = build_operating_daily_same_source(
         [row], sp, by_day, cutoff=START, first_wfs=START, saved_facts=saved
