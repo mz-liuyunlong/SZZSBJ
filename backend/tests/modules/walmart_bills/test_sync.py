@@ -1001,6 +1001,29 @@ def test_request_exception_leaves_the_exception_type_and_all_stores_failed(
     assert all(s.provider_message == "TimeoutError" for s in status.failed_stores)
 
 
+def test_local_validation_failure_is_not_shown_as_an_upstream_error(session: Session) -> None:
+    """领星第 2 页 total 变了：那一页本身是成功响应，不能记成「领星码 0 / success」。"""
+    add_stores(session)
+    interface = governed(session)
+    client = FakeLingxing(base_rows())
+    client.total_bump[(STORE_A, 2)] = 1
+    run = run_sync(session, interface, client)
+
+    assert (run.status, run.error_code) == ("failed", "SYNC_WALMART_BILL_STORE_PARTIAL")
+    items = failed_items(session, run)
+    assert [item.error_code for item in items] == ["SYNC_WALMART_BILL_TOTAL_CHANGED"]
+    assert (items[0].http_status, items[0].provider_code, items[0].provider_message) == (
+        200,
+        None,
+        None,
+    )
+    status = bill_sync.latest_walmart_bill_sync(session)
+    assert [s.store_code for s in status.failed_stores] == ["CN9901"]
+    assert status.failed_stores[0].error_code == "SYNC_WALMART_BILL_TOTAL_CHANGED"
+    assert status.failed_stores[0].provider_code is None
+    assert status.failed_stores[0].provider_message is None
+
+
 def test_successful_run_reports_no_failed_stores(session: Session) -> None:
     add_stores(session)
     interface = governed(session)
@@ -1014,12 +1037,14 @@ def test_provider_error_fields_truncate_and_fall_back_to_client_codes() -> None:
         provider_error_fields,
     )
 
-    def envelope(body: JsonValue, code: int | None, error_code: str, message: str) -> Any:
+    def envelope(
+        body: JsonValue, code: int | None, error_code: str, message: str, ok: bool = False
+    ) -> Any:
         return LingxingRawEnvelope(
             api_path=WALMART_BILL_SYNC_SPEC.endpoint_path,
             response_json=body,
             response_code=code,
-            is_success=False,
+            is_success=ok,
             error_code=error_code,
             error_message=message,
             pulled_at=NOW,
@@ -1044,3 +1069,6 @@ def test_provider_error_fields_truncate_and_fall_back_to_client_codes() -> None:
     assert (code, len(message or "")) == ("1", 500)
     # 没有响应：只留异常类型
     assert provider_error_fields(None, "ConnectError") == (None, None, "ConnectError")
+    # 领星那一页是成功的（本地校验失败）：只留 HTTP 状态
+    ok_page = envelope({"code": 0, "message": "success"}, 200, "", "", ok=True)
+    assert provider_error_fields(ok_page, "TOTAL_CHANGED") == (200, None, None)

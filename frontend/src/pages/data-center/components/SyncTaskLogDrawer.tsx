@@ -320,10 +320,12 @@ function SyncTaskLogDrawer({
     Boolean(detailLog),
   );
   const workItems = workItemsQuery.data ?? [];
+  // 只有上游真的回了错误码的失败分页才算「上游失败」；本地校验失败只带 HTTP 状态，不算。
   const upstreamFailures = workItems.filter(
-    (item) =>
-      item.status === "failed" &&
-      (item.providerCode || item.providerMessage || item.httpStatus),
+    (item) => item.status === "failed" && Boolean(item.providerCode),
+  );
+  const hasUpstreamInfo = workItems.some(
+    (item) => item.httpStatus || item.providerCode || item.providerMessage,
   );
   const rawRefs = rawRefsQuery.data ?? [];
   const detailLoading = workItemsQuery.isFetching || rawRefsQuery.isFetching;
@@ -480,28 +482,32 @@ function SyncTaskLogDrawer({
       width: 190,
       render: (value: string | null) => value ?? "-",
     },
-    {
-      title: "HTTP",
-      dataIndex: "httpStatus",
-      key: "httpStatus",
-      width: 70,
-      render: (value: number | null) => value ?? "-",
-    },
-    {
-      title: "上游返回码",
-      dataIndex: "providerCode",
-      key: "providerCode",
-      width: 110,
-      render: (value: string | null) => value ?? "-",
-    },
-    {
-      title: "上游说明",
-      dataIndex: "providerMessage",
-      key: "providerMessage",
-      width: 220,
-      ellipsis: true,
-      render: (value: string | null) => value ?? "-",
-    },
+    ...(hasUpstreamInfo
+      ? [
+          {
+            title: "HTTP",
+            dataIndex: "httpStatus",
+            key: "httpStatus",
+            width: 70,
+            render: (value: number | null) => value ?? "-",
+          },
+          {
+            title: "上游返回码",
+            dataIndex: "providerCode",
+            key: "providerCode",
+            width: 110,
+            render: (value: string | null) => value ?? "-",
+          },
+          {
+            title: "上游说明",
+            dataIndex: "providerMessage",
+            key: "providerMessage",
+            width: 220,
+            ellipsis: true,
+            render: (value: string | null) => value ?? "-",
+          },
+        ]
+      : []),
   ];
 
   const rawRefColumns: TableColumnsType<SyncTaskRawRequestRef> = [

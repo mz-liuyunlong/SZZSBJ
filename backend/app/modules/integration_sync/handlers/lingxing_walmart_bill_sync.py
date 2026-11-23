@@ -148,9 +148,14 @@ def provider_error_fields(
     上游返回码优先用领星响应体里的 code；没有响应体（HTTP 错 / 非 JSON）时用客户端的
     error_code（HTTP_ERROR / INVALID_JSON / AUTH_ERROR ...）。message 先脱敏再截断，
     不放任何请求参数。
+
+    领星那一页本身是成功的（总数变了、行解析不过、空响应、行数超页）属于本地校验失败，
+    不是上游失败：只留 HTTP 状态，返回码和 message 都为空，免得显示成「领星码 0 / success」。
     """
     if envelope is None:
         return None, None, _clip(detail)
+    if envelope.is_success:
+        return envelope.response_code, None, None
     code: str | None = None
     message: str | None = None
     body = envelope.response_json
