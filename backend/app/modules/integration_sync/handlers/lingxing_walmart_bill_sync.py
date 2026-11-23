@@ -39,7 +39,7 @@ from sqlalchemy.orm import Session, SessionTransaction
 
 from app.core.config import AppEnvironment, Settings, get_settings
 from app.integrations.lingxing.client import LingxingRawEnvelope, LingxingReadonlyClient
-from app.integrations.lingxing.security import canonical_json, redact_json
+from app.integrations.lingxing.security import canonical_json, redact_json, redact_text
 from app.integrations.lingxing.token_manager import get_shared_lingxing_token_manager
 from app.modules.integration_sync.models import (
     ApiRawBlob,
@@ -133,6 +133,50 @@ class _Failure:
     offset: int
     page_size: int
     envelope: LingxingRawEnvelope | None = None
+    # 没拿到响应时（请求阶段抛异常）留下异常类型名，让任务中心看得出是超时还是连不上。
+    detail: str | None = None
+
+
+PROVIDER_MESSAGE_MAX = 500
+
+
+def provider_error_fields(
+    envelope: LingxingRawEnvelope | None, detail: str | None = None
+) -> tuple[int | None, str | None, str | None]:
+    """从失败那一页的响应里取 (HTTP 状态, 上游返回码, 脱敏截断后的 message)。
+
+    上游返回码优先用领星响应体里的 code；没有响应体（HTTP 错 / 非 JSON）时用客户端的
+    error_code（HTTP_ERROR / INVALID_JSON / AUTH_ERROR ...）。message 先脱敏再截断，
+    不放任何请求参数。
+    """
+    if envelope is None:
+        return None, None, _clip(detail)
+    code: str | None = None
+    message: str | None = None
+    body = envelope.response_json
+    if isinstance(body, dict):
+        raw_code = body.get("code")
+        if isinstance(raw_code, int | str) and not isinstance(raw_code, bool):
+            code = str(raw_code)
+        for key in ("message", "msg", "error_msg", "errorMessage"):
+            raw_message = body.get(key)
+            if isinstance(raw_message, str) and raw_message.strip():
+                message = raw_message
+                break
+    if code is None and envelope.error_code:
+        code = envelope.error_code
+    if message is None:
+        message = envelope.error_message or detail
+    return envelope.response_code, _clip(code, 64), _clip(message)
+
+
+def _clip(value: str | None, limit: int = PROVIDER_MESSAGE_MAX) -> str | None:
+    if value is None:
+        return None
+    text = redact_text(value).strip()
+    if not text:
+        return None
+    return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
 @dataclass(slots=True)
@@ -499,6 +543,7 @@ class LingxingWalmartBillSyncHandler:
                     page_no,
                     offset,
                     page_size,
+                    detail=type(exc).__name__,
                 )
                 raise WalmartBillSyncError("SYNC_WALMART_BILL_REQUEST_FAILED") from exc
             failure = _Failure("", start, end, page_no, offset, page_size, envelope)
@@ -615,7 +660,7 @@ class LingxingWalmartBillSyncHandler:
                 # 不是某一页出的错（如数据库出错）：记在今天、第 1 页名下；
                 # 表约束要求页大小 > 0，不能填 0。
                 today = self._now().astimezone(SHANGHAI).date()
-                failure = _Failure(code, today, today, 1, 0, 1)
+                failure = _Failure(code, today, today, 1, 0, 1, detail=type(exc).__name__)
             work = self._start_work_item(
                 run,
                 store_id,
@@ -635,7 +680,7 @@ class LingxingWalmartBillSyncHandler:
                     failure.start,
                     failure.end,
                 )
-            self._fail_work(run, work, code)
+            self._fail_work(run, work, code, failure)
             self.session.commit()
         except Exception:
             # 失败记录本身写不进去时不能再抛（会挡住其他店），但要留日志，不能悄悄吞掉。
@@ -805,10 +850,15 @@ class LingxingWalmartBillSyncHandler:
         run: IntegrationSyncRun,
         work: IntegrationSyncRunWorkItem,
         code: str,
+        failure: _Failure | None = None,
     ) -> None:
         work.status = "failed"
         work.error_code = code
         work.error_message = "沃尔玛账单请求处理失败"
+        if failure is not None:
+            work.http_status, work.provider_code, work.provider_message = provider_error_fields(
+                failure.envelope, failure.detail
+            )
         work.finished_at = utc_now()
         run.work_items_failed += 1
         self.session.flush()

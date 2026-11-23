@@ -234,6 +234,15 @@ function buildDiagnosisText(
         .filter(Boolean)
         .join(", ") || "-"
     }`,
+    `上游返回：${
+      workItems
+        .filter((item) => item.providerCode || item.providerMessage || item.httpStatus)
+        .map(
+          (item) =>
+            `[${item.httpStatus ?? "-"}/${item.providerCode ?? "-"}] ${item.providerMessage ?? ""}`,
+        )
+        .join("; ") || "-"
+    }`,
   ].join("\n");
 }
 
@@ -311,6 +320,11 @@ function SyncTaskLogDrawer({
     Boolean(detailLog),
   );
   const workItems = workItemsQuery.data ?? [];
+  const upstreamFailures = workItems.filter(
+    (item) =>
+      item.status === "failed" &&
+      (item.providerCode || item.providerMessage || item.httpStatus),
+  );
   const rawRefs = rawRefsQuery.data ?? [];
   const detailLoading = workItemsQuery.isFetching || rawRefsQuery.isFetching;
   const workItemError = errorText(workItemsQuery.error);
@@ -464,6 +478,28 @@ function SyncTaskLogDrawer({
       dataIndex: "errorMessage",
       key: "errorMessage",
       width: 190,
+      render: (value: string | null) => value ?? "-",
+    },
+    {
+      title: "HTTP",
+      dataIndex: "httpStatus",
+      key: "httpStatus",
+      width: 70,
+      render: (value: number | null) => value ?? "-",
+    },
+    {
+      title: "上游返回码",
+      dataIndex: "providerCode",
+      key: "providerCode",
+      width: 110,
+      render: (value: string | null) => value ?? "-",
+    },
+    {
+      title: "上游说明",
+      dataIndex: "providerMessage",
+      key: "providerMessage",
+      width: 220,
+      ellipsis: true,
       render: (value: string | null) => value ?? "-",
     },
   ];
@@ -766,6 +802,24 @@ function SyncTaskLogDrawer({
                         type="warning"
                         message="Work Item 读取失败"
                         description={workItemError}
+                      />
+                    )}
+                    {upstreamFailures.length > 0 && (
+                      <Alert
+                        showIcon
+                        type="error"
+                        message={`上游接口返回失败 ${upstreamFailures.length} 条`}
+                        description={
+                          <ul style={{ margin: 0, paddingLeft: 18 }}>
+                            {upstreamFailures.map((item) => (
+                              <li key={item.id}>
+                                批次 {item.ordinal} · {item.errorCode ?? "-"} · HTTP{" "}
+                                {item.httpStatus ?? "-"} · 上游码 {item.providerCode ?? "-"}
+                                {item.providerMessage ? ` · ${item.providerMessage}` : ""}
+                              </li>
+                            ))}
+                          </ul>
+                        }
                       />
                     )}
                     <Table<SyncTaskWorkItem>

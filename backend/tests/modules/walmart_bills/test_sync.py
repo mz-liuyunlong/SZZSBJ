@@ -889,3 +889,158 @@ def test_a_period_with_two_currencies_fails_the_store(session: Session) -> None:
     assert failed == ["SYNC_WALMART_BILL_MIXED_CURRENCY"]
     assert session.get(WalmartBillPeriod, ("primary", STORE_A, "rk-a1")) is None
     assert period(session, STORE_B, "rk-b1").status == "normal"
+
+
+# ---------------------------------------------------------------- 0095：失败时留下领星到底回了什么
+
+
+class ProviderErrorLingxing(FakeLingxing):
+    """某个店领星直接回业务错误（HTTP 200、code ≠ 0），其余店正常。"""
+
+    def __init__(self, rows: list[dict[str, Any]], broken: str) -> None:
+        super().__init__(rows)
+        self.broken = broken
+
+    def fetch_walmart_bill_page(self, **kw: Any) -> LingxingRawEnvelope:
+        if kw["store_id"] != self.broken:
+            return super().fetch_walmart_bill_page(**kw)
+        self.calls.append((kw["store_id"], kw["start_date"], kw["end_date"], kw["offset"]))
+        body: JsonValue = {
+            "code": 2001005,
+            "message": "店铺授权已过期 access_token=should-not-leak",
+            "data": None,
+        }
+        return LingxingRawEnvelope(
+            api_path=WALMART_BILL_SYNC_SPEC.endpoint_path,
+            request_body_json={"offset": kw["offset"], "length": kw["length"]},
+            response_json=body,
+            response_code=200,
+            is_success=False,
+            error_code="PROVIDER_ERROR",
+            error_message="Lingxing provider reported failure",
+            pulled_at=NOW,
+            page_no=kw["page_no"],
+            page_size=kw["length"],
+            store_id=kw["store_id"],
+            object_type="lingxing_walmart_bill_statement",
+            trace_id=kw["run_id"],
+            run_id=kw["run_id"],
+            batch_id=kw["work_item_id"],
+            attempt_no=1,
+        )
+
+
+class TimeoutLingxing(FakeLingxing):
+    """请求阶段就抛异常（连不上 / 超时）：没有响应，只能留异常类型。"""
+
+    def fetch_walmart_bill_page(self, **kw: Any) -> LingxingRawEnvelope:
+        raise TimeoutError("synthetic timeout")
+
+
+def failed_items(session: Session, run: IntegrationSyncRun) -> list[IntegrationSyncRunWorkItem]:
+    return list(
+        session.scalars(
+            select(IntegrationSyncRunWorkItem)
+            .where(
+                IntegrationSyncRunWorkItem.run_id == run.id,
+                IntegrationSyncRunWorkItem.status == "failed",
+            )
+            .order_by(IntegrationSyncRunWorkItem.ordinal)
+        ).all()
+    )
+
+
+def test_provider_error_is_kept_on_the_work_item_and_shown_on_the_page(session: Session) -> None:
+    add_stores(session)
+    interface = governed(session)
+    run = run_sync(session, interface, ProviderErrorLingxing(base_rows(), STORE_A))
+
+    assert (run.status, run.error_code) == ("failed", "SYNC_WALMART_BILL_STORE_PARTIAL")
+    items = failed_items(session, run)
+    assert [item.error_code for item in items] == ["SYNC_WALMART_BILL_RESPONSE_FAILED"]
+    item = items[0]
+    assert (item.http_status, item.provider_code) == (200, "2001005")
+    assert item.provider_message is not None
+    assert item.provider_message.startswith("店铺授权已过期")
+    assert "should-not-leak" not in item.provider_message  # message 先脱敏再落库
+    # 乙店照常写入
+    assert period(session, STORE_B, "rk-b1").status == "normal"
+
+    status = bill_sync.latest_walmart_bill_sync(session)
+    assert status.status == "failed"
+    assert [s.store_code for s in status.failed_stores] == ["CN9901"]
+    failed_store = status.failed_stores[0]
+    assert failed_store.store_id == STORE_A
+    # 窗口按自然月切段，第一段就失败了：10-06 ~ 10-31
+    assert (failed_store.window_start, failed_store.window_end) == ("2026-10-06", "2026-10-31")
+    assert (failed_store.error_code, failed_store.http_status, failed_store.provider_code) == (
+        "SYNC_WALMART_BILL_RESPONSE_FAILED",
+        200,
+        "2001005",
+    )
+    assert failed_store.provider_message == item.provider_message
+
+
+def test_request_exception_leaves_the_exception_type_and_all_stores_failed(
+    session: Session,
+) -> None:
+    add_stores(session)
+    interface = governed(session)
+    run = run_sync(session, interface, TimeoutLingxing(base_rows()))
+
+    assert (run.status, run.error_code) == ("failed", "SYNC_WALMART_BILL_ALL_STORES_FAILED")
+    items = failed_items(session, run)
+    assert {item.error_code for item in items} == {"SYNC_WALMART_BILL_REQUEST_FAILED"}
+    assert all(
+        (item.http_status, item.provider_code, item.provider_message)
+        == (None, None, "TimeoutError")
+        for item in items
+    )
+    status = bill_sync.latest_walmart_bill_sync(session)
+    assert [s.store_code for s in status.failed_stores] == ["CN9901", "CN9902"]
+    assert all(s.provider_message == "TimeoutError" for s in status.failed_stores)
+
+
+def test_successful_run_reports_no_failed_stores(session: Session) -> None:
+    add_stores(session)
+    interface = governed(session)
+    run_sync(session, interface, FakeLingxing(base_rows()))
+    status = bill_sync.latest_walmart_bill_sync(session)
+    assert (status.status, status.failed_stores) == ("succeeded", [])
+
+
+def test_provider_error_fields_truncate_and_fall_back_to_client_codes() -> None:
+    from app.modules.integration_sync.handlers.lingxing_walmart_bill_sync import (
+        provider_error_fields,
+    )
+
+    def envelope(body: JsonValue, code: int | None, error_code: str, message: str) -> Any:
+        return LingxingRawEnvelope(
+            api_path=WALMART_BILL_SYNC_SPEC.endpoint_path,
+            response_json=body,
+            response_code=code,
+            is_success=False,
+            error_code=error_code,
+            error_message=message,
+            pulled_at=NOW,
+            page_no=1,
+            page_size=1,
+            object_type="lingxing_walmart_bill_statement",
+            trace_id="t",
+            run_id="r",
+            batch_id="b",
+            attempt_no=1,
+        )
+
+    # HTTP 502、响应不是 JSON：用客户端的 error_code / error_message
+    assert provider_error_fields(envelope(None, 502, "INVALID_JSON", "not json")) == (
+        502,
+        "INVALID_JSON",
+        "not json",
+    )
+    # message 超长截到 500
+    long = envelope({"code": 1, "message": "x" * 800}, 200, "PROVIDER_ERROR", "p")
+    _, code, message = provider_error_fields(long)
+    assert (code, len(message or "")) == ("1", 500)
+    # 没有响应：只留异常类型
+    assert provider_error_fields(None, "ConnectError") == (None, None, "ConnectError")

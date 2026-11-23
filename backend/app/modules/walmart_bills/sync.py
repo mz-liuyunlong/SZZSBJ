@@ -7,13 +7,19 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.modules.integration_sync.models import IntegrationSyncConfig, IntegrationSyncRun
+from app.modules.data_pages.models import LingxingStoreDimension
+from app.modules.integration_sync.models import (
+    IntegrationSyncConfig,
+    IntegrationSyncRun,
+    IntegrationSyncRunWorkItem,
+)
 from app.modules.integration_sync.repository import IntegrationSyncRepository
 from app.modules.integration_sync.schemas import TriggerRequest
 from app.modules.integration_sync.service import IntegrationSyncService
 from app.modules.integration_sync.tasks import TaskDispatchError, dispatch_sync_run
 from app.modules.integration_sync.walmart_bill_catalog import WALMART_BILL_SYNC_SPEC
-from app.modules.walmart_bills.schemas import WalmartBillSyncData
+from app.modules.walmart_bills.payout_service import store_code
+from app.modules.walmart_bills.schemas import WalmartBillSyncData, WalmartBillSyncFailedStore
 
 PROVIDER = "lingxing"
 SPEC = WALMART_BILL_SYNC_SPEC
@@ -55,7 +61,57 @@ def latest_walmart_bill_sync(session: Session) -> WalmartBillSyncData:
         records_seen=run.records_seen,
         records_written=run.records_written,
         last_success_at=success.finished_at if success else None,
+        failed_stores=_failed_stores(session, run) if run.status == "failed" else [],
     )
+
+
+def _failed_stores(session: Session, run: IntegrationSyncRun) -> list[WalmartBillSyncFailedStore]:
+    """一个店只留最后一条失败分页（整店回滚后补的那条就是它）。"""
+    items = session.scalars(
+        select(IntegrationSyncRunWorkItem)
+        .where(
+            IntegrationSyncRunWorkItem.run_id == run.id,
+            IntegrationSyncRunWorkItem.status == "failed",
+        )
+        .order_by(IntegrationSyncRunWorkItem.ordinal)
+    ).all()
+    if not items:
+        return []
+    by_store: dict[str, IntegrationSyncRunWorkItem] = {}
+    for item in items:
+        sids = item.request_safe_params.get("sids")
+        store_id = (
+            str(sids[0])
+            if isinstance(sids, list) and sids
+            else str(item.scope_key).split(":", 1)[0]
+        )
+        if store_id:
+            by_store[store_id] = item
+    names = dict(
+        session.execute(
+            select(LingxingStoreDimension.store_id, LingxingStoreDimension.store_name).where(
+                LingxingStoreDimension.source_account_ref == run.source_account_ref,
+                LingxingStoreDimension.store_id.in_(list(by_store)),
+            )
+        ).all()
+    )
+    result = []
+    for store_id, item in by_store.items():
+        params = item.request_safe_params
+        start, end = params.get("startDate"), params.get("endDate")
+        result.append(
+            WalmartBillSyncFailedStore(
+                store_id=store_id,
+                store_code=store_code(names.get(store_id), store_id),
+                window_start=str(start) if start else None,
+                window_end=str(end) if end else None,
+                error_code=item.error_code,
+                http_status=item.http_status,
+                provider_code=item.provider_code,
+                provider_message=item.provider_message,
+            )
+        )
+    return sorted(result, key=lambda s: s.store_code)
 
 
 def start_walmart_bill_sync(

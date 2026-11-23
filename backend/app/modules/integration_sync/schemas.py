@@ -226,6 +226,9 @@ class WorkItemRead(StrictSchema):
     response_count: int | None
     error_code: str | None
     error_message: str | None
+    http_status: int | None = None
+    provider_code: str | None = None
+    provider_message: str | None = None
     started_at: datetime | None
     finished_at: datetime | None
     created_at: datetime

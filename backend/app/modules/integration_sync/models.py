@@ -350,6 +350,10 @@ class IntegrationSyncRunWorkItem(Base):
     response_count: Mapped[int | None] = mapped_column(Integer)
     error_code: Mapped[str | None] = mapped_column(String(128))
     error_message: Mapped[str | None] = mapped_column(Text)
+    # 0095：失败那一页上游到底回了什么（HTTP 状态、上游返回码、脱敏截断后的 message）。
+    http_status: Mapped[int | None] = mapped_column(Integer)
+    provider_code: Mapped[str | None] = mapped_column(String(64))
+    provider_message: Mapped[str | None] = mapped_column(String(500))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(

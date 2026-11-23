@@ -7,6 +7,19 @@ from uuid import UUID
 from pydantic import BaseModel
 
 
+class WalmartBillSyncFailedStore(BaseModel):
+    """最近一次同步里没完成的店：哪个店、哪个窗口、领星到底回了什么。"""
+
+    store_id: str
+    store_code: str
+    window_start: str | None = None  # yyyy-mm-dd
+    window_end: str | None = None
+    error_code: str | None = None
+    http_status: int | None = None
+    provider_code: str | None = None
+    provider_message: str | None = None
+
+
 class WalmartBillSyncData(BaseModel):
     """「手动同步」按钮和页面顶部的同步状态。"""
 
@@ -19,6 +32,8 @@ class WalmartBillSyncData(BaseModel):
     records_seen: int = 0
     records_written: int = 0
     last_success_at: datetime | None = None
+    # 最近一次运行失败时，按店列出没完成的店（成功或还在跑时为空）。
+    failed_stores: list[WalmartBillSyncFailedStore] = []
 
 
 class WalmartBillPeriodRead(BaseModel):
