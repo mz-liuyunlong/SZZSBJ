@@ -94,6 +94,63 @@ def test_no_write_and_no_arbitrary_destination(denied):
     assert not resolver.stores  # denied before credential access
 
 
+def review_items_request(*, body=None, key="review_accelerator_items", is_write=False):
+    return PreparedRequest(
+        key=key,
+        method="POST",
+        path="/v3/growth/reviews-accelerator/items",
+        query={"scrollId": "*"},
+        body=body,
+        is_write=is_write,
+    )
+
+
+def test_direct_transport_allows_the_reviewed_read_semantic_post_with_empty_body(monkeypatch):
+    """Review Accelerator items: POST, empty JSON object, scrollId only — nothing else."""
+    resolver = FakeResolver()
+    seen = []
+    real_client = httpx.Client
+
+    def handler(req):
+        seen.append((req.method, str(req.url), req.content))
+        if req.url.path == "/v3/token":
+            return httpx.Response(200, json={"access_token": "opaque"})
+        return httpx.Response(200, json={"items": [{"sku": "x", "reviewsCollected": 3}]})
+
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs),
+    )
+    transport = WalmartDirectReadOnlyTransport(bound_store="HK2613", secret_resolver=resolver)
+    status, payload = transport.execute(store_code="HK2613", request=review_items_request(body={}))
+    assert status == 200 and payload["items"][0]["reviewsCollected"] == 3
+    method, url, content = seen[-1]
+    assert method == "POST"
+    assert url == (
+        "https://marketplace.walmartapis.com/v3/growth/reviews-accelerator/items?scrollId=%2A"
+    )
+    assert content == b"{}"  # pinned empty object, never caller bytes
+
+
+@pytest.mark.parametrize(
+    "denied",
+    [
+        review_items_request(body={"status": "ENROLLED"}),  # any filter body is a write
+        review_items_request(body=None),  # no body → not the reviewed shape
+        review_items_request(body={}, is_write=True),  # contract flagged as write
+        review_items_request(body={}, key="wfs_inbound_preview"),  # other POSTs stay denied
+        request("POST", "/v3/growth/reviews-accelerator/items", body={}),  # wrong key
+    ],
+)
+def test_other_posts_and_bodies_stay_denied(denied):
+    resolver = FakeResolver()
+    transport = WalmartDirectReadOnlyTransport(bound_store="HK2613", secret_resolver=resolver)
+    with pytest.raises(TransportRejected, match="WALMART_DIRECT_WRITE_DENIED"):
+        transport.execute(store_code="HK2613", request=denied)
+    assert not resolver.stores
+
+
 def test_direct_transport_rejects_other_store():
     resolver = FakeResolver()
     with pytest.raises(TransportRejected, match="WALMART_STORE_NOT_AUTHORIZED"):

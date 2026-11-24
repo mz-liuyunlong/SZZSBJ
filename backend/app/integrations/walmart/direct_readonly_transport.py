@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import httpx
 
+from app.integrations.walmart.contract_signing import READ_SEMANTIC_NON_GET_KEYS
 from app.integrations.walmart.contracts import PreparedRequest
 from app.integrations.walmart.https_transport import (
     MAX_ERROR_RESPONSE_BYTES,
@@ -50,7 +51,16 @@ class WalmartDirectReadOnlyTransport:
             raise TransportRejected("WALMART_STORE_NOT_AUTHORIZED")
         # A signed contract can authorize many reads, but cannot override the
         # operating mode: reject every non-GET even if it claims is_write=False.
-        if request.method != "GET" or request.is_write or request.body is not None:
+        # Single reviewed exception: the Review Accelerator item list is a POST with
+        # an empty body (READ_SEMANTIC_NON_GET_KEYS); any other body or method is a write.
+        read_semantic_post = (
+            request.method == "POST"
+            and request.key in READ_SEMANTIC_NON_GET_KEYS
+            and request.body == {}
+        )
+        if request.is_write or (
+            not read_semantic_post and (request.method != "GET" or request.body is not None)
+        ):
             raise TransportRejected("WALMART_DIRECT_WRITE_DENIED")
         if (
             not request.path.startswith("/v3/")
@@ -91,9 +101,11 @@ class WalmartDirectReadOnlyTransport:
                     raise TransportRejected("WALMART_TOKEN_INVALID")
                 wants_pdf = request.response_kind == "pdf"
                 with client.stream(
-                    "GET",
+                    "POST" if read_semantic_post else "GET",
                     WALMART_HOST + request.path,
                     params=dict(request.query),
+                    # The pinned empty object; never the caller's bytes.
+                    json={} if read_semantic_post else None,
                     headers={
                         "WM_SEC.ACCESS_TOKEN": token,
                         "WM_SVC.NAME": "Walmart Marketplace",

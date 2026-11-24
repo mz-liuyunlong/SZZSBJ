@@ -34,6 +34,7 @@ from app.integrations.walmart.contract_signing import (
 from app.integrations.walmart.contracts import ContractRegistry
 from app.integrations.walmart.direct_readonly_transport import WalmartDirectReadOnlyTransport
 from app.integrations.walmart.feeds_catalog import feed_monitor_registry
+from app.integrations.walmart.growth_catalog import growth_read_registry
 from app.integrations.walmart.https_transport import WalmartHttpsTransport
 from app.integrations.walmart.marketplace_catalog import marketplace_read_registry
 from app.integrations.walmart.operations_catalog import operations_read_registry
@@ -199,7 +200,10 @@ def _load_registry(
         marketplace_keys = set(marketplace_read_registry().keys())
         returns_keys = set(returns_read_registry().keys())
         operations_keys = set(operations_read_registry().keys())
-        known_keys = wfs_keys | feed_keys | marketplace_keys | returns_keys | operations_keys
+        growth_keys = set(growth_read_registry().keys())
+        known_keys = (
+            wfs_keys | feed_keys | marketplace_keys | returns_keys | operations_keys | growth_keys
+        )
         if approved_keys - known_keys:
             raise ValueError("WALMART_APPROVED_OPERATION_UNKNOWN")
         combined = (
@@ -221,6 +225,9 @@ def _load_registry(
                 operations_read_registry(
                     approved_keys=approved_keys & operations_keys
                 )._operations.values()
+            )
+            + tuple(
+                growth_read_registry(approved_keys=approved_keys & growth_keys)._operations.values()
             )
             + tuple(wfs_write_registry(approved_keys=approved_write_keys)._operations.values())
         )

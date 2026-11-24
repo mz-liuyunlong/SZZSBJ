@@ -70,9 +70,11 @@ RISK_READ = "read"
 RISK_WRITE = "write"
 
 # Reviewer requirement 3: a non-GET is a write unless the operation was explicitly
-# reviewed as read-semantic. This set is cloud-side code, not configuration, and is
-# empty on purpose (WFS inbound-preview is a POST and is treated as a write).
-READ_SEMANTIC_NON_GET_KEYS: frozenset[str] = frozenset()
+# reviewed as read-semantic. This set is cloud-side code, not configuration. The only
+# entry is the Review Accelerator item list (owner authorization 2026-11-24): a POST
+# that pages through enrolled items with an empty body and changes nothing. WFS
+# inbound-preview is a POST and stays a write.
+READ_SEMANTIC_NON_GET_KEYS: frozenset[str] = frozenset({"review_accelerator_items"})
 
 
 def risk_for(method: str, operation_key: str) -> str:

@@ -26,6 +26,7 @@ MODULES = (
     "contracts.py",
     "direct_readonly_transport.py",
     "feeds_catalog.py",
+    "growth_catalog.py",
     "https_transport.py",
     "marketplace_catalog.py",
     "operations_catalog.py",

@@ -163,7 +163,7 @@ PMC「WFS 货件创建」需要 6 个写调用，契约在 `wfs_write_catalog.py
 
 ### 风险等级（云函数自己判断）
 
-`risk_for(method, key)`：GET = read；POST/PUT/PATCH/DELETE = write，除非 key 在云端代码常量 `READ_SEMANTIC_NON_GET_KEYS`（目前为空；WFS inbound-preview 是 POST，按写处理）。云函数不信契约里的 `mutating` 字段单独判读；服务器声明的 `risk` 与云端计算不一致 → `WALMART_RISK_MISMATCH`。每店唯一开关 `SZZSBJ_WALMART_MAX_RISK=read|write`（`write` 还需 `LIVE_MODE=owner-approved-read-write`）；write 还要求 `approval_ref`。
+`risk_for(method, key)`：GET = read；POST/PUT/PATCH/DELETE = write，除非 key 在云端代码常量 `READ_SEMANTIC_NON_GET_KEYS`（唯一条目 `review_accelerator_items`：评价加速器报名清单 `POST /v3/growth/reviews-accelerator/items`，query 只允许 `scrollId`，请求体由契约钉死为空对象 `{}`，直连传输层也只对这一个 key 放行 POST 并自己发 `{}`；负责人 2026-11-24 书面授权。WFS inbound-preview 是 POST，仍按写处理）。云函数不信契约里的 `mutating` 字段单独判读；服务器声明的 `risk` 与云端计算不一致 → `WALMART_RISK_MISMATCH`。每店唯一开关 `SZZSBJ_WALMART_MAX_RISK=read|write`（`write` 还需 `LIVE_MODE=owner-approved-read-write`）；write 还要求 `approval_ref`。
 
 ### 与 v1/v2 的关系
 

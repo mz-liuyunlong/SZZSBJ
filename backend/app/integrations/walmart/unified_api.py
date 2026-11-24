@@ -25,6 +25,7 @@ from app.integrations.walmart.contracts import (
     with_authorization,
 )
 from app.integrations.walmart.feeds_catalog import feed_monitor_registry
+from app.integrations.walmart.growth_catalog import growth_read_registry
 from app.integrations.walmart.marketplace_catalog import marketplace_read_registry
 from app.integrations.walmart.operations_catalog import operations_read_registry
 from app.integrations.walmart.pagination import PageContract, collect_read_pages
@@ -47,6 +48,8 @@ _READ_FAMILIES: tuple[tuple[Any, str], ...] = (
     (marketplace_read_registry, "marketplace"),
     (returns_read_registry, "returns"),
     (operations_read_registry, "operations"),
+    # Review Accelerator item list: the one reviewed read-semantic POST (empty body).
+    (growth_read_registry, "growth"),
 )
 WFS_WRITE_PERMISSION = "action:walmart:wfs:shipments:write"
 WFS_CANCEL_PERMISSION = "action:walmart:wfs:shipments:cancel"
@@ -89,6 +92,7 @@ def _builtins(
         marketplace_read_registry,
         returns_read_registry,
         operations_read_registry,
+        growth_read_registry,
     )
     operations: dict[str, Operation] = {}
     for factory in factories:
