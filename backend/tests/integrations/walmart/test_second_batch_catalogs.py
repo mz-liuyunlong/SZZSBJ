@@ -95,7 +95,26 @@ def test_payment_insights_misc_are_get_only_with_documented_params() -> None:
     assert query.method == "POST" and query.is_write is False
     with pytest.raises(ContractError, match="WALMART_BODY_FIELD_NOT_ALLOWED"):
         insights.prepare("insights_listing_quality_items", body={"sql": "drop"})
-    misc = misc_read_registry(approved_keys=frozenset({"lagtime_get", "shipping_template_get"}))
+    misc = misc_read_registry(
+        approved_keys=frozenset(
+            {"lagtime_get", "shipping_template_get", "inbound_shipments_quote_get", "items_spec"}
+        )
+    )
+    quote = misc.prepare(
+        "inbound_shipments_quote_get", params={"shipmentId": "S1", "quoteType": "PARCEL"}
+    )
+    assert quote.method == "GET" and quote.path == "/v3/fulfillment/inbound-shipments-quote"
+    with pytest.raises(ContractError, match="WALMART_PARAM_REQUIRED"):
+        misc.prepare("inbound_shipments_quote_get", params={"quoteType": "LTL"})
+    spec = misc.prepare(
+        "items_spec",
+        body={"feedType": "MP_WFS_ITEM", "version": "5.0", "productTypes": ["Baking Sheets"]},
+    )
+    assert spec.method == "POST" and not spec.is_write and risk_for("POST", "items_spec") == "read"
+    with pytest.raises(ContractError):
+        misc.prepare("items_spec", body={"productTypes": ["x"]})  # feedType / version required
+    with pytest.raises(ContractError, match="WALMART_BODY_FIELD_NOT_ALLOWED"):
+        misc.prepare("items_spec", body={"feedType": "x", "version": "y", "sku": "z"})
     assert misc.prepare("lagtime_get", params={"sku": "A/B"}).query == {"sku": "A/B"}
     assert (
         misc.prepare("shipping_template_get", params={"templateId": "t 1"}).path

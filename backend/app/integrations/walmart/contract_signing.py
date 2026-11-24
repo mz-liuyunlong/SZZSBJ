@@ -86,6 +86,8 @@ READ_SEMANTIC_NON_GET_KEYS: frozenset[str] = frozenset(
         "report_request_create",
         # insights
         "insights_listing_quality_items",
+        # items (setup spec query)
+        "items_spec",
         # SEM queries
         "sem_billing_history",
         "sem_campaigns_performance_summary",
