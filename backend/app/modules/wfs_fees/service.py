@@ -558,7 +558,8 @@ class WfsFeeService:
         record.rows_new = new_rows
         record.rows_duplicate = len(report.lines) - new_rows
         record.status = "parsed" if report.lines else "empty"
-        self.refresh_checks(store_id, {row.report_key for row in touched if row.report_key})
+        # 标 missing 的行所在账单期也要重算核对（空报表重传后核对要回到汇总行口径，审核 P2-1）
+        self.refresh_checks(store_id, affected_keys)
         return ImportResult(
             record.id,
             record.file_name,

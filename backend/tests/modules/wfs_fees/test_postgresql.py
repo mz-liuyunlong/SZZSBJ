@@ -768,14 +768,14 @@ def test_settlement_summary_rows_are_company_and_superseded_by_item_reports(serv
     _bill_lines(
         session,
         RK_1020,
-        [("WFS StorageFee", "2026-10-09", "-12.40"), ("WFS StorageFee", "2026-10-16", "-17.50")],
+        [("WFS StorageFee", "2026-10-09", "-12.40"), ("WFS StorageFee", "2026-10-16", "-17.60")],
     )
     result = _upload(
         service,
         S.settlement(
             [
                 S.fee("StorageFee", "2026-10-09", "12.40", ref="S1"),
-                S.fee("StorageFee", "2026-10-16", "17.50", ref="S2"),
+                S.fee("StorageFee", "2026-10-16", "17.60", ref="S2"),
                 S.fee("InboundTransportationFee", "2026-10-09", "93.60", ref="I1"),
                 S.fee("FulfillmentFee", "2026-10-09", "3.45", gtin=S.GTIN_1, ref="F1"),
             ]
@@ -789,7 +789,8 @@ def test_settlement_summary_rows_are_company_and_superseded_by_item_reports(serv
     assert all(r.attribution == "company" and not r.gtin for r in summary.values())
     assert summary["S1"].report_key == RK_1020 and summary["S1"].amount_usd == Decimal("-12.40")
     checks = {(c.report_key, c.fee_type): c for c in session.scalars(select(WalmartWfsFeeCheck))}
-    assert checks[(RK_1020, "StorageFee")].status == "ok"  # 29.90 两边一致
+    check = checks[(RK_1020, "StorageFee")]
+    assert check.status == "ok" and check.report_amount == Decimal("-30.00")  # 两边一致
     assert (RK_1020, "FulfillmentFee") not in checks  # 核对两边都不含配送费
     listed, total = reader.list_lines(
         session, reader.LineFilter(store_id=S.STORE_A, fee_type="StorageFee"), page=1, page_size=50
@@ -829,7 +830,9 @@ def test_settlement_summary_rows_are_company_and_superseded_by_item_reports(serv
     assert {str(r.superseded_by_file_id) for r in hidden if not r.gtin} == {str(storage.file_id)}
     checks = {(c.report_key, c.fee_type): c for c in session.scalars(select(WalmartWfsFeeCheck))}
     check = checks[(RK_1020, "StorageFee")]
-    assert check.status == "ok" and check.report_rows == 2  # 核对改用按商品的行，不重复算汇总行
+    # 核对改用按商品的行（29.90，与账单 30.00 差 0.10 → diff），不重复算汇总行
+    assert check.status == "diff" and check.report_rows == 2
+    assert check.report_amount == Decimal("-29.90")
 
     # 按商品报表的行全部标 missing（同期重传空报表）→ 汇总行自动回来
     cleared = _upload(
@@ -842,5 +845,7 @@ def test_settlement_summary_rows_are_company_and_superseded_by_item_reports(serv
     summary = {r.source_ref: r for r in _lines(session, fee_source="settlement")}
     assert "superseded_by_file" not in summary["S1"].extra
     checks = {(c.report_key, c.fee_type): c for c in session.scalars(select(WalmartWfsFeeCheck))}
+    # 核对回到汇总行口径：金额 30.00、状态 ok（审核 P2-1：空报表重传也要重算核对）
     check = checks[(RK_1020, "StorageFee")]
     assert check.report_rows == 2 and check.status == "ok"
+    assert check.report_amount == Decimal("-30.00")

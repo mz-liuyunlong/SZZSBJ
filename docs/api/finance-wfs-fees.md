@@ -64,4 +64,6 @@ PR 2（#346）的沃尔玛接口拉取走的是「生产 → 店铺服务器 SSH
 
 - 结算报表只有配送费（`FulfillmentFee`）行不入表（配送费从领星账单订单行取）；仓储费（`StorageFee`）、入库运费（`InboundTransportationFee`）的店铺周汇总行（无 GTIN）入表，归属 `company`，只用于和领星账单的现金核对，不进结算利润。
 - 同店同账单期导入了按商品的仓储费报表（`fee_source = storage`）/ 入库运输报告（`inbound`）后，对应的汇总行被顶掉：`extra.superseded_by_file` 记顶掉它的文件 id，列表（默认）、合计、核对都不再算它；报表行被标 missing 后汇总行自动回来。接口 `superseded_by_file_id` 字段给页面。
-- 核对（`mart_walmart_wfs_fee_checks`）两边都不含配送费。
+- 核对（`mart_walmart_wfs_fee_checks`）两边都不含配送费；重传空报表（按商品行全部标 missing）后，该期核对也重算，回到汇总行口径。
+- 账单期（`report_key`）只在导入时按当时已同步的领星账单归期，之后不自动补：**先同步沃尔玛账单，再导 WFS 报表**。账单晚到的，重导同一份文件即可重新归期并重算顶掉标记。
+- 上线步骤：线上任务中心若已登记 `walmart` / `walmartWfsFeeReports` 接口，停用（`is_enabled=false`）或归档；按票据重导 16 个历史结算 CSV（同一份文件重传只补行、不重复入账）。

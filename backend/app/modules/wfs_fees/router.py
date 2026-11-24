@@ -4,7 +4,7 @@
 - 看：page:finance:wfs-fees:view
 - 导入：action:finance:wfs-fees:import（所有店铺都可上传卖家后台下载的报表；Rocky 2026-11-12）
 - 调整 / 标已核实：action:finance:wfs-fees:adjust
-- 同步：action:finance:wfs-fees:sync（沃尔玛接口拉报表；按一次锁 90 分钟、失败锁 60 分钟）
+- 同步：已移除（2026-11-24 PR-0，远端拉取通道废弃；权限键保留登记、无接口使用）
 """
 
 from __future__ import annotations
