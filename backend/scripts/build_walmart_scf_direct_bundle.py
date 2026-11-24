@@ -21,6 +21,7 @@ import sys
 import zipfile
 
 MODULES = (
+    "_catalog_base.py",
     "cloud_executor.py",
     "contract_signing.py",
     "contracts.py",
@@ -28,10 +29,15 @@ MODULES = (
     "feeds_catalog.py",
     "growth_catalog.py",
     "https_transport.py",
+    "insights_catalog.py",
     "marketplace_catalog.py",
+    "misc_catalog.py",
     "operations_catalog.py",
+    "payment_catalog.py",
     "recon_catalog.py",
+    "reports_catalog.py",
     "returns_catalog.py",
+    "sem_catalog.py",
     "scf_bridge.py",
     "scf_runtime.py",
     "tencent_api.py",

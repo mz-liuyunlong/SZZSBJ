@@ -26,11 +26,21 @@ from app.integrations.walmart.contracts import (
 )
 from app.integrations.walmart.feeds_catalog import feed_monitor_registry
 from app.integrations.walmart.growth_catalog import growth_read_registry
+from app.integrations.walmart.insights_catalog import insights_read_registry
 from app.integrations.walmart.marketplace_catalog import marketplace_read_registry
+from app.integrations.walmart.misc_catalog import misc_read_registry
 from app.integrations.walmart.operations_catalog import operations_read_registry
 from app.integrations.walmart.pagination import PageContract, collect_read_pages
+from app.integrations.walmart.payment_catalog import payment_read_registry
 from app.integrations.walmart.recon_catalog import recon_read_registry
+from app.integrations.walmart.reports_catalog import reports_registry
 from app.integrations.walmart.returns_catalog import returns_read_registry
+from app.integrations.walmart.sem_catalog import (
+    SEM_WRITE_KEYS,
+    SEM_WRITE_PERMISSION,
+    sem_read_registry,
+    sem_write_registry,
+)
 from app.integrations.walmart.source_catalog_data import load_source_catalog
 from app.integrations.walmart.wfs_catalog import wfs_registry
 from app.integrations.walmart.wfs_write_catalog import WFS_WRITE_KEYS, wfs_write_registry
@@ -53,10 +63,22 @@ _READ_FAMILIES: tuple[tuple[Any, str], ...] = (
     (growth_read_registry, "growth"),
     # Settlement (recon) report dates + JSON pages for payout reconciliation (GET only).
     (recon_read_registry, "recon"),
+    # 2026-11-24 second batch (owner: open everything probed OK):
+    (reports_registry, "reports"),  # on-request report create (read-semantic POST) + ZIP
+    (payment_read_registry, "payment"),
+    (insights_read_registry, "insights"),
+    (sem_read_registry, "sem"),
+    (misc_read_registry, "misc"),
 )
 WFS_WRITE_PERMISSION = "action:walmart:wfs:shipments:write"
 WFS_CANCEL_PERMISSION = "action:walmart:wfs:shipments:cancel"
 _WRITE_PERMISSIONS = {"wfs_inbound_shipment_cancel": WFS_CANCEL_PERMISSION}
+# Every reviewed write contract: WFS inbound (2026-11) + SEM campaigns (2026-11-24).
+ALL_WRITE_KEYS: frozenset[str] = WFS_WRITE_KEYS | SEM_WRITE_KEYS
+_WRITE_FAMILIES: tuple[tuple[Any, str, frozenset[str], str], ...] = (
+    (wfs_write_registry, "wfs", WFS_WRITE_KEYS, WFS_WRITE_PERMISSION),
+    (sem_write_registry, "sem", SEM_WRITE_KEYS, SEM_WRITE_PERMISSION),
+)
 
 
 @lru_cache(maxsize=1)
@@ -77,29 +99,23 @@ def reviewed_registry() -> ContractRegistry:
             operations[key] = with_authorization(
                 operation, family=family, permission=f"action:walmart:{family}:read"
             )
-    for key, operation in wfs_write_registry(approved_keys=WFS_WRITE_KEYS)._operations.items():
-        if key in operations or not operation.is_write:
-            raise WalmartIntegrationError("WALMART_OPERATION_COLLISION")
-        operations[key] = with_authorization(
-            operation, family="wfs", permission=_WRITE_PERMISSIONS.get(key, WFS_WRITE_PERMISSION)
-        )
+    for factory, family, keys, default_permission in _WRITE_FAMILIES:
+        for key, operation in factory(approved_keys=keys)._operations.items():
+            if key in operations or not operation.is_write:
+                raise WalmartIntegrationError("WALMART_OPERATION_COLLISION")
+            operations[key] = with_authorization(
+                operation,
+                family=family,
+                permission=_WRITE_PERMISSIONS.get(key, default_permission),
+            )
     return ContractRegistry(tuple(operations.values()))
 
 
 def _builtins(
     approved_keys: frozenset[str], approved_write_keys: frozenset[str] = frozenset()
 ) -> dict[str, Operation]:
-    factories = (
-        wfs_registry,
-        feed_monitor_registry,
-        marketplace_read_registry,
-        returns_read_registry,
-        operations_read_registry,
-        growth_read_registry,
-        recon_read_registry,
-    )
     operations: dict[str, Operation] = {}
-    for factory in factories:
+    for factory, _family in _READ_FAMILIES:
         known = factory().keys()
         accepted = approved_keys.intersection(known)
         for key, operation in factory(approved_keys=frozenset(accepted))._operations.items():
@@ -107,11 +123,12 @@ def _builtins(
                 raise WalmartIntegrationError("WALMART_OPERATION_COLLISION")
             operations[key] = operation
     # Write contracts are only ever enabled through the explicit write approval set.
-    write_accepted = approved_write_keys.intersection(WFS_WRITE_KEYS)
-    for key, operation in wfs_write_registry(approved_keys=write_accepted)._operations.items():
-        if key in operations:
-            raise WalmartIntegrationError("WALMART_OPERATION_COLLISION")
-        operations[key] = operation
+    for factory, _family, keys, _permission in _WRITE_FAMILIES:
+        write_accepted = approved_write_keys.intersection(keys)
+        for key, operation in factory(approved_keys=write_accepted)._operations.items():
+            if key in operations:
+                raise WalmartIntegrationError("WALMART_OPERATION_COLLISION")
+            operations[key] = operation
     return operations
 
 
@@ -139,8 +156,8 @@ def load_unified_registry(
         isinstance(key, str) for key in approved_write_keys
     ):
         raise WalmartIntegrationError("WALMART_APPROVED_KEYS_INVALID")
-    if approved_write_keys - WFS_WRITE_KEYS or approved_keys & WFS_WRITE_KEYS:
-        # A write key is never a read approval, and only reviewed WFS writes can be enabled.
+    if approved_write_keys - ALL_WRITE_KEYS or approved_keys & ALL_WRITE_KEYS:
+        # A write key is never a read approval, and only reviewed writes can be enabled.
         raise WalmartIntegrationError("WALMART_WRITE_NOT_AUTHORIZED")
     merged = _builtins(approved_keys, approved_write_keys)
     if contract_file is not None or contract_sha256 is not None:

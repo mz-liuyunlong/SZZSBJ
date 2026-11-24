@@ -100,7 +100,7 @@ class WalmartCloudExecutor:
         accept = event.get("accept", "json")
         if version == 1 and "accept" in event:
             raise ContractError("WALMART_EVENT_INVALID")
-        if accept not in ("json", "pdf"):
+        if accept not in ("json", "pdf", "zip"):
             raise ContractError("WALMART_EVENT_INVALID")
         if event.get("operation") != "marketplace_call":
             raise ContractError("WALMART_EVENT_INVALID")
@@ -191,7 +191,7 @@ class WalmartCloudExecutor:
             raise ContractError("WALMART_STORE_NOT_AUTHORIZED")
         # Actor shape is validated (and signed) inside the verifier.
         accept = event.get("accept", "json")
-        if accept not in ("json", "pdf"):
+        if accept not in ("json", "pdf", "zip"):
             raise ContractError("WALMART_EVENT_INVALID")
         # Signature, key, freshness, replay, store/function binding, contract shape,
         # hashes and the method-derived risk level.

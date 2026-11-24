@@ -70,11 +70,30 @@ RISK_READ = "read"
 RISK_WRITE = "write"
 
 # Reviewer requirement 3: a non-GET is a write unless the operation was explicitly
-# reviewed as read-semantic. This set is cloud-side code, not configuration. The only
-# entry is the Review Accelerator item list (owner authorization 2026-11-24): a POST
-# that pages through enrolled items with an empty body and changes nothing. WFS
-# inbound-preview is a POST and stays a write.
-READ_SEMANTIC_NON_GET_KEYS: frozenset[str] = frozenset({"review_accelerator_items"})
+# reviewed as read-semantic. This set is cloud-side code, not configuration (owner
+# authorization 2026-11-24, first and second batch): POST queries that page or filter
+# read-only data, plus creating an on-request report (it creates a report request on
+# Walmart's side and changes no seller data). Every key here has a contract whose body
+# schema pins the allowed keys. WFS inbound-preview is a POST and stays a write.
+READ_SEMANTIC_NON_GET_KEYS: frozenset[str] = frozenset(
+    {
+        # growth
+        "review_accelerator_items",
+        "review_accelerator_categories",
+        "assortment_recommendations",
+        "assortment_categorization_counts",
+        # reports
+        "report_request_create",
+        # insights
+        "insights_listing_quality_items",
+        # SEM queries
+        "sem_billing_history",
+        "sem_campaigns_performance_summary",
+        "sem_item_level_summary",
+        "sem_item_issues_search",
+        "sem_items_eligibility",
+    }
+)
 
 
 def risk_for(method: str, operation_key: str) -> str:
@@ -474,7 +493,7 @@ class ContractVerifier:
             raise ContractError("WALMART_EVENT_INVALID")
         if params is None:
             params = {}
-        if not isinstance(params, Mapping) or response_kind not in ("json", "pdf"):
+        if not isinstance(params, Mapping) or response_kind not in ("json", "pdf", "zip"):
             raise ContractError("WALMART_EVENT_INVALID")
         # The cloud decides the risk from the method; the server's declaration must agree.
         risk = risk_for(method, operation.key)

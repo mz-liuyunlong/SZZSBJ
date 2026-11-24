@@ -31,21 +31,45 @@ from app.integrations.walmart.contract_signing import (
     RedisReplayStore,
     ReplayStore,
 )
-from app.integrations.walmart.contracts import ContractRegistry
+from app.integrations.walmart.contracts import ContractRegistry, Operation
 from app.integrations.walmart.direct_readonly_transport import WalmartDirectReadOnlyTransport
 from app.integrations.walmart.feeds_catalog import feed_monitor_registry
 from app.integrations.walmart.growth_catalog import growth_read_registry
 from app.integrations.walmart.https_transport import WalmartHttpsTransport
+from app.integrations.walmart.insights_catalog import insights_read_registry
 from app.integrations.walmart.marketplace_catalog import marketplace_read_registry
+from app.integrations.walmart.misc_catalog import misc_read_registry
 from app.integrations.walmart.operations_catalog import operations_read_registry
+from app.integrations.walmart.payment_catalog import payment_read_registry
 from app.integrations.walmart.recon_catalog import recon_read_registry
+from app.integrations.walmart.reports_catalog import reports_registry
 from app.integrations.walmart.returns_catalog import returns_read_registry
+from app.integrations.walmart.sem_catalog import (
+    SEM_WRITE_KEYS,
+    sem_read_registry,
+    sem_write_registry,
+)
 from app.integrations.walmart.tencent_api import TemporaryTencentIdentity, TencentApiClient
 from app.integrations.walmart.tencent_ssm import TencentSsmResolver
 from app.integrations.walmart.wfs_catalog import wfs_registry
 from app.integrations.walmart.wfs_write_catalog import WFS_WRITE_KEYS, wfs_write_registry
 
 MAX_CONTRACT_BYTES = 2 * 1024 * 1024
+# Every built-in read catalog (legacy v1/v2 events build their registry from these).
+READ_FACTORIES = (
+    wfs_registry,
+    feed_monitor_registry,
+    marketplace_read_registry,
+    returns_read_registry,
+    operations_read_registry,
+    growth_read_registry,
+    recon_read_registry,
+    reports_registry,
+    payment_read_registry,
+    insights_read_registry,
+    sem_read_registry,
+    misc_read_registry,
+)
 _STORE_PATTERN = re.compile(r"^(?:HK|CN)[0-9]{4}$")
 LIVE_MODE_READ_ONLY = "owner-approved-read-only"
 LIVE_MODE_READ_WRITE = "owner-approved-read-write"
@@ -192,57 +216,30 @@ def _load_registry(
     approved_keys: frozenset[str], approved_write_keys: frozenset[str] = frozenset()
 ) -> ContractRegistry:
     # Snapshot-only OpenAPI loading; arbitrary URLs and remote $ref are forbidden.
-    if approved_write_keys - WFS_WRITE_KEYS or approved_keys & WFS_WRITE_KEYS:
+    all_write_keys = WFS_WRITE_KEYS | SEM_WRITE_KEYS
+    if approved_write_keys - all_write_keys or approved_keys & all_write_keys:
         raise ValueError("WALMART_WRITE_NOT_AUTHORIZED")
     source = os.environ.get("SZZSBJ_WALMART_CONTRACT_FILE", "")
     if not source:
-        wfs_keys = set(wfs_registry().keys())
-        feed_keys = set(feed_monitor_registry().keys())
-        marketplace_keys = set(marketplace_read_registry().keys())
-        returns_keys = set(returns_read_registry().keys())
-        operations_keys = set(operations_read_registry().keys())
-        growth_keys = set(growth_read_registry().keys())
-        recon_keys = set(recon_read_registry().keys())
-        known_keys = (
-            wfs_keys
-            | feed_keys
-            | marketplace_keys
-            | returns_keys
-            | operations_keys
-            | growth_keys
-            | recon_keys
-        )
+        combined: list[Operation] = []
+        known_keys: set[str] = set()
+        for factory in READ_FACTORIES:
+            keys = set(factory().keys())
+            known_keys |= keys
+            combined.extend(factory(approved_keys=approved_keys & keys)._operations.values())
         if approved_keys - known_keys:
             raise ValueError("WALMART_APPROVED_OPERATION_UNKNOWN")
-        combined = (
-            tuple(wfs_registry(approved_keys=approved_keys & wfs_keys)._operations.values())
-            + tuple(
-                feed_monitor_registry(approved_keys=approved_keys & feed_keys)._operations.values()
-            )
-            + tuple(
-                marketplace_read_registry(
-                    approved_keys=approved_keys & marketplace_keys
-                )._operations.values()
-            )
-            + tuple(
-                returns_read_registry(
-                    approved_keys=approved_keys & returns_keys
-                )._operations.values()
-            )
-            + tuple(
-                operations_read_registry(
-                    approved_keys=approved_keys & operations_keys
-                )._operations.values()
-            )
-            + tuple(
-                growth_read_registry(approved_keys=approved_keys & growth_keys)._operations.values()
-            )
-            + tuple(
-                recon_read_registry(approved_keys=approved_keys & recon_keys)._operations.values()
-            )
-            + tuple(wfs_write_registry(approved_keys=approved_write_keys)._operations.values())
+        combined.extend(
+            wfs_write_registry(
+                approved_keys=approved_write_keys & WFS_WRITE_KEYS
+            )._operations.values()
         )
-        return ContractRegistry(combined)
+        combined.extend(
+            sem_write_registry(
+                approved_keys=approved_write_keys & SEM_WRITE_KEYS
+            )._operations.values()
+        )
+        return ContractRegistry(tuple(combined))
     if approved_write_keys:
         # Writes are only reviewed as built-in contracts; a snapshot cannot enable them.
         raise ValueError("WALMART_WRITE_NOT_AUTHORIZED")

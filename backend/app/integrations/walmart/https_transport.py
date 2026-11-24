@@ -98,6 +98,9 @@ class WalmartHttpsTransport:
             raise TransportRejected("WALMART_OPERATION_INVALID")
         if request.method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
             raise TransportRejected("WALMART_OPERATION_INVALID")
+        if getattr(request, "response_kind", "json") == "zip":
+            # Report ZIP download is implemented by the direct read-only transport only.
+            raise TransportRejected("WALMART_OPERATION_INVALID")
         try:
             credentials = self._secrets.get_store_credentials(store_code)
             if not credentials.client_id or not credentials.client_secret:
