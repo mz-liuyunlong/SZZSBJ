@@ -644,6 +644,8 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
           <Button size="small" type="primary"
             onClick={() => onOpen("market",row.id)}>去评分</Button>
         </span>;
+        if (state === "待等级确认") return <Button size="small"
+          onClick={() => onOpen("detail", row.id)}>详情</Button>;
         if (state === "待测评确认") return <span style={{ display: "inline-flex", alignItems: "center", gap: 12, whiteSpace: "nowrap" }}>
           <Button size="small" onClick={() => onOpen("detail",row.id)}>详情</Button>
           <Button size="small" type="primary" onClick={() => onOpen("assessment",row.id)}>确认测评</Button>

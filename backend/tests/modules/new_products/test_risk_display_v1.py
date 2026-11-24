@@ -29,6 +29,7 @@ def coverage(
 ):
     return {
         "ad_display_v1": {
+            "source": "fact_walmart_ad_item_sp_daily",
             "status": "complete",
             "window_start_la": "2026-10-10",
             "window_end_la": cutoff,
@@ -80,6 +81,13 @@ def test_insufficient_sample_requires_ads():
     assert r["ad_sample_insufficient"]["status"] == "hit"
     r = result(coverage(clicks="0", orders="0", spend="0"), config("ad_sample_insufficient"))
     assert r["ad_sample_insufficient"]["status"] == "clear"
+
+
+def test_unknown_ad_source_never_generates_a_verified_hit():
+    cov = coverage()
+    cov["ad_display_v1"].pop("source")
+    output = result(cov, config("ad_uncontrolled"))
+    assert output["ad_uncontrolled"]["status"] == "unverified"
 
 
 def test_missing_or_old_ads_not_a_hit():

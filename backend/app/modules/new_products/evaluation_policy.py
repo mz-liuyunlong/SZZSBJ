@@ -51,6 +51,12 @@ def evaluation_status(
     *, listing_date: Any, first_wfs: Any, coverage: dict | None, grade: Any, total: Any
 ) -> str:
     if grade is not None and total is not None:
+        confirmation = (
+            coverage.get("evaluation_grade_confirmation_v1")
+            if isinstance(coverage, dict) else None
+        )
+        if isinstance(confirmation, dict) and confirmation.get("status") == "pending":
+            return "待等级确认"
         record = coverage.get("operator_assessment_v1") if isinstance(coverage, dict) else None
         if isinstance(record, dict) and record.get("decision") == "passed":
             return "测评通过"

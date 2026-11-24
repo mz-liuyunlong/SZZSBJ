@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Popover } from "antd";
+import { LoadingOutlined } from "@ant-design/icons";
 import "./newProductCorrectionPopover.css";
 
 export type CorrectionSubmission = { ok: boolean; error?: string };
@@ -120,7 +121,10 @@ export default function NewProductCorrectionPopover({
           {error ? <div className="np-score-correction-error" role="alert">{error}</div> : null}
           <div className="np-score-correction-footer">
             <button type="button" className="np-score-correction-cancel" onClick={() => changeOpen(false)}>取消</button>
-            <button type="button" className="np-score-correction-submit" onClick={submit} disabled={saving}>保存修正</button>
+            <button type="button" className="np-score-correction-submit"
+              onClick={submit} disabled={saving} aria-busy={saving}>
+              {saving ? <><LoadingOutlined spin aria-hidden="true" /> 保存中…</> : "保存修正"}
+            </button>
           </div>
         </div>
       }

@@ -80,7 +80,12 @@ def manual_single_product_write_allowed(
     """
     return (
         _AUTHORIZED_MANUAL_IDENTITY.get() == manual_identity
-        and os.getenv("APP_ENV", "").strip().lower() == "production"
+        and os.getenv("APP_ENV", "").strip().lower() in (
+            "production",
+            "local",
+            "dev",
+            "development",
+        )
         and manual_identity is not None
         and len(manual_identity) == 3
         and all(isinstance(part, str) and bool(part.strip()) for part in manual_identity)
@@ -526,6 +531,22 @@ def _is_frozen(target: Session, key: Key, registry_id: Any) -> bool:
     )
 
 
+def _pending_market_daily_refresh_allowed(perf, coverage: dict) -> bool:
+    """Refresh automatic V2 evidence until the human market grade is final.
+
+    A completed formal trigger alone must not stop daily calculation.
+    Published scores, manual exceptions and approval locks remain protected
+    by the existing save guards.
+    """
+    trigger = coverage.get("evaluation_formal_trigger")
+    return (
+        isinstance(trigger, dict)
+        and trigger.get("status") == "completed"
+        and perf.grade is None
+        and perf.score is None
+    )
+
+
 def _save_one(
     target: Session,
     key: Key,
@@ -636,7 +657,10 @@ def _save_one(
     saved_coverage = p.data_coverage_json if isinstance(p.data_coverage_json, dict) else {}
     recheck = saved_coverage.get("evaluation_recheck_required")
     if (
-        isinstance(saved_coverage.get("evaluation_formal_trigger"), dict)
+        (
+            isinstance(saved_coverage.get("evaluation_formal_trigger"), dict)
+            and not _pending_market_daily_refresh_allowed(p, saved_coverage)
+        )
         or isinstance(saved_coverage.get("evaluation_final_snapshot"), dict)
         or saved_coverage.get("evaluation_manual_exception")
         or (
@@ -1067,8 +1091,21 @@ def execute_unified_job(
         raise RuntimeError("PR337_APP_ENV_REQUIRED: source/write identity cannot be verified")
     engine = get_engine()
     if apply and env in {"local", "dev", "development"}:
-        # No local-to-production tunnel exception, even with old opt-in flags.
-        if not local_target_approved(engine.url.database, engine.url.host):
+        # Only the authenticated exact-item API context may publish to
+        # the configured business database. Never authorize by host or port.
+        manual_target_approved = (
+            engine.url.database == "szzsbj_app"
+            and manual_single_product_write_allowed(
+                item_ids=item_ids,
+                limit=limit,
+                auto_only=auto_only,
+                manual_identity=manual_identity,
+            )
+        )
+        if not (
+            local_target_approved(engine.url.database, engine.url.host)
+            or manual_target_approved
+        ):
             raise PermissionError("PR337_WRITE_TARGET_NOT_LOCAL_DEV_OR_HYBRID")
     if apply and not (
         permission_to_write()

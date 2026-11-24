@@ -25,7 +25,7 @@ from .evaluation_policy import evaluation_status
 
 SAMPLE_TAG = "小批量测品"
 LA = ZoneInfo("America/Los_Angeles")
-_STATUSES = ("待到货", "测评中", "待市场评分", "待测评确认", "测评通过", "测评未通过")
+_STATUSES = ("待到货", "测评中", "待市场评分", "待等级确认", "待测评确认", "测评通过", "测评未通过")
 _GRADES = ("S", "A", "B", "C", "D", "Pass")
 _LOGGER = logging.getLogger(__name__)
 
@@ -95,6 +95,7 @@ def scoped_projection(source, db, accounts: frozenset[str]) -> list[dict]:
         SELECT w.a,w.s,w.i,r.listing_date_la,
           p.first_wfs_available_date_la, p.score,p.grade,
           p.data_coverage_json -> 'operator_assessment_v1' AS operator_assessment,
+          p.data_coverage_json -> 'evaluation_grade_confirmation_v1' AS grade_confirmation,
           p.data_coverage_json #> '{auto_dimension_scores,dimensions}' AS dimensions,
           p.data_coverage_json #>> '{new_products_score_facts_v2,market_score}' AS market_score,
           p.data_coverage_json #>> '{evaluation_formal_trigger,status}' AS formal_status,
@@ -166,6 +167,8 @@ def scoped_projection(source, db, accounts: frozenset[str]) -> list[dict]:
         )
         if isinstance(p.get("operator_assessment"), dict):
             coverage["operator_assessment_v1"] = p["operator_assessment"]
+        if isinstance(p.get("grade_confirmation"), dict):
+            coverage["evaluation_grade_confirmation_v1"] = p["grade_confirmation"]
         status = evaluation_status(
             listing_date=listing_day,
             first_wfs=first_wfs,
@@ -218,6 +221,7 @@ def summary(source, db, accounts: frozenset[str]) -> dict:
             "all": len(rows),
             "evaluating": states["测评中"],
             "market": states["待市场评分"],
+            "pending_grade_confirmation": states["待等级确认"],
             "pending_confirmation": states["待测评确认"],
             "passed": states["测评通过"],
             "failed": states["测评未通过"],
@@ -288,7 +292,7 @@ def board_summary(source, db, accounts: frozenset[str], *, start_date, end_date,
     if not isinstance(start_date, date) or not isinstance(end_date, date) or start_date > end_date:
         raise ValueError("NP_BOARD_DATE_RANGE_INVALID")
     today = datetime.now(LA).date()
-    allowed = {"测评中", "待市场评分", "测评通过", "测评未通过"}
+    allowed = {"测评中", "待市场评分", "待等级确认", "待测评确认", "测评通过", "测评未通过"}
     rows = [
         r
         for r in scoped_projection(source, db, accounts)

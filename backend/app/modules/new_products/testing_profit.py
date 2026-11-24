@@ -539,13 +539,22 @@ def build_operating_daily_same_source(
             # available proof; never interpret missing fields as agreement.
             if all(saved_facts.get(a) is not None for a, _ in checks):
                 if any(decimal_value(saved_facts[a]) != decimal_value(total[b]) for a, b in checks):
-                    return unavailable("saved_score_proof_disagrees_with_daily")
-                comparison = "saved_score_reconciled"
+                    # NP_DAILY_RETAIN_RECONCILED_ROWS_ON_SAVED_SCORE_MISMATCH_V1
+                    # Daily rows passed their own evidence and total reconciliations.
+                    # Do not certify them against the historical saved grade.
+                    comparison = "saved_score_mismatch"
+                else:
+                    comparison = "saved_score_reconciled"
 
     # These are cumulative ratios from the SAME unrounded financial totals,
     # not arithmetic averages of daily percentages / ROI values.
+    # Mismatch is intentionally NOT status="scored": archived formal score
+    # proof is not verified. A detail-view client may render diagnostic rows
+    # but must not use them to republish a grade or authorize a purchase.
+    mismatch = comparison == "saved_score_mismatch"
     return {
-        "status": "scored",
+        "status": "unverified" if mismatch else "scored",
+        "reason": "saved_score_proof_disagrees_with_daily" if mismatch else None,
         "source": source_name,
         "policy": policy,
         "cutoff_la": cutoff_str,
@@ -562,7 +571,7 @@ def build_operating_daily_same_source(
             "invested_usd": components["invested_usd"],
         },
         "score_comparison": comparison,
-        "missing": [],
+        "missing": ["saved_score_proof_disagrees_with_daily"] if mismatch else [],
         "complete_calendar_days": (
             sum(first_wfs <= business_day <= cutoff for business_day in days)
             == (cutoff - first_wfs).days + 1

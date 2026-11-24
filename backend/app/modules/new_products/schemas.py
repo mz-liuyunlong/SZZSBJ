@@ -110,6 +110,10 @@ class ScoreCorrectionWrite(Identity):
     expected_revision: int = Field(ge=0)
 
 
+class GradeConfirmationWrite(Identity):
+    expected_revision: int = Field(ge=0)
+
+
 class TrackingWrite(Identity):
     decision: Literal["打品成功", "继续观察", "需要优化", "打品失败"]
     reason: str = Field(default="", max_length=4000)

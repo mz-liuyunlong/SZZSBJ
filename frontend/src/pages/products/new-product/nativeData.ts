@@ -9,7 +9,11 @@ category?:string;developer?:string;operator?:string;overrides?:Partial<Record<"s
 /** Backend is authoritative for real records; fields above preserve accepted UI layout only. */
 backend?:{
   identity:{source_account_ref:string;store_id:string;item_id:string};
-  scoreCorrection?:import("./newProductBusinessApi").ScoreCorrectionView|null;purchaseStatus?:string|null;
+  scoreCorrection?:import("./newProductBusinessApi").ScoreCorrectionView|null;
+  scoreCorrectionRevision?:number|null;
+  scoreCorrectionState?:"none"|"applied"|"stale"|null;
+  gradeConfirmation?:import("./newProductBusinessApi").NewProductListing["evaluation_grade_confirmation"];
+  purchaseStatus?:string|null;
   purchaseReviewReason?:string|null;
   purchaseReviewedBy?:string|null;
   purchaseReviewedAt?:string|null;

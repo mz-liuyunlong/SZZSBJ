@@ -37,7 +37,7 @@ from .persisted_projection import load_persisted_page, merge_persisted_page_row
 from .persisted_read import load_persisted, snapshot_row  # PR337_PERSISTED_DISPLAY_V1
 from .repository import NewProductRepository
 from .sale_stat_order_evidence import reconcile_sale_stat_order_evidence
-from .score_corrections import calculate_effective, overlay, public_correction
+from .score_corrections import calculate_effective, overlay, public_correction, resolved_system
 from .scoring import evaluate
 from .testing_profit import FINAL_RESULTS, load_final_decisions, load_testing_profit_page
 from .testing_profit_projection import (
@@ -668,14 +668,24 @@ class NewProductService:
                 else None
             )
             if isinstance(block, dict):
-                found[(a, store, item)] = block
+                frozen = (coverage or {}).get("evaluation_final_snapshot")
+                risk = frozen.get("risk_evaluation") if isinstance(frozen, dict) else None
+                confirmation = (coverage or {}).get("evaluation_grade_confirmation_v1")
+                pending = (
+                    isinstance(confirmation, dict)
+                    and confirmation.get("status") == "pending"
+                )
+                found[(a, store, item)] = (block, risk, pending)
         return found
 
     def _overlay_score_correction_rows(self, rows, keys, config):
         blocks = self._score_correction_blocks(keys)
         for row, key in zip(rows, keys, strict=True):
-            block = blocks.get(key)
-            if block is not None and overlay(row, block, config):
+            saved = blocks.get(key)
+            if saved is not None and overlay(
+                row, saved[0], config,
+                risk_evaluation=saved[1], require_risk=saved[2],
+            ):
                 row["suggested_qty"] = self._suggested_quantity(row["evaluation"], config)
 
     def save_score_correction(self, accounts, body, actor):
@@ -704,17 +714,40 @@ class NewProductService:
             )
             if perf is None:
                 problem("NP_CORRECTION_NO_EVIDENCE", 409, "尚未保存自动评分证据")
-            if perf.grade is not None or perf.score is not None:
-                problem("NP_CORRECTION_FROZEN", 409, "正式评分已锁定，须通过复核流程处理")
-            config, current_rule_version = self._config()
             coverage = deepcopy(perf.data_coverage_json or {})
+            marker = coverage.get("evaluation_grade_confirmation_v1")
+            pending_grade = (
+                isinstance(marker, dict) and marker.get("status") == "pending"
+            )
+            if (perf.grade is not None or perf.score is not None) and not pending_grade:
+                problem("NP_CORRECTION_FROZEN", 409, "等级已确认或属于旧评分，须通过复核流程处理")
+            if pending_grade and coverage.get("operator_assessment_v1") is not None:
+                problem("NP_CORRECTION_ASSESSMENT_LOCKED", 409, "人工测评已确认，禁止修改评分")
+            config, current_rule_version = self._config()
             block = coverage.get("operator_score_correction_v1")
             revision = block.get("revision", 0) if isinstance(block, dict) else 0
             if revision != body.expected_revision:
                 problem("NP_CORRECTION_VERSION_CONFLICT", 409, "评分已被其他运营修改，请刷新后重试")
             if not isinstance(block, dict):
                 # Persist the original immutable official score BEFORE first edit.
-                current = self.persisted_score(accounts, a, store, item)["evaluation"]
+                if pending_grade and perf.grade is not None:
+                    frozen = coverage.get("evaluation_final_snapshot")
+                    if not isinstance(frozen, dict):
+                        problem("NP_CORRECTION_SNAPSHOT_MISSING", 409, "正式计算快照缺失")
+                    current = {
+                        "rule_version": frozen.get("rule_version"),
+                        "total": frozen.get("total"),
+                        "grade": frozen.get("grade"),
+                        "dimensions": deepcopy(frozen.get("dimensions")),
+                        "ad_excluded": (
+                            (coverage.get("new_products_score_facts_v2") or {}).get("ad_status")
+                            == "not_run"
+                        ),
+                        "risk": [],
+                        "observation_state": "scored",
+                    }
+                else:
+                    current = self.persisted_score(accounts, a, store, item)["evaluation"]
                 if (
                     current.get("rule_version") != current_rule_version
                     or current.get("observation_state") == "frozen"
@@ -752,6 +785,15 @@ class NewProductService:
                     },
                     "history": [],
                 }
+            frozen_risk = None
+            if pending_grade:
+                snapshot = coverage.get("evaluation_final_snapshot")
+                frozen_risk = (
+                    snapshot.get("risk_evaluation")
+                    if isinstance(snapshot, dict) else None
+                )
+                if not isinstance(frozen_risk, dict):
+                    problem("NP_CORRECTION_RISK_SNAPSHOT_MISSING", 409, "风险结果快照缺失")
             system = block["system"]
             if system.get("rule_version") != current_rule_version:
                 problem("NP_CORRECTION_RULE_CONFLICT", 409, "评分规则已更新，原始快照需要核实")
@@ -769,7 +811,9 @@ class NewProductService:
             else:
                 overrides[dimension] = str(after)
             try:
-                effective = calculate_effective(system, overrides, config)
+                effective = calculate_effective(
+                    system, overrides, config, risk_evaluation=frozen_risk
+                )
             except (ValueError, KeyError, ArithmeticError):
                 problem("NP_CORRECTION_CALC_INVALID", 409, "无法对已保存的正式测评进行安全重算")
             updated_at = datetime.now(UTC).isoformat()
@@ -1431,8 +1475,18 @@ class NewProductService:
             )
             if current_perf is None:
                 problem("NP_EVAL_NO_EVIDENCE", 409, "尚未保存正式测评证据")
-            if current_perf.grade is not None or current_perf.score is not None:
-                problem("NP_EVAL_RESULT_FROZEN", 409, "正式评分已锁定，请走复核流程")
+            saved = current_perf.data_coverage_json or {}
+            marker = (
+                saved.get("evaluation_grade_confirmation_v1")
+                if isinstance(saved, dict)
+                else None
+            )
+            editing_pending = isinstance(marker, dict) and marker.get("status") == "pending"
+            if (
+                (current_perf.grade is not None or current_perf.score is not None)
+                and not editing_pending
+            ):
+                problem("NP_EVAL_RESULT_FROZEN", 409, "等级已确认或属于历史评分，请走复核流程")
             if row:
                 row.score = body.score
                 row.reason = body.reason.strip()
@@ -1470,7 +1524,16 @@ class NewProductService:
             # Freeze final score only after verified automatic evidence.
             from .evaluation_workflow import publish_after_market
 
-            publish_after_market(self.db, a, s, i, body.score, market_version=v + 1)
+            try:
+                publish_after_market(
+                    self.db, a, s, i, body.score,
+                    market_version=v + 1,
+                    risk_conditions=list(body.risk_conditions),
+                )
+            except ValueError as exc:
+                if str(exc).startswith(("NP_RISK_", "RISK_")):
+                    problem("NP_RISK_EVIDENCE_CONFLICT", 409, "风险证据未核实：" + str(exc))
+                raise
             # Persist manual competitor selection in existing versioned JSONB.
 
             perf = self.db.scalar(
@@ -1511,6 +1574,134 @@ class NewProductService:
             self.db.rollback()
             raise
 
+    def confirm_grade(self, accounts, body, actor):
+        from .evaluation_workflow import _protected, _stored_grade_matches_snapshot
+
+        a, store, item = ident(body)
+        self._listing(accounts, a, store, item)
+        try:
+            self.db.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+                {"key": "NP_SCORE_CORRECTION:" + a + ":" + store + ":" + item},
+            )
+            reg = self.db.scalar(
+                select(NewProductRegistry).where(
+                    NewProductRegistry.source_account_ref == a,
+                    NewProductRegistry.store_id == store,
+                    NewProductRegistry.item_id == item,
+                )
+            )
+            if reg is None or _protected(self.db, reg):
+                problem("NP_GRADE_CONFIRM_DOWNSTREAM_LOCKED", 409, "商品已进入采购或打品闭环")
+            perf = self.db.scalar(
+                select(NewProductPerformanceCurrent)
+                .where(NewProductPerformanceCurrent.registry_id == reg.id)
+                .with_for_update()
+            )
+            if perf is None or perf.grade is None or perf.score is None:
+                problem("NP_GRADE_CONFIRM_SCORE_MISSING", 409, "尚未生成完整计算等级")
+            coverage = deepcopy(perf.data_coverage_json or {})
+            marker = coverage.get("evaluation_grade_confirmation_v1")
+            if not isinstance(marker, dict) or marker.get("status") != "pending":
+                problem("NP_GRADE_CONFIRM_NOT_PENDING", 409, "等级已锁定或属于旧评分")
+            if coverage.get("operator_assessment_v1") is not None:
+                problem("NP_GRADE_CONFIRM_ASSESSMENT_LOCKED", 409, "已有人工测评结论")
+            final = coverage.get("evaluation_final_snapshot")
+            if not isinstance(final, dict):
+                problem("NP_GRADE_CONFIRM_SNAPSHOT_MISSING", 409, "计算结果快照缺失")
+            if not isinstance(final.get("risk_evaluation"), dict):
+                problem("NP_GRADE_CONFIRM_RISK_MISSING", 409, "风险条件尚未正式执行")
+            display = final.get("system_risk_display")
+            if (
+                not isinstance(display, dict)
+                or not isinstance(display.get("rules"), list)
+                or any(
+                    not isinstance(x, dict)
+                    or (x.get("status") == "unverified" and x.get("enabled"))
+                    for x in display["rules"]
+                )
+            ):
+                problem("NP_GRADE_CONFIRM_RISK_UNVERIFIED", 409, "系统风险证据尚未核实")
+            config, rule_version = self._config()
+            if (
+                final.get("rule_version") != rule_version
+                or marker.get("rule_version") != rule_version
+            ):
+                problem("NP_GRADE_CONFIRM_RULE_STALE", 409, "评分规则版本已变更，禁止确认旧计算")
+            market = self.write_repo.market(a, store, item)
+            if market is None or marker.get("market_version") != market.version:
+                problem("NP_GRADE_CONFIRM_MARKET_STALE", 409, "市场评分版本已变更")
+            if not isinstance(final.get("dimensions"), dict) or final.get("total") is None:
+                problem("NP_GRADE_CONFIRM_BASE_MISSING", 409, "计算结果缺少分数或维度")
+            if not _stored_grade_matches_snapshot(perf.grade, perf.score, final):
+                problem("NP_GRADE_CONFIRM_BASE_CHANGED", 409, "原始计算结果已变化")
+            original = {
+                "total": str(final["total"]),
+                "grade": final["grade"],
+                "dimensions": deepcopy(final["dimensions"]),
+            }
+            block = coverage.get("operator_score_correction_v1")
+            revision = block.get("revision", 0) if isinstance(block, dict) else 0
+            if revision != body.expected_revision:
+                problem("NP_GRADE_CONFIRM_REVISION_CONFLICT", 409, "分数已被修改，请刷新最新版本")
+            if isinstance(block, dict):
+                system = block.get("system")
+                if not isinstance(system, dict) or system.get("rule_version") != rule_version:
+                    problem("NP_GRADE_CONFIRM_CORRECTION_STALE", 409, "修正基准与正式快照不一致")
+                try:
+                    resolved = resolved_system(
+                        {
+                            "rule_version": rule_version,
+                            "grade": original["grade"],
+                            "total": original["total"],
+                            "dimensions": original["dimensions"],
+                            "ad_excluded": system.get("ad_excluded", False),
+                        },
+                        system,
+                    )
+                    if resolved is None:
+                        raise ValueError("CORRECTION_BASELINE_MISMATCH")
+                    effective = calculate_effective(
+                        resolved, block.get("overrides", {}), config,
+                        risk_evaluation=final["risk_evaluation"],
+                    )
+                except (ValueError, KeyError, ArithmeticError, TypeError):
+                    problem("NP_GRADE_CONFIRM_CALC_FAILED", 409, "修正分数无法核验")
+                block["system"] = resolved
+                block["effective"] = effective
+                coverage["operator_score_correction_v1"] = block
+            else:
+                effective = original
+            if effective.get("grade") not in {"S", "A", "B", "C", "D", "Pass"}:
+                problem("NP_GRADE_CONFIRM_INVALID_RESULT", 409, "当前等级无效")
+            now = datetime.now(UTC)
+            final["grade_before_confirmation_v1"] = original
+            final["grade"] = effective["grade"]
+            final["total"] = effective["total"]
+            final["dimensions"] = deepcopy(effective["dimensions"])
+            coverage["evaluation_final_snapshot"] = final
+            record = {
+                "status": "confirmed",
+                "actor_id": actor,
+                "confirmed_at": now.isoformat(),
+                "rule_version": rule_version,
+                "market_version": market.version,
+                "correction_revision": revision,
+                "effective_grade": effective["grade"],
+                "effective_total": str(effective["total"]),
+            }
+            coverage["evaluation_grade_confirmation_v1"] = record
+            perf.data_coverage_json = coverage
+            perf.score = Decimal(str(effective["total"]))
+            perf.grade = effective["grade"]
+            perf.updated_at = now
+            self._event(a, store, item, "grade_confirmed", actor, record)
+            self.db.commit()
+            return record
+        except Exception:
+            self.db.rollback()
+            raise
+
     def save_manual_assessment(self, accounts, body, actor, *, commit=True):
         a, s, i = ident(body)
         self._listing(accounts, a, s, i)
@@ -1535,6 +1726,15 @@ class NewProductService:
             if perf is None or perf.grade is None or perf.score is None:
                 problem("NP_ASSESSMENT_SCORE_REQUIRED", 409, "须先完成正式评分")
             coverage = dict(perf.data_coverage_json or {})
+            confirmation = coverage.get("evaluation_grade_confirmation_v1")
+            if isinstance(confirmation, dict) and confirmation.get("status") != "confirmed":
+                problem("NP_ASSESSMENT_GRADE_UNCONFIRMED", 409, "请先确认等级")
+            if (
+                body.decision == "passed"
+                and perf.grade in {"D", "Pass"}
+                and not coverage.get("evaluation_manual_exception")
+            ):
+                problem("NP_ASSESSMENT_GRADE_NOT_PASSABLE", 409, "D/Pass 等级不能正常测评通过")
             if coverage.get("operator_assessment_v1") is not None:
                 problem("NP_ASSESSMENT_ALREADY_LOCKED", 409, "人工测评结论已锁定，请走复核流程")
             if not isinstance(coverage.get("evaluation_final_snapshot"), dict):
@@ -1658,6 +1858,12 @@ class NewProductService:
                 perf.score if perf is not None and perf.score is not None else manual.get("total")
             )
 
+            confirmation = coverage.get("evaluation_grade_confirmation_v1")
+            if isinstance(confirmation, dict) and confirmation.get("status") != "confirmed":
+                problem("NP_PURCHASE_GRADE_UNCONFIRMED", 409, "等级未确认，禁止采购")
+            if grade in {"D", "Pass"} and not coverage.get("evaluation_manual_exception"):
+                problem("NP_PURCHASE_GRADE_NOT_PASSABLE", 409, "D/Pass 等级不能正常申请采购")
+
             # The stored evaluation is evidence, not a new scoring task.
             # Rule changes and missing operating archives do not block
             # the submission of a human-approved request.
@@ -1672,6 +1878,18 @@ class NewProductService:
                 "dimensions": dict(final.get("dimensions") or {}),
                 "missing": [],
             }
+
+            risk_record = final.get("risk_evaluation")
+            blocked_risk = (
+                isinstance(risk_record, dict)
+                and risk_record.get("recommend_not_pass") is True
+            )
+            if grade in {"D", "Pass"} or blocked_risk:
+                problem(
+                    "NP_PURCHASE_RISK_BLOCKED",
+                    409,
+                    "D/Pass或高风险不通过商品不能直接提交采购",
+                )
 
             cfg, _ = self._config()
             qty_archive = coverage.get("evaluation_operating_archive_v1")

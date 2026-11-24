@@ -11,6 +11,7 @@ from decimal import ROUND_HALF_UP, Decimal
 DIMENSIONS = ("speed", "ad", "profit", "trust")
 ORDER = ("S", "A", "B", "C", "D", "Pass")
 TWO = Decimal("0.01")
+STORAGE = Decimal("0.0001")
 
 
 def _dec(value):
@@ -22,7 +23,63 @@ def _dec(value):
     return number
 
 
-def calculate_effective(system: dict, overrides: dict, config: dict) -> dict:
+def _apply_saved_risks(grade: str, evidence: dict) -> str:
+    """Limit a corrected grade using the frozen, source-verified risk hits.
+
+    A grade cap must remain active even if the ORIGINAL grade was below it.
+    Reject malformed, contradictory or unverifiable saved risk records.
+    """
+    if not isinstance(evidence, dict):
+        raise ValueError("missing frozen risk evidence")
+    base = evidence.get("base_grade")
+    effective = evidence.get("effective_grade")
+    hits = evidence.get("risk_hits")
+    selected = evidence.get("manual_selected")
+    if (
+        base not in ORDER[:5]
+        or effective not in ORDER
+        or not isinstance(hits, list)
+        or not isinstance(selected, list)
+    ):
+        raise ValueError("invalid frozen risk evidence")
+    limits = []
+    selected_manual = set()
+    for item in hits:
+        if not isinstance(item, dict):
+            raise ValueError("malformed frozen risk hit")
+        limit = item.get("limit")
+        if limit not in ("none", "B", "C", "D", "recommend_not_pass"):
+            raise ValueError("invalid frozen risk limit")
+        if item.get("source") not in ("system", "manual"):
+            raise ValueError("invalid frozen risk source")
+        if item["source"] == "manual":
+            if not isinstance(item.get("name"), str):
+                raise ValueError("invalid frozen manual risk")
+            selected_manual.add(item["name"])
+        limits.append(limit)
+    if any(not isinstance(name, str) for name in selected):
+        raise ValueError("invalid frozen manual selection")
+    if set(selected) - {"无"} != selected_manual:
+        raise ValueError("frozen manual risk selection does not match risk hits")
+
+    def cap(current: str) -> str:
+        for limit in limits:
+            if limit == "recommend_not_pass":
+                return "Pass"
+            if limit in ORDER[:5] and ORDER.index(current) < ORDER.index(limit):
+                current = limit
+        return current
+
+    if cap(base) != effective:
+        raise ValueError("frozen risk result differs from evidence")
+    if grade not in ORDER:
+        raise ValueError("invalid proposed grade")
+    return cap(grade)
+
+
+def calculate_effective(
+    system: dict, overrides: dict, config: dict, *, risk_evaluation: dict | None = None
+) -> dict:
     """Calculate from saved dimensions; never recompute or rewrite original evidence."""
     dimensions = deepcopy(system["dimensions"])
     if not isinstance(dimensions, dict):
@@ -63,15 +120,22 @@ def calculate_effective(system: dict, overrides: dict, config: dict) -> dict:
 
     selected = band(total)
     original_grade = system["grade"]
-    original_total = _dec(system["total"]).quantize(TWO, rounding=ROUND_HALF_UP)
-    unconstrained_original = band(original_total)
     if original_grade not in ORDER:
         raise ValueError("invalid system grade")
-    # Preserve existing risk / veto constraints. Corrections cannot bypass them.
-    if original_grade == "Pass":
-        selected = "Pass"
-    elif ORDER.index(original_grade) > ORDER.index(unconstrained_original):
-        selected = ORDER[max(ORDER.index(selected), ORDER.index(original_grade))]
+    if risk_evaluation is not None:
+        if risk_evaluation.get("rule_version") != system.get("rule_version"):
+            raise ValueError("frozen risk rule version changed")
+        if original_grade != risk_evaluation.get("effective_grade"):
+            raise ValueError("frozen risk baseline grade changed")
+        selected = _apply_saved_risks(selected, risk_evaluation)
+    else:
+        # Legacy snapshots without a frozen risk block retain their old protection.
+        original_total = _dec(system["total"]).quantize(TWO, rounding=ROUND_HALF_UP)
+        unconstrained_original = band(original_total)
+        if original_grade == "Pass":
+            selected = "Pass"
+        elif ORDER.index(original_grade) > ORDER.index(unconstrained_original):
+            selected = ORDER[max(ORDER.index(selected), ORDER.index(original_grade))]
     return {"dimensions": dimensions, "total": str(total), "grade": selected}
 
 
@@ -105,7 +169,8 @@ def resolved_system(evaluation: dict, system: dict) -> dict | None:
         if (
             evaluation.get("total") is None
             or evaluation.get("grade") != system.get("grade")
-            or _dec(evaluation["total"]) != _dec(system["total"])
+            or _dec(evaluation["total"])
+            != _dec(system["total"]).quantize(STORAGE, rounding=ROUND_HALF_UP)
         ):
             return None
         return deepcopy(system)
@@ -118,20 +183,33 @@ def resolved_system(evaluation: dict, system: dict) -> dict | None:
     return official
 
 
-def overlay(row: dict, block: dict, config: dict) -> bool:
+def overlay(
+    row: dict, block: dict, config: dict, *,
+    risk_evaluation: dict | None = None, require_risk: bool = False,
+) -> bool:
     """Use only a matching official snapshot; never invent a grade before market."""
     ev = row.get("evaluation")
     if not isinstance(ev, dict) or ev.get("observation_state") == "frozen":
         return False
     system = block.get("system")
-    if not isinstance(system, dict):
+    if require_risk and not isinstance(risk_evaluation, dict):
         return False
-    resolved = resolved_system(ev, system)
-    if resolved is None:
+    if (
+        not isinstance(system, dict)
+        or type(block.get("revision")) is not int
+        or block["revision"] < 0
+        or not isinstance(block.get("history"), list)
+        or not isinstance(block.get("overrides"), dict)
+    ):
         return False
     try:
-        changed = calculate_effective(resolved, block["overrides"], config)
-    except (KeyError, ValueError, ArithmeticError):
+        resolved = resolved_system(ev, system)
+        if resolved is None:
+            return False
+        changed = calculate_effective(
+            resolved, block["overrides"], config, risk_evaluation=risk_evaluation
+        )
+    except (KeyError, ValueError, TypeError, ArithmeticError):
         return False
     ev["dimensions"] = deepcopy(changed["dimensions"])
     ev["total"] = changed["total"]

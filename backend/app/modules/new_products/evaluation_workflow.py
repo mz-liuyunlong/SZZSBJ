@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
@@ -52,6 +52,26 @@ def _json(value):
 
 def _sha(value):
     return hashlib.sha256(_json(value).encode()).hexdigest()
+
+
+def _stored_grade_matches_snapshot(grade, stored_total, snapshot):
+    """Match an exact JSONB score to a PostgreSQL NUMERIC(10,4) score.
+
+    Preserve grade identity and reject malformed/non-finite values. Do not use
+    a permissive tolerance, because it could accept an actual changed score.
+    """
+    if not isinstance(snapshot, dict) or grade is None or stored_total is None:
+        return False
+    if snapshot.get("grade") != grade or snapshot.get("total") is None:
+        return False
+    try:
+        exact = Decimal(str(snapshot["total"]))
+        persisted = Decimal(str(stored_total))
+        if not exact.is_finite() or not persisted.is_finite():
+            return False
+        return persisted == exact.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+    except (ArithmeticError, ValueError, TypeError):
+        return False
 
 
 def _key(account, store, item):
@@ -256,6 +276,7 @@ def publish_after_market(
     item: str,
     market_score: int,
     market_version: int | None = None,
+    risk_conditions: list[str] | None = None,
 ):
     """Publish a formal result inside the same transaction as the market score.
 
@@ -272,12 +293,77 @@ def publish_after_market(
     if not isinstance(trigger, dict) or trigger.get("status") != "completed":
         _error("NP_EVAL_BEFORE_TRIGGER", 409, "未达到正式测评条件，请先完成自动测评")
     proof = _verified_proof(perf)
-    if proof is None or trigger.get("proof_hash") != _sha(proof):
-        _error("NP_EVAL_EVIDENCE_CHANGED", 409, "评分证据已变更，需要重新核实")
+    marker = coverage.get("evaluation_grade_confirmation_v1")
+    pending = isinstance(marker, dict) and marker.get("status") == "pending"
+    frozen = coverage.get("evaluation_final_snapshot")
     if _protected(session, reg):
         _error("NP_EVAL_FROZEN", 409, "商品存在已审批或已冻结的业务结果")
-    if perf.grade is not None or perf.score is not None:
-        _error("NP_EVAL_RESULT_FROZEN", 409, "已有正式测评结果，须走复核通道")
+    if pending:
+        if (
+            not isinstance(frozen, dict)
+            or market_version is None
+            or not frozen.get("proof_hash")
+        ):
+            _error(
+                "NP_EVAL_PENDING_SNAPSHOT",
+                409,
+                "待确认评分的原始快照不完整",
+            )
+        if coverage.get("operator_assessment_v1") is not None:
+            _error(
+                "NP_EVAL_PENDING_ASSESSED",
+                409,
+                "已有人工测评结论，不能修改市场评分",
+            )
+        if marker.get("market_version") != market_version - 1:
+            _error(
+                "NP_EVAL_PENDING_MARKET_VERSION",
+                409,
+                "市场评分版本与待确认记录不一致，请刷新后重试",
+            )
+        if marker.get("rule_version") != frozen.get("rule_version"):
+            _error(
+                "NP_EVAL_PENDING_RULE_VERSION",
+                409,
+                "待确认评分的规则版本不一致",
+            )
+        if not _stored_grade_matches_snapshot(perf.grade, perf.score, frozen):
+            _error(
+                "NP_EVAL_PENDING_BASE_CHANGED",
+                409,
+                "原始计算分数或等级已变化，禁止覆盖",
+            )
+        # The original proof hash belongs to its publication.
+        # On a pending market edit the saved authority market version changes.
+        # The source, cutoff, and four automatic dimensions are checked below.
+        authority = coverage.get("new_products_authority_v2")
+        saved = frozen.get("dimensions")
+        current = proof.get("dimensions") if isinstance(proof, dict) else None
+        if (
+            not isinstance(proof, dict)
+            or proof.get("__source") != "new_products_authority_v2"
+            or not isinstance(authority, dict)
+            or authority.get("market_version") != marker.get("market_version")
+            or not isinstance(saved, dict)
+            or not isinstance(current, dict)
+        ):
+            _error("NP_EVAL_PENDING_EVIDENCE", 409, "待确认自动评分证据无法核实")
+        for dimension in ("speed", "ad", "profit", "trust"):
+            a, b = saved.get(dimension), current.get(dimension)
+            try:
+                matched = (a is None and b is None) or (
+                    a is not None and b is not None
+                    and abs(Decimal(str(a)) - Decimal(str(b))) <= Decimal("0.02")
+                )
+            except (ArithmeticError, ValueError, TypeError):
+                matched = False
+            if not matched:
+                _error("NP_EVAL_PENDING_EVIDENCE", 409, "自动评分维度已变化，须复核")
+    else:
+        if proof is None or trigger.get("proof_hash") != _sha(proof):
+            _error("NP_EVAL_EVIDENCE_CHANGED", 409, "评分证据已变更，需要重新核实")
+        if perf.grade is not None or perf.score is not None:
+            _error("NP_EVAL_RESULT_FROZEN", 409, "已有正式测评结果，须走复核通道")
     config, version = _config(session)
     if trigger.get("rule_version") != proof.get("rule_version"):
         _error("NP_EVAL_RULE_STALE", 409, "自动评分规则版本不一致")
@@ -295,6 +381,31 @@ def publish_after_market(
             409,
             "真实指标尚不足以形成完整评级：" + "、".join(ev.get("missing") or []),
         )
+    if pending:
+        coverage = {key: value for key, value in coverage.items()
+                    if key != "evaluation_final_snapshot"}
+    from .risk_finalization import resolve_final_risks
+
+    selected = risk_conditions
+    if selected is None:
+        archived = coverage.get("market_risks_frozen_v1")
+        if isinstance(archived, dict):
+            selected = archived.get("conditions")
+    try:
+        risk_record, risk_display = resolve_final_risks(
+            coverage=coverage,
+            config=config,
+            rule_version=version,
+            base_grade=ev["grade"],
+            manual_selected=selected,
+            cutoff=day(proof.get("authority_cutoff_la"))
+            or day(proof.get("window_end_la")),
+            first_wfs=perf.first_wfs_available_date_la,
+        )
+    except (ValueError, TypeError, KeyError) as exc:
+        _error("NP_RISK_FINALIZATION_BLOCKED", 409, str(exc))
+
+    ev["grade"] = risk_record["effective_grade"]
     perf.score = Decimal(str(ev["total"]))
     perf.grade = ev["grade"]
     perf.process_status = "assessment_complete"
@@ -330,6 +441,36 @@ def publish_after_market(
         "proof_hash": _sha(proof),
         "market_score": market_score,
         "published_at": _now().isoformat(),
+        "risk_evaluation": risk_record,
+        "system_risk_display": risk_display,
+    }
+    if pending and isinstance(coverage.get("operator_score_correction_v1"), dict):
+        from .score_corrections import calculate_effective
+
+        block = dict(coverage["operator_score_correction_v1"])
+        if not isinstance(block.get("overrides"), dict):
+            _error("NP_EVAL_CORRECTION_CONFLICT", 409, "历史修正记录格式无效")
+        baseline = {
+            "rule_version": version,
+            "total": ev["total"],
+            "grade": ev["grade"],
+            "dimensions": dict(ev["dimensions"]),
+            "ad_excluded": bool(ev.get("ad_excluded")),
+        }
+        try:
+            effective = calculate_effective(
+                baseline, block["overrides"], config, risk_evaluation=risk_record
+            )
+        except (KeyError, ValueError, TypeError, ArithmeticError):
+            _error("NP_EVAL_CORRECTION_CONFLICT", 409, "市场评分更新后，原修正分数无法安全重算")
+        block["system"] = baseline
+        block["effective"] = effective
+        coverage["operator_score_correction_v1"] = block
+    coverage["evaluation_grade_confirmation_v1"] = {
+        "status": "pending",
+        "rule_version": version,
+        "market_version": market_version,
+        "created_at": _now().isoformat(),
     }
     perf.data_coverage_json = coverage
     perf.updated_at = _now()
@@ -1331,6 +1472,8 @@ def decorate_page(session: Session, data: dict) -> dict:
              p.sold_out_evidence_status,p.score,p.grade,
              jsonb_strip_nulls(jsonb_build_object(
                'evaluation_final_snapshot',p.data_coverage_json->'evaluation_final_snapshot',
+               'evaluation_grade_confirmation_v1',p.data_coverage_json->'evaluation_grade_confirmation_v1',
+               'operator_score_correction_v1',p.data_coverage_json->'operator_score_correction_v1',
                'operator_assessment_v1',p.data_coverage_json->'operator_assessment_v1',
                'evaluation_manual_exception',p.data_coverage_json->'evaluation_manual_exception',
                'evaluation_recheck_required',p.data_coverage_json->'evaluation_recheck_required',
@@ -1384,6 +1527,35 @@ def decorate_page(session: Session, data: dict) -> dict:
             total=r["score"],
         )
         entry["evaluation_status"] = status
+        confirmation = coverage.get("evaluation_grade_confirmation_v1")
+        entry["evaluation_grade_confirmation"] = (
+            confirmation if isinstance(confirmation, dict) else None
+        )
+        correction = coverage.get("operator_score_correction_v1")
+        if isinstance(correction, dict):
+            revision = correction.get("revision")
+            entry["score_correction_revision"] = (
+                revision if type(revision) is int and revision >= 0 else None
+            )
+            entry["score_correction_state"] = (
+                "applied"
+                if isinstance(entry.get("score_correction"), dict)
+                and entry["score_correction"].get("revision") == revision
+                else "stale"
+            )
+        else:
+            entry["score_correction_revision"] = 0
+            entry["score_correction_state"] = "none"
+        if (
+            isinstance(confirmation, dict)
+            and confirmation.get("status") == "confirmed"
+            and isinstance(coverage.get("operator_score_correction_v1"), dict)
+        ):
+            from .score_corrections import public_correction
+
+            entry["score_correction"] = public_correction(
+                coverage["operator_score_correction_v1"]
+            )
         verdict = coverage.get("operator_assessment_v1")
         entry["evaluation_decision"] = verdict if isinstance(verdict, dict) else None
         # Read only a scalar recommendation, never copy the full daily archive
@@ -1394,8 +1566,8 @@ def decorate_page(session: Session, data: dict) -> dict:
         # separate read session. The local, audited final evaluation is the
         # authority for evaluation-only columns; never promote a provisional
         # remote score into a formal grade.
+        final = coverage.get("evaluation_final_snapshot")
         if r["grade"] is not None and r["score"] is not None:
-            final = coverage.get("evaluation_final_snapshot")
             if isinstance(final, dict) and final.get("grade") == r["grade"]:
                 ev = entry.get("evaluation")
                 if isinstance(ev, dict):
@@ -1406,6 +1578,34 @@ def decorate_page(session: Session, data: dict) -> dict:
                     if isinstance(final.get("dimensions"), dict):
                         ev["dimensions"] = dict(final["dimensions"])
                 entry.setdefault("facts", {})["market_score"] = final.get("market_score")
+        if isinstance(confirmation, dict) and confirmation.get("status") == "pending":
+            # The authoritative DB grade replaced the earlier list overlay.
+            # Apply the same saved revision AFTER the authoritative snapshot.
+            entry.pop("score_correction", None)
+            if isinstance(correction, dict):
+                from .score_corrections import overlay
+
+                valid_final = (
+                    r["grade"] is not None
+                    and r["score"] is not None
+                    and isinstance(final, dict)
+                    and final.get("grade") == r["grade"]
+                )
+                risk_record = (
+                    final.get("risk_evaluation") if isinstance(final, dict) else None
+                )
+                if valid_final and overlay(
+                    entry, correction, config,
+                    risk_evaluation=risk_record, require_risk=True,
+                ):
+                    entry["score_correction_state"] = "applied"
+                    entry["suggested_qty"] = NewProductService._suggested_quantity(
+                        entry["evaluation"], config
+                    )
+                else:
+                    # Do not silently display an old correction as current.
+                    entry["score_correction_state"] = "stale"
+                    entry["suggested_qty"] = None
         entry["evaluation_review_status"] = r["review_status"]
         entry["evaluation_review_id"] = r["review_id"]
         # Expose approved exception separately; never impersonate S/A/B/C.

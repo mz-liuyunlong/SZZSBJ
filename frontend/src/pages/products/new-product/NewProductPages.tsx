@@ -21,7 +21,7 @@ import NewProductRulesPanel from "./NewProductRulesPanel";
 import { getNewProductRules, applyNewProductRules, listNewProducts, getNewProductSummary,
   saveNewProductMarketScore, saveNewProductManualDecision, confirmNewProductAndRequestPurchase,
   requestNewProductManualDecisionReview,
-  saveNewProductScoreCorrection, getNewProductPurchaseSnapshot, saveNewProductTrackingDecision, submitNewProductPurchase,
+  saveNewProductScoreCorrection, confirmNewProductGrade, getNewProductPurchaseSnapshot, saveNewProductTrackingDecision, submitNewProductPurchase,
   reviewNewProductPurchase, exportNewProductListings,
   requestNewProductEvaluation,
   requestNewProductEvaluationReview,
@@ -133,24 +133,26 @@ type MarketScoringDraftProps = {
   initialCompetitorIds: string[];
   initialNoCompetitors: boolean;
   saving: boolean;
+  readOnly?: boolean;
   onSave: (value: number | null, reason: string, ids: string[], none: boolean) => void;
 };
-function MarketScoringDraft({initialScore, initialReason, initialCompetitorIds, initialNoCompetitors, saving, onSave}: MarketScoringDraftProps) {
+function MarketScoringDraft({initialScore, initialReason, initialCompetitorIds, initialNoCompetitors, saving, readOnly=false, onSave}: MarketScoringDraftProps) {
   const [draftScore, setDraftScore] = useState<number | null>(initialScore);
   const [draftReason, setDraftReason] = useState(initialReason);
   const [draftCompetitors, setDraftCompetitors] = useState(initialCompetitorIds.join(", "));
   const [draftNone, setDraftNone] = useState(initialNoCompetitors);
   const submit = () => {
+    if(readOnly || saving)return;
     const ids = draftNone ? [] : draftCompetitors.split(/[,\s，；;]+/).map(id => id.trim()).filter(Boolean);
     onSave(draftScore, draftReason, ids, draftNone);
   };
   return (
-    <div className="np-market-v3-form">
+    <div className={"np-market-v3-form"+(readOnly?" np-market-v3-readonly":"")}>
       <div className="np-market-v3-form-row">
         <div className="np-market-v3-label">市场竞争分数 <span aria-hidden="true">*</span></div>
         <div className="np-market-v3-scale" role="group" aria-label="市场竞争分数">
           {Array.from({length: 11}, (_, i) => (
-            <button type="button" key={i} disabled={saving}
+            <button type="button" key={i} disabled={saving||readOnly}
               aria-pressed={draftScore === i}
               className={"market-score-btn " + (draftScore === i ? "active" : "")}
               onClick={() => setDraftScore(i)}>{i}</button>
@@ -161,13 +163,13 @@ function MarketScoringDraft({initialScore, initialReason, initialCompetitorIds, 
         <div className="np-market-v3-label" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <label htmlFor="np-market-v3-competitors">竞品 ID <span aria-hidden="true">*</span></label>
           <label style={{display:"inline-flex",alignItems:"center",gap:6,cursor:"pointer"}}>
-            <input type="checkbox" checked={draftNone} disabled={saving}
+            <input type="checkbox" checked={draftNone} disabled={saving||readOnly}
               onChange={e=>setDraftNone(e.target.checked)} /> 无
           </label>
         </div>
         <div className="np-market-v3-textarea-shell">
           <textarea id="np-market-v3-competitors" className="textarea" rows={3}
-            style={{resize:"none"}} disabled={saving || draftNone} value={draftCompetitors}
+            style={{resize:"none"}} disabled={saving || draftNone || readOnly} value={draftCompetitors}
             aria-label="竞品 ID" aria-required={!draftNone}
             onChange={e=>{
               const value = e.target.value.replace(/[，；;]/g, ",");
@@ -180,17 +182,17 @@ function MarketScoringDraft({initialScore, initialReason, initialCompetitorIds, 
         <label htmlFor="np-market-v3-note" className="np-market-v3-label">市场竞争评价依据 <span aria-hidden="true">*</span></label>
         <div className="np-market-v3-textarea-shell">
           <textarea id="np-market-v3-note" className="textarea" rows={3}
-            style={{resize:"none"}} disabled={saving}
+            style={{resize:"none"}} disabled={saving || readOnly}
             aria-label="市场竞争评价依据" value={draftReason}
             onChange={e => setDraftReason(e.target.value)}
             placeholder="填写竞品数量、价格、评价和差异化依据……" />
           <span className="np-market-v3-count">{draftReason.length} / 500</span>
         </div>
       </div>
-      <div className="np-market-v3-actions">
+      {!readOnly && <div className="np-market-v3-actions">
         <button type="button" className="btn primary" disabled={saving}
           onClick={submit}>保存市场评分并计算</button>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -214,6 +216,9 @@ export default function NewProductPages({page,mode}:Props){
  const [assessmentChoice,setAssessmentChoice]=useState<""|"passed"|"failed">("");
  const [assessmentReason,setAssessmentReason]=useState("");
  const [assessmentSaving,setAssessmentSaving]=useState(false);
+ const [gradeConfirmSaving,setGradeConfirmSaving]=useState(false);
+ const [gradePreview,setGradePreview]=useState(false);
+ const [gradePreviewSaving,setGradePreviewSaving]=useState(false);
  const [assessmentQty,setAssessmentQty]=useState("");
  const [assessmentPurchaseReason,setAssessmentPurchaseReason]=useState("");
  const [,setAssessmentReviewOpen]=useState(false);
@@ -270,6 +275,20 @@ export default function NewProductPages({page,mode}:Props){
    await queryClient.invalidateQueries({queryKey:["np-tracking"]});
   return [];
  },[mode,tab,remoteQuery,queryClient,boardActionItem]);
+ const freshScoreProduct=async(item:Product):Promise<PersistedProduct>=>{
+    if(!item.backend)throw new Error("Product identity is missing");
+    const identity=item.backend.identity;
+    const page=await listNewProducts({
+      page:1,pageSize:200,keyword:identity.item_id,searchField:"item_id"
+    });
+    const current=page.items.map(toPersistedProduct).find(row=>
+      row.backend.identity.source_account_ref===identity.source_account_ref &&
+      row.backend.identity.store_id===identity.store_id &&
+      row.backend.identity.item_id===identity.item_id);
+    if(!current)throw new Error("Current product is not in the verified listing response");
+    setDetailSnapshot(current);
+    return current;
+  };
  const [approvalFocus,setApprovalFocus]=useState<string|null>(null);
  const [trackingDrill,setTrackingDrill]=useState<TrackingDrillFilter|null>(null);
  // PR337_PHASE2_REAL_API_V1: hydrate the saved and applied rule; never fallback on fetch failure.
@@ -307,6 +326,12 @@ export default function NewProductPages({page,mode}:Props){
  const patch=(id:string,change:Partial<Product>)=>setItems(prev=>prev.map(x=>x.id===id?{...x,...change}:x));
  const show=(kind:ModalType|"assessment",id?:string)=>{
    const item=id?activeItems.find(x=>x.id===id):undefined;
+   setGradePreview(Boolean(
+     item?.backend?.gradeConfirmation?.status==="pending" &&
+     item.market!==null &&
+     item.backend.evaluation.total!==null &&
+     item.backend.evaluation.grade!==null
+   ));
    if(kind==="market"&&item?.backend&&!item.backend.firstWfsDate&&!item.launch){
      msg("WFS首次可售时间未核实，暂不能评分");return;
    }
@@ -409,7 +434,7 @@ export default function NewProductPages({page,mode}:Props){
      msg(`复核申请失败：${error instanceof Error?error.message:"请检查权限及当前评级"}`);
    }finally{setEvaluationReviewSubmitting(false);}
  };
- const close=()=>{setModal(null);setDetailSnapshot(null);setDetailSection("details");setNote("")};
+ const close=()=>{setModal(null);setDetailSnapshot(null);setDetailSection("details");setGradePreview(false);setNote("")};
  const reset=()=>{setPhase("all");setReportRevision(n=>n+1)};
 
  const openConfigPanel=()=>{
@@ -473,6 +498,12 @@ export default function NewProductPages({page,mode}:Props){
  void requestManualDecisionChange;
  const confirmManualAssessment=async(goPurchase=false)=>{
    if(!p?.backend || assessmentSaving)return;
+   if(p.backend.gradeConfirmation?.status==="pending"){
+     msg("请先确认等级，再确认测评结论");return;
+   }
+   if(assessmentChoice==="passed" && ["D","Pass"].includes(p.backend.evaluation.grade??"") && !p.evaluationManualException){
+     msg("D/Pass 等级不能正常测评通过");return;
+   }
    if(!assessmentChoice || Array.from(assessmentReason.replace(/\s/g,"")).length<20){
      msg("请选择测评结论并填写不少于20字的原因");return;
    }
@@ -542,8 +573,20 @@ export default function NewProductPages({page,mode}:Props){
        if(!result)throw new Error("保存后未找到当前商品");
        setDetailSnapshot(result);
        if(result.backend?.evaluation.grade&&result.backend.evaluation.total!==null){
-         setDetailSection("assessment");
-         msg(`市场评分已保存，评级 ${result.backend.evaluation.grade}；请人工确认测评结论`);
+         const pending = result.backend.gradeConfirmation?.status === "pending";
+         setGradePreview(Boolean(
+           pending &&
+           result.backend.evaluation.total!==null &&
+           result.backend.evaluation.grade!==null
+         ));
+         if (pending && tab === "list") {
+           setPhase("all");
+           setReportRevision(current => current + 1);
+         }
+         setDetailSection(pending ? "details" : "assessment");
+         msg(pending
+           ? `市场评分已保存，计算等级 ${result.backend.evaluation.grade}；可继续修正分数，完成后点击计算等级`
+           : `市场评分已保存，评级 ${result.backend.evaluation.grade}；请人工确认测评结论`);
        }else{
          // Preserve details: a market score is not proof of complete automatic evidence.
          msg(`市场评分已保存；${result?.backend?.evaluation.missing.join('、')||'后台评分证据尚未齐备'}，暂不生成评级`);
@@ -647,17 +690,89 @@ export default function NewProductPages({page,mode}:Props){
       return;
     }
     if(!p)return;if(["需要优化","打品失败"].includes(review)&&note.trim().length<5){msg("请填写复盘说明");return}patch(p.id,{tracking:review,reasonFailure:note});close();msg("模拟复盘已保存")};
+ const calculateGrade=async()=>{
+   if(!p?.backend || p.backend.gradeConfirmation?.status!=="pending" ||
+     gradePreviewSaving || gradeConfirmSaving)return;
+   setGradePreviewSaving(true);
+   try{
+     const fresh=await listNewProducts({
+       page:1,pageSize:200,keyword:p.item,searchField:"item_id"
+     });
+     const updated=fresh.items.map(toPersistedProduct)
+       .find(row=>row.id===p.id);
+     if(!updated?.backend || updated.backend.gradeConfirmation?.status!=="pending"){
+       throw new Error("商品不再处于待等级确认状态");
+     }
+     if(updated.backend.scoreCorrectionRevision===null ||
+       updated.backend.scoreCorrectionState==="stale"){
+       throw new Error("修正分数快照已失效，请核对后再计算等级");
+     }
+     if(updated.backend.evaluation.total===null ||
+       updated.backend.evaluation.grade===null){
+       throw new Error("尚无完整的已保存评分结果");
+     }
+     await refreshReal();
+     setDetailSnapshot(updated);
+     setGradePreview(true);
+   }catch(error){
+     msg(`计算等级失败：${error instanceof Error?error.message:"未知错误"}`);
+   }finally{setGradePreviewSaving(false);}
+ };
+ const confirmGrade=async()=>{
+   if(!p?.backend || p.backend.gradeConfirmation?.status!=="pending" ||
+     !gradePreview || gradeConfirmSaving || gradePreviewSaving)return;
+   const identity=p.backend.identity;
+   setGradeConfirmSaving(true);
+   try{
+     const current=await freshScoreProduct(p);
+     const expected=current.backend.scoreCorrectionRevision;
+     if(current.backend.gradeConfirmation?.status!=="pending" ||
+       expected===null || current.backend.scoreCorrectionState==="stale"){
+       throw new Error("评分快照未核实，请刷新后再确认");
+     }
+     await confirmNewProductGrade(identity,expected);
+     const updated=await freshScoreProduct(current);
+     if(!updated || updated.backend.gradeConfirmation?.status!=="confirmed"){
+       msg("等级已确认，请刷新核对最新数据");return;
+     }
+     setGradePreview(false);
+     setDetailSnapshot(updated);
+     await refreshReal();
+     setDetailSection("assessment");
+     msg("等级已确认并锁定，可以继续人工测评");
+   }catch(error){
+     msg(`等级确认失败：${error instanceof Error?error.message:"未知错误"}`);
+   }finally{setGradeConfirmSaving(false);}
+ };
  // NP_OPERATOR_SCORE_CORRECTION_V1_20261119: direct operator write, not an approval.
  const correct=async(dimension:Correction["dimension"], requestedScore:number, requestedReason:string):Promise<{ok:boolean;error?:string}>=>{
    if(!p||!p.backend)return {ok:false,error:"当前商品不可修改"};
-   if(p.backend.evaluation.grade !== null && p.backend.evaluation.total !== null)
-     return {ok:false,error:"正式评分已锁定，不允许修改"};
+   if(p.backend.evaluation.grade !== null && p.backend.evaluation.total !== null &&
+     p.backend.gradeConfirmation?.status!=="pending")
+     return {ok:false,error:"等级已确认或属于历史评分，不允许直接修改"};
    if(!Number.isFinite(requestedScore)||requestedScore<0||requestedScore>10||requestedReason.trim().length<5){
      return {ok:false,error:"请输入0–10之间的分数及至少5字的修正依据"};
    }
    try{
-     await saveNewProductScoreCorrection(p.backend.identity,dimension,requestedScore,requestedReason.trim(),p.backend.scoreCorrection?.revision??0);
+     const current=await freshScoreProduct(p);
+     const expected=current.backend.scoreCorrectionRevision;
+     if(expected===null || current.backend.scoreCorrectionState==="stale"){
+       return {ok:false,error:"评分修正快照未核实，已阻止覆盖正式数据"};
+     }
+     if(current.backend.gradeConfirmation?.status!==p.backend.gradeConfirmation?.status){
+       return {ok:false,error:"商品等级状态已变化，请刷新核对"};
+     }
+     const saved=await saveNewProductScoreCorrection(
+       current.backend.identity,dimension,requestedScore,
+       requestedReason.trim(),expected
+     );
+     const updated=await freshScoreProduct(current);
      await refreshReal();
+     if(updated.backend.scoreCorrectionRevision!==saved.revision ||
+       updated.backend.scoreCorrectionState!=="applied"){
+       return {ok:false,error:"修正已保存，但有效分数尚未核实，请刷新核对"};
+     }
+     setDetailSnapshot(updated);
      msg("评分修正已保存，原始分数和修改记录已留存");
      return {ok:true};
    }catch(error){
@@ -680,6 +795,22 @@ export default function NewProductPages({page,mode}:Props){
      setModal("detail");
    }catch(error){msg(`读取待评分商品失败：${error instanceof Error?error.message:"未知错误"}`);}
  };
+ const gradeSummary=p?(<>
+        <div className="section-title np-assessment-result-heading"><span aria-hidden="true"><svg viewBox="0 0 24 24" width="31" height="31" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1" fill="currentColor" stroke="none"/><path d="m8 14 3 3 5-6"/></svg></span>评分结果与采购建议</div>
+        <div className="qty-hero np-assessment-hero">
+          <div><span className="np-assessment-hero-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m12 2 3.1 6.5 7.1 1-5.1 5 .9 7.1-6-3.3-6 3.3.9-7.1-5.1-5 7.1-1L12 2Z"/></svg></span><div className="subline">最终得分 / 评级</div>
+            <div className="big">{score(p,cfg)?.toFixed(2)}
+              <span className="grade">{grade(p,cfg)}</span></div>
+            <div className="delta">评级采购范围 {(cfg.quantities?.[grade(p,cfg)||"D"]??bands[grade(p,cfg)||"D"]).join("–")} 件</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <span className="np-assessment-hero-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m12 2 9 5v10l-9 5-9-5V7l9-5Z"/><path d="m3 7 9 5 9-5M12 12v10"/></svg></span><div className="subline">系统建议采购量</div>
+            <div className="big">{suggestion(p,cfg)>0?`${suggestion(p,cfg)} 件`:"不建议采购"}</div>
+            <div className="delta">{suggestion(p,cfg)>0?
+              "严格限制在评级配置范围内":"当前评级不进入采购申请"}</div>
+          </div>
+        </div>
+ </>):null;
  return <PageShell page={page}><div className="np-original-v4"><div className="content">
 
 <header className="np-workspace-title">
@@ -788,8 +919,10 @@ export default function NewProductPages({page,mode}:Props){
             className={detailSection==="assessment"?"active":""}
             onClick={()=>setDetailSection("assessment")}>测评结论与采购申请</button>
         </div>}
-      {!p.backend?.evaluationDecision && p.backend && p.backend.evaluation.grade !== null &&
-        p.backend?.evaluation.total !== null && detailSection==="details" &&
+      {!p.backend?.evaluationDecision && p.backend &&
+        p.backend.gradeConfirmation?.status!=="pending" &&
+        p.backend.evaluation.grade!==null &&
+        p.backend.evaluation.total!==null && detailSection==="details" &&
         <div className="np-assessment-pending-action">
           <span>正式评级已保存，等待人工测评确认</span>
           <button type="button" className="btn primary"
@@ -820,7 +953,9 @@ export default function NewProductPages({page,mode}:Props){
         parameters={savedRuleDraft.confirmedScoring}
         loaded={ruleLoaded}
         currentVersion={version}
-        readOnly={Boolean(p.backend && p.backend.evaluation.grade !== null && p.backend.evaluation.total !== null)}
+        readOnly={Boolean(p.backend && p.backend.evaluation.grade !== null &&
+          p.backend.evaluation.total !== null &&
+          (p.backend.gradeConfirmation?.status!=="pending" || gradePreview))}
         onRequestCorrection={(requestedScore, reason)=>correct(d,requestedScore,reason)}
       />
     </div>
@@ -829,7 +964,10 @@ export default function NewProductPages({page,mode}:Props){
 {/* PR337_MANUAL_RISK_V1: manually assessed, never preselected. */}
 {<NewProductManualRisk key={`${p.id}:${p.backend?.marketVersion??0}`}
   disabled={marketSaving}
-  readOnly={Boolean(p.backend && p.backend.evaluation.grade !== null && p.backend.evaluation.total !== null)}
+  readOnly={Boolean(p.backend && p.backend.evaluation.grade !== null &&
+    p.backend.evaluation.total !== null &&
+    (p.backend.gradeConfirmation?.status!=="pending" || gradePreview))}
+  editableSaved={p.backend?.gradeConfirmation?.status==="pending"}
   identity={p.backend?.identity}
   marketVersion={p.backend?.marketVersion??0}
   systemRiskRules={savedRuleDraft.riskConditions}
@@ -859,38 +997,67 @@ export default function NewProductPages({page,mode}:Props){
       </tbody>
     </table>
   </div>
-  {p.market===null && (p.backend || p.status === "待市场评分") ? (
-    <MarketScoringDraft key={`${p.id}:${p.backend?.marketVersion??0}`} initialScore={p.market}
-      initialReason={p.marketReason || ""} initialCompetitorIds={p.marketCompetitorIds || []}
-      initialNoCompetitors={p.marketNoCompetitors === true} saving={marketSaving}
-      onSave={(value, reason, ids, none) => { void saveMarket(value, reason, ids, none); }} />
-  ) : (
-    <div className="np-market-v3-saved">
-      <div><strong>已保存分数：</strong>{p.market === null ? "未评分" : `${p.market} /10`}</div>
-      <div><strong>竞品 ID：</strong>{p.marketNoCompetitors ? "无" : (p.marketCompetitorIds?.join(", ") || "—")}</div>
-      <div><strong>评价依据：</strong>{p.marketReason || "—"}</div>
-    </div>
-  )}
+  <MarketScoringDraft
+    key={`${p.id}:${p.backend?.marketVersion??0}:${p.market!==null &&
+      !(p.backend?.gradeConfirmation?.status==="pending" && !gradePreview)
+      ?"saved":"editing"}`}
+    initialScore={p.market}
+    initialReason={p.marketReason || ""}
+    initialCompetitorIds={p.marketCompetitorIds || []}
+    initialNoCompetitors={p.marketNoCompetitors === true}
+    saving={marketSaving}
+    readOnly={p.market!==null &&
+      !(p.backend?.gradeConfirmation?.status==="pending" && !gradePreview)}
+    onSave={(value, reason, ids, none) => { void saveMarket(value, reason, ids, none); }}
+  />
+
 </div>
 
       </>}
-    {p.market!==null&&p.marketReason.trim().length>=5&&score(p,cfg)!==null?(
+    {(p.backend?.gradeConfirmation?.status!=="pending" || gradePreview) &&
+      p.market!==null&&p.marketReason.trim().length>=5&&score(p,cfg)!==null?(
       <>
-        <div className="section-title np-assessment-result-heading"><span aria-hidden="true"><svg viewBox="0 0 24 24" width="31" height="31" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1" fill="currentColor" stroke="none"/><path d="m8 14 3 3 5-6"/></svg></span>评分结果与采购建议</div>
-        <div className="qty-hero np-assessment-hero">
-          <div><span className="np-assessment-hero-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m12 2 3.1 6.5 7.1 1-5.1 5 .9 7.1-6-3.3-6 3.3.9-7.1-5.1-5 7.1-1L12 2Z"/></svg></span><div className="subline">最终得分 / 评级</div>
-            <div className="big">{score(p,cfg)?.toFixed(2)}
-              <span className="grade">{grade(p,cfg)}</span></div>
-            <div className="delta">评级采购范围 {(cfg.quantities?.[grade(p,cfg)||"D"]??bands[grade(p,cfg)||"D"]).join("–")} 件</div>
+        {(detailSection==="assessment" ||
+          p.backend?.gradeConfirmation?.status!=="pending" ||
+          gradePreview) && gradeSummary}
+
+        {detailSection==="details" &&
+          p.backend?.gradeConfirmation?.status==="pending" && (
+          <div className="np-grade-confirm-actions">
+            {gradePreview ? <>
+              <button type="button" className="btn np-grade-back-btn"
+                disabled={gradeConfirmSaving}
+                onClick={()=>setGradePreview(false)}>
+                <svg viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2"
+                  strokeLinecap="round" strokeLinejoin="round"
+                  aria-hidden="true">
+                  <path d="m12 19-7-7 7-7M5 12h14"/>
+                </svg>
+                <span>返回修改</span>
+              </button>
+              <button type="button" className="btn primary np-grade-confirm-btn"
+                disabled={gradeConfirmSaving||gradePreviewSaving}
+                onClick={()=>{void confirmGrade();}}>
+                <svg viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2"
+                  strokeLinecap="round" strokeLinejoin="round"
+                  aria-hidden="true">
+                  <circle cx="12" cy="12" r="9"/>
+                  <path d="m8 12 2.5 2.5L16 9"/>
+                </svg>
+                <span>{gradeConfirmSaving?"确认中…":"确认等级"}</span>
+              </button>
+            </> : (
+              <button type="button" className="btn primary"
+                disabled={gradePreviewSaving||gradeConfirmSaving||marketSaving}
+                onClick={()=>{void calculateGrade();}}>
+                {gradePreviewSaving?"计算中…":"计算等级"}
+              </button>
+            )}
           </div>
-          <div style={{textAlign:"right"}}>
-            <span className="np-assessment-hero-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m12 2 9 5v10l-9 5-9-5V7l9-5Z"/><path d="m3 7 9 5 9-5M12 12v10"/></svg></span><div className="subline">系统建议采购量</div>
-            <div className="big">{suggestion(p,cfg)>0?`${suggestion(p,cfg)} 件`:"不建议采购"}</div>
-            <div className="delta">{suggestion(p,cfg)>0?
-              "严格限制在评级配置范围内":"当前评级不进入采购申请"}</div>
-          </div>
-        </div>
-        {detailSection==="assessment" && p.backend && <div className="np-assessment-panel">
+        )}
+        {detailSection==="assessment" && p.backend && p.backend.gradeConfirmation?.status!=="pending" && <div className="np-assessment-panel">
           {!p.backend.evaluationDecision &&
             <button type="button" className="np-assessment-back" onClick={()=>setDetailSection("details")}>
               ← 返回测评详情
@@ -1018,7 +1185,8 @@ export default function NewProductPages({page,mode}:Props){
           </div>}
         </div>}
       </>
-    ):<div className="info-box">{p.market===null
+    ):p.backend?.gradeConfirmation?.status==="pending" ? null
+      :<div className="info-box">{p.market===null
       ?"请先保存市场竞争评分。"
       :`市场评分已保存；${p.backend?.evaluation.missing.join('、')||'尚缺完整自动评分证据'}。证据核实前不生成总分、评级或采购建议。`}</div>}
     </>}
