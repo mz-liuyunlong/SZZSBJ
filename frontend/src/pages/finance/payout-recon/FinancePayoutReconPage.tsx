@@ -6,7 +6,7 @@
  * - 「收款账户匹配」在「手动同步」旁边，点开抽屉。
  * 全部读写 /api/finance/payout-recon 和 /api/finance/walmart-bills/sync，没有本地预览数据。
  */
-import { Button, Tooltip, Typography, message } from "antd";
+import { Alert, Button, Tooltip, Typography, message } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import PageShell from "@/components/page/PageShell";
 import type { NavigationPage } from "@/config/navigation";
@@ -28,6 +28,7 @@ import {
   usePayoutPeriods,
   useReconRefresh,
   type ApiPeriodList,
+  type ApiSync,
   type ReconRow,
 } from "./reconApi";
 import { timeText } from "./reconModel";
@@ -95,12 +96,14 @@ function ReconWorkbench({ data }: { data: ApiPeriodList }) {
       </Tooltip>
     </>
   );
+  const syncBanner = syncFailureBanner(sync.data);
   const openedRow = rows.find((row) => row.key === opened);
   const openRows = rows.filter((row) => !row.matchId && row.state !== "voided" && row.state !== "no_pay");
 
   return (
     <>
       {messageHolder}
+      {syncBanner}
       <ReconBoard
         actions={actions}
         subtitle={`对账从 ${data.recon_start} 起${data.truncated ? ` · 只显示最近 ${data.limit} 行` : ""}`}
@@ -125,6 +128,36 @@ function ReconWorkbench({ data }: { data: ApiPeriodList }) {
       />
     </>
   );
+}
+
+/** 最近一次沃尔玛账单同步失败 → 页顶红条：哪几家店、哪个窗口、领星回了什么。成功或在跑就不显示。 */
+function syncFailureBanner(sync: ApiSync | undefined) {
+  if (!sync || sync.status !== "failed") return null;
+  const stores = sync.failed_stores ?? [];
+  const allFailed = sync.error_code === "SYNC_WALMART_BILL_ALL_STORES_FAILED";
+  const title = allFailed
+    ? `最近一次沃尔玛账单同步全部店铺失败（${timeText(sync.finished_at)}）`
+    : `最近一次沃尔玛账单同步有 ${stores.length || "部分"} 家店未完成（${timeText(sync.finished_at)}）`;
+  const detail = stores.length ? (
+    <ul style={{ margin: 0, paddingLeft: 18 }}>
+      {stores.map((store) => {
+        const upstream = [store.http_status ? `HTTP ${store.http_status}` : null, store.provider_code ? `领星码 ${store.provider_code}` : null, store.provider_message]
+          .filter(Boolean)
+          .join(" · ");
+        return (
+          <li key={store.store_id}>
+            {store.store_code}
+            {store.window_start ? ` ${store.window_start} ~ ${store.window_end ?? ""}` : ""}
+            {store.error_code ? ` · ${store.error_code}` : ""}
+            {upstream ? ` · ${upstream}` : ""}
+          </li>
+        );
+      })}
+    </ul>
+  ) : (
+    `错误码 ${sync.error_code ?? "-"}；账单明细没有更新，到任务中心看运行记录。`
+  );
+  return <Alert type="error" showIcon message={title} description={detail} style={{ marginBottom: 12 }} />;
 }
 
 function FinancePayoutReconPage({ page }: { page: NavigationPage }) {
