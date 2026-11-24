@@ -193,7 +193,7 @@
   line-height:1.5;
   gap:8px;
 }
-.np-acceptance-drawer .np-assessment-result-heading {margin:8px 0 10px;padding:0}
+.np-acceptance-drawer .np-assessment-result-heading {margin:8px 0 10px;padding:0;justify-content:flex-start}
 .np-acceptance-drawer .np-assessment-result-heading > span {
   width:26px;height:26px;border-radius:5px;
 }
@@ -323,4 +323,55 @@
 }
 .np-acceptance-drawer .np-assessment-confirmed > .np-market-v3-form {
   margin: 0 22px 20px;
+}
+
+
+/* NP_GRADE_CONFIRM_BUTTON_RIGHT_V1 */
+.np-acceptance-drawer .np-grade-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+  margin: 12px 0 4px;
+  padding: 14px 0 0;
+  border-top: 1px solid #dce6f7;
+}
+
+.np-acceptance-drawer .np-grade-confirm-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  height: 42px;
+  min-width: 136px;
+  padding: 0 18px;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.np-acceptance-drawer .np-grade-confirm-actions .btn svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+}
+
+.np-acceptance-drawer .np-grade-confirm-actions .np-grade-back-btn {
+  background: #fff;
+  border: 1px solid #b9cbe8;
+  color: #344664;
+}
+
+.np-acceptance-drawer .np-grade-confirm-actions .np-grade-confirm-btn {
+  background: #0758e9;
+  border: 1px solid #0758e9;
+  color: #fff;
+}
+
+.np-acceptance-drawer .np-grade-confirm-actions .np-grade-confirm-btn:hover:not(:disabled) {
+  background: #064bc9;
+  border-color: #064bc9;
 }

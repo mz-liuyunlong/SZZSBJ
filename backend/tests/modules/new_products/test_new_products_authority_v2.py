@@ -184,8 +184,8 @@ def test_official_grade_is_immutable_during_unified_daily_publish():
     assert perf.data_coverage_json == {"frozen": True}
 
 
-def test_v2_waits_for_formal_market_result_and_freezes_trigger_v3():
-    """A formally triggered product awaits manual market scoring, unchanged."""
+def test_v2_freezes_final_market_result_after_formal_trigger():
+    """A finalized market result remains unchanged by the daily publisher."""
     from datetime import date
     from types import SimpleNamespace
     from unittest.mock import MagicMock
@@ -199,7 +199,10 @@ def test_v2_waits_for_formal_market_result_and_freezes_trigger_v3():
     registry = SimpleNamespace(id=uuid4())
     perf = SimpleNamespace(
         process_status="待市场评分",
-        data_coverage_json={"evaluation_formal_trigger": {"status": "completed"}},
+        data_coverage_json={
+            "evaluation_formal_trigger": {"status": "completed"},
+            "evaluation_final_snapshot": {"grade": "A"},
+        },
         score=None,
         grade=None,
     )

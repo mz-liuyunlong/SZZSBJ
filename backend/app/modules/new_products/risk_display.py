@@ -112,8 +112,18 @@ def build_saved_risk_display(
     if isinstance(ads, dict):
         if ads.get("window_end_la") != cutoff:
             ad_reason = "广告快照截止日不是最近完整洛杉矶业务日"
-        elif ads.get("status") != "complete":
+        elif ads.get("status") not in ("complete", "classification_incomplete"):
             ad_reason = "广告快照状态未完整核实：" + str(ads.get("status") or "missing")
+        elif ads.get("source") != "fact_walmart_ad_item_sp_daily":
+            ad_reason = "广告快照来源未核实"
+        elif ads.get("status") == "classification_incomplete" and (
+            ads.get("source") != "fact_walmart_ad_item_sp_daily"
+            or type(ads.get("invalid_campaigns")) is not int
+            or ads["invalid_campaigns"] != 0
+            or type(ads.get("source_campaigns")) is not int
+            or ads["source_campaigns"] < 1
+        ):
+            ad_reason = "广告总量来源、活动数量或原始数据校验未通过"
         else:
             source = ads.get("facts")
             if isinstance(source, dict):
