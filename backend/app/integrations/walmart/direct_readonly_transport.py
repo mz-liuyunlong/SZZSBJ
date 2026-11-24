@@ -30,7 +30,6 @@ from app.integrations.walmart.https_transport import (
     _has_sensitive_keys,
 )
 
-
 # On-request report ZIPs come back inside the function response (base64), so the raw file is
 # capped well under the SCF 6MB response limit: ~1MB per settlement month in 2026-10 probes.
 MAX_ZIP_RESPONSE_BYTES = 3 * 1024 * 1024 + 512 * 1024
