@@ -81,7 +81,8 @@ def risk_for(method: str, operation_key: str) -> str:
     """Risk level both sides agree on: method decides, with the reviewed-key exception."""
     if method == "GET":
         return RISK_READ
-    if operation_key in READ_SEMANTIC_NON_GET_KEYS:
+    # The reviewed exception is a POST only: a PUT / PATCH / DELETE with the same key is a write.
+    if method == "POST" and operation_key in READ_SEMANTIC_NON_GET_KEYS:
         return RISK_READ
     return RISK_WRITE
 

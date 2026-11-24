@@ -49,7 +49,8 @@ def test_risk_is_read_on_both_sides_and_registered_in_reviewed_registry() -> Non
     assert READ_SEMANTIC_NON_GET_KEYS == frozenset({KEY})
     assert risk_for("POST", KEY) == "read"
     assert risk_for("POST", "wfs_inbound_preview") == "write"
-    assert risk_for("PUT", KEY) == "read"  # key-based exception; the contract pins POST anyway
+    assert risk_for("PUT", KEY) == "write"  # the exception is for POST only (审核 P3-1)
+    assert risk_for("DELETE", KEY) == "write"
     operation = reviewed_registry().get(KEY)
     assert operation.family == "growth" and operation.permission == "action:walmart:growth:read"
     assert operation.risk == "read"
