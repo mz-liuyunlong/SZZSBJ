@@ -108,6 +108,12 @@ class WalmartCloudExecutor:
             raise ContractError("WALMART_EVENT_INVALID")
         if event.get("operation") != "marketplace_call":
             raise ContractError("WALMART_EVENT_INVALID")
+        if event.get("method") != "GET":
+            # Legacy v1 / v2 events are read-only: POST / PUT / PATCH / DELETE are refused
+            # here, before the contract is prepared and before any token or request. Writes
+            # and read-semantic POSTs only run through signed v3 contracts, which the cloud
+            # pins to its own built-in contracts (cloud_contracts).
+            raise ContractError("WALMART_LEGACY_READ_ONLY")
         store = event.get("store_code")
         key = event.get("api_key")
         if not isinstance(store, str) or store not in self._stores:
