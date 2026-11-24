@@ -45,13 +45,13 @@ def test_settlement_api_and_seller_center_columns_give_the_same_lines():
         S.fee("LostInventory", "2026-10-07", "-15.30", gtin=S.GTIN_1, ref="R1", qty="6"),
         S.fee("Refund", "2026-10-08", "-5.00", reason="StorageFeeDispute", ref="R2"),
         S.fee("FulfillmentFee", "2026-10-07", "3.45", gtin=S.GTIN_1, ref="F1"),  # 配送费不入表
-        S.fee("StorageFee", "2026-10-09", "100.00", ref="S1"),  # 周汇总行不入表
+        S.fee("StorageFee", "2026-10-09", "100.00", ref="S1"),  # 周汇总行入表记公司（PR-0）
     ]
     api = parse(S.settlement(rows))
     sc = parse(S.settlement(rows, seller_center=True))
     for report in (api, sc):
         assert report.fee_source == FEE_SOURCE_SETTLEMENT
-        assert [line.fee_type for line in report.lines] == ["LostInventory", "Refund"]
+        assert [line.fee_type for line in report.lines] == ["LostInventory", "Refund", "StorageFee"]
         assert report.lines[0].amount_usd == Decimal(
             "15.30"
         )  # Net Payable -15.30 = Walmart 付我们 15.30
@@ -60,8 +60,10 @@ def test_settlement_api_and_seller_center_columns_give_the_same_lines():
         assert report.lines[0].quantity == Decimal("6")
         assert report.lines[1].amount_usd == Decimal("5.00")
         assert report.partner_id == S.PARTNER_A
-        assert report.period_start == date(2026, 10, 7) and report.period_end == date(2026, 10, 8)
-        assert any("不入表" in w for w in report.warnings)
+        assert report.period_start == date(2026, 10, 7) and report.period_end == date(2026, 10, 9)
+        assert any("配送费 1 行不入表" in w for w in report.warnings)
+        assert any("店铺周汇总 1 行记公司" in w for w in report.warnings)
+        assert report.lines[2].gtin == "" and report.lines[2].amount_usd == Decimal("-100.00")
     assert [line.line_key for line in api.lines] == [line.line_key for line in sc.lines]
 
 
@@ -209,12 +211,13 @@ def test_zip_without_csv_or_broken_is_rejected():
         expand_upload("a.zip", b"PK\x03\x04broken")
 
 
-def test_summary_only_settlement_keeps_partner_and_explains_skip():
-    """卖家后台「服务费 → StorageFee」下载的只有店铺周汇总行：不入表，但要能认店、说清原因。"""
+def test_summary_only_settlement_keeps_partner_and_rows_are_company_level():
+    """只有店铺周汇总行的卖家后台 StorageFee 文件：入表（无 GTIN，service 记公司）、能认店。"""
     report = parse(S.settlement([S.fee("StorageFee", "2026-10-09", "100.00", ref="S1")]))
-    assert report.lines == []
+    assert [line.fee_type for line in report.lines] == ["StorageFee"]
+    assert report.lines[0].gtin == "" and report.lines[0].source_ref == "S1"
     assert report.partner_id == S.PARTNER_A
-    assert any("仓储费店铺周汇总 1 行" in w for w in report.warnings)
+    assert any("店铺周汇总 1 行记公司" in w for w in report.warnings)
 
 
 def test_storage_duplicate_gtin_rows_are_merged_or_split_by_sku():

@@ -729,3 +729,118 @@ def test_cards_ignore_the_attribution_filter(service, session):
     assert sorted((item.attribution, item.rows, item.amount_usd) for item in picked) == sorted(
         (item.attribution, item.rows, item.amount_usd) for item in every
     )
+
+
+# ---------------------------------- PR-0：结算单店铺周汇总行入表记公司、按商品报表顶掉
+
+
+def _bill_lines(session: Session, key: str, lines: list[tuple[str, str, str]]) -> None:
+    """往已有账单期追加几行领星账单（desc, posted_date, amount）。"""
+    period = session.scalars(
+        select(WalmartBillPeriod).where(WalmartBillPeriod.report_key == key)
+    ).one()
+    for index, (desc, posted, amount) in enumerate(lines):
+        session.add(
+            WalmartBillLine(
+                source_account_ref="primary",
+                store_id=S.STORE_A,
+                line_key=f"{key}-x{index}",
+                lx_line_id=f"{key}x{index}",
+                report_key=key,
+                report_date=period.report_date,
+                posted_at=datetime.fromisoformat(posted),
+                posted_date=date.fromisoformat(posted),
+                transaction_type="Service Fee",
+                transaction_description=desc,
+                amount=Decimal(amount),
+                currency_code="USD",
+                delete_flag=0,
+                row_hash=f"hx{key}{index}",
+                first_seen_at=NOW,
+                last_seen_at=NOW,
+            )
+        )
+    session.flush()
+
+
+def test_settlement_summary_rows_are_company_and_superseded_by_item_reports(service, session):
+    """仓储费 / 入库运费店铺周汇总行：入表记公司、能和领星账单核对；同期按商品报表导入后顶掉。"""
+    _bill_lines(
+        session,
+        RK_1020,
+        [("WFS StorageFee", "2026-10-09", "-12.40"), ("WFS StorageFee", "2026-10-16", "-17.50")],
+    )
+    result = _upload(
+        service,
+        S.settlement(
+            [
+                S.fee("StorageFee", "2026-10-09", "12.40", ref="S1"),
+                S.fee("StorageFee", "2026-10-16", "17.50", ref="S2"),
+                S.fee("InboundTransportationFee", "2026-10-09", "93.60", ref="I1"),
+                S.fee("FulfillmentFee", "2026-10-09", "3.45", gtin=S.GTIN_1, ref="F1"),
+            ]
+        ),
+        store_id=S.STORE_A,
+    )
+    assert result.status == "parsed" and result.rows_new == 3  # 配送费仍不入表
+    assert any("记公司" in w for w in result.warnings)
+    summary = {r.source_ref: r for r in _lines(session, fee_source="settlement")}
+    assert {r.fee_type for r in summary.values()} == {"StorageFee", "InboundTransportationFee"}
+    assert all(r.attribution == "company" and not r.gtin for r in summary.values())
+    assert summary["S1"].report_key == RK_1020 and summary["S1"].amount_usd == Decimal("-12.40")
+    checks = {(c.report_key, c.fee_type): c for c in session.scalars(select(WalmartWfsFeeCheck))}
+    assert checks[(RK_1020, "StorageFee")].status == "ok"  # 29.90 两边一致
+    assert (RK_1020, "FulfillmentFee") not in checks  # 核对两边都不含配送费
+    listed, total = reader.list_lines(
+        session, reader.LineFilter(store_id=S.STORE_A, fee_type="StorageFee"), page=1, page_size=50
+    )
+    assert total == 2 and all(row.superseded_by_file_id is None for row in listed)
+
+    # 同店同期按商品仓储费报表导入 → 两条仓储费汇总行被顶掉；入库运费汇总行不受影响
+    storage = _upload(
+        service,
+        S.storage(
+            [
+                (S.GTIN_1, "MSKU-1", "9.65", "10.62", "0.97"),
+                (S.GTIN_2, "MSKU-2", "20.25", "22.16", "1.91"),
+            ],
+            period=("2026-10-03", "2026-10-16"),
+            total="29.90",
+        ),
+        store_id=S.STORE_A,
+    )
+    assert storage.status == "parsed"
+    session.expire_all()
+    summary = {r.source_ref: r for r in _lines(session, fee_source="settlement")}
+    assert summary["S1"].extra.get("superseded_by_file") == str(storage.file_id)
+    assert summary["S2"].extra.get("superseded_by_file") == str(storage.file_id)
+    assert "superseded_by_file" not in summary["I1"].extra
+    listed, total = reader.list_lines(
+        session, reader.LineFilter(store_id=S.STORE_A, fee_type="StorageFee"), page=1, page_size=50
+    )
+    assert total == 2 and all(row.gtin for row in listed)  # 列表只剩按商品的两行
+    hidden, hidden_total = reader.list_lines(
+        session,
+        reader.LineFilter(store_id=S.STORE_A, fee_type="StorageFee", include_missing=True),
+        page=1,
+        page_size=50,
+    )
+    assert hidden_total == 4
+    assert {str(r.superseded_by_file_id) for r in hidden if not r.gtin} == {str(storage.file_id)}
+    checks = {(c.report_key, c.fee_type): c for c in session.scalars(select(WalmartWfsFeeCheck))}
+    check = checks[(RK_1020, "StorageFee")]
+    assert check.status == "ok" and check.report_rows == 2  # 核对改用按商品的行，不重复算汇总行
+
+    # 按商品报表的行全部标 missing（同期重传空报表）→ 汇总行自动回来
+    cleared = _upload(
+        service,
+        S.storage([], period=("2026-10-03", "2026-10-16"), total="0"),
+        store_id=S.STORE_A,
+    )
+    assert cleared.status == "empty"
+    session.expire_all()
+    summary = {r.source_ref: r for r in _lines(session, fee_source="settlement")}
+    assert "superseded_by_file" not in summary["S1"].extra
+    checks = {(c.report_key, c.fee_type): c for c in session.scalars(select(WalmartWfsFeeCheck))}
+    check = checks[(RK_1020, "StorageFee")]
+    assert check.report_rows == 2 and check.status == "ok"

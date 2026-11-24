@@ -16,10 +16,12 @@ from app.modules.data_pages.models import LingxingStoreDimension
 from app.modules.walmart_bills.models import WalmartBillPeriod
 from app.modules.walmart_bills.payout_service import store_code
 from app.modules.wfs_fees.models import (
+    SUPERSEDED_BY_KEY,
     WalmartWfsFeeAdjustment,
     WalmartWfsFeeCheck,
     WalmartWfsFeeFile,
     WalmartWfsFeeLine,
+    not_superseded,
 )
 from app.modules.wfs_fees.schemas import (
     WfsFeeAttributionTotal,
@@ -69,6 +71,13 @@ def fee_types() -> list[WfsFeeTypeRead]:
     ]
 
 
+def _uuid_or_none(value: object) -> UUID | None:
+    try:
+        return UUID(str(value)) if value else None
+    except ValueError:
+        return None
+
+
 def _money(value: Decimal | None) -> str | None:
     return None if value is None else f"{value:.4f}"
 
@@ -103,6 +112,7 @@ def _line(row: WalmartWfsFeeLine, adjusted: set[UUID]) -> WfsFeeLineRead:
         allocation_basis=row.allocation_basis,
         parent_line_id=row.parent_line_id,
         missing_since=row.missing_since,
+        superseded_by_file_id=_uuid_or_none((row.extra or {}).get(SUPERSEDED_BY_KEY)),
         raw_file_id=row.raw_file_id,
         adjusted=row.id in adjusted,
     )
@@ -128,6 +138,7 @@ def _apply(query, f: LineFilter):  # type: ignore[no-untyped-def]
     query = query.where(WalmartWfsFeeLine.parent_line_id.is_(None))
     if not f.include_missing:
         query = query.where(WalmartWfsFeeLine.missing_since.is_(None))
+        query = query.where(not_superseded(WalmartWfsFeeLine.extra))
     if f.store_id:
         query = query.where(WalmartWfsFeeLine.store_id.in_(_many(f.store_id)))
     if f.report_key:

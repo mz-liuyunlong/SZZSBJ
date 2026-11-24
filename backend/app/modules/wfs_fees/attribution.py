@@ -8,6 +8,7 @@
   - Refund · InboundTransportationShippingRefund（入库运费多收退款）：
     按该货件的入库运费分摊比例分到商品；货件没有分摊数据 → unallocated。
   - Refund · StorageFeeDispute（仓储费争议退款）：company。
+  - StorageFee / InboundTransportationFee 的店铺周汇总行（结算报表）：company，只用于现金核对。
   - DiscountAdjustment（新卖家补贴返还）：按明细里的期间；
     配送费返还 = 期间内无逐行折扣的配送费原价 × 10%，仓储费返还 = 期间内各 SKU 仓储费原价 × 10%；
     基数 × 10% 与返还额差 > 1% → allocated_check（基数待核）。
@@ -24,7 +25,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
-from app.modules.wfs_fees.parsing import INBOUND_FEE
+from app.modules.wfs_fees.parsing import SETTLEMENT_COMPANY_TYPES
 
 ATTR_MATCHED = "matched"
 ATTR_UNMATCHED = "unmatched"
@@ -177,6 +178,11 @@ def allocate_no_gtin(
     """
     if fee_type == "Refund" and reason_code == "StorageFeeDispute":
         return Allocation(ATTR_COMPANY, note="仓储费争议退款：无商品信息，记公司")
+    if fee_type in SETTLEMENT_COMPANY_TYPES:
+        return Allocation(
+            ATTR_COMPANY,
+            note="结算单店铺周汇总：记公司，只用于现金核对；按商品金额看仓储费报表 / 入库运输报告",
+        )
     if fee_type == "Refund" and reason_code == "InboundTransportationShippingRefund":
         cargo = cargo_in_detail(detail)
         shares = cargo_shares.get(cargo) if cargo else None
@@ -256,8 +262,6 @@ def allocate_no_gtin(
                 + ("" if ok else " ← 基数对不上，按比例先分，待核")
             ),
         )
-    if fee_type == INBOUND_FEE:
-        return Allocation(ATTR_UNALLOCATED, note="入库运费按货件分，等货件商品明细")
     return Allocation(ATTR_UNALLOCATED, note="没有商品信息，未定规则，请财务调整")
 
 
