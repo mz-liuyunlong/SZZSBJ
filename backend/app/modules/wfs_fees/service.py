@@ -34,10 +34,12 @@ from app.modules.walmart_bills.models import WalmartBillLine, WalmartBillPeriod
 from app.modules.walmart_bills.payout_service import store_code
 from app.modules.wfs_fees import attribution as rules
 from app.modules.wfs_fees.models import (
+    SUPERSEDED_BY_KEY,
     WalmartWfsFeeAdjustment,
     WalmartWfsFeeCheck,
     WalmartWfsFeeFile,
     WalmartWfsFeeLine,
+    not_superseded,
 )
 from app.modules.wfs_fees.parsing import (
     FEE_SOURCE_INBOUND,
@@ -532,6 +534,7 @@ class WfsFeeService:
             row.updated_at = now
             touched.append(row)
         # 仓储 / 入库同账期重传：上次有、这次没有的行标 missing
+        affected_keys = {row.report_key for row in touched if row.report_key}
         if report.fee_source in (FEE_SOURCE_STORAGE, FEE_SOURCE_INBOUND) and report.period_start:
             for row in self.session.scalars(
                 select(WalmartWfsFeeLine).where(
@@ -545,13 +548,18 @@ class WfsFeeService:
             ):
                 if row.line_key not in {line.line_key for line in report.lines}:
                     row.missing_since = now
+                    if row.report_key:
+                        affected_keys.add(row.report_key)
         self.session.flush()
         self.attribute(touched, amount_changed=amount_changed)
+        # 标 missing 的行所在账单期也要重算顶掉标记（空报表重传后汇总行要回来）
+        self._supersede_summary_rows(store_id, affected_keys)
         record.row_count = len(report.lines)
         record.rows_new = new_rows
         record.rows_duplicate = len(report.lines) - new_rows
         record.status = "parsed" if report.lines else "empty"
-        self.refresh_checks(store_id, {row.report_key for row in touched if row.report_key})
+        # 标 missing 的行所在账单期也要重算核对（空报表重传后核对要回到汇总行口径，审核 P2-1）
+        self.refresh_checks(store_id, affected_keys)
         return ImportResult(
             record.id,
             record.file_name,
@@ -565,6 +573,55 @@ class WfsFeeService:
             len(report.lines) - new_rows,
             warnings=list(report.warnings),
         )
+
+    def _supersede_summary_rows(self, store_id: str, report_keys: set[str]) -> None:
+        """结算单里的仓储费 / 入库运费店铺周汇总行，同店同账单期有按商品报表就顶掉。
+
+        仓储费看 fee_source = storage 的行，入库运费看 fee_source = inbound 的行；有 → 汇总行
+        extra 里记 superseded_by_file（顶掉它的最新文件），没有 → 清掉标记（报表被标 missing
+        后汇总行自动回来）。不删行、不改金额，核对和列表按标记过滤。
+        """
+        if not report_keys:
+            return
+        pairs = ((STORAGE_FEE, FEE_SOURCE_STORAGE), (INBOUND_FEE, FEE_SOURCE_INBOUND))
+        for fee_type, fee_source in pairs:
+            covered: dict[str, UUID] = {}
+            latest: dict[str, datetime] = {}
+            for rk, file_id, seen_at in self.session.execute(
+                select(
+                    WalmartWfsFeeLine.report_key,
+                    WalmartWfsFeeLine.last_file_id,
+                    WalmartWfsFeeLine.updated_at,
+                ).where(
+                    WalmartWfsFeeLine.store_id == store_id,
+                    WalmartWfsFeeLine.fee_source == fee_source,
+                    WalmartWfsFeeLine.report_key.in_(report_keys),
+                    WalmartWfsFeeLine.parent_line_id.is_(None),
+                    WalmartWfsFeeLine.missing_since.is_(None),
+                )
+            ):
+                # 同一账单期可能有多份报表行：记最近更新那份的文件 id
+                if rk not in latest or seen_at > latest[rk]:
+                    latest[rk] = seen_at
+                    covered[rk] = file_id
+            for row in self.session.scalars(
+                select(WalmartWfsFeeLine).where(
+                    WalmartWfsFeeLine.store_id == store_id,
+                    WalmartWfsFeeLine.fee_source == FEE_SOURCE_SETTLEMENT,
+                    WalmartWfsFeeLine.fee_type == fee_type,
+                    WalmartWfsFeeLine.report_key.in_(report_keys),
+                    WalmartWfsFeeLine.parent_line_id.is_(None),
+                )
+            ):
+                extra = dict(row.extra or {})
+                file_id = covered.get(row.report_key or "")
+                if file_id is not None:
+                    extra[SUPERSEDED_BY_KEY] = str(file_id)
+                else:
+                    extra.pop(SUPERSEDED_BY_KEY, None)
+                if extra != (row.extra or {}):
+                    row.extra = extra
+        self.session.flush()
 
     def _fill(
         self, row: WalmartWfsFeeLine, parsed: ParsedLine, report: ParsedReport, bills: _BillIndex
@@ -639,7 +696,8 @@ class WfsFeeService:
                     row.attribution = rules.ATTR_UNMATCHED
                     row.allocation_basis = "店铺 + GTIN 在商品表里没有"
                 continue
-            if row.fee_type == INBOUND_FEE:
+            if row.fee_type == INBOUND_FEE and row.fee_source == FEE_SOURCE_INBOUND:
+                # 入库运输报告按货件分；结算单里的入库运费店铺周汇总行走下面的无 GTIN 规则（记公司）
                 result = rules.allocate_inbound(
                     row.amount_usd, self._shipment_items(row.store_id, row.po_number, listings)
                 )
@@ -706,6 +764,10 @@ class WfsFeeService:
 
     def reallocate_inbound(self, shipments: dict[str, set[str]]) -> int:
         """入库货件明细到了以后补分摊（复审 P2-5）。
+
+        【不启用，2026-11-24 PR-0】入库货件明细（fact_walmart_wfs_inbound_items）原由已废弃的
+        远程采集落盘，现在没有写入方；入库运费不进产品成本（结算利润 v3 §0.3），本方法无人调用，
+        表和代码保留不删。
 
         只补这些货件里还没分摊、没人工调整过的入库运费原行。
 
@@ -938,6 +1000,7 @@ class WfsFeeService:
         ):
             fee_type = LX_FEE_NAMES.get(desc[4:], desc[4:])
             if fee_type == FULFILLMENT_FEE:
+                # 配送费从领星账单订单行取，不进本表、不核对
                 continue
             entry = lx[(rk, fee_type)]
             entry[0] += amount
@@ -955,6 +1018,7 @@ class WfsFeeService:
                 WalmartWfsFeeLine.report_key.in_(report_keys),
                 WalmartWfsFeeLine.parent_line_id.is_(None),
                 WalmartWfsFeeLine.missing_since.is_(None),
+                not_superseded(WalmartWfsFeeLine.extra),
             )
         ):
             entry = ours[(rk, fee_type)]

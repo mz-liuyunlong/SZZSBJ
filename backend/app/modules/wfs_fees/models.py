@@ -34,6 +34,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
 FEE_SOURCES = ("settlement", "storage", "inbound")
+# 结算报表里的仓储费 / 入库运费店铺周汇总行，被同店同期的按商品报表顶掉后，在 extra 里记
+# 顶掉它的文件 id（不加列、不删行、不算 missing）；列表、合计、核对都不再算它。
+SUPERSEDED_BY_KEY = "superseded_by_file"
 ATTRIBUTIONS = ("matched", "unmatched", "allocated", "allocated_check", "unallocated", "company")
 FILE_STATUSES = ("parsed", "rejected", "empty")
 ADJUST_KINDS = ("realloc", "company", "verified")
@@ -73,6 +76,11 @@ class WalmartWfsFeeFile(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+
+
+def not_superseded(column):  # type: ignore[no-untyped-def]
+    """SQL 条件：extra 里没有 superseded_by_file（给列表 / 合计 / 核对用）。"""
+    return ~column.has_key(SUPERSEDED_BY_KEY)
 
 
 class WalmartWfsFeeLine(Base):

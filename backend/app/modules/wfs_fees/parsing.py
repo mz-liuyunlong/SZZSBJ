@@ -3,7 +3,9 @@
 - 结算报表（SETTLEMENT）：接口下载的（Order ID / PO Number / WFS Reference ID /
   Transaction Date and Time / GTIN / Net Payable …）和卖家后台「服务费 → 下载」的
   （Walmart.com PO # / WFSReferenceID / Transaction Date/Time / Partner GTIN …）两种列名，
-  同一套字段。配送费（FulfillmentFee）行不入表（Rocky 11-12），其余类型都收。
+  同一套字段。配送费（FulfillmentFee）行不入表（11-12），其余类型都收；仓储费 / 入库运费的
+  店铺周汇总行（无 GTIN）也入表、归属记公司，只用于和领星账单的现金核对；同店同期的按商品
+  仓储费报表 / 入库运输报告导入后，汇总行被顶掉（PRP 结算利润 v3 PR-0）。
 - 仓储费报表（WFS_STORAGE_FEE）：接口下载的只有明细表头（账期由调用方给）；
   卖家后台下载的多一段汇总块（Report start date / Report end date / Total storage fees），
   有就用它定账期并做守恒校验。新旧两版表头都认。
@@ -34,8 +36,10 @@ FULFILLMENT_FEE = "FulfillmentFee"
 STORAGE_FEE = "StorageFee"
 INBOUND_FEE = "InboundTransportationFee"
 RETURN_PROCESSING_FEE = "ReturnProcessingFee"
-# 结算报表里这两类另有专门报表（仓储按 GTIN、入库按货件），店铺级的周汇总行不入表，只用于核对
-SETTLEMENT_SKIP = frozenset({FULFILLMENT_FEE, STORAGE_FEE, INBOUND_FEE})
+# 结算报表里只有配送费行不入表（配送费从领星账单订单行取）；仓储费 / 入库运费的店铺周汇总行
+# 入表记公司（SETTLEMENT_COMPANY_TYPES），按商品金额另看仓储费报表 / 入库运输报告
+SETTLEMENT_SKIP = frozenset({FULFILLMENT_FEE})
+SETTLEMENT_COMPANY_TYPES = frozenset({STORAGE_FEE, INBOUND_FEE})
 
 MAX_BYTES = 16 * 1024 * 1024
 
@@ -311,14 +315,14 @@ def parse_settlement(content: bytes) -> ParsedReport:
         report.period_start = min(line.transaction_date for line in lines)
         report.period_end = max(line.transaction_date for line in lines)
     if skipped:
-        names = {
-            "FulfillmentFee": "配送费",
-            "StorageFee": "仓储费店铺周汇总",
-            "InboundTransportationFee": "入库运费店铺周汇总",
-        }
+        names = {"FulfillmentFee": "配送费"}
         parts = "、".join(f"{names.get(k, k)} {v} 行" for k, v in sorted(skipped.items()))
+        report.warnings.append(f"{parts}不入表（配送费看领星账单订单行）")
+    summary = sum(1 for line in lines if line.fee_type in SETTLEMENT_COMPANY_TYPES)
+    if summary:
         report.warnings.append(
-            f"{parts}不入表（仓储费、入库运费按商品要导 WFS 报告里的仓储 / 入库运输报告）"
+            f"仓储费 / 入库运费店铺周汇总 {summary} 行记公司，只用于现金核对；"
+            "按商品金额请导仓储费报表 / 入库运输报告，导入后同期汇总行自动顶掉"
         )
     return report
 
