@@ -163,7 +163,17 @@ PMC「WFS 货件创建」需要 6 个写调用，契约在 `wfs_write_catalog.py
 
 ### 风险等级（云函数自己判断）
 
-`risk_for(method, key)`：GET = read；POST/PUT/PATCH/DELETE = write，除非 key 在云端代码常量 `READ_SEMANTIC_NON_GET_KEYS`（目前为空；WFS inbound-preview 是 POST，按写处理）。云函数不信契约里的 `mutating` 字段单独判读；服务器声明的 `risk` 与云端计算不一致 → `WALMART_RISK_MISMATCH`。每店唯一开关 `SZZSBJ_WALMART_MAX_RISK=read|write`（`write` 还需 `LIVE_MODE=owner-approved-read-write`）；write 还要求 `approval_ref`。
+`risk_for(method, key)`：GET = read；POST/PUT/PATCH/DELETE = write，除非方法是 POST 且 key 在云端代码常量 `READ_SEMANTIC_NON_GET_KEYS`（名单与各契约见下方「2026-11-24 第二批」；第一批时只有评价加速器一个、请求体钉死 `{}`，第二批扩到 11 个、请求体按契约 schema 限定键）。WFS inbound-preview 是 POST，仍按写处理。同一轮（2026-11-24）把财务回款对账用的两个 GET `recon_report_dates` / `recon_report_json`（`recon_catalog.py`，family `recon`，11-03 已只读跑通）登记进仓库；登记 GET 操作不需要改云函数，只需在线上读键清单放行。
+
+**2026-11-24 第二批（负责人 13:46 / 14:00 书面授权「探测通过的全部开放」）**：
+- `READ_SEMANTIC_NON_GET_KEYS` 扩成 12 个只读 POST（growth 4、报表下单 1、Listing 质量明细 1、商品建档规格 1、SEM 查询 5），每个的契约都把请求体钉成「只允许文档里的筛选 / 分页键」的对象；直连传输层对名单内 key 转发契约校验过的对象（重新序列化，不转发原始字节），其他方法 / 非对象体 / 写契约仍拒。
+- 按需报表：`report_request_create`（`POST /v3/reports/reportRequests`，报表类型白名单 = 10-11 探测通过的 24 个枚举，请求体只许 `dataStartTime` / `dataEndTime`）→ `report_request_status_get` → `report_download`（新响应类型 `zip`：云函数拿到 `downloadURL` 后只在同一主机、https、`/v3/` 下取 ZIP，不跟跳转、上限 3.5MB、必须 `PK` 魔数，base64 回传；服务端 `scf_bridge` 解回 `zip_bytes`）。
+- 新登记的只读家族：`payment`（付款对账单 / 绩效）、`insights`（Listing 质量 / 未发布 / Pro Seller）、`sem`（3 GET + 5 POST 查询）、`misc`（备货周期、分类树、运费账户 / 承运方式 / 模板 / 发货节点、SWW 包裹类型与发货日、webhook 元数据、WFS 入库运费报价、商品建档规格 POST 查询）；growth 加 3 个 POST 查询。
+- 写：`sem_catalog.py` 登记 4 个 SEM 活动写操作（10-11 实测过），权限 `action:walmart:sem:campaigns:write`，与 WFS 写同一道闸（读写 live mode、`MAX_RISK=write`、写 key 清单、`approval_ref`、共享防重放存储）；服务端入口 `scf_write_factory.make_walmart_write_api` 按 `ALL_WRITE_KEYS = WFS ∪ SEM` 校验。
+- **旧版协议只读（刘云龙 #358 审核，2026-11-24）**：v1 / v2 事件只允许 GET；POST / PUT / PATCH / DELETE（含 WFS / SEM 写、只读 POST）在云函数里于准备契约、取 token、发请求之前一律 `WALMART_LEGACY_READ_ONLY`。写与只读 POST 只走 v3 签名契约。注：`scf_write_factory` 与 gateway 的 v2 写回退路径因此不可用，开写时须走 v3（gateway 主路径已是 v3）。
+- **云端钉死非 GET 契约（审核 #358 P1-1）**：所有非 GET 调用（只读 POST 与写）由云函数用包内 `cloud_contracts.builtin_non_get_registry()` 的契约执行，服务器签来的契约在方法、路径模板、字段、请求体开关 / schema / 类型、mutating、响应类型上任一不同即 `WALMART_CONTRACT_MISMATCH`，在取 token 之前拒绝。GET 仍是「服务端登记即可、不改云函数」。
+- 上限：报表 ZIP 3.5MB、PDF 4MB（base64 后都在云函数 5.5MB 结果上限内）。
+- 包清单（`build_walmart_scf_direct_bundle.py`）加 `_catalog_base.py` 与各新目录；未探测通过的 90 个能力（写 58、只读待探 32）不登记。云函数不信契约里的 `mutating` 字段单独判读；服务器声明的 `risk` 与云端计算不一致 → `WALMART_RISK_MISMATCH`。每店唯一开关 `SZZSBJ_WALMART_MAX_RISK=read|write`（`write` 还需 `LIVE_MODE=owner-approved-read-write`）；write 还要求 `approval_ref`。
 
 ### 与 v1/v2 的关系
 

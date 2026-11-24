@@ -84,7 +84,7 @@ def test_safe_get_uses_cloud_policy() -> None:
     ("change", "code"),
     [
         ({"store_code": "HK2614"}, "WALMART_STORE_NOT_AUTHORIZED"),
-        ({"method": "DELETE"}, "WALMART_OPERATION_MISMATCH"),
+        ({"method": "DELETE"}, "WALMART_LEGACY_READ_ONLY"),
         ({"path": "/v3/other"}, "WALMART_OPERATION_MISMATCH"),
         ({"api_key": "notApproved"}, "WALMART_API_NOT_REGISTERED"),
         ({"unexpected": "x"}, "WALMART_EVENT_INVALID"),
@@ -104,31 +104,20 @@ def test_rejects_untrusted_main_server_events(change: dict[str, object], code: s
     assert transport.calls == []
 
 
-def test_write_without_approval_never_transmits() -> None:
-    transport = FakeTransport()
-    executor = WalmartCloudExecutor(
-        registry=registry(),
-        store_allowlist=frozenset({"HK2615"}),
-        policy=FakePolicy(),
-        transport=transport,
-    )
-    reply = executor.handle({**event(operation="updateItem"), "approval_ref": None})
-    assert reply["status"] == "WALMART_WRITE_APPROVAL_REQUIRED"
-    assert transport.calls == []
-
-
-def test_policy_denial_prevents_write() -> None:
-    transport = FakeTransport()
-    executor = WalmartCloudExecutor(
-        registry=registry(),
-        store_allowlist=frozenset({"HK2615"}),
-        policy=FakePolicy(allow=False),
-        transport=transport,
-    )
-    assert executor.handle(event(operation="updateItem"))["status"] == (
-        "WALMART_OWNER_POLICY_DENIED"
-    )
-    assert transport.calls == []
+def test_legacy_write_is_refused_before_policy_and_transport() -> None:
+    """Legacy v1 / v2 are read-only: a write never reaches the policy or the transport."""
+    for policy in (FakePolicy(), FakePolicy(allow=False)):
+        transport = FakeTransport()
+        executor = WalmartCloudExecutor(
+            registry=registry(),
+            store_allowlist=frozenset({"HK2615"}),
+            policy=policy,
+            transport=transport,
+        )
+        for approval in ("owner-review", None):
+            reply = executor.handle({**event(operation="updateItem"), "approval_ref": approval})
+            assert reply == {"success": False, "status": "WALMART_LEGACY_READ_ONLY"}
+        assert transport.calls == [] and policy.calls == []
 
 
 def test_cn2502_supported_when_independently_configured() -> None:
