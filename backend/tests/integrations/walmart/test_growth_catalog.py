@@ -16,9 +16,20 @@ from app.integrations.walmart.unified_api import load_unified_registry, reviewed
 KEY = REVIEW_ACCELERATOR_ITEMS_KEY
 
 
-def test_growth_registry_has_one_operation_disabled_by_default() -> None:
+def test_growth_registry_operations_are_read_posts_disabled_by_default() -> None:
     registry = growth_read_registry()
-    assert set(registry.keys()) == {KEY}
+    # 2026-11-24 second batch added three more read-semantic POST queries to the family
+    assert set(registry.keys()) == {
+        KEY,
+        "review_accelerator_categories",
+        "assortment_recommendations",
+        "assortment_categorization_counts",
+    }
+    assert all(not registry.get(key).enabled for key in registry.keys())
+    assert all(
+        registry.get(key).method == "POST" and not registry.get(key).is_write
+        for key in registry.keys()
+    )
     operation = registry.get(KEY)
     assert (operation.method, operation.path) == ("POST", REVIEW_ACCELERATOR_ITEMS_PATH)
     assert operation.enabled is False and operation.is_write is False
@@ -46,7 +57,7 @@ def test_items_accepts_only_scroll_id_and_an_empty_body() -> None:
 
 
 def test_risk_is_read_on_both_sides_and_registered_in_reviewed_registry() -> None:
-    assert READ_SEMANTIC_NON_GET_KEYS == frozenset({KEY})
+    assert KEY in READ_SEMANTIC_NON_GET_KEYS  # full set is checked in test_second_batch_catalogs
     assert risk_for("POST", KEY) == "read"
     assert risk_for("POST", "wfs_inbound_preview") == "write"
     assert risk_for("PUT", KEY) == "write"  # the exception is for POST only (审核 P3-1)

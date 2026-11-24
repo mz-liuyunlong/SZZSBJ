@@ -30,6 +30,7 @@ from app.integrations.walmart.contracts import (
     sha256_hex,
 )
 from app.integrations.walmart.scf_bridge import GatewayRejected, ProtectedScfBridge
+from app.integrations.walmart.sem_catalog import SEM_WRITE_PERMISSION
 from app.integrations.walmart.unified_api import (
     WFS_CANCEL_PERMISSION,
     WFS_WRITE_PERMISSION,
@@ -200,7 +201,11 @@ def test_reviewed_registry_enables_every_builtin_with_permissions():
         operation = registry.get(key)
         assert operation.enabled and operation.permission and operation.family
         if operation.is_write:
-            assert operation.permission in {WFS_WRITE_PERMISSION, WFS_CANCEL_PERMISSION}
+            assert operation.permission in {
+                WFS_WRITE_PERMISSION,
+                WFS_CANCEL_PERMISSION,
+                SEM_WRITE_PERMISSION,
+            }
         else:
             assert operation.permission == f"action:walmart:{operation.family}:read"
         # Reviewer requirement 3: server-side risk must equal the cloud's method-based risk.
