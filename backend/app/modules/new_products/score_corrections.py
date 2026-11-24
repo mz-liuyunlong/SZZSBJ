@@ -184,8 +184,12 @@ def resolved_system(evaluation: dict, system: dict) -> dict | None:
 
 
 def overlay(
-    row: dict, block: dict, config: dict, *,
-    risk_evaluation: dict | None = None, require_risk: bool = False,
+    row: dict,
+    block: dict,
+    config: dict,
+    *,
+    risk_evaluation: dict | None = None,
+    require_risk: bool = False,
 ) -> bool:
     """Use only a matching official snapshot; never invent a grade before market."""
     ev = row.get("evaluation")

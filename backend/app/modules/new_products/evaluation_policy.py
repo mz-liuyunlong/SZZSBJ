@@ -52,8 +52,7 @@ def evaluation_status(
 ) -> str:
     if grade is not None and total is not None:
         confirmation = (
-            coverage.get("evaluation_grade_confirmation_v1")
-            if isinstance(coverage, dict) else None
+            coverage.get("evaluation_grade_confirmation_v1") if isinstance(coverage, dict) else None
         )
         if isinstance(confirmation, dict) and confirmation.get("status") == "pending":
             return "待等级确认"

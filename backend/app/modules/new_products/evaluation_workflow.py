@@ -299,11 +299,7 @@ def publish_after_market(
     if _protected(session, reg):
         _error("NP_EVAL_FROZEN", 409, "商品存在已审批或已冻结的业务结果")
     if pending:
-        if (
-            not isinstance(frozen, dict)
-            or market_version is None
-            or not frozen.get("proof_hash")
-        ):
+        if not isinstance(frozen, dict) or market_version is None or not frozen.get("proof_hash"):
             _error(
                 "NP_EVAL_PENDING_SNAPSHOT",
                 409,
@@ -352,7 +348,8 @@ def publish_after_market(
             a, b = saved.get(dimension), current.get(dimension)
             try:
                 matched = (a is None and b is None) or (
-                    a is not None and b is not None
+                    a is not None
+                    and b is not None
                     and abs(Decimal(str(a)) - Decimal(str(b))) <= Decimal("0.02")
                 )
             except (ArithmeticError, ValueError, TypeError):
@@ -382,8 +379,9 @@ def publish_after_market(
             "真实指标尚不足以形成完整评级：" + "、".join(ev.get("missing") or []),
         )
     if pending:
-        coverage = {key: value for key, value in coverage.items()
-                    if key != "evaluation_final_snapshot"}
+        coverage = {
+            key: value for key, value in coverage.items() if key != "evaluation_final_snapshot"
+        }
     from .risk_finalization import resolve_final_risks
 
     selected = risk_conditions
@@ -398,8 +396,7 @@ def publish_after_market(
             rule_version=version,
             base_grade=ev["grade"],
             manual_selected=selected,
-            cutoff=day(proof.get("authority_cutoff_la"))
-            or day(proof.get("window_end_la")),
+            cutoff=day(proof.get("authority_cutoff_la")) or day(proof.get("window_end_la")),
             first_wfs=perf.first_wfs_available_date_la,
         )
     except (ValueError, TypeError, KeyError) as exc:
@@ -1553,9 +1550,7 @@ def decorate_page(session: Session, data: dict) -> dict:
         ):
             from .score_corrections import public_correction
 
-            entry["score_correction"] = public_correction(
-                coverage["operator_score_correction_v1"]
-            )
+            entry["score_correction"] = public_correction(coverage["operator_score_correction_v1"])
         verdict = coverage.get("operator_assessment_v1")
         entry["evaluation_decision"] = verdict if isinstance(verdict, dict) else None
         # Read only a scalar recommendation, never copy the full daily archive
@@ -1591,12 +1586,13 @@ def decorate_page(session: Session, data: dict) -> dict:
                     and isinstance(final, dict)
                     and final.get("grade") == r["grade"]
                 )
-                risk_record = (
-                    final.get("risk_evaluation") if isinstance(final, dict) else None
-                )
+                risk_record = final.get("risk_evaluation") if isinstance(final, dict) else None
                 if valid_final and overlay(
-                    entry, correction, config,
-                    risk_evaluation=risk_record, require_risk=True,
+                    entry,
+                    correction,
+                    config,
+                    risk_evaluation=risk_record,
+                    require_risk=True,
                 ):
                     entry["score_correction_state"] = "applied"
                     entry["suggested_qty"] = NewProductService._suggested_quantity(

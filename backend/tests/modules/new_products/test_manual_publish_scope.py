@@ -123,13 +123,9 @@ def test_local_manual_tunnel_scope_does_not_open_batch(monkeypatch):
     monkeypatch.setenv("SZZSBJ_PR337_UNIFIED_PUBLISH_ENABLED", "0")
 
     def target(database):
-        return SimpleNamespace(
-            url=SimpleNamespace(database=database, host="configured-tunnel")
-        )
+        return SimpleNamespace(url=SimpleNamespace(database=database, host="configured-tunnel"))
 
-    monkeypatch.setattr(
-        db_session, "get_engine", lambda: target("szzsbj_app")
-    )
+    monkeypatch.setattr(db_session, "get_engine", lambda: target("szzsbj_app"))
 
     class ReachedReadSource(Exception):
         pass
@@ -137,9 +133,7 @@ def test_local_manual_tunnel_scope_does_not_open_batch(monkeypatch):
     def no_database_access():
         raise ReachedReadSource()
 
-    monkeypatch.setattr(
-        read_source, "get_new_product_read_session", no_database_access
-    )
+    monkeypatch.setattr(read_source, "get_new_product_read_session", no_database_access)
 
     kwargs = dict(
         item_ids={IDENTITY[2]},
@@ -149,9 +143,7 @@ def test_local_manual_tunnel_scope_does_not_open_batch(monkeypatch):
         manual_identity=IDENTITY,
     )
 
-    with pytest.raises(
-        PermissionError, match="PR337_WRITE_TARGET_NOT_LOCAL_DEV_OR_HYBRID"
-    ):
+    with pytest.raises(PermissionError, match="PR337_WRITE_TARGET_NOT_LOCAL_DEV_OR_HYBRID"):
         publisher.execute_unified_job(**kwargs)
 
     with publisher.authenticated_manual_publish(IDENTITY):
@@ -180,12 +172,8 @@ def test_local_manual_tunnel_scope_does_not_open_batch(monkeypatch):
             ):
                 publisher.execute_unified_job(**invalid)
 
-        monkeypatch.setattr(
-            db_session, "get_engine", lambda: target("unexpected_db")
-        )
-        with pytest.raises(
-            PermissionError, match="PR337_WRITE_TARGET_NOT_LOCAL_DEV_OR_HYBRID"
-        ):
+        monkeypatch.setattr(db_session, "get_engine", lambda: target("unexpected_db"))
+        with pytest.raises(PermissionError, match="PR337_WRITE_TARGET_NOT_LOCAL_DEV_OR_HYBRID"):
             publisher.execute_unified_job(**kwargs)
 
 

@@ -49,6 +49,7 @@ def test_no_account_scope_returns_no_projection_and_no_query():
         "all": 0,
         "evaluating": 0,
         "market": 0,
+        "pending_grade_confirmation": 0,
         "pending_confirmation": 0,
         "passed": 0,
         "failed": 0,

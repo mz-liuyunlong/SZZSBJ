@@ -80,7 +80,8 @@ def manual_single_product_write_allowed(
     """
     return (
         _AUTHORIZED_MANUAL_IDENTITY.get() == manual_identity
-        and os.getenv("APP_ENV", "").strip().lower() in (
+        and os.getenv("APP_ENV", "").strip().lower()
+        in (
             "production",
             "local",
             "dev",
@@ -1103,8 +1104,7 @@ def execute_unified_job(
             )
         )
         if not (
-            local_target_approved(engine.url.database, engine.url.host)
-            or manual_target_approved
+            local_target_approved(engine.url.database, engine.url.host) or manual_target_approved
         ):
             raise PermissionError("PR337_WRITE_TARGET_NOT_LOCAL_DEV_OR_HYBRID")
     if apply and not (

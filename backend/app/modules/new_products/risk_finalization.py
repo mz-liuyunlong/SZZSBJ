@@ -2,6 +2,7 @@
 
 Only verified saved risk evidence may influence a final grade. No DB access.
 """
+
 from datetime import date
 from typing import Any
 
@@ -51,29 +52,23 @@ def resolve_final_risks(
         rule_version=rule_version,
     )
     unverified = [
-        x["code"] for x in display["rules"]
-        if x["enabled"] and x["status"] == "unverified"
+        x["code"] for x in display["rules"] if x["enabled"] and x["status"] == "unverified"
     ]
     if unverified:
-        raise ValueError(
-            "NP_RISK_SYSTEM_EVIDENCE_UNVERIFIED:" + ",".join(unverified)
-        )
+        raise ValueError("NP_RISK_SYSTEM_EVIDENCE_UNVERIFIED:" + ",".join(unverified))
 
-    hits = [
-        dict(x) for x in manual["risk_hits"]
-        if x["source"] == "manual"
-    ]
-    system_hits = [
-        x for x in display["rules"]
-        if x["enabled"] and x["status"] == "hit"
-    ]
-    hits.extend({
-        "code": x["code"],
-        "name": x["name"],
-        "source": "system",
-        "limit": x["limit"],
-        "observed": x["basis"],
-    } for x in system_hits)
+    hits = [dict(x) for x in manual["risk_hits"] if x["source"] == "manual"]
+    system_hits = [x for x in display["rules"] if x["enabled"] and x["status"] == "hit"]
+    hits.extend(
+        {
+            "code": x["code"],
+            "name": x["name"],
+            "source": "system",
+            "limit": x["limit"],
+            "observed": x["basis"],
+        }
+        for x in system_hits
+    )
 
     grade = base_grade
     recommend_not_pass = False

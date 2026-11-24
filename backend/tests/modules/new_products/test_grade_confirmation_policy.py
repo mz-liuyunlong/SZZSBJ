@@ -44,8 +44,11 @@ def test_verified_partial_campaign_split_can_use_grand_totals():
         },
     }
     result = build_saved_risk_display(
-        coverage, rules, cutoff_la=date(2026, 11, 18),
-        first_wfs=date(2026, 11, 1), rule_version=2,
+        coverage,
+        rules,
+        cutoff_la=date(2026, 11, 18),
+        first_wfs=date(2026, 11, 1),
+        rule_version=2,
     )
     states = {r["code"]: r["status"] for r in result["rules"]}
     assert states == {
@@ -56,8 +59,11 @@ def test_verified_partial_campaign_split_can_use_grand_totals():
     }
     coverage["ad_display_v1"]["invalid_campaigns"] = 1
     invalid = build_saved_risk_display(
-        coverage, rules, cutoff_la=date(2026, 11, 18),
-        first_wfs=date(2026, 11, 1), rule_version=2,
+        coverage,
+        rules,
+        cutoff_la=date(2026, 11, 18),
+        first_wfs=date(2026, 11, 1),
+        rule_version=2,
     )
     statuses = {r["code"]: r["status"] for r in invalid["rules"]}
     assert statuses["ad_uncontrolled"] == "unverified"

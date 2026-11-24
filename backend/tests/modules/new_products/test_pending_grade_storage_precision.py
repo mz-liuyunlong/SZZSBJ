@@ -1,4 +1,5 @@
 """Regression: persisted NUMERIC(10,4) vs exact JSONB grade snapshot."""
+
 from decimal import Decimal
 
 import pytest
@@ -22,9 +23,14 @@ def test_saved_score_column_has_four_decimal_places():
     ],
 )
 def test_postgres_numeric_4_round_trip_is_not_a_business_conflict(persisted, exact):
-    assert _stored_grade_matches_snapshot("B", Decimal(persisted), {
-        "grade": "B", "total": exact,
-    })
+    assert _stored_grade_matches_snapshot(
+        "B",
+        Decimal(persisted),
+        {
+            "grade": "B",
+            "total": exact,
+        },
+    )
 
 
 @pytest.mark.parametrize(
@@ -38,9 +44,7 @@ def test_postgres_numeric_4_round_trip_is_not_a_business_conflict(persisted, exa
         ("B", Decimal("6.8735"), None),
     ],
 )
-def test_real_score_changes_or_invalid_snapshots_still_block(
-    stored_grade, stored_total, snapshot
-):
+def test_real_score_changes_or_invalid_snapshots_still_block(stored_grade, stored_total, snapshot):
     assert not _stored_grade_matches_snapshot(stored_grade, stored_total, snapshot)
 
 

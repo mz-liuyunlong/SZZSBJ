@@ -671,10 +671,7 @@ class NewProductService:
                 frozen = (coverage or {}).get("evaluation_final_snapshot")
                 risk = frozen.get("risk_evaluation") if isinstance(frozen, dict) else None
                 confirmation = (coverage or {}).get("evaluation_grade_confirmation_v1")
-                pending = (
-                    isinstance(confirmation, dict)
-                    and confirmation.get("status") == "pending"
-                )
+                pending = isinstance(confirmation, dict) and confirmation.get("status") == "pending"
                 found[(a, store, item)] = (block, risk, pending)
         return found
 
@@ -683,8 +680,11 @@ class NewProductService:
         for row, key in zip(rows, keys, strict=True):
             saved = blocks.get(key)
             if saved is not None and overlay(
-                row, saved[0], config,
-                risk_evaluation=saved[1], require_risk=saved[2],
+                row,
+                saved[0],
+                config,
+                risk_evaluation=saved[1],
+                require_risk=saved[2],
             ):
                 row["suggested_qty"] = self._suggested_quantity(row["evaluation"], config)
 
@@ -716,9 +716,7 @@ class NewProductService:
                 problem("NP_CORRECTION_NO_EVIDENCE", 409, "尚未保存自动评分证据")
             coverage = deepcopy(perf.data_coverage_json or {})
             marker = coverage.get("evaluation_grade_confirmation_v1")
-            pending_grade = (
-                isinstance(marker, dict) and marker.get("status") == "pending"
-            )
+            pending_grade = isinstance(marker, dict) and marker.get("status") == "pending"
             if (perf.grade is not None or perf.score is not None) and not pending_grade:
                 problem("NP_CORRECTION_FROZEN", 409, "等级已确认或属于旧评分，须通过复核流程处理")
             if pending_grade and coverage.get("operator_assessment_v1") is not None:
@@ -789,8 +787,7 @@ class NewProductService:
             if pending_grade:
                 snapshot = coverage.get("evaluation_final_snapshot")
                 frozen_risk = (
-                    snapshot.get("risk_evaluation")
-                    if isinstance(snapshot, dict) else None
+                    snapshot.get("risk_evaluation") if isinstance(snapshot, dict) else None
                 )
                 if not isinstance(frozen_risk, dict):
                     problem("NP_CORRECTION_RISK_SNAPSHOT_MISSING", 409, "风险结果快照缺失")
@@ -1477,15 +1474,12 @@ class NewProductService:
                 problem("NP_EVAL_NO_EVIDENCE", 409, "尚未保存正式测评证据")
             saved = current_perf.data_coverage_json or {}
             marker = (
-                saved.get("evaluation_grade_confirmation_v1")
-                if isinstance(saved, dict)
-                else None
+                saved.get("evaluation_grade_confirmation_v1") if isinstance(saved, dict) else None
             )
             editing_pending = isinstance(marker, dict) and marker.get("status") == "pending"
             if (
-                (current_perf.grade is not None or current_perf.score is not None)
-                and not editing_pending
-            ):
+                current_perf.grade is not None or current_perf.score is not None
+            ) and not editing_pending:
                 problem("NP_EVAL_RESULT_FROZEN", 409, "等级已确认或属于历史评分，请走复核流程")
             if row:
                 row.score = body.score
@@ -1526,7 +1520,11 @@ class NewProductService:
 
             try:
                 publish_after_market(
-                    self.db, a, s, i, body.score,
+                    self.db,
+                    a,
+                    s,
+                    i,
+                    body.score,
                     market_version=v + 1,
                     risk_conditions=list(body.risk_conditions),
                 )
@@ -1662,7 +1660,9 @@ class NewProductService:
                     if resolved is None:
                         raise ValueError("CORRECTION_BASELINE_MISMATCH")
                     effective = calculate_effective(
-                        resolved, block.get("overrides", {}), config,
+                        resolved,
+                        block.get("overrides", {}),
+                        config,
                         risk_evaluation=final["risk_evaluation"],
                     )
                 except (ValueError, KeyError, ArithmeticError, TypeError):
@@ -1881,8 +1881,7 @@ class NewProductService:
 
             risk_record = final.get("risk_evaluation")
             blocked_risk = (
-                isinstance(risk_record, dict)
-                and risk_record.get("recommend_not_pass") is True
+                isinstance(risk_record, dict) and risk_record.get("recommend_not_pass") is True
             )
             if grade in {"D", "Pass"} or blocked_risk:
                 problem(

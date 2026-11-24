@@ -116,15 +116,12 @@ def build_saved_risk_display(
             ad_reason = "广告快照状态未完整核实：" + str(ads.get("status") or "missing")
         elif ads.get("source") != "fact_walmart_ad_item_sp_daily":
             ad_reason = "广告快照来源未核实"
-        elif (
-            ads.get("status") == "classification_incomplete"
-            and (
-                ads.get("source") != "fact_walmart_ad_item_sp_daily"
-                or type(ads.get("invalid_campaigns")) is not int
-                or ads["invalid_campaigns"] != 0
-                or type(ads.get("source_campaigns")) is not int
-                or ads["source_campaigns"] < 1
-            )
+        elif ads.get("status") == "classification_incomplete" and (
+            ads.get("source") != "fact_walmart_ad_item_sp_daily"
+            or type(ads.get("invalid_campaigns")) is not int
+            or ads["invalid_campaigns"] != 0
+            or type(ads.get("source_campaigns")) is not int
+            or ads["source_campaigns"] < 1
         ):
             ad_reason = "广告总量来源、活动数量或原始数据校验未通过"
         else:
