@@ -253,6 +253,7 @@ def parse_settlement(content: bytes) -> ParsedReport:
     partner = ""
     seen: set[str] = set()
     skipped: dict[str, int] = {}
+    undated_storage = 0
     for row in rows[head_at + 1 :]:
         if not any(_clean(c) for c in row):
             continue
@@ -266,6 +267,11 @@ def parse_settlement(content: bytes) -> ParsedReport:
             continue
         when = _date(cell(row, "date"))
         net = _decimal(cell(row, "net"))
+        if when is None and fee_type == STORAGE_FEE:
+            # 真实结算报表里的仓储费汇总行没有交易日期（一份跨多期的文件只有一行），
+            # 无法归到账单期：不入表、不拒收整份文件，提示里说明（仓储费金额以领星账单为准）
+            undated_storage += 1
+            continue
         if when is None or net is None:
             raise ParseError(f"结算报表有一行缺交易日期或金额（{fee_type}）")
         ref = cell(row, "ref")
@@ -318,6 +324,11 @@ def parse_settlement(content: bytes) -> ParsedReport:
         names = {"FulfillmentFee": "配送费"}
         parts = "、".join(f"{names.get(k, k)} {v} 行" for k, v in sorted(skipped.items()))
         report.warnings.append(f"{parts}不入表（配送费看领星账单订单行）")
+    if undated_storage:
+        report.warnings.append(
+            f"仓储费汇总行没有交易日期 {undated_storage} 行，未入表（无法归到账单期；"
+            "仓储费金额以领星账单为准，按商品金额请导仓储费报表）"
+        )
     summary = sum(1 for line in lines if line.fee_type in SETTLEMENT_COMPANY_TYPES)
     if summary:
         report.warnings.append(
