@@ -22,6 +22,7 @@ import zipfile
 
 MODULES = (
     "_catalog_base.py",
+    "cloud_contracts.py",
     "cloud_executor.py",
     "contract_signing.py",
     "contracts.py",

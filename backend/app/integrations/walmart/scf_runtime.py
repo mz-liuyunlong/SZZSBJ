@@ -23,6 +23,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from app.integrations.walmart.cloud_contracts import READ_FACTORIES
 from app.integrations.walmart.cloud_executor import RISK_LEVELS, WalmartCloudExecutor
 from app.integrations.walmart.contract_signing import (
     ContractVerifier,
@@ -33,43 +34,13 @@ from app.integrations.walmart.contract_signing import (
 )
 from app.integrations.walmart.contracts import ContractRegistry, Operation
 from app.integrations.walmart.direct_readonly_transport import WalmartDirectReadOnlyTransport
-from app.integrations.walmart.feeds_catalog import feed_monitor_registry
-from app.integrations.walmart.growth_catalog import growth_read_registry
 from app.integrations.walmart.https_transport import WalmartHttpsTransport
-from app.integrations.walmart.insights_catalog import insights_read_registry
-from app.integrations.walmart.marketplace_catalog import marketplace_read_registry
-from app.integrations.walmart.misc_catalog import misc_read_registry
-from app.integrations.walmart.operations_catalog import operations_read_registry
-from app.integrations.walmart.payment_catalog import payment_read_registry
-from app.integrations.walmart.recon_catalog import recon_read_registry
-from app.integrations.walmart.reports_catalog import reports_registry
-from app.integrations.walmart.returns_catalog import returns_read_registry
-from app.integrations.walmart.sem_catalog import (
-    SEM_WRITE_KEYS,
-    sem_read_registry,
-    sem_write_registry,
-)
+from app.integrations.walmart.sem_catalog import SEM_WRITE_KEYS, sem_write_registry
 from app.integrations.walmart.tencent_api import TemporaryTencentIdentity, TencentApiClient
 from app.integrations.walmart.tencent_ssm import TencentSsmResolver
-from app.integrations.walmart.wfs_catalog import wfs_registry
 from app.integrations.walmart.wfs_write_catalog import WFS_WRITE_KEYS, wfs_write_registry
 
 MAX_CONTRACT_BYTES = 2 * 1024 * 1024
-# Every built-in read catalog (legacy v1/v2 events build their registry from these).
-READ_FACTORIES = (
-    wfs_registry,
-    feed_monitor_registry,
-    marketplace_read_registry,
-    returns_read_registry,
-    operations_read_registry,
-    growth_read_registry,
-    recon_read_registry,
-    reports_registry,
-    payment_read_registry,
-    insights_read_registry,
-    sem_read_registry,
-    misc_read_registry,
-)
 _STORE_PATTERN = re.compile(r"^(?:HK|CN)[0-9]{4}$")
 LIVE_MODE_READ_ONLY = "owner-approved-read-only"
 LIVE_MODE_READ_WRITE = "owner-approved-read-write"

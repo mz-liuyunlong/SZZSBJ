@@ -36,7 +36,7 @@ class SafeResult:
     report_request_id: str | None = None
 
 
-MAX_PDF_BYTES = 5 * 1024 * 1024
+MAX_PDF_BYTES = 4 * 1024 * 1024
 MAX_ZIP_BYTES = 3 * 1024 * 1024 + 512 * 1024
 
 

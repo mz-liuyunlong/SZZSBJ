@@ -39,13 +39,19 @@ def test_report_request_create_is_a_pinned_read_semantic_post() -> None:
     )
     assert (request.method, request.path) == ("POST", "/v3/reports/reportRequests")
     assert request.is_write is False and risk_for("POST", "report_request_create") == "read"
-    # body optional (Walmart defaults the window), but only the two documented keys
+    # body required (审核 P3-1); {} lets Walmart use its default window
     assert (
         registry.prepare(
-            "report_request_create", params={"reportType": "ITEM", "reportVersion": "v1"}
+            "report_request_create",
+            params={"reportType": "ITEM", "reportVersion": "v1"},
+            body={},
         ).body
-        is None
+        == {}
     )
+    with pytest.raises(ContractError, match="WALMART_BODY_REQUIRED"):
+        registry.prepare(
+            "report_request_create", params={"reportType": "ITEM", "reportVersion": "v1"}
+        )
     with pytest.raises(ContractError, match="WALMART_BODY_FIELD_NOT_ALLOWED"):
         registry.prepare(
             "report_request_create",
@@ -129,12 +135,7 @@ def test_read_semantic_set_matches_the_reviewed_non_get_reads_exactly() -> None:
     assert non_get_reads == READ_SEMANTIC_NON_GET_KEYS
     for key in non_get_reads:
         operation = registry.get(key)
-        assert (
-            operation.method == "POST"
-            and operation.has_body
-            and operation.body_required
-            or (key == "report_request_create")
-        )
+        assert operation.method == "POST" and operation.has_body and operation.body_required
         schema = operation.request_schema
         assert isinstance(schema, dict) and schema.get("additionalProperties") is False
         assert operation.risk == "read" == risk_for(operation.method, key)

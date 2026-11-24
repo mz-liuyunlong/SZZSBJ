@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any, Protocol
 
+from app.integrations.walmart.cloud_contracts import builtin_for
 from app.integrations.walmart.contract_signing import RISK_WRITE, ContractVerifier
 from app.integrations.walmart.contracts import ContractError, ContractRegistry
 from app.integrations.walmart.https_transport import TransportRejected
@@ -59,9 +60,12 @@ class WalmartCloudExecutor:
         transport: CloudTransport,
         verifier: ContractVerifier | None = None,
         max_risk: str = "read",
+        builtin_non_get: ContractRegistry | None = None,
     ) -> None:
         if max_risk not in RISK_LEVELS:
             raise ContractError("WALMART_RISK_CEILING_INVALID")
+        # Non-GET v3 calls must equal this package's own contracts (None = the built-in set).
+        self._builtin_non_get = builtin_non_get
         self._registry = registry
         self._stores = store_allowlist
         self._policy = policy
@@ -197,6 +201,12 @@ class WalmartCloudExecutor:
         # hashes and the method-derived risk level.
         verified = self._verifier.verify(event)
         operation = verified.operation
+        if operation.method != "GET" or event.get("method") != "GET":
+            # 审核 #358 P1-1: a POST / PUT / PATCH / DELETE runs only the contract built into
+            # this package (method, path, fields, body schema, mutating, response kind);
+            # a signed contract that differs in any of these is refused before any token.
+            if verified.risk != RISK_WRITE or self._max_risk == "write":
+                operation = builtin_for(event.get("contract"), self._builtin_non_get)
         registry = ContractRegistry((operation,))
         # Same contract code as the server: path/query values are re-validated against the
         # field schemas and the resolved path must equal what the caller claims to call.

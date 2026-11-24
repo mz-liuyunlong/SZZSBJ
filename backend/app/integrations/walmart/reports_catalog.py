@@ -5,7 +5,9 @@ report requests for the report types probed in 2026-10-11 and bring the generate
 
 Flow (three contracts, all against marketplace.walmartapis.com):
 1. ``report_request_create``  POST /v3/reports/reportRequests?reportType=&reportVersion=v1
-   body: optional ``{"dataStartTime", "dataEndTime"}`` (ISO-8601 UTC) and nothing else.
+   body: an object with optional ``dataStartTime`` / ``dataEndTime`` (ISO-8601 UTC) and
+   nothing else; send ``{}`` to let Walmart use its default window (body is required so the
+   read-only transport always sees an object).
    It creates a *report request* on Walmart's side and changes no seller data, so it is
    listed in ``READ_SEMANTIC_NON_GET_KEYS``; the body schema pins the two filter keys.
 2. ``report_request_status_get`` (operations_catalog)  GET /v3/reports/reportRequests/{id}
@@ -70,7 +72,7 @@ _OPERATIONS = (
             Field("reportVersion", "query", required=True, enum=("v1",)),
         ),
         has_body=True,
-        body_required=False,
+        body_required=True,
         request_schema=REPORT_REQUEST_BODY_SCHEMA,
         mutating=False,
         source="https://developer.walmart.com/us-marketplace/docs/request-a-settlement-report",

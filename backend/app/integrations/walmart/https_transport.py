@@ -24,7 +24,7 @@ from app.integrations.walmart.contracts import PreparedRequest
 
 WALMART_HOST = "https://marketplace.walmartapis.com"
 MAX_RESPONSE_BYTES = 1024 * 1024
-MAX_PDF_RESPONSE_BYTES = 5 * 1024 * 1024
+MAX_PDF_RESPONSE_BYTES = 4 * 1024 * 1024  # base64 stays under the 5.5MB result cap
 MAX_ERROR_RESPONSE_BYTES = 64 * 1024
 MAX_TOKEN_RESPONSE_BYTES = 16 * 1024
 _PRIVATE_NETS = tuple(
