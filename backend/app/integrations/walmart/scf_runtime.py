@@ -38,6 +38,7 @@ from app.integrations.walmart.growth_catalog import growth_read_registry
 from app.integrations.walmart.https_transport import WalmartHttpsTransport
 from app.integrations.walmart.marketplace_catalog import marketplace_read_registry
 from app.integrations.walmart.operations_catalog import operations_read_registry
+from app.integrations.walmart.recon_catalog import recon_read_registry
 from app.integrations.walmart.returns_catalog import returns_read_registry
 from app.integrations.walmart.tencent_api import TemporaryTencentIdentity, TencentApiClient
 from app.integrations.walmart.tencent_ssm import TencentSsmResolver
@@ -201,8 +202,15 @@ def _load_registry(
         returns_keys = set(returns_read_registry().keys())
         operations_keys = set(operations_read_registry().keys())
         growth_keys = set(growth_read_registry().keys())
+        recon_keys = set(recon_read_registry().keys())
         known_keys = (
-            wfs_keys | feed_keys | marketplace_keys | returns_keys | operations_keys | growth_keys
+            wfs_keys
+            | feed_keys
+            | marketplace_keys
+            | returns_keys
+            | operations_keys
+            | growth_keys
+            | recon_keys
         )
         if approved_keys - known_keys:
             raise ValueError("WALMART_APPROVED_OPERATION_UNKNOWN")
@@ -228,6 +236,9 @@ def _load_registry(
             )
             + tuple(
                 growth_read_registry(approved_keys=approved_keys & growth_keys)._operations.values()
+            )
+            + tuple(
+                recon_read_registry(approved_keys=approved_keys & recon_keys)._operations.values()
             )
             + tuple(wfs_write_registry(approved_keys=approved_write_keys)._operations.values())
         )

@@ -29,6 +29,7 @@ from app.integrations.walmart.growth_catalog import growth_read_registry
 from app.integrations.walmart.marketplace_catalog import marketplace_read_registry
 from app.integrations.walmart.operations_catalog import operations_read_registry
 from app.integrations.walmart.pagination import PageContract, collect_read_pages
+from app.integrations.walmart.recon_catalog import recon_read_registry
 from app.integrations.walmart.returns_catalog import returns_read_registry
 from app.integrations.walmart.source_catalog_data import load_source_catalog
 from app.integrations.walmart.wfs_catalog import wfs_registry
@@ -50,6 +51,8 @@ _READ_FAMILIES: tuple[tuple[Any, str], ...] = (
     (operations_read_registry, "operations"),
     # Review Accelerator item list: the one reviewed read-semantic POST (empty body).
     (growth_read_registry, "growth"),
+    # Settlement (recon) report dates + JSON pages for payout reconciliation (GET only).
+    (recon_read_registry, "recon"),
 )
 WFS_WRITE_PERMISSION = "action:walmart:wfs:shipments:write"
 WFS_CANCEL_PERMISSION = "action:walmart:wfs:shipments:cancel"
@@ -93,6 +96,7 @@ def _builtins(
         returns_read_registry,
         operations_read_registry,
         growth_read_registry,
+        recon_read_registry,
     )
     operations: dict[str, Operation] = {}
     for factory in factories:

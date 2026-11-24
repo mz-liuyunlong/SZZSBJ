@@ -30,6 +30,7 @@ MODULES = (
     "https_transport.py",
     "marketplace_catalog.py",
     "operations_catalog.py",
+    "recon_catalog.py",
     "returns_catalog.py",
     "scf_bridge.py",
     "scf_runtime.py",
