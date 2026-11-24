@@ -60,10 +60,12 @@ def test_report_request_create_is_a_pinned_read_semantic_post() -> None:
         )
     with pytest.raises(ContractError, match="WALMART_FIELD_INVALID"):
         registry.prepare(
-            "report_request_create", params={"reportType": "SALES", "reportVersion": "v1"}
+            "report_request_create",
+            params={"reportType": "SALES", "reportVersion": "v1"},
+            body={},
         )
     with pytest.raises(ContractError, match="WALMART_PARAM_REQUIRED"):
-        registry.prepare("report_request_create", params={"reportType": "ITEM"})
+        registry.prepare("report_request_create", params={"reportType": "ITEM"}, body={})
     assert "RETURN_ITEM_OVERRIDES" not in REPORT_TYPES and "SETTLEMENT" in REPORT_TYPES
 
 
