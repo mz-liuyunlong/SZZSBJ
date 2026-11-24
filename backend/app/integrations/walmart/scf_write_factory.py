@@ -1,4 +1,4 @@
-"""SZZSBJ Walmart write API factory (WFS inbound-shipment operations).
+"""SZZSBJ Walmart write API factory (WFS inbound-shipment and SEM campaign operations).
 
 Mirrors ``scf_read_factory`` but uses bridge protocol v2 so the caller receives
 Walmart's error body on a rejected write and the PDF bytes for label calls. The server
@@ -13,8 +13,11 @@ from collections.abc import Mapping
 from app.integrations.walmart.routed_scf import create_scoped_client
 from app.integrations.walmart.scf_read_factory import IdentityProvider, RefreshingScfApi
 from app.integrations.walmart.tenc_sts_identity import CachedScfAssumeRoleIdentity
-from app.integrations.walmart.unified_api import WalmartWriteAPI, load_unified_registry
-from app.integrations.walmart.wfs_write_catalog import WFS_WRITE_KEYS
+from app.integrations.walmart.unified_api import (
+    ALL_WRITE_KEYS,
+    WalmartWriteAPI,
+    load_unified_registry,
+)
 
 
 def make_walmart_write_api(
@@ -35,7 +38,8 @@ def make_walmart_write_api(
     """
     if not allowed_stores or not approved_write_keys:
         raise ValueError("WALMART_APPROVAL_MISSING")
-    if approved_write_keys - WFS_WRITE_KEYS:
+    if approved_write_keys - ALL_WRITE_KEYS:
+        # WFS inbound + SEM campaigns (2026-11-24); same cloud gate for both.
         raise ValueError("WALMART_APPROVED_OPERATION_UNKNOWN")
     if not function_qualifier or function_qualifier == "$LATEST":
         raise ValueError("WALMART_STABLE_VERSION_REQUIRED")
