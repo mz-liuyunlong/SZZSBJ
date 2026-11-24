@@ -49,3 +49,33 @@ describe("Listing monitor RAW field rendering", () => {
     expect(row.resold).toBe("否");
   });
 });
+
+describe("Listing commercial exception V3", () => {
+  const normal = {
+    listing_status: "OFFLINE",
+    wfs_available_quantity: "10",
+    buybox_status: "NORMAL",
+    monitor_has_strikethrough: true,
+    is_hijacked: false,
+  };
+  it.each([
+    [{}, "正常"],
+    [{ wfs_available_quantity: "0", is_hijacked: true }, "—"],
+    [{ wfs_available_quantity: null, buybox_status: "LOST" }, "—"],
+    [{ wfs_available_quantity: "0", monitor_has_strikethrough: false }, "—"],
+    [{ wfs_available_quantity: "1", is_hijacked: true }, "异常"],
+    [{ monitor_has_strikethrough: false }, "异常"],
+    [{ is_hijacked: true }, "异常"],
+    [{ buybox_status: "LOST" }, "异常"],
+    [{ buybox_status: " secondary " }, "异常"],
+    [{ buybox_status: "NOT_FOUND" }, "异常"],
+    [{ buybox_status: "UNAVAILABLE" }, "异常"],
+    [{ buybox_status: "OUT_OF_STOCK" }, "正常"],
+    [{ buybox_status: "FETCH_ERROR" }, "待确认"],
+    [{ monitor_has_strikethrough: null }, "待确认"],
+    [{ is_hijacked: null }, "待确认"],
+    [{ buybox_status: null, is_hijacked: true }, "异常"],
+  ] as const)("maps confirmed operational evidence %j to %s", (change, expected) => {
+    expect(fromRaw({ ...normal, ...change }).listingStatus).toBe(expected);
+  });
+});

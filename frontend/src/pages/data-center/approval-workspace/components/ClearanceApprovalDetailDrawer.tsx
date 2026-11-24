@@ -312,7 +312,7 @@ function ClearanceApprovalContent({selected,onClose,onUpdated,directReviewAction
           <Button className="approval-demo__clearance-close" aria-label="关闭详情" onClick={onClose}>×</Button>
         </div>
         <div className="approval-demo__clearance-meta">
-          <span>申请人<b>{app?.applicant_ref || "—"}</b></span>
+          <span>申请人<b>{app?.applicant_name || "申请人待核实"}</b></span>
           <span>提交时间<b>{when(app?.submitted_at)}</b></span>
           <span>当前审批人<b>授权审批人</b></span>
           <span>审批状态<b>{statusText[app?.status || ""] || "—"}</b></span>

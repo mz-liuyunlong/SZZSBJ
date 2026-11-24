@@ -593,18 +593,27 @@ const reasonAliases: Record<string,string> = {
  const manualFlow=manualOpen||(manualWizardActive&&apply?.source==="manual");
  const manualStep2=!manualOpen&&manualWizardActive&&apply?.source==="manual";
  const manualProductColumns:ColumnsType<ClearanceProduct>=[
-  {title:"商品",width:460,render:(_,x)=>{
+  {title:"商品",width:300,render:(_,x)=>{
    const why="";
    return <div className="clearance-wizard-product">
     <span className="clearance-wizard-thumb">▦</span>
     <div className="clearance-wizard-product-text">
      <strong title={x.name}>{x.name}</strong>
      <small>{x.sku} · {x.msku}</small>
+     <small title={x.item}>{x.item||"—"}</small>
      {why&&<small className="clearance-wizard-blocked">{why}</small>}
     </div>
    </div>;
   }},
-  {title:"WFS 可售",width:110,render:(_,x)=><div className="clearance-wizard-meta"><small>WFS 可售</small><strong>{x.avail.toLocaleString("en-US")} 件</strong></div>},
+  {title:"店铺",width:160,render:(_,x)=>
+    <div className="clearance-wizard-meta">
+     <strong title={x.store} style={{
+      overflow:"hidden",
+      textOverflow:"ellipsis",
+      whiteSpace:"nowrap"
+     }}>{x.store||"—"}</strong>
+    </div>},
+   {title:"WFS 可售",width:110,render:(_,x)=><div className="clearance-wizard-meta"><small>WFS 可售</small><strong>{x.avail.toLocaleString("en-US")} 件</strong></div>},
   {title:"当前售价",width:110,render:(_,x)=><div className="clearance-wizard-meta"><small>当前售价</small><strong>{money(x.price)}</strong></div>},
   {title:"风险",width:90,render:(_,x)=><RiskTag level={evaluateProduct(x,data.rules).level}/>},
   {title:"操作",width:124,render:(_,x)=>{
@@ -679,7 +688,7 @@ const reasonAliases: Record<string,string> = {
    <div className="clearance-wizard-pane" style={{display:manualOpen?"flex":"none"}}>
     <div className="clearance-wizard-rowtitle"><strong>选择清货商品</strong><small>一次仅能申请一个 SKU</small></div>
     <div className="clearance-wizard-search">
-     <Input.Search allowClear placeholder="搜索商品名称、SKU、MSKU 或 ASIN"
+     <Input.Search allowClear placeholder="搜索商品名称、SKU、MSKU 或 Item ID"
       value={manualSearch} onChange={e=>setManualSearch(e.target.value)}/>
      <small>支持模糊搜索</small>
     </div>

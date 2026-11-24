@@ -265,6 +265,9 @@ def list_applications(
         snapshots = {str(entry["id"]): entry["snapshot"] for entry in saved}
 
     saved_fields = original.application_saved_metadata(write, rows, snapshots=snapshots)
+    from .batch_read import application_identity, find_listings
+
+    listings = find_listings(read, (application_identity(row) for row in rows), accounts)
     results = []
     for r in rows:
         data = dict(r)
@@ -291,7 +294,7 @@ def list_applications(
         ):
             snapshot = {}
 
-        listing = original.find_listing(read, account, store, item, lock=False)
+        listing = listings.get((account, store, item))
 
         def current(field, row=listing):
             return getattr(row, field, None) if row else None
@@ -308,6 +311,13 @@ def list_applications(
         data.update(
             {
                 **saved_fields[str(r["id"])],
+                "display_product_name": first(
+                    current("product_name"),
+                    current("local_name")
+                    if first(current("local_name")) != first(current("title"))
+                    else None,
+                    saved_fields[str(r["id"])].get("display_product_name"),
+                ),
                 "item_id": item,
                 "title": first(
                     current("local_name"),

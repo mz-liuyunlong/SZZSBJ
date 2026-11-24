@@ -235,6 +235,7 @@ function toApprovalItem(seed: DemoSeed): ApprovalItem {
     title: `【演示】${seed.title}`,
     source_account_ref: seed.store,
     applicant_id: seed.applicant,
+    applicant_name: seed.applicant,
     status: seed.status,
     risk_level: seed.risk,
     amount: seed.amount,

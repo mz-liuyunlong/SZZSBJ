@@ -17,6 +17,7 @@ from app.core.permissions import (
     require_permission,
 )
 from app.db.session import get_db_session
+from app.modules.approvals.applicant_names import attach_approval_names
 from app.modules.approvals.generic import GenericApprovalService
 from app.modules.approvals.schemas import (
     ApprovalDecisionWrite,
@@ -78,7 +79,7 @@ def list_approvals(
                 item.can_review = False
     return success_response(
         request,
-        data=data,
+        data=attach_approval_names(session, data),
         meta=ApprovalMeta(page=query.page, page_size=query.page_size, total=total),
     )
 
@@ -109,8 +110,11 @@ def legacy_detail(
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     return success_response(
         request,
-        data=ApprovalService(session).legacy_detail(
-            case_id, accounts, principal.user_id, allow_self=is_approval_admin(principal)
+        data=attach_approval_names(
+            session,
+            ApprovalService(session).legacy_detail(
+                case_id, accounts, principal.user_id, allow_self=is_approval_admin(principal)
+            ),
         ),
         meta=None,
     )
@@ -177,7 +181,7 @@ def get_approval(
         is_admin=is_approval_admin(principal),
         np_may_review=np_may_review,
     )
-    return success_response(request, data=data, meta=None)
+    return success_response(request, data=attach_approval_names(session, data), meta=None)
 
 
 @router.post(
@@ -322,7 +326,7 @@ def new_product_purchase_workbench_list(
     if is_approval_admin(principal):
         for item in data.items:
             item.can_review = item.status == "submitted"
-    return success_response(request, data=data, meta=meta)
+    return success_response(request, data=attach_approval_names(session, data), meta=meta)
 
 
 @router.get(
@@ -345,7 +349,7 @@ def new_product_purchase_workbench_detail(
     )
     if is_approval_admin(principal):
         result.can_review = result.status == "submitted"
-    return success_response(request, data=result, meta=None)
+    return success_response(request, data=attach_approval_names(session, result), meta=None)
 
 
 @router.get(

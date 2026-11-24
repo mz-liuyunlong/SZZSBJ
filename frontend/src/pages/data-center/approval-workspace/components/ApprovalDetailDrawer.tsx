@@ -208,7 +208,7 @@ function ApprovalDetailDrawerInner({
       footer={shown ? <div className="approval-review__footer">
         <div className="approval-review__footer-context">
           <strong>{shown.title}</strong>
-          <span>{`申请人 ${shown.applicant_id || "未记录"} · ${timeText(shown.submitted_at)}`}</span>
+          <span>{`申请人 ${shown.applicant_name || "申请人待核实"} · ${timeText(shown.submitted_at)}`}</span>
         </div>
         <Space wrap size={8}>
           {!mayApprove && !maySupplement ? <Tag color="default">"当前无可用审核操作"</Tag> : null}
@@ -271,7 +271,7 @@ function ApprovalDetailDrawerInner({
     >
       {shown ? <div className="approval-review__modal-context">
         <ExclamationCircleOutlined />
-        <div><strong>{shown.title}</strong><span>{riskLevel ? riskNames[riskLevel] : ""} · {`申请人 ${shown.applicant_id || "未记录"}`}</span></div>
+        <div><strong>{shown.title}</strong><span>{riskLevel ? riskNames[riskLevel] : ""} · {`申请人 ${shown.applicant_name || "申请人待核实"}`}</span></div>
       </div> : null}
       <Form layout="vertical" style={{ marginTop: 18 }}>
         <Form.Item label={resolvedAction === "approved" ? "审批意见（选填）" : resolvedAction === "rejected" ? "驳回原因（至少 5 个字）" : resolvedAction === "resubmit" ? "补充说明（至少 5 个字）" : "需补充的材料（至少 5 个字）"}>

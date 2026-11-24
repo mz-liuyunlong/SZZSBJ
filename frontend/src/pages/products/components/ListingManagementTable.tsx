@@ -1,3 +1,5 @@
+import type { MouseEvent as HeaderMouseEvent, KeyboardEvent as HeaderKeyboardEvent } from "react";
+import { isListingSortField, mergeListingSorts, nextListingColumnSort, type ListingSort } from "@/pages/products/listingManagementSort";
 import { useState as useLifecycleEditState } from "react";
 import { Select } from "antd";
 import { RobotOutlined, InfoCircleOutlined } from "@ant-design/icons";
@@ -116,6 +118,8 @@ const statusColorMap: Record<string, string> = {
 };
 
 interface ListingManagementTableProps {
+  sorts?: readonly ListingSort[];
+  onSortChange?: (sorts: ListingSort[]) => void;
   rows: ListingManagementRow[];
   total: number;
   appliedColumnKeys: string[];
@@ -403,6 +407,8 @@ function LifecycleDiagnosticCard({
 }
 
 function ListingManagementTable({
+  sorts = [],
+  onSortChange,
   rows,
   total,
   appliedColumnKeys,
@@ -430,7 +436,7 @@ function ListingManagementTable({
 }: ListingManagementTableProps) {
   // Only the large pages need row virtualization. Original columns, pinned columns,
   // sorters, selection and all per-row actions are kept unchanged in both modes.
-  const virtual = pageSize >= 500;
+  const virtual = pageSize >= 50;
   const title = (key: string, label: string) => (
     <>
       <ResizableColumnTitle
@@ -477,7 +483,6 @@ function ListingManagementTable({
       title: title("productIdName", fieldTitle.productIdName ?? "商品ID/品名"),
       width: columnWidths.productIdName,
       fixed: "left",
-      sorter: (a, b) => a.productId.localeCompare(b.productId),
       onHeaderCell: headerCell,
       render: (_, row) => (
         <ProductIdentityCell
@@ -491,10 +496,6 @@ function ListingManagementTable({
       title: title("skuMsku", fieldTitle.skuMsku ?? "SKU/MSKU"),
       width: columnWidths.skuMsku,
       fixed: "left",
-      sorter: (a, b) => (
-        a.sku.localeCompare(b.sku)
-        || a.msku.localeCompare(b.msku)
-      ),
       onHeaderCell: headerCell,
       render: (_, row) => (
         <SkuMskuIdentityCell
@@ -509,7 +510,6 @@ function ListingManagementTable({
       title: title("msku", fieldTitle.msku),
       width: columnWidths.msku,
       fixed: "left",
-      sorter: (a, b) => a.msku.localeCompare(b.msku),
       onHeaderCell: headerCell,
       render: (_, row) => (
         <CopyableTextCell
@@ -526,7 +526,6 @@ function ListingManagementTable({
       title: title("productId", fieldTitle.productId),
       width: columnWidths.productId,
       fixed: "left",
-      sorter: (a, b) => a.productId.localeCompare(b.productId),
       onHeaderCell: headerCell,
       render: (_, row) => (
         <CopyableTextCell
@@ -570,7 +569,6 @@ function ListingManagementTable({
       dataIndex: "sku",
       title: title("sku", fieldTitle.sku),
       width: columnWidths.sku,
-      sorter: (a, b) => a.sku.localeCompare(b.sku),
       onHeaderCell: headerCell,
       render: (_, row) => (
         <CopyableTextCell
@@ -585,7 +583,6 @@ function ListingManagementTable({
       title: title("productName", fieldTitle.productName),
       width: columnWidths.productName,
       ellipsis: true,
-      sorter: (a, b) => a.productName.localeCompare(b.productName),
       onHeaderCell: headerCell,
       render: (_, row) => (
         <CopyableTextCell
@@ -616,7 +613,6 @@ function ListingManagementTable({
       dataIndex: "listPrice",
       title: title("listPrice", fieldTitle.listPrice),
       width: columnWidths.listPrice,
-      sorter: (a, b) => (a.listPrice ?? -1) - (b.listPrice ?? -1),
       onHeaderCell: headerCell,
       render: (_, row) => row.listPrice == null ? "—" : `$${row.listPrice.toFixed(2)}`,
     },
@@ -625,7 +621,6 @@ function ListingManagementTable({
       dataIndex: "salePrice",
       title: title("salePrice", fieldTitle.salePrice),
       width: columnWidths.salePrice,
-      sorter: (a, b) => (a.salePrice ?? -1) - (b.salePrice ?? -1),
       onHeaderCell: headerCell,
       render: (_, row) => row.salePrice == null ? "—" : `$${row.salePrice.toFixed(2)}`,
     },
@@ -701,7 +696,6 @@ function ListingManagementTable({
       dataIndex: "listedAt",
       title: title("listedAt", fieldTitle.listedAt),
       width: columnWidths.listedAt,
-      sorter: (a, b) => a.listedAt.localeCompare(b.listedAt),
       onHeaderCell: headerCell,
     },
     category: {
@@ -742,7 +736,6 @@ function ListingManagementTable({
       dataIndex: "wfsAvailableInventory",
       title: title("wfsAvailableInventory", fieldTitle.wfsAvailableInventory),
       width: columnWidths.wfsAvailableInventory,
-      sorter: (a, b) => a.wfsAvailableInventory - b.wfsAvailableInventory,
       onHeaderCell: headerCell,
     },
     inboundInventory: {
@@ -750,7 +743,6 @@ function ListingManagementTable({
       dataIndex: "inboundInventory",
       title: title("inboundInventory", fieldTitle.inboundInventory),
       width: columnWidths.inboundInventory,
-      sorter: (a, b) => a.inboundInventory - b.inboundInventory,
       onHeaderCell: headerCell,
     },
     sales90Days: {
@@ -758,7 +750,6 @@ function ListingManagementTable({
       dataIndex: "sales90Days",
       title: title("sales90Days", fieldTitle.sales90Days),
       width: columnWidths.sales90Days,
-      sorter: (a, b) => a.sales90Days - b.sales90Days,
       onHeaderCell: headerCell,
     },
     adSpend30Days: {
@@ -766,7 +757,6 @@ function ListingManagementTable({
       dataIndex: "adSpend30Days",
       title: title("adSpend30Days", fieldTitle.adSpend30Days),
       width: columnWidths.adSpend30Days,
-      sorter: (a, b) => a.adSpend30Days - b.adSpend30Days,
       onHeaderCell: headerCell,
       render: (_, row) => `$${row.adSpend30Days.toFixed(2)}`,
     },
@@ -814,7 +804,6 @@ function ListingManagementTable({
       dataIndex: "checkedAt",
       title: title("checkedAt", fieldTitle.checkedAt),
       width: columnWidths.checkedAt,
-      sorter: (a, b) => a.checkedAt.localeCompare(b.checkedAt),
       onHeaderCell: headerCell,
       render: (_, row) => row.checkedAt && row.checkedAt !== "\u672a\u68c0\u6d4b"
         ? row.checkedAt.slice(0, 10) : "\u672a\u68c0\u6d4b",
@@ -824,7 +813,6 @@ function ListingManagementTable({
       dataIndex: "rating",
       title: title("rating", fieldTitle.rating),
       width: columnWidths.rating,
-      sorter: (a, b) => (a.rating ?? -1) - (b.rating ?? -1),
       onHeaderCell: headerCell,
       render: (_, row) => row.rating ?? "—",
     },
@@ -833,7 +821,6 @@ function ListingManagementTable({
       dataIndex: "reviewCount",
       title: title("reviewCount", fieldTitle.reviewCount),
       width: columnWidths.reviewCount,
-      sorter: (a, b) => (a.reviewCount ?? -1) - (b.reviewCount ?? -1),
       onHeaderCell: headerCell,
       render: (_, row) => row.reviewCount ?? "—",
     },
@@ -848,7 +835,6 @@ function ListingManagementTable({
       key: "sellerOfferCount", dataIndex: "sellerOfferCount",
       title: title("sellerOfferCount", fieldTitle.sellerOfferCount),
       width: columnWidths.sellerOfferCount,
-      sorter: (a, b) => (a.sellerOfferCount ?? -1) - (b.sellerOfferCount ?? -1),
       onHeaderCell: headerCell,
       render: (_, row) => row.sellerOfferCount ?? "—",
     },
@@ -1075,12 +1061,44 @@ function ListingManagementTable({
 
   // Avoid repainting unchanged row contents when selection or other page state
   // changes. Updated records are replaced immutably by the page's mutation handlers.
-  const optimizedColumns = columns.map((column) => ({
-    ...column,
-    shouldCellUpdate: (record: ListingManagementRow, previous: ListingManagementRow) => (
-      record !== previous
-    ),
-  }));
+  const optimizedColumns = columns.map((column): ProColumns<ListingManagementRow> => {
+    const key = column.key;
+    const selected = sorts[0]?.key === key ? sorts[0] : undefined;
+    return {
+      ...column,
+      ...(isListingSortField(key) ? {
+        // Native single-column server sorting.
+        sorter: true,
+        sortOrder: selected ? (selected.direction === "asc" ? "ascend" : "descend") : null,
+        onHeaderCell: () => ({
+          ...headerCell(),
+          onClickCapture: (event: HeaderMouseEvent<HTMLElement>) => {
+            if (!onSortChange) return;
+            const target = event.target;
+            if (!(target instanceof Element)) return;
+            if (!event.currentTarget.contains(target)) return;
+            if (target.closest(
+              ".report-table-resize-handle, button, input, textarea, select, a"
+            )) return;
+
+            event.stopPropagation();
+            onSortChange(nextListingColumnSort(sorts, key));
+          },
+          onKeyDownCapture: (event: HeaderKeyboardEvent<HTMLElement>) => {
+            if (!onSortChange || event.target !== event.currentTarget) return;
+            if (event.key !== "Enter" && event.key !== " ") return;
+
+            event.preventDefault();
+            event.stopPropagation();
+            onSortChange(nextListingColumnSort(sorts, key));
+          },
+        }),
+      } : {}),
+      shouldCellUpdate: (record: ListingManagementRow, previous: ListingManagementRow) => (
+        record !== previous
+      ),
+    };
+  });
   const scrollX = columns.reduce((sum, column) => sum + Number(column.width ?? 112), 56);
 
   return (
@@ -1096,6 +1114,13 @@ function ListingManagementTable({
         options={false}
         dataSource={rows}
         columns={optimizedColumns}
+        onChange={(_pagination, _filters, sorter, extra) => {
+          if (extra.action !== "sort") return;
+          const next = mergeListingSorts(sorts, sorter);
+          if (next.length !== sorts.length || next.some((sort, index) =>
+            sort.key !== sorts[index]?.key || sort.direction !== sorts[index]?.direction
+          )) onSortChange?.(next);
+        }}
         tableAlertRender={false}
         toolBarRender={false}
         bordered

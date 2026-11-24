@@ -333,7 +333,7 @@ function DemoApprovalDrawerContent({selected: selectedInput,onClose,initialActio
   const purchaseSeed: DemoSeed | undefined = livePurchase ? {
     id:livePurchase.id, approval_type:livePurchase.approval_type,
     title:livePurchase.title, business_ref:livePurchase.business_ref,
-    applicant:livePurchase.applicant_id || "—",
+    applicant:livePurchase.applicant_name || "申请人待核实",
     store:liveInfo?.store_name || "—",
     status:livePurchase.status as DemoSeed["status"],
     risk:livePurchase.risk_level as DemoSeed["risk"],
@@ -381,7 +381,7 @@ function DemoApprovalDrawerContent({selected: selectedInput,onClose,initialActio
   const isLive = Boolean(live);
   const seed: DemoSeed | undefined = selected ? getDemoSeed(selected.id) ?? purchaseSeed ?? (live ? {
     id: live.id, approval_type: live.approval_type, title: live.title,
-    business_ref: live.business_ref, applicant: live.applicant_id || "—",
+    business_ref: live.business_ref, applicant: live.applicant_name || "申请人待核实",
     store: live.clearance_details?.store_name ?? live.source_account_ref ?? "—",
     status: live.status as DemoSeed["status"],
     risk: live.risk_level as DemoSeed["risk"], amount: null,

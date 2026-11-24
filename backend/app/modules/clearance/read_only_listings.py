@@ -332,9 +332,9 @@ def _product_data_for_listings(
             ProductPlatformListing.platform == "walmart",
             ProductPlatformListing.deleted_at.is_(None),
             Product.deleted_at.is_(None),
-            ProductPlatformListing.store_name.in_([x[0] for x in eligible]),
-            ProductPlatformListing.msku.in_([x[1] for x in eligible]),
-            Product.sku.in_([x[2] for x in eligible]),
+            ProductPlatformListing.store_name.in_({x[0] for x in eligible}),
+            ProductPlatformListing.msku.in_({x[1] for x in eligible}),
+            Product.sku.in_({x[2] for x in eligible}),
         )
     ).all()
     out = {}
@@ -435,10 +435,14 @@ def read_business_snapshot(
     page_cost: object | None = None,
     rules: ClearanceRules | None = None,
     rule_version: int = 0,
+    availability_batched: bool = False,
+    include_evidence: bool = True,
 ) -> dict:
     """Real Item-ID facts, all read-only. Optional batch inputs avoid per-row queries."""
     available = (
-        page_available if page_available is not None else current_available(session, listing)
+        page_available
+        if availability_batched or page_available is not None
+        else current_available(session, listing)
     )
     cutoff = la_today() - timedelta(days=1)
     first = (
@@ -542,11 +546,21 @@ def read_business_snapshot(
         unit_cost,
         rules,
     )
+    # Zero or unknown stock exits the risk engine before suggestions.
+    # Keep those metrics unknown instead of treating missing values as zero.
+    if available is None or available <= 0:
+        assessed = {
+            **assessed,
+            "sellout_days": None,
+            "suggested_clearance_qty": None,
+            "suggested_floor_price_usd": None,
+        }
     display_sellout = assessed["sellout_days"]
     sellout_source = "verified_daily_sales" if display_sellout is not None else None
     if (
         display_sellout is None
         and available is not None
+        and available > 0
         and listing.sales_30d is not None
         and listing.sales_30d > 0
     ):
@@ -556,7 +570,12 @@ def read_business_snapshot(
             (Decimal(available) * 30 / listing.sales_30d).to_integral_value(rounding=ROUND_CEILING)
         )
         sellout_source = "listing_30d_estimate_only"
-    if display_sellout is None and available is not None and listing.sales_30d == 0:
+    if (
+        display_sellout is None
+        and available is not None
+        and available > 0
+        and listing.sales_30d == 0
+    ):
         sellout_source = "listing_30d_zero_sales"
     # Listing MART sales are informational; evaluator only uses verified daily
     # windows. No inference that a missing zero-sales day means zero orders.
@@ -640,6 +659,8 @@ def read_business_snapshot(
         if listing.sale_price_amount is not None and listing.sale_price_currency_code == "USD"
         else None,
     }
+    if not include_evidence:
+        return snapshot
     # Detailed rule evidence is read-only and cannot submit clearance tasks.
     from .risk_evidence_v20 import evidence_for_snapshot
 

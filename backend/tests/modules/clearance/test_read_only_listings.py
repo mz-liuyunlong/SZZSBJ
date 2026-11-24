@@ -197,3 +197,32 @@ def test_unrequested_total_does_not_issue_count():
     result = fallback.search_unassessed_listings(session, frozenset({"HK2613"}), "", 1, 50)
     assert result["total"] is None
     assert len(session.statements) == 1
+
+
+@pytest.mark.parametrize("available,level", [(0, "low"), (None, "unknown")])
+def test_clearance_application_zero_or_unknown_stock(available, level):
+    session = ReadSession()
+    result = fallback.read_business_snapshot(
+        session,
+        listing(),
+        page_available=available,
+        availability_batched=True,
+        page_daily_rows=[],
+        first_dates_batched=True,
+        product_data={},
+        include_evidence=False,
+    )
+    assert result["risk"] == level
+    assert result["available"] == available
+    assert result["metrics"]["sellout_days"] is None
+    assert result["metrics"]["suggested_clearance_qty"] is None
+    assert result["metrics"]["suggested_floor_price_usd"] is None
+    assert session.statements == []
+
+
+def test_clearance_verified_name_can_equal_listing_title():
+    from app.modules.clearance.batch_read import management_product_name
+
+    assert management_product_name("Product", None, "Product", None, None) == "Product"
+    assert management_product_name(None, None, "Product", "Product", None) == "Product"
+    assert management_product_name(None, "Product", "Product", None, None) is None

@@ -152,19 +152,45 @@ def search_risk_filtered(
     from .repository import la_today
 
     clause, params = scoped_parts(session, accounts, keyword, store_refs, owner_names)
-    ids = (
-        session.execute(
-            text(
-                "SELECT l.id "
-                + clause
-                + " ORDER BY l.store_id, l.item_id, l.source_account_ref, l.id"
-            ),
-            params,
+    listing_model = ListingManagementCurrentMart
+    ordering = " ORDER BY l.store_id, l.item_id, l.source_account_ref, l.id"
+    if isinstance(session, Session):
+        listing_fields = (
+            "id",
+            "source_account_ref",
+            "store_id",
+            "item_id",
+            "platform_code",
+            "store_name",
+            "msku",
+            "local_sku",
+            "local_name",
+            "title",
+            "owner_ref",
+            "picture_url",
+            "sale_price_amount",
+            "sale_price_currency_code",
+            "wfs_available_quantity",
+            "inbound_quantity",
+            "listing_start_at_utc",
+            "sales_7d",
+            "sales_14d",
+            "sales_30d",
+            "average_rating",
+            "review_count",
+            "wfs_fee_amount",
+            "wfs_fee_currency_code",
         )
-        .scalars()
-        .all()
-    )
-    if not ids:
+        columns = ", ".join("l." + field for field in listing_fields)
+        listings = session.execute(
+            text("SELECT " + columns + " " + clause + ordering), params
+        ).all()
+    else:
+        ids = session.execute(text("SELECT l.id " + clause + ordering), params).scalars().all()
+        found = session.scalars(select(listing_model).where(listing_model.id.in_(ids))).all()
+        by_id = {row.id: row for row in found}
+        listings = [by_id[row_id] for row_id in ids if row_id in by_id]
+    if not listings:
         return {
             "items": [],
             "page": page,
@@ -182,11 +208,6 @@ def search_risk_filtered(
             "risk_model_ready": False,
             "risk_calculated_in_memory": True,
         }
-    found = session.scalars(
-        select(ListingManagementCurrentMart).where(ListingManagementCurrentMart.id.in_(ids))
-    ).all()
-    by_id = {row.id: row for row in found}
-    listings = [by_id[row_id] for row_id in ids if row_id in by_id]
     cutoff = la_today() - timedelta(days=1)
     first_map = _page_first_wfs_dates(session, listings)
     product_map = _product_data_for_listings(session, listings)
@@ -199,23 +220,30 @@ def search_risk_filtered(
             if row.source_account_ref == account and row.local_sku:
                 costs_by_key[(account, row.local_sku)] = costs.get(normalize_sku_key(row.local_sku))
 
-    # Chunk tuple-IN requests to keep SQL parameter and memory pressure bounded.
-    daily = defaultdict(list)
+    # Real reads transfer only evaluator fields; fake sessions retain test contract.
     keys = sorted({(row.source_account_ref, row.store_id, row.item_id) for row in listings})
-    for start in range(0, len(keys), 150):
-        batch = keys[start : start + 150]
-        facts = session.scalars(
-            select(DailySalesItemDayMart).where(
-                tuple_(
-                    DailySalesItemDayMart.source_account_ref,
-                    DailySalesItemDayMart.store_id,
-                    DailySalesItemDayMart.item_id,
-                ).in_(batch),
-                DailySalesItemDayMart.business_date_la.between(cutoff - timedelta(days=29), cutoff),
-            )
-        ).all()
-        for fact in facts:
-            daily[(fact.source_account_ref, fact.store_id, fact.item_id)].append(fact)
+    if isinstance(session, Session):
+        from .batch_read import read_daily_rows
+
+        daily = read_daily_rows(session, keys, cutoff)
+    else:
+        daily = defaultdict(list)
+        for start in range(0, len(keys), 150):
+            batch = keys[start : start + 150]
+            facts = session.scalars(
+                select(DailySalesItemDayMart).where(
+                    tuple_(
+                        DailySalesItemDayMart.source_account_ref,
+                        DailySalesItemDayMart.store_id,
+                        DailySalesItemDayMart.item_id,
+                    ).in_(batch),
+                    DailySalesItemDayMart.business_date_la.between(
+                        cutoff - timedelta(days=29), cutoff
+                    ),
+                )
+            ).all()
+            for fact in facts:
+                daily[(fact.source_account_ref, fact.store_id, fact.item_id)].append(fact)
 
     matched = []
     counts = {k: 0 for k in ("high", "medium", "low", "none", "unknown")}
@@ -239,6 +267,7 @@ def search_risk_filtered(
             store_commissions=commission_map,
             rules=rules,
             rule_version=rule_version,
+            include_evidence=not isinstance(session, Session),
         )
         level = row.get("risk", "unknown")
         if level not in counts:
@@ -266,8 +295,24 @@ def search_risk_filtered(
         )
     )
     start = (page - 1) * page_size
+    selected = matched[start : start + page_size]
+    if isinstance(session, Session):
+        from .risk_evidence_v20 import evidence_for_snapshot
+        from .rules import ClearanceRules
+
+        listing_map = {str(r.id): r for r in listings}
+        for row in selected:
+            key = (row["source_account_ref"], row["store_id"], row["item_id"])
+            report = evidence_for_snapshot(
+                row,
+                rules if rules is not None else ClearanceRules(),
+                listing=listing_map[row["listing_id"]],
+                first_wfs_date=first_map.get(key),
+                as_of=cutoff,
+            )
+            row.update({k: v for k, v in report.items() if k != "risk"})
     return {
-        "items": matched[start : start + page_size],
+        "items": selected,
         "page": page,
         "page_size": page_size,
         "has_more": start + page_size < len(matched),

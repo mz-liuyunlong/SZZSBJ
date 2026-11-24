@@ -30,8 +30,8 @@ export interface ClearanceListing {
 export interface ClearanceFilterOption { value: string; label: string; source_account_ref?: string }
 export interface ClearanceFilterOptions { stores: ClearanceFilterOption[]; owners: ClearanceFilterOption[]; risks: ClearanceFilterOption[] }
 export interface ClearanceMultiFilters { store_refs?: string[]; owner_names?: string[]; risk_levels?: string[] }
-export async function getClearanceFilterOptions(): Promise<ClearanceFilterOptions> {
-  return (await backendRequest<ClearanceFilterOptions, null>("/api/clearance/filter-options")).data;
+export async function getClearanceFilterOptions(signal?: AbortSignal): Promise<ClearanceFilterOptions> {
+  return (await backendRequest<ClearanceFilterOptions, null>("/api/clearance/filter-options", { signal })).data;
 }
 export interface ClearanceList {
   items: ClearanceListing[];
@@ -55,6 +55,7 @@ export interface ClearanceApplication {
   store_id: string;
   item_id: string;
   applicant_ref: string;
+  applicant_name?: string | null;
   status: "pending" | "rejected" | "cancelled" | "running" | "done" | "stock_closed";
   title: string | null;
   local_sku: string | null;
@@ -72,6 +73,11 @@ export interface ClearanceApplication {
   requested_qty: number;
   approved_qty: number | null;
   sold_qty: string | number;
+  /** Read-only observed MART totals for the displayed clearance plan window. */
+  plan_start_date_la?: string | null;
+  plan_sales_through_la?: string | null;
+  plan_sold_qty?: number | null;
+  plan_sales_amount_usd?: number | null;
   reason: string;
   note: string;
   methods_json: string[];
@@ -102,13 +108,13 @@ export interface ApplicationDetail {
 }
 
 const json = (data: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(data) });
-export async function listClearanceListings(keyword = "", page = 1, riskOnly = true, pageSize = 50, filters: ClearanceMultiFilters = {}): Promise<ClearanceList> {
+export async function listClearanceListings(keyword = "", page = 1, riskOnly = true, pageSize = 50, filters: ClearanceMultiFilters = {}, signal?: AbortSignal): Promise<ClearanceList> {
   void riskOnly; // Risk admission remains disabled during rule validation.
   const params = new URLSearchParams({ keyword, page: String(page), page_size: String(pageSize), risk_only: "false", exact_total: "true" });
   for (const ref of filters.store_refs ?? []) params.append("store_refs", ref);
   for (const name of filters.owner_names ?? []) params.append("owner_names", name);
   for (const level of filters.risk_levels ?? []) params.append("risk_levels", level);
-  return (await backendRequest<ClearanceList, null>(`/api/clearance/listings?${params}`)).data;
+  return (await backendRequest<ClearanceList, null>(`/api/clearance/listings?${params}`, { signal })).data;
 }
 export async function getClearanceListing(listing: Pick<ClearanceListing,"source_account_ref"|"store_id"|"item_id">) {
   const params = new URLSearchParams({ source_account_ref: listing.source_account_ref, store_id: listing.store_id, item_id: listing.item_id });
@@ -126,209 +132,11 @@ export async function getClearanceRuleHistory() {
   return (await backendRequest<{items: Array<{version:number;changed_by:string;change_reason:string;changed_at:string|null} >}, null>("/api/clearance/rules/history")).data.items;
 }
 
-// CLEARANCE_MISSING_IDENTITY_V44: read only missing current product facts from
-// the authorized primary Listing API. Never persist or modify application data.
-const v44IdentityCache = new Map<string,{at:number;value:Promise<ClearanceListing|null>}>();
-const v44ItemId = (row: ClearanceApplication): string => {
-  const parts = row.item_id.split("::");
-  return parts.length===3 && parts[0]===row.source_account_ref &&
-    parts[1]===row.store_id && /^\d+$/.test(parts[2]) ? parts[2] : row.item_id;
-};
-async function v44GetListing(row: ClearanceApplication): Promise<ClearanceListing|null> {
-  const itemId=v44ItemId(row);
-  const key=JSON.stringify([row.source_account_ref,row.store_id,itemId]);
-  const cached=v44IdentityCache.get(key);
-  if(cached && Date.now()-cached.at<10000)return cached.value;
-  const value=getClearanceListing({source_account_ref:row.source_account_ref,
-    store_id:row.store_id,item_id:itemId}).then(live=>{
-      if(live.source_account_ref!==row.source_account_ref || live.store_id!==row.store_id || live.item_id!==itemId)
-        throw new Error("Listing identity mismatch");
-      return live;
-    }).catch(async error=>{
-      // Historical applications may exist without a matching detail endpoint
-      // record. Search the existing read-only WFS listing index by Item ID,
-      // then require the EXACT account, store and Item ID before using facts.
-      // Never match on SKU alone or borrow another store's product record.
-      try {
-        const candidates=await listClearanceListings(itemId,1,false,50);
-        const exact=candidates.items.filter(live=>
-          live.source_account_ref===row.source_account_ref &&
-          live.store_id===row.store_id && live.item_id===itemId);
-        if(exact.length===1)return exact[0];
-        if(exact.length>1)throw new Error("Ambiguous exact Listing identity");
-      }catch(fallbackError){
-        console.warn("Clearance historical Listing lookup failed",{
-          item_id:itemId,error:fallbackError});
-      }
-      v44IdentityCache.delete(key);
-      console.warn("Clearance Listing facts unavailable after exact lookup",{
-        item_id:itemId,error});
-      return null;
-    });
-  v44IdentityCache.set(key,{at:Date.now(),value});
-  return value;
-}
-// CLEARANCE_MANAGEMENT_FIELDS_V50_V52: only read authoritative data. Cost is
-// verified purchase + first-leg unit inventory cost × the task quantity.
-// Never use full sale unit cost (which includes selling expenses).
-const v50FiniteNumber = (value: unknown): number | null => {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-};
-const v50ValidDate = (value: unknown): string | null => {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value ? value : null;
-};
-const v50CompletionCache = new Map<string,{at:number;value:Promise<string|null>}>();
-async function v50ReadCompletionDate(row: ClearanceApplication): Promise<string|null> {
-  const own = v50ValidDate(row.planned_completion_date);
-  if (own) return own;
-  const cached = v50CompletionCache.get(row.id);
-  if (cached && Date.now() - cached.at < 30000) return cached.value;
-  const value = getClearanceApplication(row.id).then(detail => {
-    // The application detail and its submission event are read-only sources.
-    // No fallback to approval dates, current date, or arbitrary note text.
-    const recorded = v50ValidDate(detail.application?.planned_completion_date);
-    if (recorded) return recorded;
-    for (const event of detail.events ?? []) {
-      const saved = v50ValidDate(event.detail_json?.["planned_completion_date"]);
-      if (saved) return saved;
-    }
-    return null;
-  }).catch(() => null);
-  v50CompletionCache.set(row.id,{at:Date.now(),value});
-  return value;
-}
-function v50CurrentTargetCost(row: ClearanceApplication, live: ClearanceListing|null): number|null {
-  if (!live) return null;
-  const qty = v50FiniteNumber(row.approved_qty ?? row.requested_qty);
-  if (qty === null || qty <= 0 || !Number.isInteger(qty)) return null;
-  // Use inventory cost only: purchase + first leg. The 0076 fallback's
-  // capital_at_cost_usd includes full-sale fees and MUST NOT be used here.
-  let unit = v50FiniteNumber(live.metrics?.["unit_inventory_cost_usd"]);
-  if (unit === null) unit = v50FiniteNumber(live.metrics?.["inventory_unit_cost_usd"]);
-  if (unit === null) {
-    const purchase = v50FiniteNumber(live.metrics?.["purchase_unit_cost_usd"]);
-    const firstLeg = v50FiniteNumber(live.metrics?.["first_leg_unit_cost_usd"]);
-    if (purchase !== null && firstLeg !== null) unit = purchase + firstLeg;
-  }
-  if (unit === null) {
-    const capital = v50FiniteNumber(live.metrics?.["capital_purchase_first_leg_usd"]);
-    const available = v50FiniteNumber(live.available);
-    if (capital !== null && capital >= 0 && available !== null && available > 0) {
-      unit = capital / available;
-    }
-  }
-  if (unit === null || unit < 0) return null;
-  const amount = unit * qty;
-  return Number.isFinite(amount) ? Math.round((amount + Number.EPSILON) * 100) / 100 : null;
-}
-async function v44EnrichApplications(items: ClearanceApplication[]):Promise<ClearanceApplication[]> {
-  // V48 presentation source is the application list. Never overwrite
-  // persisted title, owner, SKU, store, item or task status with Listing data.
-  const result = items.map(row => ({ ...row, item_id: v44ItemId(row) }));
-  let cursor = 0;
-  const worker = async () => {
-    while (cursor < result.length) {
-      const index = cursor++;
-      const row = result[index];
-      if (!row.id || !row.source_account_ref || !row.store_id || !row.item_id) continue;
-      const [live, deadline] = await Promise.all([
-        v44GetListing(row),
-        v50ReadCompletionDate(row),
-      ]);
-      const cost = v50CurrentTargetCost(row, live);
-
-      const productName = live?.product_name?.trim() || "";
-      const localName = live?.local_name?.trim() || "";
-      const englishTitle = live?.title?.trim() || "";
-
-      const displayName = productName ||
-        (localName && localName !== englishTitle ? localName : "");
-
-      const displayOwner = live?.owner_name?.trim() || "";
-
-      const stock = v50FiniteNumber(live?.available);
-
-      const days = v50FiniteNumber(
-        live?.metrics?.["listing_days"]
-      );
-
-      const unitCost =
-        v50FiniteNumber(
-          live?.metrics?.["inventory_unit_cost_usd"]
-        ) ??
-        v50FiniteNumber(
-          live?.metrics?.["unit_inventory_cost_usd"]
-        );
-
-      const recordedCapital = v50FiniteNumber(
-        live?.metrics?.["capital_purchase_first_leg_usd"]
-      );
-
-      const inventoryCapital =
-        recordedCapital !== null && recordedCapital >= 0
-          ? recordedCapital
-          : unitCost !== null &&
-            unitCost >= 0 &&
-            stock !== null &&
-            stock >= 0
-            ? Math.round(
-                (unitCost * stock + Number.EPSILON) * 100
-              ) / 100
-            : null;
-
-      result[index] = {
-        ...row,
-
-        ...(displayName
-          ? {display_product_name: displayName}
-          : {}),
-
-        ...(displayOwner
-          ? {display_owner_name: displayOwner}
-          : {}),
-
-        ...(live
-          ? {current_risk: live.risk}
-          : {}),
-
-        ...(stock !== null && stock >= 0
-          ? {wfs_available_quantity: stock}
-          : {}),
-
-        ...(days !== null && days >= 0
-          ? {listing_days: days}
-          : {}),
-
-        ...(inventoryCapital !== null
-          ? {inventory_cost_usd: inventoryCapital}
-          : {}),
-
-        ...(cost !== null
-          ? {v44_current_target_cost_usd: cost}
-          : {}),
-
-        ...(deadline
-          ? {planned_completion_date: deadline}
-          : {}),
-      };
-    }
-  };
-  await Promise.all(Array.from({length:Math.min(4,result.length)},() => worker()));
-  return result;
-}
-
-export async function listClearanceApplications(page = 1, pageSize = 50, status?: string): Promise<ApplicationList> {
-  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+// The server returns batch-enriched application facts; never fetch each Item here.
+export async function listClearanceApplications(page = 1, pageSize = 50, status?: string, includeLive = true, signal?: AbortSignal): Promise<ApplicationList> {
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize), include_live: String(includeLive) });
   if (status) params.set("status", status);
-  const fresh = /* CLEARANCE_APPLICATIONS_NO_CACHE_V36 */ (await backendRequest<ApplicationList, null>(`/api/clearance/applications?${params}`, { cache: "no-store" })).data;
-  return {...fresh,items:await v44EnrichApplications(fresh.items)};
+  return (await backendRequest<ApplicationList, null>(`/api/clearance/applications?${params}`, { cache: "no-store", signal })).data;
 }
 export async function getClearanceApplication(id: string) {
   return (await backendRequest<ApplicationDetail, null>(`/api/clearance/applications/${encodeURIComponent(id)}`)).data;
@@ -365,6 +173,7 @@ export async function fetchClearanceApprovals(filters: ApprovalFilters): Promise
       title: row.display_product_name || row.title || row.item_id,
       source_account_ref: row.source_account_ref,
       applicant_id: row.applicant_ref,
+      applicant_name: row.applicant_name ?? null,
       status: row.status === "pending" ? "submitted" : row.status === "rejected" ? "rejected" : row.status === "running" || row.status === "done" ? "approved" : "withdrawn",
       risk_level: row.risk_at_submission,
       amount: null, currency_code: null, submitted_at: row.submitted_at,

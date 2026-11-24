@@ -90,6 +90,20 @@ def _snapshot_saved_fields(row: Mapping[str, Any], snapshot: object) -> dict:
     ):
         return result
     result["planned_completion_date"] = _saved_date(snapshot.get("planned_completion_date"))
+    title = snapshot.get("title")
+    for field in ("product_name", "local_name"):
+        candidate = snapshot.get(field)
+        if (
+            isinstance(candidate, str)
+            and candidate.strip()
+            and (
+                field == "product_name"
+                or not isinstance(title, str)
+                or candidate.strip() != title.strip()
+            )
+        ):
+            result["display_product_name"] = candidate.strip()
+            break
     metrics = snapshot.get("metrics")
     if not isinstance(metrics, dict):
         return result
@@ -446,12 +460,21 @@ def recalculate_all(
 
 
 def one_listing(
-    session: Session, *, account: str, store: str, item: str, accounts: frozenset[str]
+    session: Session,
+    *,
+    account: str,
+    store: str,
+    item: str,
+    accounts: frozenset[str],
+    saved_rules: tuple[int, ClearanceRules] | None = None,
 ) -> dict:
     scoped(account, accounts)
     listing = find_listing(session, account, store, item)
     if listing is None:
         raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
+    if saved_rules is not None:
+        version, rules = saved_rules
+        return read_business_snapshot(session, listing, rules=rules, rule_version=version)
     # Only the new clearance tables are optional during the read-only preview.
     # Unrelated SQL errors still propagate; no fallback on database errors.
     if not risk_read_model_ready(session):
@@ -473,6 +496,7 @@ def search_listings(
     store_refs: tuple[str, ...] = (),
     owner_names: tuple[str, ...] = (),
     risk_levels: tuple[str, ...] = (),
+    saved_rules: tuple[int, ClearanceRules] | None = None,
 ) -> dict:
     """Use the versioned risk read model for indexed server-side paging.
 
@@ -485,7 +509,7 @@ def search_listings(
     if not risk_only:
         from .filters_v23 import search_risk_filtered
 
-        saved = persisted_rule_version(session)
+        saved = saved_rules if saved_rules is not None else persisted_rule_version(session)
         read_version, read_rules = saved if saved is not None else (0, ClearanceRules())
         return search_risk_filtered(
             session,

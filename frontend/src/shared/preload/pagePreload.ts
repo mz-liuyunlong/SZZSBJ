@@ -12,7 +12,6 @@ import {
 } from "@/pages/products/productManagementApi";
 import { preloadListingManagementRows } from "@/pages/products/listingManagementApi";
 import { preloadDailySalesRows } from "@/pages/sales/dailySalesApi";
-import { preloadOrderProfitSourceRecords } from "@/pages/sales/orderProfitApi";
 
 type BrowserIdleApi = typeof globalThis & {
   requestIdleCallback?: (
@@ -45,11 +44,6 @@ const preloadDefaultDailySales = () => {
   preloadDailySalesRows({ startDate: day, endDate: day, pageSize: 50 });
 };
 
-const preloadDefaultOrderProfit = () => {
-  const day = previousCompletedDay();
-  preloadOrderProfitSourceRecords({ startDate: day, endDate: day, pageSize: 50 });
-};
-
 const preloadDefaultListingManagement = () => {
   preloadListingManagementRows({ pageSize: 50 });
 };
@@ -68,7 +62,6 @@ export const preloadPageData = (path: string) => {
   }
 
   if (path === "/sales/order-profit") {
-    preloadDefaultOrderProfit();
     return;
   }
 
@@ -86,14 +79,11 @@ export const preloadNavigationGroupData = (groupKey: string) => {
   idle(() => {
     if (groupKey === "sales") {
       preloadDefaultDailySales();
-      preloadDefaultOrderProfit();
-      return;
+        return;
     }
 
-    if (groupKey === "products") {
-      preloadDefaultProductManagement();
-      preloadDefaultListingManagement();
-    }
+    // Product pages preload only on explicit page navigation.
+    // Avoid competing sibling-page requests during navigation.
   });
 };
 

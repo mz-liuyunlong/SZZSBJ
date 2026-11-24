@@ -14,6 +14,7 @@ from app.core.api import SuccessEnvelope, success_response
 from app.core.auth import Principal, require_principal
 from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
+from app.modules.approvals.applicant_names import attach_clearance_names
 from app.modules.integration_sync.dependencies import require_source_account_scope
 
 from . import hybrid_v28, service
@@ -144,6 +145,13 @@ def filter_options(request: Request, session: db_session, principal: view, accou
     return success_response(request, data=list_filter_options(session, accounts), meta=None)
 
 
+def _read_local_rules(session: Session) -> tuple[int, ClearanceRules] | None:
+    if not is_local():
+        return None
+    with storage_session(session) as store:
+        return service.persisted_rule_version(store) or (0, ClearanceRules())
+
+
 @router.get("/listings", response_model=SuccessEnvelope[dict[str, Any], None])
 def listings(
     request: Request,
@@ -174,6 +182,7 @@ def listings(
             store_refs=tuple(store_refs),
             owner_names=tuple(owner_names),
             risk_levels=tuple(risk_levels),
+            saved_rules=_read_local_rules(session) if not risk_only else None,
         ),
         meta=None,
     )
@@ -192,7 +201,12 @@ def listing_detail(
     return success_response(
         request,
         data=service.one_listing(
-            session, account=source_account_ref, store=store_id, item=item_id, accounts=accounts
+            session,
+            account=source_account_ref,
+            store=store_id,
+            item=item_id,
+            accounts=accounts,
+            saved_rules=_read_local_rules(session),
         ),
         meta=None,
     )
@@ -238,23 +252,27 @@ def application_list(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
     status: str | None = None,
+    include_live: bool = True,
 ):
     reviewer = has_permission(principal, "action:products:clearance-center:review")
     with storage_session(session) as write:
-        return success_response(
-            request,
-            data=hybrid_v28.list_applications(
-                session,
-                write,
-                accounts,
-                principal.user_id,
-                reviewer=reviewer,
-                page=page,
-                page_size=page_size,
-                status=status,
-            ),
-            meta=None,
+        data = hybrid_v28.list_applications(
+            session,
+            write,
+            accounts,
+            principal.user_id,
+            reviewer=reviewer,
+            page=page,
+            page_size=page_size,
+            status=status,
         )
+        saved = service.persisted_rule_version(write) if include_live and data["items"] else None
+    if include_live and data["items"]:
+        from .batch_read import enrich_application_rows
+
+        version, rules = saved or (0, ClearanceRules())
+        data["items"] = enrich_application_rows(session, data["items"], accounts, rules, version)
+    return success_response(request, data=attach_clearance_names(session, data), meta=None)
 
 
 @router.get("/applications/{application_id}", response_model=SuccessEnvelope[dict[str, Any], None])
@@ -269,8 +287,11 @@ def application_detail(
     with storage_session(session) as write:
         return success_response(
             request,
-            data=hybrid_v28.application_detail(
-                session, write, application_id, accounts, principal.user_id, reviewer=reviewer
+            data=attach_clearance_names(
+                session,
+                hybrid_v28.application_detail(
+                    session, write, application_id, accounts, principal.user_id, reviewer=reviewer
+                ),
             ),
             meta=None,
         )

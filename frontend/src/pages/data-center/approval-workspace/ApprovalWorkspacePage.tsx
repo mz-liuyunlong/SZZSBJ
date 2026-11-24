@@ -34,7 +34,8 @@ import { formatMoney } from "@/shared/formatters/money";
 
 import ApprovalDetailDrawer from "./components/ApprovalDetailDrawer";
 import ClearanceApprovalDetailDrawer from "./components/ClearanceApprovalDetailDrawer";
-import BulkApprovalModal from "./components/BulkApprovalModal";
+import BulkApprovalModal from "./components/UnifiedBulkApprovalModal";
+import { canBatchApprove } from "./batchApproval";
 import type { ApprovalFilters, ApprovalItem, ApprovalTab } from "./approvalTypes";
 import { approvalColumnFields, approvalTabs, riskNames, statusNames } from "./approvalTypes";
 import { parseFollowLog } from "./followLog";
@@ -180,11 +181,9 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
  const [reloadToken, setReloadToken] = useState(0);
  const [selectedBulkKeys, setSelectedBulkKeys] = useState<React.Key[]>([]);
  const [bulkRows, setBulkRows] = useState<ApprovalItem[]>([]);
- const selectedRows = rows.filter((row) => selectedBulkKeys.includes(row.id));
- const bulkEligible = selectedRows.length > 0 && selectedRows.every((row) =>
-  row.approval_type === "operations_plan_ack" && row.risk_level === "low" &&
-  row.status === "submitted" && row.can_review && !row.case_review
- );
+ const canSelectBulk = (row: ApprovalItem) => canBatchApprove(row, permissions);
+ const selectedRows = rows.filter(row => selectedBulkKeys.includes(row.id) && !isDemoApproval(row));
+ const bulkEligible = !loading && !loadError && selectedRows.length > 0 && selectedRows.every(canSelectBulk);
  const columnKeys = approvalBusinessByKey[business].columns;
  const [widths, setWidths] = useState(defaultWidths);
  const countSignature = [
@@ -341,7 +340,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
    },
   risk_level: { key:"risk_level", render:(_,r) => <span className={`approval-list__risk approval-list__risk--${r.risk_level}`}><span className="approval-list__risk-dot"/>{riskNames[r.risk_level]}</span> },
    amount: { key:"amount", render:(_,r) => <div className="approval-list__money"><strong>{r.amount === null ? "—" : formatMoney(r.amount,{currency:r.currency_code || "USD"})}</strong><span>{r.amount === null ? "非金额事项" : "关联金额"}</span></div> },
-   applicant_id: { key:"applicant_id", render:(_,r) => <div className="approval-list__applicant"><span>{r.applicant_id || "申请人待核实"}</span></div> },
+   applicant_id: { key:"applicant_id", render:(_,r) => <div className="approval-list__applicant"><span>{r.applicant_name || "申请人待核实"}</span></div> },
    submitted_at: { key:"submitted_at", render:(_,r) => <div className="approval-list__time"><span>{r.submitted_at ? new Date(r.submitted_at).toLocaleString("zh-CN", {month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"}</span></div> },
    status: { key:"status", render:(_,r) => <StatusTag label={statusNames[r.status]} semantic={statusTone[r.status]}/> },
    action: { key:"action", render:(_,r) => <div className="approval-list__actions"><Button size="small" type="text" onClick={() => setSelected(r)}>详情 <ArrowRightOutlined/></Button>{filters.tab === "pending" && r.can_review && (r.approval_type === "clearance_request" ? r.can_review : r.approval_type === "wfs_case_abandon" ? hasPermission(permissions,"action:warehouse:wfs-fee-alert:archive-review") : (hasPermission(permissions,"*") || hasPermission(permissions,"internal:approval:administrator"))) && <><Button size="small" onClick={() => {
@@ -374,10 +373,10 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   <div className="approval-workspace">
    <div className="approval-workspace__heading">
     <div><h3>审批工作台</h3><p>统一处理业务审批 · 所有审批结论均留痕</p></div>
-    <Space>{selectedBulkKeys.length>0 && <Button type="primary" onClick={() => {
-      if (!bulkEligible) { void messageApi.warning("所选审批包含不支持批量处理的事项；WFS 请逐条审核"); return; }
+    <Space>{selectedRows.length>0 && <Button type="primary" onClick={() => {
+      if (!bulkEligible) { void messageApi.warning("所选事项含未接入、非待审批或无权限记录，请重新选择"); return; }
       setBulkRows(selectedRows);
-     }}>批量审批（{selectedBulkKeys.length}）</Button>}</Space>
+     }}>批量审批（{selectedRows.length}）</Button>}</Space>
    </div>
    <Card className="approval-workspace__toolbar-card approval-workspace__v3-toolbar" size="small">
     <Segmented
@@ -441,8 +440,12 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
         }),
 
        columnWidth:48,
-       selectedRowKeys:selectedBulkKeys,
-       onChange:(keys)=>setSelectedBulkKeys(keys),
+       selectedRowKeys:selectedRows.map(row=>row.id),
+       onChange:(keys)=>setSelectedBulkKeys(
+          rows.filter(row =>
+            keys.includes(row.id) && !isDemoApproval(row)
+          ).map(row=>row.id)
+        ),
        preserveSelectedRowKeys:false,
       }}
       search={false} options={false} toolBarRender={false} bordered={false} size="small"
@@ -455,7 +458,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
     }
    </ReportTableShell>
   </div>
-  <BulkApprovalModal rows={bulkRows} onCancel={() => setBulkRows([])}
+  <BulkApprovalModal permissions={permissions} rows={bulkRows} onCancel={() => setBulkRows([])}
    onUpdated={() => {setSelectedBulkKeys([]);reload();}}/>
   <DemoApprovalDrawer
     selected={selected && (isDemoApproval(selected) || selected.approval_type === "clearance_request" || selected.approval_type === "new_product_purchase") ? selected : undefined}

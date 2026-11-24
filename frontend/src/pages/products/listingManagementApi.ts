@@ -1,3 +1,4 @@
+import { encodeListingSorts, type ListingSort } from "@/pages/products/listingManagementSort";
 import { backendDownload, backendRequest } from "@/api/backendApi";
 import { getCachedResource, preloadCachedResource, stableCacheKey } from "@/shared/preload/resourceCache";
 import type { ReportFilterOption } from "@/shared/report-filters";
@@ -70,6 +71,7 @@ interface BackendListingSummaryData {
   total: number;
   online: number;
   buybox_exception: number;
+  listing_exception?: number;
   rating_warning: number;
   resold_warning: number;
   strike_price_exception: number;
@@ -91,6 +93,9 @@ interface BackendListingFilterOptionsData {
   product_types: ReportFilterOption[];
   tags?: ReportFilterOption[];
   archive_statuses?: ReportFilterOption[];
+  product_tags?: ReportFilterOption[];
+  lifecycles?: ReportFilterOption[];
+  grades?: ReportFilterOption[];
 }
 
 interface BackendListingTag {
@@ -170,6 +175,7 @@ export interface ListingManagementSummary {
   total: number;
   online: number;
   buyboxException: number;
+  listingException?: number;
   ratingWarning: number;
   resoldWarning: number;
   strikePriceException: number;
@@ -181,18 +187,27 @@ export interface ListingManagementFilterOptions {
   productTypes: ReportFilterOption[];
   tags: ReportFilterOption[];
   archiveStatuses?: ReportFilterOption[];
+  productTags?: ReportFilterOption[];
+  lifecycles?: ReportFilterOption[];
+  grades?: ReportFilterOption[];
 }
 
 export interface ListingManagementParams {
+  sorts?: readonly ListingSort[];
   stores?: string[];
   owners?: string[];
   productTypes?: string[];
   productStatuses?: string[];
   tagValues?: string[];
+  productTagValues?: string[];
+  customTagValues?: string[];
+  lifecycleValues?: string[];
+  gradeValues?: string[];
   archiveStatuses?: string[];
   searchType?: "sku" | "msku" | "productId" | "productName";
   keyword?: string;
   batchValues?: string[];
+  exactFilters?: Record<string, string[]>;
   summaryFilter?: string;
   page?: number;
   pageSize?: number;
@@ -222,37 +237,23 @@ const toCheckedText = (value?: string | null): string => {
   }).format(date);
 };
 
+// Operational status is the union of three confirmed monitor anomalies.
 const normalizeListingStatus = (
-  value: string | null,
   cartValue: string | null,
+  hasStrikethrough: boolean | null,
+  isHijacked: boolean | null,
+  wfsAvailable: number,
 ): string => {
+  if (!(wfsAvailable > 0)) return "—";
   const cart = normalizeBuyBoxStatus(cartValue);
-  if ([
-    "购物车丢失",
-    "未拥有购物车",
-    "未找到购物车",
-    "缺货",
-    "不可购买",
+  if (hasStrikethrough === false || isHijacked === true || [
+    "购物车丢失", "未拥有购物车", "未找到购物车", "不可购买",
   ].includes(cart)) {
     return "异常";
   }
-
-  const status = value?.trim().toUpperCase() ?? "";
-  if ([
-    "OFFLINE", "UNPUBLISHED", "INACTIVE",
-    "DELISTED", "离线", "下架", "已下架", "异常",
-  ].includes(status)) {
-    return "异常";
-  }
-
-  if ([
-    "ONLINE", "PUBLISHED", "PUBLISH",
-    "在售", "在线", "正常",
-  ].includes(status)) {
-    return "正常";
-  }
-
-  if (cart === "正常" || cart === "拥有") {
+  if (hasStrikethrough === true && isHijacked === false && [
+    "正常", "拥有", "缺货",
+  ].includes(cart)) {
     return "正常";
   }
   return "待确认";
@@ -309,7 +310,12 @@ export const toListingRow = (item: BackendListingItem): ListingManagementRow => 
   sales90Days: numberValue(item.sales_30d),
   adSpend30Days: numberValue(item.ad_spend_30d_amount),
   disabledReason: item.disabled_reason ?? "",
-  listingStatus: normalizeListingStatus(item.listing_status, item.buybox_status),
+  listingStatus: normalizeListingStatus(
+    item.buybox_status,
+    item.monitor_has_strikethrough ?? null,
+    item.is_hijacked ?? null,
+    numberValue(item.wfs_available_quantity),
+  ),
   buyBoxStatus: normalizeBuyBoxStatus(item.buybox_status),
   walmartSeller: item.walmart_seller ?? "待确认",
   resold: item.is_hijacked == null ? "待检测" : item.is_hijacked ? "是" : "否",
@@ -352,12 +358,18 @@ const appendMultiParam = (
 };
 
 const appendListingFilters = (search: URLSearchParams, params: ListingManagementParams) => {
+  const exact = Object.fromEntries(Object.entries(params.exactFilters ?? {}).filter(([, values]) => values.length));
+  if (Object.keys(exact).length) search.set("exact_filters", JSON.stringify(exact));
   appendMultiParam(search, "store_id", params.stores);
   appendMultiParam(search, "owner_ref", params.owners);
   appendMultiParam(search, "product_type", params.productTypes);
   appendMultiParam(search, "status", params.productStatuses);
   appendMultiParam(search, "tag", params.tagValues);
   appendMultiParam(search, "archive_status", params.archiveStatuses);
+  if (params.productTagValues?.length) search.set("product_tag", JSON.stringify(params.productTagValues));
+  if (params.customTagValues?.length) search.set("custom_tag", JSON.stringify(params.customTagValues));
+  appendMultiParam(search, "lifecycle", params.lifecycleValues);
+  appendMultiParam(search, "grade", params.gradeValues);
 
   if (params.summaryFilter && params.summaryFilter !== "total") {
     search.set("summary_filter", params.summaryFilter);
@@ -380,6 +392,53 @@ const listingBatchValues = (params: ListingManagementParams): string[] =>
 const listingBatchBody = (search: URLSearchParams, batchValues: string[], columns: string[] = []) =>
   JSON.stringify({ query: Object.fromEntries(search.entries()), batch_values: batchValues, columns });
 
+export async function fetchListingExactFacetOptions(
+  field: string,
+  params: ListingManagementParams,
+  offset = 0,
+): Promise<{ options: ReportFilterOption[]; has_more: boolean }> {
+  const search = new URLSearchParams();
+  appendListingFilters(search, params);
+  const envelope = await backendRequest<{ options: ReportFilterOption[]; has_more: boolean }>(
+    "/api/listings/walmart/facet-options",
+    { method: "POST", body: JSON.stringify({
+      query: Object.fromEntries(search.entries()), batch_values: listingBatchValues(params),
+      field, offset, limit: 1000,
+    }) },
+  );
+  return envelope.data;
+}
+
+export async function fetchListingExactFacetBatchOptions(
+  fields: Record<string, number>,
+  params: ListingManagementParams,
+  signal?: AbortSignal,
+): Promise<Record<string, { options: ReportFilterOption[]; has_more: boolean }>> {
+  const search = new URLSearchParams();
+  appendListingFilters(search, params);
+  const envelope = await backendRequest<{
+    items: Record<string, { options: ReportFilterOption[]; has_more: boolean }>;
+  }>("/api/listings/walmart/facet-options/batch", {
+    method: "POST", signal, body: JSON.stringify({
+      query: Object.fromEntries(search.entries()), batch_values: listingBatchValues(params),
+      fields, complete: true, compact_labels: true,
+    }),
+  });
+  const items = envelope.data.items;
+  // The server may omit an identical long label in opt-in compact mode.
+  // Reconstruct the original display text, never change the selection token.
+  for (const page of Object.values(items)) {
+    for (const option of page.options) {
+      if (option.label === "" && option.value.startsWith("v:")) {
+        const label: unknown = JSON.parse(option.value.slice(2));
+        if (typeof label !== "string") throw new Error("invalid compact facet label");
+        option.label = label;
+      }
+    }
+  }
+  return items;
+}
+
 async function fetchListingManagementRowsFromApi(
   params: ListingManagementParams = {},
 ): Promise<ListingManagementApiResult> {
@@ -390,11 +449,13 @@ async function fetchListingManagementRowsFromApi(
   search.set("page", String(page));
   search.set("page_size", String(pageSize));
   appendListingFilters(search, params);
+  const sortBy = encodeListingSorts(params.sorts);
+  if (sortBy) search.set("sort_by", sortBy);
 
   const batchValues = listingBatchValues(params);
-  const envelope = batchValues.length > 0
+  const envelope = batchValues.length > 0 || search.has("exact_filters")
     ? await backendRequest<BackendListingData, ListingManagementApiMeta>(
-      "/api/listings/walmart/batch-search",
+      search.has("exact_filters") ? "/api/listings/walmart/query" : "/api/listings/walmart/batch-search",
       { method: "POST", body: listingBatchBody(search, batchValues) },
     )
     : await backendRequest<BackendListingData, ListingManagementApiMeta>(
@@ -414,9 +475,9 @@ async function fetchListingManagementSummaryFromApi(
   appendListingFilters(search, { ...params, summaryFilter: "total" });
 
   const batchValues = listingBatchValues(params);
-  const envelope = batchValues.length > 0
+  const envelope = batchValues.length > 0 || search.has("exact_filters")
     ? await backendRequest<BackendListingSummaryData>(
-      "/api/listings/walmart/summary/batch-search",
+      search.has("exact_filters") ? "/api/listings/walmart/summary/query" : "/api/listings/walmart/summary/batch-search",
       { method: "POST", body: listingBatchBody(search, batchValues) },
     )
     : await backendRequest<BackendListingSummaryData>(
@@ -427,6 +488,7 @@ async function fetchListingManagementSummaryFromApi(
     total: envelope.data.total,
     online: envelope.data.online,
     buyboxException: envelope.data.buybox_exception,
+    listingException: envelope.data.listing_exception,
     ratingWarning: envelope.data.rating_warning,
     resoldWarning: envelope.data.resold_warning,
     strikePriceException: envelope.data.strike_price_exception,
@@ -439,10 +501,12 @@ export async function exportListingManagementRows(
 ): Promise<void> {
   const search = new URLSearchParams();
   appendListingFilters(search, params);
+  const sortBy = encodeListingSorts(params.sorts);
+  if (sortBy) search.set("sort_by", sortBy);
   const batchValues = listingBatchValues(params);
-  if (batchValues.length > 0) {
+  if (batchValues.length > 0 || search.has("exact_filters")) {
     await backendDownload(
-      "/api/listings/walmart/export/batch-search",
+      search.has("exact_filters") ? "/api/listings/walmart/export/query" : "/api/listings/walmart/export/batch-search",
       "listing-management-export.csv",
       { method: "POST", body: listingBatchBody(search, batchValues, columns ?? []) },
     );
@@ -468,6 +532,9 @@ async function fetchListingManagementFilterOptionsFromApi(): Promise<ListingMana
     productTypes: envelope.data.product_types,
     tags: envelope.data.tags ?? [],
     archiveStatuses: envelope.data.archive_statuses ?? [],
+    productTags: envelope.data.product_tags ?? [],
+    lifecycles: envelope.data.lifecycles ?? [],
+    grades: envelope.data.grades ?? [],
   };
 }
 
@@ -720,7 +787,7 @@ export function applyListingEvaluationPreview(
   };
 }
 
-const cacheKey = (...parts: unknown[]) => "listing-management:" + stableCacheKey(parts);
+const cacheKey = (...parts: unknown[]) => "listing-management:exact-v1:" + stableCacheKey(parts);
 
 export function fetchListingManagementRows(
   ...args: Parameters<typeof fetchListingManagementRowsFromApi>

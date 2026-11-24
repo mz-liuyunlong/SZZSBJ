@@ -1,7 +1,9 @@
+import { reportTotalValue, type ReportTableTotals } from "@/pages/sales/reportTotals";
+import { dailySalesSortFields, nextSalesReportSort, type SalesReportSort } from "@/pages/sales/reportSort";
 /** Dense daily-sales report table. */
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import { Button, Empty, Table, Tooltip } from "antd";
-import type { Key } from "react";
+import type { Key, MouseEvent as SortMouseEvent, KeyboardEvent as SortKeyboardEvent } from "react";
 import ReportTableShell, {
   ReportTableSelectionBar,
 } from "@/components/report-table/ReportTableShell";
@@ -17,7 +19,6 @@ import {
   TrendPreviewCell,
 } from "@/components/report-table/cells";
 import {
-  convertCnyUnitTotalOrUsdSourceValue,
   convertUsdSourceValue,
   dynamicCurrencyTitle,
   renderCnySourceMoney,
@@ -34,9 +35,11 @@ import {
 } from "@/pages/sales/dailySalesTypes";
 
 interface DailySalesTableProps {
+  tableTotals?: ReportTableTotals | null;
+  sort?: SalesReportSort | null;
+  onSortChange?: (sort: SalesReportSort | null) => void;
   rows: DailySalesRow[];
   total?: number;
-  wfsAvailableInventoryTotal?: number | null;
   loading?: boolean;
   currency: DailySalesCurrency;
   appliedColumnKeys: string[];
@@ -152,20 +155,6 @@ const roiRatio = (key: keyof DailySalesRow) =>
     return <RoiCell value={typeof value === "number" ? value / 100 : null} />;
   };
 
-const sum = (rows: DailySalesRow[], key: keyof DailySalesRow) => rows
-  .reduce((total, row) => total + Number(row[key] ?? 0), 0);
-const sumNullable = (rows: DailySalesRow[], key: keyof DailySalesRow) => (
-  rows.some((row) => row[key] == null) ? null : sum(rows, key)
-);
-const sumUsdSourceMoney = (rows: DailySalesRow[], key: keyof DailySalesRow, currency: DailySalesCurrency) => {
-  if (rows.some((row) => row[key] == null)) return null;
-  return rows.reduce((total, row) => {
-    const value = row[key];
-    const numeric = typeof value === "number" ? value : 0;
-    return total + (convertUsdSourceValue(numeric, currency, dailySalesFxRate(row)) ?? 0);
-  }, 0);
-};
-
 const numericRowValue = (row: DailySalesRow, key: keyof DailySalesRow) => {
   const value = row[key];
   return typeof value === "number" ? value : null;
@@ -195,35 +184,6 @@ const renderCostMatchedUsdMoney = (
   );
 };
 
-const sumCnyUnitTotalOrUsdSourceMoney = (
-  rows: DailySalesRow[],
-  usdTotalKey: keyof DailySalesRow,
-  cnyUnitKey: keyof DailySalesRow,
-  quantityKey: keyof DailySalesRow,
-  currency: DailySalesCurrency,
-) => {
-  let hasMissingValue = false;
-  const total = rows.reduce((currentTotal, row) => {
-    const value = convertCnyUnitTotalOrUsdSourceValue(
-      numericRowValue(row, usdTotalKey),
-      numericRowValue(row, cnyUnitKey),
-      numericRowValue(row, quantityKey),
-      currency,
-      dailySalesFxRate(row),
-    );
-
-    if (value == null) {
-      hasMissingValue = true;
-      return currentTotal;
-    }
-
-    return currentTotal + value;
-  }, 0);
-
-  return hasMissingValue ? null : total;
-};
-
-
 const totalMoneyKeys = new Set([
   "salesAmount",
   "sampleExcludedAmount",
@@ -248,121 +208,32 @@ const totalIntegerKeys = new Set([
 function TotalCell({
   columnKey,
   currency,
-  rows,
-  wfsAvailableInventoryTotal,
+  tableTotals,
 }: {
   columnKey: string;
   currency: DailySalesCurrency;
-  rows: DailySalesRow[];
-  wfsAvailableInventoryTotal?: number | null;
+  tableTotals?: ReportTableTotals | null;
 }) {
   if (columnKey === "image") return <span className="report-table-summary-label">总计</span>;
-  if (columnKey === "purchaseCost") {
-    return (
-      <MoneyCell
-        value={sumCnyUnitTotalOrUsdSourceMoney(
-          rows,
-          "purchaseCost",
-          "purchaseUnitPriceCny",
-          "costQuantity",
-          currency,
-        )}
-        currency={currency === "CNY" ? "¥" : "$"}
-      />
-    );
+  const value = reportTotalValue(tableTotals, currency, columnKey);
+  if (totalMoneyKeys.has(columnKey) || columnKey === "averagePrice") {
+    return <MoneyCell value={value} currency={currency === "CNY" ? "¥" : "$"} tone={columnKey === "orderProfit" ? "profit" : undefined} />;
   }
-  if (columnKey === "firstLegCost") {
-    return (
-      <MoneyCell
-        value={sumCnyUnitTotalOrUsdSourceMoney(
-          rows,
-          "firstLegCost",
-          "firstLegUnitPriceCny",
-          "costQuantity",
-          currency,
-        )}
-        currency={currency === "CNY" ? "¥" : "$"}
-      />
-    );
-  }
-  if (columnKey === "orderProfit") {
-    const total = sumUsdSourceMoney(rows, "orderProfit", currency);
-    return <MoneyCell value={total} currency={currency === "CNY" ? "¥" : "$"} tone="profit" />;
-  }
-  if (totalMoneyKeys.has(columnKey)) {
-    const total = sumUsdSourceMoney(rows, columnKey as keyof DailySalesRow, currency);
-    return <MoneyCell value={total} currency={currency === "CNY" ? "¥" : "$"} />;
-  }
-  if (columnKey === "wfsAvailableInventory") {
-    return (
-      <span className="report-table-metric">
-        {wfsAvailableInventoryTotal == null
-          ? "—"
-          : wfsAvailableInventoryTotal.toLocaleString("zh-CN")}
-      </span>
-    );
-  }
-
-  if (columnKey === "sampleQuantity") {
-    const states = rows.map(sampleEvidenceState);
-    if (states.includes("pending")) {
-      return (
-        <Tooltip title="合计仅包含已归属的送样数量；部分零元订单仍需在异常中心核对商品或财务数据">
-          <span className="report-table-metric">
-            {sum(rows, "sampleQuantity").toLocaleString("zh-CN")}
-          </span>
-        </Tooltip>
-      );
+  if (totalIntegerKeys.has(columnKey) || columnKey === "wfsAvailableInventory") {
+    const content = <span className="report-table-metric">{value == null ? "—" : value.toLocaleString("zh-CN")}</span>;
+    if (columnKey === "sampleQuantity" && tableTotals?.sampleEvidence === "pending") {
+      return <Tooltip title="合计仅包含已归属的送样数量；部分零元订单仍需在异常中心核对商品或财务数据">{content}</Tooltip>;
     }
-    if (states.includes("unknown")) {
-      return (
-        <Tooltip title="当前已记录的送样量合计；部分商品缺少采集证据，数值可能不完整">
-          <span className="report-table-metric">
-            {sum(rows, "sampleQuantity").toLocaleString("zh-CN")}
-          </span>
-        </Tooltip>
-      );
+    if (columnKey === "sampleQuantity" && tableTotals?.sampleEvidence === "unknown") {
+      return <Tooltip title="当前已记录的送样量合计；部分商品缺少采集证据，数值可能不完整">{content}</Tooltip>;
     }
-  }
-
-  if (totalIntegerKeys.has(columnKey)) {
-    return <span className="report-table-metric">{sum(rows, columnKey as keyof DailySalesRow).toLocaleString("zh-CN")}</span>;
-  }
-  const salesVolume = sum(rows, "salesVolume");
-  const salesAmount = sum(rows, "salesAmount");
-  const totalAdSpend = sum(rows, "totalAdSpend");
-  if (columnKey === "averagePrice") {
-    const totalSalesAmount = sumUsdSourceMoney(rows, "salesAmount", currency);
-    return (
-      <MoneyCell
-        value={salesVolume && totalSalesAmount != null ? totalSalesAmount / salesVolume : null}
-        currency={currency === "CNY" ? "¥" : "$"}
-      />
-    );
+    return content;
   }
   if (columnKey === "returnRate30Days") {
-    return salesVolume ? <PercentCell value={sum(rows, "returnCount") / salesVolume * 100} /> : null;
+    return <Tooltip title="缺少完整的30天退货量及销量分母，暂不展示全量30天退货率"><span><PercentCell value={value} /></span></Tooltip>;
   }
-  if (columnKey === "adRatio") {
-    return salesAmount ? <PercentCell value={totalAdSpend / salesAmount * 100} /> : null;
-  }
-  if (columnKey === "profitMargin") {
-    const orderProfit = sumNullable(rows, "orderProfit");
-    return salesAmount && orderProfit != null
-      ? <PercentCell value={orderProfit / salesAmount * 100} />
-      : <PercentCell value={null} />;
-  }
-  if (columnKey === "roi") {
-    const orderProfit = sumNullable(rows, "orderProfit");
-    const purchaseCost = sumNullable(rows, "purchaseCost");
-    const firstLegCost = sumNullable(rows, "firstLegCost");
-    const denominator = purchaseCost != null && firstLegCost != null
-      ? purchaseCost + firstLegCost
-      : null;
-    return orderProfit != null && denominator != null && denominator > 0
-      ? <RoiCell value={orderProfit / denominator} />
-      : <RoiCell value={null} />;
-  }
+  if (columnKey === "adRatio" || columnKey === "profitMargin") return <PercentCell value={value} />;
+  if (columnKey === "roi") return <RoiCell value={value} />;
   return null;
 }
 
@@ -476,9 +347,11 @@ render: (_, row) => (
 }
 
 function DailySalesTable({
+  tableTotals,
+  sort = null,
+  onSortChange,
   rows,
   total = rows.length,
-  wfsAvailableInventoryTotal = null,
   loading = false,
   currency,
   appliedColumnKeys,
@@ -507,11 +380,35 @@ function DailySalesTable({
     const title = columnTitle(key, configuredTitle, currency);
     const width = compactIdentityColumnWidths[key] ?? columnWidths[key] ?? (Number(column.width) || 96);
     const minWidth = Math.max(key === "image" ? 72 : 88, title.length * 14 + 28);
+    const sortField = dailySalesSortFields[key];
+    const sortable = Boolean(sortField && onSortChange);
     return [{
       ...column,
+      ...(sortable ? {
+        sorter: true,
+        sortOrder: sort && sort.field === sortField
+          ? (sort.direction === "asc" ? "ascend" as const : "descend" as const) : null,
+      } : {}),
       align: "left" as const,
       width,
-      onHeaderCell: () => ({ className: "report-table-resizable-header-cell daily-sales__resizable-header-cell" }),
+      onHeaderCell: () => ({
+        className: "report-table-resizable-header-cell daily-sales__resizable-header-cell",
+        ...(sortable ? {
+          onClickCapture: (event: SortMouseEvent<HTMLElement>) => {
+            const target = event.target;
+            if (!(target instanceof Element) || !event.currentTarget.contains(target)) return;
+            if (target.closest(".report-table-resize-handle, button, input, textarea, select, a")) return;
+            event.stopPropagation();
+            onSortChange?.(nextSalesReportSort(sort, sortField));
+          },
+          onKeyDownCapture: (event: SortKeyboardEvent<HTMLElement>) => {
+            if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            onSortChange?.(nextSalesReportSort(sort, sortField));
+          },
+        } : {}),
+      }),
       title: (
         <ResizableColumnTitle
           label={title}
@@ -553,8 +450,7 @@ function DailySalesTable({
                     <TotalCell
                       columnKey={key}
                       currency={currency}
-                      rows={rows}
-                      wfsAvailableInventoryTotal={wfsAvailableInventoryTotal}
+                      tableTotals={tableTotals}
                     />
                   </Table.Summary.Cell>
                 );

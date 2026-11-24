@@ -55,6 +55,15 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
  const savingRules=useRef(false);
  const [liveRows,setLiveRows] = useState<ClearanceProduct[]>([]);
  const requestSerial=useRef(0);
+ const listAbort=useRef<AbortController|null>(null);
+ const [primaryReady,setPrimaryReady]=useState(false);
+ const analysisDirty=useRef(false);
+ const [tab,setTab]=useState<Tab>("analysis");
+ const [analysisFilters,setAnalysisFilters]=useState<FilterState>({...blankFilters});
+ const [managementFilters,setManagementFilters]=useState<FilterState>({...blankFilters});
+ const filters=tab==="analysis"?analysisFilters:managementFilters;
+ const setFilters=tab==="analysis"?setAnalysisFilters:setManagementFilters;
+ const [applicationsLoading,setApplicationsLoading]=useState(true);
  const [loadError,setLoadError] = useState(false);
  const [loading,setLoading] = useState(true);
  const [hasMore,setHasMore] = useState(false);
@@ -67,12 +76,15 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
  ]});
  const loadLive=async (pageNumber=1,pageSize=50,keyword="", selected?:Pick<FilterState,"store"|"owner"|"risk">)=>{
   const serial=++requestSerial.current;
+  listAbort.current?.abort();
+  const controller=new AbortController();
+  listAbort.current=controller;
   setLoading(true);
   try {
    const chosen=selected??filters;
    const result:ClearanceList=await listClearanceListings(keyword,pageNumber,true,pageSize,{
      store_refs:chosen.store,owner_names:chosen.owner,risk_levels:chosen.risk,
-   });
+   },controller.signal);
    if(serial!==requestSerial.current)return;
    const rows=result.items.map(fromLiveListing);
    replaceClearancePreviewProducts(rows);
@@ -84,80 +96,86 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
    replaceClearancePreviewProducts([]);
    setLiveRows([]);setLoadError(true);
    void message.error("清货商品读取失败；不会以模拟数据替代");
-  } finally {if(serial===requestSerial.current)setLoading(false);}
+  } finally {if(serial===requestSerial.current){setLoading(false);setPrimaryReady(true);}}
  };
+ // Deferring the mount read by one event turn avoids StrictMode's discarded mount.
  useEffect(()=>{
-  let active=true;
-  void getClearanceFilterOptions().then(result=>{if(active)setFilterOptions(result);})
-    .catch(()=>{if(active)void message.warning("完整筛选选项加载失败，请检查筛选接口");});
-  return ()=>{active=false;};
+  const timer=window.setTimeout(()=>{void loadLive(1,50,"",blankFilters);},0);
+  return ()=>{window.clearTimeout(timer);requestSerial.current++;listAbort.current?.abort();};
+ // The first list request is deliberately independent of auxiliary reads.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
  },[]);
  useEffect(()=>{
-  let active=true;
-  const serial=++requestSerial.current;
-  void listClearanceListings("",1,true,50).then(result=>{
-   if(!active||serial!==requestSerial.current)return;
-   const rows=result.items.map(fromLiveListing);
-   replaceClearancePreviewProducts(rows);
-   setLiveRows(rows);setHasMore(result.has_more);setRemotePage(result.page);setRemoteSize(result.page_size);
-   setRemoteTotal(typeof result.total === "number" && ["all_wfs_stock_eligible","filtered_wfs_stock_eligible"].includes(result.total_scope ?? "") ? result.total : null);
-   setLoadError(false);
-  }).catch(()=>{
-   if(!active||serial!==requestSerial.current)return;
-   replaceClearancePreviewProducts([]);setLiveRows([]);setLoadError(true);
-   void message.error("清货商品读取失败；不会以模拟数据替代");
-  }).finally(()=>{if(active&&serial===requestSerial.current)setLoading(false);});
-  return ()=>{active=false;};
- },[]);
+  if(!primaryReady)return;
+  const controller=new AbortController();
+  const timer=window.setTimeout(()=>{
+   void getClearanceFilterOptions(controller.signal).then(setFilterOptions)
+    .catch(()=>{if(!controller.signal.aborted)void message.warning("完整筛选选项加载失败，请检查筛选接口");});
+  },0);
+  return ()=>{window.clearTimeout(timer);controller.abort();};
+ },[primaryReady]);
  const [managementApplications,setManagementApplications]=useState<ClearanceApplication[]>([]);
-
-
- // Only one application-list refresh source: avoid the old 100-row request
- // racing with the complete paginated refresh below.
- // CLEARANCE_CENTER_REFRESH_V36_1: fetch actual 55433-backed application states.
- useEffect(() => {
-   let mounted = true;
-   let requestVersion = 0;
-   const refreshClearanceApplicationsV361 = async () => {
-     const version = ++requestVersion;
-     try {
-       const allItems: Awaited<ReturnType<typeof listClearanceApplications>>["items"] = [];
-       const pageSize = 100;
-       const first = await listClearanceApplications(1, pageSize);
-       allItems.push(...first.items);
-       const total = first.total;
-       if (total > 10000) throw new Error("Clearance list exceeds the safe refresh limit");
-       const pages = Math.ceil(total / pageSize);
-       for (let page = 2; page <= pages; page += 1) {
-         const next = await listClearanceApplications(page, pageSize);
-         allItems.push(...next.items);
-       }
-       if (allItems.length !== total) {
-         throw new Error("Clearance list changed during pagination; retry to refresh");
-       }
-       if (mounted && version === requestVersion) setManagementApplications(allItems);
-     } catch (error) {
-       if (mounted && version === requestVersion) {
-         console.error("Clearance refresh failed; keeping previous data", error);
-       }
+ const applicationRefresh=useRef<(full:boolean,force?:boolean)=>void>(()=>{});
+ useEffect(()=>{
+   let mounted=true;
+   let running=false;
+   let runningFull=false;
+   let queued=false;
+   let wantsFull=false;
+   let completed:"none"|"status"|"full"="none";
+   let controller:AbortController|null=null;
+   const refresh=(full:boolean,force=false)=>{
+     if(!mounted)return;
+     if(!full&&!force&&wantsFull){
+       if(running||completed!=="none")return;
+       wantsFull=false;
      }
+     wantsFull=wantsFull||full;
+     if(running){if(force||(wantsFull&&!runningFull))queued=true;return;}
+     if(!force&&(completed==="full"||(completed==="status"&&!wantsFull)))return;
+     running=true;
+     runningFull=wantsFull;
+     const includeLive=runningFull;
+     const request=new AbortController();
+     controller=request;
+     setApplicationsLoading(true);
+     void (async()=>{
+       try{
+         const pageSize=100;
+         const first=await listClearanceApplications(1,pageSize,undefined,includeLive,request.signal);
+         const items=[...first.items];
+         if(first.total>10000)throw new Error("Clearance list exceeds the safe refresh limit");
+         for(let p=2;p<=Math.ceil(first.total/pageSize);p++){
+           if(!mounted||request.signal.aborted)return;
+           const next=await listClearanceApplications(p,pageSize,undefined,includeLive,request.signal);
+           items.push(...next.items);
+         }
+         if(items.length!==first.total)throw new Error("Clearance list changed during pagination");
+         if(mounted&&!request.signal.aborted){
+           setManagementApplications(items);
+           completed=includeLive?"full":"status";
+         }
+       }catch(error){
+         if(mounted&&!request.signal.aborted){console.error("Clearance application refresh failed",error);void message.warning("清货任务读取失败，请刷新重试");}
+       }finally{
+         running=false;
+         if(mounted){setApplicationsLoading(false);if(queued){queued=false;refresh(wantsFull,true);}}
+       }
+     })();
    };
-   const onRefreshClearanceV361 = () => { void refreshClearanceApplicationsV361(); };
-   const onVisibilityClearanceV361 = () => {
-     if (document.visibilityState === "visible") onRefreshClearanceV361();
-   };
-   window.addEventListener("szzsbj-clearance-application-updated", onRefreshClearanceV361);
-   window.addEventListener("focus", onRefreshClearanceV361);
-   document.addEventListener("visibilitychange", onVisibilityClearanceV361);
-   onRefreshClearanceV361();
-   return () => {
-     mounted = false;
-     requestVersion += 1;
-     window.removeEventListener("szzsbj-clearance-application-updated", onRefreshClearanceV361);
-     window.removeEventListener("focus", onRefreshClearanceV361);
-     document.removeEventListener("visibilitychange", onVisibilityClearanceV361);
-   };
- }, []);
+   applicationRefresh.current=refresh;
+   const onUpdated=()=>refresh(wantsFull,true);
+   window.addEventListener("szzsbj-clearance-application-updated",onUpdated);
+   return ()=>{mounted=false;controller?.abort();applicationRefresh.current=()=>{};
+     window.removeEventListener("szzsbj-clearance-application-updated",onUpdated);};
+ },[]);
+ // Initial analysis loads lightweight status; entering management upgrades once.
+ // Ordinary Tab switching and window focus never discard an already loaded list.
+ useEffect(()=>{
+   if(!primaryReady&&tab==="analysis")return;
+   const timer=window.setTimeout(()=>applicationRefresh.current(tab==="management"),0);
+   return ()=>window.clearTimeout(timer);
+ },[primaryReady,tab]);
  const realTasks=useMemo<ClearanceTask[]>(()=>managementApplications.map(app=>({
   id:app.id,
   lines:[{id:`${app.source_account_ref}::${app.store_id}::${app.item_id}`,
@@ -170,7 +188,6 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
   history:[],version:app.version,ruleVersion:app.rule_version,
   riskAtSubmission:app.risk_at_submission,
  })),[managementApplications]);
- const [tab,setTab]=useState<Tab>("analysis");
   // PR285_RULES_SIDE_DRAWER_V1
   const [rulesOpen,setRulesOpen]=useState(false);
  useEffect(()=>{
@@ -205,6 +222,11 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
    const rules=rulesFromServer(current);
    setRuleServer(current);
    setData(previous=>({...previous,rules,ruleVersion:saved.version}));
+   analysisDirty.current=true;
+   if(tab==="analysis"){
+    analysisDirty.current=false;
+    void loadLive(remotePage,remoteSize,analysisFilters.query,analysisFilters);
+   }
    void message.success("规则保存成功");
    try{
     const history=await getClearanceRuleHistory();
@@ -220,11 +242,19 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
 
  const [period,setPeriod]=useState<PeriodDays>(30);
  const role="刘运营";
- const [filters,setFilters]=useState<FilterState>({...blankFilters});
- const [searchDraft,setSearchDraft]=useState("");
- const [searchType,setSearchType]=useState("all");
+ const [analysisSearchDraft,setAnalysisSearchDraft]=useState("");
+ const [managementSearchDraft,setManagementSearchDraft]=useState("");
+ const searchDraft=tab==="analysis"?analysisSearchDraft:managementSearchDraft;
+ const setSearchDraft=tab==="analysis"?setAnalysisSearchDraft:setManagementSearchDraft;
+ const [analysisSearchType,setAnalysisSearchType]=useState("all");
+ const [managementSearchType,setManagementSearchType]=useState("all");
+ const searchType=tab==="analysis"?analysisSearchType:managementSearchType;
+ const setSearchType=tab==="analysis"?setAnalysisSearchType:setManagementSearchType;
  const [showStats,setShowStats]=useState(true);
- const [activeStat,setActiveStat]=useState("");
+ const [analysisActiveStat,setAnalysisActiveStat]=useState("");
+ const [managementActiveStat,setManagementActiveStat]=useState("");
+ const activeStat=tab==="analysis"?analysisActiveStat:managementActiveStat;
+ const setActiveStat=tab==="analysis"?setAnalysisActiveStat:setManagementActiveStat;
  const [tables,setTables]=useState<Record<"analysis"|"management",TableState>>({
   analysis:{page:1,pageSize:50,columns:analysisDefaults},
   management:{page:1,pageSize:50,columns:managementDefaults},
@@ -267,7 +297,7 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
    const q=filters.query.trim().toLowerCase();
    if(!q)return true;
    const fields:Record<string,string>={
-     sku:app.local_sku||"",msku:app.msku||"",item:app.item_id,name:app.title||"",
+     sku:app.local_sku||"",msku:app.msku||"",item:app.item_id,name:app.display_product_name||"",
    };
    if(searchType!=="all")return (fields[searchType]||"").toLowerCase().includes(q);
    return [app.id,app.reason,app.note,app.applicant_ref,app.store_name,app.owner_ref,
@@ -292,14 +322,18 @@ const metrics=useMemo(():ManagementStatCardItem<string>[]=>{
   const next={...filters,...patch};
   setFilters(next);
   setTables(old=>({...old,[tab]:{...old[tab],page:1}}));
-  if("store" in patch||"owner" in patch||"risk" in patch){
+  if(tab==="analysis"&&("store" in patch||"owner" in patch||"risk" in patch)){
    void loadLive(1,remoteSize,next.query,next);
   }
  };
  const selectTab=(key:string)=>{
   if(!["analysis","management"].includes(key))return;
-  setTab(key as Tab);setFilters({...blankFilters});setSearchDraft("");setSearchType("all");setActiveStat("");
-  if(key==="analysis")void loadLive(1,remoteSize,"",blankFilters);
+  if(key===tab)return;
+  setTab(key as Tab);
+  if(key==="analysis"&&analysisDirty.current){
+   analysisDirty.current=false;
+   void loadLive(remotePage,remoteSize,analysisFilters.query,analysisFilters);
+  }
  };
  const onStat=(key:string)=>{
   setActiveStat(old=>old===key?"":key);
@@ -321,16 +355,16 @@ const metrics=useMemo(():ManagementStatCardItem<string>[]=>{
       <ReportFacetSelect ariaLabel="选择负责人" mode="multiple" placeholder="全部负责人" unit="位负责人" value={filters.owner} onChange={v=>changeFilter({owner:Array.isArray(v)?v:[]})} options={filterOptions.owners}/>
       {tab==="analysis"?<><ReportFacetSelect ariaLabel="风险等级" mode="multiple" placeholder="全部风险" unit="个等级" value={filters.risk} onChange={v=>changeFilter({risk:Array.isArray(v)?v:[]})} options={filterOptions.risks}/><Select aria-label="排序方式" value={filters.sort} onChange={v=>changeFilter({sort:v})} options={[{value:"risk",label:"风险优先"},{value:"age",label:"库龄最高"},{value:"value",label:"库存成本最高"},{value:"sales",label:"销量最低"}]}/></>:<Select aria-label="清货状态" value={filters.status} onChange={v=>changeFilter({status:v})} options={[{value:"all",label:"全部状态"},...Object.entries({pending:"待审批",supplement:"待补资料",ready:"待执行",running:"执行中",paused:"已暂停",done:"已完成",rejected:"已驳回",cancelled:"已撤回"}).map(([value,label])=>({value,label}))]}/>}
       <div className={`clearance-search-row${tab==="analysis"?" clearance-search-row--period":""}`}>
-      <ConnectedSearch typeAriaLabel="清货搜索范围" typeOptions={[{value:"all",label:"全部"},{value:"sku",label:"SKU"},{value:"msku",label:"MSKU"},{value:"item",label:"商品 ID"},{value:"name",label:"品名"}]} typeValue={searchType} onTypeChange={value=>{setSearchType(value);changeFilter({query:searchDraft});}} inputAriaLabel="搜索清货记录" inputPlaceholder={tab==="analysis"?"搜索 SKU / MSKU / 商品ID / 品名":"搜索清货单号 / SKU / 申请说明"} inputValue={searchDraft} onInputChange={setSearchDraft} onSearch={()=>{changeFilter({query:searchDraft});void loadLive(1,remoteSize,searchDraft);}}/>
+      <ConnectedSearch typeAriaLabel="清货搜索范围" typeOptions={[{value:"all",label:"全部"},{value:"sku",label:"SKU"},{value:"msku",label:"MSKU"},{value:"item",label:"商品 ID"},{value:"name",label:"品名"}]} typeValue={searchType} onTypeChange={value=>{setSearchType(value);changeFilter({query:searchDraft});}} inputAriaLabel="搜索清货记录" inputPlaceholder={tab==="analysis"?"搜索 SKU / MSKU / 商品ID / 品名":"搜索清货单号 / SKU / 申请说明"} inputValue={searchDraft} onInputChange={setSearchDraft} onSearch={()=>{changeFilter({query:searchDraft});if(tab==="analysis")void loadLive(1,remoteSize,searchDraft);}}/>
        {tab==="analysis"&&<div className="clearance-period-control"><span className="clearance-period-label">数据周期：</span><Segmented aria-label="数据周期" className="clearance-period-segmented" value={period} options={PERIODS.map(n=>({label:n+"天",value:n}))} onChange={value=>setPeriod(value as PeriodDays)}/></div>}
       </div>
       <Button type="primary" icon={<FileAddOutlined/>} onClick={()=>setManualOpen(true)}>申请 SKU</Button>
-      <Button icon={<ReloadOutlined/>} onClick={()=>{setSearchDraft("");setSearchType("all");setFilters({...blankFilters});setActiveStat("");setTableState({page:1});void loadLive(1,remoteSize,"",blankFilters);}}>刷新</Button>
+      <Button icon={<ReloadOutlined/>} onClick={()=>{setSearchDraft("");setSearchType("all");setFilters({...blankFilters});setActiveStat("");setTableState({page:1});if(tab==="analysis")void loadLive(1,remoteSize,"",blankFilters);window.dispatchEvent(new Event("szzsbj-clearance-application-updated"));}}>刷新</Button>
      </div>
      {tab==="analysis"&&<div className="clearance-quick"><Typography.Text type="secondary">快速定位</Typography.Text>{[
       ["all","全部风险"],["untreated","待评估"],["auto","系统识别"],["manual","人工申请"],["age","库龄 ≥"+data.rules.mediumAge+"天"],["coverage","售罄 ≥"+data.rules.highCoverage+"天"],["decline","近期销量下滑"],
      ].map(([key,title])=><Button size="small" key={key} type={filters.quick===key?"primary":"default"} onClick={()=>changeFilter({quick:key})}>{title}</Button>)}</div>}
-     {tab==="analysis"?<ClearanceAnalysisTable rows={analysisRows} rules={data.rules} tasks={realTasks} manual={data.manual} period={period} state={{...tables.analysis,page:remotePage,pageSize:remoteSize}} total={remoteTotal ?? ((remotePage-1)*remoteSize+candidates.length+(hasMore?1:0))} onPage={(page,pageSize)=>{setTableState({page,pageSize});void loadLive(page,pageSize,filters.query);}} onInspect={setApplicant} onApply={id=>{const p=CLEARANCE_PRODUCTS.find(x=>x.id===id);if(!p){void message.error("未找到商品 ID");return;}setApply({ids:[id],source:data.manual.includes(id)?"manual":"auto"});}} onTask={setTaskId}/>:<ClearanceLiveManagementTable rows={managementDisplayRows} state={tables.management} total={managementDisplayRows.length} onPage={(page,pageSize)=>setTableState({page,pageSize})} onTask={setTaskId}/>}
+     {tab==="analysis"?<ClearanceAnalysisTable loading={loading} rows={analysisRows} rules={data.rules} tasks={realTasks} manual={data.manual} period={period} state={{...tables.analysis,page:remotePage,pageSize:remoteSize}} total={remoteTotal ?? ((remotePage-1)*remoteSize+candidates.length+(hasMore?1:0))} onPage={(page,pageSize)=>{setTableState({page,pageSize});void loadLive(page,pageSize,filters.query);}} onInspect={setApplicant} onApply={id=>{const p=CLEARANCE_PRODUCTS.find(x=>x.id===id);if(!p){void message.error("未找到商品 ID");return;}setApply({ids:[id],source:data.manual.includes(id)?"manual":"auto"});}} onTask={setTaskId}/>:<ClearanceLiveManagementTable loading={applicationsLoading} rows={managementDisplayRows} state={tables.management} total={managementDisplayRows.length} onPage={(page,pageSize)=>setTableState({page,pageSize})} onTask={setTaskId}/>}
     </>
    </Card>
   </div>

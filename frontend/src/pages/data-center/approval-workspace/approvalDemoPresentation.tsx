@@ -110,7 +110,7 @@ export function demoColumnsForBusiness(
   const common = {
     title: col("title", business === "purchase" ? "采购事项" : business === "clearance" ? "申请单 / 商品" : business === "listing" ? "归档申请 / 商品" : "调价申请 / 商品", 235, r => <div className="approval-demo__subject"><Tooltip title={r.title}><Button type="link" size="small" onClick={() => onDetail(r)}>{r.title}</Button></Tooltip><small>{r.business_ref} · {r.source_account_ref}</small></div>),
     risk: col("risk", "风险", 90, r => <Tag color={r.risk_level === "high" ? "red" : r.risk_level === "medium" ? "orange" : "green"}>{riskNames[r.risk_level]}</Tag>),
-    applicant: col("applicant", "申请人", 105, r => r.applicant_id),
+    applicant: col("applicant", "申请人", 105, r => r.applicant_name || "申请人待核实"),
     submitted: col("submitted", "提交时间", 144, r => r.submitted_at ? new Date(r.submitted_at).toLocaleString("zh-CN", {month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"),
     status: col("status", "状态", 100, r => <Tag color={r.status === "approved" ? "success" : r.status === "rejected" ? "error" : "processing"}>{titleByStatus[r.status] || r.status}</Tag>),
     action: col("action", "操作", 108, r => <Button type="link" size="small" onClick={() => onDetail(r)}>查看详情</Button>),

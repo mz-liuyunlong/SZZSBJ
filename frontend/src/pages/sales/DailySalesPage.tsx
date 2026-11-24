@@ -1,3 +1,5 @@
+import type { SalesReportSort } from "@/pages/sales/reportSort";
+import { BackendRequestError } from "@/api/backendApi";
 /** Daily-sales page backed by DATA-PAGES MART API. */
 import {
   CloudDownloadOutlined,
@@ -90,6 +92,8 @@ function DailySalesPage({ page }: DailySalesPageProps) {
   const [appliedColumnKeys, setAppliedColumnKeys] = useState(defaultColumnKeys);
   const [columnWidths, setColumnWidths] = useState(defaultColumnWidths);
   const [currentPage, setCurrentPage] = useState(1);
+  const [sort, setSort] = useState<SalesReportSort | null>(null);
+  const sortCurrency = sort ? filters.currency : undefined;
   const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [analysisSource, setAnalysisSource] = useState<ListingAnalysisSource | null>(null);
@@ -146,6 +150,8 @@ function DailySalesPage({ page }: DailySalesPageProps) {
       startDate: dateRangeStart,
       endDate: dateRangeEnd,
       page: currentPage,
+      sort,
+      sortCurrency,
       pageSize,
       platforms: filters.platforms,
       owners: filters.owners,
@@ -161,8 +167,13 @@ function DailySalesPage({ page }: DailySalesPageProps) {
         setSalesSummary(nextSalesSummary);
         setRefundSummary(nextRefundSummary);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!active) return;
+        if (sort && error instanceof BackendRequestError && error.status === 403) {
+          setSort(null);
+          void messageApi.warning("当前账号没有该字段的排序权限");
+          return;
+        }
         setSourceRows([]);
         setServerTotal(0);
         setSalesSummary(null);
@@ -178,6 +189,9 @@ function DailySalesPage({ page }: DailySalesPageProps) {
     };
   }, [
     currentPage,
+    sort,
+    sortCurrency,
+    messageApi,
     dateRangeStart,
     dateRangeEnd,
     filters.batchValues,
@@ -215,6 +229,8 @@ function DailySalesPage({ page }: DailySalesPageProps) {
       endDate: previousDateRange.endDate,
       page: 1,
       pageSize: 1,
+      includeTableTotals: false,
+      summaryOnly: true,
       platforms: filters.platforms,
       owners: filters.owners,
       stores: filters.stores,
@@ -312,6 +328,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
   };
 
   const resetFilters = () => {
+    setSort(null);
     setFilters(createInitialFilters());
     setToolbarResetKey((current) => current + 1);
     resetPageAndSelection();
@@ -425,9 +442,9 @@ function DailySalesPage({ page }: DailySalesPageProps) {
 
 
             <DailySalesTable
+          tableTotals={salesSummary?.tableTotals}
           rows={filteredRows}
           total={serverTotal || filteredRows.length}
-          wfsAvailableInventoryTotal={salesSummary?.wfsAvailableInventory ?? null}
           loading={isTableRequesting}
           currency={filters.currency}
           appliedColumnKeys={appliedColumnKeys}
@@ -440,6 +457,11 @@ function DailySalesPage({ page }: DailySalesPageProps) {
             [key]: width,
           }))}
           onCurrentPageChange={setCurrentPage}
+          sort={sort}
+          onSortChange={(nextSort) => {
+            setSort(nextSort);
+            resetPageAndSelection();
+          }}
           onPageSizeChange={(nextPageSize) => {
             setPageSize(normalizeReportTablePageSize(nextPageSize));
             resetPageAndSelection();
@@ -464,6 +486,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
         onSaveTemplate={() => void messageApi.info(TEMPLATE_PENDING)}
       />
       <DailySalesExportModal
+        sort={sort}
         open={exportModalOpen}
         filters={filters}
         onClose={() => setExportModalOpen(false)}
