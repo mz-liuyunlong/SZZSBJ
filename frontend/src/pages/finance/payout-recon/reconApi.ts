@@ -44,7 +44,27 @@ export interface ApiAccountList {
   accounts: { account_key: string; account_name: string; org: string; currency_code: string }[];
   stores: { store_id: string; store_code: string; store_name: string | null }[];
 }
-export interface ApiSync { run_id: string | null; status: string; trigger_type: string | null; started_at: string | null; finished_at: string | null; error_code: string | null; last_success_at: string | null }
+export interface ApiSyncFailedStore {
+  store_id: string;
+  store_code: string;
+  window_start: string | null;
+  window_end: string | null;
+  error_code: string | null;
+  http_status: number | null;
+  provider_code: string | null;
+  provider_message: string | null;
+}
+export interface ApiSync {
+  run_id: string | null;
+  status: string;
+  trigger_type: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  error_code: string | null;
+  last_success_at: string | null;
+  /** 最近一次同步失败时，没完成的店（后端 0095 起返回；老接口没有就当空）。 */
+  failed_stores?: ApiSyncFailedStore[];
+}
 
 /** 页面一行 = 一店一期。 */
 export interface ReconRow {

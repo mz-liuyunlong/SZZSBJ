@@ -34,6 +34,7 @@ export type NewProductListing = {
   system_risk_display?: SystemRiskDisplay | null;
   evaluation_status?: "待到货"|"测评中"|"待市场评分"|"待测评确认"|"测评通过"|"测评未通过";
   evaluation_decision?: {decision:"passed"|"failed";reason:string;actor_id:string;confirmed_at:string;grade:string;total:string;revision:number}|null;
+  evaluation_grade_confirmation?: {status:"pending"|"confirmed";rule_version:number;market_version:number;correction_revision?:number;effective_grade?:string;effective_total?:string;confirmed_at?:string}|null;
   evaluation_review_status?: "submitted"|"info_required"|"approved"|"rejected"|null;
   evaluation_review_id?: string|null;
   evaluation_job_status?: "none"|"queued"|"running"|"completed"|"failed"|null;
@@ -58,6 +59,8 @@ export type NewProductListing = {
   market_reason: string | null;
   market_version: number;
   score_correction?: ScoreCorrectionView | null;
+  score_correction_revision?: number | null;
+  score_correction_state?: "none" | "applied" | "stale";
   market_competitor_ids?: string[];
   market_no_competitors?: boolean;
   suggested_qty: number | null;
@@ -194,6 +197,13 @@ export async function saveNewProductMarketScore(identity:Identity,score:number,r
   })).data;
 }
 // NP_OPERATOR_SCORE_CORRECTION_V1_20261119
+export async function confirmNewProductGrade(identity:Identity,expectedRevision:number) {
+  return (await backendRequest<{status:"confirmed";effective_grade:string;effective_total:string}>(
+    "/api/new-products/evaluations/confirm-grade", {
+      method:"POST",body:JSON.stringify({...identity,expected_revision:expectedRevision})
+    }
+  )).data;
+}
 export async function saveNewProductScoreCorrection(identity:Identity,dimension:"speed"|"ad"|"profit"|"trust",newScore:number,reason:string,expectedRevision:number) {
   return (await backendRequest<ScoreCorrectionView>("/api/new-products/score-corrections",{
     method:"PUT",body:JSON.stringify({...identity,dimension,new_score:newScore,reason,expected_revision:expectedRevision})

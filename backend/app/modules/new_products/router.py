@@ -24,6 +24,7 @@ from .read_source import get_new_product_read_session, require_new_product_scope
 from .schemas import (
     AssessmentPurchaseWrite,
     AssessmentWrite,
+    GradeConfirmationWrite,
     ListingQuery,
     MarketWrite,
     PurchaseDecision,
@@ -358,6 +359,24 @@ def confirm_evaluation_and_request_purchase(
     return success_response(
         request,
         data=NewProductService(db, read_session=source).save_assessment_and_purchase(
+            accounts, payload, principal.user_id
+        ),
+        meta={"source": "database"},
+    )
+
+
+@router.post("/evaluations/confirm-grade", response_model=SuccessEnvelope[dict, dict])
+def confirm_new_product_grade(
+    request: Request,
+    payload: GradeConfirmationWrite,
+    db: DB,
+    principal: Score,
+    accounts: Scope,
+    source: Source,
+):
+    return success_response(
+        request,
+        data=NewProductService(db, read_session=source).confirm_grade(
             accounts, payload, principal.user_id
         ),
         meta={"source": "database"},

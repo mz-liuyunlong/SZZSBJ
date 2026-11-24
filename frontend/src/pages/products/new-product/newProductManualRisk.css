@@ -21,3 +21,31 @@
 .np-manual-risk-description strong{font-size:12px;color:#0758e9;white-space:nowrap;}
 .np-manual-risk-description .np-manual-risk-help{color:#728198;}
 @media(max-width:720px){.np-manual-risk-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.np-manual-risk-description{flex-wrap:wrap}}
+
+/* NP_RISK_SAVED_DISABLED_STATE_V1_20261123 */
+/* Native buttons are disabled in saved mode; show their locked visual state. */
+.np-manual-risk-readonly .np-manual-risk-choice,
+.np-manual-risk-readonly .np-manual-risk-choice.checked,
+.np-manual-risk-readonly .np-manual-risk-choice:hover,
+.np-manual-risk-readonly .np-manual-risk-choice:focus-visible {
+  opacity: 1;
+  background: #f0f2f5;
+  color: #66758b;
+  border-color: #d7dde6;
+  outline: none;
+  cursor: not-allowed;
+}
+.np-manual-risk-readonly .np-manual-risk-choice.checked {
+  background: #e2e8f0;
+  border-color: #a9b8ca;
+}
+.np-manual-risk-readonly .np-manual-risk-checkbox,
+.np-manual-risk-readonly .np-manual-risk-choice.checked .np-manual-risk-checkbox {
+  background: #e3e7ee;
+  border-color: #adb8c8;
+  color: #44546b;
+}
+.np-manual-risk-readonly .np-manual-risk-choice.checked .np-manual-risk-checkbox {
+  background: #a7b4c5;
+  color: #fff;
+}

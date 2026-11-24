@@ -151,7 +151,7 @@ def test_source_dates_before_wfs_cannot_be_silently_discarded():
     assert result["reason"] == "historical_period_conflicts_with_first_wfs"
 
 
-def test_same_cutoff_saved_score_disagreement_blocks_proof():
+def test_same_cutoff_saved_score_disagreement_retains_diagnostic_rows():
     row = mart_row(START)
     sp, by_day = fake_sp([(START, "5")])
     score = calculate_testing_profit([row], sp_data=sp)
@@ -168,7 +168,13 @@ def test_same_cutoff_saved_score_disagreement_blocks_proof():
     result = build_operating_daily_same_source(
         [row], sp, by_day, cutoff=START, first_wfs=START, saved_facts=saved
     )
+    assert result["status"] == "unverified"
     assert result["reason"] == "saved_score_proof_disagrees_with_daily"
+    assert result["score_comparison"] == "saved_score_mismatch"
+    # Daily data is source-reconciled, but the SAVED score is not certified.
+    assert len(result["rows"]) == 1
+    assert result["totals"]["profit_usd"] == score["profit_usd"]
+    assert saved["profit_usd"] == "999"  # No mutation of the historical proof.
 
 
 def test_same_cutoff_saved_score_equal_reconciles():
