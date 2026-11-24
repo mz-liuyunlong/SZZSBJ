@@ -14,6 +14,9 @@ export type PersistedProduct = Product & {
     marketVersion: number;
     evaluationDecision?: NewProductListing["evaluation_decision"];
     scoreCorrection?:import("./newProductBusinessApi").ScoreCorrectionView|null;
+    scoreCorrectionRevision:number|null;
+    scoreCorrectionState:"none"|"applied"|"stale"|null;
+    gradeConfirmation?:NewProductListing["evaluation_grade_confirmation"];
     ruleVersion: number;
     evaluation: RealScore;
     scoringFacts: Record<string, unknown>;
@@ -183,7 +186,11 @@ export function toPersistedProduct(row: NewProductListing): PersistedProduct {
     developer:listing.product_developer_name || undefined,
     operator:listing.owner_name || undefined,
     imageUrl:listing.picture_url,msku:listing.msku,storeName:listing.store_name,
-    backend:{identity,scoreCorrection:row.score_correction??null,purchaseStatus:row.purchase_status??null,
+    backend:{identity,scoreCorrection:row.score_correction??null,
+      scoreCorrectionRevision:typeof row.score_correction_revision==="number"
+        ?row.score_correction_revision:null,
+      scoreCorrectionState:row.score_correction_state??null,
+      gradeConfirmation:row.evaluation_grade_confirmation??null,purchaseStatus:row.purchase_status??null,
       purchaseReviewReason:row.purchase_review_reason??null,
       purchaseReviewedBy:row.purchase_reviewed_by??null,
       purchaseReviewedAt:row.purchase_reviewed_at??null,systemRiskDisplay:row.system_risk_display ?? null,

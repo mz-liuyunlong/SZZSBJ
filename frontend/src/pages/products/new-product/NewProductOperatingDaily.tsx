@@ -193,7 +193,14 @@ function NewProductOperatingDailyView({product,initialOperatingDaily}:{product:P
       }
       const rows = parseRows(detail.rows);
       const totals = asRecord(detail.totals);
-      if (detail.status !== "scored" || !rows || !totals) {
+      // NP_DAILY_RETAIN_RECONCILED_ROWS_ON_SAVED_SCORE_MISMATCH_V1
+      // Only this independently calculated, explicitly unverified diagnostic
+      // may show rows; never treat it as a verified saved-score proof.
+      const savedProofMismatch =
+        detail.status === "unverified" &&
+        detail.reason === "saved_score_proof_disagrees_with_daily" &&
+        detail.score_comparison === "saved_score_mismatch";
+      if ((detail.status !== "scored" && !savedProofMismatch) || !rows || !totals) {
         const missing = Array.isArray(detail.missing)
           ? detail.missing.filter((v):v is string => typeof v === "string").slice(0,3).join("、") : "";
         setLoaded({state:"error",rows:[],error:`同源利润未核实：${String(detail.reason ?? missing ?? "未知原因")}`});return;
@@ -274,7 +281,10 @@ function NewProductOperatingDailyView({product,initialOperatingDaily}:{product:P
       与自动评分使用同一利润计算函数；退款不冲减付费收入，送样收入及成本排除，广告 SP＋SEM。
       {loaded.cutoff ? ` 数据截止 ${loaded.cutoff}（洛杉矶）。` : ""}
       {!loaded.completeDays ? "部分业务日缺少销售源记录：每日明细仅显示已核实的日期。" : ""}
-      {loaded.scoreComparison !== "saved_score_reconciled" ? "本次同源实时计算与已保存评分日期可能不同。" : ""}
+      {loaded.scoreComparison === "saved_score_mismatch"
+        ? "注意：当前每日经营数据已完成独立核算，但与已保存的正式评分快照不一致；仅用于核对，不会修改历史评分、等级或采购依据。"
+        : loaded.scoreComparison !== "saved_score_reconciled"
+          ? "本次同源实时计算与已保存评分日期可能不同。" : ""}
       {totalInvest === null ? "投入成本未核实。" : ""}
     </small>}
   </div>;

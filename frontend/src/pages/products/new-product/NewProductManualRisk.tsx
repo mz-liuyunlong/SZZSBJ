@@ -31,6 +31,7 @@ interface Props {
   onChange:(selected:ManualRiskCode[])=>void;
   disabled?:boolean;
   readOnly?:boolean;
+  editableSaved?:boolean;
   identity?:Identity;
   marketVersion?:number;
   systemRiskRules:RiskConditionRule[];
@@ -39,7 +40,7 @@ interface Props {
   riskLoaded:boolean;
 }
 export default function NewProductManualRisk({
-  onChange,disabled=false,readOnly=false,identity,marketVersion=0,systemRiskRules,systemRiskDisplay,riskVersion,riskLoaded
+  onChange,disabled=false,readOnly=false,editableSaved=false,identity,marketVersion=0,systemRiskRules,systemRiskDisplay,riskVersion,riskLoaded
 }:Props){
   const [selected,setSelected]=useState<ManualRiskCode[]>([]);
   const [hover,setHover]=useState<string|null>(null);
@@ -53,7 +54,7 @@ export default function NewProductManualRisk({
     marketVersion
   ]);
   useEffect(()=>{
-    if(!readOnly || !identity || !marketVersion)return;
+    if((!readOnly && !editableSaved) || !identity || !marketVersion)return;
     let active=true;
     getCachedNewProductDetail(identity).then(data=>{
       const events=Array.isArray(data.events)?data.events:[];
@@ -73,15 +74,16 @@ export default function NewProductManualRisk({
         raw.every(x=>typeof x==="string" && allowed.has(x)) &&
         new Set(raw).size===raw.length &&
         (!raw.includes("无") || raw.length===1);
-      if(active)setSavedRisk({
-        key:scopeKey,
-        values:valid?raw as ManualRiskCode[]:null
-      });
+      if(active){
+        const values=valid?raw as ManualRiskCode[]:[];
+        setSavedRisk({key:scopeKey,values:valid?values:null});
+        if(editableSaved && !readOnly){setSelected(values);onChange(values);}
+      }
     }).catch(()=>{
       if(active)setSavedRisk({key:scopeKey,values:null});
     });
     return ()=>{active=false};
-  },[readOnly,scopeKey]);
+  },[readOnly,editableSaved,scopeKey]);
   const displaySelected=readOnly
     ? (savedRisk?.key===scopeKey?savedRisk.values??[]:[])
     : selected;
@@ -105,7 +107,7 @@ export default function NewProductManualRisk({
         :state;
       const cutoff=verified?.cutoff_la ? `；截止 ${verified.cutoff_la}（洛杉矶）`:"";
       const result=hit
-        ?`最高 ${x.limit} 级（已命中；正式评级限制尚未发布）`
+        ?`最高 ${x.limit} 级（${systemRiskDisplay?.grade_cap_applied?"已按规则执行":"待正式市场评分应用"}）`
         :status==="clear"?"未命中，不限制等级"
         :status==="disabled"?"未启用，不限制等级"
         :"待核实，不自动限制等级";
@@ -124,7 +126,7 @@ export default function NewProductManualRisk({
     setSelected(next);
     onChange(next);
   };
-  return <section className="np-manual-risk" aria-label="风险条件">
+  return <section className={"np-manual-risk"+(readOnly?" np-manual-risk-readonly":"")} aria-label="风险条件">
     <header className="np-manual-risk-header">
       <strong>风险条件 <span aria-hidden="true">*</span></strong>
       <div className="np-manual-risk-legend"><i className="normal"/>一般风险 <i className="severe"/>高风险</div>
@@ -133,7 +135,7 @@ export default function NewProductManualRisk({
       {riskItems.map(x=><button type="button" key={x.id}
         role="checkbox" aria-checked={displaySelected.includes(x.id)}
         aria-label={x.label+(x.id.startsWith('ROI低')?'：'+x.result:'')}
-        disabled={disabled}
+        disabled={disabled||readOnly}
         className={'np-manual-risk-choice'+(displaySelected.includes(x.id)?' checked':'')}
         onClick={()=>choose(x.id)} onMouseEnter={()=>setHover(x.id)}
         onMouseLeave={()=>setHover(null)} onFocus={()=>setHover(x.id)} onBlur={()=>setHover(null)}>
