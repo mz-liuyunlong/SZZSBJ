@@ -250,9 +250,10 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         msku: str | None,
         local_sku: str | None,
     ) -> str | None:
-        """Require uniquely agreeing Listing and same-day direct SaleStat IDs.
+        """Resolve a unique Listing identity; SaleStat may legitimately omit samples.
 
-        Provider responses often omit item_id. Never invent one from SKU alone.
+        Reject any conflicting same-day SaleStat identity instead of guessing
+        from SKU or silently merging products.
         """
         if not store_id or not msku or not local_sku:
             return None
@@ -288,10 +289,9 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
             .mappings()
             .one()
         )
-        if (
-            int(row["listing_count"]) == 1
-            and int(row["sales_count"]) == 1
-            and row["listing_id"] == row["sales_id"]
+        if int(row["listing_count"]) == 1 and (
+            int(row["sales_count"]) == 0
+            or (int(row["sales_count"]) == 1 and row["listing_id"] == row["sales_id"])
         ):
             return str(row["listing_id"])
         return None
@@ -393,8 +393,40 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     and discount is not None
                     and abs(discount) >= item_price - Decimal("0.01")
                 )
-                if not (order_total == Decimal("0") or full_discount):
-                    continue
+                if order_total != Decimal("0"):
+                    # A previously verified zero-paid line cannot silently
+                    # disappear when a provider replays it as a paid order.
+                    prior_order_no = _field(item, "platform_order_no") or _field(
+                        row, "platform_order_no", "reference_no", "referenceNo"
+                    )
+                    prior_line_id = _field(item, "order_item_no", "global_item_no", "id")
+                    if prior_order_no and prior_line_id:
+                        prior_verified = self.session.execute(
+                            text(
+                                "select exists (select 1 from fact_walmart_sample_order_items "
+                                "where source_account_ref=:account "
+                                "and platform_order_no=:order_no and source_order_line_id=:line_id "
+                                "and is_valid_sample=true and sample_rule_version in "
+                                "(:historical_rule,:verified_rule))"
+                            ),
+                            {
+                                "account": self.source_account_ref,
+                                "order_no": prior_order_no,
+                                "line_id": prior_line_id,
+                                "historical_rule": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
+                                "verified_rule": VERIFIED_SAMPLE_RULE_VERSION,
+                            },
+                        ).scalar_one()
+                        if prior_verified:
+                            raise DataPagesMartInvariantError(
+                                "DATA_PAGES_VERIFIED_SAMPLE_CHANGED",
+                                business_date=self.business_date,
+                            )
+                    if not full_discount:
+                        continue
+                    # Full item discount alone is NOT evidence that the order
+                    # total is zero. Keep it as a candidate, never a verified
+                    # sample, so the existing operator workflow can investigate.
                 quantity = _decimal(item.get("quantity"))
                 if quantity is None or quantity <= 0:
                     self.summary.sample_unresolved_rows += 1
@@ -473,30 +505,16 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 # Do not invent an item ID for new samples. For an existing
                 # verified legacy line only, reuse its prior verified ID when
                 # the provider omits item_id and the catalog cannot resolve it.
-                # YC00512_OWNER_APPROVED_SAMPLE_HOTFIX_V1: strict provider evidence.
-                # This is deliberately opt-in for the approved backfill process.
+                # Source's verified zero-paid total is sufficient for sample identity;
+                # item attribution remains an independent strict listing check.
                 provider_item_id = _field(item, "item_id", "platform_product_id")
-                strict_discount = (
-                    order_total == Decimal("0")
-                    and str(order_status_raw).strip() == "9"
-                    and not is_cancelled
-                    and item_price is not None
-                    and item_price > 0
-                    and discount is not None
-                    and quantity is not None
-                    and quantity > 0
-                    and unit_price is not None
-                    and unit_price > 0
-                    and abs(item_price - discount) <= Decimal("0.01")
-                    and abs(unit_price * quantity - discount) <= Decimal("0.01")
-                )
                 resolved_item_id = (
                     self._hotfix_unique_sample_item_id(
                         store_id,
                         _field(item, "msku"),
                         _field(item, "local_sku", "sku"),
                     )
-                    if strict_discount
+                    if order_total == Decimal("0") and not is_cancelled
                     else None
                 )
                 identity_agrees = resolved_item_id is not None and (
@@ -509,7 +527,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 if legacy_verified is not None:
                     # The writer's strict evidence comparison below still checks
                     # all other persisted fields and rejects any changed replay.
-                    if not strict_discount:
+                    if not _is_valid_sample(order_total, cancel_time_raw, order_status_raw):
                         raise DataPagesMartInvariantError(
                             "DATA_PAGES_VERIFIED_SAMPLE_CHANGED",
                             business_date=self.business_date,
@@ -670,13 +688,10 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         return count
 
     def _resolve_sample_items(self) -> int:
-        """Resolve a missing item_id only when Listing and SaleStat agree uniquely.
+        """Enrich a sample only from one unique listing identity.
 
-        Samples affect sales only after the strict store_id + item_id + MSKU
-        identity is established. If the provider omits item_id, enrich it only
-        when the current Walmart listing and same-day direct SaleStat each yield
-        exactly one item_id for the same store + MSKU and those item_ids agree.
-        Ambiguous or disagreeing candidates remain unresolved.
+        SaleStat may not include zero-dollar orders, so its absence is not a
+        veto; an actual contradictory SaleStat Item ID remains a hard veto.
         """
 
         self.session.execute(
@@ -692,6 +707,8 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 "and s.item_id is null "
                 "and s.store_id is not null and s.msku is not null and trim(s.msku)<>'' "
                 "and l.item_id is not null "
+                "and s.local_sku is not null and trim(s.local_sku)<>'' "
+                "and trim(l.local_sku)=trim(s.local_sku) "
                 "group by s.id"
                 "), sales_candidates as ("
                 "select s.id, min(f.item_id) as item_id, count(distinct f.item_id) as item_count "
@@ -710,14 +727,53 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 "), resolved as ("
                 "select l.id, l.item_id "
                 "from listing_candidates l "
-                "join sales_candidates f on f.id=l.id "
-                "where l.item_count=1 and f.item_count=1 and l.item_id=f.item_id"
+                "left join sales_candidates f on f.id=l.id "
+                "where l.item_count=1 and (f.id is null or "
+                "(f.item_count=1 and l.item_id=f.item_id))"
                 ") "
                 "update fact_walmart_sample_order_items s "
                 "set item_id=r.item_id, updated_at=now() "
                 "from resolved r where s.id=r.id and s.item_id is null"
             ),
             {"account": self.source_account_ref, "day": self.business_date},
+        )
+
+        # SZZSBJ_ZERO_PAID_AUTO_V1
+        # Use the source sample-order evidence as the authoritative zero-paid
+        # identity; order V2 FACT may have different line IDs or date windows.
+        # A sample may be real even if SaleStat omits it or reports another day.
+        # Finance MART still blocks over-deduction and disputed profit.
+        self.session.execute(
+            text(
+                "update fact_walmart_sample_order_items s "
+                "set is_valid_sample=true, "
+                "sample_rule_version=:verified, updated_at=now() "
+                "where s.source_account_ref=:account "
+                "and s.business_date_utc_minus_7=:day "
+                "and s.is_valid_sample=false "
+                "and s.is_cancelled=false "
+                "and s.order_total_amount=0 "
+                "and s.quantity>0 "
+                "and s.unit_price_amount is not null "
+                "and s.store_id is not null "
+                "and s.item_id is not null "
+                "and s.msku is not null and trim(s.msku)<>'' "
+                "and s.local_sku is not null and trim(s.local_sku)<>'' "
+                "and exists ("
+                "select 1 from dim_walmart_listings l "
+                "where l.source_account_ref=s.source_account_ref "
+                "and l.store_id=s.store_id "
+                "and l.item_id=s.item_id "
+                "and trim(l.msku)=trim(s.msku)) "
+                "and s.source_order_id is not null "
+                "and s.platform_order_no is not null "
+                "and s.source_order_line_id is not null "
+            ),
+            {
+                "account": self.source_account_ref,
+                "day": self.business_date,
+                "verified": VERIFIED_SAMPLE_RULE_VERSION,
+            },
         )
 
         unresolved_candidates = int(
@@ -758,11 +814,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     "where l.source_account_ref=s.source_account_ref "
                     "and l.store_id=s.store_id and l.item_id=s.item_id "
                     "and trim(l.msku)=trim(s.msku)) "
-                    "or not exists (select 1 from fact_walmart_sales_item_daily f "
-                    "where f.source_account_ref=s.source_account_ref "
-                    "and f.business_date_la=s.business_date_utc_minus_7 "
-                    "and f.store_id=s.store_id and f.item_id=s.item_id "
-                    "and trim(f.msku)=trim(s.msku) and f.allocation_status='direct'))"
+                    ")"
                 ),
                 {
                     "account": self.source_account_ref,
