@@ -181,3 +181,5 @@ class WalmartReconReportPage(Base):
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     request_id: Mapped[str | None] = mapped_column(String(128))
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # 重拉覆盖时记上一版的指纹，内容变过能看出来
+    previous_sha256: Mapped[str | None] = mapped_column(String(64))

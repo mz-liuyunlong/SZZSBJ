@@ -81,6 +81,7 @@ def upgrade() -> None:
         sa.Column("sha256", sa.String(64), nullable=False),
         sa.Column("request_id", sa.String(128), nullable=True),
         sa.Column("received_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("previous_sha256", sa.String(64), nullable=True),
         sa.CheckConstraint("page_offset >= 0", name="page_offset"),
         sa.CheckConstraint("store_id ~ '^[0-9]+$'", name="store_id_digits"),
         sa.PrimaryKeyConstraint(

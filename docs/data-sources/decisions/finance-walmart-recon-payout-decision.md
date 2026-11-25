@@ -16,6 +16,13 @@
 3. **只拉账单日 ≥ 2026-11-01 的期**：10 月及以前已人工对完，不拉、不改应付；10 月数据的清理另行安排。
 4. 已配对或审核过的 11 月起的期，应付变化 > 0.01：照改应付，追加 `reset` 审核事件退回待初审，任务结果列出。
 
+## RAW 存法与保留
+
+- 不用 `ods_api_raw_blobs` + `ods_api_raw_request_refs`：那套绑定 Integration Sync 的 run / work item / 保留策略，这个任务是独立的 Celery 任务、不走 Integration Sync，硬套会多出一整层运行登记；改用专用表 `raw_walmart_recon_report_pages`（店铺 × 对账日期 × 页偏移），每页原样 JSONB + sha256 + 字节数 + 请求号。
+- 拉到就先单独保存（独立保存点）再解析：解析失败、账期对不上、限流，原始页都留下，正好是要留证据的那些期。
+- 重拉覆盖同一页时记上一版指纹 `previous_sha256`；生产任务不传 `refresh_existing`，不会主动重拉。
+- 内容含订单号、收货城市 / 州 / 邮编等买家信息：没有任何接口返回这张表，只有数据库可读。**保留期限 12 个月**，到期由部署AI按 Rocky 票据清理（`delete … where received_at < now() - interval '12 months'`），不自动删；10 月及以前的期本就不拉。
+
 ## 实现要点
 
 - 每期只拉第一页（`PaymentSummary` 在第一页；不在第一页报 `WALMART_RECON_SUMMARY_NOT_ON_FIRST_PAGE` 并跳过该期）；JSON 回包上限 1MB（云函数），一页 100 行远低于上限，不用翻页。

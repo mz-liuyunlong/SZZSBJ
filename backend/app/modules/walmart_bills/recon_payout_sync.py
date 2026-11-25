@@ -5,7 +5,8 @@
 - 只拉账单日 ≥ RECON_PAYOUT_START（2026-11-01）的期：10 月及以前已人工对完，不碰
   （Rocky 2026-11-26）。
 - 每页先原样落 raw_walmart_recon_report_pages（RAW），再解析写期表。
-- 每期一个保存点：一期出错记错误码跳过，其余照写；每店成功后单独提交。
+- 每期先把原始页单独落 RAW（独立保存点，拉到就留下），再开第二个保存点解析写期表：解析失败只回滚
+  期表改动，RAW 保留；每店结束后单独提交（限流时这家店已拉到的 RAW 和已写的期也保留）。
 - 领星比沃尔玛晚 1~3 天出账单：沃尔玛有、领星还没有这期的先跳过，下次再补。
 - 这期已配对或审核过、应付变化 > 0.01：照改应付，追加一条 reset 审核事件退回待初审，任务结果列出。
 """
@@ -132,6 +133,7 @@ def _store_raw_page(
     now: datetime,
 ) -> WalmartReconReportPage:
     body = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    existing = session.get(WalmartReconReportPage, (source_account_ref, store_id, report_date, 0))
     page = WalmartReconReportPage(
         source_account_ref=source_account_ref,
         store_id=store_id,
@@ -143,6 +145,7 @@ def _store_raw_page(
         sha256=hashlib.sha256(body.encode("utf-8")).hexdigest(),
         request_id=request_id,
         received_at=now,
+        previous_sha256=existing.sha256 if existing and existing.sha256 else None,
     )
     session.merge(page)
     return page
@@ -269,7 +272,7 @@ def _sync_store(
                 PeriodOutcome(report_date, "error", "WALMART_RECON_DUPLICATE_PERIOD")
             )
             continue
-        savepoint = session.begin_nested()
+        # 第一步：拉第一页并原样落 RAW（拉到就留下，后面解析失败也不回滚）
         try:
             result = _get(
                 call,
@@ -281,6 +284,14 @@ def _sync_store(
                     "noOfRecords": RECON_PAGE_SIZE,
                 },
             )
+        except Exception as exc:
+            code = _error_code(exc)
+            outcome.periods.append(PeriodOutcome(report_date, "error", code))
+            if code == "WALMART_RECON_RATE_LIMITED":
+                raise
+            continue
+        raw_point = session.begin_nested()
+        try:
             _store_raw_page(
                 session,
                 source_account_ref=source_account_ref,
@@ -291,6 +302,15 @@ def _sync_store(
                 request_id=getattr(result, "request_id", None),
                 now=now,
             )
+            session.flush()
+            raw_point.commit()
+        except Exception as exc:
+            raw_point.rollback()
+            outcome.periods.append(PeriodOutcome(report_date, "error", _error_code(exc)))
+            continue
+        # 第二步：解析写期表；失败只回滚这一步
+        savepoint = session.begin_nested()
+        try:
             summary = extract_payment_summary(report_date, result.data)
             reset = apply_summary(session, periods[report_date], summary, now=now)
             session.flush()
@@ -298,10 +318,7 @@ def _sync_store(
             outcome.periods.append(PeriodOutcome(report_date, "reset" if reset else "written"))
         except Exception as exc:
             savepoint.rollback()
-            code = _error_code(exc)
-            outcome.periods.append(PeriodOutcome(report_date, "error", code))
-            if code == "WALMART_RECON_RATE_LIMITED":
-                raise
+            outcome.periods.append(PeriodOutcome(report_date, "error", _error_code(exc)))
 
 
 def sync_recon_payouts(
@@ -316,14 +333,14 @@ def sync_recon_payouts(
 ) -> ReconPayoutSyncResult:
     """store_codes: 领星 store_id → 沃尔玛店铺编码（reviewed_store_id_map）。
 
-    每店一个事务：成功就提交，可用日期拉不到 / 限流就整店回滚，其他店照常。
+    每店结束后单独提交。可用日期拉不到 / 限流 → 这家店记错误停止，已落的 RAW 和已写的期保留，
+    其他店照常。
     """
     now = now or utc_now()
     result = ReconPayoutSyncResult(started_at=now)
     for store_id, store_code in sorted(store_codes.items(), key=lambda item: item[1]):
         outcome = StoreOutcome(store_code=store_code)
         result.stores.append(outcome)
-        savepoint = session.begin_nested()
         try:
             _sync_store(
                 session,
@@ -335,13 +352,15 @@ def sync_recon_payouts(
                 refresh_existing=refresh_existing,
                 outcome=outcome,
             )
-            savepoint.commit()
-            if commit_each_store:
-                session.commit()
         except Exception as exc:
-            savepoint.rollback()
             outcome.error = _error_code(exc)
-            outcome.periods = [p for p in outcome.periods if p.status == "error"]
+        if commit_each_store:
+            try:
+                session.commit()
+            except Exception as exc:
+                session.rollback()
+                outcome.error = outcome.error or f"COMMIT_FAILED:{type(exc).__name__}"
+                outcome.periods = [p for p in outcome.periods if p.status == "error"]
     result.finished_at = utc_now()
     return result
 

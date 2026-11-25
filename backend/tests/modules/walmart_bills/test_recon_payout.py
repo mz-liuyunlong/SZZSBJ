@@ -358,10 +358,25 @@ def test_each_period_has_its_own_savepoint_and_store_keeps_going(session: Sessio
         session.refresh(period)
     assert a1.payable_source == "walmart" and a3.payable_source == "walmart"
     assert a2.payable_source == "lingxing" and a2.walmart_total_payable is None
-    assert session.get(WalmartReconReportPage, ("primary", STORE_A, D1117, 0)) is None
+    # 解析失败的期：期表不写，但原始页留着（Rocky：原始数据要存）
+    raw = session.get(WalmartReconReportPage, ("primary", STORE_A, D1117, 0))
+    assert raw is not None and raw.payload["reportData"][0]["Transaction Type"] == "Sale"
 
 
-def test_rate_limit_stops_the_store_and_rolls_it_back(session: Session) -> None:
+def test_summary_not_on_first_page_keeps_raw_but_not_period(session: Session) -> None:
+    a = add_period(session, STORE_A, "rk-a", D1117, "20")
+    full = {"reportData": [row("Sale", "1", order=f"o{i}") for i in range(100)], "nextOffset": 100}
+    fake = FakeWalmart(
+        dates={"SYN01": ["11172026"], "SYN02": []}, pages={("SYN01", "11172026"): full}
+    )
+    result = run(session, fake)
+    assert result.stores[0].failed_periods == [(D1117, "WALMART_RECON_SUMMARY_NOT_ON_FIRST_PAGE")]
+    session.refresh(a)
+    assert a.payable_source == "lingxing"
+    assert session.get(WalmartReconReportPage, ("primary", STORE_A, D1117, 0)) is not None
+
+
+def test_rate_limit_stops_the_store_but_keeps_what_was_fetched(session: Session) -> None:
     a1 = add_period(session, STORE_A, "rk-a1", D1103, "10", start=date(2026, 10, 15), end=D1103)
     a2 = add_period(session, STORE_A, "rk-a2", D1117, "20")
     b = add_period(session, STORE_B, "rk-b", D1117, "30")
@@ -378,9 +393,41 @@ def test_rate_limit_stops_the_store_and_rolls_it_back(session: Session) -> None:
     assert fake.fetched() == [("SYN01", "11032026"), ("SYN01", "11172026"), ("SYN02", "11172026")]
     for period in (a1, a2, b):
         session.refresh(period)
-    assert a1.payable_source == "lingxing" and a2.payable_source == "lingxing"
+    # 限流前已拉到的那期保留（RAW 和期表都在），限流那期没写
+    assert a1.payable_source == "walmart" and a2.payable_source == "lingxing"
     assert b.payable_source == "walmart"
-    assert session.get(WalmartReconReportPage, ("primary", STORE_A, D1103, 0)) is None
+    assert session.get(WalmartReconReportPage, ("primary", STORE_A, D1103, 0)) is not None
+    assert session.get(WalmartReconReportPage, ("primary", STORE_A, D1117, 0)) is None
+    assert [p.status for p in result.stores[0].periods] == ["written", "error"]
+
+
+def test_commit_failure_is_recorded_and_next_store_still_runs(session: Session) -> None:
+    add_period(session, STORE_A, "rk-a", D1117, "1")
+    b = add_period(session, STORE_B, "rk-b", D1117, "2")
+    fake = FakeWalmart(
+        dates={"SYN01": ["11172026"], "SYN02": ["11172026"]},
+        pages={("SYN01", "11172026"): page("1"), ("SYN02", "11172026"): page("2")},
+    )
+    calls: list[str] = []
+    real_commit, real_rollback = session.commit, session.rollback
+
+    def commit() -> None:
+        calls.append("commit")
+        if len(calls) == 1:
+            raise RuntimeError("synthetic commit failure")
+        session.flush()  # 测试事务里不能真 commit
+
+    session.commit = commit  # type: ignore[method-assign]
+    session.rollback = lambda: calls.append("rollback")  # type: ignore[method-assign]
+    try:
+        result = sync.sync_recon_payouts(session, call=fake, store_codes=CODES, now=NOW)
+    finally:
+        session.commit, session.rollback = real_commit, real_rollback  # type: ignore[method-assign]
+    assert calls == ["commit", "rollback", "commit"]
+    assert result.stores[0].error == "COMMIT_FAILED:RuntimeError"
+    assert result.stores[1].error is None and result.stores[1].written == 1
+    session.refresh(b)
+    assert b.payable_source == "walmart"
 
 
 def test_dates_endpoint_failure_fails_only_that_store(session: Session) -> None:
