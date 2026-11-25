@@ -22,6 +22,7 @@ from app.modules.walmart_monitor.models import WalmartMonitorListingCurrent
 
 from .category_zh import business_category, category_path_detail, translate_category
 from .evaluation_policy import evaluation_status
+from .historical_tracking import listing_scope
 
 SAMPLE_TAG = "小批量测品"
 LA = ZoneInfo("America/Los_Angeles")
@@ -30,7 +31,7 @@ _GRADES = ("S", "A", "B", "C", "D", "Pass")
 _LOGGER = logging.getLogger(__name__)
 
 
-def scoped_projection(source, db, accounts: frozenset[str]) -> list[dict]:
+def scoped_projection(source, db, accounts: frozenset[str], *, historical_keys=()) -> list[dict]:
     """One MART read + one decision read + one owner lookup, never N+1."""
     if not accounts:
         return []
@@ -53,7 +54,7 @@ def scoped_projection(source, db, accounts: frozenset[str]) -> list[dict]:
         )
         .where(
             m.source_account_ref.in_(accounts),
-            m.product_tags_json.contains([{"label": SAMPLE_TAG}]),
+            listing_scope(m, historical_keys),
         )
         .outerjoin(
             monitor,

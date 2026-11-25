@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError
 
+from .historical_tracking import snapshots as historical_snapshots
 from .performance_list_scope import scoped_projection
 from .service import NewProductService, local_preview_item_ids
 
@@ -108,7 +109,8 @@ def _projection(source: Session, db: Session, accounts: frozenset[str]) -> list[
     """Small in-memory metadata only, never full item facts or detail JSON."""
     if not accounts:
         return []
-    summary = scoped_projection(source, db, accounts)
+    history = historical_snapshots(db, accounts)
+    summary = scoped_projection(source, db, accounts, historical_keys=history)
     if len(summary) > MAX_ROWS:
         raise ApiError(code="NP_TRACKING_SCOPE_TOO_LARGE", status_code=422)
     preview = local_preview_item_ids()
@@ -139,7 +141,8 @@ def _projection(source: Session, db: Session, accounts: frozenset[str]) -> list[
         else:
             decision = "未判定" if arrival else "等待开售"
         if not (
-            approved_qty > 0
+            key in history
+            or approved_qty > 0
             or purchase_status == "approved"
             or decision not in ("等待开售", "未判定", "")
         ):
@@ -158,6 +161,7 @@ def _projection(source: Session, db: Session, accounts: frozenset[str]) -> list[
                 "secondary": None,
                 "grade": grade,
                 "has_initial_grade": initial in GRADES,
+                "historical_import": key in history,
                 "suggested_qty": int(suggested_qty) if suggested_qty is not None else None,
                 "arrival": arrival,
                 "launch": launch,
@@ -363,7 +367,8 @@ def detail_list(
         search_field="item_id",
         status="",
     )
-    result = service._list_saved(accounts, q, item_keys=keys)
+    options = {"tracking_scope": True} if any(r.get("historical_import") for r in page_rows) else {}
+    result = service._list_saved(accounts, q, item_keys=keys, **options)
     from .evaluation_workflow import decorate_page
 
     result = decorate_page(db, result)
