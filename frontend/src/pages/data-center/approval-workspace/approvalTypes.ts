@@ -76,6 +76,7 @@ export interface ApprovalItem {
   follow_count?: number | null;
  id: string; version: number; approval_type: string; business_ref: string;
  title: string; source_account_ref: string; applicant_id: string | null;
+ applicant_name?: string | null;
  status: ApprovalStatus; risk_level: ApprovalRisk; amount: string | null;
  currency_code: string | null; submitted_at: string | null;
  reviewed_at: string | null; reviewed_by: string | null;

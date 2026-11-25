@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated, Literal
@@ -14,6 +15,9 @@ from pydantic import (
     StringConstraints,
     field_validator,
 )
+
+from app.modules.data_pages.listing_exact_facets import FACET_FIELDS, parse_exact_filters
+from app.modules.data_pages.listing_sort import parse_listing_sort
 
 Nonblank128 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
 
@@ -71,6 +75,45 @@ class DailySalesQuery(StrictSchema):
     ] = ""
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=100, ge=1, le=1000)
+    include_table_totals: bool = False
+    summary_only: bool = False
+    sort_field: (
+        Literal[
+            "ad_ratio",
+            "ad_spend",
+            "avg_price",
+            "commission",
+            "cost_status",
+            "first_leg_cost_total",
+            "first_leg_unit_cny",
+            "gross_margin",
+            "order_count",
+            "order_profit",
+            "period",
+            "platform",
+            "purchase_cost_total",
+            "purchase_unit_cny",
+            "refund_amount",
+            "return_qty",
+            "return_rate_30d",
+            "roi",
+            "sales_amount",
+            "sales_qty",
+            "sample_amount",
+            "sample_qty",
+            "sem_ad_spend",
+            "storage_fee_total",
+            "storage_unit",
+            "total_ad_spend",
+            "wfs_fee_total",
+            "wfs_fee_unit",
+            "wfs_inventory",
+            "wfs_low_price_surcharge",
+        ]
+        | None
+    ) = None
+    sort_direction: Literal["asc", "desc"] = "asc"
+    sort_currency: Literal["USD", "CNY"] = "USD"
 
 
 class DailySalesTrendPointRead(StrictSchema):
@@ -168,7 +211,20 @@ class DailySalesItemRead(StrictSchema):
     operation_log_status: str = "draft"
 
 
+class SalesReportTableTotalsRead(StrictSchema):
+    """Full filtered scope, independent of page, order and row selection.
+
+    Money uses the existing table display conversion; ratios are percentages
+    except ROI, which remains a ratio. Unknown values are null, never page sums.
+    """
+
+    usd: dict[str, Decimal | None] = Field(default_factory=dict)
+    cny: dict[str, Decimal | None] = Field(default_factory=dict)
+    sample_evidence: Literal["pending", "unknown"] | None = None
+
+
 class DailySalesSummaryRead(StrictSchema):
+    table_totals: SalesReportTableTotalsRead | None = None
     sales_qty: Money = Decimal("0")
     order_count: Money = Decimal("0")
     sales_amount: Money = Decimal("0")
@@ -212,6 +268,46 @@ class OrderProfitQuery(StrictSchema):
     keyword: Annotated[str, StringConstraints(strip_whitespace=True, max_length=128)] = ""
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=100, ge=1, le=1000)
+    include_table_totals: bool = False
+    summary_only: bool = False
+    sort_field: (
+        Literal[
+            "ad_ratio",
+            "ad_spend",
+            "avg_price",
+            "avg_profit_per_order",
+            "commission",
+            "cost_status",
+            "first_leg_cost_total",
+            "first_leg_unit_cny",
+            "gross_margin",
+            "order_count",
+            "order_profit",
+            "platform",
+            "purchase_cost_total",
+            "purchase_unit_cny",
+            "refund_amount",
+            "return_qty",
+            "return_rate_30d",
+            "roi",
+            "sales_amount",
+            "sales_qty",
+            "sample_amount",
+            "sample_qty",
+            "sem_ad_spend",
+            "storage_fee_total",
+            "storage_unit",
+            "total_ad_spend",
+            "total_cost",
+            "wfs_fee_total",
+            "wfs_fee_unit",
+            "wfs_inventory",
+            "wfs_low_price_surcharge",
+        ]
+        | None
+    ) = None
+    sort_direction: Literal["asc", "desc"] = "asc"
+    sort_currency: Literal["USD", "CNY"] = "USD"
 
 
 class OrderProfitItemRead(StrictSchema):
@@ -265,6 +361,7 @@ class OrderProfitItemRead(StrictSchema):
 
 
 class OrderProfitSummaryRead(StrictSchema):
+    table_totals: SalesReportTableTotalsRead | None = None
     sales_qty: Money = Decimal("0")
     order_count: Money = Decimal("0")
     sales_amount: Money = Decimal("0")
@@ -323,6 +420,14 @@ class OrderProfitReadMeta(StrictSchema):
 
 
 class ListingManagementQuery(StrictSchema):
+    sort_by: Annotated[str, StringConstraints(max_length=1024)] = ""
+
+    @field_validator("sort_by")
+    @classmethod
+    def validate_sort_by(cls, value: str) -> str:
+        parse_listing_sort(value)
+        return value
+
     store_id: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
     owner_ref: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
     product_type: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
@@ -332,10 +437,24 @@ class ListingManagementQuery(StrictSchema):
         description="Archive status csv: active,archived",
     )
     tag: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
+    # Tags use JSON string arrays to preserve names containing commas.
+    product_tag: Annotated[str, StringConstraints(max_length=32768)] = ""
+    custom_tag: Annotated[str, StringConstraints(max_length=32768)] = ""
+    lifecycle: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
+    grade: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
+    exact_filters: Annotated[str, StringConstraints(max_length=1000000)] = ""
+
+    @field_validator("exact_filters")
+    @classmethod
+    def validate_exact_filters(cls, value: str) -> str:
+        parse_exact_filters(value)
+        return value
+
     summary_filter: Literal[
         "total",
         "online",
         "offline",
+        "listing_exception",
         "buybox",
         "rating",
         "resold",
@@ -350,6 +469,26 @@ class ListingManagementQuery(StrictSchema):
     ] = ""
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=50, ge=1, le=1000)
+
+    @field_validator("product_tag", "custom_tag")
+    @classmethod
+    def validate_tag_filter(cls, value: str) -> str:
+        if not value:
+            return ""
+        try:
+            labels = json.loads(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("tag filter must be a JSON array of names") from exc
+        if (
+            not isinstance(labels, list)
+            or len(labels) > 1000
+            or any(
+                not isinstance(label, str) or not label.strip() or len(label) > 512
+                for label in labels
+            )
+        ):
+            raise ValueError("invalid tag filter names")
+        return value
 
 
 class ListingProductTagRead(StrictSchema):
@@ -382,6 +521,57 @@ class ListingManagementBatchSearchRequest(StrictSchema):
         # model_copy intentionally avoids the legacy GET-only 32768-char cap.
         # No user-supplied unvalidated query fields enter this update.
         return self.query.model_copy(update={"batch_values": ",".join(self.batch_values)})
+
+
+class ListingManagementExactRequest(ListingManagementBatchSearchRequest):
+    """Read-only JSON request, including exact filters without batch IDs."""
+
+    batch_values: list[Nonblank128] = Field(default_factory=list, max_length=1000)
+
+    def as_query(self) -> ListingManagementQuery:
+        if self.batch_values:
+            return super().as_query()
+        return self.query
+
+
+class ListingManagementFacetRequest(ListingManagementExactRequest):
+    field: str
+    offset: int = Field(default=0, ge=0, le=1_000_000)
+    limit: int = Field(default=1000, ge=1, le=1000)
+
+    @field_validator("field")
+    @classmethod
+    def validate_exact_facet_field(cls, value: str) -> str:
+        if value not in FACET_FIELDS:
+            raise ValueError("unknown Listing facet field")
+        return value
+
+
+class ListingManagementFacetData(StrictSchema):
+    options: list[DataPageFilterOptionRead] = Field(default_factory=list)
+    has_more: bool = False
+
+
+class ListingManagementFacetBatchRequest(ListingManagementExactRequest):
+    """Fetch several exact-value facets in one scoped read-only request."""
+
+    fields: dict[str, Annotated[int, Field(ge=0, le=1_000_000)]] = Field(
+        min_length=1, max_length=19
+    )
+    limit: int = Field(default=500, ge=1, le=1000)
+    complete: bool = False
+    compact_labels: bool = False
+
+    @field_validator("fields")
+    @classmethod
+    def validate_fields(cls, value: dict[str, int]) -> dict[str, int]:
+        if any(field not in FACET_FIELDS for field in value):
+            raise ValueError("unknown Listing facet field")
+        return value
+
+
+class ListingManagementFacetBatchData(StrictSchema):
+    items: dict[str, ListingManagementFacetData]
 
 
 class ListingManagementItemRead(StrictSchema):
@@ -458,6 +648,7 @@ class ListingManagementItemRead(StrictSchema):
 class ListingManagementSummaryData(StrictSchema):
     total: int = 0
     online: int = 0
+    listing_exception: int = 0
     buybox_exception: int = 0
     rating_warning: int = 0
     resold_warning: int = 0
@@ -469,6 +660,9 @@ class ListingManagementFilterOptionsData(StrictSchema):
     owners: list[DataPageFilterOptionRead] = Field(default_factory=list)
     product_types: list[DataPageFilterOptionRead] = Field(default_factory=list)
     tags: list[DataPageFilterOptionRead] = Field(default_factory=list)
+    product_tags: list[DataPageFilterOptionRead] = Field(default_factory=list)
+    lifecycles: list[DataPageFilterOptionRead] = Field(default_factory=list)
+    grades: list[DataPageFilterOptionRead] = Field(default_factory=list)
     archive_statuses: list[DataPageFilterOptionRead] = Field(default_factory=list)
 
 

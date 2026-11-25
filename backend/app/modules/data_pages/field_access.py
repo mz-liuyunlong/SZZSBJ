@@ -3,11 +3,14 @@ from __future__ import annotations
 from decimal import Decimal
 
 from app.core.api import ApiError, ErrorCode
+from app.modules.data_pages.sales_report_totals import redact_report_totals
 from app.modules.data_pages.schemas import (
     DailySalesListData,
+    DailySalesSummaryRead,
     OrderProfitListData,
     OrderProfitSummaryRead,
     OrderProfitTrendData,
+    SalesReportTableTotalsRead,
 )
 
 ORDER_PROFIT_GROSS_PROFIT_PERMISSION = "field:sales:order-profit:gross-profit"
@@ -94,6 +97,57 @@ def filter_order_profit_export_columns(
     return ",".join(selected)
 
 
+def _existing_summary_table_totals(
+    summary: DailySalesSummaryRead | OrderProfitSummaryRead,
+) -> SalesReportTableTotalsRead:
+    """Use only already-returned server aggregates; never read page rows."""
+    fx = Decimal("6.6")  # Same convention as the existing statistics cards.
+
+    def usd(value: Decimal | None, currency: str | None) -> Decimal | None:
+        if value is None:
+            return None
+        return value / fx if currency == "CNY" else value
+
+    def ratio(
+        numerator: Decimal | None,
+        denominator: Decimal | None,
+        scale: int = 1,
+    ) -> Decimal | None:
+        if numerator is None or denominator is None or denominator <= 0:
+            return None
+        return numerator / denominator * scale
+
+    amounts = {
+        "sales_amount": usd(summary.sales_amount, summary.sales_currency_code),
+        "order_profit": usd(summary.order_profit_amount, summary.order_profit_currency_code),
+        "ad_spend": usd(summary.ad_spend_amount, summary.ad_spend_currency_code),
+        "sem_ad_spend": usd(summary.sem_ad_spend_amount, summary.ad_spend_currency_code),
+        "total_ad_spend": usd(summary.total_ad_spend_amount, summary.ad_spend_currency_code),
+    }
+    counts: dict[str, Decimal | None] = {
+        "sales_qty": summary.sales_qty,
+        "order_count": summary.order_count,
+    }
+    if isinstance(summary, DailySalesSummaryRead):
+        counts["wfs_inventory"] = summary.wfs_available_quantity
+        # Daily card refund events and item-day refund attribution differ.
+        # Do not silently replace one with the other.
+    else:
+        counts["return_qty"] = summary.return_qty
+        amounts["refund_amount"] = usd(summary.refund_amount, summary.refund_currency_code)
+
+    usd_values = {**counts, **amounts}
+    cny_values = {
+        **counts,
+        **{key: value * fx if value is not None else None for key, value in amounts.items()},
+    }
+    for values in (usd_values, cny_values):
+        values["avg_price"] = ratio(values["sales_amount"], values["sales_qty"])
+        values["ad_ratio"] = ratio(values["total_ad_spend"], values["sales_amount"], 100)
+        values["gross_margin"] = ratio(values["order_profit"], values["sales_amount"], 100)
+    return SalesReportTableTotalsRead(usd=usd_values, cny=cny_values)
+
+
 def filter_daily_sales_list_data(
     data: DailySalesListData,
     *,
@@ -118,7 +172,15 @@ def filter_daily_sales_list_data(
             updates.update({"gross_margin": None, "roi": None})
         items.append(item.model_copy(update=updates) if updates else item)
 
-    summary_updates: dict[str, object] = {}
+    summary_updates: dict[str, object] = {
+        "table_totals": redact_report_totals(
+            data.summary.table_totals or _existing_summary_table_totals(data.summary),
+            gross_keys=_GROSS_PROFIT_EXPORT_COLUMNS,
+            margin_keys=_MARGIN_EXPORT_COLUMNS,
+            can_view_gross_profit=can_view_gross_profit,
+            can_view_profit_margin=can_view_profit_margin,
+        ),
+    }
     if not can_view_gross_profit:
         summary_updates.update(
             {
@@ -152,7 +214,15 @@ def filter_order_profit_list_data(
             updates.update({"gross_margin": None, "roi": None})
         items.append(item.model_copy(update=updates) if updates else item)
 
-    summary_updates: dict[str, object] = {}
+    summary_updates: dict[str, object] = {
+        "table_totals": redact_report_totals(
+            data.summary.table_totals or _existing_summary_table_totals(data.summary),
+            gross_keys=_GROSS_PROFIT_EXPORT_COLUMNS,
+            margin_keys=_MARGIN_EXPORT_COLUMNS,
+            can_view_gross_profit=can_view_gross_profit,
+            can_view_profit_margin=can_view_profit_margin,
+        ),
+    }
     if not can_view_gross_profit:
         summary_updates.update(
             {
@@ -201,3 +271,16 @@ def empty_order_profit_summary() -> OrderProfitSummaryRead:
         sem_ad_spend_amount=Decimal("0"),
         total_ad_spend_amount=Decimal("0"),
     )
+
+
+def require_sales_sort_access(
+    field: str | None,
+    *,
+    can_view_gross_profit: bool,
+    can_view_profit_margin: bool,
+) -> None:
+    """Prevent hidden financial fields leaking through relative row order."""
+    if field in _GROSS_PROFIT_EXPORT_COLUMNS and not can_view_gross_profit:
+        raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+    if field in _MARGIN_EXPORT_COLUMNS and not (can_view_gross_profit and can_view_profit_margin):
+        raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)

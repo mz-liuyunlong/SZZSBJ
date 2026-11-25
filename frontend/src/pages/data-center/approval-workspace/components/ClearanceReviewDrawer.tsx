@@ -59,7 +59,7 @@ function ClearanceReviewDrawerInner({selected,canReview,directAction,onClose,onU
           {key:"qty",label:"申请数量",children:`${record.requested_qty} 件`},
           {key:"stock",label:"WFS最新可售",children:`${current.available} 件`},
           {key:"owner",label:"负责人",children:current.owner||"—"},
-          {key:"applicant",label:"申请人",children:record.applicant_ref},
+          {key:"applicant",label:"申请人",children:record.applicant_name || "申请人待核实"},
           {key:"method",label:"清货方式",children:record.methods_json.join("、")},
           {key:"reason",label:"清货原因",children:record.reason},
           {key:"note",label:"申请说明",children:record.note||"—"},

@@ -39,6 +39,7 @@ class ApprovalItem(StrictSchema):
     title: str
     source_account_ref: str
     applicant_id: str | None
+    applicant_name: str | None = None
     status: ApprovalStatus
     risk_level: ApprovalRisk
     amount: str | None

@@ -46,6 +46,9 @@ Registry Status: `draft; approved only after owner review and merge`
 
 ## Internal Backend API Registry
 
+2026-11-24 商品计划店铺展示与筛选（本地待验收）：既有 GET `/api/operations/plans/products` 新增 `store_names`（字符串数组）并返回当前关联店铺数量 `store_count`；既有 `store_id` 参数支持逗号分隔多选、任一店铺匹配。GET `/api/operations/plans/options` 的 `stores` 来自 `mart_listing_management_current`，按当前计划周期、Item ID、store_id 去重并统计计划数。保持完整商品账号授权及商品级计划金额口径，不新增接口、物理字段或迁移。
+
+
 2026-10-19 国内仓增量：负责人已确认补齐选项和当前产品负责人筛选，PRP 为 `PRPs/pmc-domestic-filter-options.md`，数据源决策为 `docs/data-sources/decisions/pmc-domestic-filter-options-decision.md`。本地实现和合成测试不等于已合并或部署；既有批次接口新增重复 `owner_uid`（最多50项），列表与统计共同查询SKU身份和当前负责人DWD，数据范围不变，不新增表/同步/写操作。
 
 | API ID | Method | Route | Purpose | Source Layer | Read Model / Table | Permission Key | Data Scope | Frontend Page | Status | PRP | PR | Notes |
@@ -333,3 +336,13 @@ Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源�
 ## PMC-PURCHASE-UNIFIED-SYNC（2026-10-27）
 
 状态：已撤回（2026-10-28）。按负责人要求，任务中心、采购父子接管及统一调度变更恢复 main；不注册或启用采购父任务。原同步入口保持 main 行为。当前整改证据见 `docs/delivery/pmc-scope-rectification-20261028.md`。
+
+## Approval applicant display-name resolution
+
+- Existing approval and clearance GET responses add `applicant_name`.
+- Source: `app_users.id`, `display_name`, `username`.
+- Resolve only identities in already authorized result rows.
+- Applicant IDs remain unchanged for authorization and audit.
+- Missing or unverified identities return null.
+- No new tables, migrations or historical record updates.
+- Status: local implementation pending runtime verification.

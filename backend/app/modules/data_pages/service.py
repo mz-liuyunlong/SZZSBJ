@@ -32,6 +32,7 @@ from app.modules.data_pages.schemas import (
     ListingArchiveActionData,
     ListingGptAnalysisLinkRead,
     ListingGptAnalysisLinkUpdateRequest,
+    ListingManagementFacetData,
     ListingManagementFilterOptionsData,
     ListingManagementItemRead,
     ListingManagementListData,
@@ -166,14 +167,32 @@ class DailySalesService:
             batch_values=query.batch_values,
             page=query.page,
             page_size=query.page_size,
+            **({"summary_only": True} if getattr(query, "summary_only", False) else {}),
+            **(
+                {
+                    "sort_field": query.sort_field,
+                    "sort_direction": query.sort_direction,
+                    "sort_currency": query.sort_currency,
+                }
+                if getattr(query, "sort_field", None)
+                else {}
+            ),
         )
-        inventory_snapshots = self.repository.daily_sales_inventory_snapshot_map(rows)
-        access = (
-            resolve_log_access(self.repository.session, principal, restricted_accounts=account_refs)
-            if principal is not None and principal.user_id.isdecimal()
-            else None
-        )
-        log_summaries = load_daily_sales_log_summaries(self.repository.session, rows, access=access)
+        if getattr(query, "summary_only", False):
+            inventory_snapshots = {}
+            log_summaries = {}
+        else:
+            inventory_snapshots = self.repository.daily_sales_inventory_snapshot_map(rows)
+            access = (
+                resolve_log_access(
+                    self.repository.session, principal, restricted_accounts=account_refs
+                )
+                if principal is not None and principal.user_id.isdecimal()
+                else None
+            )
+            log_summaries = load_daily_sales_log_summaries(
+                self.repository.session, rows, access=access
+            )
 
         (
             sales_qty,
@@ -433,6 +452,15 @@ class OrderProfitService:
             keyword=query.keyword,
             page=query.page,
             page_size=query.page_size,
+            **(
+                {
+                    "sort_field": query.sort_field,
+                    "sort_direction": query.sort_direction,
+                    "sort_currency": query.sort_currency,
+                }
+                if getattr(query, "sort_field", None)
+                else {}
+            ),
         )
 
         (
@@ -615,7 +643,13 @@ class ListingManagementService:
             status=query.status,
             tag=query.tag,
             archive_status=query.archive_status,
+            product_tag=query.product_tag,
+            custom_tag=query.custom_tag,
+            lifecycle=query.lifecycle,
+            grade=query.grade,
+            exact_filters=query.exact_filters,
             summary_filter=query.summary_filter,
+            sort_by=query.sort_by,
             search_field=query.search_field,
             keyword=query.keyword,
             batch_values=query.batch_values,
@@ -660,6 +694,7 @@ class ListingManagementService:
             rating_warning,
             resold_warning,
             strike_price_exception,
+            listing_exception,
         ) = self.repository.listing_summary(
             account_refs=account_refs,
             store_id=query.store_id,
@@ -668,6 +703,11 @@ class ListingManagementService:
             status=query.status,
             tag=query.tag,
             archive_status=query.archive_status,
+            product_tag=query.product_tag,
+            custom_tag=query.custom_tag,
+            lifecycle=query.lifecycle,
+            grade=query.grade,
+            exact_filters=query.exact_filters,
             search_field=query.search_field,
             keyword=query.keyword,
             batch_values=query.batch_values,
@@ -680,6 +720,68 @@ class ListingManagementService:
             rating_warning=rating_warning,
             resold_warning=resold_warning,
             strike_price_exception=strike_price_exception,
+            listing_exception=listing_exception,
+        )
+
+    def listing_complete_facet_batch(
+        self,
+        query: ListingManagementQuery,
+        account_refs: frozenset[str],
+        fields: list[str],
+    ) -> dict[str, ListingManagementFacetData]:
+        items = self.repository.listing_complete_facet_batch(
+            account_refs=account_refs,
+            store_id=query.store_id,
+            owner_ref=query.owner_ref,
+            product_type=query.product_type,
+            status=query.status,
+            tag=query.tag,
+            archive_status=query.archive_status,
+            product_tag=query.product_tag,
+            custom_tag=query.custom_tag,
+            lifecycle=query.lifecycle,
+            grade=query.grade,
+            summary_filter=query.summary_filter,
+            search_field=query.search_field,
+            keyword=query.keyword,
+            batch_values=query.batch_values,
+            exact_filters=query.exact_filters,
+            fields=fields,
+        )
+        return {
+            field: ListingManagementFacetData.model_validate(item) for field, item in items.items()
+        }
+
+    def listing_exact_facet_options(
+        self,
+        query: ListingManagementQuery,
+        account_refs: frozenset[str],
+        field: str,
+        offset: int,
+        limit: int,
+    ) -> ListingManagementFacetData:
+        return ListingManagementFacetData.model_validate(
+            self.repository.listing_exact_facet_options(
+                account_refs=account_refs,
+                store_id=query.store_id,
+                owner_ref=query.owner_ref,
+                product_type=query.product_type,
+                status=query.status,
+                tag=query.tag,
+                archive_status=query.archive_status,
+                product_tag=query.product_tag,
+                custom_tag=query.custom_tag,
+                lifecycle=query.lifecycle,
+                grade=query.grade,
+                summary_filter=query.summary_filter,
+                search_field=query.search_field,
+                keyword=query.keyword,
+                batch_values=query.batch_values,
+                exact_filters=query.exact_filters,
+                field=field,
+                offset=offset,
+                limit=limit,
+            )
         )
 
     def listing_filter_options(
@@ -715,6 +817,18 @@ class ListingManagementService:
                     key=lambda item: item[1],
                 )
             ],
+            product_tags=[
+                DataPageFilterOptionRead(value=value, label=label, count=count)
+                for value, label, count in rows["product_tags"]
+            ],
+            lifecycles=[
+                DataPageFilterOptionRead(value=value, label=label, count=count)
+                for value, label, count in rows["lifecycles"]
+            ],
+            grades=[
+                DataPageFilterOptionRead(value=value, label=label, count=count)
+                for value, label, count in rows["grades"]
+            ],
             archive_statuses=self.repository.archive_status_filter_options(account_refs),
         )
 
@@ -733,7 +847,13 @@ class ListingManagementService:
             status=query.status,
             tag=query.tag,
             archive_status=query.archive_status,
+            product_tag=query.product_tag,
+            custom_tag=query.custom_tag,
+            lifecycle=query.lifecycle,
+            grade=query.grade,
+            exact_filters=query.exact_filters,
             summary_filter=query.summary_filter,
+            sort_by=query.sort_by,
             search_field=query.search_field,
             keyword=query.keyword,
             batch_values=query.batch_values,

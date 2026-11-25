@@ -66,7 +66,7 @@ export default function BusinessApprovalDetail({ detail }: { detail: ApprovalDet
       </Card>
       <Card size="small" title="02 / 申请依据与说明">
         <Space direction="vertical" size={12} style={{width:"100%"}}>
-          <div><Tag color="blue">申请人</Tag>{detail.applicant_id ?? "身份待核实"}</div>
+          <div><Tag color="blue">申请人</Tag>{detail.applicant_name ?? "身份待核实"}</div>
           <Typography.Text strong>申请理由</Typography.Text>
           <Typography.Paragraph style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{detail.reason || "未提供"}</Typography.Paragraph>
           <Typography.Text strong>申请证据</Typography.Text>

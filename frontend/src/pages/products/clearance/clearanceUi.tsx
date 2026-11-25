@@ -49,7 +49,8 @@ function metricTone(key:string):"sales"|"ads"|"profit"|null {
 }
 
 
-export function ClearanceAnalysisTable({rows,rules,tasks,manual,period,state,total,onPage,onInspect,onApply,onTask}:TableCommon&{
+export function ClearanceAnalysisTable({rows,rules,tasks,manual,period,state,total,onPage,onInspect,onApply,onTask,loading}:TableCommon&{
+  loading?:boolean;
   rows:ClearanceProduct[];rules:ClearanceRules;tasks:ClearanceTask[];manual:string[];period:PeriodDays;
   onInspect:(id:string)=>void;onApply:(id:string)=>void;onTask:(id:string)=>void;
 }){
@@ -141,6 +142,7 @@ export function ClearanceAnalysisTable({rows,rules,tasks,manual,period,state,tot
     });
   });
   return <ReportTableShell label="清货分析表格"><ProTable<ClearanceProduct>
+    loading={loading}
     rowKey="id" search={false} options={false} toolBarRender={false} columns={columns} dataSource={rows}
     scroll={{x:fields.reduce((n,[key,,w])=>n+(widths["analysis:"+key]??w),0),y:"100%"}}
     pagination={{current:state.page,pageSize:state.pageSize,total:total??rows.length,size:"small",showSizeChanger:true,showQuickJumper:true,pageSizeOptions:REPORT_TABLE_PAGE_SIZE_OPTIONS,onChange:onPage}}

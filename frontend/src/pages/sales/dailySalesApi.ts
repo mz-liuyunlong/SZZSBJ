@@ -1,3 +1,5 @@
+import { decodeReportTableTotals, type BackendReportTableTotals, type ReportTableTotals } from "@/pages/sales/reportTotals";
+import { appendSalesReportSort, type SalesReportSort, type SalesSortCurrency } from "@/pages/sales/reportSort";
 import { backendDownload, backendRequest } from "@/api/backendApi";
 import type {
   DailySalesCurrency,
@@ -82,6 +84,7 @@ interface BackendDailySalesItem {
 }
 
 interface BackendDailySalesSummary {
+  table_totals?: BackendReportTableTotals | null;
   sales_qty: string;
   order_count: string;
   sales_amount: string;
@@ -114,6 +117,7 @@ export interface DailySalesApiMeta {
 }
 
 export interface DailySalesServerSummary {
+  tableTotals?: ReportTableTotals | null;
   salesQuantity: number;
   orderCount: number;
   salesAmount: number;
@@ -139,6 +143,10 @@ export interface DailySalesApiResult {
 }
 
 interface DailySalesParams {
+  includeTableTotals?: boolean;
+  summaryOnly?: boolean;
+  sort?: SalesReportSort | null;
+  sortCurrency?: SalesSortCurrency;
   startDate?: string;
   endDate?: string;
   page?: number;
@@ -260,6 +268,7 @@ const toDailySalesServerSummary = (
   if (!summary) return null;
 
   return {
+    tableTotals: decodeReportTableTotals(summary.table_totals),
     salesQuantity: numberValue(summary.sales_qty),
     orderCount: numberValue(summary.order_count),
     salesAmount: numberValue(summary.sales_amount),
@@ -326,6 +335,9 @@ async function fetchDailySalesRowsFromApi(
   appendDailySalesFilters(search, params);
   search.set("page", String(page));
   search.set("page_size", String(pageSize));
+  if (params.includeTableTotals === false) search.set("include_table_totals", "false");
+  if (params.summaryOnly) search.set("summary_only", "true");
+  appendSalesReportSort(search, params.sort, params.sortCurrency);
 
   const envelope = await backendRequest<BackendDailySalesData, DailySalesApiMeta>(
     `/api/sales/daily-sales?${search.toString()}`,
@@ -371,6 +383,7 @@ export async function downloadDailySalesExportCsv(
   if (params.endDate) search.set("end_date", params.endDate);
   search.set("period", params.period);
   search.set("dimension", params.dimension);
+  appendSalesReportSort(search, params.sort, params.sortCurrency);
 
   if (params.columns.length > 0) {
     search.set("columns", params.columns.join(","));

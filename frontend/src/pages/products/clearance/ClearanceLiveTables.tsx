@@ -143,17 +143,18 @@ export function ClearanceLiveAnalysisTable({rows,period,state,total,onPage,onIns
   </ReportTableShell>;
 }
 
-export function ClearanceLiveManagementTable({rows,state,onPage,total,onTask}:BaseProps&{
+export function ClearanceLiveManagementTable({rows,state,onPage,total,onTask,loading}:BaseProps&{
+  loading?:boolean;
   rows:ClearanceApplication[];onTask(id:string):void;
 }){
   const [widths,setWidths]=useState<Record<string,number>>({});
   const onWidth=(key:string,value:number)=>setWidths(old=>({...old,[key]:value}));
   const cell=(row:ClearanceApplication,key:string):ReactNode=>{
     const target=row.approved_qty??row.requested_qty;
-    const sold=number(row.sold_qty);
+    const sold=number(row.plan_sold_qty);
     const progress=sold!==null&&target>0?Math.max(0,Math.min(100,Math.floor(sold*100/target))):null;
     switch(key){
-      case "identity":return <><strong>{row.display_product_name||row.title||row.item_id}</strong><Typography.Text className="clearance-subline" type="secondary">{row.item_id}</Typography.Text></>;
+      case "identity":return <><strong>{row.display_product_name||"—"}</strong><Typography.Text className="clearance-subline" type="secondary">{row.item_id}</Typography.Text></>;
       case "sku":return <><strong>{row.local_sku||"—"}</strong><Typography.Text className="clearance-subline" type="secondary">{row.msku||"—"}</Typography.Text></>;
       case "store":return <>{row.store_name||row.store_id}<Typography.Text className="clearance-subline" type="secondary">{row.display_owner_name||row.owner_ref||"—"}</Typography.Text></>;
       case "source":return <Tag color="purple">运营主动申请</Tag>;
@@ -161,7 +162,7 @@ export function ClearanceLiveManagementTable({rows,state,onPage,total,onTask}:Ba
       case "method":return row.methods_json.join(" / ");
       case "goal":return <strong>{count(target)} 件</strong>;
       case "sold":return sold===null?"—":`${count(sold)} 件`;
-      case "revenue":return <span title="未获得此清货任务的真实成交金额，不使用当前售价估算">—</span>;
+      case "revenue":return amount(row.plan_sales_amount_usd);
       case "progress":return progress===null?"—":<div className="clearance-progress" title={`实际销售 ${sold} 件 / 批准目标 ${target} 件`}>
         <strong>{progress}%</strong><Progress percent={progress} showInfo={false} size="small"/></div>;
       // CLEARANCE_TARGET_COST_FALLBACK_V44
@@ -172,7 +173,7 @@ export function ClearanceLiveManagementTable({rows,state,onPage,total,onTask}:Ba
         if(saved!==null && saved>=0)return <span title="申请时保存的采购成本加头程 × 本任务目标数量；历史申请快照，非当前成本">{money(saved)}</span>;
         return <span title="当前和申请快照均缺少可核实的采购+头程成本，未生成估算金额">—</span>;
       }
-      case "plannedStart":return <span title="按申请提交时的美国洛杉矶日期，默认次日开始；非独立保存的计划日期">{v50DisplayDate(v50PlannedStart(row.submitted_at))}</span>;
+      case "plannedStart":return <span title="按申请提交时的美国洛杉矶日期，默认次日开始；非独立保存的计划日期">{v50DisplayDate(row.plan_start_date_la??v50PlannedStart(row.submitted_at))}</span>;
       case "due":return <span title={row.planned_completion_date?"申请时保存的计划完成日期":"申请列表及详情未返回已保存的计划完成日期；需检查后端持久化"}>{v50DisplayDate(row.planned_completion_date)}</span>;
       case "status":return <Tag color={statusColor[row.status]||"default"}>{statusLabel[row.status]||row.status}</Tag>;
       case "submitted":return row.submitted_at
@@ -185,6 +186,7 @@ export function ClearanceLiveManagementTable({rows,state,onPage,total,onTask}:Ba
   const columns=MANAGEMENT_FIELDS.map(([key,label,width])=>makeColumn<ClearanceApplication>(key,label,width,widths,onWidth,row=>cell(row,key),"management"));
   const totalWidth=MANAGEMENT_FIELDS.reduce((sum,[key,,w])=>sum+(widths["management:"+key]??w),0);
   return <ReportTableShell label="清货管理表格"><ProTable<ClearanceApplication>
+    loading={loading}
     rowKey="id" search={false} options={false} toolBarRender={false} dataSource={rows} columns={columns}
     scroll={{x:totalWidth,y:"100%"}}
     pagination={{current:state.page,pageSize:state.pageSize,total,size:"small",showSizeChanger:true,
