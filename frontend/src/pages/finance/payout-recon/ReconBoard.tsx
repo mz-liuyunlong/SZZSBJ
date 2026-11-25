@@ -23,11 +23,6 @@ import { PAY_STATE, REVIEW_TAG, VOIDED_ARRIVAL_TEXT, isFirstPending, isMatched, 
 type CardKey = "all" | "paid" | "anomaly" | "todo" | "ok1";
 
 const EMPTY = "—";
-        <Tag bordered={false} color={walmart ? (differs ? "orange" : "blue") : "default"} style={{ marginInlineEnd: 0 }}>{walmart ? (differs ? "沃尔玛≠领星" : "沃尔玛") : "领星"}</Tag>
-      </Space>
-    </Tooltip>
-  );
-}
 const icon = (text: string) => <span className="management-stat-card__mark">{text}</span>;
 const usd = (value: number | null | undefined, strong?: boolean) =>
   strong ? <Typography.Text strong><MoneyCell value={value} /></Typography.Text> : <MoneyCell value={value} />;
@@ -43,6 +38,11 @@ function payableCell(row: ReconRow): ReactNode {
     <Tooltip title={title}>
       <Space size={4}>
         {usd(row.payable, true)}
+        <Tag bordered={false} color={walmart ? (differs ? "orange" : "blue") : "default"} style={{ marginInlineEnd: 0 }}>{walmart ? (differs ? "沃尔玛≠领星" : "沃尔玛") : "领星"}</Tag>
+      </Space>
+    </Tooltip>
+  );
+}
 
 export interface ReconBoardProps {
   actions: ReactNode;
