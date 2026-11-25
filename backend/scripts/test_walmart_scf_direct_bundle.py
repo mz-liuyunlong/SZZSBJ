@@ -61,11 +61,15 @@ def fake_http(request):
     assert request.url.host == "marketplace.walmartapis.com"
     if request.url.path == "/v3/token":
         return httpx.Response(200, json={"access_token": "test-token"})
-    assert request.method == "GET"
+    if request.url.path == "/v3/new-generic-smoke":
+        assert request.method in {"GET", "POST", "PUT", "PATCH", "DELETE"}
+    else:
+        assert request.method == "GET"
     return httpx.Response(200, json={"items": [{"test": True}]})
 def fake_client(**kwargs):
     assert kwargs["trust_env"] is False and kwargs["follow_redirects"] is False
-    assert "proxy" not in kwargs
+    assert kwargs.pop("proxy", None) is None
+    assert kwargs.pop("transport", None) is None
     return original_client(transport=httpx.MockTransport(fake_http), **kwargs)
 httpx.Client = fake_client
 
@@ -126,7 +130,23 @@ for key, params in samples.items():
 # A write-shaped signed request cannot be executed in read-only direct mode.
 assert scf_runtime._max_risk_from_env(False) == "read"
 assert len([p for p in requests if p[0] == "GET"]) == 5  # v1 + four v3
-print("SCF_PY310_ZIP_SMOKE_OK: v1 + v3 four reads, signature replay/store checks, no writes")
+# V4 works through the same real bundle and the legacy read-only configuration.
+# All outbound HTTP and SSM traffic remains mocked.
+for method in ("GET", "POST", "PUT", "PATCH", "DELETE"):
+    generic = signer.sign_generic(
+        store_code=STORE,
+        function_name=FUNCTION,
+        method=method,
+        path="/v3/new-generic-smoke",
+        body=None if method == "GET" else {"futureField": 1},
+    )
+    result = main_handler(generic, None)
+    assert result["success"] is True, result
+    assert result["protocol"] == 4
+    assert result["request_id"] == generic["auth"]["request_id"]
+    assert main_handler(generic, None)["status"] == "WALMART_SIGNATURE_REPLAYED"
+    assert main_handler(dict(generic, store_code="CN2603"), None)["success"] is False
+print("SCF_PY310_ZIP_SMOKE_OK: v1/v3 reads and v4 five methods, all mocked")
 """
 
 

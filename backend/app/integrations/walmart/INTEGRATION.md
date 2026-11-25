@@ -253,3 +253,58 @@ RBAC 落点：权限 key 由注册中心定义（`Operation.permission`），不
 生成密钥（部署 AI，在主服务器上执行一次，私钥不离开服务器）：`python -c "from app.integrations.walmart.contract_signing import ContractSigner as S; from app.integrations.walmart.unified_api import reviewed_registry as R; s=S.generate(kid='szzsbj-2026-10', registry=R()); open('/etc/szzsbj/walmart-contract-signing.pem','wb').write(s.private_pem()); print(s.public_key_b64())"`，然后 `chmod 640` + `chown root:szzsbj`，输出的公钥交给云函数所有者。
 
 新增一个 Walmart 接口的步骤：在对应 catalog 加 `Operation`（方法、路径、字段 schema、`mutating`、`response_kind`）→ `reviewed_registry()` 自动带上权限 → 写契约测试（参数校验、v3 事件往返）→ 业务模块通过 `gw.call` 使用 → 合并即生效，云函数不变。
+
+## 2026-11-25 V3.1 通用代理（事件协议 v4）
+
+负责人已授权本次实现：九家 SCF/SSM 保持隔离，SZZSBJ 可信后端代码自由定义
+Walmart Marketplace 请求。**不新增运行时业务接口目录、读写风险上限、审批引用、
+审计成功或业务幂等账本等通用调用前置条件。** v1/v2/v3 及原有业务权限逻辑保持不变；
+新通用调用走 v4，不自动改造任何既有采购、广告、报表或其他业务模块。
+
+### 内部 Python 入口
+
+    from app.integrations.walmart.generic_client import call_walmart
+
+    result = call_walmart(
+        store_code, "POST", "/v3/example",
+        query={"limit": 10}, body={"exampleField": "example"},
+    )
+    # result.status_code / result.data / result.provider_error / result.request_id
+    # response_kind="pdf" -> result.pdf
+    # response_kind="zip" -> result.zip_bytes / result.report_request_id
+
+上例路径和字段仅为接口形状示例，并非真实 Walmart API；由业务代码提供官方定义。
+支持 GET/POST/PUT/PATCH/DELETE、JSON 请求、JSON（含空响应）/PDF/报表 ZIP 响应、
+官方 HTTP 状态及脱敏错误。ZIP 使用同一官方 HTTPS 主机的预签名下载链接，不转发
+Walmart token；不跟随重定向。通用调用不自动重试结果不明确的请求，不自动执行真实写入。
+不得将内部函数直接暴露为浏览器可指定任意 method/path/body 的 route。
+
+### 配置与兼容
+
+复用原有 SZZSBJ 店铺映射、CVM/STS 调用身份、Ed25519 签名私钥及 kid；SCF 继续使用
+本店 SSM、公钥、绑定店铺/function、现有 live mode 及批准的网络出站设置。
+v4 不读取业务 approved keys、max risk、approval ref 或业务账本。
+保留基础签名、有效期和防重放；如未配置共享 Redis/CFS，防重放仅在单 SCF
+实例内有效，不能声称跨实例防重放。真实写入前必须认识这一风险，既有业务自身防重复
+逻辑不删除。不要让通用通道接收不可信前端请求。
+
+固定目标 https://marketplace.walmartapis.com/v3/，禁止调用者提供外部 URL、
+任意认证头、token 端点、编码路径逃逸；敏感响应和凭据不得返回。
+这是现有 JSON 请求传输能力的通用化，不覆盖其他域名、API 版本、multipart、
+XML、任意文件上传、未经实现的响应类型。ClientContext 上限 64 KiB；JSON 响应
+1 MiB，PDF 4 MiB，ZIP 3.5 MiB，SCF 封装不超过 5.5 MiB；v4 主服务器接收层
+适配 SCF 返回的 JSON 包装大小，旧通道的默认限制不变。
+
+### 验证与升级
+
+- 先运行后端全量 preflight、v4 专项 pytest、旧 v1/v2/v3 回归和真实 ZIP
+  的 Python 3.10 离线 smoke。所有请求均为 mock，禁止真实 Walmart 调用。
+- 记录 CN2601 当前 stable 版本；核对签名、公钥、角色、SSM、店铺绑定、网络、
+  函数超时及共享重放状态，不读取或输出密钥值。
+- 使用同一 CI 产出的 ZIP 发布独立版本。可通过构造测试版本 qualifier 做只读灰度，
+  再按授权切 stable；不能把主系统指向尚未支持 v4 的版本。验证旧查询和通用查询。
+- CN2601 验收后分别升级其余八个函数。不得自动复制店铺绑定或密钥配置。
+- 回滚：将各 stable 别名恢复到记录的旧版本，停止新通用调用；主系统按原版本回退。
+  未合并、未部署前，不宣称真实云端验证通过。
+
+本次新增内部协议，不新增公网 API、页面、数据库、迁移、业务定时任务或真实写入。

@@ -11,7 +11,11 @@ from typing import Any, Protocol
 
 from app.integrations.walmart.routed_scf import create_scoped_client
 from app.integrations.walmart.tenc_sts_identity import CachedScfAssumeRoleIdentity
-from app.integrations.walmart.tencent_api import TemporaryTencentIdentity, TencentApiClient
+from app.integrations.walmart.tencent_api import (
+    MAX_BYTES,
+    TemporaryTencentIdentity,
+    TencentApiClient,
+)
 from app.integrations.walmart.unified_api import WalmartReadAPI, load_unified_registry
 
 
@@ -22,13 +26,21 @@ class IdentityProvider(Protocol):
 class RefreshingScfApi(TencentApiClient):
     """Request fresh-or-cached account B identity for each SCF invocation."""
 
-    def __init__(self, provider: IdentityProvider) -> None:
+    def __init__(
+        self, provider: IdentityProvider, *, scf_response_limit: int = MAX_BYTES
+    ) -> None:
         self._provider = provider
+        self._scf_response_limit = scf_response_limit
 
     def request(self, service: str, payload: dict[str, Any]) -> dict[str, Any]:
         if service != "scf":
             raise ValueError("SCF_ONLY")
-        return TencentApiClient(self._provider.get_identity()).request("scf", payload)
+        identity = self._provider.get_identity()
+        if self._scf_response_limit == MAX_BYTES:
+            return TencentApiClient(identity).request("scf", payload)
+        return TencentApiClient(
+            identity, scf_response_limit=self._scf_response_limit
+        ).request("scf", payload)
 
 
 def make_walmart_read_api(

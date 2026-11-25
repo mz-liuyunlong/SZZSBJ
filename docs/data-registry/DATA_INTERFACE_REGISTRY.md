@@ -2,6 +2,12 @@
 
 Registry Status: `draft; approved only after owner review and merge`
 
+## 2026-11-25 Walmart SCF 通用代理 v4（内部传输）
+
+| 接口／数据集 | 来源与粒度 | 本轮变更及边界 | 状态／文档 |
+|---|---|---|---|
+| `call_walmart(store_code, method, path, query, body, response_kind)` / SCF v4 | Walmart 官方 Marketplace API；独立店铺单次请求 | 内部签名通用转发；不新增业务数据集、表、公开 route、业务权限或实际调用；旧协议保留 | 实现候选，CI 与审核待完成；[PRP](../../PRPs/walmart-scf-generic-v31.md)、[集成说明](../../backend/app/integrations/walmart/INTEGRATION.md)、[交接](../delivery/walmart-scf-generic-v31-handoff-20261125.md) |
+
 ## 2026-10-28 打包审批增量登记（验收暂停）
 
 字段纠错（负责人已批准）：arrival_received ← 同版本采购明细 ODS payload_json.quantity_entry（到货入库量）；arrival_pending ← quantity_receive（待到货量）。分别汇总原明细，不累加计划拆行或采集快照；缺字段不按差值推算。未新增物理字段，未运行修复后测试；前序测试结果不能代替此次验收。
