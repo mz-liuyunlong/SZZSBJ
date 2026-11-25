@@ -24,6 +24,7 @@ import app.modules.pmc_purchase.gate3_models  # noqa: F401  # Register PMC purch
 import app.modules.pmc_purchase.models  # noqa: F401  # Register PMC purchase ODS.
 import app.modules.product_management.models  # noqa: F401  # Register product management BFF.
 import app.modules.products.models  # noqa: F401  # Register approved model metadata.
+import app.modules.settlement_profit.models  # noqa: F401  # Settlement profit V3 tables.
 import app.modules.sku_detail.models  # noqa: F401  # Register SKU DWD/DWS projections.
 import app.modules.walmart_bills.models  # noqa: F401  # Register Walmart bill lines/periods.
 import app.modules.walmart_bills.payout_models  # noqa: F401  # Register payout reconciliation.

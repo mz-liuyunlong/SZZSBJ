@@ -14,6 +14,7 @@ def register_productlist_sync_models() -> None:
     import app.modules.pmc_purchase.models
     import app.modules.product_management.models
     import app.modules.products.models
+    import app.modules.settlement_profit.models
     import app.modules.sku_detail.models
     import app.modules.walmart_bills.models
     import app.modules.walmart_bills.payout_models
