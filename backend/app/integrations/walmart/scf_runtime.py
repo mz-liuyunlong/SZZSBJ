@@ -12,6 +12,10 @@ Protocol v3 (signed contracts) is enabled by ``SZZSBJ_WALMART_CONTRACT_PUBLIC_KE
 allowlists above are not consulted; the only per-store switch is
 ``SZZSBJ_WALMART_MAX_RISK`` ("read" by default, "write" only together with the
 read-write live mode). v1/v2 events keep working unchanged.
+
+Protocol v4 authenticates trusted internal requests with the same public keys
+and per-store binding, without interpreting legacy business allowlists or risk
+ceilings. The existing live-mode and approved network route remain required.
 """
 
 from __future__ import annotations
@@ -34,6 +38,9 @@ from app.integrations.walmart.contract_signing import (
 )
 from app.integrations.walmart.contracts import ContractRegistry, Operation
 from app.integrations.walmart.direct_readonly_transport import WalmartDirectReadOnlyTransport
+from app.integrations.walmart.generic_executor import execute_generic_event
+from app.integrations.walmart.generic_protocol import VERSION as GENERIC_VERSION
+from app.integrations.walmart.generic_transport import WalmartGenericTransport
 from app.integrations.walmart.https_transport import WalmartHttpsTransport
 from app.integrations.walmart.sem_catalog import SEM_WRITE_KEYS, sem_write_registry
 from app.integrations.walmart.tencent_api import TemporaryTencentIdentity, TencentApiClient
@@ -229,6 +236,23 @@ def _load_registry(
     return ContractRegistry.from_openapi(parsed, approved_keys=approved_keys)
 
 
+def _generic_transport_from_env(
+    *, store: str, secrets: TencentSsmResolver
+) -> WalmartGenericTransport:
+    """Reuse the approved network route, not the legacy business risk mode."""
+    mode = os.environ.get(EGRESS_MODE_ENV, "").strip()
+    if mode == "direct-public-readonly":
+        if os.environ.get(DIRECT_APPROVED_ENV) != "1":
+            raise ValueError("WALMART_EGRESS_NOT_APPROVED")
+        return WalmartGenericTransport(bound_store=store, secret_resolver=secrets)
+    if mode not in ("", "private-proxy"):
+        raise ValueError("WALMART_EGRESS_NOT_APPROVED")
+    mapping = json.loads(os.environ.get("SZZSBJ_WALMART_PRIVATE_PROXIES", "{}"))
+    if not isinstance(mapping, dict) or set(mapping) != {store}:
+        raise ValueError("WALMART_EGRESS_MISSING")
+    return WalmartGenericTransport(bound_store=store, secret_resolver=secrets, proxy=mapping[store])
+
+
 def main_handler(event: object, context: object) -> dict[str, Any]:
     """Tencent SCF handler; no raw error details, bodies, keys or tokens."""
     if isinstance(event, dict) and event.get("operation") == "health":
@@ -240,9 +264,24 @@ def main_handler(event: object, context: object) -> dict[str, Any]:
     store = os.environ.get("SZZSBJ_WALMART_BOUND_STORE", "")
     if not _STORE_PATTERN.fullmatch(store):
         return {"success": False, "status": "WALMART_STORE_BINDING_MISSING"}
+    generic = isinstance(event, dict) and event.get("version") == GENERIC_VERSION
     signed = isinstance(event, dict) and event.get("version") == 3
     try:
         verifier = _verifier_from_env(store)
+        if generic:
+            if verifier is None:
+                return {"success": False, "status": "WALMART_PROTOCOL_NOT_ENABLED"}
+            secrets = TencentSsmResolver(
+                TencentApiClient(TemporaryTencentIdentity.from_environment()),
+                approved_stores=frozenset({store}),
+                version=os.environ.get("SZZSBJ_WALMART_SECRET_VERSION", "v1"),
+            )
+            return execute_generic_event(
+                event,
+                verifier=verifier,
+                store=store,
+                transport=_generic_transport_from_env(store=store, secrets=secrets),
+            )
         if signed and verifier is None:
             return {"success": False, "status": "WALMART_PROTOCOL_NOT_ENABLED"}
         approved = frozenset(
