@@ -42,6 +42,16 @@ from app.db.base import Base
 
 MONEY = Numeric(18, 4)
 FX_RATE = Numeric(18, 8)
+# 件数（可能有小数，如平均在库件数）；和金额分开定义，不复用 MONEY
+QTY = Numeric(18, 4)
+LINE_KEY = String(320)
+# 汇率齐（final）时必须有汇率，缺汇率（missing）时汇率必须为空，不兜底
+FX_RATE_MATCHES_STATUS = "(fx_status = 'final') = (fx_rate IS NOT NULL)"
+# 成本录入的范围标识必须由发货单号 / 出库单号推出，写入方拼错会被数据库拒绝
+SCOPE_REF_MATCHES = (
+    "scope_ref = CASE WHEN shipping_list_code IS NOT NULL "
+    "THEN 'shipping:' || shipping_list_code ELSE 'outbound:' || outbound_order_no END"
+)
 
 FX_STATUSES = ("final", "missing")
 # 订单行待审原因（§8.4，订单行 8 个）；店铺级项目只有 price_missing（§8.6）。
@@ -112,6 +122,10 @@ def _json_dict() -> Any:
 
 def _money() -> Any:
     return mapped_column(MONEY, nullable=False, default=Decimal("0"), server_default=text("0"))
+
+
+def _qty() -> Any:
+    return mapped_column(QTY, nullable=False, default=Decimal("0"), server_default=text("0"))
 
 
 def _version() -> Any:
@@ -237,7 +251,7 @@ class FinShippingDetailItem(_Ods, Base):
     logistics_provider_id: Mapped[str | None] = mapped_column(String(64))
     head_fee_type: Mapped[str | None] = mapped_column(String(32))
     value_source: Mapped[str | None] = mapped_column(String(32))
-    delivery_num: Mapped[Decimal | None] = mapped_column(MONEY)
+    delivery_num: Mapped[Decimal | None] = mapped_column(QTY)
 
 
 class FinWmsOutboundOrder(_Ods, Base):
@@ -314,11 +328,21 @@ class SettlementOrderLine(_Calc, _Fx, _Created, Base):
             name="uq_fact_settlement_order_line",
         ),
         Index("ix_fact_settlement_order_lines_current", "store_id", "period_key", "is_current"),
+        # 同店同期同一订单行只能有一个当前版本，否则利润 / 对平 / 审核页会重复计算
+        Index(
+            "uq_fact_settlement_order_line_current",
+            "store_id",
+            "period_key",
+            "line_key",
+            unique=True,
+            postgresql_where=text("is_current"),
+        ),
         Index("ix_fact_settlement_order_lines_item", "store_id", "bill_month", "item_id"),
         CheckConstraint(_first_of_month("bill_month"), name="bill_month_first_day"),
         CheckConstraint(_in("line_kind", LINE_KINDS), name="line_kind"),
         CheckConstraint(_in("fulfillment_type", FULFILLMENT_TYPES), name="fulfillment_type"),
         CheckConstraint(_in("fx_status", FX_STATUSES), name="fx_status"),
+        CheckConstraint(FX_RATE_MATCHES_STATUS, name="fx_rate_matches_status"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -326,7 +350,7 @@ class SettlementOrderLine(_Calc, _Fx, _Created, Base):
     store_id: Mapped[str] = mapped_column(String(32), nullable=False)
     period_key: Mapped[str] = mapped_column(String(64), nullable=False)
     bill_month: Mapped[date] = mapped_column(Date, nullable=False)
-    line_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    line_key: Mapped[str] = mapped_column(LINE_KEY, nullable=False)
     is_current: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
     )
@@ -340,7 +364,7 @@ class SettlementOrderLine(_Calc, _Fx, _Created, Base):
     msku: Mapped[str | None] = mapped_column(Text)
     owner_id: Mapped[str | None] = mapped_column(String(128))
     posted_date: Mapped[date | None] = mapped_column(Date)
-    quantity: Mapped[Decimal] = _money()
+    quantity: Mapped[Decimal] = _qty()
     transaction_types: Mapped[list[str]] = _json_list()
     # 收入与订单费用（USD，结算单口径；正 = 收入，负 = 扣费）
     sales_usd: Mapped[Decimal] = _money()
@@ -390,6 +414,7 @@ class SettlementStoreMonthItem(_Calc, _Fx, _Timestamps, Base):
         CheckConstraint(_in("assign_status", ASSIGN_STATUSES), name="assign_status"),
         CheckConstraint(_in("review_status", REVIEW_STATUSES), name="review_status"),
         CheckConstraint(_in("fx_status", FX_STATUSES), name="fx_status"),
+        CheckConstraint(FX_RATE_MATCHES_STATUS, name="fx_rate_matches_status"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -398,7 +423,7 @@ class SettlementStoreMonthItem(_Calc, _Fx, _Timestamps, Base):
     period_key: Mapped[str | None] = mapped_column(String(64))
     source_kind: Mapped[str] = mapped_column(String(32), nullable=False)
     source_ref: Mapped[str] = mapped_column(String(255), nullable=False)
-    line_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    line_key: Mapped[str] = mapped_column(LINE_KEY, nullable=False)
     transaction_type: Mapped[str | None] = mapped_column(String(128))
     amount_usd: Mapped[Decimal] = _money()
     amount_cny: Mapped[Decimal | None] = mapped_column(MONEY)
@@ -434,7 +459,7 @@ class SettlementPostCloseDiff(_Created, Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     store_id: Mapped[str] = mapped_column(String(32), nullable=False)
     bill_month: Mapped[date] = mapped_column(Date, nullable=False)
-    line_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    line_key: Mapped[str] = mapped_column(LINE_KEY, nullable=False)
     detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     frozen_calc_version: Mapped[int] = mapped_column(Integer, nullable=False)
     new_calc_version: Mapped[int | None] = mapped_column(Integer)
@@ -461,6 +486,7 @@ class SettlementProfitItemMonth(_Calc, _Fx, _Timestamps, Base):
         Index("ix_mart_settlement_profit_item_month_owner", "owner_id", "bill_month"),
         CheckConstraint(_first_of_month("bill_month"), name="bill_month_first_day"),
         CheckConstraint(_in("fx_status", FX_STATUSES), name="fx_status"),
+        CheckConstraint(FX_RATE_MATCHES_STATUS, name="fx_rate_matches_status"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -471,7 +497,7 @@ class SettlementProfitItemMonth(_Calc, _Fx, _Timestamps, Base):
     period_end: Mapped[date | None] = mapped_column(Date)
     sku: Mapped[str | None] = mapped_column(Text)
     owner_id: Mapped[str | None] = mapped_column(String(128))
-    quantity: Mapped[Decimal] = _money()
+    quantity: Mapped[Decimal] = _qty()
     sales_usd: Mapped[Decimal] = _money()
     refund_usd: Mapped[Decimal] = _money()
     promotion_usd: Mapped[Decimal] = _money()
@@ -520,7 +546,7 @@ class SettlementOrderReview(_Calc, _Timestamps, Base):
     store_id: Mapped[str] = mapped_column(String(32), nullable=False)
     period_key: Mapped[str] = mapped_column(String(64), nullable=False)
     bill_month: Mapped[date] = mapped_column(Date, nullable=False)
-    line_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    line_key: Mapped[str] = mapped_column(LINE_KEY, nullable=False)
     row_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     platform_order_no: Mapped[str | None] = mapped_column(String(64))
     item_id: Mapped[str | None] = mapped_column(String(64))
@@ -590,7 +616,7 @@ class SettlementNoOrderFlag(_Calc, _Timestamps, Base):
     owner_id: Mapped[str | None] = mapped_column(String(128))
     months_without_order: Mapped[int] = mapped_column(Integer, nullable=False)
     last_order_date: Mapped[date | None] = mapped_column(Date)
-    wfs_inventory_qty: Mapped[Decimal | None] = mapped_column(MONEY)
+    wfs_inventory_qty: Mapped[Decimal | None] = mapped_column(QTY)
     inventory_snapshot_date: Mapped[date | None] = mapped_column(Date)
     storage_fee_cum_usd: Mapped[Decimal] = _money()
     disposal_loss_cum_usd: Mapped[Decimal] = _money()
@@ -619,6 +645,7 @@ class SettlementCostEntry(_Actor, _Timestamps, Base):
         CheckConstraint(
             "(shipping_list_code IS NULL) <> (outbound_order_no IS NULL)", name="one_scope"
         ),
+        CheckConstraint(SCOPE_REF_MATCHES, name="scope_ref_matches"),
         CheckConstraint(
             "entry_kind <> 'override' OR coalesce(reason, '') <> ''", name="override_reason"
         ),
@@ -686,7 +713,7 @@ class SettlementOrderAdjustment(_Actor, _Timestamps, Base):
     store_id: Mapped[str] = mapped_column(String(32), nullable=False)
     bill_month: Mapped[date] = mapped_column(Date, nullable=False)
     period_key: Mapped[str | None] = mapped_column(String(64))
-    line_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    line_key: Mapped[str] = mapped_column(LINE_KEY, nullable=False)
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     amount_field: Mapped[str | None] = mapped_column(String(64))
     amount_usd: Mapped[Decimal | None] = mapped_column(MONEY)
@@ -728,7 +755,7 @@ class SettlementReviewAction(_Actor, Base):
     period_key: Mapped[str | None] = mapped_column(String(64))
     target_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     target_id: Mapped[UUID | None] = mapped_column()
-    line_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    line_key: Mapped[str] = mapped_column(LINE_KEY, nullable=False)
     stage: Mapped[str] = mapped_column(String(8), nullable=False)
     decision: Mapped[str] = mapped_column(String(8), nullable=False)
     comment: Mapped[str | None] = mapped_column(Text)

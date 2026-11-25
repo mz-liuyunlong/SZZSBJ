@@ -107,7 +107,7 @@ def upgrade() -> None:
         sa.Column("store_id", sa.String(length=32), nullable=False),
         sa.Column("period_key", sa.String(length=64), nullable=False),
         sa.Column("bill_month", sa.Date(), nullable=False),
-        sa.Column("line_key", sa.String(length=255), nullable=False),
+        sa.Column("line_key", sa.String(length=320), nullable=False),
         sa.Column("is_current", sa.Boolean(), server_default=sa.text("true"), nullable=False),
         sa.Column("line_kind", sa.String(length=16), nullable=False),
         sa.Column("fulfillment_type", sa.String(length=16), nullable=False),
@@ -239,6 +239,9 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint("fulfillment_type IN ('wfs', 'seller')", name="fulfillment_type"),
         sa.CheckConstraint("fx_status IN ('final', 'missing')", name="fx_status"),
+        sa.CheckConstraint(
+            "(fx_status = 'final') = (fx_rate IS NOT NULL)", name="fx_rate_matches_status"
+        ),
         sa.CheckConstraint("line_kind IN ('sale', 'refund', 'mcf')", name="line_kind"),
         sa.CheckConstraint("EXTRACT(DAY FROM bill_month) = 1", name="bill_month_first_day"),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_fact_settlement_order_lines")),
@@ -262,12 +265,19 @@ def upgrade() -> None:
         ["store_id", "bill_month", "item_id"],
         unique=False,
     )
+    op.create_index(
+        "uq_fact_settlement_order_line_current",
+        "fact_settlement_order_lines",
+        ["store_id", "period_key", "line_key"],
+        unique=True,
+        postgresql_where=sa.text("is_current"),
+    )
     op.create_table(
         "fact_settlement_post_close_diffs",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("store_id", sa.String(length=32), nullable=False),
         sa.Column("bill_month", sa.Date(), nullable=False),
-        sa.Column("line_key", sa.String(length=255), nullable=False),
+        sa.Column("line_key", sa.String(length=320), nullable=False),
         sa.Column("detected_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("frozen_calc_version", sa.Integer(), nullable=False),
         sa.Column("new_calc_version", sa.Integer(), nullable=True),
@@ -313,7 +323,7 @@ def upgrade() -> None:
         sa.Column("period_key", sa.String(length=64), nullable=True),
         sa.Column("source_kind", sa.String(length=32), nullable=False),
         sa.Column("source_ref", sa.String(length=255), nullable=False),
-        sa.Column("line_key", sa.String(length=255), nullable=False),
+        sa.Column("line_key", sa.String(length=320), nullable=False),
         sa.Column("transaction_type", sa.String(length=128), nullable=True),
         sa.Column(
             "amount_usd",
@@ -380,6 +390,9 @@ def upgrade() -> None:
             "assign_status IN ('assigned', 'pending', 'not_applicable')", name="assign_status"
         ),
         sa.CheckConstraint("fx_status IN ('final', 'missing')", name="fx_status"),
+        sa.CheckConstraint(
+            "(fx_status = 'final') = (fx_rate IS NOT NULL)", name="fx_rate_matches_status"
+        ),
         sa.CheckConstraint(
             "review_status IN ('pending', 'auto', 'first_passed', 'final_passed', 'rejected')",
             name="review_status",
@@ -462,6 +475,11 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "(shipping_list_code IS NULL) <> (outbound_order_no IS NULL)", name="one_scope"
         ),
+        sa.CheckConstraint(
+            "scope_ref = CASE WHEN shipping_list_code IS NOT NULL "
+            "THEN 'shipping:' || shipping_list_code ELSE 'outbound:' || outbound_order_no END",
+            name="scope_ref_matches",
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_manual_settlement_cost_entries")),
         sa.UniqueConstraint("idempotency_key", name="uq_manual_settlement_cost_entry_idem"),
     )
@@ -509,7 +527,7 @@ def upgrade() -> None:
         sa.Column("store_id", sa.String(length=32), nullable=False),
         sa.Column("bill_month", sa.Date(), nullable=False),
         sa.Column("period_key", sa.String(length=64), nullable=True),
-        sa.Column("line_key", sa.String(length=255), nullable=False),
+        sa.Column("line_key", sa.String(length=320), nullable=False),
         sa.Column("kind", sa.String(length=16), nullable=False),
         sa.Column("amount_field", sa.String(length=64), nullable=True),
         sa.Column("amount_usd", sa.Numeric(precision=18, scale=4), nullable=True),
@@ -580,7 +598,7 @@ def upgrade() -> None:
         sa.Column("period_key", sa.String(length=64), nullable=True),
         sa.Column("target_kind", sa.String(length=16), nullable=False),
         sa.Column("target_id", sa.Uuid(), nullable=True),
-        sa.Column("line_key", sa.String(length=255), nullable=False),
+        sa.Column("line_key", sa.String(length=320), nullable=False),
         sa.Column("stage", sa.String(length=8), nullable=False),
         sa.Column("decision", sa.String(length=8), nullable=False),
         sa.Column("comment", sa.Text(), nullable=True),
@@ -710,7 +728,7 @@ def upgrade() -> None:
         sa.Column("store_id", sa.String(length=32), nullable=False),
         sa.Column("period_key", sa.String(length=64), nullable=False),
         sa.Column("bill_month", sa.Date(), nullable=False),
-        sa.Column("line_key", sa.String(length=255), nullable=False),
+        sa.Column("line_key", sa.String(length=320), nullable=False),
         sa.Column("row_kind", sa.String(length=16), nullable=False),
         sa.Column("platform_order_no", sa.String(length=64), nullable=True),
         sa.Column("item_id", sa.String(length=64), nullable=True),
@@ -945,6 +963,9 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.CheckConstraint("fx_status IN ('final', 'missing')", name="fx_status"),
+        sa.CheckConstraint(
+            "(fx_status = 'final') = (fx_rate IS NOT NULL)", name="fx_rate_matches_status"
+        ),
         sa.CheckConstraint("EXTRACT(DAY FROM bill_month) = 1", name="bill_month_first_day"),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_mart_settlement_profit_item_month")),
         sa.UniqueConstraint(
@@ -1328,6 +1349,11 @@ def downgrade() -> None:
     )
     op.drop_table("fact_settlement_store_month_items")
     op.drop_table("fact_settlement_post_close_diffs")
+    op.drop_index(
+        "uq_fact_settlement_order_line_current",
+        table_name="fact_settlement_order_lines",
+        postgresql_where=sa.text("is_current"),
+    )
     op.drop_index("ix_fact_settlement_order_lines_item", table_name="fact_settlement_order_lines")
     op.drop_index(
         "ix_fact_settlement_order_lines_current", table_name="fact_settlement_order_lines"

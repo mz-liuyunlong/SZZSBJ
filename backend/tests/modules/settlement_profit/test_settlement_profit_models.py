@@ -136,12 +136,22 @@ def test_every_month_column_is_checked_to_be_first_day() -> None:
 
 
 def test_fact_and_mart_rows_carry_calc_version_hash_and_freeze() -> None:
+    # fact_settlement_post_close_diffs 不带冻结列：它本身就是结账后才写的差异记录，
+    # 只增不改，记录的是冻结版本号 frozen_calc_version 与新版本号，自己不会被“冻结”。
     for name in m.SETTLEMENT_PROFIT_TABLES:
-        if not name.startswith(("fact_settlement_order", "fact_settlement_store", "mart_")):
+        if not name.startswith(("fact_", "mart_")) or name == "fact_settlement_post_close_diffs":
             continue
         columns = _table(name).columns
-        for column in ("calc_version", "content_hash", "frozen_at", "frozen_by"):
+        for column in (
+            "calc_version",
+            "content_hash",
+            "frozen_at",
+            "frozen_by",
+            "frozen_calc_version",
+        ):
             assert column in columns, (name, column)
+    diffs = _table("fact_settlement_post_close_diffs").columns
+    assert "frozen_calc_version" in diffs and not diffs["frozen_calc_version"].nullable
 
 
 def test_fx_columns_and_missing_status_without_fallback() -> None:
@@ -153,19 +163,24 @@ def test_fx_columns_and_missing_status_without_fallback() -> None:
         table = _table(name)
         assert {"fx_rate", "fx_month", "fx_status"} <= set(table.columns.keys())
         assert table.columns["fx_rate"].nullable  # missing 时留空，不兜底
-        assert "fx_status IN ('final', 'missing')" in _checks(table)["fx_status"]
+        checks = _checks(table)
+        assert "fx_status IN ('final', 'missing')" in checks["fx_status"]
+        assert checks["fx_rate_matches_status"] == "(fx_status = 'final') = (fx_rate IS NOT NULL)"
 
 
 def test_reason_and_status_vocabularies_match_prp() -> None:
     assert len(m.ORDER_LINE_REASONS) + len(m.STORE_ITEM_REASONS) == 9
-    assert set(m.SETTING_KEYS) >= {
+    # §0.5 六项 + §8.3 WFS 承运商清单，正好 7 项
+    assert set(m.SETTING_KEYS) == {
         "review_accelerator_price_formula",
         "company_cost_allocation",
         "fixed_cost_fallback",
         "review_accelerator_snapshot_frequency",
         "no_order_months",
         "bill_month_cutoff_day",
+        "wfs_carrier_provider_ids",
     }
+    assert len(m.SETTING_KEYS) == 7
     review = _checks(_table("mart_settlement_order_review"))
     assert "row_kind IN ('order', 'store_item', 'reconcile_diff')" in review["row_kind"]
     kinds = _checks(_table("fact_settlement_store_month_items"))["source_kind"]
@@ -185,6 +200,45 @@ def test_cost_entry_scope_rules() -> None:
     assert active.unique
     assert [column.name for column in active.columns] == ["store_id", "msku", "scope_ref"]
     assert "revoked" in str(active.dialect_options["postgresql"]["where"])
+    assert "'shipping:' || shipping_list_code" in checks["scope_ref_matches"]
+    assert "'outbound:' || outbound_order_no" in checks["scope_ref_matches"]
+
+
+def test_one_current_version_per_order_line() -> None:
+    table = _table("fact_settlement_order_lines")
+    current = next(
+        index for index in table.indexes if index.name == "uq_fact_settlement_order_line_current"
+    )
+    assert current.unique
+    assert [column.name for column in current.columns] == ["store_id", "period_key", "line_key"]
+    assert str(current.dialect_options["postgresql"]["where"]) == "is_current"
+
+
+def test_line_keys_fit_the_longest_business_key() -> None:
+    # 店铺 32 + reportKey 64 + 订单号 64 + 订单行号 32 + GTIN 64 + 分隔符，约 260
+    for name in m.SETTLEMENT_PROFIT_TABLES:
+        columns = _table(name).columns
+        if "line_key" in columns:
+            assert columns["line_key"].type.length == 320, name
+
+
+def test_quantities_do_not_reuse_the_money_type() -> None:
+    assert m.QTY is not m.MONEY
+    for name, column in (
+        ("ods_lingxing_fin_shipping_detail_items", "delivery_num"),
+        ("fact_settlement_order_lines", "quantity"),
+        ("mart_settlement_profit_item_month", "quantity"),
+        ("mart_settlement_no_order_flags", "wfs_inventory_qty"),
+    ):
+        assert _table(name).columns[column].type is m.QTY, (name, column)
+
+
+def test_index_count_matches_migration() -> None:
+    orm = sum(len(_table(name).indexes) for name in m.SETTLEMENT_PROFIT_TABLES)
+    source = MIGRATION.read_text(encoding="utf-8")
+    assert orm == 15
+    assert source.count("op.create_index(") == 15
+    assert source.count("op.drop_index(") == 15
 
 
 def test_manual_tables_reference_line_key_not_uuid() -> None:

@@ -90,15 +90,24 @@ def _order_line(**overrides: Any) -> SettlementOrderLine:
 
 
 def test_order_line_defaults_and_versions(session: Session) -> None:
-    session.add(_order_line())
+    session.add(_order_line(is_current=False))
     session.add(_order_line(id=uuid4(), calc_version=2, content_hash="1" * 64))
     session.flush()
     rows = session.scalars(select(SettlementOrderLine).order_by(SettlementOrderLine.calc_version))
     first = next(iter(rows))
     session.refresh(first)
     assert first.fx_status == "missing" and first.fx_rate is None
-    assert first.sales_usd == Decimal("0") and first.reasons == [] and first.is_current
-    _rejected(session, _order_line(id=uuid4()))  # 同店同期同版本同 line_key
+    assert first.sales_usd == Decimal("0") and first.reasons == [] and not first.is_current
+    _rejected(session, _order_line(id=uuid4(), is_current=False))  # 同店同期同版本同 line_key
+    # 同一订单行已有当前版本（v2），再来一个当前版本（v3）被拒
+    _rejected(session, _order_line(id=uuid4(), calc_version=3, content_hash="2" * 64))
+
+
+def test_fx_rate_must_match_status(session: Session) -> None:
+    _rejected(session, _order_line(fx_status="final"))  # 汇率齐却没有汇率
+    _rejected(session, _order_line(fx_rate=Decimal("7.10000000")))  # 缺汇率却填了汇率
+    session.add(_order_line(fx_status="final", fx_rate=Decimal("7.10000000"), fx_month=MONTH))
+    session.flush()
 
 
 def test_month_columns_must_be_first_day(session: Session) -> None:
@@ -147,6 +156,8 @@ def test_cost_entry_scope_override_and_single_active(session: Session) -> None:
     _rejected(session, _entry(shipping_list_code=None))  # 两种范围都没有
     _rejected(session, _entry(outbound_order_no="OB-SYN-1"))  # 两种范围都有
     _rejected(session, _entry(entry_kind="override", reason=None))  # 修正必须写原因
+    _rejected(session, _entry(scope_ref="shipping:sp-syn-0001"))  # 范围标识与发货单号对不上
+    _rejected(session, _entry(scope_ref="outbound:SP-SYN-0001"))  # 前缀不对
     first = _entry()
     session.add(first)
     session.flush()

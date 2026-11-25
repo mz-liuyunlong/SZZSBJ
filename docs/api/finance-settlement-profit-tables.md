@@ -7,11 +7,12 @@ PR-1 只建表，不写同步、计算和接口。表都从空开始；同步任
 ## 通用约定
 
 - 分层：RAW（既有 `ods_api_raw_*`）→ ODS → FACT → MART。`manual_` 只覆盖计算结果，不写 RAW / ODS / FACT；`cfg_` 是财务设置。
-- 金额 `numeric(18,4)`，列名带币种后缀（`_usd` / `_cny`）或配 `currency_code`。有折算的行同时存 `fx_rate numeric(18,8)`、`fx_month`、`fx_status`（`final` / `missing`）。`missing` 时 CNY 金额和 `fx_rate` 为空，不做兜底。汇率只取 `fact_lingxing_fx_rate`。
+- 金额 `numeric(18,4)`，列名带币种后缀（`_usd` / `_cny`）或配 `currency_code`。有折算的行同时存 `fx_rate numeric(18,8)`、`fx_month`、`fx_status`（`final` / `missing`），数据库约束 `final` 时必须有 `fx_rate`、`missing` 时必须为空，不做兜底。汇率只取 `fact_lingxing_fx_rate`。缺汇率时为空的是**折算出来的列**：订单行的 `cost_total_usd`（货本 ¥→$）、店铺级项目的 `amount_cny`、商品月的 `cost_total_usd`、`settlement_profit_cny`、`company_cost_cny`、`net_profit_cny`；人民币原值（`purchase_cny`、`head_cny`、`last_leg_cny`、`cost_total_cny`）和美元原值照常保留。
+- 件数列（`quantity`、`delivery_num`、`wfs_inventory_qty`）单独定义件数类型 `numeric(18,4)`，不复用金额类型。
 - 外部 ID（订单号、GTIN、item_id、店铺 ID、发货单号、出库单号、`period_key`）一律字符串。
 - `period_key` = 回款对账的期（`mart_walmart_bill_periods.report_key`）。`bill_month`、`effective_month` 一律是当月 1 号（CHECK 约束）。
 - FACT / MART 行带 `calc_version`、`content_hash`（同一输入重算 hash 不变则不写新版本），以及结账冻结三列 `frozen_at`、`frozen_by`、`frozen_calc_version`。
-- `manual_` 表引用稳定业务键 `line_key`，不引用会随重算变化的 UUID：
+- `manual_` 表引用稳定业务键 `line_key`（`varchar(320)`），不引用会随重算变化的 UUID：
   - 订单行：店铺 + reportKey + 订单号 + 订单行号 + GTIN；
   - 店铺级项目：店铺 + 账单月 + source_kind + source_ref；
   - 对平差额行：店铺 + 期 + `reconcile_diff`。
@@ -33,7 +34,7 @@ ODS 公共列：`synced_at`、`row_hash`、`raw_row`（原始行 JSON）。
 
 | 表 | 业务键 | 内容 |
 |---|---|---|
-| `fact_settlement_order_lines` | store_id, period_key, calc_version, line_key | 订单审核的订单行，一期一行一订单行。`line_kind`：sale / refund / mcf；`fulfillment_type`：wfs / seller。收入与订单费用（USD，结算单口径）、广告分摊（只展示）、货本三项（CNY：采购、头程、尾程；WFS 订单的尾程 = 配送费，只展示、不计入 `cost_total_cny`）、`cost_sources`（可多段）、`reasons`（待审原因）、`auto_passed`；`is_current` 标当前版本 |
+| `fact_settlement_order_lines` | store_id, period_key, calc_version, line_key | 订单审核的订单行，一期一行一订单行。`line_kind`：sale / refund / mcf；`fulfillment_type`：wfs / seller。收入与订单费用（USD，结算单口径）、广告分摊（只展示）、货本三项（CNY：采购、头程、尾程；WFS 订单的尾程 = 配送费，只展示、不计入 `cost_total_cny`）、`cost_sources`（可多段）、`reasons`（待审原因）、`auto_passed`；`is_current` 标当前版本，同店同期同一 `line_key` 只能有一个当前版本（部分唯一索引） |
 | `fact_settlement_store_month_items` | store_id, bill_month, source_kind, source_ref | 店铺级项目：`review_accelerator`、`discount_back`（WFS 费用返还，不分摊）、`transfer_fee`、`mcf`、`storage_fee`、`other_wfs_service`、`company_cost`，以及待指定 `unassigned_bill`（来自结算单行，参与对平）/ `unassigned_wfs`（来自 WFS 费用表，不参与对平但挡结账）。`allocation` 存分到 ItemID 的结果，`assign_status`、`review_status`、`version` |
 | `fact_settlement_post_close_diffs` | store_id, bill_month, line_key, detected_at | 结账后源数据变化：旧值 / 新值，不改冻结数；状态 open / acknowledged / resolved_by_unlock |
 
@@ -50,7 +51,7 @@ ODS 公共列：`synced_at`、`row_hash`、`raw_row`（原始行 JSON）。
 
 | 表 | 键 | 内容 |
 |---|---|---|
-| `manual_settlement_cost_entries` | id；同一 店铺 × MSKU × 范围 只能有一条未撤销的录入（部分唯一索引，`scope_ref` = `shipping:<发货单号>` 或 `outbound:<出库单号>`） | 录成本 / 确认：范围 = MSKU × 发货单，或 MSKU × 出库单，二选一（CHECK）；`entry_kind` confirm / override（override 必须写原因）；`prefilled` 存当时领星预填值；初审 / 终审状态、`version`、撤销信息；不回写领星 |
+| `manual_settlement_cost_entries` | id；同一 店铺 × MSKU × 范围 只能有一条未撤销的录入（部分唯一索引；`scope_ref` 由数据库约束必须等于 `shipping:<发货单号>` 或 `outbound:<出库单号>`，拼错被拒） | 录成本 / 确认：范围 = MSKU × 发货单，或 MSKU × 出库单，二选一（CHECK）；`entry_kind` confirm / override（override 必须写原因）；`prefilled` 存当时领星预填值；初审 / 终审状态、`version`、撤销信息；不回写领星 |
 | `manual_settlement_sem_month` | store_id, item_id, bill_month | SEM 月值（旧系统下线前人工导入） |
 | `manual_settlement_order_adjustments` | id | 调整：`kind` = amount（改金额，必须带金额）/ assign_item（指定商品，必须带 ItemID）/ note；原因必填、可撤销、`version`、初审 / 终审状态 |
 | `manual_settlement_review_actions` | id | 初审 / 终审 / 退回记录，只增不改；`target_kind` = order_line / store_item / cost_entry / adjustment；退回必须写意见；存 before / after |
