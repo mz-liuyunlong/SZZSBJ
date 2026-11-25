@@ -211,6 +211,36 @@ def test_zip_without_csv_or_broken_is_rejected():
         expand_upload("a.zip", b"PK\x03\x04broken")
 
 
+def test_real_settlement_storage_summary_row_without_date_is_skipped_not_rejected():
+    """真实结算报表形状（2026-11-24 线上重导发现）：StorageFee 汇总行没有交易日期、
+    没有 Reference ID；入库运费行按货件、带日期和货件号。前者跳过并提示，后者入表，整份不拒收。"""
+    report = parse(
+        S.settlement(
+            [
+                S.fee("LostInventory", "2026-07-07", "-15.30", gtin=S.GTIN_1, ref="R1"),
+                S.fee(
+                    "InboundTransportationFee",
+                    "2026-07-17",
+                    "12.00",
+                    reason="Parcel",
+                    po="8500000WFA",
+                    ref="REF_8500000WFA_311",
+                    qty="",
+                ),
+                S.fee("StorageFee", "", "30.00", orig="33.00", disc="3.00", qty=""),
+            ]
+        )
+    )
+    assert [line.fee_type for line in report.lines] == ["LostInventory", "InboundTransportationFee"]
+    inbound = report.lines[1]
+    assert inbound.po_number == "8500000WFA" and inbound.gtin == ""
+    assert any("没有交易日期 1 行，未入表" in w for w in report.warnings)
+    assert any("店铺周汇总 1 行记公司" in w for w in report.warnings)
+    # 其他类型缺日期仍按坏文件处理
+    with pytest.raises(ParseError, match="缺交易日期或金额"):
+        parse(S.settlement([S.fee("LostInventory", "", "1.00", gtin=S.GTIN_1, ref="R9")]))
+
+
 def test_summary_only_settlement_keeps_partner_and_rows_are_company_level():
     """只有店铺周汇总行的卖家后台 StorageFee 文件：入表（无 GTIN，service 记公司）、能认店。"""
     report = parse(S.settlement([S.fee("StorageFee", "2026-10-09", "100.00", ref="S1")]))
