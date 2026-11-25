@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import replace
 from functools import lru_cache
@@ -29,6 +30,19 @@ from app.integrations.walmart.scf_read_factory import IdentityProvider, Refreshi
 from app.integrations.walmart.tenc_sts_identity import CachedScfAssumeRoleIdentity
 from app.integrations.walmart.tencent_api import MAX_SCF_RESPONSE_BYTES
 from app.integrations.walmart.tencent_scf import TencentScfInvoker
+
+# 云函数失败时只透传这种形状的纯错误码（如 WALMART_RESPONSE_TOO_LARGE）；其他内容一律不带出。
+_CLOUD_STATUS = re.compile(r"WALMART_[A-Z0-9_]{1,64}")
+
+
+def cloud_status_of(result: Any) -> str | None:
+    """The cloud's own failure code when it is a plain WALMART_* code, otherwise None."""
+    if not isinstance(result, Mapping):
+        return None
+    status = result.get("status")
+    if isinstance(status, str) and _CLOUD_STATUS.fullmatch(status):
+        return status
+    return None
 
 
 class WalmartGenericClient:
@@ -77,7 +91,11 @@ class WalmartGenericClient:
             # Never retry an ambiguous write automatically.
             raise GatewayRejected("WALMART_GATEWAY_UNAVAILABLE") from None
         if not isinstance(result, Mapping) or result.get("success") is not True:
-            raise GatewayRejected("WALMART_GATEWAY_REJECTED")
+            # Keep the stable code first; append the cloud's own code so callers can
+            # tell a 1MB response limit from a token or egress failure.
+            status = cloud_status_of(result)
+            code = "WALMART_GATEWAY_REJECTED"
+            raise GatewayRejected(code if status is None else f"{code}:{status}")
         request_id = event["auth"]["request_id"]
         if (
             result.get("protocol") != VERSION

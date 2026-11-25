@@ -208,6 +208,46 @@ def test_provider_errors_empty_response_and_pdf(signer: ContractSigner) -> None:
     assert client.call(STORE, "POST", PATH, response_kind="pdf").pdf == response.content
 
 
+@pytest.mark.parametrize(
+    ("cloud_result", "expected"),
+    [
+        (
+            {"success": False, "status": "WALMART_RESPONSE_TOO_LARGE"},
+            "REJECTED:WALMART_RESPONSE_TOO_LARGE$",
+        ),
+        (
+            {"success": False, "status": "WALMART_TOKEN_REJECTED"},
+            "REJECTED:WALMART_TOKEN_REJECTED$",
+        ),
+        (
+            {"success": False, "status": "WALMART_" + "A" * 64},
+            "REJECTED:WALMART_" + "A" * 64 + "$",
+        ),
+        ({"success": False, "status": "WALMART_X\n"}, "REJECTED$"),
+        ({"success": False, "status": "WALMART_A:B"}, "REJECTED$"),
+        ({"success": False, "status": ""}, "REJECTED$"),
+        ({"success": False, "status": " WALMART_X"}, "REJECTED$"),
+        ({"success": False, "status": "WALMART_"}, "REJECTED$"),
+        ({"success": False, "status": "secret=abc"}, "REJECTED$"),
+        ({"success": False, "status": "WALMART_x"}, "REJECTED$"),
+        ({"success": False, "status": "WALMART_" + "A" * 65}, "REJECTED$"),
+        ({"success": False, "status": 500}, "REJECTED$"),
+        ({"success": False}, "REJECTED$"),
+        ("not a mapping", "REJECTED$"),
+    ],
+)
+def test_cloud_failure_code_passthrough_only_for_plain_codes(
+    signer: ContractSigner, cloud_result: Any, expected: str
+) -> None:
+    class CloudFails:
+        def invoke(self, payload: Mapping[str, Any]) -> Any:
+            return cloud_result
+
+    client = WalmartGenericClient(signer=signer, routes={STORE: (FUNCTION, CloudFails())})
+    with pytest.raises(GatewayRejected, match="^WALMART_GATEWAY_" + expected):
+        client.call(STORE, "GET", PATH)
+
+
 def test_zip_download_uses_no_token_and_validates_host(signer: ContractSigner) -> None:
     target = "https://marketplace.walmartapis.com/v3/download/report?sig=fake"
     archive = b"PK" + b"x" * (2 * 1024 * 1024)
