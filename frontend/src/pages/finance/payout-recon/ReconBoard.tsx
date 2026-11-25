@@ -32,7 +32,7 @@ function payableCell(row: ReconRow): ReactNode {
   const walmart = row.payableSource === "walmart";
   const differs = walmart && row.walmartDiff != null && Math.abs(row.walmartDiff) >= 0.005;
   const title = walmart
-    ? `沃尔玛实际打款 $${n2(row.payable)}${row.lingxingPayable != null ? ` · 领星账单 $${n2(row.lingxingPayable)}` : ""}${differs ? ` · 差 $${n2(row.walmartDiff ?? 0)}` : ""}${row.walmartNote ? `（${row.walmartNote}）` : ""}`
+    ? `沃尔玛实际打款 $${n2(row.payable)}${row.lingxingPayable != null ? ` · 领星账单 $${n2(row.lingxingPayable)}` : ""}${differs ? ` · 沃尔玛比领星${(row.walmartDiff ?? 0) > 0 ? "多" : "少"} $${n2(Math.abs(row.walmartDiff ?? 0))}` : ""}${row.walmartNote ? `（${row.walmartNote}）` : ""}`
     : "领星账单合计（这一期还没拉到沃尔玛对账报表）";
   return (
     <Tooltip title={title}>

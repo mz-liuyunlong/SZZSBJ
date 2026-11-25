@@ -56,7 +56,6 @@ class PaymentSummary:
     account_rows: list[dict[str, Any]] = field(default_factory=list)
     page_rows: int = 0
     has_more: bool = False
-    summary_row: dict[str, Any] = field(default_factory=dict)
 
 
 def parse_report_date(value: Any) -> date:
@@ -115,8 +114,14 @@ def extract_payment_summary(report_date: date, payload: Any) -> PaymentSummary:
         raise ReconPayoutError("WALMART_RECON_REPORT_INVALID")
     rows = [row for row in payload["reportData"] if isinstance(row, dict)]
     summaries = [row for row in rows if row.get("Transaction Type") == SUMMARY_TYPE]
+    next_offset = payload.get("nextOffset")
+    has_more = isinstance(next_offset, int) and next_offset > 0 and len(rows) >= RECON_PAGE_SIZE
     if len(summaries) != 1:
-        raise ReconPayoutError("WALMART_RECON_SUMMARY_MISSING")
+        raise ReconPayoutError(
+            "WALMART_RECON_SUMMARY_NOT_ON_FIRST_PAGE"
+            if has_more and not summaries
+            else "WALMART_RECON_SUMMARY_MISSING"
+        )
     summary = summaries[0]
     total = _decimal(summary.get("Total Payable"))
     if total is None:
@@ -129,8 +134,6 @@ def extract_payment_summary(report_date: date, payload: Any) -> PaymentSummary:
         and _blank(row.get("Purchase Order #"))
         and _blank(row.get("Partner GTIN"))
     ]
-    next_offset = payload.get("nextOffset")
-    has_more = isinstance(next_offset, int) and next_offset > 0 and len(rows) >= RECON_PAGE_SIZE
     currency = summary.get("Currency")
     return PaymentSummary(
         report_date=report_date,
@@ -145,17 +148,19 @@ def extract_payment_summary(report_date: date, payload: Any) -> PaymentSummary:
         account_rows=account_rows,
         page_rows=len(rows),
         has_more=has_more,
-        summary_row={key: value for key, value in summary.items() if not _blank(value)},
     )
 
 
-def account_rows_note(rows: list[dict[str, Any]]) -> str:
-    """给页面看的一句话：账户级交易各多少（如「Release Reserve +1 行」）。"""
+def account_rows_note(rows: list[dict[str, Any]], *, complete: bool = True) -> str:
+    """给页面看的一句话：账户级交易各多少（如「Release Reserve 1 行」）；只看了第一页就说明。"""
     counts: dict[str, int] = {}
     for row in rows:
         kind = str(row.get("Transaction Type") or "（空）")
         counts[kind] = counts.get(kind, 0) + 1
-    return "、".join(f"{kind} {count} 行" for kind, count in sorted(counts.items()))
+    note = "、".join(f"{kind} {count} 行" for kind, count in sorted(counts.items()))
+    if not complete:
+        note = (note + "；" if note else "") + "只看了第一页，账户级交易可能不全"
+    return note
 
 
 def lingxing_payable(row: Any) -> Decimal:

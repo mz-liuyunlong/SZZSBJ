@@ -145,7 +145,7 @@ function PeriodDrawer({ row, openRows, onPass, onReject, onChanged, onClose }: P
         <Descriptions.Item label="账单日">{row.payDate}</Descriptions.Item>
         <Descriptions.Item label="应付"><MoneyCell value={row.payable} />{row.payableSource === "walmart" ? "（沃尔玛实际打款）" : "（领星账单合计）"}</Descriptions.Item>
         {row.payableSource === "walmart" && row.lingxingPayable != null && (
-          <Descriptions.Item label="领星账单"><MoneyCell value={row.lingxingPayable} />{row.walmartDiff != null && Math.abs(row.walmartDiff) >= 0.005 ? `（沃尔玛比领星多 $${n2(row.walmartDiff)}${row.walmartNote ? `，${row.walmartNote}` : ""}）` : "（一致）"}</Descriptions.Item>
+          <Descriptions.Item label="领星账单"><MoneyCell value={row.lingxingPayable} />{row.walmartDiff != null && Math.abs(row.walmartDiff) >= 0.005 ? `（沃尔玛比领星${row.walmartDiff > 0 ? "多" : "少"} $${n2(Math.abs(row.walmartDiff))}${row.walmartNote ? `，${row.walmartNote}` : ""}）` : "（一致）"}</Descriptions.Item>
         )}
         <Descriptions.Item label="到账">{row.arrived == null ? "—" : <MoneyCell value={row.arrived} />}</Descriptions.Item>
         <Descriptions.Item label="回款状态">

@@ -41,12 +41,19 @@ def recon_payout_sync_task() -> None:
         log.info("walmart recon payout sync disabled")
         return
     with get_session_factory()() as session:
+        # 每店成功后单独提交（sync_recon_payouts 内部），不跨店长事务
         result = sync_recon_payouts(
             session, call=production_call(), store_codes=production_store_codes()
         )
-        session.commit()
     log.info(
-        "walmart recon payout sync: written=%s failed=%s",
+        "walmart recon payout sync: written=%s failed_stores=%s reset=%s failed_periods=%s",
         result.written,
         ",".join(result.failed) or "-",
+        ";".join(f"{code}:{day.isoformat()}" for code, day in result.reset) or "-",
+        ";".join(
+            f"{s.store_code}:{day.isoformat()}:{err}"
+            for s in result.stores
+            for day, err in s.failed_periods
+        )
+        or "-",
     )

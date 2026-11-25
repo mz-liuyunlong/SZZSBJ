@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
@@ -19,7 +19,8 @@ from sqlalchemy.pool import NullPool
 from app.core.config import Settings, SettingsError, get_test_database_url
 from app.modules.walmart_bills import recon_payout as rp
 from app.modules.walmart_bills import recon_payout_sync as sync
-from app.modules.walmart_bills.models import WalmartBillPeriod
+from app.modules.walmart_bills.models import WalmartBillPeriod, WalmartReconReportPage
+from app.modules.walmart_bills.payout_models import WalmartPayoutMatch, WalmartPayoutReviewEvent
 from app.modules.walmart_bills.payout_service import PayoutReconService
 from app.modules.walmart_bills.periods import refresh_periods
 
@@ -30,6 +31,7 @@ TODAY = date(2026, 11, 20)
 NOW = datetime(2026, 11, 20, 2, 0, tzinfo=UTC)
 D1117 = date(2026, 11, 17)
 D1103 = date(2026, 11, 3)
+D1006 = date(2026, 10, 6)
 
 
 def row(
@@ -51,7 +53,12 @@ def row(
 
 
 def page(
-    total: str, *, extra_rows: list[dict] | None = None, next_offset: int | None = 19904
+    total: str,
+    *,
+    extra_rows: list[dict] | None = None,
+    next_offset: int | None = 19904,
+    start: str = "10/29/2026",
+    end: str = "11/13/2026",
 ) -> dict:
     rows = [
         row("Sale", "10.00", order="ORD-SYN-1", gtin="00000000000001"),
@@ -60,9 +67,9 @@ def page(
             "Transaction Type": "PaymentSummary",
             "Transaction Description": "Deposited in SYNTHETIC account",
             "Total Payable": total,
-            "Period Start Date": "10/31/2026",
-            "Period End Date": "11/14/2026",
-            "Transaction Posted Timestamp": "11/14/2026",
+            "Period Start Date": start,
+            "Period End Date": end,
+            "Transaction Posted Timestamp": end,
             "Currency": "USD",
             "Amount": "",
             "Customer Order #": "",
@@ -88,16 +95,16 @@ def test_parse_dates_and_summary_shapes() -> None:
 
 
 def test_extract_summary_keeps_account_rows_without_order_or_gtin() -> None:
-    release = row("Release Reserve", "600.00", desc="Reserve released", **{"Transaction Key": "k1"})
+    release = row("Release Reserve", "600", desc="Reserve released", **{"Transaction Key": "k1"})
     summary = rp.extract_payment_summary(
-        D1117, page("7756.90", extra_rows=[release, row("Adjustment", "-2.00", order="ORD-SYN-2")])
+        D1117, page("1600", extra_rows=[release, row("Adjustment", "-2", order="ORD-SYN-2")])
     )
-    assert summary.total_payable == Decimal("7756.90")
+    assert summary.total_payable == Decimal("1600")
     assert (summary.period_start_date, summary.period_end_date) == (
-        date(2026, 10, 31),
-        date(2026, 11, 14),
+        date(2026, 10, 29),
+        date(2026, 11, 13),
     )
-    assert summary.posted_date == date(2026, 11, 14)
+    assert summary.posted_date == date(2026, 11, 13)
     assert summary.currency_code == "USD"
     assert summary.page_rows == 5 and not summary.has_more  # 不满 100 行就没有下一页
     full = page("1.00", extra_rows=[row("Sale", "1", order=f"o{i}") for i in range(97)])
@@ -106,9 +113,9 @@ def test_extract_summary_keeps_account_rows_without_order_or_gtin() -> None:
     assert [r["Transaction Type"] for r in summary.account_rows] == ["Release Reserve"]
     # 账户级行只留固定字段，不带商品名 / 城市
     assert set(summary.account_rows[0]) <= set(rp._ACCOUNT_ROW_KEYS)
-    assert "Ship to City" not in summary.summary_row
     assert rp.account_rows_note(summary.account_rows) == "Release Reserve 1 行"
     assert rp.account_rows_note([]) == ""
+    assert "只看了第一页" in rp.account_rows_note([], complete=False)
 
 
 @pytest.mark.parametrize(
@@ -127,6 +134,12 @@ def test_extract_summary_rejects_missing_or_duplicate_summary(payload: Any) -> N
         rp.extract_payment_summary(D1117, payload)
 
 
+def test_summary_not_on_first_page_gets_its_own_code() -> None:
+    full = {"reportData": [row("Sale", "1", order=f"o{i}") for i in range(100)], "nextOffset": 100}
+    with pytest.raises(rp.ReconPayoutError, match="WALMART_RECON_SUMMARY_NOT_ON_FIRST_PAGE"):
+        rp.extract_payment_summary(D1117, full)
+
+
 # --------------------------------------------------------------------------- 同步（假通道）
 
 
@@ -134,10 +147,11 @@ def test_extract_summary_rejects_missing_or_duplicate_summary(payload: Any) -> N
 class Result:
     status_code: int
     data: Any
+    request_id: str | None = "req-syn"
 
 
 class FakeWalmart:
-    """只记录调用；按店给可用日期和第一页。"""
+    """只记录调用；按店给可用日期和第一页。pages 里的值是 dict → 200，int → 该 HTTP 状态。"""
 
     def __init__(self, dates: dict[str, list[str]], pages: dict[tuple[str, str], Any]) -> None:
         self.dates = dates
@@ -150,12 +164,20 @@ class FakeWalmart:
         self.calls.append((store_code, method, path, dict(query)))
         assert method == "GET" and response_kind == "json"
         if path == rp.RECON_DATES_PATH:
-            return Result(200, {"availableApReportDates": self.dates.get(store_code, [])})
+            dates = self.dates.get(store_code)
+            if dates is None:
+                return Result(400, {"error": "no store"})
+            return Result(200, {"availableApReportDates": dates})
         if path == rp.RECON_FILE_PATH:
             assert query["offset"] == 0 and query["noOfRecords"] == 100
             found = self.pages.get((store_code, query["reportDate"]))
+            if isinstance(found, int):
+                return Result(found, {"error": "synthetic"})
             return Result(200, found) if found is not None else Result(400, {"error": "no report"})
         raise AssertionError(path)
+
+    def fetched(self) -> list[tuple[str, str]]:
+        return sorted((c[0], c[3]["reportDate"]) for c in self.calls if c[2] == rp.RECON_FILE_PATH)
 
 
 def test_sync_refuses_paths_outside_the_two_allowed() -> None:
@@ -166,11 +188,35 @@ def test_sync_refuses_paths_outside_the_two_allowed() -> None:
         sync._get(call, "SYN01", "/v3/report/payment/statement", {})
 
 
-def test_enabled_flag_default_off() -> None:
+def test_enabled_flag_default_off_and_task_returns_without_calling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     assert not sync.enabled({})
     assert not sync.enabled({sync.ENABLED_ENV: "true"})
     assert sync.enabled({sync.ENABLED_ENV: "1"})
-    assert os.environ.get(sync.ENABLED_ENV) != "1"
+    from app.modules.walmart_bills import tasks
+
+    monkeypatch.delenv(sync.ENABLED_ENV, raising=False)
+
+    def boom() -> Any:
+        raise AssertionError("must not touch Walmart or the database when disabled")
+
+    monkeypatch.setattr(tasks, "production_call", boom)
+    monkeypatch.setattr(tasks, "get_session_factory", boom)
+    tasks.recon_payout_sync_task.run()
+
+
+def test_error_code_keeps_filtered_gateway_codes() -> None:
+    class GatewayRejected(RuntimeError):
+        pass
+
+    assert sync._error_code(
+        GatewayRejected("WALMART_GATEWAY_REJECTED:WALMART_RESPONSE_TOO_LARGE")
+    ) == ("WALMART_GATEWAY_REJECTED:WALMART_RESPONSE_TOO_LARGE")
+    assert (
+        sync._error_code(rp.ReconPayoutError("WALMART_RECON_HTTP_400")) == "WALMART_RECON_HTTP_400"
+    )
+    assert sync._error_code(ValueError("secret text")) == "ValueError"
 
 
 # --------------------------------------------------------------------------- PostgreSQL
@@ -192,7 +238,16 @@ def session() -> Iterator[Session]:
 
 
 def add_period(
-    session: Session, store: str, key: str, day: date, payable: str
+    session: Session,
+    store: str,
+    key: str,
+    day: date,
+    payable: str,
+    *,
+    line_count: int = 3,
+    currency: str = "USD",
+    start: date = date(2026, 10, 29),
+    end: date = date(2026, 11, 13),
 ) -> WalmartBillPeriod:
     period = WalmartBillPeriod(
         source_account_ref="primary",
@@ -200,14 +255,14 @@ def add_period(
         report_key=key,
         store_name="CN9901-合成店",
         report_date=day,
-        period_start_date=date(2026, 10, 29),
-        period_end_date=date(2026, 11, 13),
-        currency_code="USD",
-        line_count=3,
+        period_start_date=start,
+        period_end_date=end,
+        currency_code=currency,
+        line_count=line_count,
         excluded_line_count=0,
         amount_sum=Decimal(payable),
         payable_amount=Decimal(payable),
-        status="normal",
+        status="normal" if Decimal(payable) > 0 and line_count else "not_payable",
         refreshed_at=NOW,
     )
     session.add(period)
@@ -215,64 +270,274 @@ def add_period(
     return period
 
 
-def test_sync_writes_walmart_payable_and_keeps_lingxing_as_reference(session: Session) -> None:
-    a = add_period(session, STORE_A, "rk-a", D1117, "7156.90")
-    add_period(session, STORE_A, "rk-a0", D1103, "100.00")
-    b = add_period(session, STORE_B, "rk-b", D1117, "10114.89")
+def run(session: Session, fake: FakeWalmart, **kwargs: Any) -> sync.ReconPayoutSyncResult:
+    # 测试事务里不能真 commit（外层会回滚），用保存点语义
+    return sync.sync_recon_payouts(
+        session, call=fake, store_codes=CODES, now=NOW, commit_each_store=False, **kwargs
+    )
+
+
+def test_sync_writes_walmart_payable_raw_page_and_keeps_lingxing_as_reference(
+    session: Session,
+) -> None:
+    a = add_period(session, STORE_A, "rk-a", D1117, "1000")
+    add_period(session, STORE_A, "rk-a0", D1103, "100", start=date(2026, 10, 15), end=D1103)
+    old = add_period(session, STORE_A, "rk-old", D1006, "50", start=date(2026, 9, 17), end=D1006)
+    b = add_period(session, STORE_B, "rk-b", D1117, "2000")
     fake = FakeWalmart(
         dates={"SYN01": ["10062026", "11032026", "11172026"], "SYN02": ["11172026", "12012026"]},
         pages={
-            ("SYN01", "11172026"): page("7756.90", extra_rows=[row("Release Reserve", "600.00")]),
-            ("SYN01", "11032026"): page("100.00"),
-            ("SYN02", "11172026"): page("10114.89"),
+            ("SYN01", "11172026"): page("1600", extra_rows=[row("Release Reserve", "600")]),
+            ("SYN01", "11032026"): page("100", start="10/15/2026", end="11/03/2026"),
+            ("SYN01", "10062026"): page(
+                "999", start="09/17/2026", end="10/06/2026"
+            ),  # 10 月：不该拉
+            ("SYN02", "11172026"): page("2000"),
             # 12-01 沃尔玛有、领星还没有这期：不该去拉
         },
     )
-    result = sync.sync_recon_payouts(session, call=fake, store_codes=CODES, today=TODAY, now=NOW)
-    assert result.failed == [] and result.written == 3
+    result = run(session, fake)
+    assert result.failed == [] and result.written == 3 and result.reset == []
     assert [c[2] for c in fake.calls].count(rp.RECON_DATES_PATH) == 2
-    fetched = sorted((c[0], c[3]["reportDate"]) for c in fake.calls if c[2] == rp.RECON_FILE_PATH)
-    assert fetched == [("SYN01", "11032026"), ("SYN01", "11172026"), ("SYN02", "11172026")]
+    assert fake.fetched() == [("SYN01", "11032026"), ("SYN01", "11172026"), ("SYN02", "11172026")]
 
     session.refresh(a)
     assert a.payable_source == "walmart"
-    assert a.payable_amount == Decimal("7756.9000")
-    assert a.walmart_total_payable == Decimal("7756.9000")
+    assert a.payable_amount == Decimal("1600.0000")
+    assert a.walmart_total_payable == Decimal("1600.0000")
     assert a.walmart_diff == Decimal("600.0000")
-    assert a.amount_sum == Decimal("7156.9000")  # 领星值不动
+    assert a.amount_sum == Decimal("1000.0000")  # 领星值不动
     assert a.walmart_account_rows[0]["Transaction Type"] == "Release Reserve"
-    assert a.walmart_synced_at == NOW and a.status == "normal"
+    assert a.walmart_account_rows_complete and a.walmart_synced_at == NOW and a.status == "normal"
     session.refresh(b)
-    assert b.walmart_diff == Decimal("0.0000") and b.payable_amount == Decimal("10114.8900")
+    assert b.walmart_diff == Decimal("0.0000") and b.payable_amount == Decimal("2000.0000")
+    session.refresh(old)
+    assert old.payable_source == "lingxing" and old.walmart_total_payable is None
+
+    raw = session.get(WalmartReconReportPage, ("primary", STORE_A, D1117, 0))
+    assert raw is not None and raw.store_code == "SYN01" and raw.request_id == "req-syn"
+    assert raw.payload["reportData"][2]["Transaction Type"] == "PaymentSummary"
+    assert len(raw.sha256) == 64 and raw.payload_bytes > 0
 
     # 第二次：已有沃尔玛数据的期不再拉
     fake.calls.clear()
-    again = sync.sync_recon_payouts(session, call=fake, store_codes=CODES, today=TODAY, now=NOW)
-    assert again.written == 0 and [c for c in fake.calls if c[2] == rp.RECON_FILE_PATH] == []
+    again = run(session, fake)
+    assert again.written == 0 and fake.fetched() == []
 
     # 页面字段
     items = {r.report_key: r for r in PayoutReconService(session).list_periods(today=TODAY).items}
     assert items["rk-a"].payable_source == "walmart"
-    assert items["rk-a"].lingxing_payable == Decimal("7156.9000")
+    assert items["rk-a"].lingxing_payable == Decimal("1000.0000")
     assert items["rk-a"].walmart_diff == Decimal("600.0000")
     assert items["rk-a"].walmart_note == "Release Reserve 1 行"
     assert items["rk-b"].walmart_note is None
 
 
-def test_store_failure_rolls_back_only_that_store(session: Session) -> None:
-    a = add_period(session, STORE_A, "rk-a", D1117, "1.00")
-    b = add_period(session, STORE_B, "rk-b", D1117, "2.00")
+def test_each_period_has_its_own_savepoint_and_store_keeps_going(session: Session) -> None:
+    a1 = add_period(session, STORE_A, "rk-a1", D1103, "10", start=date(2026, 10, 15), end=D1103)
+    a2 = add_period(session, STORE_A, "rk-a2", D1117, "20")
+    a3 = add_period(session, STORE_A, "rk-a3", date(2026, 11, 20), "30", end=date(2026, 11, 20))
     fake = FakeWalmart(
-        dates={"SYN01": ["11172026"], "SYN02": ["11172026"]},
-        pages={("SYN01", "11172026"): page("1.00")},  # SYN02 第一页 400
+        dates={"SYN01": ["11032026", "11172026", "11202026"], "SYN02": []},
+        pages={
+            ("SYN01", "11032026"): page("10", start="10/15/2026", end="11/03/2026"),
+            ("SYN01", "11172026"): {"reportData": [row("Sale", "1", order="o")]},  # 没有汇总行
+            ("SYN01", "11202026"): page("31", next_offset=None, end="11/20/2026"),
+        },
     )
-    result = sync.sync_recon_payouts(session, call=fake, store_codes=CODES, today=TODAY, now=NOW)
-    assert result.failed == ["SYN02"]
-    assert result.stores[1].error == "WALMART_RECON_HTTP_400"
+    result = run(session, fake)
+    store = result.stores[0]
+    assert store.error is None
+    assert [(p.report_date, p.status) for p in store.periods] == [
+        (D1103, "written"),
+        (D1117, "error"),
+        (date(2026, 11, 20), "written"),
+    ]
+    assert store.failed_periods == [(D1117, "WALMART_RECON_SUMMARY_MISSING")]
+    for period in (a1, a2, a3):
+        session.refresh(period)
+    assert a1.payable_source == "walmart" and a3.payable_source == "walmart"
+    assert a2.payable_source == "lingxing" and a2.walmart_total_payable is None
+    assert session.get(WalmartReconReportPage, ("primary", STORE_A, D1117, 0)) is None
+
+
+def test_rate_limit_stops_the_store_and_rolls_it_back(session: Session) -> None:
+    a1 = add_period(session, STORE_A, "rk-a1", D1103, "10", start=date(2026, 10, 15), end=D1103)
+    a2 = add_period(session, STORE_A, "rk-a2", D1117, "20")
+    b = add_period(session, STORE_B, "rk-b", D1117, "30")
+    fake = FakeWalmart(
+        dates={"SYN01": ["11032026", "11172026"], "SYN02": ["11172026"]},
+        pages={
+            ("SYN01", "11032026"): page("10", start="10/15/2026", end="11/03/2026"),
+            ("SYN01", "11172026"): 429,
+            ("SYN02", "11172026"): page("30"),
+        },
+    )
+    result = run(session, fake)
+    assert result.failed == ["SYN01"] and result.stores[0].error == "WALMART_RECON_RATE_LIMITED"
+    assert fake.fetched() == [("SYN01", "11032026"), ("SYN01", "11172026"), ("SYN02", "11172026")]
+    for period in (a1, a2, b):
+        session.refresh(period)
+    assert a1.payable_source == "lingxing" and a2.payable_source == "lingxing"
+    assert b.payable_source == "walmart"
+    assert session.get(WalmartReconReportPage, ("primary", STORE_A, D1103, 0)) is None
+
+
+def test_dates_endpoint_failure_fails_only_that_store(session: Session) -> None:
+    a = add_period(session, STORE_A, "rk-a", D1117, "1")
+    b = add_period(session, STORE_B, "rk-b", D1117, "2")
+    fake = FakeWalmart(dates={"SYN02": ["11172026"]}, pages={("SYN02", "11172026"): page("2")})
+    result = run(session, fake)
+    assert result.failed == ["SYN01"] and result.stores[0].error == "WALMART_RECON_HTTP_400"
     session.refresh(a)
     session.refresh(b)
-    assert a.payable_source == "walmart" and b.payable_source == "lingxing"
-    assert b.walmart_total_payable is None
+    assert a.payable_source == "lingxing" and b.payable_source == "walmart"
+
+
+def test_period_or_currency_mismatch_and_duplicate_dates_are_skipped(session: Session) -> None:
+    add_period(
+        session, STORE_A, "rk-cur", D1103, "10", currency="CNY", start=date(2026, 10, 15), end=D1103
+    )
+    add_period(session, STORE_A, "rk-dup1", D1117, "20")
+    add_period(session, STORE_A, "rk-dup2", D1117, "21")
+    add_period(
+        session,
+        STORE_A,
+        "rk-span",
+        date(2026, 11, 20),
+        "30",
+        start=date(2026, 9, 1),
+        end=date(2026, 9, 30),
+    )
+    fake = FakeWalmart(
+        dates={"SYN01": ["11032026", "11172026", "11202026"], "SYN02": []},
+        pages={
+            ("SYN01", "11032026"): page("10", start="10/15/2026", end="11/03/2026"),
+            ("SYN01", "11172026"): page("20"),
+            ("SYN01", "11202026"): page("30", end="11/20/2026"),
+        },
+    )
+    result = run(session, fake)
+    assert sorted(result.stores[0].failed_periods) == [
+        (D1103, "WALMART_RECON_CURRENCY_MISMATCH"),
+        (D1117, "WALMART_RECON_DUPLICATE_PERIOD"),
+        (date(2026, 11, 20), "WALMART_RECON_PERIOD_MISMATCH"),
+    ]
+    assert fake.fetched() == [("SYN01", "11032026"), ("SYN01", "11202026")]  # 重复日期不去拉
+    sources = {
+        p.report_key: p.payable_source
+        for p in session.scalars(
+            select(WalmartBillPeriod).where(WalmartBillPeriod.store_id == STORE_A)
+        )
+    }
+    assert set(sources.values()) == {"lingxing"}
+
+
+def test_not_payable_and_voided_on_both_paths(session: Session) -> None:
+    neg = add_period(session, STORE_A, "rk-neg", D1103, "5", start=date(2026, 10, 15), end=D1103)
+    void = add_period(session, STORE_A, "rk-void", D1117, "7", line_count=0)
+    fake = FakeWalmart(
+        dates={"SYN01": ["11032026", "11172026"], "SYN02": []},
+        pages={
+            ("SYN01", "11032026"): page("-3", start="10/15/2026", end="11/03/2026"),
+            ("SYN01", "11172026"): page("7"),
+        },
+    )
+    assert run(session, fake).written == 2
+    session.refresh(neg)
+    session.refresh(void)
+    assert neg.status == "not_payable" and neg.payable_amount == Decimal("-3.0000")
+    assert void.status == "voided" and void.payable_amount == Decimal("7.0000")
+    # 领星重算只动有明细的期；这两期没有明细行，重算不碰它们，沃尔玛写的状态保留
+    refresh_periods(
+        session,
+        source_account_ref="primary",
+        keys={(STORE_A, "rk-neg"), (STORE_A, "rk-void")},
+        store_names={},
+        run_id=None,
+    )
+    session.expire_all()
+    neg = session.get(WalmartBillPeriod, ("primary", STORE_A, "rk-neg"))
+    void = session.get(WalmartBillPeriod, ("primary", STORE_A, "rk-void"))
+    assert neg is not None and void is not None
+    assert neg.status == "not_payable" and neg.payable_amount == Decimal("-3.0000")
+    assert void.status == "voided" and void.payable_source == "walmart"
+
+
+def test_matched_or_reviewed_period_gets_reset_when_payable_changes(session: Session) -> None:
+    from app.modules.finance_cashflow.models import FinanceCashAccount
+    from tests.modules.walmart_bills.test_payout_postgresql import ACC, add_line
+
+    session.add(
+        FinanceCashAccount(
+            account_key=ACC,
+            display_name="合成 · 账户",
+            entity="合成主体",
+            currency_code="USD",
+            kind="platform",
+            provider="pingpong",
+        )
+    )
+    session.flush()
+    add_line(session, "syn-line-1", "2026-11-05", "100")
+    matched = add_period(
+        session, STORE_A, "rk-m", D1103, "100", start=date(2026, 10, 15), end=D1103
+    )
+    reviewed = add_period(session, STORE_A, "rk-r", D1117, "200")
+    same = add_period(session, STORE_B, "rk-s", D1117, "300")
+    session.add(
+        WalmartPayoutMatch(
+            match_id=uuid4(),
+            seq=0,
+            line_uid="syn-line-1",
+            source_account_ref="primary",
+            store_id=STORE_A,
+            report_key="rk-m",
+            payable_amount=Decimal("100"),
+            method="auto",
+            created_by="u",
+        )
+    )
+    for store, key in ((STORE_A, "rk-r"), (STORE_B, "rk-s")):
+        session.add(
+            WalmartPayoutReviewEvent(
+                source_account_ref="primary",
+                store_id=store,
+                report_key=key,
+                kind="review1_pass",
+                actor="u",
+            )
+        )
+    session.flush()
+    fake = FakeWalmart(
+        dates={"SYN01": ["11032026", "11172026"], "SYN02": ["11172026"]},
+        pages={
+            ("SYN01", "11032026"): page("160", start="10/15/2026", end="11/03/2026"),
+            ("SYN01", "11172026"): page("190"),
+            ("SYN02", "11172026"): page("300.004"),  # 差 < 0.01：不重置
+        },
+    )
+    result = run(session, fake)
+    assert sorted(result.reset) == [("SYN01", D1103), ("SYN01", D1117)]
+    for period in (matched, reviewed, same):
+        session.refresh(period)
+    assert matched.payable_amount == Decimal("160.0000")
+    assert reviewed.payable_amount == Decimal("190.0000")
+    resets = session.scalars(
+        select(WalmartPayoutReviewEvent).where(WalmartPayoutReviewEvent.kind == "reset")
+    ).all()
+    assert sorted(e.report_key for e in resets) == ["rk-m", "rk-r"]
+    assert all(e.actor == sync.SYNC_ACTOR for e in resets)
+    assert {Decimal(e.payload["payable_before"]) for e in resets} == {
+        Decimal("100"),
+        Decimal("200"),
+    }
+    assert {Decimal(e.payload["payable_after"]) for e in resets} == {Decimal("160"), Decimal("190")}
+    items = {r.report_key: r for r in PayoutReconService(session).list_periods(today=TODAY).items}
+    assert items["rk-r"].stage == "todo"  # 退回待初审
+    assert items["rk-s"].stage == "ok1"  # 没变，不动
+    # 已配对的期：到账 100 对新应付 160 → 金额不符，财务一眼能看到
+    assert items["rk-m"].pay_state == "mismatch" and items["rk-m"].diff == Decimal("-60.0000")
 
 
 def test_lingxing_refresh_keeps_walmart_payable_and_recomputes_diff(session: Session) -> None:
@@ -305,7 +570,12 @@ def test_lingxing_refresh_keeps_walmart_payable_and_recomputes_diff(session: Ses
     )
     period = session.get(WalmartBillPeriod, ("primary", STORE_A, "rk-a"))
     assert period is not None and period.payable_amount == Decimal("15.5000")
-    sync.apply_summary(session, period, rp.extract_payment_summary(D1117, page("20.00")), now=NOW)
+    sync.apply_summary(
+        session,
+        period,
+        rp.extract_payment_summary(D1117, page("20", start="11/10/2026", end="11/10/2026")),
+        now=NOW,
+    )
     session.flush()
     session.expire_all()
     # 领星再同步重算这一期：应付仍是沃尔玛的 20，差额按新的领星合计重算
@@ -322,7 +592,7 @@ def test_lingxing_refresh_keeps_walmart_payable_and_recomputes_diff(session: Ses
 
 
 def test_payable_source_and_walmart_value_must_agree(session: Session) -> None:
-    period = add_period(session, STORE_A, "rk-x", D1117, "1.00")
+    period = add_period(session, STORE_A, "rk-x", D1117, "1")
     period.payable_source = "walmart"  # 没有沃尔玛金额却标 walmart
     with pytest.raises(IntegrityError):
         session.flush()

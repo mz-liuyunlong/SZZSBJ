@@ -462,7 +462,10 @@ class PayoutReconService:
                     lingxing_payable=lingxing_payable(row),
                     walmart_total_payable=row.walmart_total_payable,
                     walmart_diff=row.walmart_diff,
-                    walmart_note=account_rows_note(row.walmart_account_rows) or None,
+                    walmart_note=account_rows_note(
+                        row.walmart_account_rows, complete=row.walmart_account_rows_complete
+                    )
+                    or None,
                     period_status=row.status,
                     pay_state=state,
                     anomaly=arrival_voided or state in rules.ANOMALY_STATES,
