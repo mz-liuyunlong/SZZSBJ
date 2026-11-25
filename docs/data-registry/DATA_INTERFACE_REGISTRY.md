@@ -352,3 +352,10 @@ Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源�
 - Missing or unverified identities return null.
 - No new tables, migrations or historical record updates.
 - Status: local implementation pending runtime verification.
+
+## 2026-11-25 历史打品跟踪兼容（热修复回归 Git）
+
+- 既有打品看板、明细、单商品详情/已保存评分读取及打品判定接口复用原登录/账号范围，不新增端点、物理字段、表、迁移、前端或调度。
+- 来源：`mart_listing_management_current` 的真实 Listing；应用库 `biz_new_product_registry`、`biz_new_product_performance_current`、`biz_new_product_tracking_current` 的显式历史登记、原始评分及初始评级；完整身份 `source_account_ref + store_id + item_id`；两数据源独立查询。人工补录证据 `data_coverage_json.historical_tracking_import_v1`，来源 `manual_historical_import`。普通新品列表和采购入口仍要求原小批量测品标签。原始风险与供应链评分独立留存，不映射为现行 trust。
+- 仅已登记的历史商品获得打品读取兼容，不按代采标签自动批量入选。现有 WFS 证据与最终判定锁定规则继续有效；历史原始数据不随 PR 分发，不重复补录。打品自动规则分析不是本次范围。
+- 生产热修复已由负责人页面验收；Git 版本尚待完整预检、PR 审核和正式发布。回滚代码会恢复旧筛选范围，历史数据保留，不随代码回滚直接删除已产生业务记录。

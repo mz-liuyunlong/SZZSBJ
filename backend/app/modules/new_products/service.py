@@ -24,6 +24,8 @@ from .bulk_read import (
     ReadSnapshot,
     load_read_snapshot,
 )
+from .historical_tracking import overlay as overlay_historical
+from .historical_tracking import snapshots as historical_snapshots
 from .models import (
     ActionEvent,
     MarketScore,
@@ -86,8 +88,9 @@ class NewProductService:
         self.repo = NewProductRepository(read_session or session)
         self.write_repo = NewProductRepository(session)
 
-    def _listing(self, accounts, account, store, item):
-        listing = self.repo.exact_listing(accounts, account, store, item)
+    def _listing(self, accounts, account, store, item, *, historical=None):
+        options = {"historical_keys": historical} if historical else {}
+        listing = self.repo.exact_listing(accounts, account, store, item, **options)
         if listing is None:
             problem("NEW_PRODUCT_NOT_FOUND", 404, "未找到具有小批量测品标签的商品或无权限访问")
         return listing
@@ -508,7 +511,9 @@ class NewProductService:
         ev["missing"] = list(missing or ["等待新品独立利润与评分权威数据重新发布"])
         return False
 
-    def _hydrate_workflow_rows(self, rows, saved_rows=None, profit_results=None):
+    def _hydrate_workflow_rows(
+        self, rows, saved_rows=None, profit_results=None, *, historical=None
+    ):
         """One bounded local decision query per model, never N+1 and never source writes."""
         if not rows:
             return
@@ -516,6 +521,7 @@ class NewProductService:
         if not isinstance(self.db, Session):
             return
         saved_rows = saved_rows or {}
+        historical = historical or {}
         keys = [
             (
                 str(row["listing"]["source_account_ref"]),
@@ -608,7 +614,11 @@ class NewProductService:
                 if row["evaluation"].get("observation_state") != "frozen":
                     row["evaluation"]["dimensions"]["market"] = str(market.score)
             app = applications.get(key)
-            if row["evaluation"].get("observation_state") != "frozen" and not (
+            if key in historical:
+                if row["evaluation"].get("observation_state") != "frozen":
+                    attach_testing_profit_facts(row["facts"], profit_results.get(key))
+                    overlay_historical(row, historical[key])
+            elif row["evaluation"].get("observation_state") != "frozen" and not (
                 app is not None and app.status in ("submitted", "approved")
             ):
                 self._verified_final_from_saved(
@@ -633,7 +643,16 @@ class NewProductService:
             if decision is not None:
                 row["tracking_decision"] = decision.decision
                 row["tracking_reason"] = decision.reason
-        self._overlay_score_correction_rows(rows, keys, config)
+        if historical:
+            normal = [
+                (row, key) for row, key in zip(rows, keys, strict=True) if key not in historical
+            ]
+            if normal:
+                self._overlay_score_correction_rows(
+                    [r for r, _ in normal], [k for _, k in normal], config
+                )
+        else:
+            self._overlay_score_correction_rows(rows, keys, config)
 
     # NP_OPERATOR_SCORE_CORRECTION_V1_20261119
     def _score_correction_blocks(self, keys):
@@ -929,7 +948,7 @@ class NewProductService:
             row["facts"]["order_days_count"] = counts.get(key)
             row["facts"]["order_days_cutoff_la"] = cutoff.isoformat()
 
-    def _list_saved(self, accounts, query, *, item_keys=None):
+    def _list_saved(self, accounts, query, *, item_keys=None, tracking_scope=False):
         """List saved results only. No advertising, order, profit or scoring queries.
 
         All expensive evidence/score calculations belong to background publishers.
@@ -941,6 +960,13 @@ class NewProductService:
         try:
             preview = local_preview_item_ids()
             filters = {"item_ids": preview} if preview is not None else {}
+            historical = (
+                historical_snapshots(self.db, accounts, item_keys)
+                if tracking_scope and item_keys
+                else {}
+            )
+            if historical:
+                filters["historical_keys"] = historical
             data, total, last = self.repo.page(
                 accounts,
                 page=query.page,
@@ -1002,7 +1028,10 @@ class NewProductService:
                         if isinstance(coverage, dict):
                             overlay_saved_ad_display(row, coverage.get("ad_display_v1"))
                 rows.append(row)
-            self._hydrate_workflow_rows(rows, persisted)
+            if historical:
+                self._hydrate_workflow_rows(rows, persisted, historical=historical)
+            else:
+                self._hydrate_workflow_rows(rows, persisted)
             self._attach_order_days_for_list(rows, finals, today_la - timedelta(days=1))
             _LOGGER.info(
                 "new_product_list_saved_only page=%d count=%d total=%d elapsed_ms=%d",
@@ -1288,8 +1317,14 @@ class NewProductService:
 
     def persisted_score(self, accounts, account, store, item):
         """Saved GET snapshot; write workflows still use live score() unchanged."""
-        listing = self._listing(accounts, account, store, item)
-        key = ident(listing)
+        key = (account, store, item)
+        # Ordinary score/assessment/purchase writes still require the sample label.
+        historical = (
+            historical_snapshots(self.db, accounts, [key]) if isinstance(self.db, Session) else {}
+        )
+        listing = self._listing(
+            accounts, account, store, item, **({"historical": historical} if historical else {})
+        )
         saved = load_persisted(self.repo.session, [key]).get(key)
         first_order = self.repo.first_order_dates([listing]).get(key)
         market = self.write_repo.market(account, store, item)
@@ -1298,7 +1333,15 @@ class NewProductService:
         from .pr337_daily_view import saved_daily_view
 
         saved_daily_view(row, saved)
-        self._hydrate_workflow_rows([row], {key: saved} if saved else {})
+        if historical:
+            final = self._final_decisions([key]).get(key)
+            if final is not None:
+                row = closed_list_row(
+                    listing.model_dump(mode="json"), saved, final, datetime.now(LA).date()
+                )
+            self._hydrate_workflow_rows([row], {key: saved} if saved else {}, historical=historical)
+        else:
+            self._hydrate_workflow_rows([row], {key: saved} if saved else {})
         return {
             "identity": {
                 "source_account_ref": account,
@@ -1308,12 +1351,18 @@ class NewProductService:
             "listing": row["listing"],
             "facts": row["facts"],
             "evaluation": row["evaluation"],
-            "rule_source": "persisted_snapshot",
+            "rule_source": (
+                "frozen_snapshot"
+                if row["evaluation"].get("observation_state") == "frozen"
+                else "historical_manual_import"
+            )
+            if historical
+            else "persisted_snapshot",
             "rule_version": row["evaluation"]["rule_version"],
         }
 
     def detail(self, accounts, account, store, item):
-        self._listing(accounts, account, store, item)
+        # persisted_score performs the same exact authorization, including history.
         score = self.persisted_score(accounts, account, store, item)
         tr = self.write_repo.tracking(account, store, item)
         if score.get("rule_source") == "frozen_snapshot":
@@ -2112,7 +2161,12 @@ class NewProductService:
 
     def save_tracking(self, accounts, body, actor):
         a, s, i = ident(body)
-        self._listing(accounts, a, s, i)
+        historical = (
+            historical_snapshots(self.db, accounts, [(a, s, i)])
+            if isinstance(self.db, Session)
+            else {}
+        )
+        self._listing(accounts, a, s, i, **({"historical": historical} if historical else {}))
         if body.decision in ("打品失败", "需要优化") and len(body.reason.strip()) < 5:
             problem(
                 "NEW_PRODUCT_TRACKING_REASON_REQUIRED", 422, "失败或需优化时必须填写至少5字原因"
@@ -2122,7 +2176,9 @@ class NewProductService:
         first = self.repo.first_wfs_date(a, s, i)
         if not first:
             problem("NEW_PRODUCT_TRACKING_NOT_STARTED", 409, "WFS首次可售证据缺失，不能人工判定")
-        score = self.score(accounts, a, s, i)
+        score = (
+            self.persisted_score(accounts, a, s, i) if historical else self.score(accounts, a, s, i)
+        )
         try:
             self.db.execute(
                 text("SELECT pg_advisory_xact_lock(hashtext(:key))"),

@@ -23,6 +23,7 @@ from app.modules.data_pages.repository import (
 from app.modules.data_pages.schemas import ListingManagementListData
 from app.modules.data_pages.service import ListingManagementService
 
+from .historical_tracking import listing_scope
 from .models import ActionEvent, MarketScore, PurchaseApplication, RuleVersion, TrackingDecision
 
 SAMPLE_TAG = "小批量测品"
@@ -63,6 +64,7 @@ class NewProductRepository:
         status: str = "",
         item_ids: Collection[str] | None = None,
         item_keys: Collection[tuple[str, str, str]] | None = None,
+        historical_keys: Collection[tuple[str, str, str]] = (),
     ):
         # Stage 1 must only read existing Listing MART rows. Reusing the full
         # Listing Management page would COUNT/MAX/ORDER a six-table joined
@@ -71,7 +73,7 @@ class NewProductRepository:
         mart = ListingManagementCurrentMart
         stmt = select(mart).where(
             mart.source_account_ref.in_(accounts),
-            mart.product_tags_json.contains([{"label": SAMPLE_TAG}]),
+            listing_scope(mart, historical_keys),
         )
         # Explicit local preview only: filter at the source before count and page.
         if item_ids is not None:
@@ -353,7 +355,9 @@ class NewProductRepository:
             for row in self.session.execute(stmt).mappings()
         }
 
-    def exact_listing(self, accounts: frozenset[str], account: str, store: str, item: str):
+    def exact_listing(
+        self, accounts: frozenset[str], account: str, store: str, item: str, *, historical_keys=()
+    ):
         if account not in accounts:
             return None
         data, _, _ = self.page(
@@ -363,6 +367,11 @@ class NewProductRepository:
             search_field="item_id",
             page=1,
             page_size=500,
+            **(
+                {"historical_keys": historical_keys, "item_keys": [(account, store, item)]}
+                if historical_keys
+                else {}
+            ),
         )
         return next(
             (
