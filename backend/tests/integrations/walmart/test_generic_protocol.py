@@ -213,9 +213,21 @@ def test_provider_errors_empty_response_and_pdf(signer: ContractSigner) -> None:
     [
         (
             {"success": False, "status": "WALMART_RESPONSE_TOO_LARGE"},
-            "REJECTED:WALMART_RESPONSE_TOO_LARGE",
+            "REJECTED:WALMART_RESPONSE_TOO_LARGE$",
         ),
-        ({"success": False, "status": "WALMART_TOKEN_REJECTED"}, "REJECTED:WALMART_TOKEN_REJECTED"),
+        (
+            {"success": False, "status": "WALMART_TOKEN_REJECTED"},
+            "REJECTED:WALMART_TOKEN_REJECTED$",
+        ),
+        (
+            {"success": False, "status": "WALMART_" + "A" * 64},
+            "REJECTED:WALMART_" + "A" * 64 + "$",
+        ),
+        ({"success": False, "status": "WALMART_X\n"}, "REJECTED$"),
+        ({"success": False, "status": "WALMART_A:B"}, "REJECTED$"),
+        ({"success": False, "status": ""}, "REJECTED$"),
+        ({"success": False, "status": " WALMART_X"}, "REJECTED$"),
+        ({"success": False, "status": "WALMART_"}, "REJECTED$"),
         ({"success": False, "status": "secret=abc"}, "REJECTED$"),
         ({"success": False, "status": "WALMART_x"}, "REJECTED$"),
         ({"success": False, "status": "WALMART_" + "A" * 65}, "REJECTED$"),

@@ -279,11 +279,14 @@ Walmart Marketplace 请求。**不新增运行时业务接口目录、读写风�
 Walmart token；不跟随重定向。通用调用不自动重试结果不明确的请求，不自动执行真实写入。
 不得将内部函数直接暴露为浏览器可指定任意 method/path/body 的 route。
 
-失败时 `GatewayRejected` 的错误码：云函数调用本身失败（网络、Tencent API）→ `WALMART_GATEWAY_UNAVAILABLE`；
+失败时 `GatewayRejected` 的错误码（其中与云函数有关的两种）：云函数调用本身失败（网络、Tencent API）→ `WALMART_GATEWAY_UNAVAILABLE`；
 云函数返回 `success=false` → `WALMART_GATEWAY_REJECTED:<云函数状态码>`（只透传形如 `WALMART_[A-Z0-9_]{1,64}`
 的纯错误码，如 `WALMART_RESPONSE_TOO_LARGE`、`WALMART_TOKEN_REJECTED`；状态不是这种形状时只有
 `WALMART_GATEWAY_REJECTED`，不带任何云端文本）。JSON 响应上限 1MB（`MAX_RESPONSE_BYTES`），超过即
-`WALMART_RESPONSE_TOO_LARGE`，业务侧按分页缩小每页数量，不要求云端放宽。
+`WALMART_RESPONSE_TOO_LARGE`，业务侧按分页缩小每页数量，不要求云端放宽。分页只解决 JSON 超限：PDF（4MB）、
+错误响应体（64KB）、ZIP 下载超限同样报 `WALMART_RESPONSE_TOO_LARGE` 但不靠分页解决；整包超 5.5MB 报
+`WALMART_PROVIDER_RESPONSE_TOO_LARGE`。其他失败码：店铺无路由 `WALMART_STORE_GATEWAY_UNAVAILABLE`、签名前契约
+校验失败（原样透传 `ContractError` 的码）、`WALMART_GATEWAY_SCOPE_MISMATCH`、`WALMART_PROVIDER_NOT_SUCCESSFUL`。
 
 ### 配置与兼容
 
