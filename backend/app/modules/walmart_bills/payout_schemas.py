@@ -37,6 +37,13 @@ class PayoutPeriodRead(BaseModel):
     period_end_date: date | None
     currency_code: str | None
     payable_amount: Decimal
+    # 应付来源（0097）：walmart = 沃尔玛对账报表 PaymentSummary 的打款额；lingxing = 领星账单合计。
+    payable_source: str = "lingxing"
+    lingxing_payable: Decimal | None = None
+    walmart_total_payable: Decimal | None = None
+    walmart_diff: Decimal | None = None
+    # 第一页里的账户级交易（保证金扣留 / 释放等）各几行，解释差额用；没有就空
+    walmart_note: str | None = None
     period_status: str
     pay_state: str
     anomaly: bool

@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import and_, func, or_, select, tuple_
+from sqlalchemy import and_, case, func, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -142,14 +142,27 @@ def refresh_periods(
                 "refreshed_at": now,
             }
             statement = pg_insert(WalmartBillPeriod).values(**values)
+            set_ = {
+                key: statement.excluded[key]
+                for key in values
+                if key not in {"source_account_ref", "store_id", "report_key"}
+            }
+            # 这一期已有沃尔玛打款额（0097）：应付仍以沃尔玛为准，领星重算只更新参考值与差额；
+            # walmart_* 列不在 values 里，不会被覆盖。
+            walmart = WalmartBillPeriod.walmart_total_payable
+            set_["payable_amount"] = func.coalesce(walmart, statement.excluded.payable_amount)
+            set_["walmart_diff"] = case(
+                (walmart.is_(None), None), else_=walmart - statement.excluded.payable_amount
+            )
+            set_["status"] = case(
+                (walmart.is_(None), statement.excluded.status),
+                (statement.excluded.line_count == 0, "voided"),
+                (walmart <= ZERO, "not_payable"),
+                else_="normal",
+            )
             session.execute(
                 statement.on_conflict_do_update(
-                    index_elements=["source_account_ref", "store_id", "report_key"],
-                    set_={
-                        key: statement.excluded[key]
-                        for key in values
-                        if key not in {"source_account_ref", "store_id", "report_key"}
-                    },
+                    index_elements=["source_account_ref", "store_id", "report_key"], set_=set_
                 )
             )
             written += 1

@@ -25,6 +25,7 @@ ENDPOINTS = [
     ("GET", "/api/finance/walmart-bills/periods"),
     ("GET", "/api/finance/walmart-bills/sync"),
     ("POST", "/api/finance/walmart-bills/sync"),
+    ("POST", "/api/finance/walmart-bills/recon-payout-sync"),
 ]
 
 
@@ -70,6 +71,25 @@ def test_page_permission_can_read_but_not_sync(client_for, monkeypatch) -> None:
     assert periods.json()["data"] == {"items": [], "limit": 2000, "truncated": False}
     assert client.get("/api/finance/walmart-bills/sync").json()["data"]["status"] == "never"
     assert client.post("/api/finance/walmart-bills/sync").status_code == 403
+    assert client.post("/api/finance/walmart-bills/recon-payout-sync").status_code == 403
+
+
+def test_recon_payout_sync_is_off_by_default_then_dispatches(client_for, monkeypatch) -> None:
+    client = client_for(user(SYNC))
+    off = client.post("/api/finance/walmart-bills/recon-payout-sync")
+    assert (off.status_code, off.json()["error"]["code"]) == (409, "WALMART_RECON_PAYOUT_DISABLED")
+    monkeypatch.setattr(bills_router, "recon_payout_enabled", lambda: True)
+    sent: list[bool] = []
+    monkeypatch.setattr(bills_router, "dispatch_recon_payout_sync", lambda: sent.append(True))
+    queued = client.post("/api/finance/walmart-bills/recon-payout-sync")
+    assert (queued.status_code, queued.json()["data"]["status"]) == (202, "queued")
+    assert sent == [True]
+
+    def down() -> None:
+        raise bills_router.ReconPayoutDispatchError("down")
+
+    monkeypatch.setattr(bills_router, "dispatch_recon_payout_sync", down)
+    assert client.post("/api/finance/walmart-bills/recon-payout-sync").status_code == 503
 
 
 def test_sync_permission_starts_a_run_and_maps_errors(client_for, monkeypatch) -> None:

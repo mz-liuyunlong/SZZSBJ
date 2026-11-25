@@ -24,6 +24,7 @@ TASK_IMPORTS = (
     "app.modules.integration_sync.tasks",
     "app.modules.walmart_scf.tasks",
     "app.modules.walmart_remote.tasks",
+    "app.modules.walmart_bills.tasks",
     "app.modules.operation_logs.tasks",
     "app.modules.business_connectors.tasks",
     "app.modules.listing_rule_config.tasks",
@@ -45,6 +46,7 @@ TASK_ROUTES = {
     "ai_runtime.*": {"queue": AI_QUEUE, "routing_key": AI_QUEUE},
     "walmart_scf.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "walmart_remote.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
+    "walmart_bills.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "integration_sync.*": {
         "queue": INTEGRATION_QUEUE,
         "routing_key": INTEGRATION_QUEUE,
@@ -147,6 +149,16 @@ def create_celery_app(
             },
         },
     )
+    # 0097 沃尔玛对账报表打款额：只有生产 + SZZSBJ_WALMART_RECON_PAYOUT_ENABLED=1 才排期；
+    # 每周三上海 04:30（UTC 周二 20:30），在领星账单同步（周三 03:00）之后。
+    if _is_production_env() and _env_truthy(os.getenv("SZZSBJ_WALMART_RECON_PAYOUT_ENABLED")):
+        celery.conf.beat_schedule = {
+            **celery.conf.beat_schedule,
+            "walmart-bills-recon-payout-weekly": {
+                "task": "walmart_bills.recon_payout_sync",
+                "schedule": crontab(minute=30, hour=20, day_of_week="2"),
+            },
+        }
     # Never enqueue disabled clearance ticks; unrelated Beat entries are untouched.
     if _is_production_env() and _env_truthy(os.getenv("SZZSBJ_CLEARANCE_AUTO_ENABLED")):
         celery.conf.beat_schedule = {

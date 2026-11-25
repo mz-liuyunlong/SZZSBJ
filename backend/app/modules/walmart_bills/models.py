@@ -107,6 +107,11 @@ class WalmartBillPeriod(Base):
     __table_args__ = (
         Index("ix_walmart_bill_periods_report_date", "report_date"),
         CheckConstraint("status IN ('normal', 'not_payable', 'voided')", name="status"),
+        CheckConstraint("payable_source IN ('lingxing', 'walmart')", name="payable_source"),
+        CheckConstraint(
+            "(payable_source = 'walmart') = (walmart_total_payable IS NOT NULL)",
+            name="walmart_payable_source",
+        ),
     )
 
     source_account_ref: Mapped[str] = mapped_column(String(128), primary_key=True)
@@ -131,3 +136,18 @@ class WalmartBillPeriod(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     source_run_id: Mapped[UUID | None] = mapped_column()
     refreshed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # 沃尔玛对账报表 PaymentSummary（0097，Rocky 2026-11-26）：有就以它为应付，领星值留作参考。
+    # 领星账单只含订单级交易，不含保证金扣留 / 释放等账户级交易，碰上就对不上实际打款。
+    # 这几列由 recon_payout_sync 写、领星同步重算期汇总时保留（periods.refresh_periods 不覆盖）。
+    walmart_total_payable: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    walmart_diff: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    payable_source: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="lingxing", server_default=text("'lingxing'")
+    )
+    walmart_period_start_date: Mapped[date | None] = mapped_column(Date)
+    walmart_period_end_date: Mapped[date | None] = mapped_column(Date)
+    walmart_posted_date: Mapped[date | None] = mapped_column(Date)
+    walmart_account_rows: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    walmart_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -5,6 +5,8 @@
 
 ## 1. 规则
 
+- **应付口径（0097，Rocky 2026-11-26）**：应付以**沃尔玛对账报表**（`GET /v3/report/reconreport/reconFileJson` 第一页里 `Transaction Type = PaymentSummary` 那一行的 `Total Payable`）为准；领星账单合计只作参考。原因：领星账单只含订单级交易，不含保证金扣留 / 释放（`Release Reserve` 等）这类账户级交易，碰上就对不上实际打款。沃尔玛的对账日期和领星的账单日一一对应（按 店铺 × `report_date` 对上）。`mart_walmart_bill_periods` 加列：`walmart_total_payable`、`walmart_diff`（沃尔玛 − 领星）、`payable_source`（`walmart` / `lingxing`）、`walmart_period_start_date` / `walmart_period_end_date` / `walmart_posted_date`、`walmart_account_rows`（第一页里没有订单号 / PO / GTIN 的账户级交易，只留类型、描述、金额、日期）、`walmart_synced_at`。有沃尔玛数据的期 `payable_amount` = 沃尔玛打款额，领星重算期汇总时保留这几列、只更新参考值与差额；没有的期照旧用领星。自动配对、状态、合计都读 `payable_amount`，不改。
+- **拉取**：Celery 任务 `walmart_bills.recon_payout_sync`，走 V4 通用通道 `call_walmart()`，只读 GET，代码里只允许 `availableReconFiles` 与 `reconFileJson` 两个路径；每店 1 次可用日期 + 每个缺的日期 1 次第一页（100 行，不翻页），往期一起补（最近 400 天内、每店最多 40 期，领星账单从 2026-03 起）；沃尔玛有、领星还没有这期的先跳过下次再补；一店一个保存点，失败整店回滚、其他店照常。开关环境变量 `<项目前缀>_WALMART_RECON_PAYOUT_ENABLED=1`（名字见 `backend/app/modules/walmart_bills/recon_payout_sync.py` 的 `ENABLED_ENV`；默认关，打开要业务负责人授权）：打开后生产 Beat 每周三上海 04:30 跑一次（领星账单同步之后），页面「拉沃尔玛打款额」按钮（`POST /api/finance/walmart-bills/recon-payout-sync`，手动同步权限）也只投递这个任务；没打开返回 409 `WALMART_RECON_PAYOUT_DISABLED`。
 - **自动配对**：到账日期在账单日之后 0–7 天；到账账户是这家店（账单日当天生效）的收款账户；收款账户识别（派安盈付款邮箱 / PingPong 公司名）填了就要出现在付款方、摘要或备注里；币种一致；金额差 ≤ 0.01。
 - **合并打款**：一笔到账 = 同一收款账户下 2–4 期应付之和（差 ≤ 0.01），也自动配给这几期。
 - 一笔到账能配出不止一种结果，或一期被几笔到账争抢 → 不自动配，留给财务手动配（`POST /matches`，金额可以不等，显示为金额不符；账单日早于 2026-10-01 的期次 422）。
@@ -22,7 +24,7 @@
 
 | 方法 | 路径 | 权限 | 说明 |
 |---|---|---|---|
-| GET | `/periods` | `page:finance:settlement-reconciliation:view` | 每店每期：应付、到账、差额、回款状态、审核阶段、最新跟进；`auto_ready` = 现在点自动配对能配上的期数。参数 `store_id`、`report_date_from`、`report_date_to`；最多 2000 行（`truncated`） |
+| GET | `/periods` | `page:finance:settlement-reconciliation:view` | 每店每期：应付（`payable_source`、`lingxing_payable`、`walmart_total_payable`、`walmart_diff`、`walmart_note`）、到账、差额、回款状态、审核阶段、最新跟进；`auto_ready` = 现在点自动配对能配上的期数。参数 `store_id`、`report_date_from`、`report_date_to`；最多 2000 行（`truncated`） |
 | GET | `/periods/{store_id}/{report_key}` | 同上 | 一期详情：按金额类型小计、配对历史（含撤销）、审核记录、跟进记录 |
 | GET | `/accounts` | 同上 | 收款账户映射（含历史）+ 可选入账账户、店铺 |
 | GET | `/lines` | `action:finance:settlement-reconciliation:review1` | 手动配对可选的到账（映射过的账户里、10 月起的收入流水），带 `journal_hint`；最多 2000 笔（`limit` / `truncated`） |

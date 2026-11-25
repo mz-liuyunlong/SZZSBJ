@@ -23,9 +23,26 @@ import { PAY_STATE, REVIEW_TAG, VOIDED_ARRIVAL_TEXT, isFirstPending, isMatched, 
 type CardKey = "all" | "paid" | "anomaly" | "todo" | "ok1";
 
 const EMPTY = "—";
+        <Tag bordered={false} color={walmart ? (differs ? "orange" : "blue") : "default"} style={{ marginInlineEnd: 0 }}>{walmart ? (differs ? "沃尔玛≠领星" : "沃尔玛") : "领星"}</Tag>
+      </Space>
+    </Tooltip>
+  );
+}
 const icon = (text: string) => <span className="management-stat-card__mark">{text}</span>;
 const usd = (value: number | null | undefined, strong?: boolean) =>
   strong ? <Typography.Text strong><MoneyCell value={value} /></Typography.Text> : <MoneyCell value={value} />;
+
+/** 应付：来源标签 + 差异提示（0097） */
+function payableCell(row: ReconRow): ReactNode {
+  const walmart = row.payableSource === "walmart";
+  const differs = walmart && row.walmartDiff != null && Math.abs(row.walmartDiff) >= 0.005;
+  const title = walmart
+    ? `沃尔玛实际打款 $${n2(row.payable)}${row.lingxingPayable != null ? ` · 领星账单 $${n2(row.lingxingPayable)}` : ""}${differs ? ` · 差 $${n2(row.walmartDiff ?? 0)}` : ""}${row.walmartNote ? `（${row.walmartNote}）` : ""}`
+    : "领星账单合计（这一期还没拉到沃尔玛对账报表）";
+  return (
+    <Tooltip title={title}>
+      <Space size={4}>
+        {usd(row.payable, true)}
 
 export interface ReconBoardProps {
   actions: ReactNode;
@@ -90,7 +107,7 @@ function ReconBoard({ actions, subtitle, rows: allRows, payDates, picked, onPick
     { key: "payee", title: "收款账户", dataIndex: "payee", width: 220, ellipsis: true, tooltip: "派安盈是付款邮箱，PingPong 是公司名称", render: (_, row) => row.payee || <Typography.Text type="secondary">未匹配</Typography.Text> },
     { key: "account", title: "入账账户（日记账）", width: 180, ellipsis: true, render: (_, row) => row.accountName || <Typography.Text type="secondary">未匹配</Typography.Text> },
     { key: "cycle", title: "账期", width: 200, tooltip: "这一期账单覆盖的交易日期（领星没给账期时按最早 / 最晚交易日期）", render: (_, row) => (row.cycleFrom ? `${row.cycleFrom} ~ ${row.cycleTo}` : EMPTY) },
-    { key: "payable", title: "应付", dataIndex: "payable", width: 120, align: "right", render: (_, row) => usd(row.payable, true) },
+    { key: "payable", title: "应付", dataIndex: "payable", width: 140, align: "right", tooltip: "有沃尔玛对账报表的期按沃尔玛实际打款额；没有的按领星账单合计。沃尔玛和领星不一致时标出差额（保证金扣留 / 释放等账户级交易领星账单里没有）", render: (_, row) => payableCell(row) },
     { key: "arrived", title: "到账", dataIndex: "arrived", width: 120, align: "right", render: (_, row) => (row.arrived == null ? <Typography.Text type="secondary">{EMPTY}</Typography.Text> : usd(row.arrived)) },
     { key: "diff", title: "差额", dataIndex: "diff", width: 110, align: "right", tooltip: "到账 − 应付；±0.01 以内算对上", render: (_, row) => (row.diff == null ? EMPTY : row.state === "mismatch" ? <Typography.Text type="danger"><MoneyCell value={row.diff} /></Typography.Text> : <Tag color="green" bordered={false}>0.00</Tag>) },
     { key: "arrivedAt", title: "到账日期", dataIndex: "arrivedAt", width: 110, render: (_, row) => row.arrivedAt || EMPTY },

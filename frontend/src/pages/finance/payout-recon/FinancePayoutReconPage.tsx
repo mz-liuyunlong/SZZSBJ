@@ -24,6 +24,7 @@ import {
   reconErrorText,
   startBillSync,
   toRow,
+  startReconPayoutSync,
   useBillSync,
   usePayoutPeriods,
   useReconRefresh,
@@ -43,6 +44,7 @@ const HELP: HelpSection[] = [
   { title: "审核", body: "同日记账：配上到账的期次，财务专员在「审核」列点 ✓ = 确认到账（初审）；然后变成终审，财务主管点 ✓ 终审通过、点 ✗ 写原因驳回到待初审。初审、终审、跟进分开授权。已初审 / 终审的不能改配对，要先终审驳回。" },
   { title: "收款账户匹配", body: "「手动同步」旁边的按钮。一个店铺一个收款账户：收款机构是 PingPong / 派安盈，收款账户派安盈是邮箱、PingPong 是公司名称，另记钱进日记账的哪个账户；换账户后旧的进「历史账户」。改这里要终审权限。" },
   { title: "手动同步", body: "沃尔玛账单每周三凌晨自动从领星拉一次；有权限的人可以点「手动同步」马上拉（重拉最近 35 天）。" },
+  { title: "应付来源", body: "应付以沃尔玛对账报表的实际打款额为准（每周三领星同步后自动拉，也可以点「拉沃尔玛打款额」），领星账单合计留作参考。两者不一致时应付列标「沃尔玛≠领星」，悬停看差额和原因（保证金扣留 / 释放等账户级交易领星账单里没有）。还没拉到沃尔玛数据的期按领星账单合计。" },
 ];
 
 function ReconWorkbench({ data }: { data: ApiPeriodList }) {
@@ -86,6 +88,14 @@ function ReconWorkbench({ data }: { data: ApiPeriodList }) {
       void messageApi.error(reconErrorText(error));
     }
   };
+  const runReconPayout = async () => {
+    try {
+      await startReconPayoutSync();
+      void messageApi.success("已发起拉取沃尔玛打款额，完成后刷新页面");
+    } catch (error) {
+      void messageApi.error(reconErrorText(error));
+    }
+  };
   const syncText = sync.data ? (sync.data.status === "running" || sync.data.status === "queued" ? "同步中…" : `最后同步成功：${timeText(sync.data.last_success_at)}`) : "—";
   const actions = (
     <>
@@ -93,6 +103,9 @@ function ReconWorkbench({ data }: { data: ApiPeriodList }) {
       <Button onClick={() => setMapOpen(true)}>收款账户匹配</Button>
       <Tooltip title="马上从领星重拉最近 35 天的沃尔玛账单（要手动同步权限）">
         <Button loading={sync.data?.status === "running" || sync.data?.status === "queued"} onClick={() => void runSync()}>手动同步</Button>
+      </Tooltip>
+      <Tooltip title="从沃尔玛对账报表拉每期实际打款额（只拉每期第一页；要手动同步权限，开关由业务负责人授权打开）">
+        <Button onClick={() => void runReconPayout()}>拉沃尔玛打款额</Button>
       </Tooltip>
     </>
   );

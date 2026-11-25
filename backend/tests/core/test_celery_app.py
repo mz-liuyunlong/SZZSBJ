@@ -95,3 +95,20 @@ def test_explicit_broker_url_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(REQUIRE_BROKER_ENV, "true")
 
     assert get_broker_url() == "redis://127.0.0.1:6379/0"
+
+
+def test_walmart_recon_payout_beat_only_in_production_with_switch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    key = "walmart-bills-recon-payout-weekly"
+    assert "app.modules.walmart_bills.tasks" in TASK_IMPORTS
+    assert TASK_ROUTES["walmart_bills.*"]["queue"] == INTEGRATION_QUEUE
+    monkeypatch.delenv("APP_ENV", raising=False)
+    monkeypatch.setenv("SZZSBJ_WALMART_RECON_PAYOUT_ENABLED", "1")
+    assert key not in create_celery_app(broker_url="memory://").conf.beat_schedule
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("SZZSBJ_WALMART_RECON_PAYOUT_ENABLED", raising=False)
+    assert key not in create_celery_app(broker_url="memory://").conf.beat_schedule
+    monkeypatch.setenv("SZZSBJ_WALMART_RECON_PAYOUT_ENABLED", "1")
+    entry = create_celery_app(broker_url="memory://").conf.beat_schedule[key]
+    assert entry["task"] == "walmart_bills.recon_payout_sync"
