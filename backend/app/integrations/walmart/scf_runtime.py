@@ -250,9 +250,7 @@ def _generic_transport_from_env(
     mapping = json.loads(os.environ.get("SZZSBJ_WALMART_PRIVATE_PROXIES", "{}"))
     if not isinstance(mapping, dict) or set(mapping) != {store}:
         raise ValueError("WALMART_EGRESS_MISSING")
-    return WalmartGenericTransport(
-        bound_store=store, secret_resolver=secrets, proxy=mapping[store]
-    )
+    return WalmartGenericTransport(bound_store=store, secret_resolver=secrets, proxy=mapping[store])
 
 
 def main_handler(event: object, context: object) -> dict[str, Any]:

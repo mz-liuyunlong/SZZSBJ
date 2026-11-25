@@ -163,9 +163,7 @@ class WalmartGenericTransport:
             raise TransportRejected("WALMART_TRANSPORT_FAILURE") from None
 
     @staticmethod
-    def _download_zip(
-        client: httpx.Client, data: Any, secrets: tuple[str, ...]
-    ) -> dict[str, Any]:
+    def _download_zip(client: httpx.Client, data: Any, secrets: tuple[str, ...]) -> dict[str, Any]:
         url = data.get("downloadURL") if isinstance(data, dict) else None
         if not isinstance(url, str) or not url:
             raise TransportRejected("WALMART_REPORT_DOWNLOAD_URL_MISSING")

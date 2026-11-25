@@ -89,7 +89,11 @@ def make_local(
         bound_store=STORE, secret_resolver=secrets, transport=httpx.MockTransport(http)
     )
     invoker = LocalInvoker(signer, transport)
-    return WalmartGenericClient(signer=signer, routes={STORE: (FUNCTION, invoker)}), invoker, secrets
+    return (
+        WalmartGenericClient(signer=signer, routes={STORE: (FUNCTION, invoker)}),
+        invoker,
+        secrets,
+    )
 
 
 @pytest.mark.parametrize("method", ["GET", "POST", "PUT", "PATCH", "DELETE"])
@@ -131,13 +135,9 @@ def test_new_operation_requires_no_registration_or_approval(
         ("version", 3),
     ],
 )
-def test_tampered_event_rejected_before_ssm(
-    signer: ContractSigner, key: str, value: Any
-) -> None:
+def test_tampered_event_rejected_before_ssm(signer: ContractSigner, key: str, value: Any) -> None:
     _, invoker, secrets = make_local(signer, lambda _: httpx.Response(200, json={}))
-    event = signer.sign_generic(
-        store_code=STORE, function_name=FUNCTION, method="POST", path=PATH
-    )
+    event = signer.sign_generic(store_code=STORE, function_name=FUNCTION, method="POST", path=PATH)
     event[key] = value
     result = invoker.invoke(event)
     assert result["success"] is False
@@ -328,9 +328,7 @@ def test_scf_outer_and_inner_response_limits() -> None:
     old = TencentApiClient(identity, transport=transport)
     with pytest.raises(TencentApiRejected, match="TC_RESPONSE_TOO_LARGE"):
         old.request("scf", {})
-    new = TencentApiClient(
-        identity, transport=transport, scf_response_limit=MAX_SCF_RESPONSE_BYTES
-    )
+    new = TencentApiClient(identity, transport=transport, scf_response_limit=MAX_SCF_RESPONSE_BYTES)
     invoker = TencentScfInvoker(new, function_name=FUNCTION, result_limit=6 * 1024 * 1024)
     assert invoker.invoke({"test": True}) == result
     with pytest.raises(TencentApiRejected, match="TC_RESPONSE_TOO_LARGE"):

@@ -26,9 +26,7 @@ class IdentityProvider(Protocol):
 class RefreshingScfApi(TencentApiClient):
     """Request fresh-or-cached account B identity for each SCF invocation."""
 
-    def __init__(
-        self, provider: IdentityProvider, *, scf_response_limit: int = MAX_BYTES
-    ) -> None:
+    def __init__(self, provider: IdentityProvider, *, scf_response_limit: int = MAX_BYTES) -> None:
         self._provider = provider
         self._scf_response_limit = scf_response_limit
 
@@ -38,9 +36,9 @@ class RefreshingScfApi(TencentApiClient):
         identity = self._provider.get_identity()
         if self._scf_response_limit == MAX_BYTES:
             return TencentApiClient(identity).request("scf", payload)
-        return TencentApiClient(
-            identity, scf_response_limit=self._scf_response_limit
-        ).request("scf", payload)
+        return TencentApiClient(identity, scf_response_limit=self._scf_response_limit).request(
+            "scf", payload
+        )
 
 
 def make_walmart_read_api(

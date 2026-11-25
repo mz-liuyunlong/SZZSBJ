@@ -167,9 +167,7 @@ class ProtectedScfBridge:
         }
 
 
-def decode_safe_result(
-    result: Mapping[str, Any], *, code: int, response_kind: str
-) -> SafeResult:
+def decode_safe_result(result: Mapping[str, Any], *, code: int, response_kind: str) -> SafeResult:
     """Decode the common bounded JSON/PDF/ZIP result for legacy and generic calls."""
     data = result.get("data")
     provider_error = result.get("provider_error")
