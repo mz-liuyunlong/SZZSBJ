@@ -6,7 +6,7 @@
 - 数据源决策文件：docs/data-sources/decisions/warehouse-wfs-inventory-claim-decision.md
 - 负责人已定事项（rocky，2026-11-03）：
   1. WFS 库存流水新建一张专用表 `ods_lingxing_wfs_cost_valuation_flow`（复用国内仓流水表、原始数据存接口记录表两种放法均否决）。
-  2. 该表和领星 WFS 成本计价同步、接口契约登记，**全仓库只此一份，归本 PRP 的 PR 1**；结算利润 V2 （V2 已由 V3 取代，V3 直接读本表）不再建 `ods_lingxing_wfs_cost_valuation_lines`，改读本表 `is_current = true` 的行。
+  2. 该表和领星 WFS 成本计价同步、接口契约登记，**全仓库只此一份，归本 PRP 的 PR 1**；结算利润 V2（V2 已由 V3 取代，V3 直接读本表）不再建 `ods_lingxing_wfs_cost_valuation_lines`，改读本表 `is_current = true` 的行。
   3. 索赔案件新建独立案件表 `ops_wfs_inventory_claim_cases`。
   4. 赔付数据未接入；页面「已赔」「差额」显示「未接入」。当前只做 PR 1 数据底座。
 - 本地预览：5174 `/#/warehouse/inventory-claim` 已有前端页（读本地 JSON，仅 DEV），本 PRP 定义它接入正式后端的方案。
@@ -136,7 +136,7 @@ PR 1 交付的契约登记（四处；结算利润 V2 未入库，无需删除�
 | 领星 getBatchStatementList（批次流水） | 正式表 0 行；PMC 从未拉过；交接文档无字段说明 | `ods_lingxing_domestic_inventory_events`；`handover.html` L133 |
 | 每日销售「WFS 可售库存」 | 当前快照，不是流水 | `mart_listing_management_current.wfs_available_quantity` |
 | Walmart inventory_log | 只是归档文件，不在库；CN2502 不拉 | walmart_remote schedule |
-| 结算利润 V2（V2 已由 V3 取代，V3 直接读本表） 原计划的 `ods_lingxing_wfs_cost_valuation_lines` | **取消**（rocky 2026-11-03）。同一接口只留本表；结算利润的货本和库存异动读本表 `is_current = true` 的行；其 `fact_inventory_movement_lines` 不得用 serial_number 做唯一键，店铺从 store_code / store_id 对照取 | rocky 2026-11-03 补充决定 |
+| 结算利润 V2（V2 已由 V3 取代，V3 直接读本表）原计划的 `ods_lingxing_wfs_cost_valuation_lines` | **取消**（rocky 2026-11-03）。同一接口只留本表；结算利润的货本和库存异动读本表 `is_current = true` 的行；其 `fact_inventory_movement_lines` 不得用 serial_number 做唯一键，店铺从 store_code / store_id 对照取 | rocky 2026-11-03 补充决定 |
 
 ### 6.3 流水号唯一性验证（已完成，只读本地 PMC 文件）
 
