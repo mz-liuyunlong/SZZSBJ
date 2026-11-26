@@ -342,16 +342,19 @@ def test_second_batch_for_same_account_is_rejected_without_requests(
 
 
 def add_lease(session: Session, run: IntegrationSyncRun, *, expires_in: timedelta) -> None:
+    """expires_in 为负 = 过期租约：拿锁和最后心跳都在到期之前（锁表约束要求到期不早于心跳）。"""
     now = datetime.now(UTC)
+    expires_at = now + expires_in
+    taken_at = min(now, expires_at - timedelta(minutes=5))
     session.add(
         IntegrationSyncLock(
             provider=run.provider,
             interface_key=run.interface_key,
             run_id=run.id,
             lock_token_hash="0" * 64,
-            acquired_at=now,
-            heartbeat_at=now,
-            expires_at=now + expires_in,
+            acquired_at=taken_at,
+            heartbeat_at=taken_at,
+            expires_at=expires_at,
         )
     )
     session.commit()
