@@ -51,9 +51,19 @@ class WalmartBillPeriodRead(BaseModel):
     amount_sum: Decimal
     total_payable: Decimal | None
     payable_amount: Decimal
+    payable_source: str = "lingxing"
+    walmart_total_payable: Decimal | None = None
+    walmart_diff: Decimal | None = None
+    walmart_synced_at: datetime | None = None
     amounts_by_type: dict[str, str]
     status: str
     refreshed_at: datetime
+
+
+class WalmartReconPayoutSyncData(BaseModel):
+    """「拉沃尔玛打款额」按钮：只投递任务，结果体现在期次的 payable_source / walmart_synced_at。"""
+
+    status: str = "queued"
 
 
 class WalmartBillPeriodListData(BaseModel):

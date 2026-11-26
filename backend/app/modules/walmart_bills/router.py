@@ -18,10 +18,12 @@ from app.core.auth import Principal
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
 from app.modules.walmart_bills.reader import MAX_ROWS, list_periods_page
+from app.modules.walmart_bills.recon_payout_sync import enabled as recon_payout_enabled
 from app.modules.walmart_bills.schemas import (
     WalmartBillPeriodListData,
     WalmartBillPeriodRead,
     WalmartBillSyncData,
+    WalmartReconPayoutSyncData,
 )
 from app.modules.walmart_bills.sync import (
     WalmartBillSyncNotConfiguredError,
@@ -29,6 +31,7 @@ from app.modules.walmart_bills.sync import (
     latest_walmart_bill_sync,
     start_walmart_bill_sync,
 )
+from app.modules.walmart_bills.tasks import ReconPayoutDispatchError, dispatch_recon_payout_sync
 
 READ_PERMISSION: Final = "page:finance:settlement-reconciliation:view"
 SYNC_PERMISSION: Final = "action:finance:settlement-reconciliation:sync"
@@ -36,6 +39,7 @@ SYNC_PERMISSION: Final = "action:finance:settlement-reconciliation:sync"
 ERR_SYNC_NOT_CONFIGURED: Final = "WALMART_BILL_SYNC_NOT_CONFIGURED"
 ERR_SYNC_UNAVAILABLE: Final = "WALMART_BILL_SYNC_UNAVAILABLE"
 ERR_RANGE_INVALID: Final = "WALMART_BILL_RANGE_INVALID"
+ERR_RECON_DISABLED: Final = "WALMART_RECON_PAYOUT_DISABLED"
 
 router = APIRouter(prefix="/api/finance/walmart-bills", tags=["Finance Walmart Bills"])
 
@@ -129,3 +133,32 @@ def post_sync(
             message="任务队列暂时不可用，请稍后再试",
         ) from exc
     return success_response(request, data=data)
+
+
+@router.post(
+    "/recon-payout-sync",
+    status_code=202,
+    responses=ERRORS,
+    operation_id="startFinanceWalmartReconPayoutSync",
+    summary="拉沃尔玛对账报表的每期打款额（只读 GET，走 V4 通用通道；默认关，要业务负责人授权）",
+)
+def post_recon_payout_sync(
+    request: Request,
+    principal: syncer,
+) -> SuccessEnvelope[WalmartReconPayoutSyncData, None]:
+    del principal
+    if not recon_payout_enabled():
+        raise ApiError(
+            code=ERR_RECON_DISABLED,
+            status_code=409,
+            message="沃尔玛打款额拉取还没打开（SZZSBJ_WALMART_RECON_PAYOUT_ENABLED）",
+        )
+    try:
+        dispatch_recon_payout_sync()
+    except ReconPayoutDispatchError as exc:
+        raise ApiError(
+            code=ERR_SYNC_UNAVAILABLE,
+            status_code=503,
+            message="任务队列暂时不可用，请稍后再试",
+        ) from exc
+    return success_response(request, data=WalmartReconPayoutSyncData(status="queued"))

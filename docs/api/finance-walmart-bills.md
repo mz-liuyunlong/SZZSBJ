@@ -15,7 +15,7 @@ PRP：`PRPs/finance-walmart-settlement-sync-v1.md`；数据源决策：`docs/dat
 
 `GET /periods` 查询参数：`store_id`（数字）、`report_date_from`、`report_date_to`（账单日，`YYYY-MM-DD`）。
 
-每期字段：`store_id`、`store_name`、`report_key`、`report_date`（账单日）、`period_start_date` / `period_end_date`（账期；领星没给就用最早 / 最晚交易日期）、`currency_code`、`line_count`（有效明细数）、`excluded_line_count`（被删除或重拉后消失的明细数）、`amount_sum`（有效明细合计）、`total_payable`（领星账单总额，目前都是空）、`payable_amount`（应付金额 = 账单总额，没有就用明细合计）、`amounts_by_type`（按金额类型小计，字符串金额）、`status`（`normal` / `not_payable` 本期不打款 / `voided` 作废）、`refreshed_at`。不返回订单号、买家信息。
+每期字段：`store_id`、`store_name`、`report_key`、`report_date`（账单日）、`period_start_date` / `period_end_date`（账期；领星没给就用最早 / 最晚交易日期）、`currency_code`、`line_count`（有效明细数）、`excluded_line_count`（被删除或重拉后消失的明细数）、`amount_sum`（有效明细合计）、`total_payable`（领星账单总额，目前都是空）、`payable_amount`（应付金额：这一期已拉到沃尔玛对账报表时 = 沃尔玛实际打款额 `walmart_total_payable`，`payable_source=walmart`、`walmart_diff` = 沃尔玛 − 领星；否则 = 账单总额，没有就用明细合计，`payable_source=lingxing`；0097，见 `finance-payout-recon.md` §1）、`amounts_by_type`（按金额类型小计，字符串金额）、`status`（`normal` / `not_payable` 本期不打款 / `voided` 作废）、`refreshed_at`。不返回订单号、买家信息。
 
 同步状态字段：`run_id`、`status`（`never` / `queued` / `running` / `succeeded` / `failed`）、`trigger_type`（`manual` / `schedule` / `backfill` / `retry`）、`started_at`、`finished_at`、`error_code`、`records_seen`、`records_written`、`last_success_at`。
 
@@ -34,7 +34,7 @@ PRP：`PRPs/finance-walmart-settlement-sync-v1.md`；数据源决策：`docs/dat
 |---|---|---|
 | `ods_api_raw_blobs` / `ods_api_raw_request_refs` | 领星每页原始响应 / 每次请求 | 同步任务，先于解析 |
 | `ods_lingxing_walmart_bill_lines` | 领星一条账单明细 | 同步任务；行身份 `line_key` = 组合键 + 同组合键出现序号；收货地址不入 |
-| `mart_walmart_bill_periods` | 一个店的一期账单（reportKey） | 每店拉完后重算涉及的各期 |
+| `mart_walmart_bill_periods` | 一个店的一期账单（reportKey） | 每店拉完后重算涉及的各期；`walmart_*` / `payable_source` 列由沃尔玛对账报表任务写、重算时保留 |
 
 ## 3. 同步规则
 
