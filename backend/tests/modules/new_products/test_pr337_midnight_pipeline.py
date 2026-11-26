@@ -1,4 +1,4 @@
-"""LA-midnight scheduling and single NEW_PRODUCTS Beat entry contract."""
+"""LA-midnight scoring and independent SKU projection scheduling contracts."""
 
 from __future__ import annotations
 
@@ -98,7 +98,7 @@ def test_unknown_campaign_types_preserve_totals_not_auto_manual():
     assert "manual_ad_spend_usd" not in snap["facts"]
 
 
-def test_exactly_one_new_product_schedule_even_with_legacy_flags(monkeypatch):
+def test_exactly_one_scoring_schedule_even_with_legacy_flags(monkeypatch):
     from app.celery_app import create_celery_app
 
     monkeypatch.setenv("APP_ENV", "production")
@@ -107,12 +107,28 @@ def test_exactly_one_new_product_schedule_even_with_legacy_flags(monkeypatch):
     monkeypatch.setenv("SZZSBJ_NEW_PRODUCT_TRUST_MIN_CALCULATED_AT", "2026-11-15T00:00:00Z")
     monkeypatch.setenv("SZZSBJ_PR337_UNIFIED_PUBLISH_ENABLED", "1")
     monkeypatch.setenv("SZZSBJ_PR337_UNIFIED_PRODUCTION_WRITE_APPROVED", "1")
+    monkeypatch.delenv("SZZSBJ_SKU_PROGRESS_REFRESH_ENABLED", raising=False)
     celery = create_celery_app(broker_url="memory://", require_broker=False)
     names = {
         k: v
         for k, v in celery.conf.beat_schedule.items()
         if "new-product" in k or v["task"].startswith("new_products.")
     }
-    assert list(names) == ["new-products-la-midnight"]
+    assert set(names) == {"new-products-la-midnight", "new-products-sku-progress-refresh"}
+    assert names["new-products-la-midnight"]["task"] == "new_products.daily_score_tick"
+    assert isinstance(names["new-products-la-midnight"]["schedule"], LosAngelesMidnightSchedule)
+    assert names["new-products-sku-progress-refresh"] == {
+        "task": "new_products.sku_progress_refresh",
+        "schedule": 600.0,
+    }
+
+    monkeypatch.setenv("SZZSBJ_SKU_PROGRESS_REFRESH_ENABLED", "0")
+    celery = create_celery_app(broker_url="memory://", require_broker=False)
+    names = {
+        k: v
+        for k, v in celery.conf.beat_schedule.items()
+        if "new-product" in k or v["task"].startswith("new_products.")
+    }
+    assert set(names) == {"new-products-la-midnight"}
     assert names["new-products-la-midnight"]["task"] == "new_products.daily_score_tick"
     assert isinstance(names["new-products-la-midnight"]["schedule"], LosAngelesMidnightSchedule)

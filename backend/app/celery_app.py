@@ -191,7 +191,7 @@ def create_celery_app(
                 "schedule": 600.0,
             },
         }
-    # Exactly one PR337 scheduler. The other business functions have no Beat entry.
+    # Exactly one PR337 scoring scheduler, independent of the SKU projection refresh.
     # LA calendar midnight, DST-aware, while all unrelated jobs keep UTC.
     if _is_production_env() and _env_truthy(os.getenv("SZZSBJ_NEW_PRODUCTS_DAILY_ENABLED")):
         from app.modules.new_products.la_midnight_schedule import LosAngelesMidnightSchedule
