@@ -430,7 +430,8 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                             "quantity": raw_quantity,
                             "unit_price_amount": raw_price,
                             "unit_price_currency_code": (
-                                _field(item, "unit_price_currency_code", "currency") or currency_code
+                                _field(item, "unit_price_currency_code", "currency")
+                                or currency_code
                             ),
                             "order_total_amount": order_total,
                             "order_total_currency_code": currency_code,

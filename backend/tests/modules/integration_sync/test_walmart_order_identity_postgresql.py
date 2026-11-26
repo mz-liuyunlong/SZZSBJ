@@ -1132,9 +1132,7 @@ def test_verified_v3_v5_samples_reject_evidence_changes_without_mart_loss(
             }
         )
         conflicts.append({**provider_row, "amount_currency": "CNY"})
-        conflicts.append(
-            {**provider_row, "platform_info": [{"cancel_time": "ambiguous"}]}
-        )
+        conflicts.append({**provider_row, "platform_info": [{"cancel_time": "ambiguous"}]})
 
         for changed in conflicts:
             with pytest.raises(
@@ -1235,13 +1233,16 @@ def test_verified_v3_v5_samples_reject_evidence_changes_without_mart_loss(
         assert runner._write_sample_orders([cancelled]) == 1
         assert runner._write_sample_orders([]) == 0
         session.commit()
-        assert session.execute(
-            text(
-                "select count(*) from fact_walmart_sample_order_items "
-                "where source_account_ref=:account and sample_rule_version=:rule"
-            ),
-            {"account": _ACCOUNT, "rule": CANCELLED_VERIFIED_SAMPLE_RULE_VERSION},
-        ).scalar_one() == 1
+        assert (
+            session.execute(
+                text(
+                    "select count(*) from fact_walmart_sample_order_items "
+                    "where source_account_ref=:account and sample_rule_version=:rule"
+                ),
+                {"account": _ACCOUNT, "rule": CANCELLED_VERIFIED_SAMPLE_RULE_VERSION},
+            ).scalar_one()
+            == 1
+        )
 
 
 def test_isolated_database_guard_rejects_application_database() -> None:

@@ -853,13 +853,11 @@ class SyncRunExecutionService:
                     "SYNC_REFUND_MART_VALIDATED",
                     safe_details={"business_date": purchase_day.isoformat()},
                 )
-        sample_refresh_days = []
         if sample_isolation is not None and run_id is not None:
             for day in sorted(sample_isolation.affected_days):
-                if complete_sample_financial_review(
+                complete_sample_financial_review(
                     self.session, runner.source_account_ref, day, run_id
-                ):
-                    sample_refresh_days.append(day)
+                )
             if sample_isolation.conflicted:
                 self._event(
                     run_id,
@@ -872,25 +870,6 @@ class SyncRunExecutionService:
                     },
                 )
         self.session.commit()
-        # Do not let a broker outage undo committed sales or financial results.
-        if sample_refresh_days:
-            try:
-                from app.modules.new_products.unified_tasks import publish_performance
-
-                for day in sample_refresh_days:
-                    publish_performance.delay(
-                        "sample_source_change", runner.source_account_ref, day.isoformat()
-                    )
-            except Exception:
-                if run_id is not None:
-                    self._event(
-                        run_id,
-                        "running",
-                        "running",
-                        "DATA_PAGES_SAMPLE_PRODUCT_REFRESH_PENDING",
-                        safe_details={"business_date": runner.business_date.isoformat()},
-                    )
-                    self.session.commit()
         return runner.summary
 
     def _execute_listing_management_run(self, run: IntegrationSyncRun) -> None:

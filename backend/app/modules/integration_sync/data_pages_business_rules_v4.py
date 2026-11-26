@@ -131,8 +131,7 @@ class DataPagesRealSyncRunner(HistoricalAdRunner):
         affected_days = tuple(
             sorted(
                 set(getattr(self, "_refund_affected_business_dates", ()))
-                | set(getattr(self, "_sample_affected_business_dates", ()))
-                - {current_day}
+                | set(getattr(self, "_sample_affected_business_dates", ())) - {current_day}
             )
         )
         affected_days = tuple(day for day in affected_days if day != current_day)

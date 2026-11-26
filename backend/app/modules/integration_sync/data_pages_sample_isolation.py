@@ -168,7 +168,6 @@ class SampleIsolation:
             "phase": "sample_evidence",
             "financial_status": "pending",
             "sample_isolation_active": active,
-            "new_product_refresh_pending": True,
             "affected_products": _scopes(prior, observed),
             "source_order_id": _safe_value(prior.get("source_order_id")),
             "source_order_line_id": _safe_value(prior.get("source_order_line_id")),
@@ -179,25 +178,6 @@ class SampleIsolation:
         }
         repo = IntegrationSyncRepository(self.session)
         for day in sorted(dates):
-            existing = self.session.scalar(
-                select(IntegrationSyncAnomaly).where(
-                    IntegrationSyncAnomaly.source_account_ref == self.account,
-                    IntegrationSyncAnomaly.interface_key == "saleStatPageList",
-                    IntegrationSyncAnomaly.business_date == day,
-                    IntegrationSyncAnomaly.error_code == code,
-                    IntegrationSyncAnomaly.subject_key == subject,
-                )
-            )
-            per_day = dict(details)
-            if (
-                existing is not None
-                and existing.details.get("sample_isolation_active") == active
-                and existing.details.get("changes") == details["changes"]
-                and existing.details.get("affected_products") == details["affected_products"]
-            ):
-                per_day["new_product_refresh_pending"] = existing.details.get(
-                    "new_product_refresh_pending", True
-                )
             repo.record_business_anomaly(
                 run_id=self.run_id,
                 account=self.account,
@@ -210,7 +190,7 @@ class SampleIsolation:
                 msku=_text(prior.get("msku")),
                 local_sku=_text(prior.get("local_sku")),
                 platform_order_no=_text(prior.get("platform_order_no")),
-                details=per_day,
+                details=details,
             )
 
     def conflict(
@@ -274,7 +254,6 @@ class SampleIsolation:
                 **row.details,
                 "sample_isolation_active": False,
                 "financial_status": "pending",
-                "new_product_refresh_pending": True,
                 "provider_replay_verified": True,
             }
             row.run_id = self.run_id
@@ -321,9 +300,7 @@ def _text(value: object) -> str | None:
     return str(value) if value is not None else None
 
 
-def _status(
-    session: Session, row: IntegrationSyncAnomaly, status: str, note: str
-) -> None:
+def _status(session: Session, row: IntegrationSyncAnomaly, status: str, note: str) -> None:
     if row.status == status:
         return
     session.add(
@@ -342,7 +319,7 @@ def _status(
 
 def complete_sample_financial_review(
     session: Session, account: str, day: date, run_id: UUID
-) -> bool:
+) -> None:
     """Call only after both financial MARTs passed their replay validation."""
     rows = session.scalars(
         select(IntegrationSyncAnomaly)
@@ -355,7 +332,6 @@ def complete_sample_financial_review(
         .with_for_update()
     ).all()
     has_active = any(row.details.get("sample_isolation_active") is True for row in rows)
-    pending_refresh = False
     for row in rows:
         marker = row.details.get("sample_isolation_active")
         if marker is True or marker is False:
@@ -366,14 +342,17 @@ def complete_sample_financial_review(
                 }
                 if not marker:
                     _status(session, row, "resolved", "来源和销售利润复验完成。")
-            pending_refresh |= row.details.get("new_product_refresh_pending") is True
-        elif row.subject_key == "date-scope" and not has_active and row.status not in {
-            "resolved",
-            "dismissed",
-        }:
+        elif (
+            row.subject_key == "date-scope"
+            and not has_active
+            and row.status
+            not in {
+                "resolved",
+                "dismissed",
+            }
+        ):
             row.details = {**row.details, "financial_status": "ready", "validated_run": str(run_id)}
             _status(session, row, "resolved", "整日来源和销售利润已重新同步并复验。")
-    return pending_refresh
 
 
 def mark_isolated_sample_finance(session: Session, account: str, day: date) -> None:
@@ -393,26 +372,3 @@ def mark_isolated_sample_finance(session: Session, account: str, day: date) -> N
         {"account": account, "day": day, "warning": SAMPLE_CONFLICT_WARNING},
     )
 
-
-def disputed_product_keys(
-    session: Session, keys_json: str, cutoff: date
-) -> set[tuple[str, str, str]]:
-    rows = session.execute(
-        text(
-            "with wanted as (select account,store,item from "
-            "jsonb_to_recordset(cast(:wanted as jsonb)) as w(account text,store text,item text)) "
-            "select distinct w.account,w.store,w.item from wanted w "
-            "join gov_integration_sync_anomalies a on a.source_account_ref=w.account "
-            f"cross join lateral {_SCOPE_ROWS} "
-            "where a.interface_key='saleStatPageList' and a.business_date<=:cutoff "
-            "and (a.details->>'sample_isolation_active'='true' "
-            "or (a.details ? 'sample_isolation_active' and a.details->>'financial_status'='pending')) "
-            "and (scope->>'store_id' is null or scope->>'store_id'=w.store) "
-            "and ((scope->>'item_id' is null and scope->>'msku' is null) "
-            "or scope->>'item_id'=w.item or exists (select 1 from dim_walmart_listings l "
-            "where l.source_account_ref=w.account and l.store_id=w.store and l.item_id=w.item "
-            "and trim(l.msku)=scope->>'msku'))"
-        ),
-        {"wanted": keys_json, "cutoff": cutoff},
-    ).all()
-    return {(str(a), str(s), str(i)) for a, s, i in rows}

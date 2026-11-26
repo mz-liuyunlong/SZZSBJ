@@ -125,3 +125,22 @@ retry, or historical data rewrite is authorized by this code change.
 
 Other verified-evidence changes remain protected; row-level exception
 isolation and anomaly-center UX are separate work.
+
+### Governed capture and anomaly review
+
+For the governed saleStatPageList run, a protected sample conflict is recorded
+at order-line scope with previous/observed field evidence. Its prior sample
+fact is retained. Unrelated order lines continue to capture. Affected product
+finance is provisional and profit remains unknown until source evidence and
+both MARTs are replay-validated. An operator cannot clear this protection just
+by closing an anomaly. The anomaly drawer displays Chinese guidance, source
+identity, and the previous/observed comparison; legacy date-only anomalies
+remain identifiable as such.
+
+An explicit cancellation with unchanged other verified fields is recorded as
+an automatic cancellation and retains the cancellation evidence. The existing
+Daily Sales and Order Profit refresh is reused. No new-product schedule or
+publisher is introduced; existing nightly calculation remains unchanged.
+Any cross-module treatment of disputed values needs separate verification.
+Production recovery requires an authorized deployment and a replay of the
+affected LA business day; this PR alone does not restore production data.
