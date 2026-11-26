@@ -53,6 +53,7 @@ AD_CATALOG_0094_REVISION = "20261120_0094_walmart_ad_catalog"
 SYNC_PROVIDER_ERROR_0095_REVISION = "20261124_0095_sync_work_item_provider_error"
 SETTLEMENT_PROFIT_V3_0096_REVISION = "20261125_0096_settlement_profit_v3_tables"
 RECON_PAYOUT_0097_REVISION = "20261126_0097_walmart_bill_periods_recon_payout"
+WFS_COST_VALUATION_FLOW_0098_REVISION = "20261126_0098_wfs_cost_valuation_flow"
 FINANCE_0083_REVISION = "20261109_0083_finance_sem_unallocated_lines"
 WFS_DETECTION_HEAD_REVISION = "20261026_0061_wfs_fee_detection_evidence"
 SYNC_ANOMALY_HEAD_REVISION = "20261027_0062_sync_anomaly_center"
@@ -100,8 +101,12 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20261026_0055_purchase_board_draft_no",
         LISTING_INTEGRATION_HEAD_REVISION,
     }
-    assert script.get_heads() == [RECON_PAYOUT_0097_REVISION]
+    assert script.get_heads() == [WFS_COST_VALUATION_FLOW_0098_REVISION]
 
+    assert (
+        script.get_revision(WFS_COST_VALUATION_FLOW_0098_REVISION).down_revision
+        == RECON_PAYOUT_0097_REVISION
+    )
     assert (
         script.get_revision(RECON_PAYOUT_0097_REVISION).down_revision
         == SETTLEMENT_PROFIT_V3_0096_REVISION
@@ -448,6 +453,6 @@ def test_revision_files_have_unique_ids_and_form_one_connected_graph() -> None:
                     revisions.append(ast.literal_eval(node.value))
     assert len(revisions) == len(set(revisions)), "duplicate full Alembic revision ID"
     script = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
-    assert script.get_heads() == [RECON_PAYOUT_0097_REVISION]
+    assert script.get_heads() == [WFS_COST_VALUATION_FLOW_0098_REVISION]
     assert len(script.get_bases()) == 1
     assert {item.revision for item in script.walk_revisions()} == set(revisions)
