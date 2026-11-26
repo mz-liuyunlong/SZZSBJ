@@ -113,6 +113,7 @@ def test_walmart_recon_payout_beat_only_in_production_with_switch(
     entry = create_celery_app(broker_url="memory://").conf.beat_schedule[key]
     assert entry["task"] == "walmart_bills.recon_payout_sync"
 
+
 @pytest.mark.parametrize(
     ("environment", "switch", "enabled"),
     [

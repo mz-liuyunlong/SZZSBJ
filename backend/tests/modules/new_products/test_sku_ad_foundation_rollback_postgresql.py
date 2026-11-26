@@ -45,9 +45,12 @@ def test_0100_rejects_nonempty_rollback_and_allows_empty_rollback():
             migration["downgrade"]()
         with engine.begin() as connection:
             assert names <= set(sa.inspect(connection).get_table_names())
-            assert connection.scalar(
-                sa.text("SELECT count(*) FROM mart_new_product_sku_progress_current")
-            ) == 1
+            assert (
+                connection.scalar(
+                    sa.text("SELECT count(*) FROM mart_new_product_sku_progress_current")
+                )
+                == 1
+            )
             connection.execute(sa.text("DELETE FROM mart_new_product_sku_progress_current"))
         with (
             engine.begin() as connection,
