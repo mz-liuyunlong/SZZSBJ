@@ -371,4 +371,3 @@ def mark_isolated_sample_finance(session: Session, account: str, day: date) -> N
         ),
         {"account": account, "day": day, "warning": SAMPLE_CONFLICT_WARNING},
     )
-
