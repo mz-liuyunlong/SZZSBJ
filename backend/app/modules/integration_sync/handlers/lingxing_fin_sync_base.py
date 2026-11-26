@@ -223,8 +223,11 @@ class FinSyncHandlerBase:
                     self.session.rollback()
                     self._record_store_failure(run, store.store_id, str(exc))
                 except Exception as exc:
+                    # 不是处理器自己抛的错（如写 ODS 时数据库出错）：当页工作项还是 running，
+                    # 这里一并记失败，不留悬着的工作项。
                     failed += 1
                     self.session.rollback()
+                    self._fail_running_work_items(run, "SYNC_FIN_STORE_FAILED")
                     self._record_store_failure(run, store.store_id, "SYNC_FIN_STORE_FAILED")
                     logger.exception("fin sync store failed: %s", type(exc).__name__)
 
@@ -441,6 +444,15 @@ class FinSyncHandlerBase:
         work.error_message = f"{self.spec.display_name}请求处理失败"
         work.finished_at = utc_now()
         run.work_items_failed += 1
+        self.session.commit()
+
+    def _fail_running_work_items(self, run: IntegrationSyncRun, code: str) -> None:
+        for work in self.repository.list_running_work_items_for_update(run.id):
+            work.status = "failed"
+            work.error_code = code
+            work.error_message = f"{self.spec.display_name}写入失败"
+            work.finished_at = utc_now()
+            run.work_items_failed += 1
         self.session.commit()
 
     def _record_store_failure(self, run: IntegrationSyncRun, store_id: str, code: str) -> None:

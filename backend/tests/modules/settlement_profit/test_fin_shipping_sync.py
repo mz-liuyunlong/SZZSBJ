@@ -367,10 +367,13 @@ def governed(
     page_size: int | None = None,
     max_pages: int | None = None,
 ) -> IntegrationInterface:
-    IntegrationCatalogService(session).bootstrap_fin_shipping_governance(ACCOUNT)
-    interface = session.scalars(
-        select(IntegrationInterface).where(IntegrationInterface.interface_key == spec.interface_key)
-    ).one()
+    # bootstrap 会把已登记的接口重新置回默认关闭，所以同一个测试里登记过就不再登记。
+    query = select(IntegrationInterface).where(
+        IntegrationInterface.interface_key == spec.interface_key
+    )
+    if session.scalars(query).one_or_none() is None:
+        IntegrationCatalogService(session).bootstrap_fin_shipping_governance(ACCOUNT)
+    interface = session.scalars(query).one()
     config = session.scalars(
         select(IntegrationSyncConfig).where(IntegrationSyncConfig.interface_id == interface.id)
     ).one()
@@ -556,6 +559,68 @@ def test_shipping_list_runaway_paging_is_refused(session: Session) -> None:
     run = run_sync(session, interface, client)
     assert (run.status, run.error_code) == ("failed", "SYNC_FIN_ALL_STORES_FAILED")
     assert "SYNC_FIN_SHIPPING_TOO_MANY_PAGES" in (run.error_message or "")
+
+
+def test_shipping_list_sync_keeps_detail_synced_at_until_the_list_changes(
+    session: Session,
+) -> None:
+    add_stores(session)
+    lists = governed(session, FIN_SHIPPING_LIST_SYNC_SPEC)
+    details = governed(session, FIN_SHIPPING_DETAIL_SYNC_SPEC)
+    client = FakeLingxing()
+    client.list_pages[(STORE_A, 0)] = list_body([shipping_row("SP2026T0001")])
+    client.details["SP2026T0001"] = detail_body([detail_item("SYN-001")])
+    assert run_sync(session, lists, client).status == "succeeded"
+    assert run_sync(session, details, client).status == "succeeded"
+    shipping = session.scalars(
+        select(FinShippingList).where(FinShippingList.shipping_list_code == "SP2026T0001")
+    ).one()
+    stamped = shipping.detail_synced_at
+    assert stamped is not None
+
+    # 发货单内容不变再同步一次：detail_synced_at 不能被清空，明细也不重拉。
+    client.calls.clear()
+    assert run_sync(session, lists, client).status == "succeeded"
+    assert run_sync(session, details, client).status == "succeeded"
+    session.expire_all()
+    assert shipping.detail_synced_at == stamped
+    assert client.calls == [("list", STORE_A, "0")]
+
+    # 发货单内容变了：updated_at 往后走，明细重拉。
+    client.calls.clear()
+    client.list_pages[(STORE_A, 0)] = list_body(
+        [shipping_row("SP2026T0001", delivery="2026-11-11 08:00")]
+    )
+    assert run_sync(session, lists, client).status == "succeeded"
+    assert run_sync(session, details, client).status == "succeeded"
+    session.expire_all()
+    assert client.calls == [("list", STORE_A, "0"), ("detail", STORE_A, "SP2026T0001")]
+    assert shipping.detail_synced_at is not None
+    assert shipping.detail_synced_at > stamped
+
+
+def test_database_error_while_writing_fails_the_page_and_the_store(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    add_stores(session)
+    interface = governed(session, FIN_SHIPPING_LIST_SYNC_SPEC)
+    client = FakeLingxing()
+    client.list_pages[(STORE_A, 0)] = list_body([shipping_row("SP2026T0001")])
+
+    def boom(*args: Any, **kwargs: Any) -> int:
+        raise RuntimeError("synthetic database failure")
+
+    monkeypatch.setattr(
+        "app.modules.integration_sync.handlers.lingxing_fin_shipping_sync._upsert_shipping_lists",
+        boom,
+    )
+    run = run_sync(session, interface, client)
+    assert (run.status, run.error_code) == ("failed", "SYNC_FIN_ALL_STORES_FAILED")
+    assert "SYNC_FIN_STORE_FAILED" in (run.error_message or "")
+    work = session.scalars(select(IntegrationSyncRunWorkItem)).one()
+    assert (work.status, work.error_code) == ("failed", "SYNC_FIN_STORE_FAILED")
+    assert run.work_items_failed == 1
+    assert session.scalar(select(func.count()).select_from(FinShippingList)) == 0
 
 
 def test_repeated_page_from_lingxing_stops_the_store_at_once(session: Session) -> None:

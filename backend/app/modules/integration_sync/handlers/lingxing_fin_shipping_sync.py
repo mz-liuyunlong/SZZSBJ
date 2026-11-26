@@ -272,7 +272,15 @@ def _upsert_shipping_lists(
         ]
     )
     excluded = statement.excluded
-    keep = {"id", "source_account_ref", "store_id", "shipping_list_code", "created_at"}
+    # detail_synced_at 归明细同步管，发货单 upsert 不碰它（#370 第二轮复核 P2-1）。
+    keep = {
+        "id",
+        "source_account_ref",
+        "store_id",
+        "shipping_list_code",
+        "created_at",
+        "detail_synced_at",
+    }
     set_ = {
         column.name: excluded[column.name]
         for column in FinShippingList.__table__.columns

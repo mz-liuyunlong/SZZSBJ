@@ -15,7 +15,7 @@
 1. 发货单按**发货时间**取窗：没发货的单子没有实际成本，等发货后进入滚动窗再拉。表里是当前状态（按发货单号 upsert），内容没变不动 `updated_at`。
 2. 明细只拉**已发货**（`shippingListStatus=2`）、发货时间在窗内、且「明细没拉过（发货单 `detail_synced_at` 为空）」或「发货单在明细之后变过（`detail_synced_at` < `updated_at`）」的单子（迁移 0099 加这一列）；拉完在同一事务里 upsert 新明细、删掉这张单不在新集合里的 MSKU 行、记 `detail_synced_at`——明细为空也记，不反复重拉。同一 MSKU 在一张单里出现多次把发货量加总、单价取第一条（`raw_row.merged_rows` / `merged_delivery_num` 记合并结果，行指纹按合并后算）。
 3. 销售出库单按**变更时间**取窗（出库后运费会被补分摊，`update_at` 会往后挪），按出库单号 upsert；`platform_order_no` 取接口数组第一个；`items` 只留 MSKU、数量、分摊运费、库存成本等计算要用的键。
-   - `sid_arr` 传的是多平台店铺 ID（`dim_lingxing_stores.store_id`）：2026-10-26 的拉取脚本就是这样传的（9 家店 ID 直接作 `sid_arr`），返回行的 `sid` 与传入值一致，拉到 3,779 单；本账号的 Walmart 店铺 ERP `sid` 与多平台 `store_id` 是同一个值。代码再加一道保险：返回行 `sid` 与请求的店不一致就整页判脏（`SYNC_FIN_WMS_INVALID_ROW`），不会悄悄写 0 条当成功（#370 复审 P1）。
+   - `sid_arr` 传的是多平台店铺 ID（`dim_lingxing_stores.store_id`）：2026-10-26 的拉取脚本就是这样传的（9 家店 ID 直接作 `sid_arr`），返回行的 `sid` 与传入值一致，拉到的单数与本地归档一致（数字不入库）；本账号的 Walmart 店铺 ERP `sid` 与多平台 `store_id` 是同一个值。代码再加一道保险：返回行 `sid` 与请求的店不一致就整页判脏（`SYNC_FIN_WMS_INVALID_ROW`），不会悄悄写 0 条当成功（#370 复审 P1）。
 4. 收件人、电话、地址、邮编、买家留言、客服备注、税号、备注附件、面单文件（`surface_file`，链接指向带收件人姓名地址的面单）、拣货人 / 发货人（员工姓名）、商品备注（`customization`，可能带买家文字）在落原始层**之前**就删掉（`scrub_pii`），RAW 和 ODS 都没有。
 5. 一个店失败不影响其他店；有店失败整次记失败（`SYNC_FIN_STORE_PARTIAL` / `SYNC_FIN_ALL_STORES_FAILED`），下次重跑补齐。
 6. 默认关闭（接口 outbound、配置 is_enabled、定时都关）。打开顺序：登记 → 只开手动（首次手动同步当受控探测）→ 开每周定时 → 回填 2026-05-01 起（代码下限 `FIN_SHIPPING_EARLIEST_DATE`）。定时三个接口**错开**：发货单周三上海 04:00、出库单 04:30、明细 05:00（三个接口各自一把执行锁，同一时刻排会并行，所以靠错开时间保证明细在发货单之后；沃尔玛账单同步在 03:00）。
