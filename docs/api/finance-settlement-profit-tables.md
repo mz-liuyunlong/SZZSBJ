@@ -21,6 +21,8 @@ PR-1 只建表，不写同步、计算和接口。表都从空开始；同步任
 
 ## ODS（同步落地，PR-2 写入）
 
+前三张由 PR-2 的三个 Integration Sync 处理器写入（`finShippingList` / `finShippingDetail` / `finWmsOutboundOrders`，默认关闭；上线步骤、口径与错误码见 `docs/runbooks/finance-settlement-profit-sync.md`）。公共列：`source_run_id`、`source_raw_request_ref_id` 指向当次原始页；`synced_at` 每次同步都更新；`row_hash` 是脱敏后原始行的 sha256，发货单表的 `updated_at` 只在 `row_hash` 变化时更新（明细同步靠它判断要不要重拉）；`raw_row` 是脱敏后的原始行（出库单去掉 `product_info`，明细在 JSON 里）。
+
 | 表 | 业务键 | 内容 |
 |---|---|---|
 | `ods_lingxing_fin_shipping_lists` | source_account_ref, store_id, shipping_list_code | 领星多平台发货单（shippingList v2）当前状态：状态、物流商 id / 名称、渠道、头程费用类型、发货时间。与 PMC 的 `ods_lingxing_wfs_shipping_lists`（每次运行一份快照）不同名、互不依赖 |
