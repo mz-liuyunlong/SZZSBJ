@@ -200,8 +200,8 @@ export default function NewProductPages({page,mode}:Props){
  const [boardViews,setBoardViews]=usePageStateCache<Record<Mode,"list"|"board"|"sku-progress">>(
    "new-product:board-views",{performance:"board",tracking:"board"});
  const savedTab=boardViews[mode]??"board";
- const skuPreviewEnabled=import.meta.env.DEV && mode==="performance";
- const tab=savedTab==="sku-progress"&&!skuPreviewEnabled?"board":savedTab;
+ const skuProgressEnabled=mode==="performance";
+ const tab=savedTab==="sku-progress"&&!skuProgressEnabled?"board":savedTab;
  const setTab=(view:"list"|"board"|"sku-progress")=>setBoardViews((current)=>({...current,[mode]:view}));
  const [phase,setPhase]=useState("all"),[reportRevision,setReportRevision]=useState(0);
  const [modal,setModal]=useState<ModalType>(null),[selected,setSelected]=useState<string|null>(null),[scoreValue,setScoreValue]=useState<number|null>(null),[qty,setQty]=useState(0),[note,setNote]=useState(""),[review,setReview]=useState("继续观察");
@@ -881,7 +881,7 @@ export default function NewProductPages({page,mode}:Props){
         onClick={()=>{if(mode==="tracking")setTrackingDrill(null);setTab("list");}}>
         {mode==="performance"?"新品详情":"打品详情"}
       </button>
-      {skuPreviewEnabled&&<button type="button" role="tab" aria-selected={tab==="sku-progress"} className={tab==="sku-progress"?"active":""} onClick={()=>setTab("sku-progress")}>SKU进度</button>}
+      {skuProgressEnabled&&<button type="button" role="tab" aria-selected={tab==="sku-progress"} className={tab==="sku-progress"?"active":""} onClick={()=>setTab("sku-progress")}>SKU进度</button>}
     </div>
     <div className="np-workspace-actions">
       {tab==="list"&&

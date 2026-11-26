@@ -814,22 +814,37 @@ def upgrade() -> None:
     )
 
 
+# Drop in dependency order, but lock and check every table before any DDL.
+DOWNGRADE_TABLES = (
+    "mart_new_product_sku_progress_current",
+    "dwd_walmart_ad_source_observations",
+    "biz_new_product_sku_progress_milestones",
+    "biz_new_product_sku_progress_events",
+    "biz_new_product_independent_site_submissions",
+    "biz_new_product_sku_purchase_plans",
+    "biz_new_product_sku_progress",
+    "mart_listing_ad_status_current",
+    "fact_walmart_ad_item_sp_daily_ext",
+    "dwd_walmart_ad_item_config_ext",
+    "biz_walmart_ad_account_store_mapping",
+    "dwd_lingxing_sku_country_logistics_ext",
+    "dwd_lingxing_sku_supplier_tiers_ext",
+    "dwd_lingxing_sku_supplier_quotes_ext",
+    "dwd_lingxing_sku_source_current",
+    "dwd_lingxing_sku_source_snapshots",
+)
+
+
 def downgrade() -> None:
-    # No existing business rows or tables are touched; new-table data would be lost.
     op.execute("SET LOCAL lock_timeout = '3s'")
-    op.drop_table("mart_new_product_sku_progress_current")
-    op.drop_table("dwd_walmart_ad_source_observations")
-    op.drop_table("biz_new_product_sku_progress_milestones")
-    op.drop_table("biz_new_product_sku_progress_events")
-    op.drop_table("biz_new_product_independent_site_submissions")
-    op.drop_table("biz_new_product_sku_purchase_plans")
-    op.drop_table("biz_new_product_sku_progress")
-    op.drop_table("mart_listing_ad_status_current")
-    op.drop_table("fact_walmart_ad_item_sp_daily_ext")
-    op.drop_table("dwd_walmart_ad_item_config_ext")
-    op.drop_table("biz_walmart_ad_account_store_mapping")
-    op.drop_table("dwd_lingxing_sku_country_logistics_ext")
-    op.drop_table("dwd_lingxing_sku_supplier_tiers_ext")
-    op.drop_table("dwd_lingxing_sku_supplier_quotes_ext")
-    op.drop_table("dwd_lingxing_sku_source_current")
-    op.drop_table("dwd_lingxing_sku_source_snapshots")
+    # ACCESS EXCLUSIVE locks prevent writes between the emptiness check and DROP.
+    # The guard also executes when generated offline SQL is applied to PostgreSQL.
+    op.execute("LOCK TABLE " + ", ".join(DOWNGRADE_TABLES) + " IN ACCESS EXCLUSIVE MODE")
+    checks = "\n".join(
+        f"IF EXISTS (SELECT 1 FROM {table}) THEN "
+        f"RAISE EXCEPTION '0100 rollback blocked: {table} has data'; END IF;"
+        for table in DOWNGRADE_TABLES
+    )
+    op.execute("DO $sku_progress_rollback$ BEGIN\n" + checks + "\nEND; $sku_progress_rollback$")
+    for table in DOWNGRADE_TABLES:
+        op.drop_table(table)

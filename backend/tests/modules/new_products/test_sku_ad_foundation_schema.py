@@ -49,6 +49,16 @@ def test_schema_only_and_orm_parity():
         )
         pattern = r"CREATE TABLE (\w+)" if fn == "upgrade" else r"DROP TABLE (\w+)"
         assert set(re.findall(pattern, sql)) == names
+        if fn == "downgrade":
+            assert set(migration["DOWNGRADE_TABLES"]) == names
+            lock = sql.index("LOCK TABLE ")
+            guard = sql.index("DO $sku_progress_rollback$")
+            drop = sql.index("DROP TABLE ")
+            assert lock < guard < drop
+            for name in names:
+                assert name in sql[lock:guard]
+                assert f"IF EXISTS (SELECT 1 FROM {name})" in sql[guard:drop]
+                assert f"0100 rollback blocked: {name} has data" in sql[guard:drop]
         if fn == "upgrade":
             assert "DROP TABLE" not in sql
             for name in names:

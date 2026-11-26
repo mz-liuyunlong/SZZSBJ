@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { beginBackendRequest, getBackendRequestBusySnapshot, runWithoutBackendRequestBusy } from "@/shared/network/backendRequestBusy";
 import source from "./NewProductTrackingReport.tsx?raw";
+import newProductPagesSource from "./NewProductPages.tsx?raw";
 
 describe("tracking table loading", () => {
   it("keeps query placeholders and mounts loading only on the table", () => {
@@ -31,5 +32,15 @@ describe("tracking table loading", () => {
       finishScoped?.();
     }
     expect(getBackendRequestBusySnapshot()).toBe(false);
+  });
+});
+
+describe("SKU progress production entry", () => {
+  it("keeps the performance tab available in production and excludes tracking", () => {
+    expect(newProductPagesSource).toContain('const skuProgressEnabled=mode==="performance";');
+    expect(newProductPagesSource).toContain('savedTab==="sku-progress"&&!skuProgressEnabled?"board":savedTab');
+    expect(newProductPagesSource).toContain('{skuProgressEnabled&&<button type="button" role="tab"');
+    expect(newProductPagesSource).toContain('tab==="sku-progress"?<NewProductSkuProgressPage/>');
+    expect(newProductPagesSource).not.toContain("skuPreviewEnabled");
   });
 });

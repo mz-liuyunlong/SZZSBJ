@@ -63,6 +63,13 @@ def _is_production_env() -> bool:
     return (os.environ.get(APP_ENV_ENV) or "").strip().lower() == "production"
 
 
+def sku_progress_refresh_enabled() -> bool:
+    """Production default on; explicit false/invalid values stop both Beat and worker."""
+    return _is_production_env() and _env_truthy(
+        os.getenv("SZZSBJ_SKU_PROGRESS_REFRESH_ENABLED", "1")
+    )
+
+
 def get_broker_url(*, require: bool | None = None) -> str:
     """Return the Celery broker URL with a fail-closed production guard."""
     broker_url = (os.environ.get(BROKER_URL_ENV) or "").strip()
@@ -196,7 +203,7 @@ def create_celery_app(
                 "schedule": LosAngelesMidnightSchedule(app=celery),
             },
         }
-    if _is_production_env() and _env_truthy(os.getenv("SZZSBJ_SKU_PROGRESS_REFRESH_ENABLED")):
+    if sku_progress_refresh_enabled():
         celery.conf.beat_schedule = {
             **celery.conf.beat_schedule,
             "new-products-sku-progress-refresh": {
