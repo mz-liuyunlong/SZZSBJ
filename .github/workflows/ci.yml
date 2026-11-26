@@ -116,7 +116,7 @@ jobs:
           grep -F "Forward-only permission catalog migration: do not revoke role grants automatically" /tmp/role-rollback-check.log
           test "$role_before" = "$(uv run python -c "$read_head")"
           uv run alembic upgrade head
-          test "$(uv run python -c "$read_head")" = "20261124_0095_sync_work_item_provider_error"
+          test "$(uv run python -c "$read_head")" = "20261127_0100_sku_ad_progress_foundation"
           uv run pytest -q -rs tests/modules/ai_runtime/test_postgresql_acceptance.py
 
   frontend-if-present:
@@ -347,7 +347,7 @@ jobs:
         working-directory: backend
         run: |
           uv sync --frozen
-          uv run pytest -q -s tests/db/test_domestic_chain_postgresql.py tests/db/test_packing_pending_edit_postgresql.py tests/db/test_packing_passcode_redis.py tests/db/test_domestic_database_safety.py tests/modules/pmc_domestic/test_domestic_ods_adopt.py tests/db/test_alembic_scaffold.py --junitxml=domestic-chain-results.xml
+          uv run pytest -q -s tests/db/test_domestic_chain_postgresql.py tests/db/test_packing_pending_edit_postgresql.py tests/db/test_packing_passcode_redis.py tests/db/test_domestic_database_safety.py tests/modules/pmc_domestic/test_domestic_ods_adopt.py tests/modules/integration_sync/test_wfs_cost_valuation_sync_postgresql.py tests/db/test_alembic_scaffold.py --junitxml=domestic-chain-results.xml
           uv run python -c "import xml.etree.ElementTree as E; r=E.parse('domestic-chain-results.xml'); assert r.findall('.//testcase') and not r.findall('.//skipped'), 'Domestic PostgreSQL acceptance must execute without skipped cases'"
 
   walmart-order-identity-postgresql:
@@ -398,7 +398,7 @@ jobs:
 
           engine = create_engine(get_test_database_url(Settings()))
           with engine.connect() as connection:
-              assert connection.scalar(text("select version_num from alembic_version")) == "20261124_0095_sync_work_item_provider_error"
+              assert connection.scalar(text("select version_num from alembic_version")) == "20261127_0100_sku_ad_progress_foundation"
               assert connection.scalar(text("select to_regclass('public.audit_walmart_order_item_conflicts')")) is not None
               assert connection.scalar(text("select to_regclass('public.biz_finance_sample_disputes')")) is not None
               assert connection.scalar(text("select to_regclass('public.biz_finance_unallocated_sem_lines')")) is not None
@@ -733,4 +733,4 @@ jobs:
         run: |
           uv sync --frozen
           uv run alembic upgrade head
-          uv run pytest -v -rs tests/modules/finance_cashflow tests/modules/walmart_bills tests/modules/wfs_fees tests/db/test_alembic_scaffold.py
+          uv run pytest -v -rs tests/modules/finance_cashflow tests/modules/walmart_bills tests/modules/wfs_fees tests/modules/settlement_profit tests/db/test_alembic_scaffold.py

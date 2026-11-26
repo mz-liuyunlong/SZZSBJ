@@ -110,6 +110,10 @@ describe("Cron preview safety", () => {
 describe("moduleForInterface", () => {
   it("puts the Lingxing FX sync under the finance group", () => {
     expect(moduleForInterface({ interface_key: "lingxingFxRate" })).toBe("财务");
+    expect(moduleForInterface({ interface_key: "walmartBillStatementList" })).toBe("财务");
+    expect(moduleForInterface({ interface_key: "finShippingList" })).toBe("财务");
+    expect(moduleForInterface({ interface_key: "finShippingDetail" })).toBe("财务");
+    expect(moduleForInterface({ interface_key: "finWmsOutboundOrders" })).toBe("财务");
     expect(moduleForInterface({ interface_key: "productList" })).toBe("商品");
   });
 });

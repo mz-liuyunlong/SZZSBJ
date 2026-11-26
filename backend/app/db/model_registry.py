@@ -15,11 +15,13 @@ def register_productlist_sync_models() -> None:
     import app.modules.pmc_purchase.models
     import app.modules.product_management.models
     import app.modules.products.models
+    import app.modules.settlement_profit.models
     import app.modules.sku_detail.models
     import app.modules.walmart_bills.models
     import app.modules.walmart_bills.payout_models
     import app.modules.walmart_remote.models
     import app.modules.walmart_scf.persistence
+    import app.modules.warehouse_wfs.inventory_flow_models
     import app.modules.warehouse_wfs.models
     import app.modules.wfs_fees.models  # noqa: F401
     import app.modules.wfs_fees.report_models  # noqa: F401

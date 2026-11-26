@@ -26,6 +26,19 @@ from app.modules.integration_sync.handlers.lingxing_batch_product_info import (
     BatchPlan,
     LingxingBatchGetProductInfoSyncHandler,
 )
+from app.modules.integration_sync.handlers.lingxing_fin_shipping_sync import (
+    LingxingFinShippingDetailSyncHandler,
+    LingxingFinShippingListSyncHandler,
+)
+from app.modules.integration_sync.handlers.lingxing_fin_sync_base import (
+    FinSyncError,
+)
+from app.modules.integration_sync.handlers.lingxing_fin_sync_base import (
+    FinSyncHandlerBase as FinSyncHandlerType,
+)
+from app.modules.integration_sync.handlers.lingxing_fin_wms_outbound_sync import (
+    LingxingFinWmsOutboundSyncHandler,
+)
 from app.modules.integration_sync.handlers.lingxing_fx_rate_sync import (
     FxRateSyncError,
     LingxingFxRateSyncHandler,
@@ -48,6 +61,10 @@ from app.modules.integration_sync.handlers.lingxing_walmart_bill_sync import (
     LingxingWalmartBillSyncHandler,
     WalmartBillSyncError,
 )
+from app.modules.integration_sync.handlers.lingxing_wfs_cost_valuation_sync import (
+    LingxingWfsCostValuationSyncHandler,
+    WfsCostValuationSyncError,
+)
 from app.modules.integration_sync.handlers.lingxing_wfs_settlement_sync import (
     LingxingWfsSettlementSyncHandler,
     WfsSettlementSyncError,
@@ -61,6 +78,9 @@ from app.modules.integration_sync.models import (
 )
 from app.modules.integration_sync.product_info_runner import ProductInfoOneTimeRunError
 from app.modules.integration_sync.repository import IntegrationSyncRepository
+from app.modules.integration_sync.wfs_cost_valuation_catalog import (
+    WFS_COST_VALUATION_SYNC_SPEC,
+)
 
 LOCK_LEASE_DURATION = timedelta(minutes=5)
 DATA_PAGES_LA_TZ = ZoneInfo("America/Los_Angeles")
@@ -76,6 +96,13 @@ DATA_PAGES_EXECUTABLE_INTERFACE_KEYS = frozenset(
         "walmartAdItemSpList",
     }
 )
+
+
+FIN_SHIPPING_HANDLERS: dict[str, type[FinSyncHandlerType]] = {
+    LingxingFinShippingListSyncHandler.spec.interface_key: LingxingFinShippingListSyncHandler,
+    LingxingFinShippingDetailSyncHandler.spec.interface_key: LingxingFinShippingDetailSyncHandler,
+    LingxingFinWmsOutboundSyncHandler.spec.interface_key: LingxingFinWmsOutboundSyncHandler,
+}
 
 
 class SyncRunExecutionService:
@@ -119,6 +146,17 @@ class SyncRunExecutionService:
             run.provider == "lingxing"
             and run.interface_key == "walmartBillStatementList"
             and interface.handler_key == LingxingWalmartBillSyncHandler.handler_key
+        )
+        fin_handler = FIN_SHIPPING_HANDLERS.get(run.interface_key)
+        is_fin = (
+            run.provider == "lingxing"
+            and fin_handler is not None
+            and interface.handler_key == fin_handler.handler_key
+        )
+        is_wfs_cost_flow = (
+            run.provider == "lingxing"
+            and run.interface_key == WFS_COST_VALUATION_SYNC_SPEC.interface_key
+            and interface.handler_key == LingxingWfsCostValuationSyncHandler.handler_key
         )
 
         purchase_handler = PMC_PURCHASE_HANDLERS.get(run.interface_key)
@@ -165,7 +203,11 @@ class SyncRunExecutionService:
                 self._fail(run, "SYNC_CONFIG_DISABLED")
                 return
 
-        if is_data_pages or is_wfs or is_fx or is_walmart_bill:
+        if is_wfs_cost_flow and not interface.outbound_enabled:
+            self._fail(run, "SYNC_INTERFACE_DISABLED")
+            return
+
+        if is_data_pages or is_wfs or is_fx or is_walmart_bill or is_wfs_cost_flow or is_fin:
             if run.trigger_type not in {"manual", "schedule", "retry", "backfill"}:
                 self._fail(run, "SYNC_TRIGGER_NOT_EXECUTABLE")
                 return
@@ -247,6 +289,20 @@ class SyncRunExecutionService:
                 ).execute(run, interface)
                 return
 
+            if is_fin and fin_handler is not None:
+                fin_handler(
+                    self.session,
+                    heartbeat=lambda: self._heartbeat_lock(run.id),
+                ).execute(run, interface)
+                return
+
+            if is_wfs_cost_flow:
+                LingxingWfsCostValuationSyncHandler(
+                    self.session,
+                    heartbeat=lambda: self._heartbeat_lock(run.id),
+                ).execute(run, interface)
+                return
+
             if is_fx:
                 LingxingFxRateSyncHandler(
                     self.session,
@@ -295,6 +351,8 @@ class SyncRunExecutionService:
             WfsSettlementSyncError,
             FxRateSyncError,
             WalmartBillSyncError,
+            FinSyncError,
+            WfsCostValuationSyncError,
         ) as error:
             self.session.rollback()
             recovered = self.repository.get_run_for_update(run_id)

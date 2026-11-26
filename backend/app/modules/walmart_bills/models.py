@@ -14,6 +14,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -107,6 +108,11 @@ class WalmartBillPeriod(Base):
     __table_args__ = (
         Index("ix_walmart_bill_periods_report_date", "report_date"),
         CheckConstraint("status IN ('normal', 'not_payable', 'voided')", name="status"),
+        CheckConstraint("payable_source IN ('lingxing', 'walmart')", name="payable_source"),
+        CheckConstraint(
+            "(payable_source = 'walmart') = (walmart_total_payable IS NOT NULL)",
+            name="walmart_payable_source",
+        ),
     )
 
     source_account_ref: Mapped[str] = mapped_column(String(128), primary_key=True)
@@ -131,3 +137,49 @@ class WalmartBillPeriod(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     source_run_id: Mapped[UUID | None] = mapped_column()
     refreshed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # 沃尔玛对账报表 PaymentSummary（0097，Rocky 2026-11-26）：有就以它为应付，领星值留作参考。
+    # 领星账单只含订单级交易，不含保证金扣留 / 释放等账户级交易，碰上就对不上实际打款。
+    # 这几列由 recon_payout_sync 写、领星同步重算期汇总时保留（periods.refresh_periods 不覆盖）。
+    walmart_total_payable: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    walmart_diff: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    payable_source: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="lingxing", server_default=text("'lingxing'")
+    )
+    walmart_period_start_date: Mapped[date | None] = mapped_column(Date)
+    walmart_period_end_date: Mapped[date | None] = mapped_column(Date)
+    walmart_posted_date: Mapped[date | None] = mapped_column(Date)
+    walmart_account_rows: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    # 第一页就是全部行时为真；报表不止一页时账户级交易可能不全，页面要提示
+    walmart_account_rows_complete: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    walmart_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class WalmartReconReportPage(Base):
+    """沃尔玛对账报表原始页（RAW）：每店每期第一页原样落库，再解析写期表（0097）。
+
+    每期只拉第一页（PaymentSummary 在第一页）；同一页重拉覆盖。只读凭证，不含 token。
+    """
+
+    __tablename__ = "raw_walmart_recon_report_pages"
+    __table_args__ = (
+        Index("ix_raw_walmart_recon_pages_received", "received_at"),
+        CheckConstraint("page_offset >= 0", name="page_offset"),
+        CheckConstraint("store_id ~ '^[0-9]+$'", name="store_id_digits"),
+    )
+
+    source_account_ref: Mapped[str] = mapped_column(String(128), primary_key=True)
+    store_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    report_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    page_offset: Mapped[int] = mapped_column(Integer, primary_key=True)
+    store_code: Mapped[str] = mapped_column(String(16), nullable=False)
+    payload: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    payload_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_id: Mapped[str | None] = mapped_column(String(128))
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # 重拉覆盖时记上一版的指纹，内容变过能看出来
+    previous_sha256: Mapped[str | None] = mapped_column(String(64))

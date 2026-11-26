@@ -39,6 +39,9 @@ RECOVERABLE_INTERFACE_KEYS: tuple[str, ...] = (
     "wfsProfitOrder",
     "lingxingFxRate",
     "walmartBillStatementList",
+    "finShippingList",
+    "finShippingDetail",
+    "finWmsOutboundOrders",
 )
 
 

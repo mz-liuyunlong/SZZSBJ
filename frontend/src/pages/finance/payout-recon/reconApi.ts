@@ -18,6 +18,8 @@ export interface ApiFollow { content: string; case_no: string | null; next_follo
 export interface ApiPeriod {
   store_id: string; store_code: string; store_name: string | null; report_key: string; report_date: string;
   period_start_date: string | null; period_end_date: string | null; currency_code: string | null; payable_amount: string;
+  /** 应付来源（0097）：walmart = 沃尔玛对账报表的实际打款额；lingxing = 领星账单合计 */
+  payable_source?: "walmart" | "lingxing"; lingxing_payable?: string | null; walmart_total_payable?: string | null; walmart_diff?: string | null; walmart_note?: string | null;
   period_status: string; pay_state: PayState; anomaly: boolean; arrival_voided?: boolean; arrived_amount: string | null; diff: string | null; arrived_date: string | null;
   line_uid: string | null; match_id: string | null; match_method: "auto" | "manual" | null; match_size: number;
   account_key: string | null; account_name: string | null; org: string | null; payee: string | null;
@@ -77,6 +79,11 @@ export interface ReconRow {
   cycleTo: string;
   currency: string;
   payable: number;
+  /** 应付来源与差异说明（0097） */
+  payableSource: "walmart" | "lingxing";
+  lingxingPayable: number | null;
+  walmartDiff: number | null;
+  walmartNote: string;
   arrived: number | null;
   arrivedAt: string;
   diff: number | null;
@@ -110,6 +117,10 @@ export function toRow(item: ApiPeriod): ReconRow {
     cycleTo: item.period_end_date ?? "",
     currency: item.currency_code ?? "USD",
     payable: Number(item.payable_amount),
+    payableSource: item.payable_source ?? "lingxing",
+    lingxingPayable: num(item.lingxing_payable ?? null),
+    walmartDiff: num(item.walmart_diff ?? null),
+    walmartNote: item.walmart_note ?? "",
     arrived: num(item.arrived_amount),
     arrivedAt: item.arrived_date ?? "",
     diff: num(item.diff),
@@ -176,6 +187,8 @@ const post = async <T,>(path: string, body?: unknown, method = "POST") =>
   (await backendRequest<T>(path, { method, body: body === undefined ? undefined : JSON.stringify(body) })).data;
 
 export const startBillSync = () => post<ApiSync>(`${BILLS}/sync`);
+/** 拉沃尔玛对账报表的每期打款额（只读；开关默认关） */
+export const startReconPayoutSync = () => post<{ status: string }>(`${BILLS}/recon-payout-sync`);
 export const autoMatch = () => post<{ matched_periods: number; matched_lines: number }>(`${BASE}/auto-match`);
 export const createMatch = (lineUid: string, rows: ReconRow[], note?: string) =>
   post<{ match_id: string; periods: number }>(`${BASE}/matches`, { line_uid: lineUid, periods: rows.map(periodKey), note: note || undefined });

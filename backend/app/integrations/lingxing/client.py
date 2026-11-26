@@ -28,6 +28,15 @@ from app.integrations.lingxing.pmc_purchase_contracts import (
 )
 from app.integrations.lingxing.query_sign import LingxingQuerySignError, build_query_auth_params
 from app.integrations.lingxing.security import redact_json
+from app.integrations.lingxing.wfs_cost_valuation_contracts import (
+    WFS_COST_VALUATION_ALLOWED_BODY_FIELDS,
+    WFS_COST_VALUATION_ENDPOINT,
+    WFS_COST_VALUATION_MAX_PAGE_SIZE,
+    WFS_COST_VALUATION_OBJECT_TYPE,
+    WFS_COST_VALUATION_REQUIRED_BODY_FIELDS,
+    WfsCostValuationContractError,
+    build_wfs_cost_valuation_body,
+)
 
 type LingxingEndpoint = Literal[
     "/erp/sc/routing/inventoryLog/WareHouseInventory/wareHouseCenterStatement",
@@ -50,12 +59,29 @@ type LingxingEndpoint = Literal[
     "/erp/sc/routing/data/local_inventory/inventoryDetails",
     "/erp/sc/routing/data/local_inventory/getBatchDetailList",
     "/erp/sc/routing/data/local_inventory/getBatchStatementList",
+    "/basicOpen/multiplatform/query/shippingList",
+    "/basicOpen/multiplatform/query/shippingDetail",
+    "/erp/sc/routing/wms/order/wmsOrderList",
+    "/basicOpen/multiplatform/wfs/cost/valuation/detail",
 ]
 type QueryValue = str | int | float | bool | None
 type SuccessEvaluator = Callable[[LingxingEndpoint, httpx.Response, JsonValue], bool]
 type AuthStrategy = Literal["authorization_header", "query_sign"]
 
 MAX_ATTEMPTS = 2
+# 结算利润 PR-2：发货单列表每页上限（接口文档默认 50，探测 200 可用，保守取 100）；
+# 销售出库单文档上限 200；Walmart 平台代码 10008。
+FIN_SHIPPING_LIST_PAGE_LIMIT = 100
+FIN_WMS_ORDER_PAGE_LIMIT = 200
+WALMART_PLATFORM_CODE = "10008"
+# 这三个路径只能走 fetch_fin_* 三个受控方法（脱敏后落原始层），通用抓取入口 fetch_pages 拒绝。
+FIN_SHIPPING_ONLY_PATHS: frozenset[str] = frozenset(
+    {
+        "/basicOpen/multiplatform/query/shippingList",
+        "/basicOpen/multiplatform/query/shippingDetail",
+        "/erp/sc/routing/wms/order/wmsOrderList",
+    }
+)
 RETRY_BACKOFF_SECONDS = 0.05
 DATA_PAGES_OBJECT_PREFIX = "data_pages_"
 
@@ -308,6 +334,52 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
         offset_field="offset",
         auth_strategy="query_sign",
     ),
+    # 结算利润 PR-2（财务发货单 / 发货单明细 / 销售出库单）。只读；分页由同步处理器控制，
+    # 一个店一次请求。三个接口都走 query sign（basicOpen 与 wms 路径不认 Authorization 头）。
+    "/basicOpen/multiplatform/query/shippingList": LingxingEndpointContract(
+        method="POST",
+        outbound_enabled=True,
+        allow_query_parameters=False,
+        require_json_body=True,
+        allowed_body_fields=frozenset(
+            {"platformCodes", "storeIds", "timeField", "startTime", "endTime", "offset", "length"}
+        ),
+        required_body_fields=frozenset(
+            {"platformCodes", "storeIds", "timeField", "startTime", "endTime", "offset", "length"}
+        ),
+        store_field="storeIds",
+        page_size_field="length",
+        offset_field="offset",
+        auth_strategy="query_sign",
+    ),
+    "/basicOpen/multiplatform/query/shippingDetail": LingxingEndpointContract(
+        method="POST",
+        outbound_enabled=True,
+        allow_query_parameters=False,
+        require_json_body=True,
+        allowed_body_fields=frozenset({"shippingListCode"}),
+        required_body_fields=frozenset({"shippingListCode"}),
+        store_field=None,
+        page_size_field=None,
+        auth_strategy="query_sign",
+    ),
+    # 页码分页（page/page_size）。这里不填 page_field：合同层的 page_field 只允许第 1 页，
+    # 翻页由 fetch_fin_wms_order_page 自己校验 page == page_no。
+    "/erp/sc/routing/wms/order/wmsOrderList": LingxingEndpointContract(
+        method="POST",
+        outbound_enabled=True,
+        allow_query_parameters=False,
+        require_json_body=True,
+        allowed_body_fields=frozenset(
+            {"sid_arr", "time_type", "start_date", "end_date", "page", "page_size"}
+        ),
+        required_body_fields=frozenset(
+            {"sid_arr", "time_type", "start_date", "end_date", "page", "page_size"}
+        ),
+        store_field="sid_arr",
+        page_size_field="page_size",
+        auth_strategy="query_sign",
+    ),
     "/erp/sc/routing/data/local_inventory/productList": LingxingEndpointContract(
         method="POST",
         outbound_enabled=True,
@@ -352,6 +424,20 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
         )
         for spec in PMC_DOMESTIC_ENDPOINT_SPECS.values()
     },
+    # LX-8437AD0BCB9E WFS cost valuation flow (inventory claim PR 1). Read-only; the
+    # governed sync is disabled by default and never filters businessType.
+    WFS_COST_VALUATION_ENDPOINT: LingxingEndpointContract(
+        method="POST",
+        outbound_enabled=True,
+        allow_query_parameters=False,
+        require_json_body=True,
+        allowed_body_fields=WFS_COST_VALUATION_ALLOWED_BODY_FIELDS,
+        required_body_fields=WFS_COST_VALUATION_REQUIRED_BODY_FIELDS,
+        store_field=None,
+        page_size_field="length",
+        offset_field="offset",
+        auth_strategy="query_sign",
+    ),
 }
 
 
@@ -487,6 +573,8 @@ class LingxingReadonlyClient:
             raise LingxingClientError("Lingxing endpoint is not approved")
         if request.api_path == "/erp/sc/routing/data/local_inventory/batchGetProductInfo":
             raise LingxingClientError("Use the controlled ProductInfo batch method")
+        if request.api_path in FIN_SHIPPING_ONLY_PATHS:
+            raise LingxingClientError("Use the controlled settlement sync methods")
         if not contract.outbound_enabled:
             raise LingxingClientError(contract.rejection_reason or "Lingxing endpoint is disabled")
         if not request.store_ids:
@@ -679,6 +767,167 @@ class LingxingReadonlyClient:
             page,
             contract,
             page_size_limit=200,
+            first_page_only=False,
+        )
+        return self._fetch_page(capture, page, contract)
+
+    # ------------------------------------------------------------ 结算利润 PR-2
+
+    def _fin_scope_check(self, source_account_ref: str, store_id: str) -> None:
+        if not self._settings.lingxing_enable_real_calls:
+            raise LingxingClientError("Lingxing calls are disabled")
+        if (
+            not source_account_ref
+            or source_account_ref != source_account_ref.strip()
+            or not store_id.isdigit()
+        ):
+            raise LingxingClientError("Lingxing settlement scope is invalid")
+
+    def fetch_fin_shipping_list_page(
+        self,
+        *,
+        store_id: str,
+        offset: int,
+        length: int,
+        page_no: int,
+        start_date: date,
+        end_date: date,
+        source_account_ref: str,
+        run_id: str,
+        work_item_id: str,
+    ) -> LingxingRawEnvelope:
+        """一页平台仓发货单（v2，只查 Walmart 10008，按发货时间 timeField=2 过滤）。"""
+        self._fin_scope_check(source_account_ref, store_id)
+        if start_date > end_date:
+            raise LingxingClientError("Lingxing settlement scope is invalid")
+        _required_integer(offset, minimum=0)
+        _required_integer(page_no, minimum=1)
+        if _required_integer(length, minimum=1) > FIN_SHIPPING_LIST_PAGE_LIMIT:
+            raise LingxingClientError("Lingxing shipping list page size is invalid")
+        page = LingxingPageRequest.model_construct(
+            page_no=page_no,
+            page_size=length,
+            params=None,
+            body={
+                "platformCodes": [WALMART_PLATFORM_CODE],
+                "storeIds": [store_id],
+                "timeField": 2,
+                "startTime": start_date.isoformat(),
+                "endTime": end_date.isoformat(),
+                "offset": offset,
+                "length": length,
+            },
+        )
+        capture = LingxingCaptureRequest(
+            api_path="/basicOpen/multiplatform/query/shippingList",
+            pages=(page,),
+            store_ids=(store_id,),
+            object_type="lingxing_fin_shipping_list",
+            trace_id=run_id,
+            run_id=run_id,
+            batch_id=work_item_id,
+            data_date=end_date,
+            extra={"source_account_ref": source_account_ref},
+        )
+        contract = _ENDPOINT_CONTRACTS[capture.api_path]
+        self._validate_outbound_contract(
+            capture,
+            page,
+            contract,
+            page_size_limit=FIN_SHIPPING_LIST_PAGE_LIMIT,
+            first_page_only=False,
+        )
+        return self._fetch_page(capture, page, contract)
+
+    def fetch_fin_shipping_detail(
+        self,
+        *,
+        store_id: str,
+        shipping_list_code: str,
+        source_account_ref: str,
+        run_id: str,
+        work_item_id: str,
+    ) -> LingxingRawEnvelope:
+        """一张发货单的详情（含 firstLetListResponseList 货本），一次请求一张。"""
+        self._fin_scope_check(source_account_ref, store_id)
+        code = shipping_list_code.strip()
+        if not code or code != shipping_list_code or len(code) > 64:
+            raise LingxingClientError("Lingxing shipping list code is invalid")
+        page = LingxingPageRequest.model_construct(
+            page_no=1,
+            page_size=1,
+            params=None,
+            body={"shippingListCode": code},
+        )
+        capture = LingxingCaptureRequest(
+            api_path="/basicOpen/multiplatform/query/shippingDetail",
+            pages=(page,),
+            store_ids=(store_id,),
+            object_type="lingxing_fin_shipping_detail",
+            trace_id=run_id,
+            run_id=run_id,
+            batch_id=work_item_id,
+            extra={"source_account_ref": source_account_ref},
+        )
+        contract = _ENDPOINT_CONTRACTS[capture.api_path]
+        self._validate_outbound_contract(
+            capture,
+            page,
+            contract,
+            page_size_limit=1,
+            first_page_only=True,
+        )
+        return self._fetch_page(capture, page, contract)
+
+    def fetch_fin_wms_order_page(
+        self,
+        *,
+        store_id: str,
+        page_no: int,
+        page_size: int,
+        start_date: date,
+        end_date: date,
+        source_account_ref: str,
+        run_id: str,
+        work_item_id: str,
+    ) -> LingxingRawEnvelope:
+        """一页销售出库单（按变更时间 update_at 过滤，页码分页）。"""
+        self._fin_scope_check(source_account_ref, store_id)
+        if start_date > end_date:
+            raise LingxingClientError("Lingxing settlement scope is invalid")
+        _required_integer(page_no, minimum=1)
+        if _required_integer(page_size, minimum=1) > FIN_WMS_ORDER_PAGE_LIMIT:
+            raise LingxingClientError("Lingxing wms order page size is invalid")
+        page = LingxingPageRequest.model_construct(
+            page_no=page_no,
+            page_size=page_size,
+            params=None,
+            body={
+                "sid_arr": [store_id],
+                "time_type": "update_at",
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "page": page_no,
+                "page_size": page_size,
+            },
+        )
+        capture = LingxingCaptureRequest(
+            api_path="/erp/sc/routing/wms/order/wmsOrderList",
+            pages=(page,),
+            store_ids=(store_id,),
+            object_type="lingxing_fin_wms_outbound_order",
+            trace_id=run_id,
+            run_id=run_id,
+            batch_id=work_item_id,
+            data_date=end_date,
+            extra={"source_account_ref": source_account_ref},
+        )
+        contract = _ENDPOINT_CONTRACTS[capture.api_path]
+        self._validate_outbound_contract(
+            capture,
+            page,
+            contract,
+            page_size_limit=FIN_WMS_ORDER_PAGE_LIMIT,
             first_page_only=False,
         )
         return self._fetch_page(capture, page, contract)
@@ -932,6 +1181,54 @@ class LingxingReadonlyClient:
                 raise LingxingClientError("Inbound date window invalid") from None
         elif body.get("show_zero_stock") != 1:
             raise LingxingClientError("Inbound batch snapshot must include zero stock")
+        return self._fetch_page(capture, page, contract)
+
+    def fetch_wfs_cost_valuation_page(
+        self,
+        *,
+        start_date: date,
+        end_date: date,
+        offset: int,
+        length: int,
+        page_no: int,
+        source_account_ref: str,
+        run_id: str,
+        work_item_id: str,
+    ) -> LingxingRawEnvelope:
+        """Fetch one governed LX-8437AD0BCB9E page; pagination is owned by the handler."""
+        if not self._settings.lingxing_enable_real_calls:
+            raise LingxingClientError("Lingxing calls are disabled")
+        if not source_account_ref or source_account_ref != source_account_ref.strip():
+            raise LingxingClientError("Lingxing WFS cost valuation scope is invalid")
+        _required_integer(page_no, minimum=1)
+        try:
+            body = build_wfs_cost_valuation_body(
+                start=start_date, end=end_date, offset=offset, length=length
+            )
+        except WfsCostValuationContractError:
+            raise LingxingClientError("Lingxing WFS cost valuation request is invalid") from None
+        page = LingxingPageRequest.model_construct(
+            page_no=page_no, page_size=length, params=None, body=body
+        )
+        capture = LingxingCaptureRequest(
+            api_path=WFS_COST_VALUATION_ENDPOINT,
+            pages=(page,),
+            store_ids=(source_account_ref,),
+            object_type=WFS_COST_VALUATION_OBJECT_TYPE,
+            trace_id=run_id,
+            run_id=run_id,
+            batch_id=work_item_id,
+            data_date=end_date,
+            extra={"source_account_ref": source_account_ref},
+        )
+        contract = _ENDPOINT_CONTRACTS[capture.api_path]
+        self._validate_outbound_contract(
+            capture,
+            page,
+            contract,
+            page_size_limit=WFS_COST_VALUATION_MAX_PAGE_SIZE,
+            first_page_only=False,
+        )
         return self._fetch_page(capture, page, contract)
 
     def fetch_batch_product_info(

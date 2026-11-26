@@ -64,6 +64,7 @@ Each row reports whether normalized request/response evidence exists and whether
 | `LX-8F9A0C4E13C0` | 查询预警消息列表-库存 | `/basicOpen/settings/warningMessage/inventoryList` | `normalized CSV only` | Yes | Yes | `READY_FOR_PRP` | Yes | `AUTH_UNKNOWN` |
 | `LX-E95A3442D310` | 查询头程物流渠道列表 | `/erp/sc/data/local_inventory/channelList` | `normalized CSV only` | Yes | Yes | `READY_FOR_PRP` | Yes | `AUTH_UNKNOWN` |
 | `LX-6F8ABDE7B566` | 查询库存流水（旧） | `/erp/sc/routing/data/local_inventory/wareHouseStatement` | `normalized CSV only` | Yes | Yes | `READY_FOR_PRP` | Yes | `AUTH_UNKNOWN` |
+| `LX-8437AD0BCB9E` | 查询WFS成本计价明细（手工键，2026-11-03 登记；库存索赔 PRP） | `/basicOpen/multiplatform/wfs/cost/valuation/detail` | `docs/integrations/lingxing/contracts/inventory-lx-8437ad0bcb9e.md` | Yes | Yes | `READY_FOR_PRP` | Yes | `AUTH_UNKNOWN` |
 
 ## WFS / storage / inbound transport
 
