@@ -74,6 +74,7 @@ const minColumnWidths: Record<string, number> = {
   adSpend30Days: 140,
   disabledReason: 130,
   listingStatus: 130,
+  adEnabled: 106,
   buyBoxStatus: 130,
   walmartSeller: 140,
   resold: 120,
@@ -767,6 +768,14 @@ function ListingManagementTable({
       width: columnWidths.disabledReason,
       onHeaderCell: headerCell,
       render: (_, row) => row.disabledReason || "-",
+    },
+    adEnabled: {
+      key: "adEnabled",
+      dataIndex: "adEnabled",
+      title: title("adEnabled", fieldTitle.adEnabled),
+      width: columnWidths.adEnabled ?? 106,
+      onHeaderCell: headerCell,
+      render: (_, row) => row.adEnabled === true ? <Tag color="green">已开启</Tag> : row.adEnabled === false ? <Tag color="red">未开启</Tag> : <span>—</span>,
     },
     listingStatus: {
       key: "listingStatus",

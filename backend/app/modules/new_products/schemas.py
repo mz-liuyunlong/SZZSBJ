@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
@@ -32,6 +33,12 @@ class ListingQuery(Strict):
     np_owners: str = Field(default="", max_length=1024)
     np_ratings: str = Field(default="", max_length=128)
     np_owner_keyword: str = Field(default="", max_length=128)
+    first_wfs_start_date: date | None = Field(
+        default=None, description="LA WFS first available date, inclusive"
+    )
+    first_wfs_end_date: date | None = Field(
+        default=None, description="LA WFS first available date, inclusive"
+    )
 
 
 class RuleApply(Strict):
@@ -116,8 +123,16 @@ class GradeConfirmationWrite(Identity):
 
 class TrackingWrite(Identity):
     decision: Literal["打品成功", "继续观察", "需要优化", "打品失败"]
-    reason: str = Field(default="", max_length=4000)
+    reason: str = Field(min_length=10, max_length=4000, description="复盘说明，至少10个非空白字符")
     expected_version: int = Field(ge=0)
+
+    @field_validator("reason")
+    @classmethod
+    def validate_tracking_reason(cls, value: str) -> str:
+        trimmed = value.strip()
+        if len("".join(trimmed.split())) < 10:
+            raise ValueError("复盘说明 / 判定依据至少填写10个字")
+        return trimmed
 
 
 class AssessmentWrite(Identity):

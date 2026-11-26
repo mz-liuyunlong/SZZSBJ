@@ -33,6 +33,7 @@ from app.modules.approvals.schemas import (
     NewProductPurchaseDecisionWrite,
 )
 from app.modules.approvals.service import ApprovalService
+from app.modules.approvals.workbench_read import workbench_read_router
 from app.modules.approvals.workflow import ApprovalWorkflow
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.warehouse_wfs.schemas import WfsFeeArchiveRequestWrite
@@ -421,7 +422,7 @@ def new_product_purchase_store_options(
 
 @router.post(
     "/new-products/purchases/{application_id}/decision",
-    response_model=SuccessEnvelope[dict[str, bool], None],
+    response_model=SuccessEnvelope[dict, None],
 )
 def new_product_purchase_workbench_decision(
     request: Request,
@@ -444,7 +445,7 @@ def new_product_purchase_workbench_decision(
     if payload.decision not in ("approved", "rejected"):
         raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422)
     # Source service owns locking, version check, self-review guard and audit.
-    NewProductService(session).decide_purchase(
+    result = NewProductService(session).decide_purchase(
         accounts,
         application_id,
         PurchaseDecision(
@@ -456,10 +457,18 @@ def new_product_purchase_workbench_decision(
         ),
         principal.user_id,
         allow_self=is_approval_admin(principal),
+        real_purchase_test=True,
     )
-    return success_response(request, data={"updated": True}, meta=None)
+    return success_response(
+        request,
+        data={"updated": True, "lingxing_receipt": result.get("lingxing_receipt")},
+        meta=None,
+    )
 
 
 # SZZSBJ_NP_PERMISSIONS_V3
 
 # SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1
+
+# Unified read-only workbench; all existing decision routes are unchanged.
+router.include_router(workbench_read_router)

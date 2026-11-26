@@ -1,4 +1,4 @@
-/** Source: owner's original V4 HTML, sample only; no API or production writes. */
+/** Shared new-product display model and scoring helpers; persisted backend records remain authoritative. */
 export type Grade="S"|"A"|"B"|"C"|"D"|"Pass";
 export type Product={id:string;sku:string;name:string;item:string;owner:string;days:number;market:number|null;marketReason:string;marketCompetitorIds?:string[];marketNoCompetitors?:boolean;
 scores:{speed:number;ad:number;profit:number;trust:number};penalties:number;penaltyFlags:string[];roi:number;margin:number;acos:number;
@@ -15,10 +15,16 @@ backend?:{
   gradeConfirmation?:import("./newProductBusinessApi").NewProductListing["evaluation_grade_confirmation"];
   purchaseStatus?:string|null;
   purchaseReviewReason?:string|null;
+  purchaseSuggestedQty?:number|null;
+  purchaseApprovedQty?:number|null;
+  purchaseSourceStoreId?:string|null;
+  approvedPurchaseStoreId?:string|null;
+  approvedPurchaseStoreName?:string|null;
   purchaseReviewedBy?:string|null;
   purchaseReviewedAt?:string|null;
   marketVersion:number;ruleVersion:number;purchaseId?:string|null;purchaseVersion?:number;trackingVersion?:number;
   evaluationDecision?:import("./newProductBusinessApi").NewProductListing["evaluation_decision"];
+  failedAssessmentInfo?:import("./newProductBusinessApi").NewProductListing["failed_assessment_info"];
   evaluation:{total:string|null;grade:Grade|null;dimensions:Record<"market"|"speed"|"ad"|"profit"|"trust",string|null>;missing:string[]};
   suggestedQty:number|null;available:Record<string,boolean>;firstWfsDate:string|null;firstOrderDate?:string|null;
   systemRiskDisplay?:import("./newProductBusinessApi").SystemRiskDisplay|null;

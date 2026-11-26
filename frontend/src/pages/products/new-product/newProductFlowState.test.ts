@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveNewProductFlow, hasNewProductScoreDetails } from "./newProductFlowState";
 import type { NewProductListing } from "./newProductBusinessApi";
-import type { Product } from "./nativeData";
+import type { Product } from "./newProductModel";
 
 const row = (): NewProductListing => ({
   listing: {

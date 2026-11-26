@@ -1,5 +1,5 @@
 /** PR337_TRACKING_DRILL_V5: view-only filter contract shared by dashboard and detail page. */
-import { grade, type Config, type Product } from './nativeData';
+import { grade, type Config, type Product } from './newProductModel';
 import { observationBucket, type TrackingProduct } from './trackingBoardMetrics';
 export { isOverdueHumanReview } from './trackingBoardMetrics';
 

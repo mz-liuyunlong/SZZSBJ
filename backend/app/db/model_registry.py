@@ -4,6 +4,7 @@ def register_productlist_sync_models() -> None:
     import app.modules.fx_rates.models
     import app.modules.integration_sync.models
     import app.modules.media_assets.models
+    import app.modules.new_products.sku_ad_foundation_models  # noqa: F401
     import app.modules.operation_plans.models
     import app.modules.pmc_domestic.inbound_models
     import app.modules.pmc_domestic.models

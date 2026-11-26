@@ -2,7 +2,7 @@
  * Read-only single Item ID detail GET. This panel never calculates a profit formula.
  */
 import {useEffect, useState} from "react";
-import type {Product} from "./nativeData";
+import type {Product} from "./newProductModel";
 import {getCachedNewProductDetail} from "./newProductBusinessApi";
 import "./newProductOperatingDaily.css";
 
@@ -146,7 +146,11 @@ function warmOperatingState(raw: unknown): State {
   const detail = asRecord(raw);
   const rows = parseRows(detail?.rows);
   const totals = asRecord(detail?.totals);
-  if (!detail || detail.status !== "scored" || !rows || !totals ||
+  // Apply the same diagnostic-row contract as the existing authorized GET.
+  const savedProofMismatch = detail?.status === "unverified" &&
+    detail.reason === "saved_score_proof_disagrees_with_daily" &&
+    detail.score_comparison === "saved_score_mismatch";
+  if (!detail || (detail.status !== "scored" && !savedProofMismatch) || !rows || !totals ||
       detail.source !== "new_products_testing_profit_full_history_v2" ||
       detail.policy !== "returns_ignored_samples_excluded_sample_ads_included") {
     return {state:"error",rows:[],error:"申请关联的每日测评证据未核实"};
@@ -156,6 +160,7 @@ function warmOperatingState(raw: unknown): State {
     cutoff:day(detail.cutoff_la) ?? undefined,
     completeDays:detail.complete_calendar_days === true,
     scoreComparison:typeof detail.score_comparison === "string" ? detail.score_comparison : undefined,
+    frozenOverview:asRecord(detail.frozen_overview),
   };
 }
 function NewProductOperatingDailyView({product,initialOperatingDaily}:{product:Product;initialOperatingDaily?:unknown}) {

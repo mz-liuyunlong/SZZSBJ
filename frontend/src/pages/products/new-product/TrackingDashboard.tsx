@@ -8,7 +8,7 @@ import {
   AppstoreOutlined, CloseCircleOutlined, BellOutlined, CheckOutlined, InfoCircleOutlined, RightOutlined, UnorderedListOutlined,
 } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
-import { type Config, type Product } from './nativeData';
+import { type Config, type Product } from './newProductModel';
 import { daysBetween } from './trackingBoardMetrics';
 import { getTrackingBoardSummary, type TrackingBoardSummary } from './newProductBusinessApi';
 import type { TrackingDrillFilter, TrackingDrillKind } from './trackingBoardDrilldown';

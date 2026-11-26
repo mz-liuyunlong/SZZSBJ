@@ -1,6 +1,6 @@
 /** PR337_FLOW_WFS_REAL_STATUS_20261116: presentation state from persisted evidence. */
 import type { NewProductListing, RealScore } from "./newProductBusinessApi";
-import type { Product } from "./nativeData";
+import type { Product } from "./newProductModel";
 
 const validDate = (value: unknown): boolean =>
   typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) &&

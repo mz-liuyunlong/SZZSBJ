@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { samples } from "./nativeData";
+import { samples } from "./newProductModel";
 import { initialNumericRules, metricValue, numericMetricScore, previewDimension,
   previewNumericScore, validateNumericRules } from "./newProductNumericScoring";
 

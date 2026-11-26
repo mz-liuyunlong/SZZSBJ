@@ -79,7 +79,9 @@ def _manual_selection(snapshot: dict[str, Any], facts: dict[str, Any], events: l
     return None
 
 
-def purchase_reference_evidence(session: Session, application: Any) -> dict[str, Any]:
+def purchase_reference_evidence(
+    session: Session, application: Any, *, preloaded=None
+) -> dict[str, Any]:
     """Call only after purchase-detail scope and reviewer/applicant access checks."""
     snapshot = _mapping(application.score_snapshot)
     facts = _mapping(snapshot.get("facts"))
@@ -129,13 +131,17 @@ def purchase_reference_evidence(session: Session, application: Any) -> dict[str,
     if rule_version == 0:
         weights = dict(DEFAULT_WEIGHTS)
     else:
-        version = session.scalar(
-            select(RuleVersion)
-            .where(
-                RuleVersion.kind == "performance",
-                RuleVersion.version == rule_version,
+        version = (
+            preloaded[0]
+            if preloaded is not None
+            else session.scalar(
+                select(RuleVersion)
+                .where(
+                    RuleVersion.kind == "performance",
+                    RuleVersion.version == rule_version,
+                )
+                .limit(1)
             )
-            .limit(1)
         )
         config = _mapping(version.config_json) if version is not None else {}
         candidate = _mapping(config.get("weights"))
@@ -153,18 +159,22 @@ def purchase_reference_evidence(session: Session, application: Any) -> dict[str,
                 pass
 
     # All historical events are strictly bounded by purchase application time.
-    audited = list(
-        session.scalars(
-            select(ActionEvent)
-            .where(
-                ActionEvent.source_account_ref == application.source_account_ref,
-                ActionEvent.store_id == application.store_id,
-                ActionEvent.item_id == application.item_id,
-                ActionEvent.created_at <= application.created_at,
-            )
-            .order_by(ActionEvent.created_at.desc(), ActionEvent.id.desc())
-            .limit(120)
-        ).all()
+    audited = (
+        preloaded[1]
+        if preloaded is not None
+        else list(
+            session.scalars(
+                select(ActionEvent)
+                .where(
+                    ActionEvent.source_account_ref == application.source_account_ref,
+                    ActionEvent.store_id == application.store_id,
+                    ActionEvent.item_id == application.item_id,
+                    ActionEvent.created_at <= application.created_at,
+                )
+                .order_by(ActionEvent.created_at.desc(), ActionEvent.id.desc())
+                .limit(120)
+            ).all()
+        )
     )
     market_event = next((event for event in audited if event.event_type == "market_score"), None)
     market_data = _mapping(market_event.payload_json) if market_event is not None else {}

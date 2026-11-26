@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select, text, tuple_
 
+from app.core.api import ApiError
 from app.modules.data_pages.models import ListingManagementCurrentMart
 from app.modules.data_pages.repository import LISTING_WFS_LA_LOCKED, PRODUCT_INFO_CURRENT
 from app.modules.walmart_monitor.models import WalmartMonitorListingCurrent
@@ -27,42 +28,77 @@ from .historical_tracking import listing_scope
 SAMPLE_TAG = "小批量测品"
 LA = ZoneInfo("America/Los_Angeles")
 _STATUSES = ("待到货", "测评中", "待市场评分", "待等级确认", "待测评确认", "测评通过", "测评未通过")
+_FLOW_GROUPS = {
+    "evaluating": ("测评中",),
+    "pending": ("待市场评分", "待等级确认", "待测评确认"),
+    "passed": ("待申请采购", "采购审批中", "采购已批准", "采购已驳回"),
+    "failed": ("测评未通过", "复核审批中", "待重新核算", "复核已驳回"),
+}
+_FLOW_STATUSES = ("待到货",) + tuple(s for group in _FLOW_GROUPS.values() for s in group)
+_FLOW_PREFIX = "flow:"
+
+
+def flow_status(
+    status, purchase_status=None, review_status=None, recheck_required=False, *, first_wfs=None
+):
+    """Read-only projection; assessment conclusion always takes precedence."""
+    # Listing launch alone does not establish the first WFS availability.
+    if status == "测评中" and first_wfs is None:
+        return "待到货"
+    if status == "测评通过":
+        return {"submitted": "采购审批中", "approved": "采购已批准", "rejected": "采购已驳回"}.get(
+            purchase_status, "待申请采购"
+        )
+    if status == "测评未通过":
+        if review_status in ("submitted", "info_required"):
+            return "复核审批中"
+        if review_status == "approved" and recheck_required:
+            return "待重新核算"
+        if review_status == "rejected":
+            return "复核已驳回"
+    return status
+
+
 _GRADES = ("S", "A", "B", "C", "D", "Pass")
 _LOGGER = logging.getLogger(__name__)
 
 
-def scoped_projection(source, db, accounts: frozenset[str], *, historical_keys=()) -> list[dict]:
-    """One MART read + one decision read + one owner lookup, never N+1."""
+def scoped_projection(
+    source,
+    db,
+    accounts: frozenset[str],
+    *,
+    historical_keys=(),
+    include_owners=True,
+    include_board_details=True,
+) -> list[dict]:
+    """Base assessment projection; approval states are loaded separately on demand."""
     if not accounts:
         return []
     started = time.monotonic()
     m = ListingManagementCurrentMart
     monitor = WalmartMonitorListingCurrent
-    stmt = (
-        select(
-            m.source_account_ref,
-            m.store_id,
-            m.item_id,
-            m.local_sku,
+    stmt = select(
+        m.source_account_ref,
+        m.store_id,
+        m.item_id,
+        m.local_sku,
+        m.listing_start_at_utc,
+    ).where(m.source_account_ref.in_(accounts), listing_scope(m, historical_keys))
+    if include_board_details:
+        stmt = stmt.add_columns(
             m.local_name,
             m.title,
             func.coalesce(
                 func.nullif(func.btrim(monitor.category), ""),
                 func.nullif(func.btrim(m.category), ""),
             ).label("category_raw"),
-            m.listing_start_at_utc,
-        )
-        .where(
-            m.source_account_ref.in_(accounts),
-            listing_scope(m, historical_keys),
-        )
-        .outerjoin(
+        ).outerjoin(
             monitor,
             (monitor.source_account_ref == m.source_account_ref)
             & (monitor.store_id == m.store_id)
             & (monitor.item_id == m.item_id),
         )
-    )
     has_locked = (
         source.scalar(text("SELECT to_regclass('public.listing_wfs_first_stock_la_locked')"))
         is not None
@@ -86,26 +122,40 @@ def scoped_projection(source, db, accounts: frozenset[str], *, historical_keys=(
     keys = [(str(r["source_account_ref"]), str(r["store_id"]), str(r["item_id"])) for r in rows]
     # Decision rows are read on the actual application DB, never through
     # an unsafe cross-database JOIN or a source write credential.
+    # The list filters and cards need the assessment state, not the board's
+    # category breakdown or dimension evidence. Keep board/tracking reads intact.
+    board_fields = (
+        """
+          p.data_coverage_json #> '{auto_dimension_scores,dimensions}' AS dimensions,
+          p.data_coverage_json #>> '{new_products_score_facts_v2,market_score}' AS market_score,
+    """
+        if include_board_details
+        else ""
+    )
     decision = (
         db.execute(
-            text("""
+            text(
+                """
         WITH wanted AS (
           SELECT a,s,i FROM jsonb_to_recordset(CAST(:wants AS jsonb))
           AS w(a text,s text,i text)
         )
-        SELECT w.a,w.s,w.i,r.listing_date_la,
+        SELECT w.a,w.s,w.i,r.id::text AS registry_ref,r.listing_date_la,
           p.first_wfs_available_date_la, p.score,p.grade,
           p.data_coverage_json -> 'operator_assessment_v1' AS operator_assessment,
           p.data_coverage_json -> 'evaluation_grade_confirmation_v1' AS grade_confirmation,
-          p.data_coverage_json #> '{auto_dimension_scores,dimensions}' AS dimensions,
-          p.data_coverage_json #>> '{new_products_score_facts_v2,market_score}' AS market_score,
+          """
+                + board_fields
+                + """
           p.data_coverage_json #>> '{evaluation_formal_trigger,status}' AS formal_status,
-          p.data_coverage_json ? 'auto_dimension_scores' AS has_auto
+          p.data_coverage_json ? 'auto_dimension_scores' AS has_auto,
+          p.data_coverage_json #>> '{evaluation_recheck_required,status}' AS recheck_status
         FROM wanted w
         LEFT JOIN biz_new_product_registry r
           ON r.source_account_ref=w.a AND r.store_id=w.s AND r.item_id=w.i
         LEFT JOIN biz_new_product_performance_current p ON p.registry_id=r.id
-    """),
+    """
+            ),
             {"wants": json.dumps([{"a": a, "s": s, "i": i} for a, s, i in keys])},
         )
         .mappings()
@@ -114,11 +164,12 @@ def scoped_projection(source, db, accounts: frozenset[str], *, historical_keys=(
     proofs = {(str(x["a"]), str(x["s"]), str(x["i"])): x for x in decision}
     decision_ms = int((time.monotonic() - started) * 1000) - mart_ms
 
+    owner_started = time.monotonic()
     sku_keys = sorted(
         {(str(r["source_account_ref"]), str(r["local_sku"])) for r in rows if r["local_sku"]}
     )
     owners = {}
-    if sku_keys:
+    if include_owners and sku_keys:
         owner_rows = (
             source.execute(
                 select(
@@ -147,6 +198,7 @@ def scoped_projection(source, db, accounts: frozenset[str], *, historical_keys=(
             (str(x["source_account_ref"]), str(x["lingxing_sku_code"])): x for x in owner_rows
         }
 
+    owner_ms = int((time.monotonic() - owner_started) * 1000)
     result = []
     for r in rows:
         key = (str(r["source_account_ref"]), str(r["store_id"]), str(r["item_id"]))
@@ -189,32 +241,152 @@ def scoped_projection(source, db, accounts: frozenset[str], *, historical_keys=(
             {
                 "identity": key,
                 "status": status,
+                "flow_status": flow_status(status, first_wfs=first_wfs),
+                "_registry_ref": p.get("registry_ref"),
+                "_recheck_required": p.get("recheck_status")
+                == "awaiting_verified_source_correction",
                 "grade": grade,
                 "owner": str(owner_name) if owner_name else "未分配",
                 "developer": str(developer_name) if developer_name else "未分配",
                 "first_wfs": first_wfs,
                 "launch_day": listing_day,
-                "category": r["category_raw"],
+                "category": r.get("category_raw"),
                 "sku": r["local_sku"],
-                "name": r["local_name"] or r["title"],
+                "name": r.get("local_name") or r.get("title"),
                 "total": str(p["score"]) if p.get("score") is not None else None,
                 "dimensions": p.get("dimensions"),
                 "market_score": p.get("market_score"),
             }
         )
     _LOGGER.info(
-        "new_product_scope_summary rows=%d mart_ms=%d decision_ms=%d total_ms=%d",
+        (
+            "new_product_scope_summary rows=%d mart_ms=%d decision_ms=%d owner_ms=%d "
+            "total_ms=%d board_details=%s"
+        ),
         len(result),
         mart_ms,
         decision_ms,
+        owner_ms,
         int((time.monotonic() - started) * 1000),
+        include_board_details,
     )
     return result
 
 
-def summary(source, db, accounts: frozenset[str]) -> dict:
-    rows = scoped_projection(source, db, accounts)
+def _attach_flow_statuses(db, rows, *, purchase=True, review=True):
+    """At most two set-based queries, only for relevant scoped terminal rows."""
+    purchase_rows = [r for r in rows if r["status"] == "测评通过"] if purchase else []
+    review_rows = (
+        [r for r in rows if r["status"] == "测评未通过" and r.get("_registry_ref")]
+        if review
+        else []
+    )
+    if purchase_rows:
+        keys = sorted({tuple(r["identity"]) for r in purchase_rows})
+        records = (
+            db.execute(
+                text("""
+            WITH wanted AS (
+              SELECT a,s,i FROM jsonb_to_recordset(CAST(:wants AS jsonb)) AS w(a text,s text,i text)
+            )
+            SELECT DISTINCT ON (pa.source_account_ref,pa.store_id,pa.item_id)
+                pa.source_account_ref AS a,pa.store_id AS s,pa.item_id AS i,pa.status
+            FROM biz_new_product_purchase_applications pa
+            JOIN wanted w ON pa.source_account_ref=w.a AND pa.store_id=w.s AND pa.item_id=w.i
+            ORDER BY pa.source_account_ref,pa.store_id,pa.item_id,pa.created_at DESC,pa.id DESC
+        """),
+                {"wants": json.dumps([{"a": a, "s": s, "i": i} for a, s, i in keys])},
+            )
+            .mappings()
+            .all()
+        )
+        latest = {(r["a"], r["s"], r["i"]): r["status"] for r in records}
+        for r in purchase_rows:
+            r["flow_status"] = flow_status(
+                r["status"], purchase_status=latest.get(tuple(r["identity"]))
+            )
+    if review_rows:
+        refs = sorted({r["_registry_ref"] for r in review_rows})
+        records = (
+            db.execute(
+                text("""
+            WITH wanted AS (SELECT jsonb_array_elements_text(CAST(:refs AS jsonb)) AS ref)
+            SELECT DISTINCT ON (a.business_ref) a.business_ref,a.status
+            FROM app_approval_requests a JOIN wanted w ON a.business_ref=w.ref
+            WHERE a.approval_type='new_product_evaluation_review'
+            ORDER BY a.business_ref,a.submitted_at DESC,a.id DESC
+        """),
+                {"refs": json.dumps(refs)},
+            )
+            .mappings()
+            .all()
+        )
+        latest = {r["business_ref"]: r["status"] for r in records}
+        for r in review_rows:
+            r["flow_status"] = flow_status(
+                r["status"],
+                review_status=latest.get(r["_registry_ref"]),
+                recheck_required=r["_recheck_required"],
+            )
+
+
+def _needs_flow_lookup(status_set, group, base_status):
+    selected = {_FLOW_PREFIX + s for s in _FLOW_GROUPS[group]}
+    # Selecting every substate (or the legacy base status) is equivalent to the
+    # base assessment; no approval lookup can change membership.
+    return (
+        base_status not in status_set and bool(selected & status_set) and not selected <= status_set
+    )
+
+
+# NP_FIRST_WFS_DATE_FILTER_V1
+def _validate_first_wfs_range(start_date: date | None, end_date: date | None) -> None:
+    if (start_date is None) != (end_date is None) or (
+        start_date is not None and end_date is not None and start_date > end_date
+    ):
+        raise ApiError(
+            code="NP_FIRST_WFS_DATE_RANGE_INVALID",
+            status_code=422,
+            message="请选择完整的WFS首次可售日期范围，开始日期不得晚于结束日期",
+        )
+
+
+def _first_wfs_projection(
+    source, db, accounts, start_date=None, end_date=None, *, include_owners=True
+):
+    """Filter the same scoped LA-date evidence used by the performance board.
+
+    No selected range retains unknown first-stock dates. With a range, unknown
+    first-stock dates are excluded rather than inferred from orders or launch.
+    """
+    _validate_first_wfs_range(start_date, end_date)
+    rows = scoped_projection(
+        source, db, accounts, include_owners=include_owners, include_board_details=False
+    )
+    if start_date is None:
+        return rows
+    return [
+        row
+        for row in rows
+        if row["first_wfs"] is not None and start_date <= row["first_wfs"] <= end_date
+    ]
+
+
+def summary(source, db, accounts: frozenset[str], *, start_date=None, end_date=None) -> dict:
+    started = time.monotonic()
+    rows = _first_wfs_projection(source, db, accounts, start_date, end_date)
+    flow_started = time.monotonic()
+    _attach_flow_statuses(db, rows)
+    _LOGGER.info(
+        "new_product_summary_full rows=%d workflow_ms=%d total_ms=%d",
+        len(rows),
+        int((time.monotonic() - flow_started) * 1000),
+        int((time.monotonic() - started) * 1000),
+    )
     states = Counter(r["status"] for r in rows)
+    flow_counts = Counter(
+        r.get("flow_status") or flow_status(r["status"], first_wfs=r.get("first_wfs")) for r in rows
+    )
     owners = Counter(r["owner"] for r in rows)
     grades = Counter(r["grade"] for r in rows)
     return {
@@ -227,6 +399,17 @@ def summary(source, db, accounts: frozenset[str]) -> dict:
             "passed": states["测评通过"],
             "failed": states["测评未通过"],
         },
+        # Preserve the existing evaluation counts/options for other callers.
+        "stage_counts": {
+            "all": len(rows),
+            "evaluating": flow_counts["测评中"],
+            "pending": states["待市场评分"] + states["待等级确认"] + states["待测评确认"],
+            "passed": states["测评通过"],
+            "failed": states["测评未通过"],
+        },
+        "flow_status_options": [
+            {"value": s, "label": s, "count": flow_counts[s]} for s in _FLOW_STATUSES
+        ],
         "status_options": [
             {"value": s, "label": s, "count": states[s]} for s in _STATUSES if states[s] > 0
         ],
@@ -247,22 +430,43 @@ def matching_identities(
     owners: str = "",
     ratings: str = "",
     owner_keyword: str = "",
+    start_date: date | None = None,
+    end_date: date | None = None,
 ) -> list[tuple[str, str, str]]:
+    _validate_first_wfs_range(start_date, end_date)
     status_set = set(filter(None, (s.strip() for s in statuses.split(","))))
     owner_set = set(filter(None, (s.strip() for s in owners.split(","))))
     rating_set = set(filter(None, (s.strip() for s in ratings.split(","))))
     needle = owner_keyword.strip().casefold()
     if statuses == "__none__":
         return []
-    if status_set - set(_STATUSES) or rating_set - set((*_GRADES, "pending")):
+    # Unprefixed values retain the legacy evaluation filter contract.
+    allowed_statuses = set(_STATUSES) | {_FLOW_PREFIX + s for s in _FLOW_STATUSES}
+    if status_set - allowed_statuses or rating_set - set((*_GRADES, "pending")):
         raise ValueError("NEW_PRODUCT_INVALID_PERFORMANCE_FILTER")
-    return [
-        r["identity"]
-        for r in scoped_projection(source, db, accounts)
-        if (not status_set or r["status"] in status_set)
-        and (not owner_set or r["owner"] in owner_set)
+    rows = [
+        r
+        for r in _first_wfs_projection(
+            source, db, accounts, start_date, end_date, include_owners=bool(owner_set or needle)
+        )
+        if (not owner_set or r["owner"] in owner_set)
         and (not rating_set or r["grade"] in rating_set)
         and (not needle or needle in r["owner"].casefold())
+    ]
+    purchase = _needs_flow_lookup(status_set, "passed", "测评通过")
+    review = _needs_flow_lookup(status_set, "failed", "测评未通过")
+    if purchase or review:
+        _attach_flow_statuses(db, rows, purchase=purchase, review=review)
+    return [
+        r["identity"]
+        for r in rows
+        if (
+            not status_set
+            or r["status"] in status_set
+            or _FLOW_PREFIX
+            + (r.get("flow_status") or flow_status(r["status"], first_wfs=r.get("first_wfs")))
+            in status_set
+        )
     ]
 
 

@@ -32,6 +32,7 @@ TASK_IMPORTS = (
     "app.modules.new_products.pr337_daily_tasks",  # PR337_DAILY_PERSIST_V1
     "app.modules.ai_runtime.tasks",
     "app.modules.new_products.unified_tasks",
+    "app.modules.new_products.sku_progress_tasks",
 )
 
 TASK_ROUTES = {
@@ -181,6 +182,14 @@ def create_celery_app(
             "new-products-la-midnight": {
                 "task": "new_products.daily_score_tick",
                 "schedule": LosAngelesMidnightSchedule(app=celery),
+            },
+        }
+    if _is_production_env() and _env_truthy(os.getenv("SZZSBJ_SKU_PROGRESS_REFRESH_ENABLED")):
+        celery.conf.beat_schedule = {
+            **celery.conf.beat_schedule,
+            "new-products-sku-progress-refresh": {
+                "task": "new_products.sku_progress_refresh",
+                "schedule": 600.0,
             },
         }
     return celery

@@ -1,4 +1,4 @@
-import type { Product } from "./nativeData";
+import type { Product } from "./newProductModel";
 // PR337_CORRECTION_POPOVER_V7: local scoring request panel.
 import NewProductCorrectionPopover from "./NewProductCorrectionPopover";
 import {

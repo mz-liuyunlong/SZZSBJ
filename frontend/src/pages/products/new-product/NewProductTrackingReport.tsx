@@ -7,14 +7,17 @@ import { EditOutlined, EyeOutlined } from "@ant-design/icons";
 import { useEffect, useRef, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button, Segmented, Tag, Tooltip } from "antd";
+import dayjs from "dayjs";
+import ReportDateRangePicker from "@/shared/date/ReportDateRangePicker";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import ManagementStatCards from "@/components/report-table/ManagementStatCards";
 import ReportTableShell from "@/components/report-table/ReportTableShell";
 import { ImageCell, ProductIdentityCell, SkuMskuIdentityCell } from "@/components/report-table/cells";
 import ReportFacetSelect from "@/shared/report-filters";
-import { suggestion, type Config, type Product } from "./nativeData";
+import { suggestion, type Config, type Product } from "./newProductModel";
 import { trackingOwner, trackingGrade, type TrackingDrillFilter } from "./trackingBoardDrilldown";
 import { listTrackingProducts } from "./newProductBusinessApi";
+import { runWithoutBackendRequestBusy } from "@/shared/network/backendRequestBusy";
 import { toPersistedProduct } from "./newProductRealAdapter";
 import "./newProductTrackingReport.css";
 
@@ -39,6 +42,11 @@ type StatKey = "all" | "success" | "observe" | "optimize" | "failure" | "undecid
 
 function NewProductTrackingReport({ config, onReview, drill=null, onClearDrill }: Props) {
   const [period, setPeriod] = useState<30 | 60 | 180>(30);
+  // The parent keys this report by drill identity; inherit its dates on entry.
+  // The existing API owns the date population and all counts, not the current UI page.
+  const [dateRange, setDateRange] = useState<[string,string] | undefined>(
+    () => drill ? [drill.from, drill.to] : undefined,
+  );
   const [grades, setGrades] = useState<string[]>(() => drill?.kind==='grade'&&drill.value?[drill.value]:[]);
   const [owners,setOwners] = useState<string[]>(() => drill?.kind==='owner'&&drill.value?[drill.value]:[]);
   const [search,setSearch] = useState(() => drill?.kind==='item'?drill.value??'':'');
@@ -49,12 +57,13 @@ function NewProductTrackingReport({ config, onReview, drill=null, onClearDrill }
   const viewport = useRef<HTMLDivElement>(null);
 
   const listingQuery=useQuery({
-    queryKey:['np-tracking','listings',page,pageSize,owners,grades,search,stat,period,drill],
-    queryFn:({signal})=>listTrackingProducts({
+    queryKey:['np-tracking','listings',page,pageSize,owners,grades,search,stat,period,drill,dateRange],
+    // This read has a table-local spinner; unrelated requests keep their normal global busy state.
+    queryFn:({signal})=>runWithoutBackendRequestBusy(()=>listTrackingProducts({
       page,page_size:pageSize,keyword:search,owners:owners.join(','),grades:grades.join(','),
       outcome:stat,period,drill_kind:drill?.kind,drill_value:drill?.value,
-      parent_category:drill?.parentCategory,from:drill?.from,to:drill?.to,
-    },{signal}),
+      parent_category:drill?.parentCategory,from:dateRange?.[0],to:dateRange?.[1],
+    },{signal})),
     placeholderData:keepPreviousData,staleTime:15_000,retry:1,
   });
   const filtered=(listingQuery.data?.items??[]).map(toPersistedProduct);
@@ -250,6 +259,7 @@ function NewProductTrackingReport({ config, onReview, drill=null, onClearDrill }
             type="link"
             size="small"
             icon={isView ? <EyeOutlined /> : <EditOutlined />}
+            disabled={listingQuery.isPlaceholderData || listingQuery.isFetching}
             onClick={() => onReview(row.id, row)}
             style={{
               paddingInline: 2,
@@ -281,6 +291,21 @@ function NewProductTrackingReport({ config, onReview, drill=null, onClearDrill }
       <ReportFacetSelect mode="multiple" ariaLabel="初始评级" placeholder="全部初始评级"
         value={grades} options={gradeOptions} unit="级"
         onChange={(value) => { setGrades(Array.isArray(value) ? value : []); setPage(1); }} />
+      <ReportDateRangePicker
+        aria-label="打品日期范围"
+        allowClear
+        placeholder={["开始日期","结束日期"]}
+        value={dateRange ? [dayjs(dateRange[0]),dayjs(dateRange[1])] : null}
+        style={{width:290,flex:"0 0 auto"}}
+        onChange={dates=>{
+          // Commit only a complete range or an explicit clear.
+          if (dates === null) setDateRange(undefined);
+          else if (dates[0] && dates[1]) {
+            setDateRange([dates[0].format("YYYY-MM-DD"),dates[1].format("YYYY-MM-DD")]);
+          } else return;
+          setPage(1);
+        }}
+      />
       <CommittedSearch
         className="np-tracking-committed-search"
         typeAriaLabel="搜索类型"
@@ -291,7 +316,7 @@ function NewProductTrackingReport({ config, onReview, drill=null, onClearDrill }
         inputValue={search}
         onCommit={({ keyword }) => { setSearch(keyword); setPage(1); }}
       />
-      <Button size="small" onClick={()=>{setOwners([]);setGrades([]);setSearch('');setStat('all');setPage(1);onClearDrill?.();}}>重置</Button>
+      <Button size="small" onClick={()=>{setOwners([]);setGrades([]);setSearch('');setStat('all');setDateRange(undefined);setPage(1);onClearDrill?.();}}>重置</Button>
       <div className="np-tracking-period">
         <span className="np-tracking-period-label">数据周期：</span>
         <Segmented
@@ -310,10 +335,9 @@ function NewProductTrackingReport({ config, onReview, drill=null, onClearDrill }
       </div>
     </div>
     {listingQuery.isError&&<div role="alert">打品详情读取失败，请刷新重试</div>}
-    {listingQuery.isFetching&&<span role="status">正在读取打品明细…</span>}
     {drill&&<div className="np-tracking-board-scope" role="status">
-      <Tag closable onClose={()=>{setOwners([]);setGrades([]);setSearch('');onClearDrill?.();}}>
-        来自打品看板：{drill.label}（{drill.from} 至 {drill.to}）
+      <Tag closable onClose={()=>{setOwners([]);setGrades([]);setSearch('');setDateRange(undefined);setPage(1);onClearDrill?.();}}>
+        来自打品看板：{drill.label}（{dateRange ? `${dateRange[0]} 至 ${dateRange[1]}` : "不限日期"}）
       </Tag>
     </div>}
     <div ref={viewport} className="np-tracking-shell-viewport">
@@ -323,6 +347,7 @@ function NewProductTrackingReport({ config, onReview, drill=null, onClearDrill }
           rowKey="id"
           columns={columns}
           dataSource={filtered}
+          loading={listingQuery.isFetching}
           search={false}
           options={false}
           toolBarRender={false}

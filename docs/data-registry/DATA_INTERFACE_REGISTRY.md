@@ -1,6 +1,49 @@
 # Data Interface Registry
 
+## 2026-11-27 SKU进度列表、统计及筛选接入（candidate）
+
+| 接口/数据集 | 来源/边界 | 状态 |
+|---|---|---|
+| `GET /api/new-products/sku-progress/list` | 0100 SKU汇总、原业务表、PMC DWS；按SKU分页，多选/日期/关键词/排序 | candidate |
+| `GET /api/new-products/sku-progress/summary` | 同一账号及筛选口径；独立统计、不依赖分页 | candidate |
+| `GET /api/new-products/sku-progress/facets` | 11维自排除计数、开发日期边界、未知证据保留 | candidate |
+| SKU进度前端及单个采购 | 原页面样式，真实查询/提交，固定20及既有采购校验；无新外部接口 | candidate |
+
+[数据源与实施说明](../../PRPs/sku-progress-list-facets-frontend-0100.md)。真实数据库、完整 CI 和生产验收待完成。
+
+## 2026-11-27 SKU进度（0100，candidate）
+
+| 接口/数据集 | 来源/边界 | 状态 |
+|---|---|---|
+| `mart_new_product_sku_progress_current` / `new_products.sku_progress_refresh` | 已同步SKU、Listing、广告状态；600秒差异核对；仅写新MART | candidate |
+| `GET /api/new-products/sku-progress/list` | 新MART、分页业务记录、PMC计划单号；国内发货未知 | candidate |
+| `POST /api/new-products/sku-progress/purchase` | LX-A4E9258A3B23，复用工作台签名和严格门禁；固定20，独立持久化防重 | candidate |
+
+[实施及来源决策](../../PRPs/sku-progress-list-purchase-0100.md)。未实际迁移、外部调用或部署。
+
+## 2026-11-26 审批工作台统一读取（本地候选）
+
+`GET /api/approvals/workbench/read`：当前页审批列表、分类计数、同版本新品采购预加载；复用现有审批记录、已保存测评快照、经营事实、产品管理字段权限及月汇率。无写入、新表或外部调用。候选，待本地验收、CI 和 PR 审核。参见 `docs/api/approval-workbench-unified-read-v1.md`。
+
 Registry Status: `draft; approved only after owner review and merge`
+
+## 2026-11-26 打品跟踪人工判定说明校验
+
+| 接口／数据集 | 来源与粒度 | 本轮变更及边界 | 状态／文档 |
+|---|---|---|---|
+| `PUT /api/new-products/tracking/decision` | 现有打品人工决策与事件；账号、店铺、Item ID | 四类人工结果均须填写至少10个非空白字符；原 reason 字段、权限、版本、锁定与存储不变，无新增物理字段 | 实现候选，待本地验收；[SOP](../sop/new-product-tracking-review-reason.md) |
+
+## 2026-11-26 打品详情日期范围筛选
+
+| 接口／数据集 | 来源与粒度 | 本轮变更及边界 | 状态／文档 |
+|---|---|---|---|
+| `GET /api/new-products/tracking/listings` | 既有 scoped_projection + saved tracking decisions；账号、店铺、Item ID；`entry = first_wfs or launch` | 前端复用公共日期选择器，传递已存在的 from/to；保留钻取、周期、权限和分页；无新增后端接口或写入 | 本地候选、待验收；[筛选说明](../sop/new-product-tracking-date-filter.md) |
+
+## 2026-11-26 新品表现 WFS 首次可售日期筛选（候选）
+
+| 接口 | 数据源与粒度 | 变更及边界 | 状态 |
+|---|---|---|---|
+| `/api/new-products/summary`、`/api/new-products/listings` | 既有 scoped_projection；授权账号/店铺/Item ID；新品表现快照首次可售日及首次可售锁定日期 | 可选双日期闭区间（LA）；分页前筛选，统计同口径；不建表、不改评分、不调用外部 API | 实现候选，待验收；[接口](../api/new-product-performance-first-wfs-filter.md)、[SOP](../sop/new-product-performance-first-wfs-filter.md) |
 
 ## 2026-11-25 Walmart SCF 通用代理 v4（内部传输）
 
@@ -359,3 +402,15 @@ Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源�
 - 来源：`mart_listing_management_current` 的真实 Listing；应用库 `biz_new_product_registry`、`biz_new_product_performance_current`、`biz_new_product_tracking_current` 的显式历史登记、原始评分及初始评级；完整身份 `source_account_ref + store_id + item_id`；两数据源独立查询。人工补录证据 `data_coverage_json.historical_tracking_import_v1`，来源 `manual_historical_import`。普通新品列表和采购入口仍要求原小批量测品标签。原始风险与供应链评分独立留存，不映射为现行 trust。
 - 仅已登记的历史商品获得打品读取兼容，不按代采标签自动批量入选。现有 WFS 证据与最终判定锁定规则继续有效；历史原始数据不随 PR 分发，不重复补录。打品自动规则分析不是本次范围。
 - 生产热修复已由负责人页面验收；Git 版本尚待完整预检、PR 审核和正式发布。回滚代码会恢复旧筛选范围，历史数据保留，不随代码回滚直接删除已产生业务记录。
+
+<!-- SKU_PROGRESS_MANUAL_BATCH_0100 -->
+
+## SKU progress manual/batch continuation (0100, local candidate)
+
+| Interface | Method | Source / scope | Consumer | Status |
+|---|---|---|---|---|
+| /api/new-products/sku-progress/manual | PUT | biz_new_product_sku_progress + biz_new_product_sku_progress_events; scoped account and version, deny split DB / preview | NewProductSkuProgressPage | Candidate, not deployed |
+| /api/new-products/sku-progress/list | GET | existing MART + progress version / edit flag | NewProductSkuProgressPage | Candidate |
+| /api/new-products/sku-progress/purchase | POST | existing durable per-SKU/store claim; sequential batch UI; no new provider path | NewProductSkuProgressPage | Existing gates unchanged |
+
+Source decision: docs/data-sources/decisions/sku-progress-manual-0100-decision.md. API: docs/api/sku-progress-manual-0100.md. SOP: docs/sop/sku-progress-manual-batch-0100.md.
