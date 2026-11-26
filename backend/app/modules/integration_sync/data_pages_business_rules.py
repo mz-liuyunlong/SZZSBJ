@@ -40,6 +40,7 @@ CHINA_TZ = timezone(timedelta(hours=8), name="Asia/Shanghai")
 SAMPLE_RULE_VERSION = "candidate-unverified-v5"
 HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION = "zero-total-provider-status-strict-triple-v3"
 VERIFIED_SAMPLE_RULE_VERSION = "provider-verified-sample-v5"
+CANCELLED_VERIFIED_SAMPLE_RULE_VERSION = "provider-verified-cancelled-v1"
 REFUND_RULE_VERSION = "provider-completed-origin-date-v2"
 BUSINESS_RULE_RUNNER_VERSION = f"{RUNNER_VERSION}+business-rules-1"
 
@@ -90,6 +91,30 @@ def _sample_evidence_missing(values: Mapping[str, object]) -> bool:
 
 def _sample_evidence_changed(prior: Mapping[str, object], observed: Mapping[str, object]) -> bool:
     return any(prior.get(field) != observed.get(field) for field in VERIFIED_SAMPLE_EVIDENCE_FIELDS)
+
+
+def _verified_sample_cancellation_only(
+    prior: Mapping[str, object],
+    observed: Mapping[str, object],
+    order_status_raw: object,
+) -> bool:
+    """Revoke only on explicit provider cancellation of the same verified line."""
+    status = str(order_status_raw).strip().lower()
+    cancel_time = _decimal(observed.get("cancel_time_raw"))
+    explicit_cancel = status in {"7", "cancelled", "canceled"} or (
+        cancel_time is not None and cancel_time.is_finite() and cancel_time > 0
+    )
+    return (
+        explicit_cancel
+        and observed.get("is_cancelled") is True
+        and not _sample_evidence_missing(observed)
+        and observed.get("order_total_amount") == Decimal("0")
+        and all(
+            prior.get(field) == observed.get(field)
+            for field in VERIFIED_SAMPLE_EVIDENCE_FIELDS
+            if field not in {"cancel_time_raw", "is_cancelled"}
+        )
+    )
 
 
 def _sample_window_china(day: date) -> tuple[datetime, datetime]:
@@ -321,17 +346,18 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 "DATA_PAGES_SAMPLE_RULE_VERSION_UNSUPPORTED",
                 business_date=self.business_date,
             )
-        # Refresh candidates only. All verified history stays immutable unless
-        # an identical provider replay proves that the same line still exists.
+        # Refresh candidates only. Retain revoked verified lines as durable
+        # cancellation evidence, even if later provider pages omit them.
         self.session.execute(
             text(
                 "delete from fact_walmart_sample_order_items "
                 "where source_account_ref=:account and business_date_utc_minus_7=:day "
-                "and is_valid_sample=false"
+                "and is_valid_sample=false and sample_rule_version<>:cancelled_rule"
             ),
             {
                 "account": self.source_account_ref,
                 "day": self.business_date,
+                "cancelled_rule": CANCELLED_VERIFIED_SAMPLE_RULE_VERSION,
             },
         )
         # An approval survives only an identical non-cancelled provider replay.
@@ -406,8 +432,9 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                                 "select exists (select 1 from fact_walmart_sample_order_items "
                                 "where source_account_ref=:account "
                                 "and platform_order_no=:order_no and source_order_line_id=:line_id "
-                                "and is_valid_sample=true and sample_rule_version in "
-                                "(:historical_rule,:verified_rule))"
+                                "and ((is_valid_sample=true and sample_rule_version in "
+                                "(:historical_rule,:verified_rule)) "
+                                "or sample_rule_version=:cancelled_rule))"
                             ),
                             {
                                 "account": self.source_account_ref,
@@ -415,6 +442,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                                 "line_id": prior_line_id,
                                 "historical_rule": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
                                 "verified_rule": VERIFIED_SAMPLE_RULE_VERSION,
+                                "cancelled_rule": CANCELLED_VERIFIED_SAMPLE_RULE_VERSION,
                             },
                         ).scalar_one()
                         if prior_verified:
@@ -474,8 +502,8 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                                 "and source_order_id=:order_id and platform_order_no=:platform_order "
                                 "and business_date_utc_minus_7=:day "
                                 "and source_order_line_id in (:legacy_line,:current_line) "
-                                "and is_valid_sample=true and sample_rule_version in (:rule_v3,:rule_v5) "
-                                "for update"
+                                "and ((is_valid_sample=true and sample_rule_version in (:rule_v3,:rule_v5)) "
+                                "or sample_rule_version=:cancelled_rule) for update"
                             ),
                             {
                                 "account": self.source_account_ref,
@@ -487,6 +515,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                                 "current_line": new_line_id,
                                 "rule_v3": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
                                 "rule_v5": VERIFIED_SAMPLE_RULE_VERSION,
+                                "cancelled_rule": CANCELLED_VERIFIED_SAMPLE_RULE_VERSION,
                             },
                         )
                         .mappings()
@@ -514,7 +543,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         _field(item, "msku"),
                         _field(item, "local_sku", "sku"),
                     )
-                    if order_total == Decimal("0") and not is_cancelled
+                    if order_total == Decimal("0")
                     else None
                 )
                 identity_agrees = resolved_item_id is not None and (
@@ -527,12 +556,12 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 if legacy_verified is not None:
                     # The writer's strict evidence comparison below still checks
                     # all other persisted fields and rejects any changed replay.
-                    if not _is_valid_sample(order_total, cancel_time_raw, order_status_raw):
+                    if order_total != Decimal("0"):
                         raise DataPagesMartInvariantError(
                             "DATA_PAGES_VERIFIED_SAMPLE_CHANGED",
                             business_date=self.business_date,
                         )
-                    if effective_item_id is None and provider_item_id is None:
+                    if not is_cancelled and effective_item_id is None and provider_item_id is None:
                         effective_item_id = legacy_verified["item_id"]
                 values: dict[str, object] = {
                     "id": str(uuid4()),
@@ -561,6 +590,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     "historical_rule": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
                     "verified_rule": VERIFIED_SAMPLE_RULE_VERSION,
                     "changed_rule": "provider-verified-changed-v5",
+                    "cancelled_rule": CANCELLED_VERIFIED_SAMPLE_RULE_VERSION,
                     **_timestamps(),
                 }
                 self.session.execute(
@@ -577,28 +607,52 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                             "select business_date_utc_minus_7,source_order_id,platform_order_no,"
                             "store_id,platform_code,source_order_line_id,item_id,msku,local_sku,"
                             "quantity,unit_price_amount,unit_price_currency_code,order_total_amount,"
-                            "order_total_currency_code,cancel_time_raw,is_cancelled "
+                            "order_total_currency_code,cancel_time_raw,is_cancelled,sample_rule_version "
                             "from fact_walmart_sample_order_items "
                             "where source_account_ref=:source_account_ref "
                             "and platform_order_no=:platform_order_no "
                             "and source_order_line_id=:source_order_line_id "
-                            "and is_valid_sample=true and sample_rule_version in "
-                            "(:historical_rule,:verified_rule) for update"
+                            "and ((is_valid_sample=true and sample_rule_version in "
+                            "(:historical_rule,:verified_rule)) "
+                            "or sample_rule_version=:cancelled_rule) for update"
                         ),
                         values,
                     )
                     .mappings()
                     .first()
                 )
-                if verified is not None and (
-                    _sample_evidence_missing(values)
-                    or bool(values["is_cancelled"])
-                    or _sample_evidence_changed(dict(verified), values)
-                ):
-                    raise DataPagesMartInvariantError(
-                        "DATA_PAGES_VERIFIED_SAMPLE_CHANGED",
-                        business_date=self.business_date,
-                    )
+                if verified is not None:
+                    prior = dict(verified)
+                    if _verified_sample_cancellation_only(prior, values, order_status_raw):
+                        # Keep the verified identity and amounts intact; only revoke
+                        # eligibility. Replays preserve the first cancellation evidence.
+                        self.session.execute(
+                            text(
+                                "update fact_walmart_sample_order_items "
+                                "set cancel_time_raw=case when sample_rule_version=:cancelled_rule "
+                                "then cancel_time_raw else :cancel_time_raw end, "
+                                "updated_at=case when sample_rule_version=:cancelled_rule "
+                                "then updated_at else :updated_at end, "
+                                "is_cancelled=true,is_valid_sample=false,"
+                                "sample_rule_version=:cancelled_rule,synced_at=:synced_at "
+                                "where source_account_ref=:source_account_ref "
+                                "and platform_order_no=:platform_order_no "
+                                "and source_order_line_id=:source_order_line_id"
+                            ),
+                            values,
+                        )
+                        count += 1
+                        continue
+                    if (
+                        prior.get("sample_rule_version") == CANCELLED_VERIFIED_SAMPLE_RULE_VERSION
+                        or _sample_evidence_missing(values)
+                        or bool(values["is_cancelled"])
+                        or _sample_evidence_changed(prior, values)
+                    ):
+                        raise DataPagesMartInvariantError(
+                            "DATA_PAGES_VERIFIED_SAMPLE_CHANGED",
+                            business_date=self.business_date,
+                        )
 
                 self.session.execute(
                     text(
@@ -638,7 +692,8 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         "(:historical_rule,:verified_rule) "
                         "then :changed_rule else excluded.sample_rule_version end,"
                         "synced_at=excluded.synced_at,updated_at=excluded.updated_at "
-                        "where fact_walmart_sample_order_items.sample_rule_version <> 'owner-approved-raw-zero-full-discount-v1'"
+                        "where fact_walmart_sample_order_items.sample_rule_version <> 'owner-approved-raw-zero-full-discount-v1' "
+                        "and fact_walmart_sample_order_items.sample_rule_version<>:cancelled_rule"
                     ),
                     values,
                 )

@@ -100,3 +100,28 @@ uv run python -m scripts.audit_walmart_order_identity_conflicts \
 - 未删除、更新或回填生产订单/送样历史。
 - 未自动确认 5 件送样或任何其他送样数量。
 - 未修改 `old-system/**`、生产服务、Nginx、systemd、Celery 配置或调度状态。
+
+## 2026-11-27: provider-confirmed cancellation of an already verified sample
+
+A same-identity zero-total provider replay with explicit cancellation evidence
+(positive numeric cancellation time or an explicit cancelled status) is a
+normal order lifecycle transition, not a conflicting sample identity. All
+other verified evidence must match, including the resolved Item ID, quantity,
+price, currencies, and business date. A missing or conflicting identity,
+ambiguous cancellation evidence, nonzero amount, or apparent reactivation
+continues to fail closed.
+
+The existing sample fact is retained with
+`sample_rule_version=provider-verified-cancelled-v1`,
+`is_cancelled=true`, and `is_valid_sample=false`. The first cancellation
+evidence and original identity/amount fields survive subsequent replays and
+candidate cleanup. This version replaces the former v3/v5 rule label; the
+historical raw provider capture remains the evidence for the prior state.
+Owner-approved raw exceptions keep their existing separate protection.
+The normal successful source transaction and MART refresh exclude the
+revoked sample from valid sample counts, costs and sales deductions without
+changing SaleStat itself. No migration, frontend changes, automatic production
+retry, or historical data rewrite is authorized by this code change.
+
+Other verified-evidence changes remain protected; row-level exception
+isolation and anomaly-center UX are separate work.
