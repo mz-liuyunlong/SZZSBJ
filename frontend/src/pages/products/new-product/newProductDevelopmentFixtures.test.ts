@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeNewProductDevMockRows } from "./newProductDevelopmentFixtures";
-import { samples } from "./nativeData";
+import { samples } from "./newProductModel";
 
 describe("PR337 local Product fixture consistency", () => {
   const rows = makeNewProductDevMockRows(samples);

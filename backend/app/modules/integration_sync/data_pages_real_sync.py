@@ -592,7 +592,7 @@ class DataPagesRealSyncRunner:
         if self.heartbeat is not None:
             self.heartbeat()
         self.summary.requested_interfaces.append(spec.interface_key)
-        self._persist_raw_blob(parser_key, response.response_json, response.pulled_at)
+        foundation_blob_id = self._persist_raw_blob(parser_key, response.response_json, response.pulled_at)
         if response.provider_code not in {None, 0, 200}:
             if parser_key == "walmart_return_order_list" and response.provider_code == 403:
                 self.summary.return_permission_403 = True
@@ -601,6 +601,14 @@ class DataPagesRealSyncRunner:
                     self.summary.skipped_interfaces.append(marker)
                 return response
             raise DataPagesRealSyncError(f"DATA_PAGES_PROVIDER_FAILED:{spec.interface_key}")
+        if parser_key in ("walmart_ad_item_sp_list", "walmart_advertiser_list"):
+            try:
+                from app.modules.new_products.sku_ad_foundation_runtime import collect_ad_page
+
+                collect_ad_page(self, parser_key, foundation_blob_id, response)
+            except Exception as exc:
+                self._foundation_ad_capture_failed = True
+                logging.getLogger(__name__).warning("foundation_ad_capture_failed error_type=%s", type(exc).__name__)
         return response
 
     def _fetch_offset_all(

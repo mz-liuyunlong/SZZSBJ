@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultConfig, type Product } from './nativeData';
+import { defaultConfig, type Product } from './newProductModel';
 import { buildTrackingView, daysBetween, getTrackingPool } from './trackingBoardMetrics';
 const row=(id:string,overrides:Partial<Product>={}):Product=>({
   id,sku:`SKU-${id}`,item:`IT-${id}`,name:`商品${id}`,owner:'王宁',days:35,

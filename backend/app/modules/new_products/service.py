@@ -512,7 +512,7 @@ class NewProductService:
         return False
 
     def _hydrate_workflow_rows(
-        self, rows, saved_rows=None, profit_results=None, *, historical=None
+        self, rows, saved_rows=None, profit_results=None, *, historical=None, preloaded_markets=None
     ):
         """One bounded local decision query per model, never N+1 and never source writes."""
         if not rows:
@@ -546,10 +546,14 @@ class NewProductService:
         def members(model):
             return tuple_(model.source_account_ref, model.store_id, model.item_id).in_(keys)
 
-        markets = {
-            ident(m): m
-            for m in self.db.scalars(select(MarketScore).where(members(MarketScore))).all()
-        }
+        markets = (
+            preloaded_markets
+            if preloaded_markets is not None
+            else {
+                ident(m): m
+                for m in self.db.scalars(select(MarketScore).where(members(MarketScore))).all()
+            }
+        )
         # NP_MARKET_COMPETITOR_PERSIST_20261118: one already-loaded persisted page,
         # no per-product detail/API call or source/MART query.
         companion_rows = local_saved if self.db is not self.repo.session else saved_rows
@@ -653,6 +657,7 @@ class NewProductService:
                 )
         else:
             self._overlay_score_correction_rows(rows, keys, config)
+        return applications, decisions
 
     # NP_OPERATOR_SCORE_CORRECTION_V1_20261119
     def _score_correction_blocks(self, keys):
@@ -882,21 +887,25 @@ class NewProductService:
             "created_at": row.created_at.isoformat(),
         }
 
-    def list(self, accounts, query):
+    def list(self, accounts, query, *, scope_keys=None):
         """Fail-safe cutover: preserve current preview/score behavior by default.
 
         Saved-only mode is an explicit *local* opt-in after daily snapshots
         have been inspected. Never change production semantics implicitly.
         """
-        item_keys = None
+        # Workbench supplies only the already-authorized current-page identities.
+        started = time.monotonic()
+        item_keys = scope_keys
         np_filters = {
             name: getattr(query, name, "")
             for name in ("np_statuses", "np_owners", "np_ratings", "np_owner_keyword")
         }
-        if any(np_filters.values()):
+        first_wfs_start = getattr(query, "first_wfs_start_date", None)
+        first_wfs_end = getattr(query, "first_wfs_end_date", None)
+        if any(np_filters.values()) or first_wfs_start is not None or first_wfs_end is not None:
             from .performance_list_scope import matching_identities
 
-            item_keys = matching_identities(
+            filtered_keys = matching_identities(
                 self.repo.session,
                 self.db,
                 accounts,
@@ -904,13 +913,25 @@ class NewProductService:
                 owners=np_filters["np_owners"],
                 ratings=np_filters["np_ratings"],
                 owner_keyword=np_filters["np_owner_keyword"],
+                start_date=first_wfs_start,
+                end_date=first_wfs_end,
+            )
+            item_keys = (
+                filtered_keys
+                if scope_keys is None
+                else sorted(set(scope_keys).intersection(filtered_keys))
+            )
+            _LOGGER.info(
+                "new_product_list_filter_scope rows=%d elapsed_ms=%d",
+                len(item_keys),
+                int((time.monotonic() - started) * 1000),
             )
         # PR337_LOCAL_PREVIEW_DISPATCH_EXACT_V5_20261115
         # Explicit four-item preview must use the old bounded snapshot path.
         # Production still fails closed in local_preview_item_ids().
         if os.getenv("PR337_LOCAL_PREVIEW_ITEM_IDS", "").strip():
-            return self._list_legacy_live(accounts, query, item_keys=item_keys)
-        if os.getenv("APP_ENV", "").strip().lower() in {
+            result = self._list_legacy_live(accounts, query, item_keys=item_keys)
+        elif os.getenv("APP_ENV", "").strip().lower() in {
             "local",
             "dev",
             "development",
@@ -920,8 +941,15 @@ class NewProductService:
             "yes",
             "on",
         }:
-            return self._list_saved(accounts, query, item_keys=item_keys)
-        return self._list_legacy_live(accounts, query, item_keys=item_keys)
+            result = self._list_saved(accounts, query, item_keys=item_keys)
+        else:
+            result = self._list_legacy_live(accounts, query, item_keys=item_keys)
+        _LOGGER.info(
+            "new_product_list_request page=%d elapsed_ms=%d",
+            query.page,
+            int((time.monotonic() - started) * 1000),
+        )
+        return result
 
     def _attach_order_days_for_list(self, rows, finals, cutoff):
         """Expose paid order days on list DTO; never depend on the detail GET.
@@ -979,6 +1007,7 @@ class NewProductService:
                 item_keys=item_keys,
                 **filters,
             )
+            page_ms = int((time.monotonic() - started) * 1000)
             if preview is not None and total > 4:
                 raise ValueError("本地四商品试算范围超过四条，已停止")
             keys = [ident(listing) for listing in data.items]
@@ -999,6 +1028,7 @@ class NewProductService:
                     ).all()
                 }
             saved_ads = load_saved_ad_display(self.db, keys)
+            snapshots_ms = int((time.monotonic() - started) * 1000) - page_ms
             today_la = datetime.now(LA).date()
             rows = []
             for listing in data.items:
@@ -1028,22 +1058,45 @@ class NewProductService:
                         if isinstance(coverage, dict):
                             overlay_saved_ad_display(row, coverage.get("ad_display_v1"))
                 rows.append(row)
-            if historical:
-                self._hydrate_workflow_rows(rows, persisted, historical=historical)
-            else:
-                self._hydrate_workflow_rows(rows, persisted)
+            hydrate_started = time.monotonic()
+            workflow_kwargs = {"historical": historical} if historical else {}
+            if keys and persisted:
+                workflow_kwargs["preloaded_markets"] = market_scores
+            workflow = self._hydrate_workflow_rows(rows, persisted, **workflow_kwargs)
+            hydrate_ms = int((time.monotonic() - hydrate_started) * 1000)
+            order_started = time.monotonic()
             self._attach_order_days_for_list(rows, finals, today_la - timedelta(days=1))
+            order_ms = int((time.monotonic() - order_started) * 1000)
+            # Reuse page-scoped purchase/decision reads; approval store evidence is
+            # only needed in the passed purchase view (not general list/board).
+            from .workflow_read import attach_workflow_fields, needs_purchase_store_projection
+
+            flow_started = time.monotonic()
+            attach_workflow_fields(
+                self.db,
+                rows,
+                source_session=self.repo.session,
+                include_approved_stores=needs_purchase_store_projection(
+                    getattr(query, "np_statuses", "")
+                ),
+                preloaded=workflow,
+            )
             _LOGGER.info(
-                "new_product_list_saved_only page=%d count=%d total=%d elapsed_ms=%d",
+                (
+                    "new_product_list_saved_only page=%d count=%d total=%d page_ms=%d "
+                    "snapshots_ms=%d hydrate_ms=%d order_ms=%d workflow_ms=%d "
+                    "elapsed_ms=%d"
+                ),
                 query.page,
                 len(rows),
                 total,
+                page_ms,
+                snapshots_ms,
+                hydrate_ms,
+                order_ms,
+                int((time.monotonic() - flow_started) * 1000),
                 int((time.monotonic() - started) * 1000),
             )
-            # PR337_FLOW_WFS_REAL_STATUS_20261116: read workflow states, never infer them.
-            from .workflow_read import attach_workflow_fields
-
-            attach_workflow_fields(self.db, rows)
             return {
                 "items": rows,
                 "total": total,
@@ -1265,12 +1318,29 @@ class NewProductService:
                         for k in ("source_account_ref", "store_id", "item_id")
                     )
                     saved_daily_view(saved_row, persisted.get(key))
-            self._hydrate_workflow_rows(rows, persisted, profit_page)
+            workflow = self._hydrate_workflow_rows(rows, persisted, profit_page)
             self._attach_order_days_for_list(rows, finals, cutoff_la)
             # PR337_FLOW_WFS_REAL_STATUS_20261116: read workflow states, never infer them.
-            from .workflow_read import attach_workflow_fields
+            from .workflow_read import attach_workflow_fields, needs_purchase_store_projection
 
-            attach_workflow_fields(self.db, rows)
+            flow_started = time.monotonic()
+            attach_workflow_fields(
+                self.db,
+                rows,
+                source_session=self.repo.session,
+                include_approved_stores=needs_purchase_store_projection(
+                    getattr(query, "np_statuses", "")
+                ),
+                preloaded=workflow,
+            )
+            _LOGGER.info(
+                "new_product_list_legacy page=%d count=%d total=%d workflow_ms=%d elapsed_ms=%d",
+                query.page,
+                len(rows),
+                total,
+                int((time.monotonic() - flow_started) * 1000),
+                int((time.monotonic() - started) * 1000),
+            )
             return {
                 "items": rows,
                 "total": total,
@@ -2078,7 +2148,9 @@ class NewProductService:
             "page_size": page_size,
         }
 
-    def decide_purchase(self, accounts, approval_id, body, actor, *, allow_self=False):
+    def decide_purchase(
+        self, accounts, approval_id, body, actor, *, allow_self=False, real_purchase_test=False
+    ):
         try:
             row = self.db.scalar(
                 select(PurchaseApplication)
@@ -2096,6 +2168,13 @@ class NewProductService:
                 problem("NEW_PRODUCT_SELF_REVIEW", 403, "不能审核自己提交的申请")
             if body.decision == "rejected" and len(body.reason.strip()) < 5:
                 problem("NEW_PRODUCT_REJECTION_REASON_REQUIRED", 422, "驳回原因至少5字")
+            from .purchase_plan_service import create_and_record_local_plan, ensure_no_attempt
+
+            # A durable Lingxing attempt blocks ALL later decisions on this application.
+            ensure_no_attempt(self.db, row)
+            lingxing_receipt = None
+            if body.decision == "approved" and not real_purchase_test:
+                problem("NP_LX_USE_WORKBENCH", 409, "Use the local real-write workbench flow")
             # SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1
             # Never mutate source store identity or the frozen scoring snapshot.
             approved_qty = None
@@ -2109,28 +2188,15 @@ class NewProductService:
                     problem(
                         "NP_PURCHASE_APPROVED_QTY_INVALID", 422, "批准采购数量应在1至100000之间"
                     )
-                if body.purchase_store_id is not None:
-                    from sqlalchemy import or_
-
-                    from app.modules.data_pages.models import LingxingStoreDimension
-
-                    matches = self.db.scalars(
-                        select(LingxingStoreDimension).where(
-                            LingxingStoreDimension.source_account_ref == row.source_account_ref,
-                            LingxingStoreDimension.store_id == purchase_store_id,
-                            or_(
-                                LingxingStoreDimension.platform_code == "walmart",
-                                LingxingStoreDimension.platform_code_raw == "10008",
-                            ),
-                            LingxingStoreDimension.is_sync.is_(True),
-                        )
-                    ).all()
-                    if len(matches) != 1:
-                        problem(
-                            "NP_PURCHASE_STORE_NOT_ALLOWED",
-                            422,
-                            "采购店铺无效或不属于当前授权数据账号",
-                        )
+                if body.purchase_store_id is None or body.approved_qty is None:
+                    problem(
+                        "NP_LX_APPROVAL_FIELDS_REQUIRED",
+                        422,
+                        "Select store and quantity explicitly",
+                    )
+                lingxing_receipt = create_and_record_local_plan(
+                    self.db, row, actor, purchase_store_id, approved_qty
+                )
             row.status = body.decision
             row.approved_qty = approved_qty
             row.version += 1
@@ -2151,10 +2217,16 @@ class NewProductService:
                     "purchase_store_id": purchase_store_id,
                     "requested_qty": row.requested_qty,
                     "approved_qty": approved_qty,
+                    "lingxing_receipt": lingxing_receipt,
                 },
             )
             self.db.commit()
-            return {"id": str(row.id), "status": row.status, "version": row.version}
+            return {
+                "id": str(row.id),
+                "status": row.status,
+                "version": row.version,
+                "lingxing_receipt": lingxing_receipt,
+            }
         except Exception:
             self.db.rollback()
             raise
@@ -2167,9 +2239,10 @@ class NewProductService:
             else {}
         )
         self._listing(accounts, a, s, i, **({"historical": historical} if historical else {}))
-        if body.decision in ("打品失败", "需要优化") and len(body.reason.strip()) < 5:
+        # Direct service callers must also supply evidence for every manual outcome.
+        if len("".join(body.reason.split())) < 10:
             problem(
-                "NEW_PRODUCT_TRACKING_REASON_REQUIRED", 422, "失败或需优化时必须填写至少5字原因"
+                "NEW_PRODUCT_TRACKING_REASON_REQUIRED", 422, "复盘说明 / 判定依据至少填写10个字"
             )
         if self._final_decisions([(a, s, i)]).get((a, s, i)) is not None:
             problem("NEW_PRODUCT_TRACKING_FINAL_LOCKED", 409, "Final testing result is locked")

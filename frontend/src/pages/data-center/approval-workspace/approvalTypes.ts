@@ -1,3 +1,4 @@
+import type { NewProductListing } from "@/pages/products/new-product/newProductBusinessApi";
 export type ApprovalTab = "pending" | "approved" | "rejected";
 export type ApprovalView = "mine" | "created" | "all";
 export const approvalTabs: { label: string; value: ApprovalTab }[] = [
@@ -64,7 +65,18 @@ export interface PurchaseApprovalDetails {
     firstOrderDays?: number | null;
   } | null;
 }
+export interface PurchasePageRead {
+  application_id:string;
+  version:number;
+  source_account_ref:string;
+  store_id:string;
+  item_id:string;
+  listing:NewProductListing|null;
+  daily:unknown;
+  unit_purchase_cost_cny:string|null;
+}
 export interface ApprovalItem {
+  purchase_read?: PurchasePageRead|null;
   purchase_details?: PurchaseApprovalDetails | null;
  /** Live clearance data supplied by the existing API, never by demo profiles. */
  clearance_details?: {

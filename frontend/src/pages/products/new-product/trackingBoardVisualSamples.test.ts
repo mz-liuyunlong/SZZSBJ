@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { samples, defaultConfig } from './nativeData';
+import { samples, defaultConfig } from './newProductModel';
 import { buildTrackingView } from './trackingBoardMetrics';
 import { isOriginalPr337Mock, isTrackingVisualSample, withTrackingVisualSamples } from './trackingBoardVisualSamples';
 

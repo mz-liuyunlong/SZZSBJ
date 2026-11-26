@@ -1,16 +1,13 @@
-/** V3 demo-only drawers: four independent business layouts, no approval endpoints. */
+/** Business approval details, including explicitly gated demo-only layouts. */
 import { Alert, Button, Descriptions, Drawer, Input, Modal, Table, Tag, Typography, message } from "antd";
 import { useEffect, useState, type ReactNode } from "react";
 import type { ApprovalDetail, ApprovalItem } from "../approvalTypes";
 import { getDemoSeed, type DemoSeed } from "../approvalDemoData";
 import { demoProfiles, type ClearanceSku, type DemoBusinessProfile } from "../approvalDemoPresentation";
 import { fetchNewProductPurchaseDetail } from "../approvalApi";
-import {getCachedNewProductDetail, listNewProducts} from "@/pages/products/new-product/newProductBusinessApi";
-import {toPersistedProduct} from "@/pages/products/new-product/newProductRealAdapter";
-import type {Product} from "@/pages/products/new-product/nativeData";
 import {queryClient} from "@/api/queryClient";
 import PurchaseApprovalDecisionDrawer from "./PurchaseApprovalDecisionDrawer";
-import "./DemoApprovalDrawer.css";
+import "./ApprovalBusinessDetailDrawer.css";
 
 interface Props { selected?: ApprovalItem; onClose(): void; initialAction?: "approve" | "reject"; onAction?: (item: ApprovalItem, action: "approve" | "reject") => void; }
 const usd = (n: number | string | null | undefined) => n == null ? "—" : `$${Number(n).toFixed(2)}`;
@@ -252,64 +249,43 @@ function Side({seed}:{seed:DemoSeed}) {
     <Section heading="安全边界"><p className="approval-demo__copy">演示记录不调用审批 API。申请人不能审批自己的正式申请，真实业务须由后端校验授权和业务快照。</p></Section>
   </aside>;
 }
-function DemoApprovalDrawerContent({selected: selectedInput,onClose,initialAction,onAction}:Props) {
+function ApprovalBusinessDetailDrawerContent({selected: selectedInput,onClose,initialAction,onAction}:Props) {
   // NP_PURCHASE_WORKBENCH_REAL_API_V1_20261116: fetch persisted detail by ID.
-  // PURCHASE_DETAIL_SYNCHRONIZED_V1: load the saved approval plus the authorized,
-  // already-computed evaluation facts before opening the drawer. Never rescore.
+  // Open from the already-authorized list row; only a fresh detail may enable actions.
+  // fetchQuery coalesces concurrent StrictMode effects; staleTime=0 never trusts
+  // an old approval version on reopen. Evaluation reads belong to the child.
   const [purchaseDetail,setPurchaseDetail] = useState<ApprovalDetail>();
-  const [purchaseEvaluation,setPurchaseEvaluation] = useState<{
-    id:string;product:Product;daily:unknown;
-  } | null>(null);
   const [purchaseFetchFailed,setPurchaseFetchFailed] = useState(false);
+  const detailId = selectedInput?.id;
+  const detailAccount = selectedInput?.source_account_ref;
+  const detailType = selectedInput?.approval_type;
+  const cached = selectedInput?.purchase_read;
+  const preloadedRead = cached && selectedInput && cached.application_id===selectedInput.id &&
+    cached.version===selectedInput.version && cached.source_account_ref===selectedInput.source_account_ref &&
+    cached.store_id===selectedInput.purchase_details?.store_id && cached.item_id===selectedInput.purchase_details?.item_id
+    ? cached : undefined;
   useEffect(() => {
-    if (selectedInput?.approval_type !== "new_product_purchase") return;
+    if (detailType !== "new_product_purchase" || !detailId || !detailAccount || preloadedRead) return;
     let active = true;
-    void Promise.resolve().then(() => {
-      if (active) setPurchaseFetchFailed(false);
-    });
-    const id = selectedInput.id;
-    void (async () => {
-      try {
-        const detail = await fetchNewProductPurchaseDetail(id);
-        const rawStore = detail.snapshot?.store_id;
-        const rawItem = detail.snapshot?.item_id;
-        const account = detail.source_account_ref;
-        const store = typeof rawStore === "string" ? rawStore : "";
-        const item = typeof rawItem === "string" ? rawItem : "";
-        const verifiedIdentity = Boolean(account && store && item &&
-          item === detail.purchase_details?.item_id);
-        if (verifiedIdentity) {
-          const [listResult, detailResult] = await Promise.allSettled([
-            queryClient.fetchQuery({
-              queryKey:["purchase-approval-listing",account,store,item],
-              queryFn:() => listNewProducts({page:1,pageSize:200,storeId:store,keyword:item,searchField:"item_id"}),
-              staleTime:5 * 60_000, gcTime:30 * 60_000, retry:0,
-            }),
-            getCachedNewProductDetail({source_account_ref:account,store_id:store,item_id:item}),
-          ]);
-          const matching = listResult.status === "fulfilled" ? listResult.value.items.filter(row =>
-            row.listing.source_account_ref === account && row.listing.store_id === store &&
-            row.listing.item_id === item) : [];
-          const daily = detailResult.status === "fulfilled"
-            ? detailResult.value.evaluation_operating_daily : undefined;
-          const proof = daily !== null && typeof daily === "object" && !Array.isArray(daily)
-            ? daily as Record<string,unknown> : null;
-          if (matching.length === 1 && proof?.status === "scored" &&
-              proof.source === "new_products_testing_profit_full_history_v2" &&
-              proof.policy === "returns_ignored_samples_excluded_sample_ads_included" &&
-              Array.isArray(proof.rows) && proof.totals && typeof proof.totals === "object") {
-            if (active) setPurchaseEvaluation({
-              id:detail.id,product:toPersistedProduct(matching[0]),daily:proof,
-            });
-          }
-        }
-        if (active) setPurchaseDetail(detail);
-      } catch {
-        if (active) setPurchaseFetchFailed(true);
+    const id = detailId;
+    const account = detailAccount;
+    void queryClient.fetchQuery({
+      queryKey:["purchase-approval-detail",account,id],
+      queryFn:() => fetchNewProductPurchaseDetail(id),
+      staleTime:0, gcTime:60_000, retry:0,
+    }).then(detail => {
+      if (!active) return;
+      if (detail.id !== id || detail.source_account_ref !== account ||
+          detail.approval_type !== "new_product_purchase") {
+        setPurchaseFetchFailed(true);
+        return;
       }
-    })();
+      setPurchaseDetail(detail);
+    }).catch(() => {
+      if (active) setPurchaseFetchFailed(true);
+    });
     return () => {active = false;};
-  },[selectedInput?.id,selectedInput?.approval_type]);
+  },[detailId,detailType,detailAccount,preloadedRead]);
   // SZZSBJ_NP_PURCHASE_TABLE_IDENTITY_AMOUNT_V5
   // Explicitly narrow purchaseDetail before spreading: selected remains an
   // ApprovalItem, never a partial object with optional identity fields.
@@ -327,7 +303,7 @@ function DemoApprovalDrawerContent({selected: selectedInput,onClose,initialActio
         }
       : selectedInput;
   const pendingPurchase = selectedInput?.approval_type === "new_product_purchase" &&
-    purchaseDetail?.id !== selectedInput?.id && !purchaseFetchFailed;
+    !preloadedRead && purchaseDetail?.id !== selectedInput?.id && !purchaseFetchFailed;
   const livePurchase = selected?.approval_type === "new_product_purchase" ? selected : undefined;
   const liveInfo = livePurchase?.purchase_details;
   const purchaseSeed: DemoSeed | undefined = livePurchase ? {
@@ -347,8 +323,8 @@ function DemoApprovalDrawerContent({selected: selectedInput,onClose,initialActio
   // Never join a purchase with an unrelated listing by SKU or product title.
   const purchaseSnapshot = purchaseDetail && purchaseDetail.id === selectedInput?.id
     ? purchaseDetail.snapshot : undefined;
-  const storeId = purchaseSnapshot?.store_id;
-  const itemId = purchaseSnapshot?.item_id;
+  const storeId = preloadedRead?.store_id ?? purchaseSnapshot?.store_id;
+  const itemId = preloadedRead?.item_id ?? purchaseSnapshot?.item_id;
   const evaluationIdentity = livePurchase &&
     typeof storeId === "string" && storeId.length > 0 &&
     typeof itemId === "string" && itemId === liveInfo?.item_id
@@ -430,7 +406,7 @@ function DemoApprovalDrawerContent({selected: selectedInput,onClose,initialActio
   return <Drawer
     title={null}
     closable={false}
-    open={Boolean(seed) && !pendingPurchase}
+    open={Boolean(seed)}
     width={isClearance ? 1000 : p?.kind === "purchase" ? "min(1120px, 96vw)" : 1040}
     destroyOnHidden
     onClose={onClose}
@@ -439,9 +415,11 @@ function DemoApprovalDrawerContent({selected: selectedInput,onClose,initialActio
     {seed && p ? <div className={`approval-demo ${isClearance ? "approval-demo--clearance" : p.kind === "purchase" ? "approval-demo--purchase" : ""}`}>
       {/* PR337_PURCHASE_DECISION_DETAIL_V3: purchase-specific decision, other drawers unchanged. */}
       {p.kind === "purchase" && selected
-        ? <PurchaseApprovalDecisionDrawer record={selected} seed={seed} profile={p} preloadedEvaluation={purchaseEvaluation && purchaseEvaluation.id === selected.id ? purchaseEvaluation : undefined}
+        ? <PurchaseApprovalDecisionDrawer record={selected} seed={seed} profile={p}
             evaluationIdentity={evaluationIdentity}
-            onClose={onClose} onAction={onAction} />
+            preloadedRead={preloadedRead}
+            detailState={purchaseFetchFailed ? "error" : pendingPurchase ? "loading" : "ready"}
+            onClose={onClose} onAction={pendingPurchase || purchaseFetchFailed ? undefined : onAction} />
         : isClearance ? <>
         <header className="approval-demo__clearance-header">
           <div className="approval-demo__clearance-header-top">
@@ -523,8 +501,8 @@ function DemoApprovalDrawerContent({selected: selectedInput,onClose,initialActio
 
 // Remount the demo detail when the selected approval changes. This resets local
 // demo state without synchronously calling setState inside an effect.
-export default function DemoApprovalDrawer(props: Props) {
-  return <DemoApprovalDrawerContent key={props.selected?.id ?? "closed"} {...props} />;
+export default function ApprovalBusinessDetailDrawer(props: Props) {
+  return <ApprovalBusinessDetailDrawerContent key={props.selected?.id ?? "closed"} {...props} />;
 }
 
-// PURCHASE_DETAIL_SYNCHRONIZED_V1: gate one initial render on the same preloaded evaluation proof.
+// PURCHASE_DETAIL_FAST_OPEN_V1: fresh approval first, then independent read-only modules.

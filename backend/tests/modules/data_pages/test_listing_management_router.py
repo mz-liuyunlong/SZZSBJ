@@ -232,6 +232,7 @@ def test_listing_management_route_returns_envelope_and_meta(monkeypatch: Any) ->
     assert body["meta"]["source_objects"] == [
         "mart_listing_management_current",
         "dim_walmart_listings",
+        "mart_listing_ad_status_current",
     ]
     assert body["meta"]["total"] == 1
 

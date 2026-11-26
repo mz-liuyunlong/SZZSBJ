@@ -10,13 +10,14 @@ import {useMemo, useState,type ReactNode, useCallback, useEffect, useRef} from "
 import { Drawer as AntdDrawer } from "antd";
 import ManagementStatCards from "@/components/report-table/ManagementStatCards";
 import NewProductPerformanceReport from "./NewProductPerformanceReport";
+import NewProductSkuProgressPage from "./NewProductSkuProgressPage";
 import NewProductEvaluationReviewModal, {type ReviewReasonType} from "./NewProductEvaluationReviewModal";
 import PageShell from "@/components/page/PageShell";
 import type {NavigationPage} from "@/config/navigation";
 import NativeBoard from "./TrackingBoardSwitch";
 import type {TrackingDrillFilter} from "./trackingBoardDrilldown";
 import NewProductTrackingReport from "./NewProductTrackingReport";
-import {defaultConfig,bands,score,grade,suggestion,type Product,type Config} from "./nativeData";
+import {defaultConfig,bands,score,grade,suggestion,type Product,type Config} from "./newProductModel";
 import NewProductRulesPanel from "./NewProductRulesPanel";
 import { getNewProductRules, applyNewProductRules, listNewProducts, getNewProductSummary,
   saveNewProductMarketScore, saveNewProductManualDecision, confirmNewProductAndRequestPurchase,
@@ -32,32 +33,25 @@ import TrackingRuleConfigPanel from "./components/TrackingRuleConfigPanel";
 import NewProductDimensionEvidence from "./NewProductDimensionEvidence";
 import NewProductManualRisk, {type ManualRiskCode} from "./NewProductManualRisk";
 import NewProductEvaluationData from "./NewProductEvaluationData";
-import { invalidateNewProductDetail } from "./newProductBusinessApi";
+import { invalidateNewProductDetail, type FirstWfsDateRange } from "./newProductBusinessApi";
+import { trackingReviewReasonLength, validTrackingReviewReason } from "./trackingReviewReason";
+import { performanceStatusParam } from "./newProductPerformanceStages";
 import "./nativeWorkflow.css";
 import "./newProductAssessmentTabs.css";
 import "./newProductReviewDrawer.css";
 import "./newProductDimensionCards.css";
 import "./newProductMarketCompetitionVisual.css";
-import { Button as ReviewButton, Descriptions as ReviewDescriptions, Drawer as ReviewDrawer, Input as ReviewInput, Radio as ReviewRadio, Tag as ReviewTag, Select as ReviewSelect } from "antd";
+import { Button as ReviewButton, Descriptions as ReviewDescriptions, Drawer as ReviewDrawer, Input as ReviewInput, InputNumber as ReviewInputNumber, Radio as ReviewRadio, Tag as ReviewTag, Select as ReviewSelect } from "antd";
 type Mode="performance"|"tracking";
 const initialPerformanceQuery:PerformanceReportQuery = {
   page:1,pageSize:50,statuses:[],owners:[],ratings:[],
   searchField:"sku",keyword:"",phase:"all",
 };
-function performanceParams(q:PerformanceReportQuery) {
-  const cardStatus:Record<string,string> = {
-    evaluating:"测评中",market:"待市场评分",
-    pending_confirmation:"待测评确认",
-    passed:"测评通过",failed:"测评未通过",
-  };
-  const selected = cardStatus[q.phase] ? [cardStatus[q.phase]] : [];
-  const statuses = q.statuses.length
-    ? (selected.length ? q.statuses.filter(s=>selected.includes(s)) : q.statuses)
-    : selected;
+function performanceParams(q:PerformanceReportQuery, firstWfsDateRange?:FirstWfsDateRange) {
   return {
     page:q.page,pageSize:q.pageSize,
-    npStatuses: statuses.length===0 && selected.length>0 && q.statuses.length>0
-      ? "__none__" : statuses.join(","),
+    firstWfsStartDate:firstWfsDateRange?.[0],firstWfsEndDate:firstWfsDateRange?.[1],
+    npStatuses:performanceStatusParam(q.phase,q.statuses),
     npOwners:q.owners.join(","),npRatings:q.ratings.join(","),
     keyword:q.searchField==="owner" ? "" : q.keyword,
     searchField:(q.searchField==="item"?"item_id":q.searchField==="name"?"title":"sku") as "sku"|"item_id"|"title",
@@ -203,10 +197,12 @@ export default function NewProductPages({page,mode}:Props){
  const [ruleDraft,setRuleDraft]=useState<RuleDraft>(()=>createInitialRuleDraft(defaultConfig));
  // First visit opens analysis; store both modes in the shared page-state cache.
  // A stable cache key also works if React reuses this component across routes.
- const [boardViews,setBoardViews]=usePageStateCache<Record<Mode,"list"|"board">>(
+ const [boardViews,setBoardViews]=usePageStateCache<Record<Mode,"list"|"board"|"sku-progress">>(
    "new-product:board-views",{performance:"board",tracking:"board"});
- const tab=boardViews[mode]??"board";
- const setTab=(view:"list"|"board")=>setBoardViews((current)=>({...current,[mode]:view}));
+ const savedTab=boardViews[mode]??"board";
+ const skuProgressEnabled=mode==="performance";
+ const tab=savedTab==="sku-progress"&&!skuProgressEnabled?"board":savedTab;
+ const setTab=(view:"list"|"board"|"sku-progress")=>setBoardViews((current)=>({...current,[mode]:view}));
  const [phase,setPhase]=useState("all"),[reportRevision,setReportRevision]=useState(0);
  const [modal,setModal]=useState<ModalType>(null),[selected,setSelected]=useState<string|null>(null),[scoreValue,setScoreValue]=useState<number|null>(null),[qty,setQty]=useState(0),[note,setNote]=useState(""),[review,setReview]=useState("继续观察");
  const [cfgTab,setCfgTab]=useState("weights"),[version,setVersion]=useState(0),[notice,setNotice]=useState("");
@@ -226,7 +222,7 @@ export default function NewProductPages({page,mode}:Props){
  const [assessmentReviewReason,setAssessmentReviewReason]=useState("");
  const [detailSnapshot,setDetailSnapshot]=useState<Product|null>(null);
  const [evaluationRequesting,setEvaluationRequesting]=useState<string|null>(null);
- const [evaluationReviewItem,setEvaluationReviewItem]=useState<string|null>(null);
+ const [evaluationReviewItem,setEvaluationReviewItem]=useState<Product|null>(null);
  const [evaluationReviewSubmitting,setEvaluationReviewSubmitting]=useState(false);
   const [flowSaving,setFlowSaving]=useState(false);
   const [purchaseReviewSnapshot,setPurchaseReviewSnapshot]=useState<Awaited<ReturnType<typeof getNewProductPurchaseSnapshot>>|null>(null);
@@ -235,19 +231,34 @@ export default function NewProductPages({page,mode}:Props){
  const riskSelectionRef=useRef<ManualRiskCode[]>([]);
  const queryClient=useQueryClient();
  const [remoteQuery,setRemoteQuery]=useState<PerformanceReportQuery>(initialPerformanceQuery);
+ // NP_FIRST_WFS_DATE_FILTER_V1: parent-owned range survives the keyed report remount on card selection.
+ const [firstWfsDateRange,setFirstWfsDateRange]=useState<FirstWfsDateRange>();
+ const onFirstWfsDateRangeChange=useCallback((range:FirstWfsDateRange|undefined)=>{
+   setFirstWfsDateRange(old=>old?.[0]===range?.[0] && old?.[1]===range?.[1]?old:range);
+   setRemoteQuery(old=>old.page===1?old:{...old,page:1});
+ },[]);
  const onRemoteQueryChange=useCallback((next:PerformanceReportQuery)=>{
    setRemoteQuery(old=>JSON.stringify(old)===JSON.stringify(next)?old:next);
  },[]);
+ // Let React's development-only effect replay settle before starting page reads.
+ // Real navigation/filter changes still use AbortSignal and normal query cancellation.
+ const [pageReadsReady,setPageReadsReady]=useState(false);
+ useEffect(()=>{
+   let active=true;
+   queueMicrotask(()=>{if(active)setPageReadsReady(true);});
+   return ()=>{active=false;};
+ },[]);
  const remoteEnabled=mode==="performance" && tab==="list";
+ const remoteParams=useMemo(()=>performanceParams(remoteQuery,firstWfsDateRange),[remoteQuery,firstWfsDateRange]);
  const summaryQuery=useQuery({
-   queryKey:["np-performance","summary"],
-   queryFn:({signal})=>getNewProductSummary({signal}),
-   enabled:remoteEnabled,staleTime:15_000,retry:1,
+   queryKey:["np-performance","summary",firstWfsDateRange],
+   queryFn:({signal})=>getNewProductSummary({signal},firstWfsDateRange),
+   enabled:remoteEnabled && pageReadsReady,staleTime:15_000,retry:1,
  });
  const pagingQuery=useQuery({
-   queryKey:["np-performance","page",remoteQuery],
-   queryFn:({signal})=>listNewProducts(performanceParams(remoteQuery),{signal}),
-   enabled:remoteEnabled,placeholderData:keepPreviousData,staleTime:15_000,retry:1,
+   queryKey:["np-performance","page",remoteParams],
+   queryFn:({signal})=>listNewProducts(remoteParams,{signal}),
+   enabled:remoteEnabled && pageReadsReady,placeholderData:keepPreviousData,staleTime:15_000,retry:1,
  });
  const remoteProducts=useMemo(()=>(pagingQuery.data?.items??[]).map(toPersistedProduct),[pagingQuery.data]);
  const [boardActionItem,setBoardActionItem]=useState<PersistedProduct|null>(null);
@@ -257,8 +268,8 @@ export default function NewProductPages({page,mode}:Props){
    if(mode==="performance" && tab==="list"){
      void queryClient.invalidateQueries({queryKey:["np-performance","summary"]});
      const latest=await queryClient.fetchQuery({
-       queryKey:["np-performance","page",remoteQuery],
-       queryFn:({signal})=>listNewProducts(performanceParams(remoteQuery),{signal}),
+       queryKey:["np-performance","page",remoteParams],
+       queryFn:({signal})=>listNewProducts(remoteParams,{signal}),
        staleTime:0,
      });
      return latest.items.map(toPersistedProduct);
@@ -274,7 +285,7 @@ export default function NewProductPages({page,mode}:Props){
    }
    await queryClient.invalidateQueries({queryKey:["np-tracking"]});
   return [];
- },[mode,tab,remoteQuery,queryClient,boardActionItem]);
+ },[mode,tab,remoteParams,queryClient,boardActionItem]);
  const freshScoreProduct=async(item:Product):Promise<PersistedProduct>=>{
     if(!item.backend)throw new Error("Product identity is missing");
     const identity=item.backend.identity;
@@ -295,6 +306,9 @@ export default function NewProductPages({page,mode}:Props){
  useEffect(() => {
    if (mode !== "performance") return;
    let cancelled = false;
+   // Defer until the effect is still live; do not issue an abandoned mount's GET.
+   queueMicrotask(()=>{
+   if(cancelled)return;
    getNewProductRules("performance").then(row => {
      if (cancelled) return;
      setVersion(row.version);
@@ -309,6 +323,7 @@ export default function NewProductPages({page,mode}:Props){
      }
    }).catch((error:unknown) => {
      if (!cancelled) setNotice(`评分规则读取失败：${error instanceof Error ? error.message : "未知错误"}`);
+   });
    });
    return () => { cancelled = true; };
  }, [mode]);
@@ -372,7 +387,7 @@ export default function NewProductPages({page,mode}:Props){
      if(evaluationRequesting===item.id)return;
      setEvaluationRequesting(item.id);
      void requestNewProductEvaluationRecheck(item.evaluationReviewId)
-       .then(()=>{msg("当前商品已完成纠错重新核算");return refreshReal();})
+       .then(result=>{msg(result.next_status==="待等级确认"?"纠错重新核算已完成，请在待确认中重新确认等级":"当前商品已完成纠错重新核算");return refreshReal();})
        .catch(error=>msg(`重新核算失败：${error instanceof Error?error.message:"请检查来源数据与审批权限"}`))
        .finally(()=>setEvaluationRequesting(null));
      return;
@@ -384,7 +399,7 @@ export default function NewProductPages({page,mode}:Props){
      if(item.evaluationReviewStatus==="submitted"||item.evaluationReviewStatus==="info_required"){
        msg("已有进行中的复核申请");return;
      }
-     setEvaluationReviewItem(item.id);return;
+     setEvaluationReviewItem(item);return;
    }
    if(kind==="approval"&&item){
      if(!["审核中","采购审核中"].includes(item.status)){msg("仅审核中的商品可以查看申请");return}
@@ -422,11 +437,15 @@ export default function NewProductPages({page,mode}:Props){
    }
  };
  const submitEvaluationReview=async (reasonType:ReviewReasonType,reason:string,evidence:string)=>{
-   const item=activeItems.find(row=>row.id===evaluationReviewItem);
+   const item=evaluationReviewItem;
    if(!item?.backend || evaluationReviewSubmitting)return;
    setEvaluationReviewSubmitting(true);
    try{
-     await requestNewProductEvaluationReview(item.backend.identity,reasonType,reason,evidence);
+     if(reasonType==="manual_decision_change") {
+       await requestNewProductManualDecisionReview(item.backend.identity,"passed",reason,evidence);
+     } else {
+       await requestNewProductEvaluationReview(item.backend.identity,reasonType,reason,evidence);
+     }
      setEvaluationReviewItem(null);
      await refreshReal();
      msg("测评复核申请已提交，请到审批工作台审核");
@@ -655,17 +674,41 @@ export default function NewProductPages({page,mode}:Props){
    }
    if(!p)return;patch(p.id,{status:pass?"已批准":"已驳回",actualQty:pass?qty:p.actualQty,tracking:pass?"等待开售":p.tracking});close();msg(pass?"模拟审批通过":"模拟申请被驳回");
  };
- const saveReview=async()=>{
+ // TRACKING_INLINE_PURCHASE_V3
+ const saveReview=async(review:string,note:string)=>{
     if(p?.backend){
       if(flowSaving)return;
       if(reviewFinal){msg('成功或失败已锁定，不能修改');return;}
       if(!p.backend.firstWfsDate){msg('缺少真实 WFS 首次可售日期，不能判定');return;}
       if(!['继续观察','需要优化','打品成功','打品失败'].includes(review)){msg('请选择打品结果');return;}
-      if(['需要优化','打品失败'].includes(review)&&note.trim().length<5){msg('请填写至少5字判定依据');return;}
+      if(!validTrackingReviewReason(note)){msg('复盘说明 / 判定依据至少填写10个字');return;}
       setFlowSaving(true);
       try{
-        await saveNewProductTrackingDecision(p.backend.identity,review,note.trim(),p.backend.trackingVersion??0);
-        await refreshReal();close();msg('正式打品判定已保存');
+        const saved=await saveNewProductTrackingDecision(
+          p.backend.identity,review,note.trim(),
+          p.backend.trackingVersion??0
+        );
+        if(review==="打品成功"){
+          setDetailSnapshot({
+            ...p,
+            tracking:"打品成功",
+            reasonFailure:note.trim(),
+            backend:{
+              ...p.backend,
+              trackingVersion:saved.version
+            }
+          });
+          msg("打品结果已保存，请填写采购数量及备注");
+          try{
+            await refreshReal();
+          }catch{
+            msg("打品结果已保存，列表刷新失败");
+          }
+        }else{
+          await refreshReal();
+          close();
+          msg("正式打品判定已保存");
+        }
       }catch(error){msg(`打品判定失败：${error instanceof Error?error.message:'未知错误'}`);}
       finally{setFlowSaving(false);}
       return;
@@ -689,7 +732,8 @@ export default function NewProductPages({page,mode}:Props){
       msg("请选择有效的打品结果");
       return;
     }
-    if(!p)return;if(["需要优化","打品失败"].includes(review)&&note.trim().length<5){msg("请填写复盘说明");return}patch(p.id,{tracking:review,reasonFailure:note});close();msg("模拟复盘已保存")};
+    if(!validTrackingReviewReason(note)){msg("复盘说明 / 判定依据至少填写10个字");return;}
+    patch(p.id,{tracking:review,reasonFailure:note.trim()});close();msg("模拟复盘已保存")};
  const calculateGrade=async()=>{
    if(!p?.backend || p.backend.gradeConfirmation?.status!=="pending" ||
      gradePreviewSaving || gradeConfirmSaving)return;
@@ -837,6 +881,7 @@ export default function NewProductPages({page,mode}:Props){
         onClick={()=>{if(mode==="tracking")setTrackingDrill(null);setTab("list");}}>
         {mode==="performance"?"新品详情":"打品详情"}
       </button>
+      {skuProgressEnabled&&<button type="button" role="tab" aria-selected={tab==="sku-progress"} className={tab==="sku-progress"?"active":""} onClick={()=>setTab("sku-progress")}>SKU进度</button>}
     </div>
     <div className="np-workspace-actions">
       {tab==="list"&&
@@ -846,7 +891,7 @@ export default function NewProductPages({page,mode}:Props){
             .catch(error=>msg(`刷新失败：${error instanceof Error?error.message:'未知错误'}`));
         }}>↻ 刷新</button>}
 
-      {tab!=="board" && (<button className="btn" onClick={()=>{
+      {tab==="list" && (<button className="btn" onClick={()=>{
         setCfgTab(mode==="performance"?"weights":"success");
         openConfigPanel();
       }}>
@@ -856,28 +901,33 @@ export default function NewProductPages({page,mode}:Props){
   </div>
 
  <div className="np-workspace-body">
- {tab==="board"?<NativeBoard mode={mode} products={mode==="tracking"?trackingProducts:performanceItems} config={cfg} detail={()=>setTab("list")} onTrackingDrill={filter=>{setTrackingDrill(filter);setTab("list");}} open={(key,id)=>key==="export"?exportRows():(mode==="performance"&&key==="market"&&id?void openBoardMarket(id):show(key as ModalType,id))}/>:
+ {tab==="sku-progress"?<NewProductSkuProgressPage/>:tab==="board"?<NativeBoard mode={mode} products={mode==="tracking"?trackingProducts:performanceItems} config={cfg} detail={()=>setTab("list")} onTrackingDrill={filter=>{setTrackingDrill(filter);setTab("list");}} open={(key,id)=>key==="export"?exportRows():(mode==="performance"&&key==="market"&&id?void openBoardMarket(id):show(key as ModalType,id))}/>:
  mode==="performance"?<>
  <ManagementStatCards ariaLabel="新品表现统计" className="np-performance-stats"
    activeKey={phase}
    cards={[
-     {key:"all",title:"全部新品",subtitle:"当前全部测评商品",value:summaryQuery.data?.counts.all ?? "—",tone:"normal",icon:<span>▦</span>},
-     {key:"evaluating",title:"测评中",subtitle:"等待满足正式自动测评条件",value:summaryQuery.data?.counts.evaluating ?? "—",tone:"normal",icon:<span>◷</span>},
-     {key:"market",title:"待市场评分",subtitle:"自动评分完成，等待运营判断",value:summaryQuery.data?.counts.market ?? "—",tone:"normal",icon:<span>✎</span>},
-     {key:"pending_confirmation",title:"待测评确认",subtitle:"评分已完成，等待人工确认",value:summaryQuery.data?.counts.pending_confirmation ?? "—",tone:"normal",icon:<span>◉</span>},
-     {key:"passed",title:"测评通过",subtitle:"已形成有效通过评级",value:summaryQuery.data?.counts.passed ?? "—",tone:"success",icon:<span>✓</span>},
-     {key:"failed",title:"测评未通过",subtitle:"已形成有效未通过评级",value:summaryQuery.data?.counts.failed ?? "—",tone:"warning",icon:<span>▤</span>},
+     {key:"all",title:"全部新品",subtitle:"全部新品（含待到货）",value:summaryQuery.data?.stage_counts?.all ?? "—",tone:"normal",icon:<span>▦</span>},
+     {key:"evaluating",title:"测评中",subtitle:"已首次可售，正在测评",value:summaryQuery.data?.stage_counts?.evaluating ?? "—",tone:"normal",icon:<span>◷</span>},
+     {key:"pending",title:"待确认",subtitle:"市场评分、等级及测评确认",value:summaryQuery.data?.stage_counts?.pending ?? "—",tone:"normal",icon:<span>◉</span>},
+     {key:"passed",title:"测评通过",subtitle:"含采购审批各阶段",value:summaryQuery.data?.stage_counts?.passed ?? "—",tone:"success",icon:<span>✓</span>},
+     {key:"failed",title:"测评未通过",subtitle:"含测评复核各阶段",value:summaryQuery.data?.stage_counts?.failed ?? "—",tone:"warning",icon:<span>▤</span>},
    ]}
-   onCardClick={(key)=>{setPhase(key);setApprovalFocus(null);setReportRevision(n=>n+1);}}/>
+   onCardClick={(key)=>{
+     setPhase(key);setApprovalFocus(null);
+     setRemoteQuery(old=>({...old,phase:key,statuses:[],page:1}));
+     setReportRevision(n=>n+1);
+   }}/>
 
  <NewProductPerformanceReport key={reportRevision} items={performanceItems} config={cfg} phase={phase} focusItemId={approvalFocus} calculatingItemId={evaluationRequesting} onOpen={(kind,id)=>show(kind,id)}
       remote={{loading:pagingQuery.isFetching,total:pagingQuery.data?.total??0,
         error:pagingQuery.isError?"LIST_FAILED":undefined,
-        statusOptions:summaryQuery.data?.status_options??[],
+        statusOptions:summaryQuery.data?.flow_status_options??[],
+        initialQuery:remoteQuery,
         ownerOptions:summaryQuery.data?.owner_options??[],
         ratingOptions:summaryQuery.data?.rating_options??[],
+        firstWfsDateRange,onFirstWfsDateRangeChange,
         onQueryChange:onRemoteQueryChange}}
-      onResetPhase={()=>{setApprovalFocus(null);setPhase("all")}}/>
+      onResetPhase={()=>{setApprovalFocus(null);setPhase("all");setRemoteQuery(initialPerformanceQuery)}}/>
  </>:<>
   <NewProductTrackingReport key={trackingDrill?JSON.stringify(trackingDrill):'manual'}
     products={trackingProducts} config={cfg} drill={trackingDrill}
@@ -1211,7 +1261,75 @@ export default function NewProductPages({page,mode}:Props){
  </Drawer>}
    {/* PR337_TRACKING_REVIEW_DRAWER_V1: portal-based, above top and side navigation */}
   {modal === "review" && p && (
-    <ReviewDrawer
+    <IsolatedTrackingReviewDrawer
+      key={p.id}
+      p={p}
+      cfg={cfg}
+      initialReview={review}
+      initialNote={note}
+      reviewFinal={reviewFinal}
+      reviewWaiting={reviewWaiting}
+      reviewReadOnly={reviewReadOnly}
+      flowSaving={flowSaving}
+      close={close}
+      saveReview={saveReview}
+    />
+  )}
+
+  {mode==="performance"&&evaluationReviewItem&&(()=>{
+    const candidate=evaluationReviewItem;
+    return candidate?.backend ? <NewProductEvaluationReviewModal key={candidate.id}
+      visible productName={candidate.name} itemId={candidate.item}
+      manualPassAllowed={candidate.backend.failedAssessmentInfo?.manual_pass_allowed === true && candidate.backend.evaluationDecision?.decision === "failed"}
+      legacyExceptionAllowed={["D","Pass"].includes(candidate.backend.evaluation.grade??"")}
+      submitting={evaluationReviewSubmitting}
+      onClose={()=>{if(!evaluationReviewSubmitting)setEvaluationReviewItem(null);}}
+      onSubmit={submitEvaluationReview}/> : null;
+  })()}
+  {notice&&<div className="np-native-toast">{notice}</div>}
+ </div></div></PageShell>;
+}
+
+
+/* TRACKING_DRAWER_PERFORMANCE_V4 */
+
+type IsolatedTrackingReviewDrawerProps = {
+  p: Product;
+  cfg: Config;
+  initialReview: string;
+  initialNote: string;
+  reviewFinal: boolean;
+  reviewWaiting: boolean;
+  reviewReadOnly: boolean;
+  flowSaving: boolean;
+  close: () => void;
+  saveReview: (review: string, note: string) => Promise<void>;
+};
+
+function IsolatedTrackingReviewDrawer({
+  p,
+  cfg,
+  initialReview,
+  initialNote,
+  reviewFinal,
+  reviewWaiting,
+  reviewReadOnly,
+  flowSaving,
+  close,
+  saveReview,
+}: IsolatedTrackingReviewDrawerProps) {
+  const [review,setReview]=useState(initialReview);
+  const [note,setNote]=useState(initialNote);
+  const [trackingChosenResult,setTrackingChosenResult]=useState("");
+  const [trackingPurchaseQty,setTrackingPurchaseQty]=useState<number|null>(null);
+  const [trackingPurchaseRemark,setTrackingPurchaseRemark]=useState("");
+
+  const trackingSelectedSuccess =
+    p.tracking==="打品成功" ||
+    (!reviewReadOnly && trackingChosenResult==="打品成功");
+
+  return (
+<ReviewDrawer
       open
       placement="right"
       width={660}
@@ -1229,8 +1347,17 @@ export default function NewProductPages({page,mode}:Props){
         <div className="np-review-footer">
           <span className="np-review-footer-note">{reviewFinal ? "成功与失败为最终判定，已锁定" : reviewWaiting ? "尚未开售，不产生打品结果" : "保存后更新当前商品的打品结果"}</span>
           <div className="np-review-footer-actions">
-            <ReviewButton onClick={close}>{reviewReadOnly ? "关闭" : "取消"}</ReviewButton>
-            {!reviewReadOnly && <ReviewButton type="primary" onClick={()=>{void saveReview();}} disabled={flowSaving}>保存打品结果</ReviewButton>}
+            <ReviewButton onClick={close} disabled={flowSaving}>{reviewReadOnly ? "关闭" : "取消"}</ReviewButton>
+            {trackingSelectedSuccess&&(
+              <ReviewButton
+                type="primary"
+                disabled
+                title="专项采购接口尚未启用"
+              >
+                申请采购
+              </ReviewButton>
+            )}
+            {!reviewReadOnly && ["继续观察","需要优化","打品失败"].includes(trackingChosenResult) && <ReviewButton type="primary" onClick={()=>{void saveReview(review,note);}} disabled={flowSaving || !validTrackingReviewReason(note) || !["继续观察","需要优化","打品成功","打品失败"].includes(review)}>保存打品结果</ReviewButton>}
           </div>
         </div>
       }
@@ -1276,9 +1403,14 @@ export default function NewProductPages({page,mode}:Props){
           aria-label="人工选择打品结果"
           optionType="button"
           buttonStyle="solid"
-          value={reviewWaiting ? undefined : review}
+          value={reviewWaiting ? undefined :
+            reviewReadOnly ? review :
+            trackingChosenResult || undefined}
           disabled={reviewReadOnly}
-          onChange={(event) => setReview(event.target.value)}
+          onChange={(event) => {
+            setReview(event.target.value);
+            setTrackingChosenResult(event.target.value);
+          }}
           options={[
             {label:"打品成功", value:"打品成功"},
             {label:"继续观察", value:"继续观察"},
@@ -1287,7 +1419,9 @@ export default function NewProductPages({page,mode}:Props){
           ]}
         />
         <div className="np-review-hint">
-          {review === "打品成功" ? "已达成当前打品目标，可记录成功依据。" :
+          {!reviewReadOnly && !trackingChosenResult
+            ? "请选择打品结果"
+            : review === "打品成功" ? "已达成当前打品目标，可记录成功依据。" :
             review === "继续观察" ? "暂不作成功或失败判定，继续跟踪经营数据。" :
             review === "需要优化" ? "记录需要优化的具体原因和处理方向。" :
             review === "打品失败" ? "记录失败原因，便于后续复盘。" :
@@ -1298,34 +1432,64 @@ export default function NewProductPages({page,mode}:Props){
       <section className="np-review-card">
         <div className="np-review-section-heading">
           <h3>复盘说明 / 判定依据
-            {(["需要优化", "打品失败"].includes(review)) &&
-              <span className="np-review-required"> *</span>}
+            {!reviewReadOnly && <span className="np-review-required"> *</span>}
           </h3>
-          <span>{["需要优化", "打品失败"].includes(review) ? "至少5个字符" : "选填"}</span>
+          <span>{reviewReadOnly ? "仅供查看" : `至少10个字 · 已填写 ${trackingReviewReasonLength(note)} 字`}</span>
         </div>
         <ReviewInput.TextArea
           aria-label="复盘说明与判定依据"
+          aria-required={!reviewReadOnly}
           value={note}
           readOnly={reviewReadOnly}
           onChange={(event) => setNote(event.target.value)}
           placeholder={review === "打品失败" ? "填写导致打品失败的经营原因" :
             review === "需要优化" ? "填写需优化的问题及后续建议" :
-            "可补充判断依据、观察结论或下一步跟进情况"}
+            "请填写判断依据、观察结论或下一步跟进情况（至少10个字）"}
           autoSize={{ minRows: 4, maxRows: 7 }}
           style={{ resize: "none" }}
         />
       </section>
+      {trackingSelectedSuccess&&(
+        <section
+          key={"tracking-purchase-"+p.id}
+          className="np-review-card"
+        >
+          <div className="np-review-section-heading">
+            <h3>采购申请</h3>
+            <span>待申请</span>
+          </div>
+          <div style={{marginTop:12}}>
+            <label className="form-label">
+              申请采购数量（件）
+              <span className="np-review-required"> *</span>
+            </label>
+            <ReviewInputNumber
+              min={1}
+              max={100000}
+              step={1}
+              precision={0}
+              value={trackingPurchaseQty}
+              onChange={value=>setTrackingPurchaseQty(value)}
+              placeholder="请输入采购数量"
+              style={{width:"100%",marginTop:8}}
+            />
+          </div>
+          <div style={{marginTop:16}}>
+            <label className="form-label">
+              采购备注
+              <span className="np-review-required"> *</span>
+            </label>
+            <ReviewInput.TextArea
+              value={trackingPurchaseRemark}
+              onChange={event=>setTrackingPurchaseRemark(event.target.value)}
+              placeholder="请填写采购原因及相关说明"
+              maxLength={4000}
+              autoSize={{minRows:3,maxRows:7}}
+              style={{marginTop:8,resize:"none"}}
+            />
+          </div>
+        </section>
+      )}
     </ReviewDrawer>
-  )}
-
-  {mode==="performance"&&evaluationReviewItem&&(()=>{
-    const candidate=items.find(x=>x.id===evaluationReviewItem);
-    return candidate?.backend ? <NewProductEvaluationReviewModal key={candidate.id}
-      visible productName={candidate.name} itemId={candidate.item}
-      submitting={evaluationReviewSubmitting}
-      onClose={()=>{if(!evaluationReviewSubmitting)setEvaluationReviewItem(null);}}
-      onSubmit={submitEvaluationReview}/> : null;
-  })()}
-  {notice&&<div className="np-native-toast">{notice}</div>}
- </div></div></PageShell>;
+  );
 }

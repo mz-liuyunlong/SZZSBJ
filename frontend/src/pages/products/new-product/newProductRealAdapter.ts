@@ -2,7 +2,7 @@
  * Numeric compatibility fields are not evidence of valid observations. All
  * business scoring, grade and purchase recommendation come from `evaluation`.
  */
-import type { Product, Grade } from './nativeData';
+import type { Product, Grade } from './newProductModel';
 import { resolveNewProductFlow, resolveNewProductEvaluationFlow } from './newProductFlowState';
 import type { NewProductListing, Identity, RealScore, SystemRiskDisplay } from './newProductBusinessApi';
 import { confirmedScoringDefaults, speedResult, type ScoringFacts } from './NewProductConfirmedScoring';
@@ -13,6 +13,7 @@ export type PersistedProduct = Product & {
     identity: Identity;
     marketVersion: number;
     evaluationDecision?: NewProductListing["evaluation_decision"];
+    failedAssessmentInfo?: NewProductListing["failed_assessment_info"];
     scoreCorrection?:import("./newProductBusinessApi").ScoreCorrectionView|null;
     scoreCorrectionRevision:number|null;
     scoreCorrectionState:"none"|"applied"|"stale"|null;
@@ -192,9 +193,14 @@ export function toPersistedProduct(row: NewProductListing): PersistedProduct {
       scoreCorrectionState:row.score_correction_state??null,
       gradeConfirmation:row.evaluation_grade_confirmation??null,purchaseStatus:row.purchase_status??null,
       purchaseReviewReason:row.purchase_review_reason??null,
+      purchaseSuggestedQty:row.purchase_suggested_qty??null,
+      purchaseApprovedQty:row.approved_qty??null,
+      purchaseSourceStoreId:row.purchase_source_store_id??null,
+      approvedPurchaseStoreId:row.approved_purchase_store_id??null,
+      approvedPurchaseStoreName:row.approved_purchase_store_name??null,
       purchaseReviewedBy:row.purchase_reviewed_by??null,
       purchaseReviewedAt:row.purchase_reviewed_at??null,systemRiskDisplay:row.system_risk_display ?? null,
-      marketVersion:row.market_version??0,evaluationDecision:row.evaluation_decision??null,ruleVersion:row.evaluation.rule_version,
+      marketVersion:row.market_version??0,evaluationDecision:row.evaluation_decision??null,failedAssessmentInfo:row.failed_assessment_info??null,ruleVersion:row.evaluation.rule_version,
       purchaseId:row.purchase_id??null,purchaseVersion:row.purchase_version??0,trackingVersion:row.tracking_version??0,
       evaluation,reviewApplication:row.tracking_review_application ?? null,scoringFacts:{...f},suggestedQty:row.suggested_qty ?? null,firstWfsDate:day || null,
       automaticWeightedPoints:finite(f.automatic_weighted_points),

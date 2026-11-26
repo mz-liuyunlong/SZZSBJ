@@ -1,6 +1,6 @@
 // CLEARANCE_APPROVAL_V34_STYLE_BRIDGE
 /** Real clearance approval within the previously accepted full-width V3 visual shell.
- * Reuses DemoApprovalDrawer.css for presentation ONLY; never uses demo records
+ * Reuses ApprovalBusinessDetailDrawer.css for presentation ONLY; never uses demo records
  * or demo decision state.  All decisions call the live clearance endpoint.
  */
 import { Button, Drawer, Input, Modal, Spin, Table, Tag, message } from "antd";
@@ -10,7 +10,7 @@ import {
   getClearanceApplication, reviewClearanceApplication,
   type ApplicationDetail, type ClearanceListing, type ClearanceApplication,
 } from "@/pages/products/clearance/clearanceApi";
-import "./DemoApprovalDrawer.css";
+import "./ApprovalBusinessDetailDrawer.css";
 
 type Action = "approved" | "rejected";
 type Props = { selected?: ApprovalItem; onClose(): void; onUpdated(): void; directReviewAction?: Action };

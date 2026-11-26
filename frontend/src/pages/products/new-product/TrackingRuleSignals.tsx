@@ -7,7 +7,7 @@ import {
   WarningOutlined,
   InboxOutlined,
 } from "@ant-design/icons";
-import type { Product } from "./nativeData";
+import type { Product } from "./newProductModel";
 import "./trackingRuleSignals.css";
 
 /** PR337_RULE_SIGNAL_POPOVER_V2

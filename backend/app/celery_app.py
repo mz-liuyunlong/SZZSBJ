@@ -33,6 +33,7 @@ TASK_IMPORTS = (
     "app.modules.new_products.pr337_daily_tasks",  # PR337_DAILY_PERSIST_V1
     "app.modules.ai_runtime.tasks",
     "app.modules.new_products.unified_tasks",
+    "app.modules.new_products.sku_progress_tasks",
 )
 
 TASK_ROUTES = {
@@ -60,6 +61,13 @@ def _env_truthy(value: str | None) -> bool:
 
 def _is_production_env() -> bool:
     return (os.environ.get(APP_ENV_ENV) or "").strip().lower() == "production"
+
+
+def sku_progress_refresh_enabled() -> bool:
+    """Production default on; explicit false/invalid values stop both Beat and worker."""
+    return _is_production_env() and _env_truthy(
+        os.getenv("SZZSBJ_SKU_PROGRESS_REFRESH_ENABLED", "1")
+    )
 
 
 def get_broker_url(*, require: bool | None = None) -> str:
@@ -183,7 +191,7 @@ def create_celery_app(
                 "schedule": 600.0,
             },
         }
-    # Exactly one PR337 scheduler. The other business functions have no Beat entry.
+    # Exactly one PR337 scoring scheduler, independent of the SKU projection refresh.
     # LA calendar midnight, DST-aware, while all unrelated jobs keep UTC.
     if _is_production_env() and _env_truthy(os.getenv("SZZSBJ_NEW_PRODUCTS_DAILY_ENABLED")):
         from app.modules.new_products.la_midnight_schedule import LosAngelesMidnightSchedule
@@ -193,6 +201,14 @@ def create_celery_app(
             "new-products-la-midnight": {
                 "task": "new_products.daily_score_tick",
                 "schedule": LosAngelesMidnightSchedule(app=celery),
+            },
+        }
+    if sku_progress_refresh_enabled():
+        celery.conf.beat_schedule = {
+            **celery.conf.beat_schedule,
+            "new-products-sku-progress-refresh": {
+                "task": "new_products.sku_progress_refresh",
+                "schedule": 600.0,
             },
         }
     return celery

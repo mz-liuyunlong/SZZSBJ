@@ -2,7 +2,7 @@
 import {useRef,useState} from "react";
 import {Button, Input, InputNumber, Modal, message} from "antd";
 import {useQueryClient} from "@tanstack/react-query";
-import type {Product} from "./nativeData";
+import type {Product} from "./newProductModel";
 import {submitNewProductPurchase} from "./newProductBusinessApi";
 
 export default function PurchaseReapplyButton({product}:{product:Product}) {

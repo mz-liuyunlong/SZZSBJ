@@ -92,11 +92,11 @@ export async function fetchNewProductPurchaseStoreOptions(id:string):Promise<{
 export async function decideNewProductPurchase(
   id: string, version: number, decision: "approved" | "rejected", note: string,
   approved?: {purchase_store_id:string;approved_qty:number}
-): Promise<void> {
-  await backendRequest<{updated:boolean},null>(
+): Promise<{updated:boolean;lingxing_receipt?:{plan_sn:string;ppg_sn:string;request_id:string}|null}> {
+  return (await backendRequest<{updated:boolean;lingxing_receipt?:{plan_sn:string;ppg_sn:string;request_id:string}|null},null>(
     "/api/approvals/new-products/purchases/" + encodeURIComponent(id) + "/decision",
     {method:"POST", body:JSON.stringify({expected_version:version,decision,note,...(approved??{})})}
-  );
+  )).data;
 }
 
 // SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1

@@ -3,7 +3,7 @@
  * The dashboard still receives ONE Product[]; real API results bypass this helper.
  * Never send these records to APIs or persist them.
  */
-import type { Grade, Product } from './nativeData';
+import type { Grade, Product } from './newProductModel';
 import type { TrackingProduct } from './trackingBoardMetrics';
 
 const ORIGINAL_MOCK_IDS = new Set([

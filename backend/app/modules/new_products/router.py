@@ -35,8 +35,10 @@ from .schemas import (
     TrackingWrite,
 )
 from .service import NewProductService
+from .sku_progress_router import router as sku_progress_router
 
 router = APIRouter(prefix="/api/new-products", tags=["New Product Performance"])
+router.include_router(sku_progress_router)
 DB = Annotated[Session, Depends(get_db_session)]
 Source = Annotated[Session, Depends(get_new_product_read_session)]
 Scope = Annotated[frozenset[str], Depends(require_new_product_scope)]
@@ -50,11 +52,23 @@ Tracking = Authenticated
 
 
 @router.get("/summary", response_model=SuccessEnvelope[dict, dict])
-def performance_summary(request: Request, db: DB, _: Read, accounts: Scope, source: Source):
+def performance_summary(
+    request: Request,
+    db: DB,
+    _: Read,
+    accounts: Scope,
+    source: Source,
+    first_wfs_start_date: date | None = None,
+    first_wfs_end_date: date | None = None,
+):
     from .performance_list_scope import summary
 
     return success_response(
-        request, data=summary(source, db, accounts), meta={"source": "saved_projection"}
+        request,
+        data=summary(
+            source, db, accounts, start_date=first_wfs_start_date, end_date=first_wfs_end_date
+        ),
+        meta={"source": "saved_projection"},
     )
 
 
@@ -653,13 +667,18 @@ def decide_evaluation_review(
     "/evaluation-reviews/{application_id}/recheck", response_model=SuccessEnvelope[dict, dict]
 )
 def recheck_evaluation_review(
-    request: Request, application_id: UUID, db: DB, principal: Score, accounts: Scope
+    request: Request,
+    application_id: UUID,
+    db: DB,
+    principal: Score,
+    accounts: Scope,
+    source: Source,
 ):
     from .evaluation_workflow import recheck_once
 
     return success_response(
         request,
-        data=recheck_once(db, accounts, application_id, principal.user_id),
+        data=recheck_once(db, accounts, application_id, principal.user_id, source=source),
         meta={"source": "database"},
     )
 

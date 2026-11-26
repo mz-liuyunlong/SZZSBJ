@@ -32,11 +32,18 @@ export type ScoreCorrectionView = {
 };
 export type NewProductListing = {
   system_risk_display?: SystemRiskDisplay | null;
-  evaluation_status?: "待到货"|"测评中"|"待市场评分"|"待测评确认"|"测评通过"|"测评未通过";
+  evaluation_status?: "待到货"|"测评中"|"待市场评分"|"待等级确认"|"待测评确认"|"测评通过"|"测评未通过";
   evaluation_decision?: {decision:"passed"|"failed";reason:string;actor_id:string;confirmed_at:string;grade:string;total:string;revision:number}|null;
   evaluation_grade_confirmation?: {status:"pending"|"confirmed";rule_version:number;market_version:number;correction_revision?:number;effective_grade?:string;effective_total?:string;confirmed_at?:string}|null;
   evaluation_review_status?: "submitted"|"info_required"|"approved"|"rejected"|null;
   evaluation_review_id?: string|null;
+  failed_assessment_info?: {
+    reason_kind:"risk_limit"|"grade_limit"|"manual_decision";
+    manual_pass_allowed:boolean;
+    review_request_reason:string|null;
+    review_decision_reason:string|null;
+    review_reason_type:string|null;
+  } | null;
   evaluation_job_status?: "none"|"queued"|"running"|"completed"|"failed"|null;
   evaluation_manual_exception?: boolean;
   evaluation_recheck_required?: boolean;
@@ -81,6 +88,10 @@ export type NewProductListing = {
   approved_qty?: number | null;
   purchase_reason?: string | null;
   purchase_review_reason?: string | null;
+  purchase_suggested_qty?: number | null;
+  purchase_source_store_id?: string | null;
+  approved_purchase_store_id?: string | null;
+  approved_purchase_store_name?: string | null;
   purchase_reviewed_by?: string | null;
   purchase_reviewed_at?: string | null;
   tracking_version?: number;
@@ -111,18 +122,27 @@ export async function getNewProductBoardSummary(startDate:string,endDate:string,
   return (await backendRequest<NewProductBoardSummary>(`/api/new-products/board/summary?${params}`,init)).data;
 }
 
+export type FirstWfsDateRange = [string,string];
 export type PerformanceSummary = {
   counts: { all:number; evaluating:number; market:number; pending_confirmation:number; passed:number; failed:number };
+  stage_counts: { all:number; evaluating:number; pending:number; passed:number; failed:number };
+  flow_status_options: Array<{value:string;label:string;count:number}>;
   status_options: Array<{value:string;label:string;count:number}>;
   owner_options: Array<{value:string;label:string;count:number}>;
   rating_options: Array<{value:string;label:string;count:number}>;
 };
-export async function getNewProductSummary(init?:RequestInit):Promise<PerformanceSummary> {
-  return (await backendRequest<PerformanceSummary>("/api/new-products/summary",init)).data;
+export async function getNewProductSummary(init?:RequestInit, firstWfsDateRange?:FirstWfsDateRange):Promise<PerformanceSummary> {
+  const params=new URLSearchParams();
+  if(firstWfsDateRange){
+    params.set("first_wfs_start_date",firstWfsDateRange[0]);
+    params.set("first_wfs_end_date",firstWfsDateRange[1]);
+  }
+  const suffix=params.size?`?${params}`:"";
+  return (await backendRequest<PerformanceSummary>(`/api/new-products/summary${suffix}`,init)).data;
 }
 export type RuleResponse = { kind: "performance" | "tracking"; version: number; config: RuleDraft | Record<string, unknown> | null; source: string; applied_at: string | null };
 export type RuleApplyResult = RuleResponse & { unchanged: boolean };
-export async function listNewProducts(params: {page?:number;pageSize?:number;storeId?:string;keyword?:string;searchField?:"sku"|"msku"|"item_id"|"title";npStatuses?:string;npOwners?:string;npRatings?:string;npOwnerKeyword?:string} = {},init?:RequestInit):Promise<PageResponse> {
+export async function listNewProducts(params: {page?:number;pageSize?:number;storeId?:string;keyword?:string;searchField?:"sku"|"msku"|"item_id"|"title";npStatuses?:string;npOwners?:string;npRatings?:string;npOwnerKeyword?:string;firstWfsStartDate?:string;firstWfsEndDate?:string} = {},init?:RequestInit):Promise<PageResponse> {
   const query = new URLSearchParams({page:String(params.page??1),page_size:String(params.pageSize??50)});
   if(params.storeId) query.set("store_id",params.storeId);
   if(params.keyword) query.set("keyword",params.keyword);
@@ -131,6 +151,8 @@ export async function listNewProducts(params: {page?:number;pageSize?:number;sto
   if(params.npOwners) query.set("np_owners",params.npOwners);
   if(params.npRatings) query.set("np_ratings",params.npRatings);
   if(params.npOwnerKeyword) query.set("np_owner_keyword",params.npOwnerKeyword);
+  if(params.firstWfsStartDate) query.set("first_wfs_start_date",params.firstWfsStartDate);
+  if(params.firstWfsEndDate) query.set("first_wfs_end_date",params.firstWfsEndDate);
   const envelope = await backendRequest<PageResponse>(`/api/new-products/listings?${query}`,init);
   return envelope.data;
 }
@@ -243,10 +265,10 @@ export async function getNewProductEvaluationJob(identity: Identity) {
   return (await backendRequest<{status:string;item_id:string},null>(
     `/api/new-products/evaluations/status/${a}/${s}/${i}`)).data;
 }
-export async function requestNewProductManualDecisionReview(identity:Identity, newDecision:"passed"|"failed",reason:string) {
+export async function requestNewProductManualDecisionReview(identity:Identity, newDecision:"passed"|"failed",reason:string,evidence="") {
   return (await backendRequest<{application_id:string;status:string;version:number},null>(
     "/api/new-products/evaluation-reviews",{method:"POST",body:JSON.stringify({
-      ...identity,reason_type:"manual_decision_change",new_decision:newDecision,reason,evidence:""
+      ...identity,reason_type:"manual_decision_change",new_decision:newDecision,reason,evidence
     })}
   )).data;
 }
@@ -259,7 +281,7 @@ export async function requestNewProductEvaluationReview(identity: Identity,
 }
 
 export async function requestNewProductEvaluationRecheck(applicationId: string) {
-  return (await backendRequest<{status:string;execution_id:string;grade:string},null>(
+  return (await backendRequest<{status:string;execution_id:string;grade:string;next_status?:string},null>(
     "/api/new-products/evaluation-reviews/" + encodeURIComponent(applicationId) + "/recheck",
     {method:"POST"})).data;
 }

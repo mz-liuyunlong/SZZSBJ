@@ -27,6 +27,8 @@ interface BackendListingItem {
   strike_price_amount: string | null;
   sale_price_amount: string | null;
   listing_status: string | null;
+  ad_enabled?: boolean | null;
+  ad_status_checked_at?: string | null;
   lifecycle_status: string | null;
   fulfillment_type: string | null;
   fulfillment_type_name: string | null;
@@ -310,6 +312,8 @@ export const toListingRow = (item: BackendListingItem): ListingManagementRow => 
   sales90Days: numberValue(item.sales_30d),
   adSpend30Days: numberValue(item.ad_spend_30d_amount),
   disabledReason: item.disabled_reason ?? "",
+  adEnabled: item.ad_enabled ?? null,
+  adStatusCheckedAt: item.ad_status_checked_at ?? null,
   listingStatus: normalizeListingStatus(
     item.buybox_status,
     item.monitor_has_strikethrough ?? null,

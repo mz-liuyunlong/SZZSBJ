@@ -51,6 +51,8 @@ export interface ListingManagementRow {
   adSpend30Days: number;
   disabledReason: string;
   listingStatus: string;
+  adEnabled?: boolean | null;
+  adStatusCheckedAt?: string | null;
   buyBoxStatus: string;
   walmartSeller: string;
   resold: string;
@@ -111,6 +113,7 @@ export const listingColumnFields = [
   { key: "productGrade", title: "listing\u7b49\u7ea7" },
   { key: "disabledReason", title: "\u505c\u7528\u539f\u56e0" },
   { key: "listingStatus", title: "Listing\u72b6\u6001" },
+  { key: "adEnabled", title: "广告状态" },
   { key: "buyBoxStatus", title: "\u8d2d\u7269\u8f66\u72b6\u6001" },
   { key: "brand", title: "\u54c1\u724c" },
   { key: "walmartSeller", title: "Walmart\u5356\u5bb6" },

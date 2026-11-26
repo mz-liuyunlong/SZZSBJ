@@ -202,6 +202,7 @@ const defaultColumnWidths: Record<string, number> = {
   adSpend30Days: 140,
   disabledReason: 130,
   listingStatus: 130,
+  adEnabled: 106,
   buyBoxStatus: 130,
   walmartSeller: 140,
   resold: 120,
@@ -275,6 +276,9 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   );
   const [columnConfigOpen, setColumnConfigOpen] = usePageStateCache(`${pageStateKey}:columnConfigOpen`, false);
   const [appliedColumnKeys, setAppliedColumnKeys] = usePageStateCache<string[]>(`${pageStateKey}:appliedColumnKeys:original-20261124`, defaultColumnKeys);
+  const [adStatusColumnInitialized, setAdStatusColumnInitialized] = usePageStateCache(
+    `${pageStateKey}:adStatusColumnInitialized:0100`, false,
+  );
   const [productTagColumnInitialized, setProductTagColumnInitialized] = usePageStateCache(
     `${pageStateKey}:productTagsColumnInitialized:v1`, false,
   );
@@ -378,6 +382,18 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     });
     setProductTagColumnInitialized(true);
   }, [productTagColumnInitialized, setProductTagColumnInitialized, setAppliedColumnKeys]);
+
+  useEffect(() => {
+    if (adStatusColumnInitialized) return;
+    setAppliedColumnKeys((current) => {
+      if (current.includes("adEnabled")) return current;
+      const position = current.indexOf("listingStatus");
+      const next = [...current];
+      next.splice(position >= 0 ? position + 1 : next.length, 0, "adEnabled");
+      return next;
+    });
+    setAdStatusColumnInitialized(true);
+  }, [adStatusColumnInitialized, setAdStatusColumnInitialized, setAppliedColumnKeys]);
 
   const reloadListingTags = useCallback(async (options: { showError?: boolean } = {}) => {
     setIsTagManagerLoading(true);

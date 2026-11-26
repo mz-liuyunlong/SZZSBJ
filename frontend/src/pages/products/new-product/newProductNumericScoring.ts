@@ -2,7 +2,7 @@
  * Measured numeric thresholds. Never infer unavailable first-order/CVR/CPC/order-composition data.
  * Numeric scores are an auditable PREVIEW; historical Demo scores are not overwritten.
  */
-import type { Product } from "./nativeData";
+import type { Product } from "./newProductModel";
 
 export type NumericMetric = "orders7" | "acos" | "roi" | "margin" | "singleOrderRatio";
 export type NumericDimension = "speed" | "ad" | "profit" | "trust";

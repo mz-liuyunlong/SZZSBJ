@@ -837,7 +837,9 @@ def calculate_once(
     }
 
 
-def recheck_once(session: Session, accounts, approval_id: UUID, actor: str) -> dict:
+def recheck_once(
+    session: Session, accounts, approval_id: UUID, actor: str, *, source: Session | None = None
+) -> dict:
     # One synchronous approved source recheck, no new table.
     approval = (
         session.execute(
@@ -859,7 +861,13 @@ def recheck_once(session: Session, accounts, approval_id: UUID, actor: str) -> d
     a, s, i = snap["source_account_ref"], snap["store_id"], snap["item_id"]
     _lock(session, a, s, i)
     reg = _registry(session, a, s, i, lock=True)
-    if not reg or str(reg.id) != str(approval["business_ref"]) or _protected(session, reg):
+    if (
+        a != approval["source_account_ref"]
+        or a not in accounts
+        or not reg
+        or str(reg.id) != str(approval["business_ref"])
+        or _protected(session, reg)
+    ):
         _error("NP_EVAL_RECHECK_LOCKED", 409, "后续业务状态不允许重核")
     perf = _performance(session, reg, lock=True)
     pending = (perf.data_coverage_json or {}).get("evaluation_recheck_required") if perf else None
@@ -867,10 +875,24 @@ def recheck_once(session: Session, accounts, approval_id: UUID, actor: str) -> d
         not isinstance(pending, dict)
         or pending.get("approval_id") != str(approval_id)
         or pending.get("status") != "awaiting_verified_source_correction"
+        or pending.get("reason_type") != snap.get("review_reason_type")
+        or snap.get("review_reason_type") not in ("calculation_error", "scoring_basis_error")
     ):
         _error("NP_EVAL_RECHECK_NO_PENDING", 409, "未找到有效的纠错复核授权")
     if str(perf.score) != str(snap["score"]) or perf.grade != snap["grade"]:
         _error("NP_EVAL_RECHECK_STALE", 409, "原始评级已变化")
+    coverage = perf.data_coverage_json or {}
+    verdict = coverage.get("operator_assessment_v1")
+    # Formal decisions and V2 risk snapshots cannot use the legacy PR337 writer:
+    # it does not rebuild the V2 evidence or reopen the grade-confirmation gate.
+    if (
+        isinstance(verdict, dict)
+        or isinstance(coverage.get("new_products_authority_v2"), dict)
+        or isinstance(coverage.get("evaluation_grade_confirmation_v1"), dict)
+    ):
+        if source is None:
+            _error("NP_EVAL_RECHECK_SOURCE_REQUIRED", 409, "纠错重算需要已授权的只读经营数据源")
+        return _recheck_formal_v2(session, source, accounts, approval, reg, perf, actor)
     request = {
         "source_account_ref": a,
         "store_id": s,
@@ -879,6 +901,242 @@ def recheck_once(session: Session, accounts, approval_id: UUID, actor: str) -> d
         "result_json": {"approval_id": str(approval_id)},
     }
     return _execute_approved_recheck(session, request, str(uuid4()))
+
+
+def _recheck_formal_v2(session, source, accounts, approval, reg, perf, actor):
+    """Approved single-item correction, using the same V2 publisher and risk gate.
+
+    Never invoked by a GET or daily job. Source reads remain read-only. The prior
+    formal grade, human decision and all evidence are archived inside the same
+    transaction; any incomplete proof or failed gate rolls back the reopening.
+    """
+    from copy import deepcopy
+
+    from .pr337_daily_pipeline import load_scoped_campaign_catalog
+    from .unified_publish import _candidate_scores, _save_one, load_ad_snapshots
+
+    key = (reg.source_account_ref, reg.store_id, reg.item_id)
+    NewProductService(session, read_session=source)._listing(accounts, *key)
+    if not reg.is_currently_tagged:
+        _error("NP_EVAL_RECHECK_TAG_REMOVED", 409, "商品已移出新品范围，不能重新核算")
+    previous = deepcopy(perf.data_coverage_json or {})
+    old_verdict = previous.get("operator_assessment_v1")
+    if isinstance(old_verdict, dict) and old_verdict.get("decision") != "failed":
+        _error("NP_EVAL_RECHECK_NOT_FAILED", 409, "仅未通过的人工结论可重新打开测评")
+    old_proof = _verified_proof(perf)
+    if not isinstance(old_proof, dict):
+        _error("NP_EVAL_RECHECK_OLD_PROOF", 409, "原评分证据无法核实，不能覆盖历史评分")
+    old_final = previous.get("evaluation_final_snapshot")
+    if not isinstance(old_final, dict) or not _stored_grade_matches_snapshot(
+        perf.grade, perf.score, old_final
+    ):
+        _error("NP_EVAL_RECHECK_OLD_SNAPSHOT", 409, "原正式评分快照无法核实，不能重新核算")
+    old_risk = old_final.get("risk_evaluation")
+    selected = old_risk.get("manual_selected") if isinstance(old_risk, dict) else None
+    if not isinstance(selected, list) or not selected:
+        frozen = previous.get("market_risks_frozen_v1")
+        selected = frozen.get("conditions") if isinstance(frozen, dict) else None
+    if not isinstance(selected, list) or not selected:
+        _error("NP_EVAL_RECHECK_RISK_SELECTION_MISSING", 409, "历史人工风险条件缺失，不能安全重算")
+    cutoff = (
+        day(old_proof.get("authority_cutoff_la"))
+        or day(old_proof.get("cutoff_la"))
+        or day(old_proof.get("window_end_la"))
+    )
+    if cutoff is None or cutoff > _cutoff():
+        _error("NP_EVAL_RECHECK_WINDOW_INVALID", 409, "原测评业务截止日无法核实")
+    histories = previous.get("evaluation_recheck_history_v2", [])
+    if not isinstance(histories, list) or len(histories) >= 20:
+        _error("NP_EVAL_RECHECK_HISTORY_CAP", 409, "纠错历史已达上限，需要先归档")
+    market = session.scalar(
+        select(MarketScore)
+        .where(
+            MarketScore.source_account_ref == key[0],
+            MarketScore.store_id == key[1],
+            MarketScore.item_id == key[2],
+        )
+        .with_for_update()
+    )
+    if market is None:
+        _error("NP_EVAL_RECHECK_MARKET_MISSING", 409, "原市场评分缺失，不能重新核算")
+    # Same verified source selection as ordinary V2; one exact identity, no batch publish.
+    candidate = _candidate_scores(source, session, [key], cutoff).get(key)
+    if not isinstance(candidate, dict) or not isinstance(candidate.get("evaluation"), dict):
+        _error("NP_EVAL_RECHECK_SOURCE_INCOMPLETE", 409, "纠错后的真实经营数据仍不完整")
+    facts = candidate.get("facts") or {}
+    first = day(facts.get("first_wfs_available_date_la"))
+    if first is None or first != day(perf.first_wfs_available_date_la):
+        _error("NP_EVAL_RECHECK_WFS_CHANGED", 409, "首次可售日变化，需先核实原测评窗口")
+    # Historical correction must not become a score change merely because
+    # additional calendar days elapsed after the original evaluation window.
+    old_facts = old_proof.get("facts")
+    old_elapsed = old_facts.get("elapsed_days") if isinstance(old_facts, dict) else None
+    if old_elapsed is not None:
+        facts["elapsed_days"] = old_elapsed
+    else:
+        facts["elapsed_days"] = (cutoff - first).days + 2
+    config, version = _config(session)
+    if candidate.get("rule_version") != version:
+        _error("NP_EVAL_RECHECK_RULE_STALE", 409, "重算期间评分规则已变更，请重试")
+    candidate["evaluation"] = evaluate(facts, config, version)
+    catalog, _, _ = load_scoped_campaign_catalog(session, cutoff)
+    ads = load_ad_snapshots(source, [key], {key: first}, cutoff, campaign_catalog=catalog).get(key)
+    if not isinstance(ads, dict):
+        _error("NP_EVAL_RECHECK_AD_MISSING", 409, "纠错广告证据缺失")
+    old_grade, old_score = perf.grade, str(perf.score)
+    approval_id = str(approval["id"])
+    now = _now()
+    job_id = str(uuid4())
+    pending = deepcopy(previous["evaluation_recheck_required"])
+    # Preserve original JSON and record explicit authorization. Nothing is visible
+    # outside the transaction until the same V2 risk gate has passed successfully.
+    archived = {k: v for k, v in previous.items() if k != "evaluation_recheck_history_v2"}
+    archive = {
+        "approval_id": approval_id,
+        "executed_at": now.isoformat(),
+        "actor": actor,
+        "grade": old_grade,
+        "score": old_score,
+        "coverage": archived,
+    }
+    current = dict(previous)
+    for name in (
+        "evaluation_final_snapshot",
+        "evaluation_grade_confirmation_v1",
+        "evaluation_formal_trigger",
+        "operator_assessment_v1",
+        "operator_score_correction_v1",
+        "evaluation_operating_archive_v1",
+        "evaluation_recheck_required",
+        "evaluation_manual_exception",
+        "ad_display_v1",
+    ):
+        current.pop(name, None)
+    current["evaluation_recheck_history_v2"] = [*histories, archive]
+    if isinstance(old_verdict, dict):
+        history = current.get("operator_assessment_history_v1") or []
+        if not isinstance(history, list):
+            _error("NP_EVAL_RECHECK_HISTORY_INVALID", 409, "历史人工测评记录格式不正确")
+        current["operator_assessment_history_v1"] = [*history, old_verdict]
+    try:
+        with session.begin_nested():
+            # Only this locked and approved correction can temporarily reopen the
+            # local record; the ordinary publisher's freeze checks remain untouched.
+            perf.data_coverage_json = current
+            perf.grade = None
+            perf.score = None
+            perf.process_status = "evaluating"
+            session.flush()
+            outcome = _save_one(session, key, ads, candidate, cutoff=cutoff, auto_only=True)
+            if outcome not in ("written", "reconciled"):
+                _error("NP_EVAL_RECHECK_PUBLISH_BLOCKED", 409, "纠错证据保存未通过：" + outcome)
+            proof = _verified_proof(perf)
+            if not isinstance(proof, dict):
+                _error("NP_EVAL_RECHECK_SOURCE_UNVERIFIED", 409, "新评分证据未核实，保留原测评结论")
+            _set_formal(perf, source="approved_recheck", cutoff=cutoff, proof=proof, actor=actor)
+            result = publish_after_market(
+                session, *key, market.score, market.version, risk_conditions=selected
+            )
+            revised = dict(perf.data_coverage_json or {})
+            final = revised.get("evaluation_final_snapshot")
+            marker = revised.get("evaluation_grade_confirmation_v1")
+            if (
+                not isinstance(result, dict)
+                or not isinstance(final, dict)
+                or not isinstance(marker, dict)
+                or marker.get("status") != "pending"
+            ):
+                _error("NP_EVAL_RECHECK_FORMAL_BLOCKED", 409, "新正式评分未通过完整证据及风险校验")
+            risk_keys = (
+                "rule_version",
+                "base_grade",
+                "effective_grade",
+                "risk_hits",
+                "recommend_not_pass",
+                "manual_selected",
+                "system_evidence_cutoff_la",
+            )
+            new_risk = final.get("risk_evaluation") or {}
+            prior_risk = old_risk if isinstance(old_risk, dict) else {}
+            final_proof = _verified_proof(perf)
+            if not isinstance(final_proof, dict):
+                _error("NP_EVAL_RECHECK_SOURCE_UNVERIFIED", 409, "新正式评分证据无法核实")
+            same_evidence = _sha(final_proof) == _sha(old_proof) and all(
+                new_risk.get(k) == prior_risk.get(k) for k in risk_keys
+            )
+            # An approved scoring-basis review may reopen manual market/risk
+            # assessment even if source metrics are unchanged. It still must
+            # pass the full V2 proof and grade-confirmation gates before buying.
+            if same_evidence and pending.get("reason_type") != "scoring_basis_error":
+                _error(
+                    "NP_EVAL_RECHECK_NO_CHANGE",
+                    409,
+                    "未发现已核实的数据、评分规则或风险变化，不能重开测评",
+                )
+            revised["evaluation_recheck_required"] = {
+                **pending,
+                "status": "completed",
+                "completed_at": now.isoformat(),
+                "job_id": job_id,
+                "revised_grade": perf.grade,
+                "revised_score": str(perf.score),
+            }
+            perf.data_coverage_json = revised
+            session.add(
+                ActionEvent(
+                    id=uuid4(),
+                    source_account_ref=key[0],
+                    store_id=key[1],
+                    item_id=key[2],
+                    event_type="evaluation_recheck_completed",
+                    actor_id=actor,
+                    payload_json={
+                        "approval_id": approval_id,
+                        "job_id": job_id,
+                        "before": old_grade,
+                        "after": perf.grade,
+                        "status": "pending_grade_confirmation",
+                    },
+                    created_at=now,
+                )
+            )
+            session.execute(
+                text(
+                    "\n"
+                    "                INSERT INTO app_approval_events(id,approval_id,eve"
+                    "nt_type,actor_id,note,detail,created_at)\n"
+                    "                VALUES(CAST(:id AS uuid),CAST(:aid AS "
+                    "uuid),'recalculated',:actor,:note,CAST(:detail AS jsonb),:now)\n"
+                    "            "
+                ),
+                {
+                    "id": str(uuid4()),
+                    "aid": approval_id,
+                    "actor": actor,
+                    "note": "已核实纠错证据，重新进入待等级确认",
+                    "detail": _json(
+                        {
+                            "before_grade": old_grade,
+                            "before_score": old_score,
+                            "new_grade": perf.grade,
+                            "new_score": str(perf.score),
+                            "job_id": job_id,
+                        }
+                    ),
+                    "now": now,
+                },
+            )
+            new_grade = perf.grade
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    return {
+        "execution_id": job_id,
+        "status": "completed",
+        "grade": new_grade,
+        "next_status": "待等级确认",
+    }
 
 
 def _execute_approved_recheck(session: Session, job, job_id: str):
@@ -1110,6 +1368,24 @@ def calculation_status(session, accounts, account, store, item):
     }
 
 
+def _validate_review_pass(perf, coverage, new_decision):
+    if new_decision != "passed":
+        return
+    final = coverage.get("evaluation_final_snapshot")
+    risk = final.get("risk_evaluation") if isinstance(final, dict) else None
+    confirmation = coverage.get("evaluation_grade_confirmation_v1")
+    if perf.grade not in ("S", "A", "B", "C") or (
+        isinstance(risk, dict) and risk.get("recommend_not_pass") is True
+    ):
+        _error(
+            "NP_ASSESSMENT_REVIEW_GRADE_BLOCKED",
+            409,
+            "D/Pass或高风险不通过商品不能直接改为测评通过，请先核实评分依据",
+        )
+    if isinstance(confirmation, dict) and confirmation.get("status") != "confirmed":
+        _error("NP_ASSESSMENT_GRADE_UNCONFIRMED", 409, "请先确认等级")
+
+
 def submit_review(
     session: Session,
     accounts,
@@ -1139,6 +1415,7 @@ def submit_review(
     manual_change = reason_type == "manual_decision_change"
     prior_verdict = coverage.get("operator_assessment_v1")
     if manual_change:
+        _validate_review_pass(perf, coverage, new_decision)
         if not isinstance(prior_verdict, dict):
             _error("NP_ASSESSMENT_NOT_CONFIRMED", 409, "请先完成初次人工确认")
         if new_decision not in ("passed", "failed") or new_decision == prior_verdict.get(
@@ -1147,16 +1424,16 @@ def submit_review(
             _error("NP_ASSESSMENT_REVIEW_CHOICE", 422, "变更结论须与原结论不同")
         if len("".join(reason.split())) < 20:
             _error("NP_ASSESSMENT_REVIEW_REASON", 422, "结论复核依据不少于20字")
-    elif perf.grade not in ("D", "Pass"):
-        _error("NP_EVAL_NOT_FAILED", 409, "此评分复核仅适用于D/Pass评级")
+    elif perf.grade not in ("D", "Pass") and not (
+        reason_type in ("calculation_error", "scoring_basis_error")
+        and isinstance(prior_verdict, dict)
+        and prior_verdict.get("decision") == "failed"
+    ):
+        _error("NP_EVAL_NOT_FAILED", 409, "仅测评未通过商品可申请评分纠错，特批仍限D/Pass")
     if not manual_change and coverage.get("evaluation_manual_exception"):
         _error("NP_EVAL_EXCEPTION_ALREADY_GRANTED", 409, "当前商品已有批准的人工特批")
     recheck = coverage.get("evaluation_recheck_required")
-    if (
-        not manual_change
-        and isinstance(recheck, dict)
-        and recheck.get("status") == "awaiting_verified_source_correction"
-    ):
+    if isinstance(recheck, dict) and recheck.get("status") == "awaiting_verified_source_correction":
         _error("NP_EVAL_RECHECK_ALREADY_APPROVED", 409, "已批准纠错等待重算，不能重复申请")
     pending = session.scalar(
         text("""
@@ -1306,6 +1583,10 @@ def decide_review(
         _error("NP_EVAL_REVIEW_STALE", 409, "评级已变化，须重新申请")
     if _sha(perf.data_coverage_json or {}) != snap.get("proof_hash"):
         _error("NP_EVAL_REVIEW_EVIDENCE_CHANGED", 409, "原始评分证据已变化，请重新核验")
+    if decision == "approved" and snap["review_reason_type"] == "manual_decision_change":
+        _validate_review_pass(
+            perf, perf.data_coverage_json or {}, snap.get("operator_decision_requested")
+        )
     now = _now()
     updated = session.execute(
         text("""
@@ -1480,15 +1761,29 @@ def decorate_page(session: Session, data: dict) -> dict:
              r.listing_date_la,
              p.data_coverage_json #>> '{evaluation_operating_archive_v1,suggested_qty}'
               AS frozen_suggested_qty,
-             (SELECT a.status FROM app_approval_requests a
-               WHERE a.approval_type=:kind AND a.business_ref=r.id::text
-               ORDER BY a.submitted_at DESC,a.id DESC LIMIT 1) AS review_status,
-             (SELECT a.id::text FROM app_approval_requests a
-               WHERE a.approval_type=:kind AND a.business_ref=r.id::text
-               ORDER BY a.submitted_at DESC,a.id DESC LIMIT 1) AS review_id
+             review.status AS review_status, review.id::text AS review_id,
+             CASE WHEN p.data_coverage_json #>> '{operator_assessment_v1,decision}' = 'failed'
+                  THEN review.reason END AS review_request_reason,
+             CASE WHEN p.data_coverage_json #>> '{operator_assessment_v1,decision}' = 'failed'
+                  THEN review.review_note END AS review_decision_reason,
+             CASE WHEN p.data_coverage_json #>> '{operator_assessment_v1,decision}' = 'failed'
+                  THEN review.reason_type END AS review_reason_type
       FROM wants w LEFT JOIN biz_new_product_registry r
        ON r.source_account_ref=w.a AND r.store_id=w.s AND r.item_id=w.i
       LEFT JOIN biz_new_product_performance_current p ON p.registry_id=r.id
+      LEFT JOIN LATERAL (
+        SELECT a.id,a.status,
+               CASE WHEN p.data_coverage_json #>> '{operator_assessment_v1,decision}' = 'failed'
+                    THEN a.reason END AS reason,
+               CASE WHEN p.data_coverage_json #>> '{operator_assessment_v1,decision}' = 'failed'
+                    THEN a.review_note END AS review_note,
+               CASE WHEN p.data_coverage_json #>> '{operator_assessment_v1,decision}' = 'failed'
+                    THEN a.snapshot->>'review_reason_type' END AS reason_type
+        FROM app_approval_requests a
+        WHERE a.approval_type=:kind AND a.business_ref=r.id::text
+          AND a.source_account_ref=w.a
+        ORDER BY a.submitted_at DESC,a.id DESC LIMIT 1
+      ) review ON true
     """),
             {"wants": _json(wants), "kind": REVIEW_TYPE},
         )
@@ -1553,6 +1848,28 @@ def decorate_page(session: Session, data: dict) -> dict:
             entry["score_correction"] = public_correction(coverage["operator_score_correction_v1"])
         verdict = coverage.get("operator_assessment_v1")
         entry["evaluation_decision"] = verdict if isinstance(verdict, dict) else None
+        if status == "测评未通过":
+            final = coverage.get("evaluation_final_snapshot")
+            risk = final.get("risk_evaluation") if isinstance(final, dict) else None
+            blocked = isinstance(risk, dict) and risk.get("recommend_not_pass") is True
+            risk_limited = blocked or (
+                isinstance(risk, dict)
+                and r["grade"] in ("D", "Pass")
+                and risk.get("base_grade") in ("S", "A", "B", "C")
+                and bool(risk.get("risk_hits"))
+            )
+            entry["failed_assessment_info"] = {
+                "reason_kind": "risk_limit"
+                if risk_limited
+                else "grade_limit"
+                if r["grade"] in ("D", "Pass")
+                else "manual_decision",
+                "manual_pass_allowed": r["grade"] in ("S", "A", "B", "C") and not blocked,
+                "review_request_reason": r.get("review_request_reason"),
+                "review_decision_reason": r.get("review_decision_reason"),
+                "review_reason_type": r.get("review_reason_type"),
+            }
+
         # Read only a scalar recommendation, never copy the full daily archive
         # into a 200-item list response.
         if r.get("frozen_suggested_qty") is not None:

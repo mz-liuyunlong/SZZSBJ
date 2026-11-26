@@ -146,7 +146,10 @@ def _listing_meta(
     total: int,
 ) -> ListingManagementReadMeta:
     return ListingManagementReadMeta(
-        source_objects=registry_source_objects("listing_management"),
+        source_objects=[
+            *registry_source_objects("listing_management"),
+            "mart_listing_ad_status_current",
+        ],
         latest_calculated_at=latest_calculated_at,
         page=page,
         page_size=page_size,

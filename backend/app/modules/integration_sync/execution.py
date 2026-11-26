@@ -801,6 +801,20 @@ class SyncRunExecutionService:
         self.session.commit()
         runner._source_fact_commit_completed = True
         heartbeat()
+        if interface_key == "walmartAdItemSpList":
+            # Source facts are already durable. Extension errors cannot undo them.
+            try:
+                from app.modules.new_products.sku_ad_foundation_runtime import after_ad_fact_commit
+
+                after_ad_fact_commit(runner, ad_rows)
+            except Exception as exc:
+                import logging
+
+                self.session.rollback()
+                logging.getLogger(__name__).warning(
+                    "foundation_ad_hook_failed error_type=%s", type(exc).__name__
+                )
+            heartbeat()
         runner.summary.mart_daily_sales_rows = runner._refresh_daily_sales_mart()
         heartbeat()
         runner.summary.mart_order_profit_rows = runner._refresh_order_profit_mart()

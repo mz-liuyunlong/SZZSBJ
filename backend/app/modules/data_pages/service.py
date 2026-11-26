@@ -625,6 +625,7 @@ class ListingManagementService:
     def __init__(self, session: Session) -> None:
         self.repository = ListingManagementRepository(session)
         self.tag_repository = ListingTagRepository(session)
+        self._foundation_session = session
 
     @staticmethod
     def _listing_archive_status_values(raw: str | None) -> set[str]:
@@ -659,6 +660,12 @@ class ListingManagementService:
         custom_tags = self.tag_repository.tags_for_listing_rows(rows)
         archive_states = self.repository.archive_states_for_listing_rows(rows)
         archive_states = self._normalize_listing_archive_state_keys(archive_states)
+        from app.modules.new_products.sku_ad_foundation_runtime import read_listing_statuses
+
+        ad_statuses = read_listing_statuses(
+            self._foundation_session,
+            [(str(row.source_account_ref), str(row.store_id), str(row.item_id)) for row in rows],
+        )
         return (
             ListingManagementListData(
                 items=[
@@ -674,6 +681,17 @@ class ListingManagementService:
                             "archive_reason",
                             None,
                         ),
+                    ).model_copy(
+                        update={
+                            "ad_enabled": ad_statuses.get(
+                                (str(row.source_account_ref), str(row.store_id), str(row.item_id)),
+                                (None, None),
+                            )[0],
+                            "ad_status_checked_at": ad_statuses.get(
+                                (str(row.source_account_ref), str(row.store_id), str(row.item_id)),
+                                (None, None),
+                            )[1],
+                        }
                     )
                     for row in rows
                 ],
