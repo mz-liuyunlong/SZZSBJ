@@ -212,6 +212,8 @@ class FinShippingList(_Ods, Base):
     warehouse_id: Mapped[str | None] = mapped_column(String(64))
     delivery_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     lx_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # 明细最近一次同步时间（PR-2，迁移 0099）：为空或早于 updated_at 时明细同步会（再）拉这张单。
+    detail_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class FinShippingDetailItem(_Ods, Base):

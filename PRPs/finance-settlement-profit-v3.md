@@ -1,6 +1,6 @@
 # PRP：财务 · 结算利润 V3 —— 订单审核（按期）+ 结算利润（店铺×月）+ 成本来源规则 + WFS 减免/调拨/MCF + 设置项
 
-- Status: Rev 8（Rev 8：按 #358 复审 P2-2，§3 / §6.4 / §10 / §12 / §15 同步业务负责人 2026-11-24 13:46～14:00「探测通过的沃尔玛接口全部开放」；Rev 7 审核 AI 09:39 复核通过。Rev 7：按审核 AI 2026-11-24 第四轮意见改 §8.10 公式一处；Rev 6：按审核 AI 2026-11-24 第三轮意见 P2 ×1、P3 ×2 修订；Rev 5：按审核 AI 2026-11-24 复核意见 P1 ×1、P2 ×2、P3 ×4 修订；Rev 4：2026-11-24 09:08 业务负责人定评价加速器快照走云函数、授权放开 `POST /v3/growth/reviews-accelerator/items`（只此一路径、只读），§16 清空；Rev 3：按审核 AI 2026-11-24 意见 P1 ×5、P2 ×9、P3 ×1 修订，自成一体、不再依赖 v2；Rev 2：业务负责人 2026-11-24 02:07 答复 §16 五项；Rev 1：代码 AI 2026-11-24 按业务负责人 2026-11-09 ~ 11-24 拍板整理）。审核 AI 正式复核通过的是 Rev 7（2026-11-24 09:39）；Rev 8 只同步 11-24 13:46～14:00 的授权口径，没有单独复核，以 #365 复审为准。随 PR-1 入库（2026-11-25）
+- Status: Rev 9（Rev 9：随 PR-2 入库。改动四处：① §10 合并顺序 —— 业务负责人 2026-11-26 定「订单审核要提前」，原 PR-3 / PR-4 / PR-5 按板块纵切为 PR-OR 订单审核、PR-SP 结算利润；② §10 PR-2 范围收窄：SB / SV 广告与评价加速器快照同步移出 PR-2；③ §9 PR-2 交付项同步；④ §11「迁移回滚不删业务数据」一段的 PR-3 改为 PR-OR / PR-SP。其余不动。Rev 8（Rev 8：按 #358 复审 P2-2，§3 / §6.4 / §10 / §12 / §15 同步业务负责人 2026-11-24 13:46～14:00「探测通过的沃尔玛接口全部开放」；Rev 7 审核 AI 09:39 复核通过。Rev 7：按审核 AI 2026-11-24 第四轮意见改 §8.10 公式一处；Rev 6：按审核 AI 2026-11-24 第三轮意见 P2 ×1、P3 ×2 修订；Rev 5：按审核 AI 2026-11-24 复核意见 P1 ×1、P2 ×2、P3 ×4 修订；Rev 4：2026-11-24 09:08 业务负责人定评价加速器快照走云函数、授权放开 `POST /v3/growth/reviews-accelerator/items`（只此一路径、只读），§16 清空；Rev 3：按审核 AI 2026-11-24 意见 P1 ×5、P2 ×9、P3 ×1 修订，自成一体、不再依赖 v2；Rev 2：业务负责人 2026-11-24 02:07 答复 §16 五项；Rev 1：代码 AI 2026-11-24 按业务负责人 2026-11-09 ~ 11-24 拍板整理）。审核 AI 正式复核通过的是 Rev 7（2026-11-24 09:39）；Rev 8 只同步 11-24 13:46～14:00 的授权口径，没有单独复核，以 #365 复审为准。随 PR-1 入库（2026-11-25）
 - 取代：`PRPs/finance-settlement-profit-v2.md`（Rev 4.6）。本文自成一体：v2 仍有效的条款已原文并入（§5、§7、§8.1、§8.11 ~ §8.13、§11 ~ §14）。**v2 不入库，本文取代 v2**（v2 只留本地草稿）。
 - Owner Approval Required: No（业务负责人 2026-11-24 已拍板，§16 无未决项）
 - Implementation authorization state: Yes（Rev 7 审核 AI 2026-11-24 复核通过；Rev 8 以 #365 复审为准；按 §10 顺序开发）
@@ -308,14 +308,13 @@ fx-missing state: 该账单月无汇率 → CNY 列与纯利列显示「汇率�
 
 ## 9. SOP / API Docs（实现时交付）
 - PR-1：表结构文档 `docs/api/finance-settlement-profit-tables.md`
-- PR-2：同步 handler 文档 + runbook `docs/runbooks/finance-settlement-profit-sync.md`
-- PR-3：计算口径文档 `docs/api/finance-settlement-profit-calc.md`（即本 PRP §8）
-- PR-4：API 文档 + OpenAPI metadata + SOP（审核 / 撤销 / 结账 / 解锁）
-- PR-5：PageShell help entry + Playwright E2E
+- PR-2：同步 runbook `docs/runbooks/finance-settlement-profit-sync.md` + 决策 `docs/data-sources/decisions/finance-settlement-profit-pr2-sync-decision.md`
+- PR-OR / PR-SP：计算口径文档 `docs/api/finance-settlement-profit-calc.md`（即本 PRP §8，各自交付所涉章节）
+- PR-OR / PR-SP：各自的 API 文档 + OpenAPI metadata + SOP（审核 / 撤销 / 结账 / 解锁）、PageShell help entry + Playwright E2E
 另加：`docs/runbooks/finance-order-review.md`（录成本 SOP）、`docs/runbooks/walmart-review-accelerator-snapshot.md`（通道登记与开关）。
 
 ## 10. Implementation Plan
-合并顺序：**PR-0 → PR-1 → #308（库存索赔 PR-1）→ PR-2 → PR-3 → PR-4 → PR-5**；**PR-SCF** 独立，与 PR-0 / PR-1 并行，PR-2 之前上线。每个 PR 等上一个合并后基于最新 main 开分支，不叠分支；开工时迁移号取 main 最新 + 1，同轮改 `.github/workflows/ci.yml` 两处版本号断言和 `tests/db/test_alembic_scaffold.py`；每个 PR 独立 CI 全绿后再提下一个。
+合并顺序（Rev 9，业务负责人 2026-11-26「订单审核要提前」）：**PR-0 → PR-1 → #308（库存索赔 PR-1，重开为 #369）→ PR-2 → PR-OR 订单审核 → PR-SP 结算利润**。原 PR-3 / PR-4 / PR-5 按板块纵切重排：**PR-OR 订单审核**一个 PR 交付 §8.1～§8.4 的订单行计算、九类待审原因、自动通过、成本录入 / 确认、审核接口（§7 订单审核部分）与订单审核页；**PR-SP 结算利润**一个 PR 交付 §8.5～§8.12（店铺级项目、公司级费用、纯利、对平、结账）、结算利润接口、结算利润页与设置页。PR-SCF（#358 / #364 V4 通用通道）已上线，不再是前置条件。每个 PR 等上一个合并后基于最新 main 开分支，不叠分支；开工时迁移号取 main 最新 + 1，同轮改 `.github/workflows/ci.yml` 两处版本号断言和 `tests/db/test_alembic_scaffold.py`；每个 PR 独立 CI 全绿后再提下一个。
 
 | PR | 内容 | 老 PR 处理 |
 |---|---|---|
@@ -323,10 +322,9 @@ fx-missing state: 该账单月无汇率 → CNY 列与纯利列显示「汇率�
 | PR-1 建表 | §6.2 新表、model registry、scaffold 测试、表结构文档；§6.1 决策文件；本 PRP 入库为 `PRPs/finance-settlement-profit-v3.md`，v2 不入库、本文取代 | #307 关闭重开 |
 | #308 库存索赔 PR-1 | `ods_lingxing_wfs_cost_valuation_flow` + 同步（另一 PRP） | 基于 PR-1 后的 main 重开 |
 | PR-SCF 云函数开放（#358） | 评价加速器 POST、recon、按需报表下单 + ZIP、payment / insights / sem / misc、SEM 写契约；云端钉死非 GET 契约；独立，可与 PR-0 / PR-1 并行，不依赖财务表 | #358（已授权） |
-| PR-2 同步 | shippingList / shippingDetail / wmsOrderList 登记与同步（写 `ods_lingxing_fin_*`）；SB / SV 广告；评价加速器快照同步（依赖 PR-SCF 上线） | 新 PR |
-| PR-3 计算 | §8 全部；重算入口；无订单标记 | #309 关闭重开 |
-| PR-4 接口 + 权限 | §7；权限按 #347 RBAC 登记；审计 | #310 关闭重开 |
-| PR-5 页面 | 订单审核页、结算利润页（列配置、升降序、多选精确搜索、交易类型全列）、设置页；Playwright | 新 PR |
+| PR-2 同步 | shippingList / shippingDetail / wmsOrderList 登记与同步（写 `ods_lingxing_fin_*`），默认关闭，runbook `docs/runbooks/finance-settlement-profit-sync.md`；**SB / SV 广告与评价加速器快照同步移出本 PR**（快照同步等 V4 业务层权限 / 只读限制定下后另做；SB / SV 另一 PR） | 新 PR |
+| PR-OR 订单审核 | §8.1～§8.4 订单行计算、重算入口、九类待审原因、自动通过、成本录入 / 确认（`manual_settlement_cost_entries`）、审核接口与权限（§7 订单审核部分，按 #347 RBAC 登记）、订单审核页；Playwright | 取代原 PR-3 / PR-4 / PR-5 的订单审核部分（#309 / #310 已关闭） |
+| PR-SP 结算利润 | §8.5～§8.12 店铺级项目、公司级费用、纯利、无订单提示、对平、结账 / 解锁、待指定；结算利润接口与权限；结算利润页（列配置、升降序、多选精确搜索、交易类型全列）、设置页；Playwright | 取代原 PR-3 / PR-4 / PR-5 的结算利润部分 |
 
 与 PMC #282 不再有同名表（§6.2）；如 #282 先合并，PR-2 只多一个可选的初始化来源，不改本计划。
 
@@ -353,7 +351,7 @@ Walmart：只走 §6.4 云函数通道；禁止 SSH 到店铺服务器；禁止�
 
 ## 13. Rollback Plan
 每个 PR 独立 revert；manual_ 表回滚前先导出备份；已结账月份以冻结快照为准，不随回滚改变。
-迁移回滚不删业务数据：PR-3 迁移的 downgrade 只在 FACT / MANUAL 表都没有记录时才回退结构；只要有一条记录就报错拒绝（`rollback blocked`），不执行任何 DELETE / TRUNCATE。生产环境禁止对已有数据的结算利润迁移做 downgrade；要修正结构一律写新的前向迁移；如确需恢复数据，先导出备份，经业务负责人书面同意后按备份恢复。
+迁移回滚不删业务数据：PR-OR / PR-SP 迁移（如有）的 downgrade 只在 FACT / MANUAL 表都没有记录时才回退结构；只要有一条记录就报错拒绝（`rollback blocked`），不执行任何 DELETE / TRUNCATE。生产环境禁止对已有数据的结算利润迁移做 downgrade；要修正结构一律写新的前向迁移；如确需恢复数据，先导出备份，经业务负责人书面同意后按备份恢复。
 
 ## 14. Acceptance Checklist
 | 项 | 阈值 | 失败行为 | 测试数据 |
