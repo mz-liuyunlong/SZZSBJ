@@ -237,11 +237,15 @@ class LingxingFinShippingListSyncHandler(FinSyncHandlerBase):
                 self._fail_work(run, work, "SYNC_FIN_SHIPPING_PAGE_REPEATED")
                 raise FinSyncError("SYNC_FIN_SHIPPING_PAGE_REPEATED")
             previous_codes = codes
+            total = response_total(payload, "data", "total")
+            if not rows and total is not None and offset < total:
+                # 领星说还有，却给了空页：数据没拉齐，这页和这家店都不能记成功。
+                self._fail_work(run, work, "SYNC_FIN_SHIPPING_INCOMPLETE")
+                raise FinSyncError("SYNC_FIN_SHIPPING_INCOMPLETE")
             written = _upsert_shipping_lists(
                 self.session, [value for value in values if value is not None], run, ref
             )
             self._finish_work(run, work, ref, seen=len(rows), written=written)
-            total = response_total(payload, "data", "total")
             offset += len(rows)
             if not rows or (total is not None and offset >= total):
                 return

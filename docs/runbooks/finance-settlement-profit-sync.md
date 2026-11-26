@@ -20,9 +20,10 @@
 
 ## 2. 上线步骤（负责人授权后由部署 AI 按票据执行）
 
+0. 迁移：`uv run alembic upgrade head`（到 `20261126_0099_fin_shipping_list_detail_synced_at`），再做后面的步骤。
 1. 登记（全部关闭）：`FIN_SHIPPING_GOVERNANCE_BOOTSTRAP_AUTHORIZED=true FIN_SHIPPING_SOURCE_ACCOUNT_REF=<账号引用> uv run python scripts/bootstrap_fin_shipping_governance.py`。
 2. 只开手动：`FIN_SHIPPING_SYNC_ENABLE_AUTHORIZED=true FIN_SHIPPING_SOURCE_ACCOUNT_REF=<账号引用> uv run python scripts/enable_fin_shipping_sync.py`。
-3. 首次手动同步当作受控探测：任务中心依次触发 `finShippingList` → `finShippingDetail` → `finWmsOutboundOrders`，核对条数与本地归档（2026-11-16 发货单探测、2026-10-26 出库单拉取）一致（只回报是否一致，不回报金额）。
+3. 首次手动同步当作受控探测：任务中心依次触发 `finShippingList` → `finWmsOutboundOrders` → `finShippingDetail`（等前一个跑完再点下一个），核对条数与本地归档（2026-11-16 发货单探测、2026-10-26 出库单拉取）一致（只回报是否一致，不回报金额）。
 4. 开定时：探测通过后，同上命令再加 `FIN_SHIPPING_SYNC_SCHEDULE_AUTHORIZED=true` 重跑一次（三个接口各自的 cron 见 §1）。
 5. 回填：任务中心对三个接口分别发起回填，2026-05-01 至今，按月分批（先发货单，再明细，再出库单）。
 
@@ -30,4 +31,4 @@
 
 ## 3. 错误码（任务中心可见）
 
-`SYNC_FIN_RUNTIME_NOT_AUTHORIZED`（测试环境 / 未开真实调用）、`SYNC_FIN_EXECUTION_NOT_AUTHORIZED`、`SYNC_FIN_GOVERNANCE_DISABLED`、`SYNC_FIN_NO_STORES`、`SYNC_FIN_PAGINATION_INVALID`、`SYNC_FIN_WINDOW_INVALID`、`SYNC_FIN_REQUEST_FAILED`、`SYNC_FIN_RESPONSE_FAILED`（领星 code ≠ 0）、`SYNC_FIN_SHIPPING_RESPONSE_SHAPE` / `SYNC_FIN_WMS_RESPONSE_SHAPE`（响应不是预期结构）、`SYNC_FIN_SHIPPING_INVALID_ROW` / `SYNC_FIN_WMS_INVALID_ROW`（缺单号；出库单还包括返回行 `sid` 不是请求的店）、`SYNC_FIN_SHIPPING_TOO_MANY_PAGES` / `SYNC_FIN_WMS_TOO_MANY_PAGES`、`SYNC_FIN_SHIPPING_PAGE_REPEATED` / `SYNC_FIN_WMS_PAGE_REPEATED`（连续两页单号完全相同）、`SYNC_FIN_STORE_FAILED`（店失败但不是上面任何一种，如数据库出错）、`SYNC_FIN_STORE_PARTIAL` / `SYNC_FIN_ALL_STORES_FAILED`（运行级汇总；`error_message` 里按店列出各自的错误码）。
+`SYNC_FIN_RUNTIME_NOT_AUTHORIZED`（测试环境 / 未开真实调用）、`SYNC_FIN_EXECUTION_NOT_AUTHORIZED`、`SYNC_FIN_GOVERNANCE_DISABLED`、`SYNC_FIN_NO_STORES`、`SYNC_FIN_PAGINATION_INVALID`、`SYNC_FIN_WINDOW_INVALID`、`SYNC_FIN_REQUEST_FAILED`、`SYNC_FIN_RESPONSE_FAILED`（领星 code ≠ 0）、`SYNC_FIN_SHIPPING_RESPONSE_SHAPE` / `SYNC_FIN_WMS_RESPONSE_SHAPE`（响应不是预期结构）、`SYNC_FIN_SHIPPING_INVALID_ROW` / `SYNC_FIN_WMS_INVALID_ROW`（缺单号；出库单还包括返回行 `sid` 不是请求的店）、`SYNC_FIN_SHIPPING_TOO_MANY_PAGES` / `SYNC_FIN_WMS_TOO_MANY_PAGES`、`SYNC_FIN_SHIPPING_PAGE_REPEATED` / `SYNC_FIN_WMS_PAGE_REPEATED`（连续两页单号完全相同）、`SYNC_FIN_SHIPPING_INCOMPLETE` / `SYNC_FIN_WMS_INCOMPLETE`（领星报的 total 还没拉够就给了空页；只能发现「少于 total」，total 本身不准要靠 §2 第 3 步核对条数）、`SYNC_FIN_STORE_FAILED`（店失败但不是上面任何一种，如数据库出错）、`SYNC_FIN_STORE_PARTIAL` / `SYNC_FIN_ALL_STORES_FAILED`（运行级汇总；`error_message` 里按店列出各自的错误码）。

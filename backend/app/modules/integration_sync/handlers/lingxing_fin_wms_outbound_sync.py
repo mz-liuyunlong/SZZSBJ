@@ -181,11 +181,15 @@ class LingxingFinWmsOutboundSyncHandler(FinSyncHandlerBase):
                 self._fail_work(run, work, "SYNC_FIN_WMS_PAGE_REPEATED")
                 raise FinSyncError("SYNC_FIN_WMS_PAGE_REPEATED")
             previous_codes = codes
+            total = response_total(payload, "total")
+            if not rows and total is not None and seen_total < total:
+                # 领星说还有，却给了空页：数据没拉齐，这页和这家店都不能记成功。
+                self._fail_work(run, work, "SYNC_FIN_WMS_INCOMPLETE")
+                raise FinSyncError("SYNC_FIN_WMS_INCOMPLETE")
             written = _upsert_wms_orders(
                 self.session, [value for value in values if value is not None], run, ref
             )
             self._finish_work(run, work, ref, seen=len(rows), written=written)
-            total = response_total(payload, "total")
             seen_total += len(rows)
             if not rows or (total is not None and seen_total >= total):
                 return

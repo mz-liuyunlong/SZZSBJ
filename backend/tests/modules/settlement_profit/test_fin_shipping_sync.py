@@ -192,9 +192,20 @@ class FakeLingxing:
             attempt_no=1,
         )
 
+    @staticmethod
+    def _total(first: JsonValue, *keys: str) -> int | None:
+        node: Any = first
+        for key in keys:
+            node = node.get(key) if isinstance(node, dict) else None
+        return int(node) if isinstance(node, (int, str)) and str(node).isdigit() else None
+
     def fetch_fin_shipping_list_page(self, **kw: Any) -> LingxingRawEnvelope:
         self.calls.append(("list", kw["store_id"], str(kw["offset"])))
-        body = self.list_pages.get((kw["store_id"], kw["offset"]), list_body([]))
+        # 没准备的页按「空页、total 同第一页」返回，和领星真实翻到末尾之后的样子一致。
+        first = self.list_pages.get((kw["store_id"], 0), {})
+        body = self.list_pages.get(
+            (kw["store_id"], kw["offset"]), list_body([], total=self._total(first, "data", "total"))
+        )
         return self._envelope(FIN_SHIPPING_LIST_SYNC_SPEC.endpoint_path, body, kw, kw["page_no"])
 
     def fetch_fin_shipping_detail(self, **kw: Any) -> LingxingRawEnvelope:
@@ -204,7 +215,10 @@ class FakeLingxing:
 
     def fetch_fin_wms_order_page(self, **kw: Any) -> LingxingRawEnvelope:
         self.calls.append(("wms", kw["store_id"], str(kw["page_no"])))
-        body = self.wms_pages.get((kw["store_id"], kw["page_no"]), wms_body([]))
+        first = self.wms_pages.get((kw["store_id"], 1), {})
+        body = self.wms_pages.get(
+            (kw["store_id"], kw["page_no"]), wms_body([], total=self._total(first, "total"))
+        )
         return self._envelope(FIN_WMS_OUTBOUND_SYNC_SPEC.endpoint_path, body, kw, kw["page_no"])
 
 
@@ -621,6 +635,32 @@ def test_database_error_while_writing_fails_the_page_and_the_store(
     assert (work.status, work.error_code) == ("failed", "SYNC_FIN_STORE_FAILED")
     assert run.work_items_failed == 1
     assert session.scalar(select(func.count()).select_from(FinShippingList)) == 0
+
+
+def test_short_delivery_against_total_is_incomplete_not_success(session: Session) -> None:
+    add_stores(session)
+    interface = governed(session, FIN_SHIPPING_LIST_SYNC_SPEC, page_size=2)
+    client = FakeLingxing()
+    # 领星说共 5 条，只给了 2 条，下一页空：不能记成功。
+    client.list_pages[(STORE_A, 0)] = list_body(
+        [shipping_row("SP2026T0001"), shipping_row("SP2026T0002")], total=5
+    )
+    run = run_sync(session, interface, client)
+    assert (run.status, run.error_code) == ("failed", "SYNC_FIN_ALL_STORES_FAILED")
+    assert "SYNC_FIN_SHIPPING_INCOMPLETE" in (run.error_message or "")
+    assert (run.work_items_succeeded, run.work_items_failed) == (1, 1)
+
+    wms = governed(session, FIN_WMS_OUTBOUND_SYNC_SPEC, page_size=2)
+    client.wms_pages[(STORE_A, 1)] = wms_body([wms_row("WO1")], total=3)
+    run = run_sync(session, wms, client)
+    assert run.status == "failed"
+    assert "SYNC_FIN_WMS_INCOMPLETE" in (run.error_message or "")
+
+    # total 为 0 或没有 total 时，空页正常结束。
+    client.list_pages[(STORE_A, 0)] = list_body([], total=0)
+    assert run_sync(session, interface, client).status == "succeeded"
+    client.list_pages[(STORE_A, 0)] = {"code": 0, "data": {"list": [shipping_row("SP2026T0009")]}}
+    assert run_sync(session, interface, client).status == "succeeded"
 
 
 def test_repeated_page_from_lingxing_stops_the_store_at_once(session: Session) -> None:
