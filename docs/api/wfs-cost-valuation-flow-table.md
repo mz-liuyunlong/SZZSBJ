@@ -3,7 +3,7 @@
 - PRP：`PRPs/wfs-inventory-claim.md` §7.1–§7.3（库存索赔 PR 1）
 - 数据源决策：`docs/data-sources/decisions/warehouse-wfs-inventory-claim-decision.md`
 - 接口契约：`docs/integrations/lingxing/contracts/inventory-lx-8437ad0bcb9e.md`（`LX-8437AD0BCB9E`）
-- 迁移：`backend/alembic/versions/20261103_0073_wfs_cost_valuation_flow.py`（down_revision `20261103_0072_fin_settle_profit_v2`）
+- 迁移：`backend/alembic/versions/20261126_0098_wfs_cost_valuation_flow.py`（down_revision `20261126_0097_walmart_bill_periods_recon_payout`）
 - 模型：`backend/app/modules/warehouse_wfs/inventory_flow_models.py`
 - 同步：`wfsCostValuationFlow` / `lingxing.wfs.cost_valuation_flow.v1`（`backend/app/modules/integration_sync/handlers/lingxing_wfs_cost_valuation_sync.py`）
 
@@ -14,7 +14,7 @@
 | 角色 | 说明 |
 |---|---|
 | 写入方 | 只有上面的同步 handler。默认关闭：接口 `outbound_enabled=false`，配置 `is_enabled=false`、`schedule_enabled=false`。首次开启和补历史数据须 rocky 书面同意 |
-| 读方 | 库存索赔（PR 2，读时计算）；结算利润 V2（只读 `is_current = true`，只存本表行 id，不建外键） |
+| 读方 | 库存索赔（PR 2，读时计算）；结算利润 V3（只读 `is_current = true`，只存本表行 id，不建外键） |
 
 ## 行身份与当前行
 

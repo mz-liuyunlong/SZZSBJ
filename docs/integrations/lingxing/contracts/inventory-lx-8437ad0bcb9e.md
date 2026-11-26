@@ -16,7 +16,7 @@
 | Authentication | 文档写明与其他 basicOpen 接口相同的 URL 参数鉴权（access_token / timestamp / sign / app_key）；客户端按 query-sign 实现，适用性待首次授权探测确认。本文件不记录任何凭证或签名值。 |
 | Can enter PRP planning | `yes`（`PRPs/wfs-inventory-claim.md`） |
 | Owner | 库存索赔 PRP PR 1（全仓库唯一的契约登记与 ODS） |
-| Consumer | `ods_lingxing_wfs_cost_valuation_flow`（同步 `wfsCostValuationFlow`）；结算利润 V2 只读 `is_current = true` |
+| Consumer | `ods_lingxing_wfs_cost_valuation_flow`（同步 `wfsCostValuationFlow`）；结算利润 V2（V2 已由 V3 取代，V3 直接读本表）只读 `is_current = true` |
 
 ## Request parameters
 

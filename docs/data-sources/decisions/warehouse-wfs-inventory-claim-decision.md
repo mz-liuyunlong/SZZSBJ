@@ -3,7 +3,7 @@
 - 调查日期：2026-11-03
 - 调查人：仓库代码 AI（库存索赔）
 - 目标 method/path：领星 POST `/basicOpen/multiplatform/wfs/cost/valuation/detail`（接口键 `LX-8437AD0BCB9E`）→ ODS `ods_lingxing_wfs_cost_valuation_flow`；后续 `/api/warehouse/inventory-claims*`（PR 2）
-- 业务用途：库存索赔（丢失、损坏、收货差错、供应商短少、找回）；结算利润 V3（原 V2，2026-11-24 由 V3 取代） 的货本与库存异动（只读 is_current = true）
+- 业务用途：库存索赔（丢失、损坏、收货差错、供应商短少、找回）；结算利润 V3（原 V2，2026-11-24 由 V3 取代）的货本与库存异动（只读 is_current = true）
 - 接口总体状态：READY_FOR_PRP
 - 是否包含 NEED_OWNER_DECISION：否
 - 负责人批准状态：已批准（rocky，2026-11-03：新建流水表、归本 PRP、独立案件表）；首次开启同步与补历史数据另需书面同意
@@ -30,7 +30,7 @@
 ### 1.1 单表归属（rocky 2026-11-03 决定）
 
 - 同一领星接口全仓库只建一张 ODS 表 `ods_lingxing_wfs_cost_valuation_flow`、一份契约登记（`LX-8437AD0BCB9E`），归库存索赔 PRP 的 PR 1。
-- 结算利润 V3 取消 `ods_lingxing_wfs_cost_valuation_lines`，货本和库存异动读本表 is_current = true；其事实表不得用 serial_number 做唯一键，店铺取本表 store_code / store_id。
+- 结算利润 V2（V2 已由 V3 取代，V3 直接读本表）取消 `ods_lingxing_wfs_cost_valuation_lines`，货本和库存异动读本表 is_current = true；其事实表不得用 serial_number 做唯一键，店铺取本表 store_code / store_id。
 
 ## 2. 数据集分类表
 
