@@ -135,6 +135,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # 表里只要有一条成本流水就拒绝回滚、不删数据（刘云龙 2026-11-26 复审 #369 问题二）；
+    # 生产要改结构一律写新的前向迁移。
+    bind = op.get_bind()
+    if bind.execute(sa.text(f"select 1 from {TABLE} limit 1")).first() is not None:
+        raise RuntimeError(f"rollback blocked: {TABLE} has data")
     for name in reversed(INDEXES):
         op.drop_index(name, table_name=TABLE)
     op.drop_table(TABLE)

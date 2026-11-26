@@ -7,7 +7,10 @@ Rules (PRPs/wfs-inventory-claim.md §7.1–§7.3):
 * only after every page succeeded and the row count equals the provider total, a single
   transaction retires the window's previous current rows and promotes the new ones;
 * a failed run leaves the previous current rows untouched;
-* one run per source account at a time (run-table check plus a PostgreSQL advisory lock).
+* one run per source account at a time: a PostgreSQL session advisory lock held on a
+  **dedicated connection** for the whole run (released in ``finally`` and when that
+  connection closes), plus a run-table check that ignores runs whose lease has expired, so
+  a crashed run can never block the next one (刘云龙 2026-11-26 复审 #369 问题一).
 """
 
 from __future__ import annotations
@@ -23,7 +26,7 @@ from typing import Protocol
 from uuid import UUID, uuid4
 
 from pydantic import JsonValue
-from sqlalchemy import func, select, text, update
+from sqlalchemy import Connection, func, select, text, update
 from sqlalchemy.orm import Session
 
 from app.core.config import AppEnvironment, Settings, get_settings
@@ -45,6 +48,7 @@ from app.modules.integration_sync.models import (
     ApiRawRequestRef,
     IntegrationInterface,
     IntegrationSyncConfig,
+    IntegrationSyncLock,
     IntegrationSyncRun,
     IntegrationSyncRunWorkItem,
     RawRetentionPolicy,
@@ -289,6 +293,7 @@ class LingxingWfsCostValuationSyncHandler:
         self._client = client
         self.settings = settings or get_settings()
         self.heartbeat = heartbeat or (lambda: None)
+        self._lock_connection: Connection | None = None
 
     # ------------------------------------------------------------------ entry
     def execute(
@@ -359,15 +364,19 @@ class LingxingWfsCostValuationSyncHandler:
 
     # ------------------------------------------------------- account locking
     def _other_run_active(self, run: IntegrationSyncRun) -> bool:
+        """另一条「running」记录只有在它的租约还没过期时才算在跑；进程崩了留下的旧记录不挡人。"""
+        now = utc_now()
         other = self.session.scalar(
             select(func.count())
             .select_from(IntegrationSyncRun)
+            .join(IntegrationSyncLock, IntegrationSyncLock.run_id == IntegrationSyncRun.id)
             .where(
                 IntegrationSyncRun.provider == run.provider,
                 IntegrationSyncRun.interface_key == SPEC.interface_key,
                 IntegrationSyncRun.source_account_ref == run.source_account_ref,
                 IntegrationSyncRun.status == "running",
                 IntegrationSyncRun.id != run.id,
+                IntegrationSyncLock.expires_at > now,
             )
         )
         return bool(other)
@@ -377,28 +386,43 @@ class LingxingWfsCostValuationSyncHandler:
         return bind.dialect.name == "postgresql"
 
     def _acquire_account_lock(self, source_account_ref: str) -> bool:
+        """会话级咨询锁必须和「拿锁的那条连接」绑定：业务 session 每次 commit 可能换连接，
+        锁会留在连接池里别的连接上，既放不掉也挡住下一次。所以单独开一条连接专门持锁。"""
         if not self._is_postgresql():
             return True
-        acquired = self.session.scalar(
-            text("SELECT pg_try_advisory_lock(:key)"),
-            {"key": advisory_lock_key(source_account_ref)},
+        connection = (
+            self.session.get_bind().connect().execution_options(isolation_level="AUTOCOMMIT")
         )
-        self.session.commit()
-        return bool(acquired)
+        try:
+            acquired = bool(
+                connection.scalar(
+                    text("SELECT pg_try_advisory_lock(:key)"),
+                    {"key": advisory_lock_key(source_account_ref)},
+                )
+            )
+        except Exception:
+            connection.close()
+            raise
+        if not acquired:
+            connection.close()
+            return False
+        self._lock_connection = connection
+        return True
 
     def _release_account_lock(self, source_account_ref: str) -> None:
-        if not self._is_postgresql():
+        connection = self._lock_connection
+        self._lock_connection = None
+        if connection is None:
             return
         try:
-            self.session.rollback()
-            self.session.execute(
+            connection.execute(
                 text("SELECT pg_advisory_unlock(:key)"),
                 {"key": advisory_lock_key(source_account_ref)},
             )
-            self.session.commit()
-        except Exception:  # pragma: no cover - lock dies with the connection anyway
-            self.session.rollback()
+        except Exception:  # pragma: no cover - the lock dies with the connection anyway
             logger.warning("wfs_cost_valuation_unlock_failed")
+        finally:
+            connection.close()
 
     # ------------------------------------------------------------------ pull
     def _pull(

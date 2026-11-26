@@ -303,3 +303,12 @@ def test_migration_is_single_head_on_settlement_profit_and_touches_only_its_tabl
             tables.add(ast.literal_eval(first) if isinstance(first, ast.Constant) else "TABLE")
     assert tables <= {TABLE, "TABLE"}
     assert f'TABLE = "{TABLE}"' in source
+    # 回滚只在表为空时执行：有一条数据就拒绝，不做 DELETE / TRUNCATE（刘云龙 2026-11-26）
+    downgrade = next(
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.FunctionDef) and node.name == "downgrade"
+    )
+    body = (ast.get_source_segment(source, downgrade) or "").upper()
+    assert "ROLLBACK BLOCKED" in body
+    assert "DELETE" not in body and "TRUNCATE" not in body

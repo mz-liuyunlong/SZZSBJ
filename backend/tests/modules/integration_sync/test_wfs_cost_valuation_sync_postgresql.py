@@ -7,7 +7,7 @@ No provider is called: every page comes from an in-memory fake client.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import cast
 from uuid import uuid4
 
@@ -28,6 +28,7 @@ from app.modules.integration_sync.handlers.lingxing_wfs_cost_valuation_sync impo
 from app.modules.integration_sync.models import (
     IntegrationInterface,
     IntegrationSyncConfig,
+    IntegrationSyncLock,
     IntegrationSyncRun,
 )
 from app.modules.integration_sync.wfs_cost_valuation_catalog import WFS_COST_VALUATION_SYNC_SPEC
@@ -328,8 +329,9 @@ def test_second_batch_for_same_account_is_rejected_without_requests(
         assert client.calls == []
         holder.execute(sa.text("SELECT pg_advisory_unlock_all()"))
 
-    # A running run for the same account also blocks a second (queued) run.
+    # A running run for the same account with a live lease also blocks a second (queued) run.
     running = new_run(session, config, interface)
+    add_lease(session, running, expires_in=timedelta(minutes=5))
     queued = new_run(session, config, interface, status="queued")
     client = FakeClient([page([record(1)], 1, 1)])
     result = LingxingWfsCostValuationSyncHandler(session, client=client).execute(queued, interface)
@@ -337,6 +339,55 @@ def test_second_batch_for_same_account_is_rejected_without_requests(
     assert client.calls == []
     session.refresh(running)
     assert running.status == "running"
+
+
+def add_lease(session: Session, run: IntegrationSyncRun, *, expires_in: timedelta) -> None:
+    now = datetime.now(UTC)
+    session.add(
+        IntegrationSyncLock(
+            provider=run.provider,
+            interface_key=run.interface_key,
+            run_id=run.id,
+            lock_token_hash="0" * 64,
+            acquired_at=now,
+            heartbeat_at=now,
+            expires_at=now + expires_in,
+        )
+    )
+    session.commit()
+
+
+def test_stale_running_run_does_not_block_and_lock_is_released_after_each_run(
+    session: Session, engine: sa.Engine
+) -> None:
+    """刘云龙 2026-11-26：任务结束必须放锁；崩掉留下的「running」不能挡住下一次。"""
+    interface, config = bootstrap(session)
+    # 1) a crashed run: status still "running" but its lease expired long ago
+    crashed = new_run(session, config, interface)
+    add_lease(session, crashed, expires_in=timedelta(minutes=-30))
+    # 2) a run without any lease row (worker died before taking one) is not "active" either
+    new_run(session, config, interface)
+    queued = new_run(session, config, interface, status="queued")
+    client = FakeClient([page([record(1)], 1, 1)])
+    result = LingxingWfsCostValuationSyncHandler(session, client=client).execute(queued, interface)
+    assert result.status == "succeeded", result.error_code
+    assert len(client.calls) == 1
+    # 3) the advisory lock is gone once execute() returned: another connection can take it
+    with engine.connect() as probe:
+        assert probe.scalar(
+            sa.text("SELECT pg_try_advisory_lock(:key)"), {"key": advisory_lock_key(ACCOUNT)}
+        )
+        probe.execute(sa.text("SELECT pg_advisory_unlock_all()"))
+    # 4) a failed run releases it too
+    failing = new_run(session, config, interface, status="queued")
+    bad = FakeClient([page([{**record(1), "quantity": "1.5"}], 1, 1)])
+    failed = LingxingWfsCostValuationSyncHandler(session, client=bad).execute(failing, interface)
+    assert failed.status == "failed"
+    with engine.connect() as probe:
+        assert probe.scalar(
+            sa.text("SELECT pg_try_advisory_lock(:key)"), {"key": advisory_lock_key(ACCOUNT)}
+        )
+        probe.execute(sa.text("SELECT pg_advisory_unlock_all()"))
 
 
 def test_store_mapping_by_sid_by_store_code_and_unmapped(session: Session) -> None:
