@@ -129,10 +129,13 @@ class DataPagesRealSyncRunner(HistoricalAdRunner):
 
         current_day = self.business_date
         affected_days = tuple(
-            day
-            for day in getattr(self, "_refund_affected_business_dates", ())
-            if day != current_day
+            sorted(
+                set(getattr(self, "_refund_affected_business_dates", ()))
+                | set(getattr(self, "_sample_affected_business_dates", ()))
+                - {current_day}
+            )
         )
+        affected_days = tuple(day for day in affected_days if day != current_day)
         current_daily_rows = 0
         current_order_rows = 0
         try:

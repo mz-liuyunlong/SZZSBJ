@@ -673,7 +673,9 @@ def test_verified_sample_cancellation_transition(
         "cancel_time_raw": "1795639001" if prior_cancelled else "0",
         "is_cancelled": prior_cancelled,
         "sample_rule_version": (
-            CANCELLED_VERIFIED_SAMPLE_RULE_VERSION if prior_cancelled else "provider-verified-sample-v5"
+            CANCELLED_VERIFIED_SAMPLE_RULE_VERSION
+            if prior_cancelled
+            else "provider-verified-sample-v5"
         ),
     }
 
