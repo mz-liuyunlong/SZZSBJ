@@ -24,13 +24,17 @@ class FinShippingSyncInterfaceSpec:
     retention_policy_key: str
     default_page_size: int
     default_max_pages: int
+    schedule_cron: str
     initial_outbound_enabled: bool = False
     schedule_enabled: bool = False
 
 
-# 打开定时后：每周三上海时间 04:00（cron 按 UTC，即周二 20:00；2 是周二），
-# 排在沃尔玛账单同步（周三 03:00）之后一小时，三个接口按下面的顺序依次排队。
-FIN_SHIPPING_SCHEDULE_CRON: Final = "0 20 * * 2"
+# 打开定时后三个接口错开跑（cron 按 UTC；2 是周二；上海 = UTC+8）：
+# 发货单 周三 04:00、出库单 04:30、明细 05:00 —— 明细读的是发货单同步的结果，必须排在发货单之后；
+# 三个接口各自一把执行锁，同一时刻排也会并行，所以靠错开时间保证顺序。沃尔玛账单同步在周三 03:00。
+FIN_SHIPPING_LIST_SCHEDULE_CRON: Final = "0 20 * * 2"
+FIN_WMS_OUTBOUND_SCHEDULE_CRON: Final = "30 20 * * 2"
+FIN_SHIPPING_DETAIL_SCHEDULE_CRON: Final = "0 21 * * 2"
 
 # 每次自动 / 手动同步重拉最近多少天（发货单按发货时间，出库单按变更时间）。
 FIN_SHIPPING_ROLLING_DAYS: Final = 90
@@ -49,6 +53,7 @@ FIN_SHIPPING_LIST_SYNC_SPEC: Final = FinShippingSyncInterfaceSpec(
     retention_policy_key="lingxing-fin-shipping-list-v1",
     default_page_size=100,
     default_max_pages=200,
+    schedule_cron=FIN_SHIPPING_LIST_SCHEDULE_CRON,
 )
 
 # 发货单明细：不分页，一张发货单一次请求；max_pages 表示一次运行最多拉多少张发货单的明细，
@@ -63,6 +68,7 @@ FIN_SHIPPING_DETAIL_SYNC_SPEC: Final = FinShippingSyncInterfaceSpec(
     retention_policy_key="lingxing-fin-shipping-detail-v1",
     default_page_size=1,
     default_max_pages=2000,
+    schedule_cron=FIN_SHIPPING_DETAIL_SCHEDULE_CRON,
 )
 
 # 销售出库单：page/page_size 翻页。
@@ -76,6 +82,7 @@ FIN_WMS_OUTBOUND_SYNC_SPEC: Final = FinShippingSyncInterfaceSpec(
     retention_policy_key="lingxing-fin-wms-outbound-v1",
     default_page_size=200,
     default_max_pages=200,
+    schedule_cron=FIN_WMS_OUTBOUND_SCHEDULE_CRON,
 )
 
 FIN_SHIPPING_SYNC_SPECS: Final = (

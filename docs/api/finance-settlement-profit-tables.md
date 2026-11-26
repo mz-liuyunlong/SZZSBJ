@@ -25,7 +25,7 @@ PR-1 只建表，不写同步、计算和接口。表都从空开始；同步任
 
 | 表 | 业务键 | 内容 |
 |---|---|---|
-| `ods_lingxing_fin_shipping_lists` | source_account_ref, store_id, shipping_list_code | 领星多平台发货单（shippingList v2）当前状态：状态、物流商 id / 名称、渠道、头程费用类型、发货时间。与 PMC 的 `ods_lingxing_wfs_shipping_lists`（每次运行一份快照）不同名、互不依赖 |
+| `ods_lingxing_fin_shipping_lists` | source_account_ref, store_id, shipping_list_code | 领星多平台发货单（shippingList v2）当前状态：状态、物流商 id / 名称、渠道、头程费用类型、发货时间；`detail_synced_at`（迁移 0099，PR-2）= 明细最近一次同步时间，为空或早于 `updated_at` 时明细同步会（再）拉这张单。与 PMC 的 `ods_lingxing_wfs_shipping_lists`（每次运行一份快照）不同名、互不依赖 |
 | `ods_lingxing_fin_shipping_detail_items` | source_account_ref, shipping_list_code, msku | 发货单明细（shippingDetail），一行 = 发货单 × MSKU：`purchase_price` 采购价、`head_stock_price` 出库头程、`per_firstlet_cost` 头程费用（= `per_firstlet_actual`，已含 `other_cost`）、`per_tax` 税、`wfs_stock_price` 单位成本（¥）、`logistics_way`、`logistics_provider_id`、`value_source` |
 | `ods_lingxing_fin_wms_outbound_orders` | source_account_ref, store_id, outbound_order_no | 销售出库单（wmsOrderList）：平台订单号、物流费用、币种、出库时间；非 WFS 自发货订单的尾程来源 |
 | `ods_walmart_review_accelerator_snapshots` | source_account_ref, store_id, snapshot_date, item_id | 评价加速器报名清单快照（云函数 POST items，翻 scrollId）：SKU、状态、累计评论数 `reviews_collected`、报名时间、类目；只当分摊权重用 |

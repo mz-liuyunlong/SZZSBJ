@@ -74,6 +74,14 @@ MAX_ATTEMPTS = 2
 FIN_SHIPPING_LIST_PAGE_LIMIT = 100
 FIN_WMS_ORDER_PAGE_LIMIT = 200
 WALMART_PLATFORM_CODE = "10008"
+# 这三个路径只能走 fetch_fin_* 三个受控方法（脱敏后落原始层），通用抓取入口 fetch_pages 拒绝。
+FIN_SHIPPING_ONLY_PATHS: frozenset[str] = frozenset(
+    {
+        "/basicOpen/multiplatform/query/shippingList",
+        "/basicOpen/multiplatform/query/shippingDetail",
+        "/erp/sc/routing/wms/order/wmsOrderList",
+    }
+)
 RETRY_BACKOFF_SECONDS = 0.05
 DATA_PAGES_OBJECT_PREFIX = "data_pages_"
 
@@ -565,6 +573,8 @@ class LingxingReadonlyClient:
             raise LingxingClientError("Lingxing endpoint is not approved")
         if request.api_path == "/erp/sc/routing/data/local_inventory/batchGetProductInfo":
             raise LingxingClientError("Use the controlled ProductInfo batch method")
+        if request.api_path in FIN_SHIPPING_ONLY_PATHS:
+            raise LingxingClientError("Use the controlled settlement sync methods")
         if not contract.outbound_enabled:
             raise LingxingClientError(contract.rejection_reason or "Lingxing endpoint is disabled")
         if not request.store_ids:

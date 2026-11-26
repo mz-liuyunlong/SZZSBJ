@@ -52,6 +52,7 @@ from app.modules.integration_sync.models import (
     IntegrationSyncRun,
     IntegrationSyncRunWorkItem,
 )
+from app.modules.integration_sync.product_info_runner import ProductInfoOneTimeRunError
 from app.modules.settlement_profit.models import (
     FinShippingDetailItem,
     FinShippingList,
@@ -241,7 +242,16 @@ def test_response_total_accepts_string_and_int() -> None:
 
 
 def test_scrub_pii_drops_recipient_keys_recursively() -> None:
-    cleaned = scrub_pii({"a": 1, "consignee_phone": "x", "nested": [{"address": "y", "sku": "s"}]})
+    cleaned = scrub_pii(
+        {
+            "a": 1,
+            "consignee_phone": "x",
+            "surface_file": {"cos_url": "u"},
+            "picker": "p",
+            "deliverer": "d",
+            "nested": [{"address": "y", "sku": "s", "customization": "c"}],
+        }
+    )
     assert cleaned == {"a": 1, "nested": [{"sku": "s"}]}
 
 
@@ -275,6 +285,14 @@ def test_parse_detail_items_merges_duplicate_msku_and_maps_currency_symbol() -> 
         ("SYN-002", Decimal("10")),
     ]
     assert items[0]["raw_row"]["merged_rows"] == 2
+    assert items[0]["raw_row"]["merged_delivery_num"] == "15"
+    single = parse_shipping_detail_items(
+        [detail_item("SYN-001", qty=10)],
+        shipping_list_code="SP2026T0001",
+        default_store_id=STORE_B,
+        source_account_ref=ACCOUNT,
+    )
+    assert single[0]["row_hash"] != items[0]["row_hash"]
     assert items[0]["currency_code"] == "CNY"
     assert items[0]["store_id"] == STORE_A
     assert items[0]["purchase_price"] == Decimal("3.00")
@@ -304,6 +322,7 @@ def test_parse_wms_row_keeps_first_platform_order_and_trims_items() -> None:
         parse_wms_order_row({"wo_number": None}, store_id=STORE_A, source_account_ref=ACCOUNT)
         is None
     )
+    assert parse_wms_order_row(wms_row("WO1"), store_id=STORE_B, source_account_ref=ACCOUNT) is None
 
 
 # --------------------------------------------------------------------------- 数据库
@@ -447,10 +466,9 @@ def test_enable_opens_manual_first_and_schedule_only_when_asked(session: Session
     assert service.enable_fin_shipping_sync(ACCOUNT, schedule=True) is True
     session.expire_all()
     configs = session.scalars(select(IntegrationSyncConfig)).all()
-    assert all(
-        config.schedule_enabled and config.schedule_cron == "0 20 * * 2" for config in configs
-    )
-    assert all(config.next_run_at is not None for config in configs)
+    assert all(config.schedule_enabled and config.next_run_at is not None for config in configs)
+    crons = {config.schedule_cron for config in configs}
+    assert crons == {"0 20 * * 2", "30 20 * * 2", "0 21 * * 2"}
 
 
 def test_shipping_list_sync_pages_stores_raw_first_and_upserts(session: Session) -> None:
@@ -540,6 +558,42 @@ def test_shipping_list_runaway_paging_is_refused(session: Session) -> None:
     assert "SYNC_FIN_SHIPPING_TOO_MANY_PAGES" in (run.error_message or "")
 
 
+def test_repeated_page_from_lingxing_stops_the_store_at_once(session: Session) -> None:
+    add_stores(session)
+    interface = governed(session, FIN_SHIPPING_LIST_SYNC_SPEC, page_size=1, max_pages=50)
+    client = FakeLingxing()
+    for offset in range(3):
+        client.list_pages[(STORE_A, offset)] = list_body([shipping_row("SP2026T0001")], total=99)
+    run = run_sync(session, interface, client)
+    assert (run.status, run.error_code) == ("failed", "SYNC_FIN_ALL_STORES_FAILED")
+    assert "SYNC_FIN_SHIPPING_PAGE_REPEATED" in (run.error_message or "")
+    assert run.work_items_total == 2
+
+    wms = governed(session, FIN_WMS_OUTBOUND_SYNC_SPEC, page_size=1, max_pages=50)
+    for page in (1, 2, 3):
+        client.wms_pages[(STORE_A, page)] = wms_body([wms_row("WO1")], total=99)
+    run = run_sync(session, wms, client)
+    assert "SYNC_FIN_WMS_PAGE_REPEATED" in (run.error_message or "")
+    assert run.work_items_total == 2
+
+
+def test_lease_lost_stops_the_whole_run(session: Session) -> None:
+    add_stores(session, STORE_A, STORE_B)
+    interface = governed(session, FIN_SHIPPING_LIST_SYNC_SPEC)
+    run = queued_run(session, interface)
+    run.status = "running"
+
+    def lost() -> None:
+        raise ProductInfoOneTimeRunError("SYNC_LOCK_LEASE_LOST")
+
+    handler = LingxingFinShippingListSyncHandler(
+        session, client=FakeLingxing(), heartbeat=lost, now=lambda: NOW
+    )
+    with pytest.raises(ProductInfoOneTimeRunError, match="SYNC_LOCK_LEASE_LOST"):
+        handler.execute(run, interface)
+    assert run.work_items_total == 1
+
+
 def test_backfill_window_is_used_and_never_before_may(session: Session) -> None:
     add_stores(session)
     interface = governed(session, FIN_SHIPPING_LIST_SYNC_SPEC)
@@ -602,6 +656,10 @@ def test_detail_sync_pulls_shipped_lists_once_until_the_list_changes(session: Se
     ]
     assert items[0].shipping_list_code == "SP2026T0001"
     assert items[0].currency_code == "CNY"
+    shipping = session.scalars(
+        select(FinShippingList).where(FinShippingList.shipping_list_code == "SP2026T0001")
+    ).one()
+    assert shipping.detail_synced_at is not None
 
     # 第二次：明细已经是最新，不再请求。
     client.calls.clear()
@@ -609,11 +667,9 @@ def test_detail_sync_pulls_shipped_lists_once_until_the_list_changes(session: Se
     assert run_sync(session, interface, client, now=later).status == "succeeded"
     assert client.calls == []
 
-    # 发货单变了（updated_at 往后）→ 重拉，并用新数据覆盖。
-    shipping = session.scalars(
-        select(FinShippingList).where(FinShippingList.shipping_list_code == "SP2026T0001")
-    ).one()
-    shipping.updated_at = datetime(2026, 11, 28, tzinfo=UTC)
+    # 发货单变了（updated_at 晚于明细同步时间）→ 重拉；新明细里没有的 MSKU 删掉，其余覆盖。
+    # 这里用真实当前时间：处理器写 detail_synced_at 用的是真实时钟，不是注入的 now。
+    shipping.updated_at = datetime.now(UTC)
     session.flush()
     client.details["SP2026T0001"] = detail_body([detail_item("SYN-001", purchase="3.50")])
     assert (
@@ -622,10 +678,39 @@ def test_detail_sync_pulls_shipped_lists_once_until_the_list_changes(session: Se
     )
     assert client.calls == [("detail", STORE_A, "SP2026T0001")]
     session.expire_all()
-    item = session.scalars(
-        select(FinShippingDetailItem).where(FinShippingDetailItem.msku == "SYN-001")
+    items = session.scalars(select(FinShippingDetailItem)).all()
+    assert [(item.msku, item.purchase_price) for item in items] == [("SYN-001", Decimal("3.5"))]
+    assert shipping.detail_synced_at is not None
+    assert shipping.detail_synced_at > shipping.updated_at
+
+
+def test_empty_detail_is_pulled_once_and_stale_rows_are_removed(session: Session) -> None:
+    add_stores(session)
+    seed_shipping_list(session, "SP2026T0001")
+    interface = governed(session, FIN_SHIPPING_DETAIL_SYNC_SPEC)
+    client = FakeLingxing()
+    client.details["SP2026T0001"] = detail_body([detail_item("SYN-001")])
+    assert run_sync(session, interface, client).status == "succeeded"
+    assert session.scalar(select(func.count()).select_from(FinShippingDetailItem)) == 1
+
+    shipping = session.scalars(
+        select(FinShippingList).where(FinShippingList.shipping_list_code == "SP2026T0001")
     ).one()
-    assert item.purchase_price == Decimal("3.5")
+    shipping.updated_at = datetime.now(UTC)
+    session.flush()
+    client.details["SP2026T0001"] = detail_body([])
+    client.calls.clear()
+    run = run_sync(session, interface, client, now=datetime(2026, 11, 29, tzinfo=UTC))
+    assert (run.status, run.records_seen, run.records_written) == ("succeeded", 0, 0)
+    assert client.calls == [("detail", STORE_A, "SP2026T0001")]
+    assert session.scalar(select(func.count()).select_from(FinShippingDetailItem)) == 0
+
+    client.calls.clear()
+    assert (
+        run_sync(session, interface, client, now=datetime(2026, 11, 30, tzinfo=UTC)).status
+        == "succeeded"
+    )
+    assert client.calls == []
 
 
 def test_pending_detail_codes_respects_limit_and_order(session: Session) -> None:

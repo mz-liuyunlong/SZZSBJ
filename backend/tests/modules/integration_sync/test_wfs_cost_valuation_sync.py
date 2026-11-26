@@ -287,7 +287,8 @@ def test_identity_is_request_and_ordinal_not_serial_number() -> None:
 
 def test_migration_is_single_head_on_settlement_profit_and_touches_only_its_table() -> None:
     script = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
-    assert script.get_heads() == [REVISION]
+    # 0099（结算利润 PR-2）已接在 0098 之后；这里只断言 0098 仍在主链上、前驱是 0097。
+    assert REVISION in {item.revision for item in script.walk_revisions()}
     assert script.get_revision(REVISION).down_revision == PREVIOUS
     source = (BACKEND_ROOT / "alembic" / "versions" / f"{REVISION}.py").read_text("utf-8")
     tables: set[str] = set()

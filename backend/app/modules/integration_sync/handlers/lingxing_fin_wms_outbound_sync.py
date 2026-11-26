@@ -71,9 +71,13 @@ class FinWmsOrderPageClient(Protocol):
 def parse_wms_order_row(
     row: dict[str, Any], *, store_id: str, source_account_ref: str
 ) -> dict[str, Any] | None:
-    """一行出库单 → 表字段；没有出库单号返回 None（整页按脏数据失败）。"""
+    """一行出库单 → 表字段；没有出库单号、或 sid 不是请求的店，返回 None（整页按脏数据失败）。"""
     order_no = text_or_none(row.get("wo_number"), 64)
     if order_no is None:
+        return None
+    # 请求按 sid_arr=[store_id] 一次一店；返回行带 sid 时必须等于请求的店（#370 复审 P1）。
+    row_sid = text_or_none(row.get("sid"), 32)
+    if row_sid is not None and row_sid != store_id:
         return None
     platform_orders = row.get("platform_order_no")
     if isinstance(platform_orders, list):
@@ -126,6 +130,7 @@ class LingxingFinWmsOutboundSyncHandler(FinSyncHandlerBase):
         max_pages: int,
     ) -> None:
         seen_total = 0
+        previous_codes: set[str] = set()
         for page_no in range(1, max_pages + 1):
             work = self._start_work_item(
                 run,
@@ -170,6 +175,12 @@ class LingxingFinWmsOutboundSyncHandler(FinSyncHandlerBase):
             if any(value is None for value in values):
                 self._fail_work(run, work, "SYNC_FIN_WMS_INVALID_ROW")
                 raise FinSyncError("SYNC_FIN_WMS_INVALID_ROW")
+            codes = {value["outbound_order_no"] for value in values if value is not None}
+            if codes and codes == previous_codes:
+                # 领星没理会 page、一直返回同一页：立刻停，不白跑到 max_pages。
+                self._fail_work(run, work, "SYNC_FIN_WMS_PAGE_REPEATED")
+                raise FinSyncError("SYNC_FIN_WMS_PAGE_REPEATED")
+            previous_codes = codes
             written = _upsert_wms_orders(
                 self.session, [value for value in values if value is not None], run, ref
             )

@@ -39,6 +39,7 @@ from app.modules.integration_sync.models import (
     IntegrationSyncRunWorkItem,
     RawRetentionPolicy,
 )
+from app.modules.integration_sync.product_info_runner import ProductInfoOneTimeRunError
 from app.modules.integration_sync.repository import IntegrationSyncRepository
 from app.modules.warehouse_wfs.store_discovery import (
     WfsSettlementStore,
@@ -53,11 +54,14 @@ EARLIEST = date.fromisoformat(FIN_SHIPPING_EARLIEST_DATE)
 MAX_PAGE_SIZE = 200
 MAX_PAGES = 5000
 
-# 销售出库单里的收件人等个人信息不进原始层也不进 ODS（和 2026-10 探测脚本同一份键名规则）。
+# 销售出库单里的收件人等个人信息不进原始层也不进 ODS（2026-10 探测脚本的键名规则 + #370 复审补充：
+# 面单文件 surface_file 是带收件人姓名地址的链接；拣货人 / 发货人是员工姓名；
+# 商品备注 customization 可能带买家文字）。
 _PII_KEY = re.compile(
     r"^(consignee|order_buyer_notes|order_customer_service_notes|customer_shipping_list"
     r"|buyers?_?info|address|receiver|phone|email|postcode|zip|tel|district"
-    r"|recipient_tax_no|sender_tax_no|remark_attachment)",
+    r"|recipient_tax_no|sender_tax_no|remark_attachment"
+    r"|surface_file|picker|deliverer|customization)",
     re.IGNORECASE,
 )
 
@@ -211,6 +215,9 @@ class FinSyncHandlerBase:
             for store in stores:
                 try:
                     self._sync_store(run, client, policy, store, start, end, page_size, max_pages)
+                except ProductInfoOneTimeRunError:
+                    # 执行层的租约丢了（SYNC_LOCK_LEASE_LOST）：整次运行立即停，不再碰下一家店。
+                    raise
                 except FinSyncError as exc:
                     failed += 1
                     self.session.rollback()
@@ -390,9 +397,12 @@ class FinSyncHandlerBase:
         policy: RawRetentionPolicy,
         fetch: Callable[[], LingxingRawEnvelope],
     ) -> tuple[JsonValue, ApiRawRequestRef]:
-        """请求一次，脱敏后先落原始层；请求或落库出错按 REQUEST_FAILED 记工作项失败。"""
+        """请求一次，脱敏后先落原始层；请求或落库出错按 REQUEST_FAILED 记工作项失败。
+
+        心跳在 try 外面：租约丢失要原样抛给执行层，不能包装成请求失败再去跑下一家店。
+        """
+        self.heartbeat()
         try:
-            self.heartbeat()
             envelope = fetch()
             payload = scrub_pii(redact_json(envelope.response_json))
             ref = self._persist_raw(run, work, policy, envelope, payload, response_count=None)

@@ -2,8 +2,10 @@
 
 发货单：一个店、一个时间窗（按发货时间）offset/length 翻页，写 ods_lingxing_fin_shipping_lists
 （当前状态，按 发货单号 upsert）。
-明细：从发货单表挑「已发货、在时间窗内、明细还没拉过或发货单变过」的单子，一张一次请求，
-写 ods_lingxing_fin_shipping_detail_items（发货单 × MSKU，upsert）。
+明细：从发货单表挑「已发货、在时间窗内、明细还没拉过（detail_synced_at 为空）或发货单变过
+（detail_synced_at 早于 updated_at）」的单子，一张一次请求，
+写 ods_lingxing_fin_shipping_detail_items（发货单 × MSKU，upsert；
+新明细里没有的 MSKU 同一事务删掉），并在发货单上记 detail_synced_at（明细为空也记，不反复重拉）。
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ from datetime import date, datetime
 from functools import partial
 from typing import Any, Protocol
 
-from sqlalchemy import case, select
+from sqlalchemy import case, delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -122,6 +124,9 @@ def parse_shipping_detail_items(
             if qty is not None:
                 existing["delivery_num"] = (existing["delivery_num"] or 0) + qty
             existing["raw_row"]["merged_rows"] = existing["raw_row"].get("merged_rows", 1) + 1
+            existing["raw_row"]["merged_delivery_num"] = str(existing["delivery_num"])
+            # 行指纹按合并后的结果算，第二条的数量变了指纹也要变。
+            existing["row_hash"] = row_hash(existing["raw_row"])
             continue
         merged[msku] = {
             "source_account_ref": source_account_ref,
@@ -180,6 +185,7 @@ class LingxingFinShippingListSyncHandler(FinSyncHandlerBase):
         max_pages: int,
     ) -> None:
         offset = 0
+        previous_codes: set[str] = set()
         for page_no in range(1, max_pages + 1):
             work = self._start_work_item(
                 run,
@@ -225,6 +231,12 @@ class LingxingFinShippingListSyncHandler(FinSyncHandlerBase):
             if any(value is None for value in values):
                 self._fail_work(run, work, "SYNC_FIN_SHIPPING_INVALID_ROW")
                 raise FinSyncError("SYNC_FIN_SHIPPING_INVALID_ROW")
+            codes = {value["shipping_list_code"] for value in values if value is not None}
+            if codes and codes == previous_codes:
+                # 领星没理会 offset、一直返回同一页：立刻停，不白跑到 max_pages。
+                self._fail_work(run, work, "SYNC_FIN_SHIPPING_PAGE_REPEATED")
+                raise FinSyncError("SYNC_FIN_SHIPPING_PAGE_REPEATED")
+            previous_codes = codes
             written = _upsert_shipping_lists(
                 self.session, [value for value in values if value is not None], run, ref
             )
@@ -342,7 +354,15 @@ class LingxingFinShippingDetailSyncHandler(FinSyncHandlerBase):
                 default_store_id=store.store_id,
                 source_account_ref=run.source_account_ref,
             )
-            written = _upsert_detail_items(self.session, values, run, ref)
+            written = _replace_detail_items(
+                self.session,
+                values,
+                run,
+                ref,
+                source_account_ref=run.source_account_ref,
+                store_id=store.store_id,
+                shipping_list_code=code,
+            )
             self._finish_work(run, work, ref, seen=len(items), written=written)
 
 
@@ -355,19 +375,9 @@ def pending_detail_codes(
     end: date,
     limit: int,
 ) -> list[str]:
-    """已发货、发货时间在窗内、且（没有明细 或 明细早于发货单最近一次变化）的发货单号，新的在前。"""
+    """已发货、发货时间在窗内、且（明细没拉过 或 发货单在明细之后变过）的发货单号，新的在前。"""
     window_start = datetime.combine(start, datetime.min.time(), tzinfo=SHANGHAI)
     window_end = datetime.combine(end, datetime.max.time(), tzinfo=SHANGHAI)
-    latest_item = (
-        select(FinShippingDetailItem.synced_at)
-        .where(
-            FinShippingDetailItem.source_account_ref == FinShippingList.source_account_ref,
-            FinShippingDetailItem.shipping_list_code == FinShippingList.shipping_list_code,
-        )
-        .order_by(FinShippingDetailItem.synced_at.desc())
-        .limit(1)
-        .scalar_subquery()
-    )
     statement = (
         select(FinShippingList.shipping_list_code)
         .where(
@@ -377,7 +387,8 @@ def pending_detail_codes(
             FinShippingList.delivery_at.is_not(None),
             FinShippingList.delivery_at >= window_start,
             FinShippingList.delivery_at <= window_end,
-            (latest_item.is_(None)) | (latest_item < FinShippingList.updated_at),
+            FinShippingList.detail_synced_at.is_(None)
+            | (FinShippingList.detail_synced_at < FinShippingList.updated_at),
         )
         .order_by(FinShippingList.delivery_at.desc(), FinShippingList.shipping_list_code)
         .limit(limit)
@@ -385,15 +396,48 @@ def pending_detail_codes(
     return list(session.scalars(statement).all())
 
 
+def _replace_detail_items(
+    session: Session,
+    values: list[dict[str, Any]],
+    run: IntegrationSyncRun,
+    ref: ApiRawRequestRef,
+    *,
+    source_account_ref: str,
+    store_id: str,
+    shipping_list_code: str,
+) -> int:
+    """同一事务：upsert 新明细、删掉这张单不在新集合里的 MSKU 行、在发货单上记 detail_synced_at。"""
+    now = utc_now()
+    mskus = [value["msku"] for value in values]
+    stale = delete(FinShippingDetailItem).where(
+        FinShippingDetailItem.source_account_ref == source_account_ref,
+        FinShippingDetailItem.shipping_list_code == shipping_list_code,
+    )
+    if mskus:
+        stale = stale.where(FinShippingDetailItem.msku.not_in(mskus))
+    session.execute(stale)
+    written = _upsert_detail_items(session, values, run, ref, now)
+    session.execute(
+        update(FinShippingList)
+        .where(
+            FinShippingList.source_account_ref == source_account_ref,
+            FinShippingList.store_id == store_id,
+            FinShippingList.shipping_list_code == shipping_list_code,
+        )
+        .values(detail_synced_at=now)
+    )
+    return written
+
+
 def _upsert_detail_items(
     session: Session,
     values: list[dict[str, Any]],
     run: IntegrationSyncRun,
     ref: ApiRawRequestRef,
+    now: datetime,
 ) -> int:
     if not values:
         return 0
-    now = utc_now()
     statement = pg_insert(FinShippingDetailItem).values(
         [
             {

@@ -9,10 +9,7 @@ from sqlalchemy.orm import Session
 from app.modules.integration_sync.data_pages_catalog import (
     DATA_PAGES_SYNC_INTERFACE_SPECS,
 )
-from app.modules.integration_sync.fin_shipping_catalog import (
-    FIN_SHIPPING_SCHEDULE_CRON,
-    FIN_SHIPPING_SYNC_SPECS,
-)
+from app.modules.integration_sync.fin_shipping_catalog import FIN_SHIPPING_SYNC_SPECS
 from app.modules.integration_sync.finance_approval_catalog import (
     FINANCE_APPROVAL_PROVIDER,
     FINANCE_APPROVAL_SOURCE_REF,
@@ -756,7 +753,7 @@ class IntegrationCatalogService:
         """打开结算利润 PR-2 三个接口的同步。
 
         schedule=False（默认）只开手动：首次手动同步当作受控探测；探测通过后再用 schedule=True
-        打开每周定时（三个接口同一个 cron，任务中心按登记顺序排队）。
+        打开每周定时（三个接口的 cron 错开：发货单 → 出库单 → 明细）。
         Safe to repeat: a cron or next run already set in the task centre is kept.
         """
         from app.modules.integration_sync.scheduler import next_cron_instant
@@ -786,7 +783,7 @@ class IntegrationCatalogService:
             if not schedule:
                 continue
             config.schedule_enabled = True
-            config.schedule_cron = config.schedule_cron or FIN_SHIPPING_SCHEDULE_CRON
+            config.schedule_cron = config.schedule_cron or spec.schedule_cron
             config.schedule_timezone = "UTC"
             config.next_run_at = config.next_run_at or next_cron_instant(
                 config.schedule_cron, datetime.now(UTC)

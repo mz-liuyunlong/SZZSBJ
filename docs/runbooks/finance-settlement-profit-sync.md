@@ -13,19 +13,21 @@
 - 三个都是只读，一个店一次请求，每页先落 `ods_api_raw_blobs` + `ods_api_raw_request_refs` 再写 ODS，每页提交一次；全部 upsert，重跑安全。
 - 店铺来自 `dim_lingxing_stores`（Walmart 平台），和沃尔玛账单同步同一份。
 - 时间窗：手动 / 定时 = 最近 90 天（上海日期）；回填 = 任务中心给的窗，下限 2026-05-01。
-- 明细只拉已发货、发货时间在窗内、且没有明细或发货单比明细新的单子；发货单列表要先跑过明细才有东西拉，三个按登记顺序依次手动触发即可。
-- 个人信息（收件人、电话、地址、邮编、买家留言等）在落原始层之前删掉。
+- 明细只拉已发货、发货时间在窗内、且发货单 `detail_synced_at` 为空或早于 `updated_at` 的单子；拉完同一事务里删掉不在新明细里的 MSKU 行并记 `detail_synced_at`（明细为空也记）。发货单列表要先跑过明细才有东西拉：手动触发按 发货单 → 出库单 → 明细 的顺序，等前一个跑完再点下一个。
+- 定时三个接口错开（UTC cron）：发货单 `0 20 * * 2`（周三上海 04:00）、出库单 `30 20 * * 2`（04:30）、明细 `0 21 * * 2`（05:00）。三个接口各自一把执行锁，排同一时刻会并行，所以靠错开时间保证顺序。
+- 个人信息（收件人、电话、地址、邮编、买家留言、客服备注、税号、备注附件、面单文件、拣货人 / 发货人、商品备注）在落原始层之前删掉。
+- 迁移 `20261126_0099_fin_shipping_list_detail_synced_at`：发货单表加 `detail_synced_at` 一列；有值时拒绝回滚。
 
 ## 2. 上线步骤（负责人授权后由部署 AI 按票据执行）
 
 1. 登记（全部关闭）：`FIN_SHIPPING_GOVERNANCE_BOOTSTRAP_AUTHORIZED=true FIN_SHIPPING_SOURCE_ACCOUNT_REF=<账号引用> uv run python scripts/bootstrap_fin_shipping_governance.py`。
 2. 只开手动：`FIN_SHIPPING_SYNC_ENABLE_AUTHORIZED=true FIN_SHIPPING_SOURCE_ACCOUNT_REF=<账号引用> uv run python scripts/enable_fin_shipping_sync.py`。
 3. 首次手动同步当作受控探测：任务中心依次触发 `finShippingList` → `finShippingDetail` → `finWmsOutboundOrders`，核对条数与本地归档（2026-11-16 发货单探测、2026-10-26 出库单拉取）一致（只回报是否一致，不回报金额）。
-4. 开定时：探测通过后，同上命令再加 `FIN_SHIPPING_SYNC_SCHEDULE_AUTHORIZED=true` 重跑一次（每周三上海 04:00，cron `0 20 * * 2` UTC）。
+4. 开定时：探测通过后，同上命令再加 `FIN_SHIPPING_SYNC_SCHEDULE_AUTHORIZED=true` 重跑一次（三个接口各自的 cron 见 §1）。
 5. 回填：任务中心对三个接口分别发起回填，2026-05-01 至今，按月分批（先发货单，再明细，再出库单）。
 
-回滚：任务中心关掉 `is_enabled` 立即停；本 PR 没有迁移（表由 #365 建）。
+回滚：任务中心关掉 `is_enabled` 立即停；迁移 0099 的 downgrade 在 `detail_synced_at` 有值时拒绝（不删数据）。
 
 ## 3. 错误码（任务中心可见）
 
-`SYNC_FIN_RUNTIME_NOT_AUTHORIZED`（测试环境 / 未开真实调用）、`SYNC_FIN_EXECUTION_NOT_AUTHORIZED`、`SYNC_FIN_GOVERNANCE_DISABLED`、`SYNC_FIN_NO_STORES`、`SYNC_FIN_PAGINATION_INVALID`、`SYNC_FIN_WINDOW_INVALID`、`SYNC_FIN_REQUEST_FAILED`、`SYNC_FIN_RESPONSE_FAILED`（领星 code ≠ 0）、`SYNC_FIN_SHIPPING_RESPONSE_SHAPE` / `SYNC_FIN_WMS_RESPONSE_SHAPE`（响应不是预期结构）、`SYNC_FIN_SHIPPING_INVALID_ROW` / `SYNC_FIN_WMS_INVALID_ROW`（缺单号）、`SYNC_FIN_SHIPPING_TOO_MANY_PAGES` / `SYNC_FIN_WMS_TOO_MANY_PAGES`、`SYNC_FIN_STORE_FAILED`（店失败但不是上面任何一种，如数据库出错）、`SYNC_FIN_STORE_PARTIAL` / `SYNC_FIN_ALL_STORES_FAILED`（运行级汇总；`error_message` 里按店列出各自的错误码）。
+`SYNC_FIN_RUNTIME_NOT_AUTHORIZED`（测试环境 / 未开真实调用）、`SYNC_FIN_EXECUTION_NOT_AUTHORIZED`、`SYNC_FIN_GOVERNANCE_DISABLED`、`SYNC_FIN_NO_STORES`、`SYNC_FIN_PAGINATION_INVALID`、`SYNC_FIN_WINDOW_INVALID`、`SYNC_FIN_REQUEST_FAILED`、`SYNC_FIN_RESPONSE_FAILED`（领星 code ≠ 0）、`SYNC_FIN_SHIPPING_RESPONSE_SHAPE` / `SYNC_FIN_WMS_RESPONSE_SHAPE`（响应不是预期结构）、`SYNC_FIN_SHIPPING_INVALID_ROW` / `SYNC_FIN_WMS_INVALID_ROW`（缺单号；出库单还包括返回行 `sid` 不是请求的店）、`SYNC_FIN_SHIPPING_TOO_MANY_PAGES` / `SYNC_FIN_WMS_TOO_MANY_PAGES`、`SYNC_FIN_SHIPPING_PAGE_REPEATED` / `SYNC_FIN_WMS_PAGE_REPEATED`（连续两页单号完全相同）、`SYNC_FIN_STORE_FAILED`（店失败但不是上面任何一种，如数据库出错）、`SYNC_FIN_STORE_PARTIAL` / `SYNC_FIN_ALL_STORES_FAILED`（运行级汇总；`error_message` 里按店列出各自的错误码）。
