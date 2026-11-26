@@ -31,6 +31,10 @@ from app.modules.integration_sync.data_pages_finance_partial_isolation import (
     record_sample_dispute,
     reset_sample_dispute_current,
 )
+from app.modules.integration_sync.data_pages_sample_isolation import (
+    SAMPLE_CONFLICT_WARNING,
+    mark_isolated_sample_finance,
+)
 from app.modules.product_management.daily_sales_costs import (
     DailySalesCostResolution,
     load_daily_sales_costs,
@@ -996,13 +1000,15 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             for row in sample_state_rows
         }
 
+        mark_isolated_sample_finance(self.session, self.source_account_ref, self.business_date)
         mart_rows = (
             self.session.execute(
                 text(
                     "select m.id,m.store_id,m.item_id,m.msku,m.local_sku,m.gross_sales_qty,"
                     "m.gross_order_count,m.gross_sales_amount,m.sample_order_count,m.sample_qty,m.sample_amount,"
                     "m.cost_quantity,sample_qty,return_qty,m.sales_qty,m.sales_amount,m.refund_amount,m.ad_spend_amount,"
-                    "m.sem_ad_spend_amount,m.commission_rate,m.commission_fee_amount "
+                    "m.sem_ad_spend_amount,m.commission_rate,m.commission_fee_amount,"
+                    "m.calculation_warnings_json "
                     "from mart_daily_sales_item_day m where m.source_account_ref=:account and m.business_date_la=:day"
                 ),
                 {"account": self.source_account_ref, "day": self.business_date},
@@ -1050,6 +1056,12 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             if sample_amount > gross_sales:
                 warnings.append("sample_amount_exceeds_gross_sales_amount")
             sample_disputed = sample_qty > gross_qty or sample_amount > gross_sales
+            evidence_disputed = SAMPLE_CONFLICT_WARNING in (row["calculation_warnings_json"] or [])
+            if evidence_disputed:
+                missing.append(SAMPLE_CONFLICT_WARNING)
+                warnings.append(SAMPLE_CONFLICT_WARNING)
+                refund_amount = None
+                net_commission = None
             if sample_disputed:
                 # Disputed sample evidence must not reduce SaleStat quantities or amounts,
                 # nor produce a fabricated refund or commission estimate for this SKU-day.
@@ -1069,6 +1081,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     sample_amount=sample_amount,
                     sales_amount=gross_sales,
                 )
+            sample_disputed = sample_disputed or evidence_disputed
             paid_sales = (
                 gross_sales if sample_disputed else max(gross_sales - sample_amount, Decimal("0"))
             )

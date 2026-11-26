@@ -18,6 +18,10 @@ from app.modules.integration_sync.data_pages_real_sync import (
     DataPagesRealSyncSummary,
     data_pages_client,
 )
+from app.modules.integration_sync.data_pages_sample_isolation import (
+    SampleIsolation,
+    complete_sample_financial_review,
+)
 from app.modules.integration_sync.finance_approval_catalog import FINANCE_APPROVAL_PROVIDER
 from app.modules.integration_sync.handlers.feishu_finance_approval_sync import (
     FeishuFinanceApprovalSyncHandler,
@@ -683,6 +687,7 @@ class SyncRunExecutionService:
             heartbeat()
             runner.summary.store_rows = runner._write_stores(stores)
 
+        sample_isolation: SampleIsolation | None = None
         if interface_key == "saleStatPageList":
             sales_rows: list[dict[str, Any]] = []
             for result_type in (1, 2, 3):
@@ -704,13 +709,27 @@ class SyncRunExecutionService:
             heartbeat()
             runner.summary.sales_rows = runner._write_sales(sales_rows)
             heartbeat()
-            runner.summary.order_rows = runner._write_orders(orders)
+            if run_id is not None:
+                sample_isolation = SampleIsolation(
+                    self.session, runner.source_account_ref, runner.business_date, run_id
+                )
+                runner._sample_isolation = sample_isolation
+            # Verify protected samples before ordinary order writes: a disputed
+            # provider Item ID must not abort the unrelated order capture.
+            runner.summary.sample_rows = runner._write_sample_orders(orders)
+            heartbeat()
+            order_facts = (
+                sample_isolation.filter_order_facts(orders) if sample_isolation else orders
+            )
+            runner.summary.order_rows = runner._write_orders(order_facts)
             heartbeat()
             runner.summary.order_unresolved_rows += runner._resolve_order_items()
             heartbeat()
-            runner.summary.sample_rows = runner._write_sample_orders(orders)
-            heartbeat()
             runner.summary.sample_unresolved_rows += runner._resolve_sample_items()
+            if sample_isolation is not None:
+                runner._sample_affected_business_dates = tuple(
+                    sorted(sample_isolation.affected_days)
+                )
             # Unconfirmed sample candidates never fail the entire multi-store
             # sales sync. They remain excluded from financial aggregation.
 
@@ -833,6 +852,22 @@ class SyncRunExecutionService:
                     "running",
                     "SYNC_REFUND_MART_VALIDATED",
                     safe_details={"business_date": purchase_day.isoformat()},
+                )
+        if sample_isolation is not None and run_id is not None:
+            for day in sorted(sample_isolation.affected_days):
+                complete_sample_financial_review(
+                    self.session, runner.source_account_ref, day, run_id
+                )
+            if sample_isolation.conflicted:
+                self._event(
+                    run_id,
+                    "running",
+                    "running",
+                    "DATA_PAGES_SAMPLE_EVIDENCE_ISOLATED",
+                    safe_details={
+                        "business_date": runner.business_date.isoformat(),
+                        "isolated_lines": len(sample_isolation.conflicted),
+                    },
                 )
         self.session.commit()
         return runner.summary
