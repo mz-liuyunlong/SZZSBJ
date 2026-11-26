@@ -360,44 +360,34 @@ def add_lease(session: Session, run: IntegrationSyncRun, *, expires_in: timedelt
     session.commit()
 
 
-def test_stale_running_run_does_not_block_and_lock_is_released_after_each_run(
+def test_expired_lease_does_not_block_and_lock_is_released_after_each_run(
     session: Session, engine: sa.Engine
 ) -> None:
-    """刘云龙 2026-11-26：任务结束必须放锁；崩掉留下的「running」不能挡住下一次。"""
+    """刘云龙 2026-11-26：任务结束必须放锁；崩掉留下的「running」不能挡住下一次。
+
+    直接调 handler 的层面：只有活租约才算在跑；成功、失败后咨询锁都已释放。
+    """
     interface, config = bootstrap(session)
-    # a crashed run: status still "running" (the runs table allows only one per interface),
-    # but its lease expired long ago -> it is marked failed and the new run proceeds
+    # a crashed run: status still "running" but its lease expired long ago -> not active.
+    # (the runs table allows one "running" per interface, so the new run here stays "queued"
+    # in the handler path; the execution-layer path is covered by the next test)
     crashed = new_run(session, config, interface)
     add_lease(session, crashed, expires_in=timedelta(minutes=-30))
     queued = new_run(session, config, interface, status="queued")
+    handler = LingxingWfsCostValuationSyncHandler(session, client=FakeClient([]))
+    assert handler._other_run_active(queued) is False
+    # the advisory lock is released after a successful and after a failed run
+    crashed.status = "failed"
+    session.commit()
+    ok_run = new_run(session, config, interface, status="queued")
     client = FakeClient([page([record(1)], 1, 1)])
-    result = LingxingWfsCostValuationSyncHandler(session, client=client).execute(queued, interface)
+    result = LingxingWfsCostValuationSyncHandler(session, client=client).execute(ok_run, interface)
     assert result.status == "succeeded", result.error_code
-    assert len(client.calls) == 1
-    session.refresh(crashed)
-    assert (crashed.status, crashed.error_code) == ("failed", "SYNC_WFS_FLOW_LEASE_EXPIRED")
-    assert (
-        session.scalar(
-            sa.select(IntegrationSyncLock).where(IntegrationSyncLock.run_id == crashed.id)
-        )
-        is None
-    )
-    # a "running" row without any lease (worker died before taking one) is treated the same
-    orphan = new_run(session, config, interface)
-    queued2 = new_run(session, config, interface, status="queued")
-    again = LingxingWfsCostValuationSyncHandler(
-        session, client=FakeClient([page([record(1)], 1, 1)])
-    ).execute(queued2, interface)
-    assert again.status == "succeeded", again.error_code
-    session.refresh(orphan)
-    assert orphan.status == "failed"
-    # 3) the advisory lock is gone once execute() returned: another connection can take it
     with engine.connect() as probe:
         assert probe.scalar(
             sa.text("SELECT pg_try_advisory_lock(:key)"), {"key": advisory_lock_key(ACCOUNT)}
         )
         probe.execute(sa.text("SELECT pg_advisory_unlock_all()"))
-    # 4) a failed run releases it too
     failing = new_run(session, config, interface, status="queued")
     bad = FakeClient([page([{**record(1), "quantity": "1.5"}], 1, 1)])
     failed = LingxingWfsCostValuationSyncHandler(session, client=bad).execute(failing, interface)
@@ -407,6 +397,73 @@ def test_stale_running_run_does_not_block_and_lock_is_released_after_each_run(
             sa.text("SELECT pg_try_advisory_lock(:key)"), {"key": advisory_lock_key(ACCOUNT)}
         )
         probe.execute(sa.text("SELECT pg_advisory_unlock_all()"))
+
+
+def test_execution_layer_path_releases_lease_and_lock_and_clears_expired_lease(
+    session: Session, engine: sa.Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """生产真实链路：SyncRunExecutionService.execute → 租约 → handler → finally 删租约。"""
+    from contextlib import contextmanager
+
+    from app.modules.integration_sync.handlers import lingxing_wfs_cost_valuation_sync as module
+
+    interface, config = bootstrap(session)
+    pages: list[list[LingxingRawEnvelope]] = []
+
+    @contextmanager
+    def fake_client():  # type: ignore[no-untyped-def]
+        yield FakeClient(pages.pop(0))
+
+    monkeypatch.setattr(module, "_require_runtime", lambda settings: None)
+    monkeypatch.setattr(module, "wfs_cost_valuation_client", fake_client)
+
+    def lock_free() -> bool:
+        with engine.connect() as probe:
+            free = bool(
+                probe.scalar(
+                    sa.text("SELECT pg_try_advisory_lock(:key)"),
+                    {"key": advisory_lock_key(ACCOUNT)},
+                )
+            )
+            probe.execute(sa.text("SELECT pg_advisory_unlock_all()"))
+        return free
+
+    def lease_rows() -> int:
+        return session.scalar(sa.select(sa.func.count()).select_from(IntegrationSyncLock)) or 0
+
+    # ① a normal run: lease gone and advisory lock free afterwards
+    first = new_run(session, config, interface, status="queued")
+    pages.append([page([record(1)], 1, 1)])
+    SyncRunExecutionService(session).execute(first.id)
+    session.expire_all()
+    first_row = session.get(IntegrationSyncRun, first.id)
+    assert first_row is not None
+    assert first_row.status == "succeeded", first_row.error_code
+    assert lease_rows() == 0 and lock_free()
+
+    # ② a crashed run holding an expired lease: the execution layer fails it and runs the new one
+    crashed = new_run(session, config, interface)
+    add_lease(session, crashed, expires_in=timedelta(minutes=-30))
+    second = new_run(session, config, interface, status="queued")
+    pages.append([page([record(2)], 1, 1)])
+    SyncRunExecutionService(session).execute(second.id)
+    session.expire_all()
+    crashed_row = session.get(IntegrationSyncRun, crashed.id)
+    assert crashed_row is not None
+    assert (crashed_row.status, crashed_row.error_code) == ("failed", "SYNC_LOCK_LEASE_EXPIRED")
+    second_row = session.get(IntegrationSyncRun, second.id)
+    assert second_row is not None
+    assert second_row.status == "succeeded", second_row.error_code
+    assert lease_rows() == 0 and lock_free()
+
+    # ③ a failing run also leaves no lease and no lock behind
+    third = new_run(session, config, interface, status="queued")
+    pages.append([page([{**record(3), "quantity": "1.5"}], 1, 1)])
+    SyncRunExecutionService(session).execute(third.id)
+    session.expire_all()
+    third_row = session.get(IntegrationSyncRun, third.id)
+    assert third_row is not None and third_row.status == "failed"
+    assert lease_rows() == 0 and lock_free()
 
 
 def test_store_mapping_by_sid_by_store_code_and_unmapped(session: Session) -> None:

@@ -8,9 +8,10 @@ Rules (PRPs/wfs-inventory-claim.md §7.1–§7.3):
   transaction retires the window's previous current rows and promotes the new ones;
 * a failed run leaves the previous current rows untouched;
 * one run per source account at a time: a PostgreSQL session advisory lock held on a
-  **dedicated connection** for the whole run (released in ``finally`` and when that
-  connection closes), plus a run-table check that ignores runs whose lease has expired, so
-  a crashed run can never block the next one (刘云龙 2026-11-26 复审 #369 问题一).
+  **dedicated connection** for the whole run (released in ``finally``; if the unlock fails
+  the connection is invalidated so PostgreSQL drops the lock), plus a run-table check that
+  ignores runs whose lease has expired. Expired leases themselves are cleaned up by the
+  execution layer before this handler runs (刘云龙 2026-11-26 复审 #369 问题一).
 """
 
 from __future__ import annotations
@@ -366,42 +367,24 @@ class LingxingWfsCostValuationSyncHandler:
     def _other_run_active(self, run: IntegrationSyncRun) -> bool:
         """另一条「running」记录只有在它的租约还没过期时才算在跑。
 
-        进程崩了留下的旧记录（没有租约或租约已过期）会一直占着运行表「同一接口只能有一条
-        running」的唯一约束，新任务改状态时就撞上去——这里先把它标成失败再继续。
+        过期租约 / 崩掉的旧记录由执行层（execution.py）在进入这里之前统一标失败、删租约；
+        这里不做清理，只认活租约，避免在拿咨询锁之前误杀别人。
         """
         now = utc_now()
-        others = self.session.scalars(
-            select(IntegrationSyncRun).where(
+        other = self.session.scalar(
+            select(func.count())
+            .select_from(IntegrationSyncRun)
+            .join(IntegrationSyncLock, IntegrationSyncLock.run_id == IntegrationSyncRun.id)
+            .where(
                 IntegrationSyncRun.provider == run.provider,
                 IntegrationSyncRun.interface_key == SPEC.interface_key,
                 IntegrationSyncRun.source_account_ref == run.source_account_ref,
                 IntegrationSyncRun.status == "running",
                 IntegrationSyncRun.id != run.id,
+                IntegrationSyncLock.expires_at > now,
             )
-        ).all()
-        if not others:
-            return False
-        leases = {
-            lock.run_id: lock
-            for lock in self.session.scalars(
-                select(IntegrationSyncLock).where(
-                    IntegrationSyncLock.run_id.in_([other.id for other in others])
-                )
-            )
-        }
-        active = False
-        for other in others:
-            lease = leases.get(other.id)
-            if lease is not None and lease.expires_at > now:
-                active = True
-                continue
-            other.status = "failed"
-            other.error_code = "SYNC_WFS_FLOW_LEASE_EXPIRED"
-            other.finished_at = other.finished_at or now
-            if lease is not None:
-                self.session.delete(lease)
-        self.session.commit()
-        return active
+        )
+        return bool(other)
 
     def _is_postgresql(self) -> bool:
         bind = self.session.get_bind()
@@ -441,8 +424,11 @@ class LingxingWfsCostValuationSyncHandler:
                 text("SELECT pg_advisory_unlock(:key)"),
                 {"key": advisory_lock_key(source_account_ref)},
             )
-        except Exception:  # pragma: no cover - the lock dies with the connection anyway
+        except Exception:
+            # close() 只是把连接还回连接池，会话级咨询锁不会跟着释放；
+            # 解锁失败就让底层连接真正断开，PostgreSQL 随之释放锁。
             logger.warning("wfs_cost_valuation_unlock_failed")
+            connection.invalidate()
         finally:
             connection.close()
 
