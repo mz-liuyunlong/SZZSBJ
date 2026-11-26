@@ -364,22 +364,44 @@ class LingxingWfsCostValuationSyncHandler:
 
     # ------------------------------------------------------- account locking
     def _other_run_active(self, run: IntegrationSyncRun) -> bool:
-        """另一条「running」记录只有在它的租约还没过期时才算在跑；进程崩了留下的旧记录不挡人。"""
+        """另一条「running」记录只有在它的租约还没过期时才算在跑。
+
+        进程崩了留下的旧记录（没有租约或租约已过期）会一直占着运行表「同一接口只能有一条
+        running」的唯一约束，新任务改状态时就撞上去——这里先把它标成失败再继续。
+        """
         now = utc_now()
-        other = self.session.scalar(
-            select(func.count())
-            .select_from(IntegrationSyncRun)
-            .join(IntegrationSyncLock, IntegrationSyncLock.run_id == IntegrationSyncRun.id)
-            .where(
+        others = self.session.scalars(
+            select(IntegrationSyncRun).where(
                 IntegrationSyncRun.provider == run.provider,
                 IntegrationSyncRun.interface_key == SPEC.interface_key,
                 IntegrationSyncRun.source_account_ref == run.source_account_ref,
                 IntegrationSyncRun.status == "running",
                 IntegrationSyncRun.id != run.id,
-                IntegrationSyncLock.expires_at > now,
             )
-        )
-        return bool(other)
+        ).all()
+        if not others:
+            return False
+        leases = {
+            lock.run_id: lock
+            for lock in self.session.scalars(
+                select(IntegrationSyncLock).where(
+                    IntegrationSyncLock.run_id.in_([other.id for other in others])
+                )
+            )
+        }
+        active = False
+        for other in others:
+            lease = leases.get(other.id)
+            if lease is not None and lease.expires_at > now:
+                active = True
+                continue
+            other.status = "failed"
+            other.error_code = "SYNC_WFS_FLOW_LEASE_EXPIRED"
+            other.finished_at = other.finished_at or now
+            if lease is not None:
+                self.session.delete(lease)
+        self.session.commit()
+        return active
 
     def _is_postgresql(self) -> bool:
         bind = self.session.get_bind()

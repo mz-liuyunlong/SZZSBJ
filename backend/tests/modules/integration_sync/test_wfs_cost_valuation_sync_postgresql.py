@@ -365,16 +365,32 @@ def test_stale_running_run_does_not_block_and_lock_is_released_after_each_run(
 ) -> None:
     """刘云龙 2026-11-26：任务结束必须放锁；崩掉留下的「running」不能挡住下一次。"""
     interface, config = bootstrap(session)
-    # 1) a crashed run: status still "running" but its lease expired long ago
+    # a crashed run: status still "running" (the runs table allows only one per interface),
+    # but its lease expired long ago -> it is marked failed and the new run proceeds
     crashed = new_run(session, config, interface)
     add_lease(session, crashed, expires_in=timedelta(minutes=-30))
-    # 2) a run without any lease row (worker died before taking one) is not "active" either
-    new_run(session, config, interface)
     queued = new_run(session, config, interface, status="queued")
     client = FakeClient([page([record(1)], 1, 1)])
     result = LingxingWfsCostValuationSyncHandler(session, client=client).execute(queued, interface)
     assert result.status == "succeeded", result.error_code
     assert len(client.calls) == 1
+    session.refresh(crashed)
+    assert (crashed.status, crashed.error_code) == ("failed", "SYNC_WFS_FLOW_LEASE_EXPIRED")
+    assert (
+        session.scalar(
+            sa.select(IntegrationSyncLock).where(IntegrationSyncLock.run_id == crashed.id)
+        )
+        is None
+    )
+    # a "running" row without any lease (worker died before taking one) is treated the same
+    orphan = new_run(session, config, interface)
+    queued2 = new_run(session, config, interface, status="queued")
+    again = LingxingWfsCostValuationSyncHandler(
+        session, client=FakeClient([page([record(1)], 1, 1)])
+    ).execute(queued2, interface)
+    assert again.status == "succeeded", again.error_code
+    session.refresh(orphan)
+    assert orphan.status == "failed"
     # 3) the advisory lock is gone once execute() returned: another connection can take it
     with engine.connect() as probe:
         assert probe.scalar(
