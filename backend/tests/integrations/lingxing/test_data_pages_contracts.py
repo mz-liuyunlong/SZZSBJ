@@ -14,7 +14,12 @@ from app.integrations.lingxing.client import (
     LingxingPageRequest,
     LingxingReadonlyClient,
 )
-from app.integrations.lingxing.data_pages_contracts import SP_CAMPAIGN_TYPES
+from app.integrations.lingxing.data_pages_contracts import (
+    SP_CAMPAIGN_ENDPOINT,
+    SP_CAMPAIGN_TYPES,
+    SP_KEYWORD_ENDPOINT,
+    SP_SEARCH_TERM_ENDPOINT,
+)
 from app.modules.integration_sync.parsers.lingxing_data_pages import (
     DATA_PAGES_PARSER_SPECS,
 )
@@ -200,6 +205,96 @@ def _china_epoch(value: str) -> int:
             },
             3,
         ),
+        (
+            SP_CAMPAIGN_ENDPOINT,
+            {
+                "advertiserIds": ["123456789012345"],
+                "campaignType": [
+                    "sponsoredProducts-manual",
+                    "sponsoredProducts-auto",
+                ],
+                "day": 14,
+                "endDate": "2026-09-01",
+                "operationSourceType": "gateway",
+                "pageNum": 1,
+                "pageSize": 3,
+                "paging": True,
+                "startDate": "2026-09-01",
+            },
+            {
+                "advertiserIds": [123456789012345],
+                "campaignType": [
+                    "sponsoredProducts-manual",
+                    "sponsoredProducts-auto",
+                ],
+                "day": 14,
+                "endDate": "2026-09-01",
+                "operationSourceType": "gateway",
+                "pageNum": 1,
+                "pageSize": 3,
+                "paging": True,
+                "startDate": "2026-09-01",
+            },
+            3,
+        ),
+        (
+            SP_SEARCH_TERM_ENDPOINT,
+            {
+                "advertiserIds": ["123456789012345"],
+                "campaignIds": ["123456789"],
+                "day": 14,
+                "endDate": "2026-09-01",
+                "operationSourceType": "gateway",
+                "pageNum": 1,
+                "pageSize": 3,
+                "paging": True,
+                "startDate": "2026-09-01",
+            },
+            {
+                "advertiserIds": [123456789012345],
+                "campaignIds": [123456789],
+                "day": 14,
+                "endDate": "2026-09-01",
+                "operationSourceType": "gateway",
+                "pageNum": 1,
+                "pageSize": 3,
+                "paging": True,
+                "startDate": "2026-09-01",
+            },
+            3,
+        ),
+        (
+            SP_KEYWORD_ENDPOINT,
+            {
+                "advertiserIds": ["123456789012345"],
+                "campaignIds": ["123456789"],
+                "campaignType": [
+                    "sponsoredProducts-manual",
+                    "sponsoredProducts-auto",
+                ],
+                "day": 14,
+                "endDate": "2026-09-01",
+                "pageNum": 1,
+                "pageSize": 3,
+                "paging": True,
+                "startDate": "2026-09-01",
+            },
+            {
+                "advertiserIds": [123456789012345],
+                "campaignIds": [123456789],
+                "campaignType": [
+                    "sponsoredProducts-manual",
+                    "sponsoredProducts-auto",
+                ],
+                "day": 14,
+                "endDate": "2026-09-01",
+                "pageNum": 1,
+                "pageSize": 3,
+                "paging": True,
+                "startDate": "2026-09-01",
+            },
+            3,
+        ),
     ],
 )
 def test_data_pages_contracts_use_query_sign_and_official_value_types(
@@ -312,6 +407,9 @@ def test_data_pages_parser_specs_cover_the_approved_endpoint_set() -> None:
         RETURN_ENDPOINT,
         ADVERTISER_ENDPOINT,
         AD_ITEM_SP_ENDPOINT,
+        SP_CAMPAIGN_ENDPOINT,
+        SP_SEARCH_TERM_ENDPOINT,
+        SP_KEYWORD_ENDPOINT,
     }
 
 

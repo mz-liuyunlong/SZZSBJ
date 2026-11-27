@@ -48,9 +48,9 @@ def test_data_pages_governance_bootstrap_creates_disabled_catalog_records(
         "default"
     )
 
-    assert result.interfaces_created == 7
-    assert result.retention_policies_created == 7
-    assert result.sync_configs_created == 7
+    assert result.interfaces_created == 10
+    assert result.retention_policies_created == 10
+    assert result.sync_configs_created == 10
 
     interfaces = governance_session.scalars(select(IntegrationInterface)).all()
     policies = governance_session.scalars(select(RawRetentionPolicy)).all()
@@ -62,7 +62,14 @@ def test_data_pages_governance_bootstrap_creates_disabled_catalog_records(
     assert {interface.interface_key for interface in interfaces} == {
         spec.interface_key for spec in DATA_PAGES_SYNC_INTERFACE_SPECS
     }
-    assert all(interface.outbound_enabled is False for interface in interfaces)
+    expected_outbound = {
+        spec.interface_key: spec.initial_outbound_enabled
+        for spec in DATA_PAGES_SYNC_INTERFACE_SPECS
+    }
+    assert all(
+        interface.outbound_enabled is expected_outbound[interface.interface_key]
+        for interface in interfaces
+    )
     assert all(policy.hot_retention_days == 365 for policy in policies)
     assert all(policy.is_active is True for policy in policies)
     assert all(config.is_enabled is False for config in configs)

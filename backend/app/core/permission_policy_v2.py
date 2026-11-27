@@ -18,6 +18,22 @@ class RequestPermissionRule:
 
 _RULES: tuple[RequestPermissionRule, ...] = (
     RequestPermissionRule(
+        "POST",
+        "/api/ads/search-terms/actions",
+        "action:ads:search-terms:manage-actions",
+        True,
+    ),
+    RequestPermissionRule(
+        "PATCH",
+        "/api/ads/search-terms/actions/",
+        "action:ads:search-terms:manage-actions",
+    ),
+    RequestPermissionRule(
+        None,
+        "/api/ads/search-terms/",
+        "page:ads:search-terms:view",
+    ),
+    RequestPermissionRule(
         "GET",
         "/api/products/skus",
         "page:products:product-management:view",

@@ -17,7 +17,7 @@ from app.modules.integration_sync.parsers.lingxing_data_pages import DATA_PAGES_
 
 def test_fixture_cases_cover_every_data_pages_source_interface() -> None:
     assert data_pages_fixture_parser_keys() == data_pages_sync_parser_keys()
-    assert len(DATA_PAGES_FIXTURE_CASES) == 7
+    assert len(DATA_PAGES_FIXTURE_CASES) == 10
 
     for parser_key, fixture in DATA_PAGES_FIXTURE_CASES_BY_KEY.items():
         assert fixture.parser_key == parser_key
@@ -37,13 +37,13 @@ def test_fixture_validation_report_passes_without_production_effects() -> None:
     )
 
     assert report.passed is True
-    assert report.validated_interfaces == 7
-    assert report.fixture_cases == 7
+    assert report.validated_interfaces == 10
+    assert report.fixture_cases == 10
     assert report.required_field_checks == expected_required_checks
     assert report.unique_key_checks == expected_unique_key_checks
-    assert report.request_rule_checks >= 7
+    assert report.request_rule_checks >= 10
     assert report.mart_plan_checks == len(mart_refresh_keys())
-    assert report.sensitive_field_checks == 7
+    assert report.sensitive_field_checks == 10
     assert report.production_calls is False
     assert report.production_writes is False
     assert report.issues == ()
