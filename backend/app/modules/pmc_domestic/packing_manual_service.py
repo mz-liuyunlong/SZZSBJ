@@ -15,9 +15,9 @@ from app.modules.pmc_domestic.packing_schemas import (
     Candidate,
     CandidateList,
     EditOptions,
-    ListingChoice,
     ManualSubmitted,
 )
+from app.modules.pmc_domestic.packing_service import listing_choice
 
 
 class ManualPackingService:
@@ -62,18 +62,7 @@ class ManualPackingService:
         return EditOptions(
             candidate=source,
             cross_store_proof_available=source.available_quantity is not None,
-            listings=[
-                ListingChoice(
-                    store_id=r.store_id,
-                    store_name=stores.get(r.store_id),
-                    item_id=r.item_id,
-                    gtin=r.gtin,
-                    msku=r.msku,
-                    listing_version=listing_version(r),
-                    cross_store=r.store_id != source.store_id,
-                )
-                for r in self.base.listing_rows(source)
-            ],
+            listings=[listing_choice(r, source, stores) for r in self.base.listing_rows(source)],
         )
 
     def pending(self, accounts):

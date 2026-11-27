@@ -17,9 +17,18 @@ export interface PurchaseApprovalEvidenceView {
   system_dimensions: Record<'speed'|'ad'|'profit'|'trust'|'market',string|null>;
   effective_dimensions: Record<'speed'|'ad'|'profit'|'trust'|'market',string|null>;
   weights: Record<'speed'|'ad'|'profit'|'trust'|'market',number> | null;
+  // NP_PURCHASE_SCORE_GRADE_EVIDENCE_V1
+  system_grade?: 'S'|'A'|'B'|'C'|'D'|'Pass'|null;
+  effective_grade?: 'S'|'A'|'B'|'C'|'D'|'Pass'|null;
+  // NP_PURCHASE_SCORE_HOVER_HEADER_V2
+  system_total?: string|null;
+  effective_total?: string|null;
   correction_history: Array<{
     dimension: string; before: string|null; after: string|null;
     reason: string|null; actor_id: string|null; at: string|null; revision: number|null;
+    actor_name?: string|null;
+    before_grade?: string|null; after_grade?: string|null;
+    before_total?: string|null; after_total?: string|null;
   }>;
   manual_risks: string[] | null;
   system_risks: string[] | null;

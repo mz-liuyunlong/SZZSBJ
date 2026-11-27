@@ -250,11 +250,18 @@ export default function NewProductPages({page,mode}:Props){
  },[]);
  const remoteEnabled=mode==="performance" && tab==="list";
  const remoteParams=useMemo(()=>performanceParams(remoteQuery,firstWfsDateRange),[remoteQuery,firstWfsDateRange]);
+ const facetParams={phase:remoteQuery.phase,npStatuses:remoteParams.npStatuses,
+   npOwners:remoteParams.npOwners,npRatings:remoteParams.npRatings,
+   npOwnerKeyword:remoteParams.npOwnerKeyword,keyword:remoteParams.keyword,
+   searchField:remoteParams.searchField};
  const summaryQuery=useQuery({
-   queryKey:["np-performance","summary",firstWfsDateRange],
-   queryFn:({signal})=>getNewProductSummary({signal},firstWfsDateRange),
+   queryKey:["np-performance","summary",firstWfsDateRange,facetParams],
+   queryFn:({signal})=>getNewProductSummary({signal},firstWfsDateRange,facetParams),
+   placeholderData:(previous,previousQuery)=>JSON.stringify(previousQuery?.queryKey[2]??null)===JSON.stringify(firstWfsDateRange??null)?previous:undefined,
    enabled:remoteEnabled && pageReadsReady,staleTime:15_000,retry:1,
  });
+ const cardSummary=summaryQuery.data;
+ const facetSummary=summaryQuery.isPlaceholderData?undefined:summaryQuery.data;
  const pagingQuery=useQuery({
    queryKey:["np-performance","page",remoteParams],
    queryFn:({signal})=>listNewProducts(remoteParams,{signal}),
@@ -906,11 +913,11 @@ export default function NewProductPages({page,mode}:Props){
  <ManagementStatCards ariaLabel="新品表现统计" className="np-performance-stats"
    activeKey={phase}
    cards={[
-     {key:"all",title:"全部新品",subtitle:"全部新品（含待到货）",value:summaryQuery.data?.stage_counts?.all ?? "—",tone:"normal",icon:<span>▦</span>},
-     {key:"evaluating",title:"测评中",subtitle:"已首次可售，正在测评",value:summaryQuery.data?.stage_counts?.evaluating ?? "—",tone:"normal",icon:<span>◷</span>},
-     {key:"pending",title:"待确认",subtitle:"市场评分、等级及测评确认",value:summaryQuery.data?.stage_counts?.pending ?? "—",tone:"normal",icon:<span>◉</span>},
-     {key:"passed",title:"测评通过",subtitle:"含采购审批各阶段",value:summaryQuery.data?.stage_counts?.passed ?? "—",tone:"success",icon:<span>✓</span>},
-     {key:"failed",title:"测评未通过",subtitle:"含测评复核各阶段",value:summaryQuery.data?.stage_counts?.failed ?? "—",tone:"warning",icon:<span>▤</span>},
+     {key:"all",title:"全部新品",subtitle:"全部新品（含待到货）",value:cardSummary?.stage_counts?.all ?? "—",tone:"normal",icon:<span>▦</span>},
+     {key:"evaluating",title:"测评中",subtitle:"已首次可售，正在测评",value:cardSummary?.stage_counts?.evaluating ?? "—",tone:"normal",icon:<span>◷</span>},
+     {key:"pending",title:"待确认",subtitle:"市场评分、等级及测评确认",value:cardSummary?.stage_counts?.pending ?? "—",tone:"normal",icon:<span>◉</span>},
+     {key:"passed",title:"测评通过",subtitle:"含采购审批各阶段",value:cardSummary?.stage_counts?.passed ?? "—",tone:"success",icon:<span>✓</span>},
+     {key:"failed",title:"测评未通过",subtitle:"含测评复核各阶段",value:cardSummary?.stage_counts?.failed ?? "—",tone:"warning",icon:<span>▤</span>},
    ]}
    onCardClick={(key)=>{
      setPhase(key);setApprovalFocus(null);
@@ -921,10 +928,11 @@ export default function NewProductPages({page,mode}:Props){
  <NewProductPerformanceReport key={reportRevision} items={performanceItems} config={cfg} phase={phase} focusItemId={approvalFocus} calculatingItemId={evaluationRequesting} onOpen={(kind,id)=>show(kind,id)}
       remote={{loading:pagingQuery.isFetching,total:pagingQuery.data?.total??0,
         error:pagingQuery.isError?"LIST_FAILED":undefined,
-        statusOptions:summaryQuery.data?.flow_status_options??[],
+        statusOptions:facetSummary?.flow_status_options??[],
         initialQuery:remoteQuery,
-        ownerOptions:summaryQuery.data?.owner_options??[],
-        ratingOptions:summaryQuery.data?.rating_options??[],
+        optionsReady:summaryQuery.isSuccess && !summaryQuery.isPlaceholderData,
+        ownerOptions:facetSummary?.owner_options??[],
+        ratingOptions:facetSummary?.rating_options??[],
         firstWfsDateRange,onFirstWfsDateRangeChange,
         onQueryChange:onRemoteQueryChange}}
       onResetPhase={()=>{setApprovalFocus(null);setPhase("all");setRemoteQuery(initialPerformanceQuery)}}/>

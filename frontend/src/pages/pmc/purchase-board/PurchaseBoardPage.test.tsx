@@ -16,6 +16,7 @@ import {
   listPendingPurchasePlans,
   listPurchaseBoard,
 } from "@/pages/pmc/purchase-board/purchaseBoardApi";
+import { daysSince, overdueRowFromOrder } from "@/pages/pmc/purchase-board/purchaseOverdueRows";
 import type {
   PurchaseBoardFilters,
   PurchaseBoardRow,
@@ -143,7 +144,7 @@ const summary: PurchaseBoardSummary = {
   wfsNotReadyLines: 0,
   unattributedStoreLines: 2,
   asOf: "2026-09-24",
-  meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: null },
+  meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: null, hiddenOwnerNames: [] },
 };
 
 const lastListCall = () => vi.mocked(listPurchaseBoard).mock.calls.at(-1);
@@ -171,7 +172,7 @@ beforeEach(() => {
   vi.mocked(listPurchaseBoard).mockResolvedValue({
     rows: [row],
     total: 1,
-    meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: 1 },
+    meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: 1, hiddenOwnerNames: [] },
   });
   vi.mocked(getPurchaseBoardSummary).mockResolvedValue(summary);
   vi.mocked(getPurchaseBoardOwnerOptions).mockResolvedValue([{ uid: "u-1", name: "Owner One", count: 3 }]);
@@ -189,10 +190,11 @@ beforeEach(() => {
       productName: "Gadget",
       quantityPlan: 20,
       remarkItemId: null,
+      draftNo: "CG990102-087",
     }],
     total: 1,
     thresholdDays: 7,
-    meta: { freshnessAt: null, ruleVersion: 1, total: 1 },
+    meta: { freshnessAt: null, ruleVersion: 1, total: 1, hiddenOwnerNames: [] },
   });
   vi.mocked(getPurchaseOrderDetail).mockResolvedValue({
     purchaseOrderSn: "PO1",
@@ -226,7 +228,7 @@ beforeEach(() => {
       ruleVersion: 1,
       calculatedAt: "2026-09-23T03:00:00Z",
     }],
-    meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: null },
+    meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: null, hiddenOwnerNames: [] },
   });
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -249,7 +251,7 @@ it("shows every verified remark identity without calling multiple values a confl
       identities: [
         { itemId: "19051502014", msku: "SKU-A", gtin: "00012345678905", fulfillmentType: "1" },
         { itemId: "33333333333", msku: "SKU-B", gtin: "00012345678906", fulfillmentType: "1" },
-      ] } }], total: 1, meta: { freshnessAt: "2026-10-27T00:00:00Z", ruleVersion: 1, total: 1 },
+      ] } }], total: 1, meta: { freshnessAt: "2026-10-27T00:00:00Z", ruleVersion: 1, total: 1, hiddenOwnerNames: [] },
   });
   await renderPage();
   expect(await screen.findByText("多 listing（2）")).toBeInTheDocument();
@@ -257,6 +259,47 @@ it("shows every verified remark identity without calling multiple values a confl
   expect(within(table).getByRole("link", { name: /33333333333/ })).toBeInTheDocument();
   expect(within(table).getByText("00012345678906")).toBeInTheDocument();
   expect(within(table).queryByText("归属冲突")).not.toBeInTheDocument();
+});
+
+it("flags an identity whose listing local SKU differs from the purchase SKU (rule v2)", async () => {
+  vi.mocked(listPurchaseBoard).mockResolvedValue({
+    rows: [
+      { ...row, itemId: { ...row.itemId, itemId: null, matchStatus: "matched",
+        identities: [
+          { itemId: "19051502014", msku: "SKU-A", gtin: "00012345678905", fulfillmentType: "1", localSku: "SKU-A", skuMismatch: false },
+          { itemId: "33333333333", msku: "SKU-B", gtin: "00012345678906", fulfillmentType: "1", localSku: "SKU-Z", skuMismatch: true },
+        ] } },
+    ],
+    total: 1,
+    meta: { freshnessAt: "2026-10-27T00:00:00Z", ruleVersion: 1, total: 1, hiddenOwnerNames: [] },
+  });
+  await renderPage();
+  const table = await screen.findByTestId("board-row");
+  // Only the mismatching identity carries the warning; it is still shown and linked.
+  expect(await within(table).findAllByText("SKU 不一致")).toHaveLength(1);
+  expect(within(table).getByRole("link", { name: /33333333333/ })).toBeInTheDocument();
+});
+
+it("flags a single remark ItemID whose listing local SKU differs", async () => {
+  vi.mocked(listPurchaseBoard).mockResolvedValue({
+    rows: [
+      { ...row, itemId: { ...row.itemId, itemId: "19051502014", matchStatus: "matched",
+        identities: [
+          { itemId: "19051502014", msku: "SKU-A", gtin: "00012345678905", fulfillmentType: "1", localSku: "SKU-Z", skuMismatch: true },
+        ] } },
+    ],
+    total: 1,
+    meta: { freshnessAt: "2026-10-27T00:00:00Z", ruleVersion: 1, total: 1, hiddenOwnerNames: [] },
+  });
+  await renderPage();
+  const table = await screen.findByTestId("board-row");
+  expect(await within(table).findByText("SKU 不一致")).toBeInTheDocument();
+});
+
+it("shows no SKU warning when the listing local SKU matches", async () => {
+  await renderPage();
+  const table = await screen.findByTestId("board-row");
+  expect(within(table).queryByText("SKU 不一致")).not.toBeInTheDocument();
 });
 
 afterEach(() => {
@@ -378,21 +421,71 @@ describe("PurchaseBoardPage", () => {
     expect(within(dialog).getByText("PO0 12 天")).toBeInTheDocument();
   });
 
-  it("opens the pending-plan drill-down (overdue only) when the purchase-overdue card is clicked", async () => {
+  it("shows overdue purchase orders and unconverted plans as one list in the board body", async () => {
     await renderPage();
-    // No S2-overdue order lines come back for the card filter.
-    vi.mocked(listPurchaseBoard).mockResolvedValue({
-      rows: [], total: 0, meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: 0 },
-    });
 
     fireEvent.click(screen.getByRole("button", { name: "待采购超时：6" }));
-    await waitFor(() => expect(lastListSummaryFilter()).toBe("purchase_overdue"));
-    // The plans counted by the card live in the drawer, not in the main table.
+    // Both sources are fetched completely (page size 200) for the merged list.
     await waitFor(() => expect(listPendingPurchasePlans).toHaveBeenCalled());
-    expect(vi.mocked(listPendingPurchasePlans).mock.calls.at(-1)?.[0]).toMatchObject({ page: 1, overdueOnly: true });
-    expect(screen.getByRole("switch", { name: "仅看超时" })).toBeChecked();
+    expect(vi.mocked(listPendingPurchasePlans).mock.calls.at(-1)?.[0]).toMatchObject({
+      page: 1, pageSize: 200, overdueOnly: true,
+    });
+    await waitFor(() => expect(lastListSummaryFilter()).toBe("purchase_overdue"));
+    expect(lastListCall()?.[2]).toBe(200);
+
+    // One list, two kinds of rows, no drawer.
     expect(await screen.findByText("P3")).toBeInTheDocument();
-    expect(await screen.findByText(/4 条已审批未转单的计划不进主表/)).toBeInTheDocument();
+    expect(screen.getByText("未转单计划")).toBeInTheDocument();
+    expect(screen.getByText("待下单采购单")).toBeInTheDocument();
+    expect(screen.getByText("超时 7 天")).toBeInTheDocument();
+    expect(screen.getByText(/共 2 条待采购超时/)).toBeInTheDocument();
+    // 8088 草稿号 column: the plan row from its remark, the order line from the board row.
+    expect(screen.getByText("CG990102-087")).toBeInTheDocument();
+    expect(screen.getAllByText("CG261017-039").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("switch", { name: "仅看超时" })).not.toBeInTheDocument();
+    expect(screen.queryByText("待采购计划（已审批未转单）")).not.toBeInTheDocument();
+    // Reviewer notes 3 + 4: lines vs. card count, and plans ignore the board filters.
+    expect(screen.getByText(/采购单按明细行列出/)).toBeInTheDocument();
+    expect(screen.getByText(/未转单计划不受看板筛选/)).toBeInTheDocument();
+    // Nothing was truncated, so no truncation notice.
+    expect(screen.queryByText(/仅显示前/)).not.toBeInTheDocument();
+
+    // Turning the card off brings the normal board table back.
+    fireEvent.click(screen.getByRole("button", { name: "待采购超时：6" }));
+    await waitFor(() => expect(screen.queryByText("未转单计划")).not.toBeInTheDocument());
+    expect(await screen.findAllByTestId("board-row")).not.toHaveLength(0);
+  });
+
+  it("says so when a 待采购超时 source is truncated instead of silently dropping rows", async () => {
+    vi.mocked(listPurchaseBoard).mockImplementation(async (_filters, page) => ({
+      rows: [{ ...row, id: `PO1::L${page}::P1`, orderItemId: `L${page}` }],
+      total: 9999,
+      meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: 9999, hiddenOwnerNames: [] },
+    }));
+    await renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "待采购超时：6" }));
+    // 25 pages is the cap; every page returned one row of 9,999.
+    expect(await screen.findByText(/待下单采购单仅显示前 25 条，共 9.?999 条/)).toBeInTheDocument();
+    expect(screen.queryByText(/未转单计划仅显示前/)).not.toBeInTheDocument();
+    // The fetch stops at the cap: page 25 is the last page ever requested (the query may run
+    // more than once, e.g. a refetch, so the call count itself is not asserted).
+    const pages = vi.mocked(listPurchaseBoard).mock.calls
+      .filter((call) => call[4] === "purchase_overdue")
+      .map((call) => call[1]);
+    expect(Math.max(...pages)).toBe(25);
+  });
+
+  it("counts pending days for order lines in Beijing calendar days, not UTC", () => {
+    // 2026-11-01T23:30Z is 2026-11-02 07:30 in Beijing: UTC still says 11-01.
+    const beijing0730 = new Date("2026-11-01T23:30:00Z");
+    expect(daysSince("2026-11-01", beijing0730)).toBe(1);
+    expect(daysSince("2026-11-02", beijing0730)).toBe(0);
+    // 2026-11-02T16:30Z is 11-03 00:30 in Beijing.
+    expect(daysSince("2026-11-01", new Date("2026-11-02T16:30:00Z"))).toBe(2);
+    expect(daysSince(null, beijing0730)).toBeNull();
+    const line = overdueRowFromOrder({ ...row, stage: { ...row.stage, stageStart: "2026-10-26" } }, beijing0730);
+    expect(line.pendingDays).toBe(7);
   });
 
   it("opens the pending-plan drill-down from the header action", async () => {
@@ -404,6 +497,8 @@ describe("PurchaseBoardPage", () => {
     expect(await screen.findByText("P3")).toBeInTheDocument();
     expect(screen.getByText("超时 7 天")).toBeInTheDocument();
     expect(screen.getByText(/超时阈值 7 天/)).toBeInTheDocument();
+    // 8088: the drill-down carries the draft number from the plan remark.
+    expect(screen.getByText("CG990102-087")).toBeInTheDocument();
   });
 
   it("shows an honest permission message instead of fake data when the API denies access", async () => {
