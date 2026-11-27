@@ -21,6 +21,9 @@ QTY_Q = Decimal("0.0001")
 ZERO = Decimal("0")
 
 SHIPMENT_PREFIX = "shipment:"
+# 录入范围 MSKU × 平台订单号（自发货订单、流水没覆盖的差额段）；
+# 迁移 0101 的 scope_ref_matches 第三种
+ORDER_SCOPE_PREFIX = "order:"
 FIXED_VALUE_SOURCE = "无源单配置-固定值"
 LAST_RECEIVED_SOURCE = "无源单配置-最近签收成本"
 
@@ -92,10 +95,24 @@ class ShipmentHeader:
 
 
 @dataclass(frozen=True, slots=True)
+class OutboundItem:
+    """销售出库单 items 一行（#370 同步保留的键）。
+
+    seller_sku = MSKU，apportion_freight = 该行分摊运费。
+    """
+
+    msku: str | None
+    count: Decimal | None
+    apportion_freight: Decimal | None
+    currency_code: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class OutboundOrder:
     outbound_order_no: str
     logistics_fee: Decimal | None
     currency_code: str | None
+    items: tuple[OutboundItem, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,7 +158,8 @@ class Lookups:
     def shipment_header(self, code: str) -> ShipmentHeader | None:
         raise NotImplementedError
 
-    def outbound_order(self, platform_order_no: str) -> OutboundOrder | None:
+    def outbound_orders(self, platform_order_no: str) -> list[OutboundOrder]:
+        """该平台订单号下的全部销售出库单（一单可能拆多个包裹）。"""
         raise NotImplementedError
 
     def cost_entry(self, msku: str, scope_ref: str) -> CostEntry | None:
@@ -598,13 +616,12 @@ def _sale_cost(
                 kind="missing",
                 quantity=sold - covered,
                 msku=missing_msku,
-                scope_ref=f"outbound:{group.order_no}",
+                scope_ref=f"{ORDER_SCOPE_PREFIX}{group.order_no}",
                 purchase=None,
                 head=None,
                 last_leg=None,
                 reasons=["cost_missing"],
-                # 没有任何单据可挂：范围退化为 MSKU × 平台订单号，
-                # 写在 outbound 前缀下（见接口文档 §2）
+                # 没有任何单据可挂：范围退化为 MSKU × 平台订单号（order: 前缀，见接口文档 §2）
                 detail={"note": "flow_not_covering", "scope_kind": "platform_order"},
             )
         )
@@ -665,31 +682,78 @@ def _sale_cost(
 def _seller_last_leg(
     line: ComputedLine, group: OrderGroup, segments: list[_Segment], lookups: Lookups
 ) -> None:
-    """自发货尾程：销售出库单物流费用预填（USD 按汇率折 ¥），录入范围 = MSKU × 出库单。"""
-    outbound = lookups.outbound_order(group.order_no)
-    prefill: Decimal | None = None
-    if outbound is not None and outbound.logistics_fee is not None:
-        currency = _text(outbound.currency_code).upper()
-        if currency in {"CNY", ""}:
-            prefill = money(outbound.logistics_fee)
-        elif currency == "USD":
-            rate = lookups.fx_rate(line.report_date)
-            prefill = money(outbound.logistics_fee * rate) if rate else None
+    """自发货尾程（#373 P1）。
+
+    该平台订单号下全部出库单 items 里本 MSKU 的 apportion_freight 跨张累加，
+    按本 MSKU 出库件数折成单价；不用整单 logistics_fee（一单多商品会把同一笔运费扣多次）。
+    items 缺本 MSKU、缺分摊运费或缺件数 → 尾程留空、self_fulfilled 待审，不退回整单运费。
+    录入范围 = MSKU × 平台订单号（一单拆多张出库单也只有一个范围）。"""
     if not segments:
         return
-    total_qty = sum((s.quantity for s in segments), ZERO)
+    msku = line.msku or next((s.msku for s in segments if s.msku), None)
+    unit, total, numbers, note = _msku_freight(
+        msku, lookups.outbound_orders(group.order_no), line.report_date, lookups
+    )
+    scope = f"{ORDER_SCOPE_PREFIX}{group.order_no}"
     for segment in segments:
-        segment.detail["outbound_order_no"] = outbound.outbound_order_no if outbound else None
-        segment.detail["last_leg_prefill_cny"] = _s(prefill)
-        if outbound is not None:
-            segment.scope_ref = f"outbound:{outbound.outbound_order_no}"
-        segment.last_leg = (
-            money(prefill / total_qty) if prefill is not None and total_qty > 0 else None
-        )
-        if segment.msku and segment.scope_ref:
-            entry = lookups.cost_entry(segment.msku, segment.scope_ref)
+        segment.scope_ref = scope
+        segment.detail["scope_kind"] = "platform_order"
+        segment.detail["outbound_order_nos"] = numbers
+        segment.detail["last_leg_prefill_cny"] = _s(unit)  # 单价，录入抽屉的默认值
+        segment.detail["last_leg_msku_total_cny"] = _s(total)  # 本 MSKU 在该订单的运费合计
+        if note:
+            segment.detail["last_leg_note"] = note
+        segment.last_leg = unit
+        if segment.msku:
+            entry = lookups.cost_entry(segment.msku, scope)
             if entry is not None and entry.status != "revoked":
                 _apply_entry(segment, entry, with_last_leg=True)
+
+
+def _freight_cny(
+    amount: Decimal, currency: str | None, report_date: date, lookups: Lookups
+) -> Decimal | None:
+    code = _text(currency).upper()
+    if code in {"CNY", ""}:
+        return amount
+    if code == "USD":
+        rate = lookups.fx_rate(report_date)
+        return amount * rate if rate else None
+    return None
+
+
+def _msku_freight(
+    msku: str | None, outbounds: list[OutboundOrder], report_date: date, lookups: Lookups
+) -> tuple[Decimal | None, Decimal | None, list[str], str | None]:
+    """返回（单价 ¥、合计 ¥、涉及的出库单号、留空原因）。"""
+    if not msku:
+        return None, None, [], "msku_missing"
+    total = ZERO
+    count = ZERO
+    numbers: list[str] = []
+    for outbound in outbounds:
+        for item in outbound.items:
+            if _text(item.msku) != msku:
+                continue
+            if outbound.outbound_order_no not in numbers:
+                numbers.append(outbound.outbound_order_no)
+            if item.apportion_freight is None:
+                return None, None, numbers, "apportion_freight_missing"
+            cny = _freight_cny(
+                item.apportion_freight,
+                item.currency_code or outbound.currency_code,
+                report_date,
+                lookups,
+            )
+            if cny is None:
+                return None, None, numbers, "freight_currency_unconverted"
+            total += cny
+            count += item.count or ZERO
+    if not numbers:
+        return None, None, [], "msku_not_in_outbound"
+    if count <= 0:
+        return None, money(total), numbers, "outbound_count_missing"
+    return money(total / count), money(total), numbers, None
 
 
 def _refund_cost(line: ComputedLine, group: OrderGroup, lookups: Lookups) -> None:

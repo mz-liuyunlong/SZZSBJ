@@ -23,6 +23,7 @@ from app.modules.fx_rates.models import LingxingFxRate
 from app.modules.settlement_profit.models import (
     FinShippingDetailItem,
     FinShippingList,
+    FinWmsOutboundOrder,
     OwnerTagRule,
     SettlementCostEntry,
     SettlementMonthClose,
@@ -484,6 +485,43 @@ def test_flow_lookup_only_takes_outbound_rows() -> None:
     assert ORIGINAL_FLOW_SEGMENTS(lookups, [ORDER], GTIN) == []
     assert captured and "ods_lingxing_wfs_cost_valuation_flow.quantity < " in captured[0]
     assert "is_current IS true" in captured[0]
+
+
+def test_outbound_lookup_returns_every_outbound_of_the_order(session: Session) -> None:
+    """一单拆多个包裹：全部出库单都取回，items 按 seller_sku（= MSKU）解析。
+
+    #373 P1，不再 limit 1。
+    """
+    for number, freight, at in (("WO1", "3.00", 1), ("WO2", "1.00", 2)):
+        session.add(
+            FinWmsOutboundOrder(
+                source_account_ref=ACCOUNT,
+                store_id=STORE,
+                outbound_order_no=number,
+                platform_order_no=ORDER,
+                logistics_fee=Decimal(freight),
+                currency_code="USD",
+                outbound_at=datetime(2026, 10, at, tzinfo=UTC),
+                items=[{"seller_sku": MSKU, "count": 1, "apportion_freight": freight}],
+                synced_at=NOW,
+                row_hash=number.ljust(64, "0"),
+                raw_row={},
+            )
+        )
+    session.flush()
+    lookups = DbLookups(
+        session,
+        source_account_ref=ACCOUNT,
+        store_id=STORE,
+        period_key=PERIOD,
+        report_date=REPORT,
+    )
+    orders = lookups.outbound_orders(ORDER)
+    assert [o.outbound_order_no for o in orders] == ["WO1", "WO2"]
+    assert [(i.msku, i.count, i.apportion_freight) for i in orders[1].items] == [
+        (MSKU, Decimal("1"), Decimal("1.00"))
+    ]
+    assert lookups.outbound_orders("900000000000000099") == []
 
 
 def test_periods_for_recalc_defaults_to_october_onwards(session: Session) -> None:

@@ -168,6 +168,15 @@ def test_cost_entry_scope_override_and_single_active(session: Session) -> None:
     session.flush()
 
 
+def test_cost_entry_platform_order_scope(session: Session) -> None:
+    # 第三种范围 MSKU × 平台订单号（迁移 0101，#373 P1）
+    order_scope = {"shipping_list_code": None, "platform_order_no": "900000000000000001"}
+    _rejected(session, _entry(**order_scope, scope_ref="outbound:900000000000000001"))
+    _rejected(session, _entry(platform_order_no="900000000000000001"))  # 两种范围都有
+    session.add(_entry(**order_scope, scope_ref="order:900000000000000001"))
+    session.flush()
+
+
 def test_reject_needs_comment_and_unlock_needs_reason(session: Session) -> None:
     common = {"store_id": STORE, "bill_month": MONTH, "actor_id": "u", "actor_role": "r"}
     _rejected(

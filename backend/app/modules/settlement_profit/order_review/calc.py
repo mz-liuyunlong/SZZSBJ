@@ -38,6 +38,7 @@ from app.modules.settlement_profit.order_review.rules import (
     FlowSegment,
     Lookups,
     OriginalLine,
+    OutboundItem,
     OutboundOrder,
     ReviewSettings,
     ShipmentDetail,
@@ -125,6 +126,30 @@ def month_is_closed(session: Session, *, store_id: str, bill_month: date) -> boo
 # --------------------------------------------------------------------------- 查表
 
 
+def _decimal(value: Any) -> Decimal | None:
+    if value is None or value == "":
+        return None
+    try:
+        return Decimal(str(value))
+    except (ArithmeticError, ValueError):
+        return None
+
+
+def _outbound_item(item: dict[str, Any]) -> OutboundItem:
+    """出库单 items 一行（#370 保留的键）。
+
+    seller_sku 即 MSKU；运费币种取 logistics_freight_currency_code。
+    """
+    msku = item.get("seller_sku")
+    currency = item.get("logistics_freight_currency_code")
+    return OutboundItem(
+        msku=str(msku).strip() if msku not in (None, "") else None,
+        count=_decimal(item.get("count")),
+        apportion_freight=_decimal(item.get("apportion_freight")),
+        currency_code=str(currency).strip() if currency not in (None, "") else None,
+    )
+
+
 class DbLookups(Lookups):
     def __init__(
         self,
@@ -145,7 +170,7 @@ class DbLookups(Lookups):
         self._tag_rules: dict[str, str] | None = None
         self._details: dict[tuple[str, str], ShipmentDetail | None] = {}
         self._headers: dict[str, ShipmentHeader | None] = {}
-        self._outbound: dict[str, OutboundOrder | None] = {}
+        self._outbound: dict[str, list[OutboundOrder]] = {}
         self._entries: dict[tuple[str, str], CostEntry | None] = {}
         self._originals: dict[tuple[str, str, str], OriginalLine | None] = {}
 
@@ -240,27 +265,30 @@ class DbLookups(Lookups):
             )
         return self._headers[code]
 
-    def outbound_order(self, platform_order_no: str) -> OutboundOrder | None:
+    def outbound_orders(self, platform_order_no: str) -> list[OutboundOrder]:
+        # 一单拆多个包裹会有多张出库单：全部取回，按 MSKU 累加分摊运费（#373 P1，不再 limit 1）
         if platform_order_no not in self._outbound:
-            row = self.session.scalars(
+            rows = self.session.scalars(
                 select(FinWmsOutboundOrder)
                 .where(
                     FinWmsOutboundOrder.source_account_ref == self.account,
                     FinWmsOutboundOrder.store_id == self.store_id,
                     FinWmsOutboundOrder.platform_order_no == platform_order_no,
                 )
-                .order_by(FinWmsOutboundOrder.outbound_at.desc().nulls_last())
-                .limit(1)
-            ).one_or_none()
-            self._outbound[platform_order_no] = (
-                None
-                if row is None
-                else OutboundOrder(
+                .order_by(
+                    FinWmsOutboundOrder.outbound_at.asc().nulls_last(),
+                    FinWmsOutboundOrder.outbound_order_no,
+                )
+            ).all()
+            self._outbound[platform_order_no] = [
+                OutboundOrder(
                     outbound_order_no=row.outbound_order_no,
                     logistics_fee=row.logistics_fee,
                     currency_code=row.currency_code,
+                    items=tuple(_outbound_item(item) for item in row.items or [] if item),
                 )
-            )
+                for row in rows
+            ]
         return self._outbound[platform_order_no]
 
     def cost_entry(self, msku: str, scope_ref: str) -> CostEntry | None:

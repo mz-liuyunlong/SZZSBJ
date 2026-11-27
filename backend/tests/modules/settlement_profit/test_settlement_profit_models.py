@@ -194,7 +194,10 @@ def test_reason_and_status_vocabularies_match_prp() -> None:
 def test_cost_entry_scope_rules() -> None:
     table = _table("manual_settlement_cost_entries")
     checks = _checks(table)
-    assert "(shipping_list_code IS NULL) <> (outbound_order_no IS NULL)" in checks["one_scope"]
+    assert (
+        "num_nonnulls(shipping_list_code, outbound_order_no, platform_order_no) = 1"
+        in checks["one_scope"]
+    )
     assert "override" in checks["override_reason"]
     active = next(
         index
@@ -206,6 +209,7 @@ def test_cost_entry_scope_rules() -> None:
     assert "revoked" in str(active.dialect_options["postgresql"]["where"])
     assert "'shipping:' || shipping_list_code" in checks["scope_ref_matches"]
     assert "'outbound:' || outbound_order_no" in checks["scope_ref_matches"]
+    assert "'order:' || platform_order_no" in checks["scope_ref_matches"]  # 迁移 0101
 
 
 def test_one_current_version_per_order_line() -> None:

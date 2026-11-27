@@ -193,9 +193,16 @@ def test_review2_and_recalc(client_for) -> None:
 
 def test_validation_errors_are_422(client_for) -> None:
     client = client_for(user(READ, COST))
-    bad = {**COST_BODY, "scope": {"msku": "SYN-001"}, "entry_kind": "override"}
-    # 范围 / 原因校验在服务层（这里已打桩），路由层只校验结构
-    assert client.post(f"{BASE}/cost-entries", json=bad).status_code == 201
+    # 范围三选一在结构层校验（#373 P1 加了平台订单号范围）；修正原因仍在服务层（这里已打桩）
+    no_scope = {**COST_BODY, "scope": {"msku": "SYN-001"}}
+    assert client.post(f"{BASE}/cost-entries", json=no_scope).status_code == 422
+    two_scopes = {
+        **COST_BODY,
+        "scope": {"msku": "SYN-001", "shipping_list_code": "SP2026T0001", "platform_order_no": "9"},
+    }
+    assert client.post(f"{BASE}/cost-entries", json=two_scopes).status_code == 422
+    no_reason = {**COST_BODY, "entry_kind": "override"}
+    assert client.post(f"{BASE}/cost-entries", json=no_reason).status_code == 201
     assert client.get(f"{BASE}/lines?page_size=500").status_code == 422
     assert client.post(f"{BASE}/review", json={**REVIEW_BODY, "review_ids": []}).status_code == 422
 

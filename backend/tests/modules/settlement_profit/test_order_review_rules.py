@@ -16,6 +16,7 @@ from app.modules.settlement_profit.order_review.rules import (
     FlowSegment,
     Lookups,
     OriginalLine,
+    OutboundItem,
     OutboundOrder,
     ReviewSettings,
     ShipmentDetail,
@@ -122,7 +123,7 @@ class DictLookups(Lookups):
         self.flows: list[FlowSegment] = []
         self.details: dict[tuple[str, str], ShipmentDetail] = {}
         self.headers: dict[str, ShipmentHeader] = {}
-        self.outbound: dict[str, OutboundOrder] = {}
+        self.outbound: dict[str, list[OutboundOrder]] = {}
         self.entries: dict[tuple[str, str], CostEntry] = {}
         self.owners: dict[str, str] = {"SYN-ITEM-1": "owner-a"}
         self.mskus: dict[str, str] = {"SYN-ITEM-1": MSKU}
@@ -140,8 +141,8 @@ class DictLookups(Lookups):
     def shipment_header(self, code: str) -> ShipmentHeader | None:
         return self.headers.get(code)
 
-    def outbound_order(self, platform_order_no: str) -> OutboundOrder | None:
-        return self.outbound.get(platform_order_no)
+    def outbound_orders(self, platform_order_no: str) -> list[OutboundOrder]:
+        return list(self.outbound.get(platform_order_no, []))
 
     def cost_entry(self, msku: str, scope_ref: str) -> CostEntry | None:
         self.entry_calls.append((msku, scope_ref))
@@ -172,6 +173,26 @@ def compute(rows: list[BillRow], lookups: DictLookups, cfg: ReviewSettings | Non
     groups = group_order_rows(rows)
     assert len(groups) == 1
     return compute_line(groups[0], store_id=STORE, lookups=lookups, settings=cfg or settings())
+
+
+def outbound(
+    number: str, *items: tuple[str, int | None, str | None], fee: str = "0", currency: str = "CNY"
+) -> OutboundOrder:
+    """合成出库单：items = (MSKU, 件数, 分摊运费)。"""
+    return OutboundOrder(
+        number,
+        Decimal(fee),
+        currency,
+        tuple(
+            OutboundItem(
+                msku,
+                None if count is None else Decimal(count),
+                None if freight is None else Decimal(freight),
+                None,
+            )
+            for msku, count, freight in items
+        ),
+    )
 
 
 # --------------------------------------------------------------------------- 翻译表 / 归类
@@ -340,7 +361,8 @@ def test_non_shipment_sources_are_pending_with_flow_prefill(
 def test_no_flow_row_at_all_is_cost_missing() -> None:
     line = compute(sale_rows(), DictLookups())
     assert line.reasons == ["cost_missing"]
-    assert line.cost_sources[0]["scope_ref"] == f"outbound:{ORDER}"
+    assert line.cost_sources[0]["scope_ref"] == f"order:{ORDER}"
+    assert line.cost_sources[0]["scope_kind"] == "platform_order"
 
 
 def test_two_segments_are_weighted_and_partial_coverage_is_missing() -> None:
@@ -381,26 +403,95 @@ def test_seller_fulfilled_prefills_last_leg_from_outbound_in_usd() -> None:
     lookups.flows = [flow(qty=2)]
     lookups.details[(CODE, MSKU)] = detail()
     lookups.headers[CODE] = ShipmentHeader(CODE, "6899", "WFS")
-    lookups.outbound[ORDER] = OutboundOrder("WO1", Decimal("4.20"), "USD")
+    lookups.outbound[ORDER] = [outbound("WO1", (MSKU, 2, "4.20"), fee="4.20", currency="USD")]
     line = compute(sale_rows(SELLER, qty=2), lookups)
     assert line.fulfillment_type == "seller"
     assert line.reasons == ["self_fulfilled"]  # 自发货不叠加 wfs_carrier_shipment
-    assert line.last_leg_cny == Decimal("30.2400")  # 4.20 × 7.2
+    assert line.last_leg_cny == Decimal("30.2400")  # 本 MSKU 分摊 4.20 × 7.2
     assert line.cost_total_cny == Decimal("6.0000") + Decimal("7.0000") + Decimal("30.2400")
-    assert line.cost_sources[0]["scope_ref"] == "outbound:WO1"
+    assert line.cost_sources[0]["scope_ref"] == f"order:{ORDER}"
+    assert line.cost_sources[0]["last_leg_prefill_cny"] == "15.1200"  # 单价
+    assert line.cost_sources[0]["outbound_order_nos"] == ["WO1"]
     assert line.auto_passed is False
 
 
-def test_cost_entry_on_outbound_scope_covers_seller_line() -> None:
+def test_seller_two_goods_one_outbound_each_gets_only_its_own_freight() -> None:
+    other_item, other_msku = "SYN-ITEM-2", "SYN-002"
+    lookups = DictLookups()
+    lookups.flows = [flow()]
+    lookups.mskus[other_item] = other_msku
+    lookups.owners[other_item] = "owner-a"
+    lookups.outbound[ORDER] = [
+        outbound("WO1", (MSKU, 1, "4.00"), (other_msku, 1, "6.00"), fee="10.00")
+    ]
+    rows = [
+        row("Sale", "Purchase", "Product Price", "20.00", fulfillment=SELLER, line="1"),
+        row(
+            "Sale",
+            "Purchase",
+            "Product Price",
+            "30.00",
+            fulfillment=SELLER,
+            line="2",
+            gtin="00000000000002",
+            item=other_item,
+        ),
+    ]
+    groups = group_order_rows(rows)
+    lines = [compute_line(g, store_id=STORE, lookups=lookups, settings=settings()) for g in groups]
+    legs = {line.msku: line.last_leg_cny for line in lines}
+    # 各自只摊到自己的运费，合计 = 整单运费（以前整单 10 元每行各扣一次）
+    assert legs == {MSKU: Decimal("4.0000"), other_msku: Decimal("6.0000")}
+    assert sum(legs.values(), Decimal("0")) == Decimal("10.00")
+
+
+def test_seller_one_good_two_outbounds_adds_up() -> None:
+    lookups = DictLookups()
+    lookups.flows = [flow(qty=2)]
+    lookups.outbound[ORDER] = [
+        outbound("WO1", (MSKU, 1, "3.00"), fee="3.00", currency="USD"),
+        outbound("WO2", (MSKU, 1, "1.00"), fee="1.00", currency="USD"),
+    ]
+    line = compute(sale_rows(SELLER, qty=2), lookups)
+    assert line.last_leg_cny == Decimal("28.8000")  # (3 + 1) × 7.2，拆两个包裹都算上
+    assert line.cost_sources[0]["outbound_order_nos"] == ["WO1", "WO2"]
+    assert line.cost_sources[0]["last_leg_msku_total_cny"] == "28.8000"
+
+
+@pytest.mark.parametrize(
+    ("items", "note"),
+    [
+        ((("SYN-002", 1, "6.00"),), "msku_not_in_outbound"),
+        (((MSKU, 1, None),), "apportion_freight_missing"),
+        (((MSKU, None, "6.00"),), "outbound_count_missing"),
+    ],
+)
+def test_seller_without_own_msku_freight_leaves_last_leg_empty(
+    items: tuple[tuple[str, int | None, str | None], ...], note: str
+) -> None:
+    lookups = DictLookups()
+    lookups.flows = [flow()]
+    lookups.details[(CODE, MSKU)] = detail()
+    lookups.outbound[ORDER] = [outbound("WO1", *items, fee="10.00")]
+    line = compute(sale_rows(SELLER), lookups)
+    # 不退回整单运费：尾程留空、待审
+    assert line.last_leg_cny is None
+    assert line.cost_total_cny is None
+    assert line.reasons == ["self_fulfilled"]
+    assert line.cost_sources[0]["last_leg_note"] == note
+    assert line.cost_sources[0]["scope_ref"] == f"order:{ORDER}"
+
+
+def test_cost_entry_on_platform_order_scope_covers_seller_line() -> None:
     lookups = DictLookups()
     lookups.flows = [flow()]
     lookups.details[(CODE, MSKU)] = detail()
     lookups.headers[CODE] = ShipmentHeader(CODE, "1234", "x")
-    lookups.outbound[ORDER] = OutboundOrder("WO1", Decimal("30"), "CNY")
-    lookups.entries[(MSKU, "outbound:WO1")] = CostEntry(
+    lookups.outbound[ORDER] = [outbound("WO1", (MSKU, 1, "30"), fee="30")]
+    lookups.entries[(MSKU, f"order:{ORDER}")] = CostEntry(
         "entry-1",
         MSKU,
-        "outbound:WO1",
+        f"order:{ORDER}",
         Decimal("3.5"),
         Decimal("4"),
         Decimal("28"),
@@ -494,7 +585,7 @@ def test_mcf_line_follows_wfs_rules_not_seller() -> None:
     lookups.flows = [flow()]
     lookups.details[(CODE, MSKU)] = detail()
     lookups.headers[CODE] = ShipmentHeader(CODE, "1234", "x")
-    lookups.outbound[ORDER] = OutboundOrder("WO1", Decimal("30"), "CNY")
+    lookups.outbound[ORDER] = [outbound("WO1", (MSKU, 1, "30"), fee="30")]
     line = compute(rows, lookups)
     assert line.line_kind == "sale"  # 同组里有 Product Price 销售行
     mcf_only = compute(rows[:1], lookups)

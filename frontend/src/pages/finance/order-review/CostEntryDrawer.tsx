@@ -1,5 +1,5 @@
 /**
- * 录成本 / 确认（PRP §8.4）：范围 = MSKU × 发货单（或 MSKU × 出库单），一次录入覆盖范围内所有订单行（含跨期）。
+ * 录成本 / 确认（PRP §8.4）：范围 = MSKU × 发货单 / 出库单 / 平台订单号（自发货订单、流水没覆盖的差额），一次录入覆盖范围内所有订单行（含跨期）。
  * - 确认（confirm）：接受系统预填的四项（领星发货单值）；
  * - 修正（override）：改值，原因必填，系统提示同时去领星改；不回写领星。
  * 撤销一条录入 → 受影响的行退回待审并重算。
@@ -8,18 +8,26 @@ import { Alert, Button, Drawer, Form, Input, InputNumber, Radio, Select, Space, 
 import { useEffect, useMemo, useState } from "react";
 import { SOURCE_KIND_TEXT, errorText, getCostEntry, postCostEntry, revokeCostEntry, type ApiCostSource, type ApiLine } from "./orderReviewApi";
 
-interface Scope { msku: string; shipping_list_code?: string | null; outbound_order_no?: string | null; label: string; source: ApiCostSource }
+interface Scope { msku: string; shipping_list_code?: string | null; outbound_order_no?: string | null; platform_order_no?: string | null; label: string; source: ApiCostSource }
+
+const SCOPE_LABEL: Record<string, string> = { shipping: "发货单", outbound: "出库单", order: "平台订单" };
 
 function scopesOf(line: ApiLine): Scope[] {
   const out: Scope[] = [];
+  const seen = new Set<string>();
   for (const source of line.cost_sources) {
     const msku = source.msku ?? line.msku;
     const scope = source.scope_ref ?? "";
     if (!msku || !scope) continue;
     const [prefix, ref] = scope.split(":", 2);
-    if (!ref) continue;
-    const base = { msku, label: `${msku} × ${prefix === "shipping" ? "发货单" : "出库单"} ${ref}（${SOURCE_KIND_TEXT[source.kind] ?? source.kind}）`, source };
-    out.push(prefix === "shipping" ? { ...base, shipping_list_code: ref } : { ...base, outbound_order_no: ref });
+    if (!ref || !SCOPE_LABEL[prefix]) continue;
+    // 自发货订单各段共用一个范围（MSKU × 平台订单号），只列一次
+    if (seen.has(`${msku}|${scope}`)) continue;
+    seen.add(`${msku}|${scope}`);
+    const base = { msku, label: `${msku} × ${SCOPE_LABEL[prefix]} ${ref}（${SOURCE_KIND_TEXT[source.kind] ?? source.kind}）`, source };
+    if (prefix === "shipping") out.push({ ...base, shipping_list_code: ref });
+    else if (prefix === "outbound") out.push({ ...base, outbound_order_no: ref });
+    else out.push({ ...base, platform_order_no: ref });
   }
   return out;
 }
@@ -60,7 +68,7 @@ function CostEntryDrawer({ line, onClose, onDone }: { line?: ApiLine; onClose: (
       const result = await postCostEntry(
         {
           store_id: line.store_id,
-          scope: { msku: scope.msku, shipping_list_code: scope.shipping_list_code ?? null, outbound_order_no: scope.outbound_order_no ?? null },
+          scope: { msku: scope.msku, shipping_list_code: scope.shipping_list_code ?? null, outbound_order_no: scope.outbound_order_no ?? null, platform_order_no: scope.platform_order_no ?? null },
           entry_kind: values.entry_kind,
           purchase_cny: values.purchase_cny == null ? null : String(values.purchase_cny),
           head_cny: values.head_cny == null ? null : String(values.head_cny),
@@ -110,6 +118,7 @@ function CostEntryDrawer({ line, onClose, onDone }: { line?: ApiLine; onClose: (
           <Form.Item label="范围（MSKU × 单据，一次录入覆盖范围内所有订单行，含跨期）">
             <Select value={scopeIndex} onChange={setScopeIndex} options={scopes.map((s, index) => ({ value: index, label: s.label }))} />
           </Form.Item>
+          {scope?.source.outbound_order_nos && <Typography.Paragraph type="secondary">出库单：{scope.source.outbound_order_nos.length ? scope.source.outbound_order_nos.join("、") : "没找到本 MSKU 的出库单"}{scope.source.last_leg_msku_total_cny ? ` · 本 MSKU 运费合计 ¥${scope.source.last_leg_msku_total_cny}` : ""}{scope.source.last_leg_note ? "（尾程没法预填，请手填）" : ""}</Typography.Paragraph>}
           {scope?.source.logistics_provider_name && <Typography.Paragraph type="secondary">物流商：{scope.source.logistics_provider_name}{scope.source.logistics_way ? ` · ${scope.source.logistics_way}` : ""}</Typography.Paragraph>}
           {scope?.source.prefill && (
             <Typography.Paragraph type="secondary">

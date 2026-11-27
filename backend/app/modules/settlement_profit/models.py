@@ -47,11 +47,15 @@ QTY = Numeric(18, 4)
 LINE_KEY = String(320)
 # 汇率齐（final）时必须有汇率，缺汇率（missing）时汇率必须为空，不兜底
 FX_RATE_MATCHES_STATUS = "(fx_status = 'final') = (fx_rate IS NOT NULL)"
-# 成本录入的范围标识必须由发货单号 / 出库单号推出，写入方拼错会被数据库拒绝
+# 成本录入的范围标识必须由发货单号 / 出库单号 / 平台订单号推出，写入方拼错会被数据库拒绝
+# （平台订单号一种是迁移 0101 加的：自发货订单与流水没覆盖的差额段，#373 P1）
 SCOPE_REF_MATCHES = (
     "scope_ref = CASE WHEN shipping_list_code IS NOT NULL "
-    "THEN 'shipping:' || shipping_list_code ELSE 'outbound:' || outbound_order_no END"
+    "THEN 'shipping:' || shipping_list_code "
+    "WHEN outbound_order_no IS NOT NULL THEN 'outbound:' || outbound_order_no "
+    "ELSE 'order:' || platform_order_no END"
 )
+ONE_SCOPE = "num_nonnulls(shipping_list_code, outbound_order_no, platform_order_no) = 1"
 
 FX_STATUSES = ("final", "missing")
 # 订单行待审原因（§8.4，订单行 8 个）；店铺级项目只有 price_missing（§8.6）。
@@ -628,7 +632,7 @@ class SettlementNoOrderFlag(_Calc, _Timestamps, Base):
 
 
 class SettlementCostEntry(_Actor, _Timestamps, Base):
-    """订单审核录成本 / 确认（§8.4）：范围 = MSKU × 发货单（或 MSKU × 出库单），一次录入覆盖
+    """订单审核录成本 / 确认（§8.4）：范围 = MSKU × 发货单 / 出库单 / 平台订单号，一次录入覆盖
     范围内所有订单行（含跨期）；不回写领星。同一范围同时只有一条未撤销的录入。"""
 
     __tablename__ = "manual_settlement_cost_entries"
@@ -644,9 +648,7 @@ class SettlementCostEntry(_Actor, _Timestamps, Base):
         UniqueConstraint("idempotency_key", name="uq_manual_settlement_cost_entry_idem"),
         CheckConstraint(_in("entry_kind", COST_ENTRY_KINDS), name="entry_kind"),
         CheckConstraint(_in("status", MANUAL_STATUSES), name="status"),
-        CheckConstraint(
-            "(shipping_list_code IS NULL) <> (outbound_order_no IS NULL)", name="one_scope"
-        ),
+        CheckConstraint(ONE_SCOPE, name="one_scope"),
         CheckConstraint(SCOPE_REF_MATCHES, name="scope_ref_matches"),
         CheckConstraint(
             "entry_kind <> 'override' OR coalesce(reason, '') <> ''", name="override_reason"
@@ -658,7 +660,9 @@ class SettlementCostEntry(_Actor, _Timestamps, Base):
     msku: Mapped[str] = mapped_column(Text, nullable=False)
     shipping_list_code: Mapped[str | None] = mapped_column(String(64))
     outbound_order_no: Mapped[str | None] = mapped_column(String(64))
-    # scope_ref = 'shipping:<发货单号>' 或 'outbound:<出库单号>'，给唯一索引用
+    # 范围 MSKU × 平台订单号（迁移 0101）：自发货订单、流水没覆盖的差额段
+    platform_order_no: Mapped[str | None] = mapped_column(String(64))
+    # scope_ref = 'shipping:<发货单号>' / 'outbound:<出库单号>' / 'order:<平台订单号>'，给唯一索引用
     scope_ref: Mapped[str] = mapped_column(String(80), nullable=False)
     purchase_cny: Mapped[Decimal | None] = mapped_column(MONEY)
     head_cny: Mapped[Decimal | None] = mapped_column(MONEY)

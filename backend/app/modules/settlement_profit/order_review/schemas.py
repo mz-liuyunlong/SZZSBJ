@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 ReviewStage = Literal["first", "final"]
 ReviewDecision = Literal["pass", "reject", "revert"]
@@ -147,8 +147,10 @@ class CostEntryScope(BaseModel):
     msku: str = Field(min_length=1, max_length=320)
     shipping_list_code: str | None = Field(default=None, max_length=64)
     outbound_order_no: str | None = Field(default=None, max_length=64)
+    # 自发货订单 / 流水没覆盖的差额段：范围 MSKU × 平台订单号（#373 P1）
+    platform_order_no: str | None = Field(default=None, max_length=64)
 
-    @field_validator("msku", "shipping_list_code", "outbound_order_no")
+    @field_validator("msku", "shipping_list_code", "outbound_order_no", "platform_order_no")
     @classmethod
     def _strip(cls, value: str | None) -> str | None:
         if value is None:
@@ -156,12 +158,22 @@ class CostEntryScope(BaseModel):
         value = value.strip()
         return value or None
 
+    @model_validator(mode="after")
+    def _exactly_one(self) -> CostEntryScope:
+        given = [self.shipping_list_code, self.outbound_order_no, self.platform_order_no]
+        if sum(1 for value in given if value) != 1:
+            raise ValueError(
+                "scope needs exactly one of shipping_list_code / outbound_order_no / "
+                "platform_order_no"
+            )
+        return self
+
     def scope_ref(self) -> str:
         if self.shipping_list_code:
             return f"shipping:{self.shipping_list_code}"
         if self.outbound_order_no:
             return f"outbound:{self.outbound_order_no}"
-        raise ValueError("scope requires shipping_list_code or outbound_order_no")
+        return f"order:{self.platform_order_no}"
 
 
 class CostEntryCreate(BaseModel):
@@ -183,6 +195,7 @@ class CostEntryRead(BaseModel):
     scope_ref: str
     shipping_list_code: str | None
     outbound_order_no: str | None
+    platform_order_no: str | None = None
     entry_kind: str
     purchase_cny: str | None
     head_cny: str | None

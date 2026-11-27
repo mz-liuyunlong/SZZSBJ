@@ -26,6 +26,7 @@ export interface ApiCostSource {
   purchase_cny?: string | null; head_cny?: string | null; last_leg_cny?: string | null;
   reasons?: string[]; entry_id?: string | null; entry_kind?: string | null;
   shipping_list_code?: string | null; outbound_order_no?: string | null; business_number?: string | null;
+  outbound_order_nos?: string[] | null; last_leg_msku_total_cny?: string | null; last_leg_note?: string | null; scope_kind?: string | null;
   logistics_provider_name?: string | null; logistics_way?: string | null; cost_source?: string | null;
   prefill?: Record<string, string | null> | null; last_leg_prefill_cny?: string | null; note?: string | null;
   returned?: boolean;
@@ -46,7 +47,7 @@ export interface ApiLine {
 export interface ApiLineMeta { total: number; page: number; page_size: number }
 export interface ApiTransactionType { code: string; name_zh: string | null; name_en: string; category: string; translated: boolean }
 export interface ApiCostEntry {
-  id: string; store_id: string; msku: string; scope_ref: string; shipping_list_code: string | null; outbound_order_no: string | null;
+  id: string; store_id: string; msku: string; scope_ref: string; shipping_list_code: string | null; outbound_order_no: string | null; platform_order_no?: string | null;
   entry_kind: "confirm" | "override"; purchase_cny: string | null; head_cny: string | null; last_leg_cny: string | null;
   reason: string | null; status: string; version: number; actor_id: string; created_at: string;
 }
@@ -134,7 +135,7 @@ const post = async <T,>(path: string, body: unknown, headers?: Record<string, st
 
 export interface CostEntryInput {
   store_id: string;
-  scope: { msku: string; shipping_list_code?: string | null; outbound_order_no?: string | null };
+  scope: { msku: string; shipping_list_code?: string | null; outbound_order_no?: string | null; platform_order_no?: string | null };
   entry_kind: "confirm" | "override";
   purchase_cny?: string | null; head_cny?: string | null; last_leg_cny?: string | null; reason?: string | null;
 }

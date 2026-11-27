@@ -54,7 +54,7 @@ ODS 公共列：`synced_at`、`row_hash`、`raw_row`（原始行 JSON）。
 
 | 表 | 键 | 内容 |
 |---|---|---|
-| `manual_settlement_cost_entries` | id；同一 店铺 × MSKU × 范围 只能有一条未撤销的录入（部分唯一索引；`scope_ref` 由数据库约束必须等于 `shipping:<发货单号>` 或 `outbound:<出库单号>`，拼错被拒） | 录成本 / 确认：范围 = MSKU × 发货单，或 MSKU × 出库单，二选一（CHECK）；`entry_kind` confirm / override（override 必须写原因）；`prefilled` 存当时领星预填值；初审 / 终审状态、`version`、撤销信息；不回写领星 |
+| `manual_settlement_cost_entries` | id；同一 店铺 × MSKU × 范围 只能有一条未撤销的录入（部分唯一索引；`scope_ref` 由数据库约束必须等于 `shipping:<发货单号>`、`outbound:<出库单号>` 或 `order:<平台订单号>`，拼错被拒） | 录成本 / 确认：范围 = MSKU × 发货单 / 出库单 / 平台订单号，三选一（CHECK，平台订单号一种和 `platform_order_no` 列由迁移 0101 加）；`entry_kind` confirm / override（override 必须写原因）；`prefilled` 存当时领星预填值；初审 / 终审状态、`version`、撤销信息；不回写领星 |
 | `manual_settlement_sem_month` | store_id, item_id, bill_month | SEM 月值（旧系统下线前人工导入） |
 | `manual_settlement_order_adjustments` | id | 调整：`kind` = amount（改金额，必须带金额）/ assign_item（指定商品，必须带 ItemID）/ note；原因必填、可撤销、`version`、初审 / 终审状态 |
 | `manual_settlement_review_actions` | id | 初审 / 终审 / 退回记录，只增不改；`target_kind` = order_line / store_item / cost_entry / adjustment；退回必须写意见；存 before / after |
