@@ -239,7 +239,17 @@ class IamRepository:
                                 null
                             ),
                             '{}'::varchar[]
-                        )
+                        ) || case when exists (
+                            select 1 from app_user_roles admin_ur
+                            join app_roles admin_role on admin_role.id = admin_ur.role_id
+                            where admin_ur.user_id = u.id and admin_role.role_key = 'admin'
+                        ) then array[
+                            'page:data-center:approval-workspace:view',
+                            'action:warehouse:wfs-fee-alert:archive-review',
+                            'action:products:new-product-analysis:review',
+                            'action:products:clearance-center:review',
+                            'internal:approval:administrator'
+                        ]::varchar[] else '{}'::varchar[] end
                     end as permission_keys
                 from app_sessions s
                 join app_users u on u.id = s.user_id

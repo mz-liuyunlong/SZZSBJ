@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from celery import Celery
 from celery.schedules import crontab
@@ -22,10 +24,16 @@ TASK_IMPORTS = (
     "app.modules.integration_sync.tasks",
     "app.modules.walmart_scf.tasks",
     "app.modules.walmart_remote.tasks",
+    "app.modules.walmart_bills.tasks",
     "app.modules.operation_logs.tasks",
     "app.modules.business_connectors.tasks",
     "app.modules.listing_rule_config.tasks",
+    "app.modules.clearance.tasks",
+    "app.modules.new_products.trust_tasks",  # PR337_TRUST_EVIDENCE_V7_0092
+    "app.modules.new_products.pr337_daily_tasks",  # PR337_DAILY_PERSIST_V1
     "app.modules.ai_runtime.tasks",
+    "app.modules.new_products.unified_tasks",
+    "app.modules.new_products.sku_progress_tasks",
 )
 
 TASK_ROUTES = {
@@ -33,9 +41,13 @@ TASK_ROUTES = {
     "operation_logs.*": {"queue": OPERATION_LOG_QUEUE, "routing_key": OPERATION_LOG_QUEUE},
     "business_connectors.*": {"queue": NOTIFICATION_QUEUE, "routing_key": NOTIFICATION_QUEUE},
     "listing_evaluation.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
+    "listing_lifecycle.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
+    "clearance.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
+    "new_products.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "ai_runtime.*": {"queue": AI_QUEUE, "routing_key": AI_QUEUE},
     "walmart_scf.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "walmart_remote.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
+    "walmart_bills.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "integration_sync.*": {
         "queue": INTEGRATION_QUEUE,
         "routing_key": INTEGRATION_QUEUE,
@@ -49,6 +61,13 @@ def _env_truthy(value: str | None) -> bool:
 
 def _is_production_env() -> bool:
     return (os.environ.get(APP_ENV_ENV) or "").strip().lower() == "production"
+
+
+def sku_progress_refresh_enabled() -> bool:
+    """Production default on; explicit false/invalid values stop both Beat and worker."""
+    return _is_production_env() and _env_truthy(
+        os.getenv("SZZSBJ_SKU_PROGRESS_REFRESH_ENABLED", "1")
+    )
 
 
 def get_broker_url(*, require: bool | None = None) -> str:
@@ -116,6 +135,10 @@ def create_celery_app(
                 "task": "listing_evaluation.scheduler_tick",
                 "schedule": 60.0,
             },
+            "listing-lifecycle-scheduler": {
+                "task": "listing_lifecycle.scheduler_tick",
+                "schedule": 60.0,
+            },
             "ai-keyword-recovery": {
                 "task": "ai_runtime.recover_keyword_jobs",
                 "schedule": 60.0,
@@ -134,6 +157,60 @@ def create_celery_app(
             },
         },
     )
+    # 0097 沃尔玛对账报表打款额：只有生产 + SZZSBJ_WALMART_RECON_PAYOUT_ENABLED=1 才排期；
+    # 每周三上海 04:30（UTC 周二 20:30），在领星账单同步（周三 03:00）之后。
+    if _is_production_env() and _env_truthy(os.getenv("SZZSBJ_WALMART_RECON_PAYOUT_ENABLED")):
+        celery.conf.beat_schedule = {
+            **celery.conf.beat_schedule,
+            "walmart-bills-recon-payout-weekly": {
+                "task": "walmart_bills.recon_payout_sync",
+                "schedule": crontab(minute=30, hour=20, day_of_week="2"),
+            },
+        }
+    # Never enqueue disabled clearance ticks; unrelated Beat entries are untouched.
+    if _is_production_env() and _env_truthy(os.getenv("SZZSBJ_CLEARANCE_AUTO_ENABLED")):
+        celery.conf.beat_schedule = {
+            **celery.conf.beat_schedule,
+            "clearance-la-daily-scheduler": {
+                "task": "clearance.scheduler_tick",
+                "schedule": crontab(
+                    minute=0,
+                    hour=0,
+                    nowfun=lambda: datetime.now(ZoneInfo("America/Los_Angeles")),
+                ),
+            },
+        }
+    # 0094 local verification: reuse the current Celery Beat instance.
+    # No production schedule is added; catalog auto ingest starts only after
+    # the local test DB has migrated, as enforced in ad_catalog_tick.
+    if (os.getenv(APP_ENV_ENV) or "").strip().lower() in {"local", "dev", "development"}:
+        celery.conf.beat_schedule = {
+            **celery.conf.beat_schedule,
+            "walmart-ad-catalog-local-incremental": {
+                "task": "new_products.ad_catalog_tick",
+                "schedule": 600.0,
+            },
+        }
+    # Exactly one PR337 scoring scheduler, independent of the SKU projection refresh.
+    # LA calendar midnight, DST-aware, while all unrelated jobs keep UTC.
+    if _is_production_env() and _env_truthy(os.getenv("SZZSBJ_NEW_PRODUCTS_DAILY_ENABLED")):
+        from app.modules.new_products.la_midnight_schedule import LosAngelesMidnightSchedule
+
+        celery.conf.beat_schedule = {
+            **celery.conf.beat_schedule,
+            "new-products-la-midnight": {
+                "task": "new_products.daily_score_tick",
+                "schedule": LosAngelesMidnightSchedule(app=celery),
+            },
+        }
+    if sku_progress_refresh_enabled():
+        celery.conf.beat_schedule = {
+            **celery.conf.beat_schedule,
+            "new-products-sku-progress-refresh": {
+                "task": "new_products.sku_progress_refresh",
+                "schedule": 600.0,
+            },
+        }
     return celery
 
 

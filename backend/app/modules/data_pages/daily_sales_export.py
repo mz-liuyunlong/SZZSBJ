@@ -8,6 +8,7 @@ from io import StringIO
 from typing import Literal
 
 from app.modules.data_pages.models import DailySalesItemDayMart
+from app.modules.data_pages.sales_report_sort import sort_export_rows
 from app.modules.data_pages.service import DailySalesService
 
 ZERO = Decimal("0")
@@ -436,7 +437,10 @@ def export_daily_sales_csv(
     selected_columns = _selected_columns(columns)
     inventory_snapshots = (
         service.repository.daily_sales_inventory_snapshot_map(rows)
-        if "wfs_inventory" in selected_columns
+        if (
+            "wfs_inventory" in selected_columns
+            or getattr(query, "sort_field", None) == "wfs_inventory"
+        )
         else {}
     )
 
@@ -446,8 +450,23 @@ def export_daily_sales_csv(
     period_header = "统计月份" if period == "month" else "统计日期"
     writer.writerow([period_header, *[DAILY_SALES_EXPORT_COLUMNS[key] for key in selected_columns]])
 
-    for period_value, group_rows in _group_rows(rows, period=period, dimension=dimension):
-        value_map = _row_value_map(period_value, group_rows, inventory_snapshots)
+    groups = _group_rows(rows, period=period, dimension=dimension)
+    sort_field = getattr(query, "sort_field", None)
+    if sort_field:
+        value_maps = sort_export_rows(
+            [
+                (period_value, _row_value_map(period_value, group_rows, inventory_snapshots))
+                for period_value, group_rows in groups
+            ],
+            sort_field,
+            query.sort_direction,
+        )
+    else:
+        value_maps = (
+            (period_value, _row_value_map(period_value, group_rows, inventory_snapshots))
+            for period_value, group_rows in groups
+        )
+    for period_value, value_map in value_maps:
         writer.writerow(
             [
                 period_value,

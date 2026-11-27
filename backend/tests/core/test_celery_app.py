@@ -95,3 +95,63 @@ def test_explicit_broker_url_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(REQUIRE_BROKER_ENV, "true")
 
     assert get_broker_url() == "redis://127.0.0.1:6379/0"
+
+
+def test_walmart_recon_payout_beat_only_in_production_with_switch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    key = "walmart-bills-recon-payout-weekly"
+    assert "app.modules.walmart_bills.tasks" in TASK_IMPORTS
+    assert TASK_ROUTES["walmart_bills.*"]["queue"] == INTEGRATION_QUEUE
+    monkeypatch.delenv("APP_ENV", raising=False)
+    monkeypatch.setenv("SZZSBJ_WALMART_RECON_PAYOUT_ENABLED", "1")
+    assert key not in create_celery_app(broker_url="memory://").conf.beat_schedule
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("SZZSBJ_WALMART_RECON_PAYOUT_ENABLED", raising=False)
+    assert key not in create_celery_app(broker_url="memory://").conf.beat_schedule
+    monkeypatch.setenv("SZZSBJ_WALMART_RECON_PAYOUT_ENABLED", "1")
+    entry = create_celery_app(broker_url="memory://").conf.beat_schedule[key]
+    assert entry["task"] == "walmart_bills.recon_payout_sync"
+
+
+@pytest.mark.parametrize(
+    ("environment", "switch", "enabled"),
+    [
+        ("production", None, True),
+        ("production", "YES", True),
+        ("production", "0", False),
+        ("production", "false", False),
+        ("production", "", False),
+        ("production", "invalid", False),
+        ("local", None, False),
+        ("test", "YES", False),
+        ("staging", "YES", False),
+    ],
+)
+def test_sku_progress_refresh_beat_and_worker_share_gate(
+    monkeypatch: pytest.MonkeyPatch, environment: str, switch: str | None, enabled: bool
+) -> None:
+    from unittest.mock import MagicMock
+
+    from app.modules.new_products import sku_progress_tasks as tasks
+
+    monkeypatch.setenv("APP_ENV", environment)
+    monkeypatch.delenv("SZZSBJ_SKU_PROGRESS_REFRESH_ENABLED", raising=False)
+    if switch is not None:
+        monkeypatch.setenv("SZZSBJ_SKU_PROGRESS_REFRESH_ENABLED", switch)
+    schedule = create_celery_app(broker_url="memory://").conf.beat_schedule
+    key = "new-products-sku-progress-refresh"
+    assert (key in schedule) is enabled
+    if enabled:
+        assert schedule[key] == {"task": "new_products.sku_progress_refresh", "schedule": 600.0}
+    factory = MagicMock()
+    refresh = MagicMock(return_value={"status": "complete"})
+    monkeypatch.setattr(tasks, "get_session_factory", factory)
+    monkeypatch.setattr(tasks, "refresh_sources", refresh)
+    assert tasks.sku_progress_refresh.run() == {"status": "complete" if enabled else "disabled"}
+    if enabled:
+        factory.assert_called_once_with()
+        refresh.assert_called_once()
+    else:
+        factory.assert_not_called()
+        refresh.assert_not_called()

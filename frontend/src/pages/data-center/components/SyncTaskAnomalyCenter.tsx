@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Button, Descriptions, Drawer, Input, Select, Space, Table, Tag, Typography, message } from "antd";
 import { backendRequest } from "@/api/backendApi";
+import { evidenceChanges, evidenceValue, sampleAnomalyGuide, sampleAnomalyNames, sampleFinancialStatus, sampleReviewBlocked } from "../syncTaskAnomalyEvidence";
+import type { EvidenceChange } from "../syncTaskAnomalyEvidence";
 
 interface Anomaly {
   id: string;
@@ -42,6 +44,7 @@ const statusNames: Record<string, string> = {
 };
 
 const guide: Record<string, string> = {
+  ...sampleAnomalyGuide,
   DATA_PAGES_SEM_SPEND_UNATTRIBUTED:
     "在领星广告报表按店铺、业务日期查询 Campaign 和广告花费；核实商品归属。没有 Item ID 时不得猜测 SKU。",
   DATA_PAGES_CONFIRMED_SAMPLE_EXCEEDS_SALESTAT:
@@ -110,6 +113,10 @@ export default function SyncTaskAnomalyCenter() {
       messageApi.warning("请填写至少3个字符的核对说明");
       return;
     }
+    if (sampleReviewBlocked(selected.details) && ["resolved", "dismissed"].includes(nextStatus)) {
+      messageApi.warning("来源证据或财务尚未复验，请先补同步，不可直接关闭");
+      return;
+    }
     setSaving(true);
     try {
       await backendRequest(`/api/integrations/sync-anomalies/${selected.id}`, {
@@ -155,7 +162,8 @@ export default function SyncTaskAnomalyCenter() {
           { title: "SKU / MSKU", width: 170, render: (_, row) => display(row.local_sku || row.msku) },
           { title: "订单号", dataIndex: "platform_order_no", width: 160, render: display },
           { title: "接口", dataIndex: "interface_key", width: 160 },
-          { title: "异常原因", dataIndex: "error_code", width: 250 },
+          { title: "异常原因", dataIndex: "error_code", width: 250,
+            render: value => sampleAnomalyNames[value] ?? value },
           { title: "状态", dataIndex: "status", width: 105,
             render: value => <Tag>{statusNames[value] ?? value}</Tag> },
           { title: "次数", dataIndex: "occurrence_count", width: 70 },
@@ -180,6 +188,12 @@ export default function SyncTaskAnomalyCenter() {
             { key: "item", label: "Item ID", children: <Typography.Text copyable>{display(selected.item_id)}</Typography.Text> },
             { key: "order", label: "订单号", children: <Typography.Text copyable>{display(selected.platform_order_no)}</Typography.Text> },
             { key: "campaign", label: "Campaign", children: <Typography.Text copyable>{display(selected.campaign_name)}</Typography.Text> },
+            ...(sampleAnomalyNames[selected.error_code] ? [
+              { key: "storeName", label: "店铺名称", children: evidenceValue(selected.details.store_name) },
+              { key: "sourceOrder", label: "来源订单号", children: evidenceValue(selected.details.source_order_id) },
+              { key: "line", label: "来源订单行号", children: evidenceValue(selected.details.source_order_line_id) },
+              { key: "financial", label: "财务状态", children: sampleFinancialStatus(selected.details) },
+            ] : []),
             { key: "source", label: "接口", children: selected.interface_key },
             { key: "error", label: "错误码", children: selected.error_code },
             { key: "count", label: "累计发现次数", children: selected.occurrence_count },
@@ -188,6 +202,19 @@ export default function SyncTaskAnomalyCenter() {
           <Typography.Title level={5} style={{ marginTop: 20 }}>领星核对指引</Typography.Title>
           <Typography.Paragraph>{guide[selected.error_code] ??
             "根据店铺、业务日期、商品与订单在领星核对来源数据；无法确认时标记待定位，不得直接修改财务数据。"}</Typography.Paragraph>
+          {sampleAnomalyNames[selected.error_code] && <>
+            <Typography.Title level={5}>送样证据变化</Typography.Title>
+            <Table<EvidenceChange> size="small" rowKey="field" pagination={false}
+              dataSource={evidenceChanges(selected.details)}
+              locale={{ emptyText: "暂未记录逐笔差异，请重新同步获取最新证据" }}
+              columns={[
+                { title: "变化字段", dataIndex: "field" },
+                { title: "原确认值", dataIndex: "previous" },
+                { title: "最新来源值", dataIndex: "observed" },
+              ]} />
+            {sampleReviewBlocked(selected.details) && <Alert type="warning" showIcon style={{ marginTop: 12 }}
+              message="争议商品利润待核实，正常商品继续同步。补齐证据并补同步后由系统复验。" />}
+          </>}
           <Typography.Title level={5}>异常证据（仅展示安全摘要）</Typography.Title>
           <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
             {JSON.stringify(selected.details, null, 2)}
@@ -204,7 +231,9 @@ export default function SyncTaskAnomalyCenter() {
           <Typography.Title level={5}>处理状态与核对记录</Typography.Title>
           <Space direction="vertical" style={{ width: "100%" }}>
             <Select value={nextStatus} onChange={setNextStatus}
-              options={Object.entries(statusNames).map(([value, label]) => ({ value, label }))} />
+              options={Object.entries(statusNames).map(([value, label]) => ({ value, label,
+                disabled: sampleReviewBlocked(selected.details) && ["resolved", "dismissed"].includes(value),
+              }))} />
             <Input.TextArea rows={4} value={note} onChange={event => setNote(event.target.value)}
               placeholder="填写领星核对结论、差异原因及处理依据；解决/误报关闭均须说明" />
             <Button type="primary" loading={saving} onClick={() => { void submit(); }}>保存核对记录</Button>

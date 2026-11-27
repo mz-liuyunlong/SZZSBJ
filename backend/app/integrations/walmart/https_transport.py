@@ -24,7 +24,7 @@ from app.integrations.walmart.contracts import PreparedRequest
 
 WALMART_HOST = "https://marketplace.walmartapis.com"
 MAX_RESPONSE_BYTES = 1024 * 1024
-MAX_PDF_RESPONSE_BYTES = 5 * 1024 * 1024
+MAX_PDF_RESPONSE_BYTES = 4 * 1024 * 1024  # base64 stays under the 5.5MB result cap
 MAX_ERROR_RESPONSE_BYTES = 64 * 1024
 MAX_TOKEN_RESPONSE_BYTES = 16 * 1024
 _PRIVATE_NETS = tuple(
@@ -97,6 +97,9 @@ class WalmartHttpsTransport:
         if not request.path.startswith("/v3/") or "//" in request.path or ".." in request.path:
             raise TransportRejected("WALMART_OPERATION_INVALID")
         if request.method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
+            raise TransportRejected("WALMART_OPERATION_INVALID")
+        if getattr(request, "response_kind", "json") == "zip":
+            # Report ZIP download is implemented by the direct read-only transport only.
             raise TransportRejected("WALMART_OPERATION_INVALID")
         try:
             credentials = self._secrets.get_store_credentials(store_code)

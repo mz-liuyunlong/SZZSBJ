@@ -66,6 +66,7 @@ PRODUCT_MANAGEMENT_COLUMNS = frozenset(
         "productName",
         "ownerName",
         "developerName",
+        "developmentDate",
         "tags",
         "sourceTags",
         "wfsFee",
@@ -85,6 +86,7 @@ DEFAULT_PRODUCT_MANAGEMENT_COLUMNS = (
     "productName",
     "ownerName",
     "developerName",
+    "developmentDate",
     "purchasePrice",
     "firstLegFreight",
     "purchaseLeadTime",
@@ -253,6 +255,9 @@ class SourceTagRead(StrictSchema):
 
 
 class ProductManagementListItem(StrictSchema):
+    development_date: datetime | None = None
+    # SZZSBJ_NP_PURCHASE_TABLE_IDENTITY_AMOUNT_V5: account-scoped identity
+    source_account_ref: str | None = None
     sku_id: UUID
     sku: str | None
     product_name: str | None
@@ -471,6 +476,7 @@ class PricingBreakdownRead(StrictSchema):
 
 
 class ProductManagementDetailData(StrictSchema):
+    development_date: datetime | None = None
     sku_id: UUID
     core: ProductCoreRead | None
     synced_detail: SyncedProductDetailRead | None

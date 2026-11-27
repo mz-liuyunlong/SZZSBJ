@@ -69,14 +69,55 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version-file: .python-version
-      - name: Migrate isolated PostgreSQL to 0061 and validate AI runtime
+      - name: Validate immutable migration protections on isolated PostgreSQL
         working-directory: backend
         run: |
           uv sync --frozen
+          read_head='import os; from sqlalchemy import create_engine, text; engine = create_engine(os.environ["TEST_DATABASE_URL"]); print(engine.connect().scalar(text("SELECT version_num FROM alembic_version"))); engine.dispose()'
+          # Existing lifecycle protection must be tested before irreversible clearance 0082.
+          uv run alembic upgrade 20261105_0081_finance_payoneer_statement
+          legacy_before="$(uv run python -c "$read_head")"
+          test "$legacy_before" = "20261105_0081_finance_payoneer_statement"
+          if uv run alembic downgrade 20261027_0063_ai_runtime > /tmp/ai-rollback-check.log 2>&1; then
+            echo "ERROR: protected lifecycle audit was downgraded"
+            exit 1
+          fi
+          grep -F "Immutable lifecycle audit cannot be destructively downgraded" /tmp/ai-rollback-check.log
+          legacy_after="$(uv run python -c "$read_head")"
+          test "$legacy_before" = "$legacy_after"
+          # Verify 0082 immutable history at its own revision before 0083.
+          uv run alembic upgrade 20261108_0082_clearance_center
+          clearance_before="$(uv run python -c "$read_head")"
+          test "$clearance_before" = "20261108_0082_clearance_center"
+          if uv run alembic downgrade 20261105_0081_finance_payoneer_statement > /tmp/clearance-rollback-check.log 2>&1; then
+            echo "ERROR: clearance history downgrade was allowed"
+            exit 1
+          fi
+          grep -F "Clearance approval, event and rule histories are immutable; downgrade refused" /tmp/clearance-rollback-check.log
+          test "$clearance_before" = "$(uv run python -c "$read_head")"
+          # Check 0083 finance audit before the forward-only permission migration.
+          uv run alembic upgrade 20261113_0091_finance_wfs_fee_reports
+          finance_before="$(uv run python -c "$read_head")"
+          test "$finance_before" = "20261113_0091_finance_wfs_fee_reports"
+          if uv run alembic downgrade 20261108_0082_clearance_center > /tmp/finance-rollback-check.log 2>&1; then
+            echo "ERROR: finance audit downgrade was allowed"
+            exit 1
+          fi
+          grep -F "finance SEM audit ledger has no destructive downgrade" /tmp/finance-rollback-check.log
+          test "$finance_before" = "$(uv run python -c "$read_head")"
+          # Check 0092 role permissions and forward-only history separately.
+          uv run alembic upgrade 20261115_0092_role_page_catalog_alignment
+          role_before="$(uv run python -c "$read_head")"
+          test "$role_before" = "20261115_0092_role_page_catalog_alignment"
+          if uv run alembic downgrade 20261113_0091_finance_wfs_fee_reports > /tmp/role-rollback-check.log 2>&1; then
+            echo "ERROR: role grant catalog was downgraded"
+            exit 1
+          fi
+          grep -F "Forward-only permission catalog migration: do not revoke role grants automatically" /tmp/role-rollback-check.log
+          test "$role_before" = "$(uv run python -c "$read_head")"
           uv run alembic upgrade head
+          test "$(uv run python -c "$read_head")" = "20261127_0100_sku_ad_progress_foundation"
           uv run pytest -q -rs tests/modules/ai_runtime/test_postgresql_acceptance.py
-          uv run alembic downgrade 20261027_0063_ai_runtime
-          uv run alembic upgrade head
 
   frontend-if-present:
     runs-on: ubuntu-latest
@@ -306,7 +347,7 @@ jobs:
         working-directory: backend
         run: |
           uv sync --frozen
-          uv run pytest -q -s tests/db/test_domestic_chain_postgresql.py tests/db/test_packing_pending_edit_postgresql.py tests/db/test_packing_passcode_redis.py tests/db/test_domestic_database_safety.py tests/modules/pmc_domestic/test_domestic_ods_adopt.py tests/db/test_alembic_scaffold.py --junitxml=domestic-chain-results.xml
+          uv run pytest -q -s tests/db/test_domestic_chain_postgresql.py tests/db/test_packing_pending_edit_postgresql.py tests/db/test_packing_passcode_redis.py tests/db/test_domestic_database_safety.py tests/modules/pmc_domestic/test_domestic_ods_adopt.py tests/modules/integration_sync/test_wfs_cost_valuation_sync_postgresql.py tests/db/test_alembic_scaffold.py tests/modules/new_products/test_sku_ad_foundation_rollback_postgresql.py --junitxml=domestic-chain-results.xml
           uv run python -c "import xml.etree.ElementTree as E; r=E.parse('domestic-chain-results.xml'); assert r.findall('.//testcase') and not r.findall('.//skipped'), 'Domestic PostgreSQL acceptance must execute without skipped cases'"
 
   walmart-order-identity-postgresql:
@@ -342,26 +383,27 @@ jobs:
           uv sync --frozen
           uv run alembic upgrade 20261019_0046_operation_logs
           uv run alembic upgrade 20261020_0047_walmart_order_identity_guard
+          # Prove the historical order-identity downgrade before installing
+          # irreversible finance audit migrations.
+          uv run pytest -q -s \
+            tests/modules/integration_sync/test_walmart_order_identity_downgrade_postgresql.py
+          uv run alembic upgrade head
           uv run pytest -q -s \
             tests/modules/integration_sync/test_walmart_order_identity_postgresql.py
           uv run pytest -q -s \
             tests/modules/integration_sync/test_sem_attribution_postgresql.py
-          uv run pytest -q -s \
-            tests/modules/integration_sync/test_walmart_order_identity_downgrade_postgresql.py
-          uv run alembic downgrade 20261019_0046_operation_logs
           uv run python - <<'PY'
           from sqlalchemy import create_engine, inspect, text
           from app.core.config import Settings, get_test_database_url
 
           engine = create_engine(get_test_database_url(Settings()))
           with engine.connect() as connection:
-              assert connection.scalar(text("select version_num from alembic_version")) == "20261019_0046_operation_logs"
-              assert connection.scalar(text("select to_regclass('audit_walmart_order_item_conflicts')")) is None
+              assert connection.scalar(text("select version_num from alembic_version")) == "20261127_0100_sku_ad_progress_foundation"
+              assert connection.scalar(text("select to_regclass('public.audit_walmart_order_item_conflicts')")) is not None
+              assert connection.scalar(text("select to_regclass('public.biz_finance_sample_disputes')")) is not None
+              assert connection.scalar(text("select to_regclass('public.biz_finance_unallocated_sem_lines')")) is not None
           columns = {column["name"] for column in inspect(engine).get_columns("fact_walmart_order_items")}
-          assert "canonical_identity_hash" not in columns
-          assert "is_identity_current" not in columns
-          assert "provider_item_id" not in columns
-          assert "item_id_resolution_source" not in columns
+          assert {"canonical_identity_hash","is_identity_current","provider_item_id","item_id_resolution_source"} <= columns
           engine.dispose()
           PY
 
@@ -659,3 +701,36 @@ jobs:
           path: backend/dist/walmart-scf-v3-py310.zip
           if-no-files-found: error
           retention-days: 7
+
+  finance-cashflow-postgresql:
+    name: Finance cashflow PostgreSQL acceptance
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: finance_cashflow_ci
+          POSTGRES_USER: finance_cashflow_ci
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U finance_cashflow_ci -d finance_cashflow_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      TEST_DATABASE_URL: postgresql+psycopg://finance_cashflow_ci:local_ci_only@127.0.0.1:5432/finance_cashflow_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Migrate isolated PostgreSQL and run finance cashflow tests
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run alembic upgrade head
+          uv run pytest -v -rs tests/modules/finance_cashflow tests/modules/walmart_bills tests/modules/wfs_fees tests/modules/settlement_profit tests/db/test_alembic_scaffold.py

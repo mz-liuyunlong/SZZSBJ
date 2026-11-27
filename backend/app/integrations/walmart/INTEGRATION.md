@@ -163,7 +163,17 @@ PMC「WFS 货件创建」需要 6 个写调用，契约在 `wfs_write_catalog.py
 
 ### 风险等级（云函数自己判断）
 
-`risk_for(method, key)`：GET = read；POST/PUT/PATCH/DELETE = write，除非 key 在云端代码常量 `READ_SEMANTIC_NON_GET_KEYS`（目前为空；WFS inbound-preview 是 POST，按写处理）。云函数不信契约里的 `mutating` 字段单独判读；服务器声明的 `risk` 与云端计算不一致 → `WALMART_RISK_MISMATCH`。每店唯一开关 `SZZSBJ_WALMART_MAX_RISK=read|write`（`write` 还需 `LIVE_MODE=owner-approved-read-write`）；write 还要求 `approval_ref`。
+`risk_for(method, key)`：GET = read；POST/PUT/PATCH/DELETE = write，除非方法是 POST 且 key 在云端代码常量 `READ_SEMANTIC_NON_GET_KEYS`（名单与各契约见下方「2026-11-24 第二批」；第一批时只有评价加速器一个、请求体钉死 `{}`，第二批扩到 11 个、请求体按契约 schema 限定键）。WFS inbound-preview 是 POST，仍按写处理。同一轮（2026-11-24）把财务回款对账用的两个 GET `recon_report_dates` / `recon_report_json`（`recon_catalog.py`，family `recon`，11-03 已只读跑通）登记进仓库；登记 GET 操作不需要改云函数，只需在线上读键清单放行。
+
+**2026-11-24 第二批（负责人 13:46 / 14:00 书面授权「探测通过的全部开放」）**：
+- `READ_SEMANTIC_NON_GET_KEYS` 扩成 12 个只读 POST（growth 4、报表下单 1、Listing 质量明细 1、商品建档规格 1、SEM 查询 5），每个的契约都把请求体钉成「只允许文档里的筛选 / 分页键」的对象；直连传输层对名单内 key 转发契约校验过的对象（重新序列化，不转发原始字节），其他方法 / 非对象体 / 写契约仍拒。
+- 按需报表：`report_request_create`（`POST /v3/reports/reportRequests`，报表类型白名单 = 10-11 探测通过的 24 个枚举，请求体只许 `dataStartTime` / `dataEndTime`）→ `report_request_status_get` → `report_download`（新响应类型 `zip`：云函数拿到 `downloadURL` 后只在同一主机、https、`/v3/` 下取 ZIP，不跟跳转、上限 3.5MB、必须 `PK` 魔数，base64 回传；服务端 `scf_bridge` 解回 `zip_bytes`）。
+- 新登记的只读家族：`payment`（付款对账单 / 绩效）、`insights`（Listing 质量 / 未发布 / Pro Seller）、`sem`（3 GET + 5 POST 查询）、`misc`（备货周期、分类树、运费账户 / 承运方式 / 模板 / 发货节点、SWW 包裹类型与发货日、webhook 元数据、WFS 入库运费报价、商品建档规格 POST 查询）；growth 加 3 个 POST 查询。
+- 写：`sem_catalog.py` 登记 4 个 SEM 活动写操作（10-11 实测过），权限 `action:walmart:sem:campaigns:write`，与 WFS 写同一道闸（读写 live mode、`MAX_RISK=write`、写 key 清单、`approval_ref`、共享防重放存储）；服务端入口 `scf_write_factory.make_walmart_write_api` 按 `ALL_WRITE_KEYS = WFS ∪ SEM` 校验。
+- **旧版协议只读（刘云龙 #358 审核，2026-11-24）**：v1 / v2 事件只允许 GET；POST / PUT / PATCH / DELETE（含 WFS / SEM 写、只读 POST）在云函数里于准备契约、取 token、发请求之前一律 `WALMART_LEGACY_READ_ONLY`。写与只读 POST 只走 v3 签名契约。注：gateway 用哪个协议看线上环境变量 `SZZSBJ_WALMART_SCF_PROTOCOL`，**默认 `1`（旧版），只能 GET**；只读 POST 与写需要线上设为 `3`，并配好签名密钥（`SZZSBJ_WALMART_CONTRACT_SIGNING_KEY_ID` / `SZZSBJ_WALMART_CONTRACT_SIGNING_KEY_FILE`）。上线时放行任何 POST key 之前，先确认这两项。`scf_write_factory`（`bridge_version=2`）目前无业务调用，因此不可用不影响线上。
+- **云端钉死非 GET 契约（审核 #358 P1-1）**：所有非 GET 调用（只读 POST 与写）由云函数用包内 `cloud_contracts.builtin_non_get_registry()` 的契约执行，服务器签来的契约在方法、路径模板、字段、请求体开关 / schema / 类型、mutating、响应类型上任一不同即 `WALMART_CONTRACT_MISMATCH`，在取 token 之前拒绝。GET 仍是「服务端登记即可、不改云函数」。
+- 上限：报表 ZIP 3.5MB、PDF 4MB（base64 后都在云函数 5.5MB 结果上限内）。
+- 包清单（`build_walmart_scf_direct_bundle.py`）加 `_catalog_base.py` 与各新目录；未探测通过的 90 个能力（写 58、只读待探 32）不登记。云函数不信契约里的 `mutating` 字段单独判读；服务器声明的 `risk` 与云端计算不一致 → `WALMART_RISK_MISMATCH`。每店唯一开关 `SZZSBJ_WALMART_MAX_RISK=read|write`（`write` 还需 `LIVE_MODE=owner-approved-read-write`）；write 还要求 `approval_ref`。
 
 ### 与 v1/v2 的关系
 
@@ -243,3 +253,67 @@ RBAC 落点：权限 key 由注册中心定义（`Operation.permission`），不
 生成密钥（部署 AI，在主服务器上执行一次，私钥不离开服务器）：`python -c "from app.integrations.walmart.contract_signing import ContractSigner as S; from app.integrations.walmart.unified_api import reviewed_registry as R; s=S.generate(kid='szzsbj-2026-10', registry=R()); open('/etc/szzsbj/walmart-contract-signing.pem','wb').write(s.private_pem()); print(s.public_key_b64())"`，然后 `chmod 640` + `chown root:szzsbj`，输出的公钥交给云函数所有者。
 
 新增一个 Walmart 接口的步骤：在对应 catalog 加 `Operation`（方法、路径、字段 schema、`mutating`、`response_kind`）→ `reviewed_registry()` 自动带上权限 → 写契约测试（参数校验、v3 事件往返）→ 业务模块通过 `gw.call` 使用 → 合并即生效，云函数不变。
+
+## 2026-11-25 V3.1 通用代理（事件协议 v4）
+
+负责人已授权本次实现：九家 SCF/SSM 保持隔离，SZZSBJ 可信后端代码自由定义
+Walmart Marketplace 请求。**不新增运行时业务接口目录、读写风险上限、审批引用、
+审计成功或业务幂等账本等通用调用前置条件。** v1/v2/v3 及原有业务权限逻辑保持不变；
+新通用调用走 v4，不自动改造任何既有采购、广告、报表或其他业务模块。
+
+### 内部 Python 入口
+
+    from app.integrations.walmart.generic_client import call_walmart
+
+    result = call_walmart(
+        store_code, "POST", "/v3/example",
+        query={"limit": 10}, body={"exampleField": "example"},
+    )
+    # result.status_code / result.data / result.provider_error / result.request_id
+    # response_kind="pdf" -> result.pdf
+    # response_kind="zip" -> result.zip_bytes / result.report_request_id
+
+上例路径和字段仅为接口形状示例，并非真实 Walmart API；由业务代码提供官方定义。
+支持 GET/POST/PUT/PATCH/DELETE、JSON 请求、JSON（含空响应）/PDF/报表 ZIP 响应、
+官方 HTTP 状态及脱敏错误。ZIP 使用同一官方 HTTPS 主机的预签名下载链接，不转发
+Walmart token；不跟随重定向。通用调用不自动重试结果不明确的请求，不自动执行真实写入。
+不得将内部函数直接暴露为浏览器可指定任意 method/path/body 的 route。
+
+失败时 `GatewayRejected` 的错误码（其中与云函数有关的两种）：云函数调用本身失败（网络、Tencent API）→ `WALMART_GATEWAY_UNAVAILABLE`；
+云函数返回 `success=false` → `WALMART_GATEWAY_REJECTED:<云函数状态码>`（只透传形如 `WALMART_[A-Z0-9_]{1,64}`
+的纯错误码，如 `WALMART_RESPONSE_TOO_LARGE`、`WALMART_TOKEN_REJECTED`；状态不是这种形状时只有
+`WALMART_GATEWAY_REJECTED`，不带任何云端文本）。JSON 响应上限 1MB（`MAX_RESPONSE_BYTES`），超过即
+`WALMART_RESPONSE_TOO_LARGE`，业务侧按分页缩小每页数量，不要求云端放宽。分页只解决 JSON 超限：PDF（4MB）、
+错误响应体（64KB）、ZIP 下载超限同样报 `WALMART_RESPONSE_TOO_LARGE` 但不靠分页解决；整包超 5.5MB 报
+`WALMART_PROVIDER_RESPONSE_TOO_LARGE`。其他失败码：店铺无路由 `WALMART_STORE_GATEWAY_UNAVAILABLE`、签名前契约
+校验失败（原样透传 `ContractError` 的码）、`WALMART_GATEWAY_SCOPE_MISMATCH`、`WALMART_PROVIDER_NOT_SUCCESSFUL`。
+
+### 配置与兼容
+
+复用原有 SZZSBJ 店铺映射、CVM/STS 调用身份、Ed25519 签名私钥及 kid；SCF 继续使用
+本店 SSM、公钥、绑定店铺/function、现有 live mode 及批准的网络出站设置。
+v4 不读取业务 approved keys、max risk、approval ref 或业务账本。
+保留基础签名、有效期和防重放；如未配置共享 Redis/CFS，防重放仅在单 SCF
+实例内有效，不能声称跨实例防重放。真实写入前必须认识这一风险，既有业务自身防重复
+逻辑不删除。不要让通用通道接收不可信前端请求。
+
+固定目标 https://marketplace.walmartapis.com/v3/，禁止调用者提供外部 URL、
+任意认证头、token 端点、编码路径逃逸；敏感响应和凭据不得返回。
+这是现有 JSON 请求传输能力的通用化，不覆盖其他域名、API 版本、multipart、
+XML、任意文件上传、未经实现的响应类型。ClientContext 上限 64 KiB；JSON 响应
+1 MiB，PDF 4 MiB，ZIP 3.5 MiB，SCF 封装不超过 5.5 MiB；v4 主服务器接收层
+适配 SCF 返回的 JSON 包装大小，旧通道的默认限制不变。
+
+### 验证与升级
+
+- 先运行后端全量 preflight、v4 专项 pytest、旧 v1/v2/v3 回归和真实 ZIP
+  的 Python 3.10 离线 smoke。所有请求均为 mock，禁止真实 Walmart 调用。
+- 记录 CN2601 当前 stable 版本；核对签名、公钥、角色、SSM、店铺绑定、网络、
+  函数超时及共享重放状态，不读取或输出密钥值。
+- 使用同一 CI 产出的 ZIP 发布独立版本。可通过构造测试版本 qualifier 做只读灰度，
+  再按授权切 stable；不能把主系统指向尚未支持 v4 的版本。验证旧查询和通用查询。
+- CN2601 验收后分别升级其余八个函数。不得自动复制店铺绑定或密钥配置。
+- 回滚：将各 stable 别名恢复到记录的旧版本，停止新通用调用；主系统按原版本回退。
+  未合并、未部署前，不宣称真实云端验证通过。
+
+本次新增内部协议，不新增公网 API、页面、数据库、迁移、业务定时任务或真实写入。

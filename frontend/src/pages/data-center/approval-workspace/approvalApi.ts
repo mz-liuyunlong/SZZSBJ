@@ -53,3 +53,50 @@ export async function submitWfsArchiveRequest(caseId: string, reasonType: string
   }) },
  );
 }
+
+/** Business review decision is permissioned by new-product assessment, not WFS. */
+export async function decideNewProductEvaluationReview(id: string, version: number,
+  decision: "approved" | "rejected", reason: string) {
+  await backendRequest<{id:string;status:string;version:number}, null>(
+    "/api/new-products/evaluation-reviews/" + encodeURIComponent(id) + "/decision", {
+      method: "POST", body: JSON.stringify({expected_version:version,decision,reason}),
+    });
+}
+
+
+// NP_PURCHASE_WORKBENCH_REAL_API_V1_20261116
+export async function fetchNewProductPurchaseApprovals(filters: ApprovalFilters) {
+  const params = new URLSearchParams({
+    tab: filters.tab, view: filters.view ?? "all",
+    page: String(filters.page), page_size: String(filters.page_size),
+  });
+  if (filters.risk_level) params.set("risk_level", filters.risk_level);
+  if (filters.keyword?.trim()) params.set("keyword", filters.keyword.trim());
+  return backendRequest<ApprovalListData, ApprovalMeta>(
+    "/api/approvals/new-products/purchases?" + params.toString()
+  );
+}
+export async function fetchNewProductPurchaseDetail(id: string): Promise<ApprovalDetail> {
+  return (await backendRequest<ApprovalDetail, null>(
+    "/api/approvals/new-products/purchases/" + encodeURIComponent(id)
+  )).data;
+}
+export type PurchaseApprovalStoreOption = {store_id:string;store_name:string};
+export async function fetchNewProductPurchaseStoreOptions(id:string):Promise<{
+  source_store_id:string;stores:PurchaseApprovalStoreOption[];
+}> {
+  return (await backendRequest<{source_store_id:string;stores:PurchaseApprovalStoreOption[]},null>(
+    "/api/approvals/new-products/purchases/"+encodeURIComponent(id)+"/stores"
+  )).data;
+}
+export async function decideNewProductPurchase(
+  id: string, version: number, decision: "approved" | "rejected", note: string,
+  approved?: {purchase_store_id:string;approved_qty:number}
+): Promise<{updated:boolean;lingxing_receipt?:{plan_sn:string;ppg_sn:string;request_id:string}|null}> {
+  return (await backendRequest<{updated:boolean;lingxing_receipt?:{plan_sn:string;ppg_sn:string;request_id:string}|null},null>(
+    "/api/approvals/new-products/purchases/" + encodeURIComponent(id) + "/decision",
+    {method:"POST", body:JSON.stringify({expected_version:version,decision,note,...(approved??{})})}
+  )).data;
+}
+
+// SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1

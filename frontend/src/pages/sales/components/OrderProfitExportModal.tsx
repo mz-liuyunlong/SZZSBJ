@@ -1,3 +1,4 @@
+import type { SalesReportSort } from "@/pages/sales/reportSort";
 import { Button, Checkbox, DatePicker, Modal, Select, Space, Typography, message } from "antd";
 import zhCN from "antd/es/date-picker/locale/zh_CN";
 import dayjs, { type Dayjs } from "dayjs";
@@ -22,6 +23,7 @@ interface OrderProfitExportFilters {
 }
 
 interface OrderProfitExportModalProps {
+  sort?: SalesReportSort | null;
   open: boolean;
   filters: OrderProfitExportFilters;
   onClose: () => void;
@@ -195,7 +197,7 @@ function normalizeRange(filters: OrderProfitExportFilters): [Dayjs | null, Dayjs
   return [start, end];
 }
 
-function OrderProfitExportModal({ open, filters, onClose }: OrderProfitExportModalProps) {
+function OrderProfitExportModal({ open, filters, onClose, sort }: OrderProfitExportModalProps) {
   const [messageApi, contextHolder] = message.useMessage();
   const [period, setPeriod] = useState<OrderProfitExportPeriod>("day");
   const [dimension, setDimension] = useState<OrderProfitExportDimension>("item_id");
@@ -297,6 +299,7 @@ function OrderProfitExportModal({ open, filters, onClose }: OrderProfitExportMod
     setExporting(true);
 
     const exportRequest = downloadOrderProfitExportCsv({
+      sort,
       startDate,
       endDate,
       period,

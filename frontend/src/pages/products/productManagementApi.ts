@@ -10,6 +10,7 @@ import type {
 
 interface BackendTag { key: string; label: string; color: string | null }
 interface BackendListItem {
+  development_date?: string | null;
   sku_id: string;
   sku: string | null;
   product_name: string | null;
@@ -55,6 +56,7 @@ interface BackendListItem {
 }
 
 interface BackendDetail {
+  development_date?: string | null;
   sku_id: string;
   core: {
     category: string | null;
@@ -265,6 +267,7 @@ export const toProductManagementRow = (item: BackendListItem): ProductManagement
   ownerName: item.owner_name,
   developerUid: item.product_developer_uid,
   developerName: item.product_developer_name,
+  developmentDate: item.development_date ?? null,
   productGrade: item.product_grade ? gradeLabels[item.product_grade] : null,
   category: item.category,
   purchasePrice: money("CNY", item.purchase_cost_cny),

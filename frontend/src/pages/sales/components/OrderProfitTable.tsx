@@ -1,7 +1,9 @@
+import { reportTotalValue, type ReportTableTotals } from "@/pages/sales/reportTotals";
+import { orderProfitSortFields, nextSalesReportSort, type SalesReportSort } from "@/pages/sales/reportSort";
 /** Product-ID order-profit report table with the daily-sales interaction model. */
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import { Button, Empty, Table, Tooltip } from "antd";
-import type { Key } from "react";
+import type { Key, MouseEvent as SortMouseEvent, KeyboardEvent as SortKeyboardEvent } from "react";
 import ReportTableShell, {
   ReportTableSelectionBar,
 } from "@/components/report-table/ReportTableShell";
@@ -31,6 +33,9 @@ import {
 } from "@/pages/sales/orderProfitTypes";
 
 interface OrderProfitTableProps {
+  tableTotals?: ReportTableTotals | null;
+  sort?: SalesReportSort | null;
+  onSortChange?: (sort: SalesReportSort | null) => void;
   rows: OrderProfitRow[];
   total?: number;
   currency: OrderProfitCurrency;
@@ -92,12 +97,6 @@ const roiValue = (_: unknown, row: OrderProfitRow) => {
   );
 };
 
-const sum = (rows: OrderProfitRow[], key: keyof OrderProfitRow) => rows
-  .reduce((total, row) => total + Number(row[key] ?? 0), 0);
-const sumNullable = (rows: OrderProfitRow[], key: keyof OrderProfitRow) => (
-  rows.some((row) => row[key] == null) ? null : sum(rows, key)
-);
-
 const totalMoneyKeys = new Set([
   "salesAmount",
   "sampleAmount",
@@ -125,88 +124,26 @@ const totalIntegerKeys = new Set([
 function TotalCell({
   columnKey,
   currency,
-  rows,
+  tableTotals,
 }: {
   columnKey: string;
   currency: OrderProfitCurrency;
-  rows: OrderProfitRow[];
+  tableTotals?: ReportTableTotals | null;
 }) {
   if (columnKey === "image") return <span className="report-table-summary-label">总计</span>;
-  if (columnKey === "orderProfit") {
-    const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
-    const total = sumNullable(rows, "orderProfit");
-    return (
-      <MoneyCell
-        value={total == null ? null : total * rate}
-        currency={currency === "CNY" ? "¥" : "$"}
-        tone="profit"
-      />
-    );
-  }
-  if (totalMoneyKeys.has(columnKey)) {
-    const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
-    const total = sumNullable(rows, columnKey as keyof OrderProfitRow);
-    return <MoneyCell value={total == null ? null : total * rate} currency={currency === "CNY" ? "¥" : "$"} />;
+  const value = reportTotalValue(tableTotals, currency, columnKey);
+  if (totalMoneyKeys.has(columnKey) || columnKey === "averagePrice" || columnKey === "averageProfitPerOrder") {
+    const profit = columnKey === "orderProfit" || columnKey === "averageProfitPerOrder";
+    return <MoneyCell value={value} currency={currency === "CNY" ? "¥" : "$"} tone={profit ? "profit" : undefined} />;
   }
   if (totalIntegerKeys.has(columnKey)) {
-    return <span className="report-table-metric">{sum(rows, columnKey as keyof OrderProfitRow).toLocaleString("zh-CN")}</span>;
-  }
-  const salesAmount = sum(rows, "salesAmount");
-  const salesVolume = sum(rows, "salesVolume");
-  const orderCount = sum(rows, "orderCount");
-  const totalAdSpend = sum(rows, "totalAdSpend");
-  const orderProfit = sumNullable(rows, "orderProfit");
-  if (columnKey === "averagePrice") {
-    const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
-    return (
-      <MoneyCell
-        value={salesVolume ? salesAmount / salesVolume * rate : null}
-        currency={currency === "CNY" ? "¥" : "$"}
-      />
-    );
-  }
-  if (columnKey === "averageProfitPerOrder") {
-    const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
-    return orderCount && orderProfit != null
-      ? <MoneyCell value={orderProfit / orderCount * rate} currency={currency === "CNY" ? "¥" : "$"} tone="profit" />
-      : <MoneyCell value={null} currency={currency === "CNY" ? "¥" : "$"} tone="profit" />;
+    return <span className="report-table-metric">{value == null ? "—" : value.toLocaleString("zh-CN")}</span>;
   }
   if (columnKey === "returnRate30Days") {
-    const refundQuantity = sum(rows, "refundQuantity");
-    return salesAmount && sum(rows, "salesVolume") > 0
-      ? (
-          <PercentCell
-            value={refundQuantity / sum(rows, "salesVolume") * 100}
-          />
-        )
-      : <PercentCell value={null} />;
+    return <Tooltip title="缺少完整的30天退货量及销量分母，暂不展示全量30天退货率"><span><PercentCell value={value} /></span></Tooltip>;
   }
-
-  if (columnKey === "adRatio") {
-    return salesAmount
-      ? <PercentCell value={totalAdSpend / salesAmount * 100} />
-      : null;
-  }
-  if (columnKey === "profitMargin") {
-    return salesAmount && orderProfit != null
-      ? <PercentCell value={orderProfit / salesAmount * 100} />
-      : <PercentCell value={null} />;
-  }
-  if (columnKey === "roi") {
-    const purchaseCost = sumNullable(rows, "purchaseCost");
-    const firstLegCost = sumNullable(rows, "firstLegCost");
-    const denominator = purchaseCost != null && firstLegCost != null
-      ? purchaseCost + firstLegCost
-      : null;
-
-    return orderProfit != null && denominator != null && denominator > 0
-      ? (
-          <span className="report-table-metric">
-            {(orderProfit / denominator).toFixed(2)}
-          </span>
-        )
-      : <span className="report-table-metric">-</span>;
-  }
+  if (columnKey === "adRatio" || columnKey === "profitMargin") return <PercentCell value={value} />;
+  if (columnKey === "roi") return <span className="report-table-metric">{value == null ? "-" : value.toFixed(2)}</span>;
   return null;
 }
 
@@ -338,6 +275,9 @@ render: (_, row) => (
 }
 
 function OrderProfitTable({
+  tableTotals,
+  sort = null,
+  onSortChange,
   rows,
   total = rows.length,
   currency,
@@ -374,11 +314,35 @@ function OrderProfitTable({
 
     const width = compactIdentityColumnWidths[key] ?? columnWidths[key] ?? (Number(column.width) || 96);
     const minWidth = Math.max(key === "image" ? 72 : 88, title.length * 14 + 28);
+    const sortField = orderProfitSortFields[key];
+    const sortable = Boolean(sortField && onSortChange);
     return [{
       ...column,
+      ...(sortable ? {
+        sorter: true,
+        sortOrder: sort && sort.field === sortField
+          ? (sort.direction === "asc" ? "ascend" as const : "descend" as const) : null,
+      } : {}),
       align: "left" as const,
       width,
-      onHeaderCell: () => ({ className: "report-table-resizable-header-cell order-profit__resizable-header-cell" }),
+      onHeaderCell: () => ({
+        className: "report-table-resizable-header-cell order-profit__resizable-header-cell",
+        ...(sortable ? {
+          onClickCapture: (event: SortMouseEvent<HTMLElement>) => {
+            const target = event.target;
+            if (!(target instanceof Element) || !event.currentTarget.contains(target)) return;
+            if (target.closest(".report-table-resize-handle, button, input, textarea, select, a")) return;
+            event.stopPropagation();
+            onSortChange?.(nextSalesReportSort(sort, sortField));
+          },
+          onKeyDownCapture: (event: SortKeyboardEvent<HTMLElement>) => {
+            if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            onSortChange?.(nextSalesReportSort(sort, sortField));
+          },
+        } : {}),
+      }),
       title: (
         <ResizableColumnTitle
           label={title}
@@ -416,7 +380,7 @@ function OrderProfitTable({
                     align="left"
                     className={`order-profit__total-cell order-profit__total-cell--${key}`}
                   >
-                    <TotalCell columnKey={key} currency={currency} rows={rows} />
+                    <TotalCell columnKey={key} currency={currency} tableTotals={tableTotals} />
                   </Table.Summary.Cell>
                 );
               })}

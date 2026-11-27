@@ -16,6 +16,7 @@ from app.modules.ai_runtime.skill_library_routes import router as skill_library_
 from app.modules.approvals.router import router as approvals_router
 from app.modules.business_connectors.router import router as business_connectors_router
 from app.modules.business_rules.router import router as business_rules_router
+from app.modules.clearance.router import router as clearance_router
 from app.modules.data_pages.router import router as data_pages_router
 from app.modules.decodo.router import (
     research_router as decodo_research_router,
@@ -23,6 +24,7 @@ from app.modules.decodo.router import (
 from app.modules.decodo.router import (
     settings_router as decodo_settings_router,
 )
+from app.modules.finance_cashflow.router import router as finance_cashflow_router
 from app.modules.iam.password_reset_router import router as password_reset_router
 from app.modules.iam.rbac_router import router as rbac_router
 from app.modules.iam.router import router as iam_router
@@ -31,6 +33,9 @@ from app.modules.keyword_planning.router import router as keyword_planning_route
 from app.modules.listing_rule_config.preview_router import router as listing_preview_router
 from app.modules.listing_rule_config.router import router as listing_rule_config_router
 from app.modules.media_assets.router import router as media_assets_router
+from app.modules.new_products.router import (
+    router as new_products_router,
+)  # PR337_PHASE2_REAL_API_V1
 from app.modules.notification_rules.router import router as notification_rules_router
 from app.modules.operation_logs.router import router as operation_logs_router
 from app.modules.operation_logs.rows_router import router as operation_logs_rows_router
@@ -47,11 +52,14 @@ from app.modules.pmc_purchase.router import router as pmc_purchase_router
 from app.modules.product_management.router import router as product_management_router
 from app.modules.products.router import router as products_router
 from app.modules.sku_detail.router import router as sku_detail_router
+from app.modules.walmart_bills.payout_router import router as payout_recon_router
+from app.modules.walmart_bills.router import router as walmart_bills_router
 from app.modules.walmart_monitor.router import router as walmart_monitor_router
 from app.modules.walmart_monitor_targets.router import router as walmart_monitor_targets_router
 from app.modules.walmart_remote.router import router as walmart_remote_router
 from app.modules.walmart_scf.router import router as walmart_scf_router
 from app.modules.warehouse_wfs.router import router as warehouse_wfs_router
+from app.modules.wfs_fees.router import router as wfs_fees_router
 
 
 class HealthData(BaseModel):
@@ -80,6 +88,7 @@ def create_app() -> FastAPI:
     application.include_router(skill_library_router)
     application.include_router(ai_listing_router)
     application.include_router(approvals_router)
+    application.include_router(clearance_router)
     application.include_router(business_rules_router)
     application.include_router(notification_rules_router)
     application.include_router(business_connectors_router)
@@ -93,9 +102,14 @@ def create_app() -> FastAPI:
     application.include_router(password_reset_router)
     application.include_router(media_assets_router)
     application.include_router(listing_rule_config_router)
+    application.include_router(new_products_router)  # PR337_PHASE2_REAL_API_V1
     application.include_router(listing_preview_router)
     application.include_router(operation_logs_rows_router)
     application.include_router(operation_logs_router)
+    application.include_router(finance_cashflow_router)
+    application.include_router(walmart_bills_router)
+    application.include_router(payout_recon_router)
+    application.include_router(wfs_fees_router)
     application.include_router(operation_plans_router)
     application.include_router(pmc_purchase_router)
     application.include_router(pmc_domestic_router)
