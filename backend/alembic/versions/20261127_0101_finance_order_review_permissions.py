@@ -2,6 +2,7 @@
 
 - manual_settlement_review_actions.idempotency_key（批量审核请求的 Idempotency-Key）
 - manual_settlement_cost_entries.revoke_idempotency_key（撤销录入请求的 Idempotency-Key）
+- manual_settlement_review_requests：批量审核请求的幂等记录（同一人同一 key 存第一次的完整结果）
 - manual_settlement_cost_entries.platform_order_no + 两条范围约束改为三种范围
   （MSKU × 平台订单号：自发货订单、流水没覆盖的差额段；#373 P1）
 
@@ -12,6 +13,7 @@ Revises: 20261127_0100_sku_ad_progress_foundation
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
@@ -38,6 +40,7 @@ PERMISSIONS = (
 
 REVIEW_ACTIONS = "manual_settlement_review_actions"
 COST_ENTRIES = "manual_settlement_cost_entries"
+REVIEW_REQUESTS = "manual_settlement_review_requests"
 
 OLD_ONE_SCOPE = "(shipping_list_code IS NULL) <> (outbound_order_no IS NULL)"
 OLD_SCOPE_REF_MATCHES = (
@@ -66,6 +69,29 @@ def upgrade() -> None:
     op.add_column(COST_ENTRIES, sa.Column("revoke_idempotency_key", sa.String(128), nullable=True))
     op.add_column(COST_ENTRIES, sa.Column("platform_order_no", sa.String(64), nullable=True))
     _replace_scope_checks(NEW_ONE_SCOPE, NEW_SCOPE_REF_MATCHES)
+    op.create_table(
+        REVIEW_REQUESTS,
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("actor_id", sa.String(255), nullable=False),
+        sa.Column("idempotency_key", sa.String(128), nullable=False),
+        sa.Column("request_hash", sa.String(64), nullable=False),
+        sa.Column(
+            "response",
+            postgresql.JSONB(astext_type=sa.Text()),
+            server_default=sa.text("'{}'::jsonb"),
+            nullable=False,
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f(f"pk_{REVIEW_REQUESTS}")),
+        sa.UniqueConstraint(
+            "actor_id", "idempotency_key", name="uq_manual_settlement_review_request"
+        ),
+    )
     bind = op.get_bind()
     for key, kind, action, name, sort in PERMISSIONS:
         bind.execute(
@@ -105,6 +131,8 @@ def downgrade() -> None:
         found = bind.execute(sa.text(f"select 1 from {table} where {column} is not null limit 1"))
         if found.first() is not None:
             raise RuntimeError(f"rollback blocked: {table}.{column} has data")
+    if bind.execute(sa.text(f"select 1 from {REVIEW_REQUESTS} limit 1")).first() is not None:
+        raise RuntimeError(f"rollback blocked: {REVIEW_REQUESTS} has data")
     bind.execute(
         sa.text("DELETE FROM app_permissions WHERE permission_key = ANY(:keys)"), {"keys": keys}
     )
@@ -113,3 +141,4 @@ def downgrade() -> None:
     op.drop_column(COST_ENTRIES, "revoke_idempotency_key")
     _replace_scope_checks(OLD_ONE_SCOPE, OLD_SCOPE_REF_MATCHES)
     op.drop_column(COST_ENTRIES, "platform_order_no")
+    op.drop_table(REVIEW_REQUESTS)

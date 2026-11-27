@@ -777,6 +777,26 @@ class SettlementReviewAction(_Actor, Base):
     )
 
 
+class SettlementReviewRequest(_Created, Base):
+    """批量审核请求的幂等记录（PR-OR 迁移 0101，刘云龙终审）。
+
+    同一操作人同一个 Idempotency-Key 只处理一次：存请求摘要和第一次的完整结果（成功、失败都在），
+    重试原样返回；同一个 key 换了一批订单或换了动作 → 拒绝。不属于 PRP 的 18 张表，单独登记。
+    """
+
+    __tablename__ = "manual_settlement_review_requests"
+    __table_args__ = (
+        UniqueConstraint("actor_id", "idempotency_key", name="uq_manual_settlement_review_request"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    actor_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    # 请求摘要：review_ids（排序）+ stage + decision + comment 的 sha256
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    response: Mapped[dict[str, Any]] = _json_dict()
+
+
 class SettlementMonthClose(_Actor, Base):
     """店铺 × 账单月 结账 / 解锁记录（只增不改；seq 递增，最后一条决定当前状态）。"""
 

@@ -58,6 +58,7 @@ ODS 公共列：`synced_at`、`row_hash`、`raw_row`（原始行 JSON）。
 | `manual_settlement_sem_month` | store_id, item_id, bill_month | SEM 月值（旧系统下线前人工导入） |
 | `manual_settlement_order_adjustments` | id | 调整：`kind` = amount（改金额，必须带金额）/ assign_item（指定商品，必须带 ItemID）/ note；原因必填、可撤销、`version`、初审 / 终审状态 |
 | `manual_settlement_review_actions` | id | 初审 / 终审 / 退回记录，只增不改；`target_kind` = order_line / store_item / cost_entry / adjustment；退回必须写意见；存 before / after |
+| `manual_settlement_review_requests` | id；`(actor_id, idempotency_key)` 唯一 | 批量审核请求的幂等记录（迁移 0101，不在 PRP 的 18 张表里）：请求摘要 `request_hash`（行 id 排序 + 道 + 结论 + 意见的 sha256）和第一次的完整结果 `response`；重试原样返回，同一 key 换请求拒绝 |
 | `manual_settlement_month_close` | store_id, bill_month, seq | 店铺 × 账单月 结账 / 解锁记录，只增不改，最后一条决定当前状态；解锁必须写原因；记冻结的 calc_version 与合计 |
 
 ## CFG（财务主管维护）

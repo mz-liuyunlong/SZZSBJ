@@ -54,6 +54,10 @@ from app.modules.warehouse_wfs.inventory_flow_models import WfsCostValuationFlow
 DEFAULT_CUTOFF_DAY = 5
 # 审核行上的差异提示（不是订单行的待审原因）：已初审 / 终审后计算值变了
 CHANGED_AFTER_REVIEW = "changed_after_review"
+# 订单行这次重算不在账单里了（刘云龙终审）：审核过的行不删，打这个标记保留审核结果；
+# 列表和期计数不显示，不能再审；行回到账单时沿用同一条审核行，标记随原因重算自动清掉。
+LINE_NOT_IN_BILL = "line_not_in_bill"
+REVIEWED_STATUSES = frozenset({"first_passed", "final_passed", "rejected"})
 
 
 class OrderReviewCalcError(RuntimeError):
@@ -69,6 +73,7 @@ class RecalcResult:
     lines_new_version: int = 0
     lines_unchanged: int = 0
     lines_retired: int = 0
+    lines_kept_for_audit: int = 0  # 不在账单里但审核过、保留下来的审核行
     auto_passed: int = 0
     pending: int = 0
     calc_version: int = 0
@@ -627,8 +632,22 @@ class OrderReviewCalculator:
             elif row.review_status == "pending":
                 result.pending += 1
         for line_key, row in existing.items():
-            if line_key not in seen:
+            if line_key in seen:
+                continue
+            reviewed = (
+                row.review_status in REVIEWED_STATUSES
+                or row.first_reviewed_by is not None
+                or row.final_reviewed_by is not None
+            )
+            if not reviewed:
+                # 没人审过（待审 / 自动通过）：没有审核结果要保留，直接删
                 self.session.delete(row)
+                continue
+            if LINE_NOT_IN_BILL not in (row.reasons or []):
+                row.reasons = [*(row.reasons or []), LINE_NOT_IN_BILL]
+                row.version += 1
+                row.updated_at = utc_now()
+            result.lines_kept_for_audit += 1
         self.session.flush()
 
 

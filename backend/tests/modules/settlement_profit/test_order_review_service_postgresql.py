@@ -234,6 +234,75 @@ def test_changed_after_review_filter_and_replay_is_per_actor(session: Session) -
     assert service.CHANGED_AFTER_REVIEW not in review.reasons
 
 
+def test_reviewed_line_gone_from_bill_keeps_review_record(session: Session) -> None:
+    # 刘云龙终审：审核过的订单行这次不在账单里，重算不能删掉审核记录
+    review = prepare_pending(session)
+    service.review_lines(
+        session,
+        ReviewRequest(review_ids=[review.id], stage="first", decision="pass"),
+        actor="u-first",
+        actor_role="r1",
+        request_id=None,
+    )
+    calculator = OrderReviewCalculator(session, source_account_ref=base.ACCOUNT)
+    bill_lines = session.scalars(select(base.WalmartBillLine)).all()
+    for row in bill_lines:
+        row.missing_since = base.NOW
+    session.flush()
+    result = calculator.recalc_period(STORE, PERIOD)
+    assert result.lines_kept_for_audit == 1
+    session.refresh(review)
+    # 谁、什么时候、什么结论都还在
+    assert review.review_status == "first_passed"
+    assert review.first_reviewed_by == "u-first" and review.first_reviewed_at is not None
+    assert service.LINE_NOT_IN_BILL in review.reasons
+    # 期计数不算它；再审被拒
+    period = next(p for p in service.list_periods(session) if p.period_key == PERIOD)
+    assert period.first_passed_count == 0
+    again = service.review_lines(
+        session,
+        ReviewRequest(review_ids=[review.id], stage="final", decision="pass"),
+        actor="u-final",
+        actor_role="r2",
+        request_id=None,
+    )
+    assert again.items[0].error_code == service.ERR_LINE_NOT_IN_BILL
+
+    # 行回到账单：沿用同一条审核行，标记清掉，初审结论保留
+    for row in bill_lines:
+        row.missing_since = None
+    session.flush()
+    calculator.recalc_period(STORE, PERIOD)
+    session.refresh(review)
+    assert review.review_status == "first_passed"
+    assert service.LINE_NOT_IN_BILL not in review.reasons
+
+
+def test_review_retry_returns_full_first_result_and_rejects_key_reuse(session: Session) -> None:
+    # 刘云龙终审：重试原样返回第一次的完整结果（失败的也在）；同一编号不能换一批订单
+    review = prepare_pending(session)
+    missing = uuid4()
+    request = ReviewRequest(review_ids=[review.id, missing], stage="first", decision="pass")
+    first = service.review_lines(
+        session, request, actor="u1", actor_role="r1", request_id=None, idempotency_key="k-1"
+    )
+    assert (first.succeeded, first.failed) == (1, 1)
+    retry = service.review_lines(
+        session, request, actor="u1", actor_role="r1", request_id=None, idempotency_key="k-1"
+    )
+    assert retry.model_dump() == first.model_dump()
+    with pytest.raises(service.OrderReviewError) as caught:
+        service.review_lines(
+            session,
+            ReviewRequest(review_ids=[review.id], stage="first", decision="pass"),
+            actor="u1",
+            actor_role="r1",
+            request_id=None,
+            idempotency_key="k-1",
+        )
+    assert caught.value.code == service.ERR_IDEMPOTENCY_REUSED
+
+
 def test_review_stage_order_same_reviewer_and_revert(session: Session) -> None:
     review = prepare_pending(session)
     # 待审且没录成本：货本不为空（预填了四项）→ 允许初审

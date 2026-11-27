@@ -264,6 +264,7 @@ class RecalcPeriodResult(BaseModel):
     lines_new_version: int
     lines_unchanged: int
     lines_retired: int
+    lines_kept_for_audit: int = 0
     auto_passed: int
     pending: int
     calc_version: int

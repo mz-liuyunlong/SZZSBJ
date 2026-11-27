@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -24,9 +26,11 @@ from app.modules.settlement_profit.models import (
     SettlementOrderLine,
     SettlementOrderReview,
     SettlementReviewAction,
+    SettlementReviewRequest,
 )
 from app.modules.settlement_profit.order_review.calc import (
     CHANGED_AFTER_REVIEW,
+    LINE_NOT_IN_BILL,
     OrderReviewCalculator,
     RecalcResult,
     month_is_closed,
@@ -69,6 +73,8 @@ ERR_ENTRY_EXISTS: Final = "COST_ENTRY_EXISTS"
 ERR_COST_MISSING: Final = "COST_MISSING"
 ERR_ALREADY_PASSED: Final = "ALREADY_PASSED"
 ERR_CONFIRM_REQUIRED: Final = "CONFIRM_REQUIRED"
+ERR_IDEMPOTENCY_REUSED: Final = "IDEMPOTENCY_KEY_REUSED"
+ERR_LINE_NOT_IN_BILL: Final = "LINE_NOT_IN_BILL"
 
 # PRP §5：批量审核 ≥ 20 行要前端二次确认 + 后端 confirm_token（沿用仓库固定令牌写法）
 BATCH_CONFIRM_THRESHOLD: Final = 20
@@ -122,7 +128,11 @@ def list_periods(session: Session, *, store_ids: Sequence[str] = ()) -> list[Per
             SettlementOrderReview.review_status,
             func.count(),
         )
-        .where(SettlementOrderReview.row_kind == "order")
+        .where(
+            SettlementOrderReview.row_kind == "order",
+            # 已不在账单里、只为保留审核结果的行不计数
+            ~SettlementOrderReview.reasons.contains([LINE_NOT_IN_BILL]),
+        )
         .group_by(
             SettlementOrderReview.store_id,
             SettlementOrderReview.period_key,
@@ -644,8 +654,9 @@ def review_lines(
             409, ERR_CONFIRM_REQUIRED, f"批量审核 {BATCH_CONFIRM_THRESHOLD} 行以上要二次确认"
         )
     key = (idempotency_key or "").strip() or None
+    request_hash = _review_request_hash(payload)
     if key:
-        replay = _replay_review(session, key, actor)
+        replay = _replay_review(session, key, actor, request_hash)
         if replay is not None:
             return replay
     reviews = {
@@ -682,6 +693,19 @@ def review_lines(
             )
             continue
         line = lines.get((review.store_id, review.period_key, review.line_key))
+        if line is None or LINE_NOT_IN_BILL in (review.reasons or []):
+            items.append(
+                ReviewLineResult(
+                    review_id=review.id,
+                    line_key=review.line_key,
+                    ok=False,
+                    review_status=review.review_status,
+                    version=review.version,
+                    error_code=ERR_LINE_NOT_IN_BILL,
+                    message="这一行已不在账单里，审核结果已保留，不能再审",
+                )
+            )
+            continue
         try:
             _apply_review(session, review, line, payload, actor, actor_role, request_id, key)
         except OrderReviewError as exc:
@@ -706,34 +730,64 @@ def review_lines(
                 version=review.version,
             )
         )
-    session.commit()
     succeeded = sum(1 for i in items if i.ok)
-    return ReviewResultData(items=items, succeeded=succeeded, failed=len(items) - succeeded)
-
-
-def _replay_review(session: Session, key: str, actor: str) -> ReviewResultData | None:
-    """同一人同一个 Idempotency-Key 已经处理过：按当时的审核记录重放结果，不再改任何状态。"""
-    actions = session.scalars(
-        select(SettlementReviewAction)
-        .where(
-            SettlementReviewAction.idempotency_key == key,
-            SettlementReviewAction.actor_id == actor,
+    result = ReviewResultData(items=items, succeeded=succeeded, failed=len(items) - succeeded)
+    if key:
+        # 第一次的完整结果（成功、失败都在）和请求摘要一起存，重试原样返回（刘云龙终审）
+        session.add(
+            SettlementReviewRequest(
+                id=uuid4(),
+                actor_id=actor,
+                idempotency_key=key,
+                request_hash=request_hash,
+                response=result.model_dump(mode="json"),
+            )
         )
-        .order_by(SettlementReviewAction.acted_at)
-    ).all()
-    if not actions:
+        try:
+            session.flush()
+        except IntegrityError:
+            # 同一个 key 的另一个请求刚好同时在处理：这次整体回滚，让调用方刷新后看结果
+            session.rollback()
+            raise OrderReviewError(
+                409, ERR_IDEMPOTENCY_REUSED, "同一个请求正在处理或已处理，请刷新后查看结果"
+            ) from None
+    session.commit()
+    return result
+
+
+def _review_request_hash(payload: ReviewRequest) -> str:
+    """请求摘要：哪些行（排序后）、哪一道、什么结论、什么意见。confirm_token 不算。"""
+    body = {
+        "review_ids": sorted(str(review_id) for review_id in payload.review_ids),
+        "stage": payload.stage,
+        "decision": payload.decision,
+        "comment": (payload.comment or "").strip(),
+    }
+    return hashlib.sha256(
+        json.dumps(body, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
+def _replay_review(
+    session: Session, key: str, actor: str, request_hash: str
+) -> ReviewResultData | None:
+    """同一人同一个 Idempotency-Key 已经处理过：原样返回第一次的完整结果，不再改任何状态。
+
+    同一个 key 换了一批订单、换了动作或意见 → 拒绝，不能借旧编号执行另一批（刘云龙终审）。
+    """
+    record = session.scalars(
+        select(SettlementReviewRequest).where(
+            SettlementReviewRequest.actor_id == actor,
+            SettlementReviewRequest.idempotency_key == key,
+        )
+    ).one_or_none()
+    if record is None:
         return None
-    items = [
-        ReviewLineResult(
-            review_id=action.target_id or uuid4(),
-            line_key=action.line_key,
-            ok=True,
-            review_status=str(action.after.get("review_status", "")),
-            version=int(action.after.get("version", 0)),
+    if record.request_hash != request_hash:
+        raise OrderReviewError(
+            409, ERR_IDEMPOTENCY_REUSED, "这个请求编号已用于另一批订单或另一种审核动作"
         )
-        for action in actions
-    ]
-    return ReviewResultData(items=items, succeeded=len(items), failed=0)
+    return ReviewResultData.model_validate(record.response)
 
 
 def _sync_entry_status(session: Session, line: SettlementOrderLine | None, status: str) -> None:
@@ -880,6 +934,7 @@ def recalc(session: Session, payload: RecalcRequest) -> RecalcResultData:
                 lines_new_version=r.lines_new_version,
                 lines_unchanged=r.lines_unchanged,
                 lines_retired=r.lines_retired,
+                lines_kept_for_audit=r.lines_kept_for_audit,
                 auto_passed=r.auto_passed,
                 pending=r.pending,
                 calc_version=r.calc_version,

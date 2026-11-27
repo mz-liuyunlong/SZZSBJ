@@ -166,6 +166,8 @@ const CODE_TEXT: Record<string, string> = {
   ALREADY_REVOKED: "这条录入已经撤销",
   ALREADY_PASSED: "自动通过的行不需要审核",
   CONFIRM_REQUIRED: "批量审核 20 行以上要二次确认",
+  IDEMPOTENCY_KEY_REUSED: "这个请求已处理过或正在处理，请刷新后查看结果",
+  LINE_NOT_IN_BILL: "这一行已不在账单里，审核结果已保留，不能再审",
   VALIDATION_ERROR: "填写的内容不符合要求",
   NOT_FOUND: "没有这条数据",
 };
