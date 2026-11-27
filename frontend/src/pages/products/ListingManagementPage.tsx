@@ -1,9 +1,12 @@
+import type { ListingSort } from "@/pages/products/listingManagementSort";
+// LISTING_LAYOUT_20261104_V2: 35 visible columns; 5 auxiliary fields hidden from front table.
 /** Listing-management page backed by DATA-PAGES MART API. */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Key } from "react";
-import { Button, Card, Form, Input, Modal, message } from "antd";
+import { Button, Card, Form, Input, Modal, Select, message } from "antd";
 
 import PageShell from "@/components/page/PageShell";
+import { getClearanceLifecycleOverrides } from "./clearance/clearanceApi";
 import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
 import CustomTagManagerModal, { type CustomProductTag } from "@/components/product-tags/CustomTagManagerModal";
 import ProductTagAssignmentModal from "@/components/product-tags/ProductTagAssignmentModal";
@@ -28,7 +31,7 @@ import ListingManagementSummaryCards, {
 import ListingManagementTable from "@/pages/products/components/ListingManagementTable";
 import ListingRuleConfigDrawer from "@/pages/products/components/ListingRuleConfigDrawer";
 import ListingEvaluationMonitor from "@/pages/products/components/ListingEvaluationMonitor";
-import ListingEvaluationPreviewModal from "@/pages/products/components/ListingEvaluationPreviewModal";
+import { visibleListingExactFilters } from "@/pages/products/listingExactFacetLogic";
 import ListingManagementToolbar, {
   type ListingManagementFilters,
 } from "@/pages/products/components/ListingManagementToolbar";
@@ -39,23 +42,27 @@ import {
   deleteListingTag,
   exportListingManagementRows,
   fetchListingGptAnalysisLink,
-  fetchListingManagementFilterOptions,
   fetchListingManagementRows,
+  fetchListingEvaluationPreviews,
+  applyListingEvaluationPreview,
+  withPendingListingDiagnostics,
   fetchListingManagementSummary,
   fetchListingTags,
   restoreListingManagementRow,
   saveListingGptAnalysisLink,
+  setListingLifecycleBatch,
   updateListingTag,
-  type ListingManagementFilterOptions,
   type ListingManagementSummary,
 } from "@/pages/products/listingManagementApi";
-import { backendDownloadErrorMessage } from "@/api/backendApi";
+import { BackendRequestError, backendDownloadErrorMessage } from "@/api/backendApi";
 import {
+  listingLifecycleOptions,
   fixedListingColumnKeys,
   listingColumnFields,
   type ListingManagementRow,
 } from "@/pages/products/listingManagementData";
 
+import { clearResourceCache } from "@/shared/preload/resourceCache";
 import "@/pages/products/ListingManagementPage.css";
 
 const TEMPLATE_PENDING = "列模板接口待接入";
@@ -64,11 +71,13 @@ const TEMPLATE_PENDING = "列模板接口待接入";
 
 
 const createInitialFilters = (): ListingManagementFilters => ({
+  exactFilters: {},
   stores: [],
   owners: [],
-  productTypes: [],
-  productStatuses: [],
-  tagValues: [],
+  productTagValues: [],
+  customTagValues: [],
+  lifecycleValues: [],
+  gradeValues: [],
   archiveStatuses: [],
   searchType: "sku",
   keyword: "",
@@ -88,6 +97,7 @@ const listingExportColumnGroups: ListExportColumnGroup[] = [
       { key: "developer", label: "开发人" },
       { key: "product_grade", label: "商品等级" },
       { key: "tags", label: "自定义标签" },
+      { key: "product_tags", label: "产品标签" },
     ],
   },
   {
@@ -113,6 +123,19 @@ const listingExportColumnGroups: ListExportColumnGroup[] = [
       { key: "sales_14d", label: "近14天销量" },
       { key: "sales_30d", label: "近30天销量" },
       { key: "ad_spend_30d", label: "近30天广告费" },
+    ],
+  },
+  {
+    title: "监控补充",
+    fields: [
+      { key: "monitor_seller_offer_count", label: "卖家数量" },
+      { key: "monitor_seller_names", label: "卖家列表" },
+      { key: "monitor_has_strikethrough", label: "有无划线价" },
+      { key: "monitor_strikethrough_source", label: "划线价来源" },
+      { key: "monitor_image_count", label: "图片数量" },
+      { key: "monitor_image_urls", label: "图片URL" },
+      { key: "monitor_key_features", label: "五点描述" },
+      { key: "monitor_review_fetch_status", label: "评论获取状态" },
     ],
   },
   {
@@ -146,13 +169,6 @@ const emptySummary: ListingManagementSummary = {
   strikePriceException: 0,
 };
 
-const emptyFilterOptions: ListingManagementFilterOptions = {
-  stores: [],
-  owners: [],
-  productTypes: [],
-  tags: [],
-  archiveStatuses: [],
-};
 
 const DEFAULT_LISTING_SUMMARY_FILTER_KEY: ListingManagementSummaryCardKey = "total";
 
@@ -165,6 +181,7 @@ const defaultColumnWidths: Record<string, number> = {
   skuMsku: 190,
   msku: 130,
   productId: 150,
+  storeOwner: 172,
   store: 120,
   owner: 110,
   sku: 130,
@@ -185,6 +202,7 @@ const defaultColumnWidths: Record<string, number> = {
   adSpend30Days: 140,
   disabledReason: 130,
   listingStatus: 130,
+  adEnabled: 106,
   buyBoxStatus: 130,
   walmartSeller: 140,
   resold: 120,
@@ -192,7 +210,16 @@ const defaultColumnWidths: Record<string, number> = {
   rating: 100,
   reviewCount: 110,
   brand: 130,
+  sellerOfferCount: 120,
+  sellerNames: 170,
+  hasStrikethrough: 130,
+  strikethroughSource: 150,
+  imageCount: 110,
+  imageUrls: 140,
+  keyFeatures: 140,
+  reviewFetchStatus: 130,
   tags: 130,
+  productTags: 180,
   gtin: 160,
   productGrade: 120,
   archiveReason: 180,
@@ -227,24 +254,35 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [gptAnalysisForm] = Form.useForm<ListingGptAnalysisFormValues>();
   const [managedTags, setManagedTags] = useState<CustomProductTag[]>([]);
   const [batchTagOpen, setBatchTagOpen] = useState(false);
+  const [bulkLifecycleOpen, setBulkLifecycleOpen] = useState(false);
+  const [bulkLifecycleStage, setBulkLifecycleStage] = useState<string | null>(null);
+  const [bulkLifecycleReason, setBulkLifecycleReason] = useState("");
+  const [lifecycleSaving, setLifecycleSaving] = useState(false);
   const [listingRefreshToken, setListingRefreshToken] = useState(0);
+  // Ignore list and diagnostic responses created before a lifecycle write.
+  const lifecycleMutationEpochRef = useRef(0);
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [ruleConfigOpen, setRuleConfigOpen] = useState(false);
   const [evaluationMonitorOpen, setEvaluationMonitorOpen] = useState(false);
-  const [evaluationListing, setEvaluationListing] = useState<ListingManagementRow | null>(null);
   const [isTagManagerLoading, setIsTagManagerLoading] = useState(false);
   const pageStateKey = "listing-management";
   const listingManagementPageRootRef = useRef<HTMLDivElement | null>(null);
 
-  const [filters, setFilters] = usePageStateCache<ListingManagementFilters>(`${pageStateKey}:filters`, createInitialFilters);
+  const [filters, setFilters] = usePageStateCache<ListingManagementFilters>(`${pageStateKey}:filters:exact-v1`, createInitialFilters);
   const [statisticsVisible, setStatisticsVisible] = usePageStateCache(`${pageStateKey}:statisticsVisible`, true);
   const [summaryFilterKey, setSummaryFilterKey] = usePageStateCache<ListingManagementSummaryCardKey>(
     `${pageStateKey}:summaryFilterKey:v3`,
     DEFAULT_LISTING_SUMMARY_FILTER_KEY,
   );
   const [columnConfigOpen, setColumnConfigOpen] = usePageStateCache(`${pageStateKey}:columnConfigOpen`, false);
-  const [appliedColumnKeys, setAppliedColumnKeys] = usePageStateCache<string[]>(`${pageStateKey}:appliedColumnKeys`, defaultColumnKeys);
-  const [columnWidths, setColumnWidths] = usePageStateCache<Record<string, number>>(`${pageStateKey}:columnWidths`, defaultColumnWidths);
+  const [appliedColumnKeys, setAppliedColumnKeys] = usePageStateCache<string[]>(`${pageStateKey}:appliedColumnKeys:original-20261124`, defaultColumnKeys);
+  const [adStatusColumnInitialized, setAdStatusColumnInitialized] = usePageStateCache(
+    `${pageStateKey}:adStatusColumnInitialized:0100`, false,
+  );
+  const [productTagColumnInitialized, setProductTagColumnInitialized] = usePageStateCache(
+    `${pageStateKey}:productTagsColumnInitialized:v1`, false,
+  );
+  const [columnWidths, setColumnWidths] = usePageStateCache<Record<string, number>>(`${pageStateKey}:columnWidths:original-20261124`, defaultColumnWidths);
   const [currentPage, setCurrentPage] = usePageStateCache(`${pageStateKey}:currentPage`, 1);
   const [pageSize, setPageSize] = usePageStateCache(`${pageStateKey}:pageSize`, REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = usePageStateCache<Key[]>(`${pageStateKey}:selectedRowKeys`, []);
@@ -272,12 +310,14 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
 
   const [totalRows, setTotalRows] = useState(0);
   const [summary, setSummary] = useState<ListingManagementSummary>(emptySummary);
-  const [filterOptions, setFilterOptions] = useState<ListingManagementFilterOptions>(emptyFilterOptions);
   const [analysisSource, setAnalysisSource] = useState<ListingAnalysisSource | null>(null);
   const [gptAnalysisRow, setGptAnalysisRow] = useState<ListingManagementRow | null>(null);
   const [isGptAnalysisLoading, setIsGptAnalysisLoading] = useState(false);
   const [isGptAnalysisSaving, setIsGptAnalysisSaving] = useState(false);
   const [isTableRequesting, setIsTableRequesting] = useState(false);
+  const [listingSorts, setListingSorts] = useState<ListingSort[]>([]);
+  const [facetPrefetchReady, setFacetPrefetchReady] = useState(false);
+  const diagnosticPreviewDisabledRef = useRef(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [archiveDialog, setArchiveDialog] = useState<ListingArchiveDialogState | null>(null);
@@ -286,7 +326,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [restoreDialog, setRestoreDialog] = useState<ListingRestoreDialogState | null>(null);
   const [restoreSubmitting, setRestoreSubmitting] = useState(false);
 
-  const isLargeListingPage = pageSize >= 500;
+  const isLargeListingPage = pageSize >= 50;
   const listingTableWrapRef = useRef<HTMLDivElement | null>(null);
   const [virtualScrollY, setVirtualScrollY] = useState(360);
 
@@ -327,12 +367,33 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     160,
   );
 
-  useEffect(() => {
-    setAppliedColumnKeys((current) => (
-      current.includes("gptAnalysis") ? current : [...current, "gptAnalysis"]
-    ));
-  }, [setAppliedColumnKeys]);
 
+
+  // Add the new field once for existing saved column layouts, without
+  // forcing it back after the user subsequently hides it.
+  useEffect(() => {
+    if (productTagColumnInitialized) return;
+    setAppliedColumnKeys((current) => {
+      if (current.includes("productTags")) return current;
+      const position = current.indexOf("tags");
+      const next = [...current];
+      next.splice(position >= 0 ? position + 1 : next.length, 0, "productTags");
+      return next;
+    });
+    setProductTagColumnInitialized(true);
+  }, [productTagColumnInitialized, setProductTagColumnInitialized, setAppliedColumnKeys]);
+
+  useEffect(() => {
+    if (adStatusColumnInitialized) return;
+    setAppliedColumnKeys((current) => {
+      if (current.includes("adEnabled")) return current;
+      const position = current.indexOf("listingStatus");
+      const next = [...current];
+      next.splice(position >= 0 ? position + 1 : next.length, 0, "adEnabled");
+      return next;
+    });
+    setAdStatusColumnInitialized(true);
+  }, [adStatusColumnInitialized, setAdStatusColumnInitialized, setAppliedColumnKeys]);
 
   const reloadListingTags = useCallback(async (options: { showError?: boolean } = {}) => {
     setIsTagManagerLoading(true);
@@ -384,71 +445,19 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     return () => window.clearTimeout(timer);
   }, [reloadListingTags, tagManagerOpen]);
 
-  const tagOptions = useMemo(() => {
-    const optionMap = new Map<string, { value: string; label: string; count: number }>();
-
-    for (const option of filterOptions.tags ?? []) {
-      optionMap.set(String(option.value), {
-        value: String(option.value),
-        label: String(option.label ?? option.value),
-        count: Number(option.count ?? 0),
-      });
-    }
-
-    for (const tag of managedTags) {
-      optionMap.set(tag.name, {
-        value: tag.name,
-        label: tag.name,
-        count: tag.usage,
-      });
-    }
-
-    return Array.from(optionMap.values());
-  }, [filterOptions.tags, managedTags]);
-
   const assignmentTags = useMemo(() => managedTags, [managedTags]);
 
-  const normalizedFilters = useMemo(() => {
-    const owners = filters.owners && filters.owners.length > 0
-      ? filters.owners
-      : filters.owner ? [filters.owner] : [];
-    const productTypes = filters.productTypes && filters.productTypes.length > 0
-      ? filters.productTypes
-      : filters.productType ? [filters.productType] : [];
-    const productStatuses = filters.productStatuses && filters.productStatuses.length > 0
-      ? filters.productStatuses
-      : filters.productStatus ? [filters.productStatus] : [];
+  const normalizedFilters = useMemo(() => ({
+    exactFilters: visibleListingExactFilters(filters.exactFilters),
+    searchType: filters.searchType,
+    keyword: filters.keyword,
+    batchValues: filters.batchValues,
+  }), [filters]);
+  const facetQuery = useMemo(() => ({
+    ...normalizedFilters,
+    summaryFilter: summaryFilterKey || DEFAULT_LISTING_SUMMARY_FILTER_KEY,
+  }), [normalizedFilters, summaryFilterKey]);
 
-    return {
-      stores: filters.stores ?? [],
-      owners,
-      productTypes,
-      productStatuses,
-      tagValues: filters.tagValues ?? [],
-      archiveStatuses: filters.archiveStatuses ?? [],
-      searchType: filters.searchType,
-      keyword: filters.keyword,
-      batchValues: filters.batchValues,
-    };
-  }, [filters]);
-
-  useEffect(() => {
-    let active = true;
-
-    void fetchListingManagementFilterOptions()
-      .then((options) => {
-        if (!active) return;
-        setFilterOptions(options);
-      })
-      .catch(() => {
-        if (!active) return;
-        setFilterOptions(emptyFilterOptions);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -466,48 +475,124 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     return () => {
       active = false;
     };
-  }, [normalizedFilters]);
+  }, [normalizedFilters, listingRefreshToken]);
 
   useEffect(() => {
     let active = true;
+    const requestEpoch = lifecycleMutationEpochRef.current;
+    let paintFrame = 0;
+    let nextPaintFrame = 0;
+    let paintFallback = 0;
+    const afterPaint = (work: () => void) => {
+      let ran = false;
+      const start = () => {
+        if (ran) return;
+        ran = true;
+        window.cancelAnimationFrame(paintFrame);
+        window.cancelAnimationFrame(nextPaintFrame);
+        window.clearTimeout(paintFallback);
+        if (active && requestEpoch === lifecycleMutationEpochRef.current) work();
+      };
+      paintFallback = window.setTimeout(start, 250);
+      paintFrame = window.requestAnimationFrame(() => {
+        nextPaintFrame = window.requestAnimationFrame(start);
+      });
+    };
 
     queueMicrotask(() => {
-      if (active) setIsTableRequesting(true);
+      if (active && requestEpoch === lifecycleMutationEpochRef.current) setIsTableRequesting(true);
     });
 
     void fetchListingManagementRows({
       ...normalizedFilters,
       summaryFilter: summaryFilterKey || DEFAULT_LISTING_SUMMARY_FILTER_KEY,
+      sorts: listingSorts.length ? listingSorts : undefined,
       page: currentPage,
       pageSize,
     })
       .then(({ rows: nextRows, meta }) => {
-        if (!active) return;
-        setRows(nextRows);
+        if (!active || requestEpoch !== lifecycleMutationEpochRef.current) return;
+        setRows(nextRows.map(withPendingListingDiagnostics));
         setTotalRows(meta.total);
+        setIsTableRequesting(false);
+        // Publish the primary rows and release the overlay BEFORE optional work.
+        afterPaint(() => {
+          setFacetPrefetchReady(true);
+          // Local clearance approval overlay; no writes to the real Listing MART.
+          // Exact identity uses account+store ID+Item ID, never SKU.
+          void getClearanceLifecycleOverrides().then(items => {
+            if(!active || requestEpoch !== lifecycleMutationEpochRef.current) return;
+            const approved=new Set(items.filter(item=>item.stage==="清货期")
+              .map(item=>`${item.source_account_ref}::${item.store_id}::${item.item_id}`));
+            setRows(current=>current.map(row=>approved.has(`${row.sourceAccountRef}::${row.storeId}::${row.productId}`)
+              ? {...row,lifecycle:"清货期",lifecyclePreview:true,
+                 lifecyclePreviewReason:"本地55433审批通过，15432真实数据仍只读"} : row));
+          }).catch(()=>{});
+
+          // LISTING_DIAGNOSTIC_PRODUCTION_API_V1: enrich only the visible page,
+          // in bounded account-scoped API batches. A disabled/unavailable
+          // diagnostic endpoint must NEVER hide the explanation icons.
+          const loadDiagnostics = async () => {
+            if (diagnosticPreviewDisabledRef.current) return;
+            for (let offset = 0; offset < nextRows.length; offset += 50) {
+              if (!active || requestEpoch !== lifecycleMutationEpochRef.current) return;
+              const batch = nextRows.slice(offset, offset + 50);
+              let previews: Awaited<ReturnType<typeof fetchListingEvaluationPreviews>>;
+              try {
+                previews = await fetchListingEvaluationPreviews(batch.map((item) => item.id));
+              } catch (error) {
+                // An explicitly disabled feature must not be retried on every page.
+                // Other transport errors remain retryable on the next list load.
+                if (error instanceof BackendRequestError
+                  && error.code === "LISTING_EVALUATION_PREVIEW_DISABLED") {
+                  diagnosticPreviewDisabledRef.current = true;
+                }
+                // Keep the visible pending diagnostic and avoid retry storms
+                // when the production read-only feature flag is disabled.
+                return;
+              }
+              if (!active || requestEpoch !== lifecycleMutationEpochRef.current) return;
+              const byId = new Map(previews.map((result) => [result.listing_id, result]));
+              setRows((current) => current.map((row) => {
+                const preview = byId.get(row.id);
+                return preview ? applyListingEvaluationPreview(row, preview) : row;
+              }));
+            }
+          };
+          void loadDiagnostics();
+        });
       })
       .catch(() => {
-        if (!active) return;
+        if (!active || requestEpoch !== lifecycleMutationEpochRef.current) return;
         setRows([]);
         setTotalRows(0);
+        setFacetPrefetchReady(true);
       })
       .finally(() => {
-        if (active) setIsTableRequesting(false);
+        if (active && requestEpoch === lifecycleMutationEpochRef.current) setIsTableRequesting(false);
       });
 
     return () => {
       active = false;
+      window.cancelAnimationFrame(paintFrame);
+      window.cancelAnimationFrame(nextPaintFrame);
+      window.clearTimeout(paintFallback);
     };
-  }, [currentPage, listingRefreshToken, normalizedFilters, pageSize, summaryFilterKey]);
+  }, [currentPage, listingRefreshToken, normalizedFilters, pageSize, summaryFilterKey, listingSorts]);
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
     setSelectedRowKeys([]);
   };
 
+  const handleListingSortChange = (next: ListingSort[]) => {
+    setListingSorts(next);
+    resetPageAndSelection();
+  };
+
   const updateFilters = (nextFilters: ListingManagementFilters) => {
     setFilters(nextFilters);
-    setSummaryFilterKey(DEFAULT_LISTING_SUMMARY_FILTER_KEY);
+    // Scope filters combine with the currently selected abnormality card.
     setListingRefreshToken((current) => current + 1);
     resetPageAndSelection();
   };
@@ -518,6 +603,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   };
 
   const resetFilters = () => {
+    setListingSorts(current => current.length ? [] : current);
     setFilters(createInitialFilters());
     setSummaryFilterKey(DEFAULT_LISTING_SUMMARY_FILTER_KEY);
     resetPageAndSelection();
@@ -565,6 +651,8 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
             : item,
         ),
       );
+      clearResourceCache("listing-management:");
+      setListingRefreshToken((current) => current + 1);
       void messageApi.success("已归档");
     } catch {
       void messageApi.error("归档失败，请稍后重试");
@@ -625,6 +713,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
         );
 
         setSelectedRowKeys([]);
+        clearResourceCache("listing-management:");
         setListingRefreshToken((current) => current + 1);
 
         const failed = results.length - succeededIds.size;
@@ -669,6 +758,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
       setRows((current) => current.map((item) => (
         item.id === row.id ? { ...item, isArchived: nextIsArchived } : item
       )));
+      clearResourceCache("listing-management:");
       setListingRefreshToken((current) => current + 1);
       void messageApi.success("已恢复");
     } catch {
@@ -687,6 +777,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
         {
           ...normalizedFilters,
           summaryFilter: summaryFilterKey || DEFAULT_LISTING_SUMMARY_FILTER_KEY,
+          sorts: listingSorts.length ? listingSorts : undefined,
         },
         columnKeys,
       );
@@ -699,7 +790,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     } finally {
       setIsExporting(false);
     }
-  }, [isExporting, messageApi, normalizedFilters, summaryFilterKey]);
+  }, [isExporting, messageApi, normalizedFilters, summaryFilterKey, listingSorts]);
 
   const openExportModal = useCallback(() => {
     if (isExporting) return;
@@ -721,10 +812,10 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
       platform: "Walmart US",
       status: row.listingStatus || row.productStatus,
       store: row.store,
-      listPrice: row.listPrice,
-      salePrice: row.salePrice,
-      rating: row.rating,
-      reviewCount: row.reviewCount,
+      listPrice: row.listPrice ?? undefined,
+      salePrice: row.salePrice ?? undefined,
+      rating: row.rating ?? undefined,
+      reviewCount: row.reviewCount ?? undefined,
       wfsAvailableInventory: row.wfsAvailableInventory,
     });
   };
@@ -780,6 +871,60 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     const selectedIds = new Set(selectedRowKeys.map(String));
     return rows.filter((row) => selectedIds.has(row.id));
   }, [rows, selectedRowKeys]);
+
+  // Manual changes are persisted by the server before updating any visible row.
+  // LIFECYCLE_INLINE_CONFIRM_20261105: the row changes only after a successful API response.
+  const handleSetLifecycleSingle = useCallback(async (row: ListingManagementRow, stage: string): Promise<boolean> => {
+    if (lifecycleSaving) return false;
+    if (stage === row.lifecycle) return true;
+    setLifecycleSaving(true);
+    try {
+      await setListingLifecycleBatch([row.id], stage, "单个 Listing 人工调整");
+      lifecycleMutationEpochRef.current += 1;
+      clearResourceCache("listing-management:");
+      setRows((current) => current.map((item) => item.id === row.id
+        ? withPendingListingDiagnostics({ ...item, lifecycle: stage, lifecyclePreview: false, lifecyclePreviewReason: undefined })
+        : item));
+      setListingRefreshToken((value) => value + 1);
+      void messageApi.success("生命周期已保存");
+      return true;
+    } catch {
+      void messageApi.error("生命周期未保存：请检查写入权限、数据库迁移或当前只读环境");
+      return false;
+    } finally {
+      setLifecycleSaving(false);
+    }
+  }, [lifecycleSaving, messageApi]);
+
+  const handleSetLifecycleBulk = useCallback(async () => {
+    if (!bulkLifecycleStage || !selectedListingRows.length || lifecycleSaving) return;
+    if (selectedListingRows.some((row) => row.isArchived || ["清货期", "已归档"].includes(row.lifecycle))) {
+      void messageApi.error("所选 Listing 包含清货或归档状态，请移除后再修改");
+      return;
+    }
+    setLifecycleSaving(true);
+    try {
+      const ids = selectedListingRows.map((row) => row.id);
+      await setListingLifecycleBatch(ids, bulkLifecycleStage, bulkLifecycleReason.trim() || "批量人工调整");
+      lifecycleMutationEpochRef.current += 1;
+      const wanted = new Set(ids);
+      const nextStage = bulkLifecycleStage;
+      clearResourceCache("listing-management:");
+      setRows((current) => current.map((row) => wanted.has(row.id)
+        ? withPendingListingDiagnostics({ ...row, lifecycle: nextStage, lifecyclePreview: false, lifecyclePreviewReason: undefined })
+        : row));
+      setListingRefreshToken((value) => value + 1);
+      setBulkLifecycleOpen(false);
+      setBulkLifecycleStage(null);
+      setBulkLifecycleReason("");
+      setSelectedRowKeys([]);
+      void messageApi.success(`已保存 ${ids.length} 个 Listing 的生命周期`);
+    } catch {
+      void messageApi.error("批量保存失败：未更新页面状态，请核查权限和数据库");
+    } finally {
+      setLifecycleSaving(false);
+    }
+  }, [bulkLifecycleReason, bulkLifecycleStage, lifecycleSaving, messageApi, selectedListingRows]);
 
   const handleBatchArchiveListings = useCallback(() => {
     if (selectedListingRows.length === 0) {
@@ -837,6 +982,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
       );
 
       setSelectedRowKeys([]);
+      clearResourceCache("listing-management:");
       setListingRefreshToken((current) => current + 1);
 
       const failed = results.length - succeededIds.size;
@@ -860,10 +1006,8 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
       {messageContextHolder}
       <ListingRuleConfigDrawer open={ruleConfigOpen} onClose={() => setRuleConfigOpen(false)} />
       <ListingEvaluationMonitor open={evaluationMonitorOpen} onClose={() => setEvaluationMonitorOpen(false)} />
-      <ListingEvaluationPreviewModal listing={evaluationListing} onClose={() => setEvaluationListing(null)} />
       <div ref={listingManagementPageRootRef} className="listing-management">
         <Card size="small" className="listing-management__page-card">
-          <RequestLoadingOverlay spinning={isTableRequesting} label="正在加载Listing数据，请稍候" />
           <div className="listing-management__title-row">
             <div>
               <h1>Listing管理</h1>
@@ -875,11 +1019,9 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
           <Card size="small" className="listing-management__toolbar-card">
             <ListingManagementToolbar
               filters={filters}
-              stores={filterOptions.stores}
-              owners={filterOptions.owners}
-              productTypes={filterOptions.productTypes}
-              tags={tagOptions}
-              archiveStatuses={filterOptions.archiveStatuses}
+              facetQuery={facetQuery}
+              facetRevision={listingRefreshToken}
+              facetPrefetchReady={facetPrefetchReady}
               statisticsVisible={statisticsVisible}
               onChange={updateFilters}
               onReset={resetFilters}
@@ -908,8 +1050,11 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
             className="listing-management__table-wrap"
             style={{ "--listing-virtual-scroll-y": `${virtualScrollY}px` } as CSSProperties}
           >
+            <RequestLoadingOverlay spinning={isTableRequesting} label="正在加载Listing数据，请稍候" />
             <ListingManagementTable
               rows={displayedRows}
+              sorts={listingSorts}
+              onSortChange={handleListingSortChange}
               virtualScrollY={virtualScrollY}
               total={totalRows}
               appliedColumnKeys={appliedColumnKeys}
@@ -929,9 +1074,17 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
               onSelectionChange={setSelectedRowKeys}
               onOpenDetail={openListingAnalysis}
               onOpenGptAnalysis={openGptAnalysisModal}
-              onOpenEvaluation={setEvaluationListing}
               onArchiveListing={(row) => void handleArchiveListing(row)}
               onRestoreListing={(row) => void handleRestoreListing(row)}
+              onSetLifecycle={handleSetLifecycleSingle}
+              onBatchEditLifecycle={() => {
+                if (!selectedListingRows.length) {
+                  void messageApi.warning("请先勾选 Listing");
+                  return;
+                }
+                setBulkLifecycleOpen(true);
+              }}
+              lifecycleSaving={lifecycleSaving}
               onBatchArchive={handleBatchArchiveListings}
               onBatchRestore={handleBatchRestoreListings}
               onBatchSetTags={() => {
@@ -964,7 +1117,11 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
           fixedKeys={fixedListingColumnKeys}
           defaultKeys={defaultColumnKeys}
           appliedKeys={appliedColumnKeys}
-          onApply={setAppliedColumnKeys}
+          onApply={(keys) => {
+            setAppliedColumnKeys(keys);
+            const remaining = listingSorts.filter(sort => keys.includes(sort.key));
+            if (remaining.length !== listingSorts.length) handleListingSortChange(remaining);
+          }}
           onClose={() => setColumnConfigOpen(false)}
           onSaveTemplate={() => void messageApi.info(TEMPLATE_PENDING)}
         />
@@ -1009,6 +1166,36 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
           onClose={() => setAnalysisSource(null)}
         />
       </div>
+        <Modal
+          title={`批量修改生命周期（${selectedListingRows.length} 个 Listing）`}
+          open={bulkLifecycleOpen}
+          okText="确认修改"
+          cancelText="取消"
+          okButtonProps={{ disabled: !bulkLifecycleStage || !selectedListingRows.length }}
+          confirmLoading={lifecycleSaving}
+          maskClosable={!lifecycleSaving}
+          destroyOnHidden
+          onOk={() => void handleSetLifecycleBulk()}
+          onCancel={() => { if (!lifecycleSaving) setBulkLifecycleOpen(false); }}
+        >
+          <div style={{ display: "grid", gap: 12 }}>
+            <div>统一设置所选 Listing 的生命周期：</div>
+            <Select
+              style={{ width: "100%" }}
+              placeholder="选择目标阶段"
+              options={[...listingLifecycleOptions]}
+              value={bulkLifecycleStage}
+              onChange={setBulkLifecycleStage}
+            />
+            <Input.TextArea
+              placeholder="修改原因（选填）"
+              autoSize={{ minRows: 2, maxRows: 3 }}
+              maxLength={200}
+              value={bulkLifecycleReason}
+              onChange={(event) => setBulkLifecycleReason(event.target.value)}
+            />
+          </div>
+        </Modal>
         <ProductTagAssignmentModal
           open={batchTagOpen}
           selectedProductCount={selectedRowKeys.length}
@@ -1034,6 +1221,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
                 void messageApi.success(`已给 ${selectedRowKeys.length} 个商品添加标签`);
                 setBatchTagOpen(false);
                 setSelectedRowKeys([]);
+                clearResourceCache("listing-management:");
                 setListingRefreshToken((current) => current + 1);
                 void reloadListingTags({ showError: false });
               })

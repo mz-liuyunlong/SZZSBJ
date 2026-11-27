@@ -17,6 +17,7 @@ import OnboardingGuidePage from "@/pages/help/OnboardingGuidePage";
 import LoginPage from "@/pages/auth/LoginPage";
 import NotFoundPage from "@/pages/errors/NotFoundPage";
 import ListingManagementPage from "@/pages/products/ListingManagementPage";
+import NewProductPages from "@/pages/products/new-product/NewProductPages";
 import ClearanceCenterPage from "@/pages/products/ClearanceCenterPage";
 import ProductManagementPage from "@/pages/products/ProductManagementPage";
 import DailySalesPage from "@/pages/sales/DailySalesPage";
@@ -33,6 +34,7 @@ import WalmartRemotePage from "@/pages/data-center/WalmartRemotePage";
 import ApprovalWorkspacePage from "@/pages/data-center/approval-workspace/ApprovalWorkspacePage";
 import ApiDocsPage from "@/pages/data-center/ApiDocsPage";
 import DataImportPage from "@/pages/data-center/DataImportPage";
+import FinancePageSwitch from "@/pages/finance/FinancePageSwitch";
 import WfsFeeAlertPage from "@/pages/warehouse/WfsFeeAlertPage";
 import PurchaseBoardPage from "@/pages/pmc/purchase-board/PurchaseBoardPage";
 import DomesticWarehousePage from "@/pages/pmc/domestic-warehouse/DomesticWarehousePage";
@@ -178,6 +180,10 @@ function BusinessRoute({
           <ProductManagementPage page={page} preferenceScope={activeUser.username} />
         ) : page.key === "products_listing_management" ? (
           <ListingManagementPage page={page} />
+        ) : page.key === "products_new_product_analysis" ? (
+          <NewProductPages page={page} mode="performance" />
+        ) : page.key === "products_launch_tracking" ? (
+          <NewProductPages page={page} mode="tracking" />
         ) : page.key === "products_clearance_center" ? (
           <ClearanceCenterPage page={page} />
         ) : page.key === "sales_daily_sales" ? (
@@ -207,6 +213,8 @@ function BusinessRoute({
             view={page.key === "pmc_packing_approval" ? "approval" : page.key === "pmc_packing_warehouse" ? "packing" : "batches"} />
         ) : page.key === "data_center_approval_workspace" ? (
           <ApprovalWorkspacePage page={page} permissions={activeUser.permissions} />
+        ) : page.key.startsWith("finance_") ? (
+          <FinancePageSwitch page={page} />
         ) : page.key === "data_center_data_import" ? (
           <DataImportPage page={page} />
         ) : page.key === "data_center_api_docs" ? (

@@ -124,6 +124,8 @@ def list_product_management_skus(
             "dwd_lingxing_sku_product_images",
             "dws_sku_base_profile_current",
             "dws_product_management_pricing_current",
+            "dwd_lingxing_sku_source_current",
+            "dwd_lingxing_sku_source_snapshots",
             list_freshness_at=list_freshness,
             latest_observed_at=latest_observed,
             page=query.page,
@@ -380,6 +382,8 @@ def get_product_management_sku(
             "dwd_lingxing_sku_global_tags",
             "dws_sku_base_profile_current",
             "dws_product_management_pricing_current",
+            "dwd_lingxing_sku_source_current",
+            "dwd_lingxing_sku_source_snapshots",
         ),
     )
 

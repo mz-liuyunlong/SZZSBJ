@@ -29,6 +29,34 @@ WALMART_REMOTE_HEAD_REVISION = "20261029_0068_walmart_remote_jobs"
 WALMART_GATEWAY_LEDGER_REVISION = "20261031_0069_walmart_gateway_ledger"
 SKILL_0070_REVISION = "20261102_0070_ai_skill_soft_delete"
 SKILL_0071_REVISION = "20261102_0071_skill_lib"
+FINANCE_CASHFLOW_REVISION = "20261104_0072_finance_cashflow"
+LISTING_0073_REVISION = "20261105_0073_wfs_la_lock"
+LISTING_0074_REVISION = "20261105_0074_listing_lifecycle_manual"
+LISTING_0075_REVISION = "20261105_0075_listing_lifecycle_auto"
+LISTING_0076_REVISION = "20261105_0076_listing_product_tags"
+FINANCE_APPROVALS_REVISION = "20261105_0077_finance_approvals"
+FINANCE_JOURNAL_EDIT_REVISION = "20261105_0078_finance_journal_edit_split"
+LINGXING_FX_REVISION = "20261105_0079_lingxing_fx_rate"
+FINANCE_JOURNAL_ROUND3_REVISION = "20261105_0080_finance_journal_round3"
+FINANCE_PAYONEER_REVISION = "20261105_0081_finance_payoneer_statement"
+CLEARANCE_0082_REVISION = "20261108_0082_clearance_center"
+FINANCE_WALMART_BILLS_REVISION = "20261108_0084_finance_walmart_bills"
+FINANCE_PAYOUT_RECON_REVISION = "20261110_0085_finance_payout_recon"
+FINANCE_JOURNAL_0086_REVISION = "20261111_0086_finance_journal_cny_alert_close"
+NEW_PRODUCT_TRACKING_0088_REVISION = "20261112_0088_new_product_tracking_foundation"
+FINANCE_APPROVAL_ORG_0089_REVISION = "20261113_0089_finance_approval_second_company"
+FINANCE_WFS_FEES_0090_REVISION = "20261113_0090_finance_wfs_fees"
+FINANCE_WFS_REPORTS_0091_REVISION = "20261113_0091_finance_wfs_fee_reports"
+ROLE_PAGE_0092_REVISION = "20261115_0092_role_page_catalog_alignment"
+NP_MARKET_COMPETITORS_0093_REVISION = "20261119_0093_np_market_competitors"
+AD_CATALOG_0094_REVISION = "20261120_0094_walmart_ad_catalog"
+SYNC_PROVIDER_ERROR_0095_REVISION = "20261124_0095_sync_work_item_provider_error"
+SETTLEMENT_PROFIT_V3_0096_REVISION = "20261125_0096_settlement_profit_v3_tables"
+RECON_PAYOUT_0097_REVISION = "20261126_0097_walmart_bill_periods_recon_payout"
+WFS_COST_VALUATION_FLOW_0098_REVISION = "20261126_0098_wfs_cost_valuation_flow"
+FIN_SHIPPING_DETAIL_SYNCED_0099_REVISION = "20261126_0099_fin_shipping_list_detail_synced_at"
+SKU_AD_PROGRESS_0100_REVISION = "20261127_0100_sku_ad_progress_foundation"
+FINANCE_0083_REVISION = "20261109_0083_finance_sem_unallocated_lines"
 WFS_DETECTION_HEAD_REVISION = "20261026_0061_wfs_fee_detection_evidence"
 SYNC_ANOMALY_HEAD_REVISION = "20261027_0062_sync_anomaly_center"
 AI_RUNTIME_PREVIOUS_REVISION = "20261027_0063_ai_runtime"
@@ -75,7 +103,91 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20261026_0055_purchase_board_draft_no",
         LISTING_INTEGRATION_HEAD_REVISION,
     }
-    assert script.get_heads() == [SKILL_0071_REVISION]
+    assert script.get_heads() == [SKU_AD_PROGRESS_0100_REVISION]
+
+    assert (
+        script.get_revision(SKU_AD_PROGRESS_0100_REVISION).down_revision
+        == FIN_SHIPPING_DETAIL_SYNCED_0099_REVISION
+    )
+    assert (
+        script.get_revision(FIN_SHIPPING_DETAIL_SYNCED_0099_REVISION).down_revision
+        == WFS_COST_VALUATION_FLOW_0098_REVISION
+    )
+    assert (
+        script.get_revision(WFS_COST_VALUATION_FLOW_0098_REVISION).down_revision
+        == RECON_PAYOUT_0097_REVISION
+    )
+    assert (
+        script.get_revision(RECON_PAYOUT_0097_REVISION).down_revision
+        == SETTLEMENT_PROFIT_V3_0096_REVISION
+    )
+    assert (
+        script.get_revision(SETTLEMENT_PROFIT_V3_0096_REVISION).down_revision
+        == SYNC_PROVIDER_ERROR_0095_REVISION
+    )
+    assert (
+        script.get_revision(SYNC_PROVIDER_ERROR_0095_REVISION).down_revision
+        == AD_CATALOG_0094_REVISION
+    )
+    assert (
+        script.get_revision(AD_CATALOG_0094_REVISION).down_revision
+        == NP_MARKET_COMPETITORS_0093_REVISION
+    )
+    assert (
+        script.get_revision(NP_MARKET_COMPETITORS_0093_REVISION).down_revision
+        == ROLE_PAGE_0092_REVISION
+    )
+    assert (
+        script.get_revision(ROLE_PAGE_0092_REVISION).down_revision
+        == FINANCE_WFS_REPORTS_0091_REVISION
+    )
+    assert (
+        script.get_revision(FINANCE_WFS_REPORTS_0091_REVISION).down_revision
+        == FINANCE_WFS_FEES_0090_REVISION
+    )
+    assert (
+        script.get_revision(FINANCE_WFS_FEES_0090_REVISION).down_revision
+        == FINANCE_APPROVAL_ORG_0089_REVISION
+    )
+    assert (
+        script.get_revision(FINANCE_APPROVAL_ORG_0089_REVISION).down_revision
+        == NEW_PRODUCT_TRACKING_0088_REVISION
+    )
+    assert (
+        script.get_revision(FINANCE_JOURNAL_0086_REVISION).down_revision
+        == FINANCE_PAYOUT_RECON_REVISION
+    )
+    assert (
+        script.get_revision(FINANCE_PAYOUT_RECON_REVISION).down_revision
+        == FINANCE_WALMART_BILLS_REVISION
+    )
+    assert (
+        script.get_revision(FINANCE_WALMART_BILLS_REVISION).down_revision == FINANCE_0083_REVISION
+    )
+    assert script.get_revision(FINANCE_0083_REVISION).down_revision == CLEARANCE_0082_REVISION
+    assert script.get_revision(CLEARANCE_0082_REVISION).down_revision == FINANCE_PAYONEER_REVISION
+    assert (
+        script.get_revision(FINANCE_PAYONEER_REVISION).down_revision
+        == FINANCE_JOURNAL_ROUND3_REVISION
+    )
+    assert (
+        script.get_revision(FINANCE_JOURNAL_ROUND3_REVISION).down_revision == LINGXING_FX_REVISION
+    )
+    assert script.get_revision(LINGXING_FX_REVISION).down_revision == FINANCE_JOURNAL_EDIT_REVISION
+    assert (
+        script.get_revision(FINANCE_JOURNAL_EDIT_REVISION).down_revision
+        == FINANCE_APPROVALS_REVISION
+    )
+    assert script.get_revision(FINANCE_APPROVALS_REVISION).down_revision == LISTING_0076_REVISION
+    assert script.get_revision(LISTING_0073_REVISION).down_revision == FINANCE_CASHFLOW_REVISION
+    assert script.get_revision(LISTING_0074_REVISION).down_revision == LISTING_0073_REVISION
+    assert script.get_revision(LISTING_0075_REVISION).down_revision == LISTING_0074_REVISION
+    assert script.get_revision(LISTING_0076_REVISION).down_revision == LISTING_0075_REVISION
+    assert script.get_revision(FINANCE_APPROVALS_REVISION).down_revision == LISTING_0076_REVISION
+    assert (
+        script.get_revision(FINANCE_JOURNAL_EDIT_REVISION).down_revision
+        == FINANCE_APPROVALS_REVISION
+    )
     assert script.get_revision(WALMART_REMOTE_HEAD_REVISION).down_revision == FINAL_HEAD_REVISION
     assert (
         script.get_revision(WALMART_GATEWAY_LEDGER_REVISION).down_revision
@@ -351,6 +463,6 @@ def test_revision_files_have_unique_ids_and_form_one_connected_graph() -> None:
                     revisions.append(ast.literal_eval(node.value))
     assert len(revisions) == len(set(revisions)), "duplicate full Alembic revision ID"
     script = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
-    assert script.get_heads() == [SKILL_0071_REVISION]
+    assert script.get_heads() == [SKU_AD_PROGRESS_0100_REVISION]
     assert len(script.get_bases()) == 1
     assert {item.revision for item in script.walk_revisions()} == set(revisions)

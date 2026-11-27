@@ -13,6 +13,7 @@ import { aggregateOrderProfitRows } from "@/pages/sales/orderProfitTypes";
 import { orderProfitSourceRecords } from "@/pages/sales/orderProfitMockData";
 import { orderProfitColumnFields } from "@/pages/sales/orderProfitTypes";
 
+const footerPageOnly = vi.hoisted(() => ({ enabled: false }));
 const messageInfo = vi.fn();
 const messageSuccess = vi.fn();
 const messageError = vi.fn();
@@ -85,6 +86,10 @@ vi.mock("@/pages/sales/orderProfitApi", async () => {
     return {
       records,
       summary: {
+        tableTotals: {
+          usd: { sales_qty: sum(records, "salesVolume"), sales_amount: sum(records, "salesAmount") },
+          cny: { sales_qty: sum(records, "salesVolume"), sales_amount: sum(records, "salesAmount") * 6.6 },
+        },
         salesQuantity: sum(records, "salesVolume"),
         orderCount: sum(records, "orderCount"),
         salesAmount: sum(records, "salesAmount"),
@@ -116,8 +121,10 @@ vi.mock("@/pages/sales/orderProfitApi", async () => {
 
   const fetchOrderProfitRows = vi.fn(async (params = {}) => {
     const result = await fetchOrderProfitSourceRecords(params);
+    const allRows = aggregateOrderProfitRows(result.records);
+    const page = (params as { page?: number }).page ?? 1;
     return {
-      rows: aggregateOrderProfitRows(result.records),
+      rows: footerPageOnly.enabled ? allRows.slice(page - 1, page) : allRows,
       summary: result.summary,
       meta: {
         ...result.meta,
@@ -594,6 +601,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  footerPageOnly.enabled = false;
   cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -694,7 +702,9 @@ describe("OrderProfitPage", () => {
   });
 
   it("keeps a fixed total row and uses the selected display currency", async () => {
+    footerPageOnly.enabled = true;
     await renderPage();
+    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", "1");
 
     const totalRow = screen.getByTestId("order-profit-total-row");
     expect(totalRow).toHaveTextContent("总计");
@@ -702,6 +712,9 @@ describe("OrderProfitPage", () => {
       referenceRows.reduce((total, row) => total + row.salesVolume, 0).toLocaleString("zh-CN"),
     );
     expect(totalRow.querySelector(".order-profit__total-cell--salesAmount")).toHaveTextContent("$");
+    const totalBeforePageChange = totalRow.querySelector(".order-profit__total-cell--salesVolume")?.textContent;
+    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    await waitFor(() => expect(screen.getByTestId("order-profit-total-row").querySelector(".order-profit__total-cell--salesVolume")?.textContent).toBe(totalBeforePageChange));
 
     fireEvent.change(screen.getByLabelText("币种"), { target: { value: "CNY" } });
     expect(screen.getByTestId("order-profit-total-row")).toHaveTextContent("¥");

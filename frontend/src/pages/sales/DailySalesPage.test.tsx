@@ -11,6 +11,7 @@ import DailySalesPage from "@/pages/sales/DailySalesPage";
 import { dailySalesMockData } from "@/pages/sales/dailySalesMockData";
 import { dailySalesColumnFields } from "@/pages/sales/dailySalesTypes";
 
+const footerPageOnly = vi.hoisted(() => ({ enabled: false }));
 const messageInfo = vi.fn();
 const messageSuccess = vi.fn();
 const messageError = vi.fn();
@@ -70,8 +71,12 @@ vi.mock("@/pages/sales/dailySalesApi", async () => {
     });
 
     return {
-      rows,
+      rows: footerPageOnly.enabled ? rows.slice((params.page ?? 1) - 1, params.page ?? 1) : rows,
       summary: {
+        tableTotals: {
+          usd: { sales_qty: sum(rows, "salesVolume"), sales_amount: sum(rows, "salesAmount") },
+          cny: { sales_qty: sum(rows, "salesVolume"), sales_amount: sum(rows, "salesAmount") * 6.6 },
+        },
         salesQuantity: sum(rows, "salesVolume"),
         orderCount: sum(rows, "orderCount"),
         salesAmount: sum(rows, "salesAmount"),
@@ -528,6 +533,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  footerPageOnly.enabled = false;
   cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -747,7 +753,9 @@ describe("DailySalesPage", () => {
   });
 
   it("keeps a fixed total row for all filtered rows and converts it with the display currency", async () => {
+    footerPageOnly.enabled = true;
     await renderPage();
+    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", "1");
 
     const totalRow = screen.getByTestId("daily-sales-total-row");
     expect(totalRow).toHaveTextContent("总计");
@@ -761,8 +769,9 @@ describe("DailySalesPage", () => {
       .toHaveAttribute("align", "left");
     expect(totalRow.querySelector(".daily-sales__total-cell--salesAmount")).toHaveTextContent("$");
 
+    const totalBeforePageChange = totalRow.querySelector(".daily-sales__total-cell--salesVolume")?.textContent;
     fireEvent.click(screen.getByRole("button", { name: "下一页" }));
-    expect(screen.getByTestId("daily-sales-total-row")).toHaveTextContent("总计");
+    await waitFor(() => expect(screen.getByTestId("daily-sales-total-row").querySelector(".daily-sales__total-cell--salesVolume")?.textContent).toBe(totalBeforePageChange));
     fireEvent.change(screen.getByLabelText("平台"), { target: { value: "Walmart" } });
     fireEvent.click(within(screen.getByTestId("平台-dropdown")).getByRole("button", { name: /确\s*定/ }));
     await waitFor(() => expect(screen.getByTestId("daily-sales-total-row")).toHaveTextContent(

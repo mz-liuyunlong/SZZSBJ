@@ -100,3 +100,47 @@ uv run python -m scripts.audit_walmart_order_identity_conflicts \
 - 未删除、更新或回填生产订单/送样历史。
 - 未自动确认 5 件送样或任何其他送样数量。
 - 未修改 `old-system/**`、生产服务、Nginx、systemd、Celery 配置或调度状态。
+
+## 2026-11-27: provider-confirmed cancellation of an already verified sample
+
+A same-identity zero-total provider replay with explicit cancellation evidence
+(positive numeric cancellation time or an explicit cancelled status) is a
+normal order lifecycle transition, not a conflicting sample identity. All
+other verified evidence must match, including the resolved Item ID, quantity,
+price, currencies, and business date. A missing or conflicting identity,
+ambiguous cancellation evidence, nonzero amount, or apparent reactivation
+continues to fail closed.
+
+The existing sample fact is retained with
+`sample_rule_version=provider-verified-cancelled-v1`,
+`is_cancelled=true`, and `is_valid_sample=false`. The first cancellation
+evidence and original identity/amount fields survive subsequent replays and
+candidate cleanup. This version replaces the former v3/v5 rule label; the
+historical raw provider capture remains the evidence for the prior state.
+Owner-approved raw exceptions keep their existing separate protection.
+The normal successful source transaction and MART refresh exclude the
+revoked sample from valid sample counts, costs and sales deductions without
+changing SaleStat itself. No migration, frontend changes, automatic production
+retry, or historical data rewrite is authorized by this code change.
+
+Other verified-evidence changes remain protected; row-level exception
+isolation and anomaly-center UX are separate work.
+
+### Governed capture and anomaly review
+
+For the governed saleStatPageList run, a protected sample conflict is recorded
+at order-line scope with previous/observed field evidence. Its prior sample
+fact is retained. Unrelated order lines continue to capture. Affected product
+finance is provisional and profit remains unknown until source evidence and
+both MARTs are replay-validated. An operator cannot clear this protection just
+by closing an anomaly. The anomaly drawer displays Chinese guidance, source
+identity, and the previous/observed comparison; legacy date-only anomalies
+remain identifiable as such.
+
+An explicit cancellation with unchanged other verified fields is recorded as
+an automatic cancellation and retains the cancellation evidence. The existing
+Daily Sales and Order Profit refresh is reused. No new-product schedule or
+publisher is introduced; existing nightly calculation remains unchanged.
+Any cross-module treatment of disputed values needs separate verification.
+Production recovery requires an authorized deployment and a replay of the
+affected LA business day; this PR alone does not restore production data.

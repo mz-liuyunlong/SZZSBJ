@@ -18,9 +18,34 @@ from app.modules.integration_sync.data_pages_real_sync import (
     DataPagesRealSyncSummary,
     data_pages_client,
 )
+from app.modules.integration_sync.data_pages_sample_isolation import (
+    SampleIsolation,
+    complete_sample_financial_review,
+)
+from app.modules.integration_sync.finance_approval_catalog import FINANCE_APPROVAL_PROVIDER
+from app.modules.integration_sync.handlers.feishu_finance_approval_sync import (
+    FeishuFinanceApprovalSyncHandler,
+)
 from app.modules.integration_sync.handlers.lingxing_batch_product_info import (
     BatchPlan,
     LingxingBatchGetProductInfoSyncHandler,
+)
+from app.modules.integration_sync.handlers.lingxing_fin_shipping_sync import (
+    LingxingFinShippingDetailSyncHandler,
+    LingxingFinShippingListSyncHandler,
+)
+from app.modules.integration_sync.handlers.lingxing_fin_sync_base import (
+    FinSyncError,
+)
+from app.modules.integration_sync.handlers.lingxing_fin_sync_base import (
+    FinSyncHandlerBase as FinSyncHandlerType,
+)
+from app.modules.integration_sync.handlers.lingxing_fin_wms_outbound_sync import (
+    LingxingFinWmsOutboundSyncHandler,
+)
+from app.modules.integration_sync.handlers.lingxing_fx_rate_sync import (
+    FxRateSyncError,
+    LingxingFxRateSyncHandler,
 )
 from app.modules.integration_sync.handlers.lingxing_pmc_domestic_sync import (
     PMC_DOMESTIC_HANDLERS,
@@ -36,6 +61,14 @@ from app.modules.integration_sync.handlers.lingxing_product_info_executor import
 from app.modules.integration_sync.handlers.lingxing_product_list_sync import (
     LingxingProductListSyncHandler,
 )
+from app.modules.integration_sync.handlers.lingxing_walmart_bill_sync import (
+    LingxingWalmartBillSyncHandler,
+    WalmartBillSyncError,
+)
+from app.modules.integration_sync.handlers.lingxing_wfs_cost_valuation_sync import (
+    LingxingWfsCostValuationSyncHandler,
+    WfsCostValuationSyncError,
+)
 from app.modules.integration_sync.handlers.lingxing_wfs_settlement_sync import (
     LingxingWfsSettlementSyncHandler,
     WfsSettlementSyncError,
@@ -49,6 +82,9 @@ from app.modules.integration_sync.models import (
 )
 from app.modules.integration_sync.product_info_runner import ProductInfoOneTimeRunError
 from app.modules.integration_sync.repository import IntegrationSyncRepository
+from app.modules.integration_sync.wfs_cost_valuation_catalog import (
+    WFS_COST_VALUATION_SYNC_SPEC,
+)
 
 LOCK_LEASE_DURATION = timedelta(minutes=5)
 DATA_PAGES_LA_TZ = ZoneInfo("America/Los_Angeles")
@@ -66,6 +102,13 @@ DATA_PAGES_EXECUTABLE_INTERFACE_KEYS = frozenset(
 )
 
 
+FIN_SHIPPING_HANDLERS: dict[str, type[FinSyncHandlerType]] = {
+    LingxingFinShippingListSyncHandler.spec.interface_key: LingxingFinShippingListSyncHandler,
+    LingxingFinShippingDetailSyncHandler.spec.interface_key: LingxingFinShippingDetailSyncHandler,
+    LingxingFinWmsOutboundSyncHandler.spec.interface_key: LingxingFinWmsOutboundSyncHandler,
+}
+
+
 class SyncRunExecutionService:
     """Durable governed execution for supported integration runs."""
 
@@ -81,6 +124,12 @@ class SyncRunExecutionService:
         if interface is None:
             self._fail(run, "SYNC_INTERFACE_NOT_FOUND")
             return
+        if (
+            run.provider == FINANCE_APPROVAL_PROVIDER
+            and interface.handler_key == FeishuFinanceApprovalSyncHandler.handler_key
+        ):
+            FeishuFinanceApprovalSyncHandler(self.session).execute(run, interface)
+            return
         is_data_pages = (
             run.provider == "lingxing"
             and run.interface_key in DATA_PAGES_EXECUTABLE_INTERFACE_KEYS
@@ -91,6 +140,27 @@ class SyncRunExecutionService:
             run.provider == "lingxing"
             and run.interface_key == "wfsProfitOrder"
             and interface.handler_key == LingxingWfsSettlementSyncHandler.handler_key
+        )
+        is_fx = (
+            run.provider == "lingxing"
+            and run.interface_key == "lingxingFxRate"
+            and interface.handler_key == LingxingFxRateSyncHandler.handler_key
+        )
+        is_walmart_bill = (
+            run.provider == "lingxing"
+            and run.interface_key == "walmartBillStatementList"
+            and interface.handler_key == LingxingWalmartBillSyncHandler.handler_key
+        )
+        fin_handler = FIN_SHIPPING_HANDLERS.get(run.interface_key)
+        is_fin = (
+            run.provider == "lingxing"
+            and fin_handler is not None
+            and interface.handler_key == fin_handler.handler_key
+        )
+        is_wfs_cost_flow = (
+            run.provider == "lingxing"
+            and run.interface_key == WFS_COST_VALUATION_SYNC_SPEC.interface_key
+            and interface.handler_key == LingxingWfsCostValuationSyncHandler.handler_key
         )
 
         purchase_handler = PMC_PURCHASE_HANDLERS.get(run.interface_key)
@@ -137,7 +207,11 @@ class SyncRunExecutionService:
                 self._fail(run, "SYNC_CONFIG_DISABLED")
                 return
 
-        if is_data_pages or is_wfs:
+        if is_wfs_cost_flow and not interface.outbound_enabled:
+            self._fail(run, "SYNC_INTERFACE_DISABLED")
+            return
+
+        if is_data_pages or is_wfs or is_fx or is_walmart_bill or is_wfs_cost_flow or is_fin:
             if run.trigger_type not in {"manual", "schedule", "retry", "backfill"}:
                 self._fail(run, "SYNC_TRIGGER_NOT_EXECUTABLE")
                 return
@@ -211,6 +285,35 @@ class SyncRunExecutionService:
                 self._execute_data_pages_run(run)
                 return
 
+            if is_walmart_bill:
+                # 沃尔玛账单一个店一个保存点：心跳必须用独立 session 续锁，不能提交业务事务。
+                LingxingWalmartBillSyncHandler(
+                    self.session,
+                    heartbeat=lambda: self._heartbeat_data_pages_lock(run.id),
+                ).execute(run, interface)
+                return
+
+            if is_fin and fin_handler is not None:
+                fin_handler(
+                    self.session,
+                    heartbeat=lambda: self._heartbeat_lock(run.id),
+                ).execute(run, interface)
+                return
+
+            if is_wfs_cost_flow:
+                LingxingWfsCostValuationSyncHandler(
+                    self.session,
+                    heartbeat=lambda: self._heartbeat_lock(run.id),
+                ).execute(run, interface)
+                return
+
+            if is_fx:
+                LingxingFxRateSyncHandler(
+                    self.session,
+                    heartbeat=lambda: self._heartbeat_lock(run.id),
+                ).execute(run, interface)
+                return
+
             if is_wfs:
                 LingxingWfsSettlementSyncHandler(
                     self.session,
@@ -250,6 +353,10 @@ class SyncRunExecutionService:
             DataPagesRealSyncError,
             ProductInfoOneTimeRunError,
             WfsSettlementSyncError,
+            FxRateSyncError,
+            WalmartBillSyncError,
+            FinSyncError,
+            WfsCostValuationSyncError,
         ) as error:
             self.session.rollback()
             recovered = self.repository.get_run_for_update(run_id)
@@ -580,6 +687,7 @@ class SyncRunExecutionService:
             heartbeat()
             runner.summary.store_rows = runner._write_stores(stores)
 
+        sample_isolation: SampleIsolation | None = None
         if interface_key == "saleStatPageList":
             sales_rows: list[dict[str, Any]] = []
             for result_type in (1, 2, 3):
@@ -601,13 +709,27 @@ class SyncRunExecutionService:
             heartbeat()
             runner.summary.sales_rows = runner._write_sales(sales_rows)
             heartbeat()
-            runner.summary.order_rows = runner._write_orders(orders)
+            if run_id is not None:
+                sample_isolation = SampleIsolation(
+                    self.session, runner.source_account_ref, runner.business_date, run_id
+                )
+                runner._sample_isolation = sample_isolation
+            # Verify protected samples before ordinary order writes: a disputed
+            # provider Item ID must not abort the unrelated order capture.
+            runner.summary.sample_rows = runner._write_sample_orders(orders)
+            heartbeat()
+            order_facts = (
+                sample_isolation.filter_order_facts(orders) if sample_isolation else orders
+            )
+            runner.summary.order_rows = runner._write_orders(order_facts)
             heartbeat()
             runner.summary.order_unresolved_rows += runner._resolve_order_items()
             heartbeat()
-            runner.summary.sample_rows = runner._write_sample_orders(orders)
-            heartbeat()
             runner.summary.sample_unresolved_rows += runner._resolve_sample_items()
+            if sample_isolation is not None:
+                runner._sample_affected_business_dates = tuple(
+                    sorted(sample_isolation.affected_days)
+                )
             # Unconfirmed sample candidates never fail the entire multi-store
             # sales sync. They remain excluded from financial aggregation.
 
@@ -698,6 +820,20 @@ class SyncRunExecutionService:
         self.session.commit()
         runner._source_fact_commit_completed = True
         heartbeat()
+        if interface_key == "walmartAdItemSpList":
+            # Source facts are already durable. Extension errors cannot undo them.
+            try:
+                from app.modules.new_products.sku_ad_foundation_runtime import after_ad_fact_commit
+
+                after_ad_fact_commit(runner, ad_rows)
+            except Exception as exc:
+                import logging
+
+                self.session.rollback()
+                logging.getLogger(__name__).warning(
+                    "foundation_ad_hook_failed error_type=%s", type(exc).__name__
+                )
+            heartbeat()
         runner.summary.mart_daily_sales_rows = runner._refresh_daily_sales_mart()
         heartbeat()
         runner.summary.mart_order_profit_rows = runner._refresh_order_profit_mart()
@@ -716,6 +852,22 @@ class SyncRunExecutionService:
                     "running",
                     "SYNC_REFUND_MART_VALIDATED",
                     safe_details={"business_date": purchase_day.isoformat()},
+                )
+        if sample_isolation is not None and run_id is not None:
+            for day in sorted(sample_isolation.affected_days):
+                complete_sample_financial_review(
+                    self.session, runner.source_account_ref, day, run_id
+                )
+            if sample_isolation.conflicted:
+                self._event(
+                    run_id,
+                    "running",
+                    "running",
+                    "DATA_PAGES_SAMPLE_EVIDENCE_ISOLATED",
+                    safe_details={
+                        "business_date": runner.business_date.isoformat(),
+                        "isolated_lines": len(sample_isolation.conflicted),
+                    },
                 )
         self.session.commit()
         return runner.summary

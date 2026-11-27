@@ -14,6 +14,7 @@ from typing import Any, Protocol
 
 from app.core.api import ApiError, ErrorCode
 from app.integrations.walmart.client import WalmartResult
+from app.integrations.walmart.contract_signing import READ_SEMANTIC_NON_GET_KEYS
 from app.integrations.walmart.planner import STORE_ROUTES
 from app.integrations.walmart.scf_bridge import _contains_secret_key
 from app.integrations.walmart.scf_read_factory import make_walmart_read_api
@@ -56,7 +57,11 @@ def _configuration() -> tuple[dict[str, str], frozenset[str]]:
         raise ApiError(code="WALMART_SCF_APPROVAL_MISSING", status_code=503)
     try:
         registry = load_unified_registry(approved)
-        if any(registry.get(key).method != "GET" for key in approved):
+        # Reads are GET, plus the reviewed read-semantic POST set (never a write contract).
+        if any(
+            registry.get(key).method != "GET" and key not in READ_SEMANTIC_NON_GET_KEYS
+            for key in approved
+        ) or any(registry.get(key).is_write for key in approved):
             raise ValueError
     except Exception:
         raise ApiError(code="WALMART_SCF_APPROVAL_INVALID", status_code=503) from None
