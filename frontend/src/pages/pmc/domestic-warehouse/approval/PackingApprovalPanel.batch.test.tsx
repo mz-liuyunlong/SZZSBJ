@@ -34,7 +34,7 @@ vi.mock("./packingApprovalQueries", () => ({
 function candidate(id: string, overrides: Partial<ApprovalCandidate> = {}): ApprovalCandidate {
   return {
     id, candidate_version: `v-${id}`, source_account_ref: "primary", warehouse_id: "16168", warehouse_name: "美中1号仓TX", publication_id: "p", board_id: "b",
-    inbound_order_sn: `IB-${id}`, sku: "YC00236", product_name: null, store_id: "1", store_name: "HK2614", item_id: "20394207859",
+    inbound_order_sn: `IB-${id}`, sku: "YC00236", product_name: null, store_id: "1", store_name: "HK2614", item_id: "19000000105",
     gtin: "00000000000000", msku: "YC00236-1A", purchase_order_sns: [], draft_nos: [], arrival_purchased: null, arrival_received: null,
     arrival_pending: null, arrival_status: "unknown", candidate_created_on: "2026-10-06", overdue: false, stock_balance: 10,
     available_quantity: 10, default_quantity: 10, can_approve: true, blocked_reasons: [], source_observed_at: "2026-10-06T00:00:00Z",
@@ -51,8 +51,8 @@ beforeEach(() => {
   rows.splice(0, rows.length,
     candidate("a"),
     candidate("b", { default_quantity: 6, manual_customs: "declare", split_lines: [
-      { store_id: "1", store_name: "HK2614", item_id: "20394207859", gtin: null, msku: null, listing_version: "a".repeat(64), qty: 4 },
-      { store_id: "2", store_name: "CN2602", item_id: "21168417269", gtin: null, msku: null, listing_version: "b".repeat(64), qty: 2 },
+      { store_id: "1", store_name: "HK2614", item_id: "19000000105", gtin: null, msku: null, listing_version: "a".repeat(64), qty: 4 },
+      { store_id: "2", store_name: "CN2602", item_id: "19000000104", gtin: null, msku: null, listing_version: "b".repeat(64), qty: 2 },
     ] }),
     candidate("c", { can_approve: false, blocked_reasons: ["WFS_NOT_CONVERTED"] }),
   );
