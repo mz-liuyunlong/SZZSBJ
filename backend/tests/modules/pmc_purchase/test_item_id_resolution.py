@@ -7,8 +7,8 @@ from app.modules.pmc_purchase.item_id_resolution import (
 )
 
 STORE = "110711149541688320"
-L_BLANK = ListingCandidate(STORE, "19000000101", None, "00046001636422", "TT01291-1A", "1")
-L_SAME = ListingCandidate(STORE, "19051502014", "TT01291", "00012345678905", "TT01291-1Z", "0")
+L_BLANK = ListingCandidate(STORE, "19000000101", None, "00099000000001", "TT01291-1A", "1")
+L_SAME = ListingCandidate(STORE, "19500000014", "TT01291", "00012345678905", "TT01291-1Z", "0")
 L_OTHER = ListingCandidate(STORE, "55555555555", "OTHER", "00012345678920", "OTHER-1A", "1")
 L_ELSEWHERE = ListingCandidate("999", "77777777777", "TT01291", "00012345678937", "X", "1")
 ALL = [L_BLANK, L_SAME, L_OTHER, L_ELSEWHERE]
@@ -22,7 +22,7 @@ def test_remark_id_is_verified_by_store_even_with_blank_listing_sku():
         listings=ALL,
     )
     assert found.source == "remark" and found.item_ids == ["19000000101"]
-    assert found.identities[0].msku == "TT01291-1A" and found.identities[0].gtin == "00046001636422"
+    assert found.identities[0].msku == "TT01291-1A" and found.identities[0].gtin == "00099000000001"
     assert found.identities[0].sku_mismatch is False and found.sku_mismatch_ids == []
     assert RULE_VERSION == "purchase.remark.store.v2"
 
@@ -31,10 +31,10 @@ def test_remark_id_with_other_local_sku_is_kept_and_flagged_and_all_verified_ids
     found = resolve_item_identities(
         store_id=STORE,
         sku="TT01291",
-        remark_texts=["ITEMID:55555555555 19051502014 00012345678905"],
+        remark_texts=["ITEMID:55555555555 19500000014 00012345678905"],
         listings=ALL,
     )
-    assert found.item_ids == ["55555555555", "19051502014"]  # GTIN digits ignored
+    assert found.item_ids == ["55555555555", "19500000014"]  # GTIN digits ignored
     assert found.sku_mismatch_ids == ["55555555555"]
     assert [i.sku_mismatch for i in found.identities] == [True, False]
 
@@ -45,13 +45,13 @@ def test_remark_id_not_listed_on_this_store_is_only_evidence():
     )
     # 77777777777 belongs to another store -> unverified; fall back to the same-SKU listing.
     assert found.unverified_remark_ids == ("77777777777",)
-    assert found.source == "listing" and found.item_ids == ["19051502014"]
+    assert found.source == "listing" and found.item_ids == ["19500000014"]
 
 
 def test_listing_fallback_keeps_every_same_sku_listing_then_uses_msku_for_blank_ones():
-    two = [L_SAME, ListingCandidate(STORE, "20425456045", "TT01291", None, "TT01291-1B", "1")]
+    two = [L_SAME, ListingCandidate(STORE, "20900000009", "TT01291", None, "TT01291-1B", "1")]
     found = resolve_item_identities(store_id=STORE, sku="TT01291", remark_texts=[], listings=two)
-    assert found.item_ids == ["19051502014", "20425456045"]  # callers show "multiple"
+    assert found.item_ids == ["19500000014", "20900000009"]  # callers show "multiple"
     by_msku = resolve_item_identities(
         store_id=STORE,
         sku="TT01291",

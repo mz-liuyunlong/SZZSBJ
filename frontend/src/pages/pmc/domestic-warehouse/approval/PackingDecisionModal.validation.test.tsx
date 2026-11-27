@@ -32,7 +32,7 @@ test("empty reject reason shows a Chinese message", async () => {
   render(
     <QueryClientProvider client={client}>
       <PackingDecisionModal
-        row={{ inbound_order_sn: "IB261020012", sku: "YC01280", pk: "PK261015120" } as ApprovalCandidate}
+        row={{ inbound_order_sn: "IB991020012", sku: "TT01280", pk: "PK991015120" } as ApprovalCandidate}
         kind="reject"
         busy={false}
         scope="test"
@@ -44,7 +44,7 @@ test("empty reject reason shows a Chinese message", async () => {
 
   fireEvent.submit(document.querySelector("form")!);
 
-  expect(screen.getByText("驳回 · PK261015120 · YC01280")).toBeInTheDocument();
+  expect(screen.getByText("驳回 · PK991015120 · TT01280")).toBeInTheDocument();
   expect(screen.getByText("当前登录用户")).toBeInTheDocument();
   await waitFor(() => {
     expect(screen.getByText("请填写驳回原因")).toBeInTheDocument();
@@ -59,7 +59,7 @@ test("edit dialog does not ask for warehouse, name, or passcode", async () => {
     <MemoryRouter>
       <QueryClientProvider client={client}>
         <PackingDecisionModal
-          row={{ inbound_order_sn: "IB261020003", sku: "YC00364", pk: "PK260915043" } as ApprovalCandidate}
+          row={{ inbound_order_sn: "IB991020003", sku: "TT00364", pk: "PK990915043" } as ApprovalCandidate}
           kind="approve"
           busy={false}
           scope="test"
@@ -70,7 +70,7 @@ test("edit dialog does not ask for warehouse, name, or passcode", async () => {
     </MemoryRouter>,
   );
 
-  expect(screen.getByText("修改打包单 PK260915043")).toBeInTheDocument();
+  expect(screen.getByText("修改打包单 PK990915043")).toBeInTheDocument();
   expect(screen.queryByText("收货仓")).not.toBeInTheDocument();
   expect(screen.queryByText("姓名")).not.toBeInTheDocument();
   expect(screen.queryByText("口令")).not.toBeInTheDocument();

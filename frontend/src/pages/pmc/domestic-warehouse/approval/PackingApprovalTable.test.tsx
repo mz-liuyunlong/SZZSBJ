@@ -13,16 +13,16 @@ function candidate(overrides: Partial<ApprovalCandidate> = {}): ApprovalCandidat
     warehouse_id: "16168",
     publication_id: "p",
     board_id: "b",
-    inbound_order_sn: "IB261006014",
-    sku: "YC00236",
+    inbound_order_sn: "IB991006014",
+    sku: "TT00236",
     product_name: null,
     store_id: "1",
     store_name: "HK2614",
-    item_id: "20394207859",
+    item_id: "20900000006",
     gtin: "00000000000000",
-    msku: "YC00236-1A",
-    purchase_order_sns: ["PO260001", "PO260002"],
-    draft_nos: ["CG261017-039"],
+    msku: "TT00236-1A",
+    purchase_order_sns: ["PO990001", "PO990002"],
+    draft_nos: ["CG991017-039"],
     arrival_purchased: null,
     arrival_received: null,
     arrival_pending: null,
@@ -61,7 +61,7 @@ describe("packing approval copy cells", () => {
         arrival_status: "partial", split_arrival: true, arrival_batch_count: 2, arrival_batch_index: 2,
         default_quantity: 30, available_quantity: 50, can_approve: false,
         blocked_reasons: ["WFS_NOT_CONVERTED"], quantity_suggestion: { rule: "plan_ratio",
-          plan_weights: { "20394207859": 60 }, box_pcs: 10, tail_quantity: 0, notes: [], source_refs: [] } })]}
+          plan_weights: { "20900000006": 60 }, box_pcs: 10, tail_quantity: 0, notes: [], source_refs: [] } })]}
       total={1} canApprove canReject busy={false} onDecision={vi.fn()} onApprove={vi.fn()}
       onPagination={vi.fn()} onResize={vi.fn()} onSort={vi.fn()} />);
     expect(screen.getByText("100 / 60 / 40")).toBeInTheDocument();
@@ -91,14 +91,14 @@ describe("packing approval copy cells", () => {
       />,
     );
     expect(screen.getByRole("columnheader", { name: /草稿号/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "复制草稿号：CG261017-039" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "复制入库单号：IB261006014" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "复制采购单号：PO260001" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "复制采购单号：PO260002" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "复制SKU：YC00236" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制草稿号：CG991017-039" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制入库单号：IB991006014" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制采购单号：PO990001" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制采购单号：PO990002" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制SKU：TT00236" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制GTIN：00000000000000" })).toBeInTheDocument();
-    const itemLink = screen.getByRole("link", { name: "Walmart 商品页：20394207859（新标签页打开）" });
-    expect(itemLink).toHaveAttribute("href", "https://www.walmart.com/ip/20394207859");
+    const itemLink = screen.getByRole("link", { name: "Walmart 商品页：20900000006（新标签页打开）" });
+    expect(itemLink).toHaveAttribute("href", "https://www.walmart.com/ip/20900000006");
     expect(itemLink).toHaveAttribute("target", "_blank");
     expect(itemLink).toHaveAttribute("rel", "noopener noreferrer");
     expect(screen.getByRole("button", { name: /修\s*改/ })).toBeEnabled();

@@ -73,7 +73,7 @@ The list total counts detail rows; order cards on the summary count distinct ord
 未转单计划 are not board rows — `purchase_overdue` lists the overdue S2 orders only.
 Unknown parameters and inconsistent ranges are `422 VALIDATION_ERROR`.
 
-Row fields: `purchase_order_sn, draft_no (8088 rule: parsed from the linked plan's remark first, then the purchase order line 采购备注, e.g. ``草稿:CG261017-039``; `gov_data_lineage` records the path and document version actually used — the plan's `$.data[].remark` / `plan_remark` / `item_purchase_remark` or the line's `$.data[].item_list[].remark` / `item_purchase_remark`),
+Row fields: `purchase_order_sn, draft_no (8088 rule: parsed from the linked plan's remark first, then the purchase order line 采购备注, e.g. ``草稿:CG991017-039``; `gov_data_lineage` records the path and document version actually used — the plan's `$.data[].remark` / `plan_remark` / `item_purchase_remark` or the line's `$.data[].item_list[].remark` / `item_purchase_remark`),
 order_item_id, plan_sn, plan_sns[], order_status,
 stage{stage_code, stage_start, stage_start_estimated, threshold_days, due_date, overdue_days,
 overdue_kind(purchase|arrival|null), alert_due_since}, store{id,name,attributed}, sku,

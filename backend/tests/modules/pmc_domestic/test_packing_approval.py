@@ -109,7 +109,7 @@ def seeded(db):
         publication_id=pub.id,
         source_account_ref=account,
         source_warehouse_id="16168",
-        inbound_order_sn="IB261020999",
+        inbound_order_sn="IB991020999",
         sku="FIXTURE-SKU",
         store_id="fixture-store",
         attribution_key="fixture-store",

@@ -50,7 +50,7 @@ def seeded(session: Session) -> Session:  # noqa: F811
         status=2,
         create_date=TODAY - timedelta(days=2),
         sku="SKU-D",
-        remark="ITEMID:20540519308 | 草稿:CG990102-087",
+        remark="ITEMID:20900000011 | 草稿:CG990102-087",
     )
     _plan(
         session,
@@ -63,7 +63,7 @@ def seeded(session: Session) -> Session:  # noqa: F811
     )
     # PO1: arrived this month, SKU-A with ItemID
     _order(session, "PO1", order_date=TODAY - timedelta(days=15))
-    _line(session, "PO1", "L1", draft_no="CG261017-039")
+    _line(session, "PO1", "L1", draft_no="CG991017-039")
     _receipt(session, run, "R1", "L1", f"{TODAY - timedelta(days=5)} 10:00:00", 100)
     # PO2: S3 arrival overdue, SKU-B, no ItemID
     _order(session, "PO2", order_date=TODAY - timedelta(days=30), amount_total=Decimal("900"))
@@ -95,7 +95,7 @@ def test_board_filters_sorting_and_scope(seeded: Session) -> None:
     # default sort: order_date desc with NULL (PO3) last
     assert [i.purchase_order_sn for i in data.items] == ["PO1", "PO2", "PO4", "PO3"]
     po1 = next(i for i in data.items if i.purchase_order_sn == "PO1")
-    assert po1.draft_no == "CG261017-039"
+    assert po1.draft_no == "CG991017-039"
 
     data, total, *_ = svc.list_board(BoardListQuery(status=["overdue"]), SCOPE)
     assert {i.purchase_order_sn for i in data.items} == {"PO2", "PO3"}
@@ -113,7 +113,7 @@ def test_board_filters_sorting_and_scope(seeded: Session) -> None:
 
     # 8088「草稿号 / 计划号」search: a draft number or any linked plan number.
     data, total, *_ = svc.list_board(
-        BoardListQuery(search_type="draft_plan", search_values=["CG261017-039"]), SCOPE
+        BoardListQuery(search_type="draft_plan", search_values=["CG991017-039"]), SCOPE
     )
     assert {i.purchase_order_sn for i in data.items} == {"PO1"}
     data, total, *_ = svc.list_board(
@@ -211,7 +211,7 @@ def test_order_detail_and_missing(seeded: Session) -> None:
     assert [r.receipt_order_sn for r in detail.receipts] == ["R1"]
     assert detail.receipts[0].is_arrival_receipt is True
     assert [p.plan_sn for p in detail.plans] == ["P1"]
-    assert detail.plans[0].remark_item_id == "19051502014"
+    assert detail.plans[0].remark_item_id == "19500000014"
     assert detail.sku_cycles[0].sku == "SKU-A"
     assert detail.lines[0].item_id.gtin == "00012345678905"
     with pytest.raises(ApiError) as excinfo:

@@ -105,7 +105,7 @@ def session() -> Iterator[Session]:
                 id=uuid4(),
                 source_account_ref=ACCOUNT,
                 store_id=STORE,
-                item_id="19051502014",
+                item_id="19500000014",
                 msku="MSKU-A",
                 local_sku="SKU-A",
                 gtin="00012345678905",
@@ -182,8 +182,8 @@ def _plan(session: Session, plan_sn: str, **kw: object) -> DwdPurchasePlan:
         sku="SKU-A",
         product_name="Widget",
         quantity_plan=100,
-        remark="ITEMID:19051502014",
-        remark_item_id="19051502014",
+        remark="ITEMID:19500000014",
+        remark_item_id="19500000014",
     )
     base.update(kw)
     row = DwdPurchasePlan(id=uuid4(), **_source(), **base)
@@ -360,7 +360,7 @@ def test_arrived_order_row_metrics_attribution_and_dimensions(session: Session) 
     assert row.arrival_date == date(2026, 8, 20) and row.arrival_receipt_order_sn == "R2"
     assert row.purchase_cycle_days == 15 and row.approval_cycle_days == 3
     # ItemID from the plan remark; listing / owner joined through it
-    assert (row.item_id, row.item_id_source) == ("19051502014", "from_plan_remark")
+    assert (row.item_id, row.item_id_source) == ("19500000014", "from_plan_remark")
     assert row.item_id_source_ref == "P1" and row.item_id_match_status == "matched"
     assert row.item_id_matched_at is not None
     assert (row.msku, row.gtin, row.fulfillment_type) == ("MSKU-A", "00012345678905", "0")
@@ -435,7 +435,7 @@ def test_stages_purchase_overdue_vs_arrival_overdue_and_unattributed_store(
     assert overdue["PO-C"].detail_json["overdue_kind"] == "arrival"
     # line without a plan remark takes the single Listing item id for this store + SKU
     assert (a.item_id, a.item_id_source, a.item_id_match_status, a.msku) == (
-        "19051502014",
+        "19500000014",
         "from_listing",
         "matched",
         "MSKU-A",
@@ -576,7 +576,7 @@ def test_listing_item_id_is_used_when_plan_remark_is_missing(session: Session) -
     PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
     row = _board(session)[("PO1", "L1", "")]
     assert (row.item_id, row.item_id_source, row.msku, row.gtin) == (
-        "19051502014",
+        "19500000014",
         "from_listing",
         "MSKU-A",
         "00012345678905",
@@ -593,7 +593,7 @@ def test_listing_multi_values_are_preserved_without_guessing_a_single_item(
             id=uuid4(),
             source_account_ref=ACCOUNT,
             store_id=STORE,
-            item_id="20425456045",
+            item_id="20900000009",
             msku="MSKU-B",
             local_sku="SKU-A",
             gtin="00012345678912",
@@ -610,8 +610,8 @@ def test_listing_multi_values_are_preserved_without_guessing_a_single_item(
     assert (row.item_id, row.item_id_source) == (None, "from_listing")
     assert row.item_id_match_status == "matched"
     assert {item["item_id"] for item in row.source_lineage_json["item_identities"]} == {
-        "19051502014",
-        "20425456045",
+        "19500000014",
+        "20900000009",
     }
 
 
@@ -657,14 +657,14 @@ def test_legacy_multiple_verified_remarks_keep_one_quantity_and_no_pending(
     )
     _plan(session, "P1", remark="ITEMID:33333333333")
     _order(session, "PO1")
-    _line(session, "PO1", "L1", remark_item_id="19051502014")
+    _line(session, "PO1", "L1", remark_item_id="19500000014")
     session.commit()
     PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
     row = _board(session)[("PO1", "L1", "P1")]
     assert row.item_id is None and row.item_id_match_status == "matched"
     assert row.item_id_source == "from_plan_remark"
     assert [item["item_id"] for item in row.source_lineage_json["item_identities"]] == [
-        "19051502014",
+        "19500000014",
         "33333333333",
     ]
     assert row.quantity_allocated == 100
@@ -696,7 +696,7 @@ def test_unverified_remark_falls_back_without_claiming_remark_attribution(sessio
 
     PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
     row = _board(session)[("PO1", "L1", "P1")]
-    assert (row.item_id, row.item_id_source) == ("19051502014", "from_listing")
+    assert (row.item_id, row.item_id_source) == ("19500000014", "from_listing")
     assert row.source_lineage_json["item_id_evidence"]["unverified_ids"] == ["33333333333"]
 
 
@@ -830,7 +830,7 @@ def test_resolved_item_id_uses_the_listing_with_the_same_item_id(session: Sessio
     PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
     row = _board(session)[("PO1", "L1", "P1")]
     assert (row.item_id, row.msku, row.gtin, row.fulfillment_type) == (
-        "19051502014",
+        "19500000014",
         "MSKU-A",
         "00012345678905",
         "0",
@@ -855,7 +855,7 @@ def test_packing_slip_source_is_used_when_available(session: Session) -> None:
             self, *, order_sn: str, order_item_id: str, sku: str | None, store_id: str | None
         ) -> PackingSlipMatch | None:
             if (order_sn, order_item_id) == ("PO1", "L1"):
-                return PackingSlipMatch("19051502014", "PK-1", NOW - timedelta(hours=1))
+                return PackingSlipMatch("19500000014", "PK-1", NOW - timedelta(hours=1))
             return None
 
     PmcPurchaseDwsRefresher(session, now=NOW, packing_slips=Slips()).refresh(
@@ -863,7 +863,7 @@ def test_packing_slip_source_is_used_when_available(session: Session) -> None:
     )
     row = _board(session)[("PO1", "L1", "")]
     assert (row.item_id, row.item_id_source, row.item_id_source_ref) == (
-        "19051502014",
+        "19500000014",
         "from_packing_slip",
         "PK-1",
     )

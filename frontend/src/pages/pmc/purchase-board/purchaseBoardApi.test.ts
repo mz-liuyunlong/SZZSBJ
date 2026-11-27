@@ -23,7 +23,7 @@ const envelope = (data: unknown, meta: Record<string, unknown> = {}) => ({
 
 const backendRow = {
   purchase_order_sn: "PO1",
-  draft_no: "CG261017-039",
+  draft_no: "CG991017-039",
   order_item_id: "L1",
   plan_sn: "P1",
   plan_sns: ["P1"],
@@ -42,7 +42,7 @@ const backendRow = {
   sku: "SKU-A",
   product_name: "Widget",
   item_id: {
-    item_id: "19051502014",
+    item_id: "19500000014",
     source: "from_plan_remark",
     source_ref: "P1",
     matched_at: "2026-09-23T03:00:00Z",
@@ -170,9 +170,9 @@ describe("purchaseBoardApi mapping", () => {
     expect(result.meta).toEqual({ freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: 1, hiddenOwnerNames: [] });
     const row = result.rows[0];
     expect(row.id).toBe("PO1::L1::P1");
-    expect(row.draftNo).toBe("CG261017-039");
+    expect(row.draftNo).toBe("CG991017-039");
     expect(row.stage.overdueKind).toBe("arrival");
-    expect(row.itemId.itemId).toBe("19051502014");
+    expect(row.itemId.itemId).toBe("19500000014");
     expect(row.itemId.source).toBe("from_listing");
     expect(row.skuCycle).toEqual({ valueDays: 12, source: "samples", sampleCount: 5, unstable: true });
     expect(row.unitPrice).toBe(5);
@@ -184,14 +184,14 @@ describe("purchaseBoardApi mapping", () => {
   it("maps each identity's local SKU and sku_mismatch flag", async () => {
     fetchMock.mockResolvedValue(envelope(
       { items: [{ ...backendRow, item_id: { ...backendRow.item_id, identities: [
-        { item_id: "19051502014", msku: "M1", gtin: null, fulfillment_type: "1", local_sku: "SKU-Z", sku_mismatch: true },
+        { item_id: "19500000014", msku: "M1", gtin: null, fulfillment_type: "1", local_sku: "SKU-Z", sku_mismatch: true },
         { item_id: "33333333333", msku: "M2", gtin: null, fulfillment_type: "1" },
       ] } }], total: 1 },
       { source: "new_system_postgresql", source_objects: ["dws_purchase_board"], freshness_at: null, rule_version: 1, total: 1 },
     ));
     const result = await listPurchaseBoard(createInitialPurchaseBoardFilters(), 1, 50);
     expect(result.rows[0].itemId.identities).toEqual([
-      { itemId: "19051502014", msku: "M1", gtin: null, fulfillmentType: "1", localSku: "SKU-Z", skuMismatch: true, storeId: null },
+      { itemId: "19500000014", msku: "M1", gtin: null, fulfillmentType: "1", localSku: "SKU-Z", skuMismatch: true, storeId: null },
       { itemId: "33333333333", msku: "M2", gtin: null, fulfillmentType: "1", localSku: null, skuMismatch: false, storeId: null },
     ]);
   });
@@ -237,7 +237,7 @@ describe("purchaseBoardApi mapping", () => {
       stage: backendRow.stage,
       lines: [backendRow],
       receipts: [{ receipt_order_sn: "R1", is_arrival_receipt: true }],
-      plans: [{ plan_sn: "P1", plan_status: 3, plan_create_date: "2026-08-29", quantity_plan: 100, remark_item_id: "19051502014", store_id: "110652398125259264" }],
+      plans: [{ plan_sn: "P1", plan_status: 3, plan_create_date: "2026-08-29", quantity_plan: 100, remark_item_id: "19500000014", store_id: "110652398125259264" }],
       sku_cycles: [{
         sku: "SKU-A",
         value_days: "12.0000",
@@ -257,7 +257,7 @@ describe("purchaseBoardApi mapping", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/pmc/purchase/orders/PO%201");
     expect(detail.progressRatio).toBe(0.5);
     expect(detail.receipts[0]).toEqual({ receiptOrderSn: "R1", isArrivalReceipt: true });
-    expect(detail.plans[0].remarkItemId).toBe("19051502014");
+    expect(detail.plans[0].remarkItemId).toBe("19500000014");
     expect(detail.skuCycles[0].samples[0].purchaseOrderSn).toBe("PO0");
     expect(detail.lines[0].id).toBe("PO1::L1::P1");
   });

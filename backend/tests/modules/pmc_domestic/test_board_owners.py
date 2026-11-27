@@ -35,10 +35,10 @@ def test_attach_reads_the_current_owner_for_the_row_sku():
         conn.execute(
             text(
                 "insert into dwd_lingxing_sku_identity_index values "
-                "('i1','lingxing','primary','sku-1','YC00347',1),"
-                "('i2','lingxing','primary','sku-2','YC00999',1),"
-                "('i3','lingxing','primary','sku-3','YC00999',1),"
-                "('i4','lingxing','other','sku-4','YC00347',1)"
+                "('i1','lingxing','primary','sku-1','TT00347',1),"
+                "('i2','lingxing','primary','sku-2','TT00999',1),"
+                "('i3','lingxing','primary','sku-3','TT00999',1),"
+                "('i4','lingxing','other','sku-4','TT00347',1)"
             )
         )
         conn.execute(
@@ -50,9 +50,9 @@ def test_attach_reads_the_current_owner_for_the_row_sku():
                 "('i4','lingxing','other','sku-4','u9','别人')"
             )
         )
-    known = _row("primary", "YC00347")
-    conflict = _row("primary", "YC00999")
-    missing = _row("primary", "YC00000")
+    known = _row("primary", "TT00347")
+    conflict = _row("primary", "TT00999")
+    missing = _row("primary", "TT00000")
     with Session(engine) as session:
         attach_board_owners(session, [known, conflict, missing], frozenset({"primary"}))
     assert known.owner.status == "resolved"

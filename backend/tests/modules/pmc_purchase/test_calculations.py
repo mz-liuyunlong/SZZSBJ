@@ -97,15 +97,15 @@ def test_days_between_same_day_is_zero_and_missing_is_none() -> None:
 @pytest.mark.parametrize(
     ("remark", "expected"),
     [
-        ("ITEMID:19051502014", "19051502014"),
-        ("补货 ITEMID: 19051502014 急", "19051502014"),
-        ("itemid:19051502014", "19051502014"),
-        ("20400862776", "20400862776"),
-        ("20024473476 在途", "20024473476"),
+        ("ITEMID:19500000014", "19500000014"),
+        ("补货 ITEMID: 19500000014 急", "19500000014"),
+        ("itemid:19500000014", "19500000014"),
+        ("20900000007", "20900000007"),
+        ("20900000001 在途", "20900000001"),
         ("ITEMID:11111111111 22222222222", "11111111111"),
         ("ITEMID:1905150201", None),  # ten digits
         ("ITEMID:190515020145", None),  # twelve digits
-        ("HK2614 00465000461303", None),  # 14-digit code, not an ItemID
+        ("HK2614 00099000000004", None),  # 14-digit code, not an ItemID
         ("", None),
         (None, None),
     ],
@@ -119,9 +119,9 @@ def test_parse_itemid_remark_requires_exactly_eleven_digits(
 @pytest.mark.parametrize(
     ("remark", "expected"),
     [
-        ("ITEMID:20540519308 | 草稿:CG261017-039", "CG261017-039"),
+        ("ITEMID:20900000011 | 草稿:CG991017-039", "CG991017-039"),
         ("草稿：WS261017-001", "WS261017-001"),
-        ("草稿: CG261017-039", "CG261017-039"),
+        ("草稿: CG991017-039", "CG991017-039"),
         ("no draft here", None),
         ("", None),
         (None, None),

@@ -26,11 +26,11 @@ def test_draft_numbers_follow_purchase_order_then_sku():
         conn.execute(
             text(
                 "insert into dws_purchase_board values "
-                "('primary','PO2','YC1','CG261020-002'),"
-                "('primary','PO1','YC1','CG261020-009'),"
-                "('primary','PO1','YC1','CG261020-001'),"
-                "('other','PO1','YC1','CG261020-888'),"
-                "('primary','PO1','YC2','CG261020-003')"
+                "('primary','PO2','YC1','CG991020-002'),"
+                "('primary','PO1','YC1','CG991020-009'),"
+                "('primary','PO1','YC1','CG991020-001'),"
+                "('other','PO1','YC1','CG991020-888'),"
+                "('primary','PO1','YC2','CG991020-003')"
             )
         )
     with Session(engine) as session:
@@ -40,8 +40,8 @@ def test_draft_numbers_follow_purchase_order_then_sku():
             Row("primary", "YC9", []),
         ]
         attach_draft_numbers(session, rows, frozenset({"primary"}))
-    assert rows[0].draft_nos == ["CG261020-001", "CG261020-009", "CG261020-002"]
-    assert rows[1].draft_nos == ["CG261020-003"]
+    assert rows[0].draft_nos == ["CG991020-001", "CG991020-009", "CG991020-002"]
+    assert rows[1].draft_nos == ["CG991020-003"]
     assert rows[2].draft_nos == []
     engine.dispose()
 
