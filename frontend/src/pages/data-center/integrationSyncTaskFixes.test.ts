@@ -114,6 +114,7 @@ describe("moduleForInterface", () => {
     expect(moduleForInterface({ interface_key: "finShippingList" })).toBe("财务");
     expect(moduleForInterface({ interface_key: "finShippingDetail" })).toBe("财务");
     expect(moduleForInterface({ interface_key: "finWmsOutboundOrders" })).toBe("财务");
+    expect(moduleForInterface({ interface_key: "wfsCostValuationFlow" })).toBe("财务");
     expect(moduleForInterface({ interface_key: "productList" })).toBe("商品");
   });
 });
