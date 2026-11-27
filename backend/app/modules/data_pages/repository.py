@@ -1,19 +1,21 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import Any
 from typing import cast as type_cast
 from uuid import UUID
 
 from sqlalchemy import (
+    Date,
     Select,
     String,
     and_,
     case,
     cast,
-    column,
     delete,
     exists,
     func,
@@ -23,10 +25,23 @@ from sqlalchemy import (
     text,
     tuple_,
 )
+from sqlalchemy import (
+    column as sql_column,
+)
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.modules.data_pages.listing_exact_facets import (
+    complete_facet_batch_items,
+    complete_facet_batch_statement,
+    facet_option,
+    facet_option_statement,
+    facet_predicate,
+    listing_facet,
+    parse_exact_filters,
+)
+from app.modules.data_pages.listing_sort import listing_order_columns
 from app.modules.data_pages.models import (
     DailySalesItemDayMart,
     ListingArchiveState,
@@ -39,7 +54,11 @@ from app.modules.data_pages.models import (
     WalmartListingDimension,
     WalmartListingInventoryDailyFact,
 )
-from app.modules.walmart_monitor.models import WalmartMonitorListingCurrent
+from app.modules.data_pages.sales_report_sort import sql_order
+from app.modules.walmart_monitor.models import (
+    RawWalmartMonitorEvent,
+    WalmartMonitorListingCurrent,
+)
 
 DAILY_SALES_SEARCH_COLUMNS: dict[str, ColumnElement[str | None]] = {
     "sku": DailySalesItemDayMart.local_sku,
@@ -64,12 +83,21 @@ LISTING_SEARCH_COLUMNS: dict[str, ColumnElement[str | None]] = {
 
 PRODUCT_INFO_CURRENT = table(
     "dwd_lingxing_sku_product_info_current",
-    column("source_account_ref", String()),
-    column("lingxing_sku_code", String()),
-    column("owner_uid", String()),
-    column("owner_name", String()),
-    column("product_developer_uid", String()),
-    column("product_developer_name", String()),
+    sql_column("source_account_ref", String()),
+    sql_column("lingxing_sku_code", String()),
+    sql_column("owner_uid", String()),
+    sql_column("owner_name", String()),
+    sql_column("product_developer_uid", String()),
+    sql_column("product_developer_name", String()),
+)
+
+
+LISTING_WFS_LA_LOCKED = table(
+    "listing_wfs_first_stock_la_locked",
+    sql_column("source_account_ref", String()),
+    sql_column("store_id", String()),
+    sql_column("item_id", String()),
+    sql_column("first_wfs_available_date_la", Date()),
 )
 
 
@@ -85,6 +113,7 @@ class ListingManagementRowProjection:
     product_developer_name: str | None
     launch_date_cn: date | None = None
     first_wfs_seen_at_utc: datetime | None = None
+    first_wfs_available_date_la: date | None = None
     effective_title: str | None = None
     effective_strike_price_amount: Decimal | None = None
     effective_strike_price_currency_code: str | None = None
@@ -97,6 +126,10 @@ class ListingManagementRowProjection:
     effective_average_rating: Decimal | None = None
     effective_review_count: int | None = None
     effective_brand: str | None = None
+    effective_lifecycle_status: str | None = None
+    monitor_raw_parsed: dict[str, Any] | None = None
+    monitor_checked_at: datetime | None = None
+    monitor_source: str | None = None
 
     def __getattr__(self, name: str) -> object:
         effective = f"effective_{name}"
@@ -142,6 +175,11 @@ def _listing_projection(row: Sequence[object]) -> ListingManagementRowProjection
         effective_average_rating=row[17],  # type: ignore[arg-type]
         effective_review_count=row[18],  # type: ignore[arg-type]
         effective_brand=row[19],  # type: ignore[arg-type]
+        first_wfs_available_date_la=row[20],  # type: ignore[arg-type]
+        effective_lifecycle_status=row[-1],  # last selected computed column
+        monitor_raw_parsed=row[21],  # type: ignore[arg-type]
+        monitor_checked_at=row[22],  # type: ignore[arg-type]
+        monitor_source=row[23],  # type: ignore[arg-type]
     )
 
 
@@ -149,6 +187,55 @@ def _csv_values(value: str | None) -> list[str]:
     if value is None:
         return []
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _listing_rating_warning_condition(rating):
+    """Only a known positive rating strictly below 4.0 is a low rating."""
+    return and_(rating.is_not(None), rating > 0, rating < 4)
+
+
+def _listing_no_strike_condition(raw):
+    """Match the table's monitor_has_strikethrough=False, not unknown data."""
+    return and_(
+        func.jsonb_typeof(func.jsonb_extract_path(raw, "hasStrikethrough")) == "boolean",
+        func.jsonb_extract_path_text(raw, "hasStrikethrough") == "false",
+    )
+
+
+def _listing_buybox_exception_condition(buybox_status):
+    """Known cart anomalies; out-of-stock alone is not a Buy Box anomaly."""
+    return func.upper(func.trim(func.coalesce(buybox_status, ""))).in_(
+        [
+            "LOST",
+            "NOT_OWNED",
+            "SECONDARY",
+            "OTHER",
+            "未拥有",
+            "NOT_FOUND",
+            "CART_NOT_FOUND",
+            "UNAVAILABLE",
+        ]
+    )
+
+
+def _listing_exception_condition(no_strike, cart_exception, hijacked, wfs_available):
+    """Confirmed commercial anomalies for in-stock Listings only."""
+    return and_(
+        func.coalesce(wfs_available, 0) > 0,
+        or_(
+            func.coalesce(no_strike, False),
+            func.coalesce(cart_exception, False),
+            hijacked.is_(True),
+        ),
+    )
+
+
+def _listing_lifecycle_display(value):
+    return func.coalesce(value, "待判定")
+
+
+def _listing_grade_display(value):
+    return case((value == "", "待评级"), else_=func.coalesce(value, "未分级"))
 
 
 def _platform_filter_values(value: str | None) -> list[str]:
@@ -199,6 +286,10 @@ class DailySalesRepository:
         batch_values: str,
         page: int,
         page_size: int,
+        summary_only: bool = False,
+        sort_field: str | None = None,
+        sort_direction: str = "asc",
+        sort_currency: str = "USD",
     ) -> tuple[Sequence[DailySalesItemDayMart], int, datetime | None]:
         statement = self._filtered_statement(
             account_refs=account_refs,
@@ -211,14 +302,15 @@ class DailySalesRepository:
             keyword=keyword,
             batch_values=batch_values,
         )
-        total = self.session.scalar(
-            select(func.count()).select_from(statement.order_by(None).subquery())
-        )
-        latest_calculated_at = self.session.scalar(
-            statement.with_only_columns(func.max(DailySalesItemDayMart.calculated_at)).order_by(
-                None
-            )
-        )
+        total, latest_calculated_at = self.session.execute(
+            statement.with_only_columns(
+                func.count(),
+                func.max(DailySalesItemDayMart.calculated_at),
+                maintain_column_froms=True,
+            ).order_by(None)
+        ).one()
+        if summary_only:
+            return [], int(total or 0), latest_calculated_at
         is_single_day = start_date is not None and end_date is not None and start_date == end_date
         order_columns = (
             (
@@ -240,6 +332,25 @@ class DailySalesRepository:
             )
         )
 
+        if sort_field:
+            inventory = (
+                WalmartListingInventoryDailyFact
+                if sort_field == "wfs_inventory" and self._inventory_snapshot_table_ready()
+                else None
+            )
+            order_columns = (
+                sql_order(
+                    DailySalesItemDayMart,
+                    sort_field,
+                    sort_direction,
+                    sort_currency,
+                    daily=True,
+                    inventory=inventory,
+                ),
+                *order_columns,
+            )
+        # Stable unique tie-breaker, including when all selected values are NULL.
+        order_columns = (*order_columns, DailySalesItemDayMart.id.asc())
         rows = self.session.scalars(
             statement.order_by(*order_columns).offset((page - 1) * page_size).limit(page_size)
         ).all()
@@ -729,6 +840,9 @@ class OrderProfitRepository:
         keyword: str,
         page: int,
         page_size: int,
+        sort_field: str | None = None,
+        sort_direction: str = "asc",
+        sort_currency: str = "USD",
     ) -> tuple[Sequence[OrderProfitSkuDayMart], int, datetime | None]:
         statement = self._filtered_statement(
             account_refs=account_refs,
@@ -746,15 +860,22 @@ class OrderProfitRepository:
                 None
             )
         )
-        rows = self.session.scalars(
-            statement.order_by(
-                func.coalesce(OrderProfitSkuDayMart.sales_qty, 0).desc(),
-                func.coalesce(OrderProfitSkuDayMart.sales_amount, 0).desc(),
-                OrderProfitSkuDayMart.business_date_la.desc(),
-                OrderProfitSkuDayMart.local_sku.asc(),
+        order_columns = (
+            func.coalesce(OrderProfitSkuDayMart.sales_qty, 0).desc(),
+            func.coalesce(OrderProfitSkuDayMart.sales_amount, 0).desc(),
+            OrderProfitSkuDayMart.business_date_la.desc(),
+            OrderProfitSkuDayMart.local_sku.asc(),
+            OrderProfitSkuDayMart.id.asc(),
+        )
+        if sort_field:
+            order_columns = (
+                sql_order(
+                    OrderProfitSkuDayMart, sort_field, sort_direction, sort_currency, daily=False
+                ),
+                *order_columns,
             )
-            .offset((page - 1) * page_size)
-            .limit(page_size)
+        rows = self.session.scalars(
+            statement.order_by(*order_columns).offset((page - 1) * page_size).limit(page_size)
         ).all()
         return rows, int(total or 0), latest_calculated_at
 
@@ -868,7 +989,13 @@ class ListingManagementRepository:
         status: str | None = "",
         tag: str | None = "",
         archive_status: str | None = "",
+        product_tag: str = "",
+        custom_tag: str = "",
+        lifecycle: str = "",
+        grade: str = "",
+        exact_filters: str = "",
         summary_filter: str = "total",
+        sort_by: str = "",
         search_field: str,
         keyword: str,
         batch_values: str = "",
@@ -883,32 +1010,40 @@ class ListingManagementRepository:
             status=status,
             tag=tag,
             archive_status=archive_status,
+            product_tag=product_tag,
+            custom_tag=custom_tag,
+            lifecycle=lifecycle,
+            grade=grade,
+            exact_filters=exact_filters,
             summary_filter=summary_filter,
             search_field=search_field,
             keyword=keyword,
             batch_values=batch_values,
         )
 
+        # Count and latest timestamp share the same filtered row set; evaluate
+        # them in one aggregate query instead of two independent scans.
         base = statement.order_by(None).subquery()
-        total = self.session.scalar(select(func.count()).select_from(base))
-        latest_calculated_at = self.session.scalar(select(func.max(base.c.calculated_at)))
+        total, latest_calculated_at = self.session.execute(
+            select(func.count(), func.max(base.c.calculated_at)).select_from(base)
+        ).one()
 
         rows = self.session.execute(
             statement.order_by(
-                func.coalesce(ListingManagementCurrentMart.wfs_available_quantity, 0).desc(),
-                ListingManagementCurrentMart.store_name.asc(),
-                ListingManagementCurrentMart.local_sku.asc(),
-                ListingManagementCurrentMart.item_id.asc(),
+                *listing_order_columns(
+                    statement.selected_columns,
+                    sort_by,
+                    _listing_exception_condition,
+                    _listing_buybox_exception_condition,
+                    _listing_no_strike_condition,
+                )
             )
             .offset((page - 1) * page_size)
             .limit(page_size)
         ).all()
 
-        return (
-            [_listing_projection(row) for row in rows],
-            int(total or 0),
-            latest_calculated_at,
-        )
+        projected = [_listing_projection(row) for row in rows]
+        return projected, int(total or 0), latest_calculated_at
 
     def export_listings(
         self,
@@ -920,7 +1055,13 @@ class ListingManagementRepository:
         status: str | None = "",
         tag: str | None = "",
         archive_status: str | None = "",
+        product_tag: str = "",
+        custom_tag: str = "",
+        lifecycle: str = "",
+        grade: str = "",
+        exact_filters: str = "",
         summary_filter: str = "total",
+        sort_by: str = "",
         search_field: str,
         keyword: str,
         batch_values: str = "",
@@ -934,6 +1075,11 @@ class ListingManagementRepository:
             status=status,
             tag=tag,
             archive_status=archive_status,
+            product_tag=product_tag,
+            custom_tag=custom_tag,
+            lifecycle=lifecycle,
+            grade=grade,
+            exact_filters=exact_filters,
             summary_filter=summary_filter,
             search_field=search_field,
             keyword=keyword,
@@ -942,10 +1088,13 @@ class ListingManagementRepository:
 
         rows = self.session.execute(
             statement.order_by(
-                func.coalesce(ListingManagementCurrentMart.wfs_available_quantity, 0).desc(),
-                ListingManagementCurrentMart.store_name.asc(),
-                ListingManagementCurrentMart.local_sku.asc(),
-                ListingManagementCurrentMart.item_id.asc(),
+                *listing_order_columns(
+                    statement.selected_columns,
+                    sort_by,
+                    _listing_exception_condition,
+                    _listing_buybox_exception_condition,
+                    _listing_no_strike_condition,
+                )
             ).limit(max_rows)
         ).all()
 
@@ -961,10 +1110,15 @@ class ListingManagementRepository:
         status: str | None,
         tag: str | None,
         archive_status: str | None = "",
+        product_tag: str = "",
+        custom_tag: str = "",
+        lifecycle: str = "",
+        grade: str = "",
+        exact_filters: str = "",
         search_field: str,
         keyword: str,
         batch_values: str,
-    ) -> tuple[int, int, int, int, int, int]:
+    ) -> tuple[int, int, int, int, int, int, int]:
         statement = self._filtered_listing_statement(
             account_refs=account_refs,
             store_id=store_id,
@@ -973,6 +1127,11 @@ class ListingManagementRepository:
             status=status,
             tag=tag,
             archive_status=archive_status,
+            product_tag=product_tag,
+            custom_tag=custom_tag,
+            lifecycle=lifecycle,
+            grade=grade,
+            exact_filters=exact_filters,
             summary_filter="total",
             search_field=search_field,
             keyword=keyword,
@@ -981,20 +1140,19 @@ class ListingManagementRepository:
         base = statement.order_by(None).subquery()
 
         online_condition = func.coalesce(base.c.wfs_available_quantity, 0) > 0
-        buybox_exception_condition = base.c.effective_buybox_status.in_(
-            ["未拥有", "LOST", "NOT_OWNED", "secondary", "other"]
+        buybox_exception_condition = _listing_buybox_exception_condition(
+            base.c.effective_buybox_status
         )
-        rating_warning_condition = and_(
-            base.c.effective_average_rating.is_not(None),
-            base.c.effective_average_rating > 0,
-            base.c.effective_average_rating < 4,
+        rating_warning_condition = _listing_rating_warning_condition(
+            base.c.effective_average_rating
         )
         resold_warning_condition = base.c.effective_is_hijacked.is_(True)
-        strike_price_exception_condition = and_(
-            base.c.effective_sale_price_amount.is_not(None),
-            base.c.effective_sale_price_amount > 0,
-            base.c.effective_strike_price_amount.is_not(None),
-            base.c.effective_strike_price_amount <= base.c.effective_sale_price_amount,
+        strike_price_exception_condition = _listing_no_strike_condition(base.c.monitor_raw_parsed)
+        listing_exception_condition = _listing_exception_condition(
+            strike_price_exception_condition,
+            buybox_exception_condition,
+            base.c.effective_is_hijacked,
+            base.c.wfs_available_quantity,
         )
 
         row = self.session.execute(
@@ -1005,6 +1163,7 @@ class ListingManagementRepository:
                 func.coalesce(func.sum(case((rating_warning_condition, 1), else_=0)), 0),
                 func.coalesce(func.sum(case((resold_warning_condition, 1), else_=0)), 0),
                 func.coalesce(func.sum(case((strike_price_exception_condition, 1), else_=0)), 0),
+                func.coalesce(func.sum(case((listing_exception_condition, 1), else_=0)), 0),
             ).select_from(base)
         ).one()
 
@@ -1015,7 +1174,68 @@ class ListingManagementRepository:
             int(row[3] or 0),
             int(row[4] or 0),
             int(row[5] or 0),
+            int(row[6] or 0),
         )
+
+    def listing_complete_facet_batch(
+        self,
+        *,
+        fields: list[str],
+        exact_filters: str = "",
+        **filters: Any,
+    ) -> dict[str, Any]:
+        selected = parse_exact_filters(exact_filters)
+        # Filters outside this request are common to every branch. Apply them
+        # once before the shared CTE instead of repeating them 18 times.
+        requested = set(fields)
+        common = {field: values for field, values in selected.items() if field not in requested}
+        varying = {field: values for field, values in selected.items() if field in requested}
+        statement = self._filtered_listing_statement(
+            **filters,
+            exact_filters=json.dumps(common, ensure_ascii=False),
+        )
+        query = complete_facet_batch_statement(
+            statement,
+            fields,
+            varying,
+            _listing_exception_condition,
+            _listing_buybox_exception_condition,
+            _listing_no_strike_condition,
+        )
+        rows = self.session.execute(query).all()
+        result = complete_facet_batch_items(fields, rows)
+        return result
+
+    def listing_exact_facet_options(
+        self,
+        *,
+        field: str,
+        offset: int,
+        limit: int,
+        exact_filters: str = "",
+        **filters: Any,
+    ) -> dict[str, Any]:
+        # Self-excluding faceting: selected values in other dimensions remain active.
+        selected = parse_exact_filters(exact_filters)
+        selected.pop(field, None)
+        statement = self._filtered_listing_statement(
+            **filters, exact_filters=json.dumps(selected, ensure_ascii=False)
+        )
+        base = statement.order_by(None).subquery()
+        facet = listing_facet(
+            base.c,
+            field,
+            _listing_exception_condition,
+            _listing_buybox_exception_condition,
+            _listing_no_strike_condition,
+        )
+        rows = self.session.execute(
+            facet_option_statement(base, facet, field).offset(offset).limit(limit + 1)
+        ).all()
+        return {
+            "options": [facet_option(field, value, count) for value, count in rows[:limit]],
+            "has_more": len(rows) > limit,
+        }
 
     def listing_filter_options(
         self,
@@ -1064,6 +1284,30 @@ class ListingManagementRepository:
             .order_by(product_type_value)
         ).all()
 
+        lifecycle_value = _listing_lifecycle_display(base.c.effective_lifecycle_status)
+        grade_value = _listing_grade_display(base.c.product_grade)
+        lifecycle_rows = self.session.execute(
+            select(lifecycle_value, func.count())
+            .group_by(lifecycle_value)
+            .order_by(lifecycle_value)
+        ).all()
+        grade_rows = self.session.execute(
+            select(grade_value, func.count()).group_by(grade_value).order_by(grade_value)
+        ).all()
+        product_tag_counter: dict[str, int] = {}
+        for tags in self.session.scalars(select(base.c.product_tags_json)):
+            if not isinstance(tags, list):
+                continue
+            names = {
+                tag["label"]
+                for tag in tags
+                if isinstance(tag, dict)
+                and isinstance(tag.get("label"), str)
+                and tag["label"].strip()
+            }
+            for name in names:
+                product_tag_counter[name] = product_tag_counter.get(name, 0) + 1
+
         tag_counter: dict[str, int] = {}
         tag_source_rows = self.session.scalars(
             select(base.c.tags_json).where(base.c.tags_json.is_not(None))
@@ -1096,6 +1340,19 @@ class ListingManagementRepository:
             "product_types": [
                 (str(value), str(value), int(count or 0))
                 for value, count in product_type_rows
+                if value is not None and str(value).strip()
+            ],
+            "product_tags": [
+                (name, name, count) for name, count in sorted(product_tag_counter.items())
+            ],
+            "lifecycles": [
+                (str(value), str(value), int(count or 0))
+                for value, count in lifecycle_rows
+                if value is not None and str(value).strip()
+            ],
+            "grades": [
+                (str(value), str(value), int(count or 0))
+                for value, count in grade_rows
                 if value is not None and str(value).strip()
             ],
             "tags": [
@@ -1136,19 +1393,38 @@ class ListingManagementRepository:
         status: str | None,
         tag: str | None,
         archive_status: str | None = "",
+        product_tag: str = "",
+        custom_tag: str = "",
+        lifecycle: str = "",
+        grade: str = "",
+        exact_filters: str = "",
         summary_filter: str,
         search_field: str,
         keyword: str,
         batch_values: str,
     ):
         owner_lookup = self._owner_lookup()
+        # The current monitor row only contains a successfully published
+        # observation. Read its ORIGINAL parsed fields from immutable RAW.
+        monitor_raw_parsed = RawWalmartMonitorEvent.payload_json["final_observation"][
+            "parsed_result"
+        ]
+        raw_strike_flag = func.jsonb_extract_path_text(monitor_raw_parsed, "hasStrikethrough")
+        raw_hijack = func.coalesce(
+            func.jsonb_extract_path_text(monitor_raw_parsed, "isHijacked"),
+            func.jsonb_extract_path_text(monitor_raw_parsed, "is_hijacked"),
+            func.jsonb_extract_path_text(monitor_raw_parsed, "otherSellersPresent"),
+        )
         effective_title = func.coalesce(
             WalmartMonitorListingCurrent.title,
             ListingManagementCurrentMart.title,
         )
-        effective_strike_price = func.coalesce(
-            WalmartMonitorListingCurrent.strike_price_amount,
-            ListingManagementCurrentMart.strike_price_amount,
+        effective_strike_price = case(
+            (raw_strike_flag == "false", None),
+            else_=func.coalesce(
+                WalmartMonitorListingCurrent.strike_price_amount,
+                ListingManagementCurrentMart.strike_price_amount,
+            ),
         )
         effective_strike_currency = func.coalesce(
             WalmartMonitorListingCurrent.strike_price_currency_code,
@@ -1174,9 +1450,13 @@ class ListingManagementRepository:
             WalmartMonitorListingCurrent.walmart_seller,
             ListingManagementCurrentMart.walmart_seller,
         )
-        effective_hijacked = func.coalesce(
-            WalmartMonitorListingCurrent.is_hijacked,
-            ListingManagementCurrentMart.is_hijacked,
+        effective_hijacked = case(
+            (raw_hijack == "true", True),
+            (raw_hijack == "false", False),
+            else_=func.coalesce(
+                WalmartMonitorListingCurrent.is_hijacked,
+                ListingManagementCurrentMart.is_hijacked,
+            ),
         )
         effective_rating = func.coalesce(
             WalmartMonitorListingCurrent.average_rating,
@@ -1190,6 +1470,67 @@ class ListingManagementRepository:
             WalmartMonitorListingCurrent.brand,
             ListingManagementCurrentMart.brand,
         )
+        # The locked table has priority when migration 0072 is installed.
+        # Until then, the 5173 QA connection can continue showing a read-only
+        # historical preview without attempting writes against production data.
+        locked_table_name = self.session.execute(
+            text("SELECT to_regclass('public.listing_wfs_first_stock_la_locked')::text")
+        ).scalar()
+        if isinstance(locked_table_name, str) and locked_table_name:
+            first_wfs_available_date_la = (
+                select(LISTING_WFS_LA_LOCKED.c.first_wfs_available_date_la)
+                .where(
+                    LISTING_WFS_LA_LOCKED.c.source_account_ref
+                    == ListingManagementCurrentMart.source_account_ref,
+                    LISTING_WFS_LA_LOCKED.c.store_id == ListingManagementCurrentMart.store_id,
+                    LISTING_WFS_LA_LOCKED.c.item_id == ListingManagementCurrentMart.item_id,
+                )
+                .correlate(ListingManagementCurrentMart)
+                .scalar_subquery()
+            )
+        else:
+            first_wfs_available_date_la = (
+                select(func.min(WalmartListingInventoryDailyFact.snapshot_date_la))
+                .where(
+                    WalmartListingInventoryDailyFact.source_account_ref
+                    == ListingManagementCurrentMart.source_account_ref,
+                    WalmartListingInventoryDailyFact.store_id
+                    == ListingManagementCurrentMart.store_id,
+                    WalmartListingInventoryDailyFact.item_id
+                    == ListingManagementCurrentMart.item_id,
+                    WalmartListingInventoryDailyFact.wfs_available_quantity >= 1,
+                )
+                .correlate(ListingManagementCurrentMart)
+                .scalar_subquery()
+            )
+        # Manual stage is authoritative after a full refresh, but do not require a
+        # migration on environments still using the old read-only database.
+        manual_ready = self.session.scalar(
+            text("SELECT to_regclass('public.biz_listing_lifecycle_manual_states')")
+        )
+        if manual_ready:
+            manual = table(
+                "biz_listing_lifecycle_manual_states",
+                sql_column("source_account_ref", String()),
+                sql_column("store_id", String()),
+                sql_column("item_id", String()),
+                sql_column("stage", String()),
+            )
+            manual_stage = (
+                select(manual.c.stage)
+                .where(
+                    manual.c.source_account_ref == ListingManagementCurrentMart.source_account_ref,
+                    manual.c.store_id == ListingManagementCurrentMart.store_id,
+                    manual.c.item_id == ListingManagementCurrentMart.item_id,
+                )
+                .correlate(ListingManagementCurrentMart)
+                .scalar_subquery()
+            )
+            effective_lifecycle = func.coalesce(
+                manual_stage, ListingManagementCurrentMart.lifecycle_status
+            )
+        else:
+            effective_lifecycle = ListingManagementCurrentMart.lifecycle_status
         statement = (
             select(
                 ListingManagementCurrentMart,
@@ -1212,6 +1553,11 @@ class ListingManagementRepository:
                 effective_rating.label("effective_average_rating"),
                 effective_review_count.label("effective_review_count"),
                 effective_brand.label("effective_brand"),
+                first_wfs_available_date_la.label("first_wfs_available_date_la"),
+                monitor_raw_parsed.label("monitor_raw_parsed"),
+                WalmartMonitorListingCurrent.observed_at.label("monitor_checked_at"),
+                WalmartMonitorListingCurrent.monitor_source.label("monitor_source"),
+                effective_lifecycle.label("effective_lifecycle_status"),
             )
             .outerjoin(
                 WalmartListingDimension,
@@ -1248,6 +1594,10 @@ class ListingManagementRepository:
                     WalmartMonitorListingCurrent.store_id == ListingManagementCurrentMart.store_id,
                     WalmartMonitorListingCurrent.item_id == ListingManagementCurrentMart.item_id,
                 ),
+            )
+            .outerjoin(
+                RawWalmartMonitorEvent,
+                RawWalmartMonitorEvent.id == WalmartMonitorListingCurrent.source_raw_event_id,
             )
             .where(ListingManagementCurrentMart.source_account_ref.in_(account_refs))
         )
@@ -1356,9 +1706,59 @@ class ListingManagementRepository:
 
             statement = statement.where(or_(*legacy_tag_conditions, db_tag_exists))
 
+        # Separate label dimensions. Never use the legacy mixed tag predicate here.
+        product_tag_values = json.loads(product_tag) if product_tag else []
+        if product_tag_values:
+            statement = statement.where(
+                or_(
+                    *(
+                        ListingManagementCurrentMart.product_tags_json.contains([{"label": value}])
+                        for value in product_tag_values
+                    )
+                )
+            )
+        custom_tag_values = json.loads(custom_tag) if custom_tag else []
+        if custom_tag_values:
+            statement = statement.where(
+                exists(
+                    select(1)
+                    .select_from(ProductCustomTagAssignment)
+                    .join(
+                        ProductCustomTag, ProductCustomTag.id == ProductCustomTagAssignment.tag_id
+                    )
+                    .where(
+                        ProductCustomTagAssignment.source_account_ref
+                        == ListingManagementCurrentMart.source_account_ref,
+                        ProductCustomTagAssignment.item_id == ListingManagementCurrentMart.item_id,
+                        ProductCustomTag.deleted_at.is_(None),
+                        ProductCustomTag.is_active.is_(True),
+                        ProductCustomTag.name.in_(custom_tag_values),
+                    )
+                )
+            )
+        lifecycle_values = _csv_values(lifecycle)
+        if lifecycle_values:
+            statement = statement.where(
+                _listing_lifecycle_display(effective_lifecycle).in_(lifecycle_values)
+            )
+        grade_values = _csv_values(grade)
+        if grade_values:
+            statement = statement.where(
+                _listing_grade_display(ListingManagementCurrentMart.product_grade).in_(grade_values)
+            )
+
         if summary_filter == "online":
             statement = statement.where(
                 func.coalesce(ListingManagementCurrentMart.wfs_available_quantity, 0) > 0
+            )
+        elif summary_filter == "listing_exception":
+            statement = statement.where(
+                _listing_exception_condition(
+                    _listing_no_strike_condition(monitor_raw_parsed),
+                    _listing_buybox_exception_condition(effective_buybox),
+                    effective_hijacked,
+                    ListingManagementCurrentMart.wfs_available_quantity,
+                )
             )
         elif summary_filter == "offline":
             statement = statement.where(
@@ -1367,24 +1767,13 @@ class ListingManagementRepository:
                 )
             )
         elif summary_filter == "buybox":
-            statement = statement.where(
-                effective_buybox.in_(["未拥有", "LOST", "NOT_OWNED", "secondary", "other"])
-            )
+            statement = statement.where(_listing_buybox_exception_condition(effective_buybox))
         elif summary_filter == "rating":
-            statement = statement.where(
-                effective_rating.is_not(None),
-                effective_rating > 0,
-                effective_rating < 4,
-            )
+            statement = statement.where(_listing_rating_warning_condition(effective_rating))
         elif summary_filter == "resold":
             statement = statement.where(effective_hijacked.is_(True))
         elif summary_filter == "strike":
-            statement = statement.where(
-                effective_sale_price.is_not(None),
-                effective_sale_price > 0,
-                effective_strike_price.is_not(None),
-                effective_strike_price <= effective_sale_price,
-            )
+            statement = statement.where(_listing_no_strike_condition(monitor_raw_parsed))
         elif summary_filter == "disabled":
             statement = statement.where(ListingManagementCurrentMart.disabled_reason.is_not(None))
 
@@ -1413,6 +1802,16 @@ class ListingManagementRepository:
                     ListingManagementCurrentMart.item_id.in_(batch_filter_values),
                 )
             )
+
+        for field, values in parse_exact_filters(exact_filters).items():
+            facet = listing_facet(
+                statement.selected_columns,
+                field,
+                _listing_exception_condition,
+                _listing_buybox_exception_condition,
+                _listing_no_strike_condition,
+            )
+            statement = statement.where(facet_predicate(facet, values))
 
         return statement
 

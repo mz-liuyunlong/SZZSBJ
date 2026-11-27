@@ -1,0 +1,63 @@
+/* PR337_EVALUATION_DATA_V1 — scoped to the measurement card only. */
+.np-ed { height:360px; width:100%; box-sizing:border-box; border:1px solid #d5e2f3; border-radius:12px; background:#fff; display:flex; flex-direction:column; overflow:hidden; color:#182840; font-family:inherit; }
+.np-ed * { box-sizing:border-box; }
+.np-ed-header {height:48px;flex:0 0 48px; display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 16px;border-bottom:1px solid #e3ebf6;}
+.np-ed-title {display:flex; align-items:center;gap:9px;font-size:16px;white-space:nowrap;}
+.np-ed-symbol {display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;background:#eaf2ff;color:#0758e9;}
+.np-ed-symbol svg {width:17px;height:17px;}
+.np-ed button {appearance:none; border:0; font-family:inherit;cursor:pointer;touch-action:manipulation;transition:background-color .12s ease,color .12s ease;}
+.np-ed button:focus-visible {outline:2px solid #77a5ff;outline-offset:2px;}
+.np-ed-mode {display:flex;align-items:center;gap:2px;padding:3px;background:#f1f4f9;border-radius:9px;}
+.np-ed-mode button {padding:7px 12px;background:transparent;border-radius:7px;color:#627791;font-size:13px;font-weight:600;white-space:nowrap;}
+.np-ed-mode button.active {background:#0758e9;color:#fff;box-shadow:0 1px 2px rgba(6,61,160,.12);}
+.np-ed-main {flex:1;min-height:0;padding:0 14px 12px;display:flex;flex-direction:column;}
+.np-ed-context {height:42px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #edf1f7;flex-shrink:0;color:#536986;font-size:13px;}
+.np-ed-context small {color:#9baabc;font-size:12px;}
+.np-ed-context .np-ed-count {margin-left:auto;font-size:12px;color:#98a7bc;}
+.np-ed-dot {width:7px;height:7px;border-radius:99px;background:#0758e9;}
+.np-ed-highlight {border-left:3px solid #0758e9;margin-top:11px;padding:12px 14px;border-radius:10px;background:linear-gradient(95deg,#ecf3ff,#f5f8fd);min-height:76px;flex:0 0 76px;}
+.np-ed-three {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:12px;}
+.np-ed-metric {display:flex;min-width:0;flex-direction:column;gap:6px;justify-content:center;}
+.np-ed-metric .np-ed-label {font-size:12px;color:#879ab3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.np-ed-metric strong {font-weight:650;font-size:16px;color:#13223b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums;}
+.np-ed-highlight .np-ed-metric strong {font-size:21px;color:#0758e9;}
+.np-ed-section-heading {height:39px;flex:0 0 39px;display:flex;align-items:center;gap:7px;font-size:13px;}
+.np-ed-section-heading .np-ed-accent {height:15px;width:2px;background:#0758e9;border-radius:2px;}
+.np-ed-section-heading small {font-size:12px;font-weight:400;margin-left:auto;color:#98a7bc;}
+.np-ed-details {background:#f4f7fb;border-radius:10px;padding:12px 15px;min-height:144px;flex:1;row-gap:7px;}
+.np-ed-details .np-ed-metric strong {font-size:15px;}
+.np-ed-details .np-ed-metric .np-ed-label {font-size:12px;}
+.np-ed-ad-toolbar {height:42px;flex:0 0 42px;margin:0 -14px;padding:0 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid #e4ebf5;}
+.np-ed-ad-tabs {display:flex;align-items:center;gap:5px;min-width:0;}
+.np-ed-ad-tabs button {padding:6px 10px;background:transparent;color:#667c9a;border-radius:6px;font-size:12px;white-space:nowrap;}
+.np-ed-ad-tabs button.active {color:#0758e9;background:#eaf2ff;box-shadow:inset 0 0 0 1px #9cbfff;font-weight:650;}
+.np-ed-compare-button {background:#fff;border:1px solid #c6d7ee!important;color:#415b80;font-size:12px;white-space:nowrap;flex-shrink:0;border-radius:7px;padding:6px 10px;}
+.np-ed-compare-button.on {color:#0758e9;background:#f0f6ff;border-color:#9dbaf9!important;}
+.np-ed-ad-content {flex:1;min-height:0;display:flex;flex-direction:column;}
+.np-ed-ad-content .np-ed-highlight {margin-top:11px;}
+.np-ed-comparison {display:flex;flex-direction:column;min-height:0;flex:1;margin:0 -14px -12px;}
+.np-ed-compare-caption {padding:0 14px;flex-shrink:0;}
+.np-ed-compare-caption .np-ed-section-heading {height:33px;flex-basis:33px;}
+.np-ed-four-col {display:grid;grid-template-columns:1.12fr 1fr 1fr 1fr;align-items:center;column-gap:8px;}
+.np-ed-tablehead {height:35px;flex:0 0 35px;background:#eaf1fd;padding:0 15px;color:#436085;font-size:13px;}
+.np-ed-tablehead > :not(:first-child) {text-align:right;}
+.np-ed-tablehead b:nth-child(2){color:#0758e9;}
+.np-ed-tablebody {min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#c0cee2 transparent;}
+.np-ed-tableline {height:37px;padding:0 15px;font-size:13px;border-bottom:1px solid #edf1f7;}
+.np-ed-tableline:nth-child(even) {background:#f6f8fc;}
+.np-ed-tableline > :first-child {color:#6e829d;}
+.np-ed-tableline > :not(:first-child) {text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.np-ed-tableline strong {color:#0758e9;font-weight:650;}
+@media (max-width:640px){
+  .np-ed {height:360px;}
+  .np-ed-header {padding:0 10px;}
+  .np-ed-main {padding-left:10px;padding-right:10px;}
+  .np-ed-ad-toolbar {margin-left:-10px;margin-right:-10px;padding-left:10px;padding-right:10px;}
+  .np-ed-ad-tabs {gap:1px;}
+  .np-ed-ad-tabs button {padding:6px 7px;font-size:11px;}
+  .np-ed-compare-button {padding:6px;font-size:11px;}
+  .np-ed-highlight .np-ed-metric strong {font-size:18px;}
+  .np-ed-details {padding:10px;column-gap:5px;}
+  .np-ed-metric strong {font-size:13px!important;}
+  .np-ed-metric .np-ed-label {font-size:11px;}
+}

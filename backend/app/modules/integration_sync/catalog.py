@@ -1,12 +1,21 @@
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Literal, Protocol
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.integration_sync.data_pages_catalog import (
     DATA_PAGES_SYNC_INTERFACE_SPECS,
 )
+from app.modules.integration_sync.fin_shipping_catalog import FIN_SHIPPING_SYNC_SPECS
+from app.modules.integration_sync.finance_approval_catalog import (
+    FINANCE_APPROVAL_PROVIDER,
+    FINANCE_APPROVAL_SOURCE_REF,
+    FINANCE_APPROVAL_SYNC_SPEC,
+)
+from app.modules.integration_sync.fx_catalog import FX_RATE_SCHEDULE_CRON, FX_RATE_SYNC_SPEC
 from app.modules.integration_sync.models import (
     IntegrationInterface,
     IntegrationInterfaceDependency,
@@ -20,7 +29,14 @@ from app.modules.integration_sync.pmc_purchase_catalog import (
     PMC_PURCHASE_SYNC_INTERFACE_SPECS,
 )
 from app.modules.integration_sync.repository import IntegrationSyncRepository
+from app.modules.integration_sync.walmart_bill_catalog import (
+    WALMART_BILL_SCHEDULE_CRON,
+    WALMART_BILL_SYNC_SPEC,
+)
 from app.modules.integration_sync.wfs_catalog import WFS_SETTLEMENT_SYNC_SPEC
+from app.modules.integration_sync.wfs_cost_valuation_catalog import (
+    WFS_COST_VALUATION_SYNC_SPEC,
+)
 
 BootstrapStatus = Literal["created", "updated", "unchanged"]
 
@@ -458,6 +474,322 @@ class IntegrationCatalogService:
         except Exception:
             self.session.rollback()
             raise
+
+    def bootstrap_finance_approval_governance(self) -> tuple[BootstrapStatus, ...]:
+        """登记财务审批单同步：接口和配置打开，定时保持关闭，以后在任务中心开。"""
+
+        spec = FINANCE_APPROVAL_SYNC_SPEC
+        try:
+            interface = self.repository.get_interface_by_key(
+                FINANCE_APPROVAL_PROVIDER, spec.interface_key
+            )
+            values = {
+                "display_name": spec.display_name,
+                "method": spec.method,
+                "endpoint_path": spec.endpoint_path,
+                "request_kind": spec.request_kind,
+                "handler_key": spec.handler_key,
+                "contract_version": "v1",
+                "outbound_enabled": True,
+            }
+            interface_status: BootstrapStatus
+            if interface is None:
+                interface = self.repository.add_catalog_record(
+                    IntegrationInterface(
+                        id=uuid4(),
+                        provider=FINANCE_APPROVAL_PROVIDER,
+                        interface_key=spec.interface_key,
+                        **values,
+                    )
+                )
+                interface_status = "created"
+            else:
+                interface_status = _apply_approved_values(interface, **values)
+
+            policy_values = {
+                "provider": FINANCE_APPROVAL_PROVIDER,
+                "interface_key": spec.interface_key,
+                "hot_retention_days": 365,
+                "archive_after_days": None,
+                "delete_after_days": None,
+                "archive_required": False,
+                "legal_hold": False,
+                "is_active": True,
+            }
+            policy = self.repository.get_retention_policy_by_key(spec.retention_policy_key)
+            policy_status: BootstrapStatus
+            if policy is None:
+                policy = self.repository.add_catalog_record(
+                    RawRetentionPolicy(
+                        id=uuid4(), policy_key=spec.retention_policy_key, **policy_values
+                    )
+                )
+                policy_status = "created"
+            else:
+                policy_status = _apply_approved_values(policy, **policy_values)
+
+            config = self.repository.get_config_by_scope(interface.id, FINANCE_APPROVAL_SOURCE_REF)
+            config_status: BootstrapStatus = "unchanged"
+            # 已有配置不覆盖：定时开关等运行参数归任务中心管。
+            if config is None:
+                self.repository.add_catalog_record(
+                    IntegrationSyncConfig(
+                        id=uuid4(),
+                        interface_id=interface.id,
+                        source_account_ref=FINANCE_APPROVAL_SOURCE_REF,
+                        is_enabled=True,
+                        schedule_enabled=False,
+                        schedule_cron=None,
+                        schedule_timezone="UTC",
+                        page_size=spec.default_page_size,
+                        batch_size=None,
+                        max_pages=spec.default_max_pages,
+                        max_attempts=1,
+                        retention_policy_id=policy.id,
+                        next_run_at=None,
+                        last_scheduled_at=None,
+                    )
+                )
+                config_status = "created"
+            self.session.commit()
+            return interface_status, policy_status, config_status
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def bootstrap_fx_governance(
+        self,
+        source_account_ref: str,
+    ) -> WfsGovernanceBootstrapResult:
+        """Create the FX catalog/config with outbound and schedule disabled."""
+
+        source_account_ref = validate_data_pages_source_account_ref(source_account_ref)
+        spec = FX_RATE_SYNC_SPEC
+        try:
+            interface, interface_status = self._bootstrap_data_pages_interface(spec)
+            policy, policy_status = self._bootstrap_data_pages_retention_policy(spec)
+            config_status = self._bootstrap_data_pages_sync_config(
+                interface,
+                policy,
+                spec,
+                source_account_ref,
+            )
+            self.session.commit()
+            return WfsGovernanceBootstrapResult(
+                interface_statuses=(interface_status,),
+                retention_policy_statuses=(policy_status,),
+                sync_config_statuses=(config_status,),
+            )
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def bootstrap_wfs_cost_valuation_governance(
+        self,
+        source_account_ref: str,
+    ) -> WfsGovernanceBootstrapResult:
+        """Create the WFS cost valuation catalog/config with outbound and schedule disabled.
+
+        Re-running resets the config to disabled; enabling is a separate, owner-approved step.
+        """
+
+        source_account_ref = validate_data_pages_source_account_ref(source_account_ref)
+        spec = WFS_COST_VALUATION_SYNC_SPEC
+        try:
+            interface, interface_status = self._bootstrap_data_pages_interface(spec)
+            policy, policy_status = self._bootstrap_data_pages_retention_policy(spec)
+            config_status = self._bootstrap_data_pages_sync_config(
+                interface,
+                policy,
+                spec,
+                source_account_ref,
+            )
+            self.session.commit()
+            return WfsGovernanceBootstrapResult(
+                interface_statuses=(interface_status,),
+                retention_policy_statuses=(policy_status,),
+                sync_config_statuses=(config_status,),
+            )
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def enable_fx_sync(self, source_account_ref: str) -> bool:
+        """Turn on the FX sync: manual runs and the weekly schedule.
+
+        Safe to repeat: a cron or next run already set in the task centre is kept.
+        """
+        from app.modules.integration_sync.scheduler import next_cron_instant
+
+        source_account_ref = validate_data_pages_source_account_ref(source_account_ref)
+        interface = self.session.scalars(
+            select(IntegrationInterface).where(
+                IntegrationInterface.provider == "lingxing",
+                IntegrationInterface.interface_key == FX_RATE_SYNC_SPEC.interface_key,
+            )
+        ).one_or_none()
+        if interface is None:
+            return False
+        config = self.session.scalars(
+            select(IntegrationSyncConfig).where(
+                IntegrationSyncConfig.interface_id == interface.id,
+                IntegrationSyncConfig.source_account_ref == source_account_ref,
+            )
+        ).one_or_none()
+        if config is None:
+            return False
+        interface.outbound_enabled = True
+        config.is_enabled = True
+        config.schedule_enabled = True
+        config.schedule_cron = config.schedule_cron or FX_RATE_SCHEDULE_CRON
+        config.schedule_timezone = "UTC"
+        config.next_run_at = config.next_run_at or next_cron_instant(
+            config.schedule_cron, datetime.now(UTC)
+        )
+        self.session.commit()
+        return True
+
+    def bootstrap_walmart_bill_governance(
+        self,
+        source_account_ref: str,
+    ) -> WfsGovernanceBootstrapResult:
+        """Create the Walmart bill catalog/config with outbound and schedule disabled."""
+
+        source_account_ref = validate_data_pages_source_account_ref(source_account_ref)
+        spec = WALMART_BILL_SYNC_SPEC
+        try:
+            interface, interface_status = self._bootstrap_data_pages_interface(spec)
+            policy, policy_status = self._bootstrap_data_pages_retention_policy(spec)
+            config_status = self._bootstrap_data_pages_sync_config(
+                interface,
+                policy,
+                spec,
+                source_account_ref,
+            )
+            self.session.commit()
+            return WfsGovernanceBootstrapResult(
+                interface_statuses=(interface_status,),
+                retention_policy_statuses=(policy_status,),
+                sync_config_statuses=(config_status,),
+            )
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def enable_walmart_bill_sync(self, source_account_ref: str, *, schedule: bool = False) -> bool:
+        """Turn on the Walmart bill sync.
+
+        schedule=False（默认）只开手动：任务中心和回款对账的「手动同步」能用，定时不开；首次手动
+        同步当作受控探测。探测通过后再用 schedule=True 单独打开每周定时。
+        Safe to repeat: a cron or next run already set in the task centre is kept.
+        """
+        from app.modules.integration_sync.scheduler import next_cron_instant
+
+        source_account_ref = validate_data_pages_source_account_ref(source_account_ref)
+        interface = self.session.scalars(
+            select(IntegrationInterface).where(
+                IntegrationInterface.provider == "lingxing",
+                IntegrationInterface.interface_key == WALMART_BILL_SYNC_SPEC.interface_key,
+            )
+        ).one_or_none()
+        if interface is None:
+            return False
+        config = self.session.scalars(
+            select(IntegrationSyncConfig).where(
+                IntegrationSyncConfig.interface_id == interface.id,
+                IntegrationSyncConfig.source_account_ref == source_account_ref,
+            )
+        ).one_or_none()
+        if config is None:
+            return False
+        interface.outbound_enabled = True
+        config.is_enabled = True
+        if not schedule:
+            self.session.commit()
+            return True
+        config.schedule_enabled = True
+        config.schedule_cron = config.schedule_cron or WALMART_BILL_SCHEDULE_CRON
+        config.schedule_timezone = "UTC"
+        config.next_run_at = config.next_run_at or next_cron_instant(
+            config.schedule_cron, datetime.now(UTC)
+        )
+        self.session.commit()
+        return True
+
+    def bootstrap_fin_shipping_governance(
+        self,
+        source_account_ref: str,
+    ) -> WfsGovernanceBootstrapResult:
+        """结算利润 PR-2 三个接口（发货单 / 明细 / 出库单）的登记，全部默认关闭。"""
+
+        source_account_ref = validate_data_pages_source_account_ref(source_account_ref)
+        interface_statuses: list[BootstrapStatus] = []
+        policy_statuses: list[BootstrapStatus] = []
+        config_statuses: list[BootstrapStatus] = []
+        try:
+            for spec in FIN_SHIPPING_SYNC_SPECS:
+                interface, interface_status = self._bootstrap_data_pages_interface(spec)
+                policy, policy_status = self._bootstrap_data_pages_retention_policy(spec)
+                config_status = self._bootstrap_data_pages_sync_config(
+                    interface,
+                    policy,
+                    spec,
+                    source_account_ref,
+                )
+                interface_statuses.append(interface_status)
+                policy_statuses.append(policy_status)
+                config_statuses.append(config_status)
+            self.session.commit()
+            return WfsGovernanceBootstrapResult(
+                interface_statuses=tuple(interface_statuses),
+                retention_policy_statuses=tuple(policy_statuses),
+                sync_config_statuses=tuple(config_statuses),
+            )
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def enable_fin_shipping_sync(self, source_account_ref: str, *, schedule: bool = False) -> bool:
+        """打开结算利润 PR-2 三个接口的同步。
+
+        schedule=False（默认）只开手动：首次手动同步当作受控探测；探测通过后再用 schedule=True
+        打开每周定时（三个接口的 cron 错开：发货单 → 出库单 → 明细）。
+        Safe to repeat: a cron or next run already set in the task centre is kept.
+        """
+        from app.modules.integration_sync.scheduler import next_cron_instant
+
+        source_account_ref = validate_data_pages_source_account_ref(source_account_ref)
+        for spec in FIN_SHIPPING_SYNC_SPECS:
+            interface = self.session.scalars(
+                select(IntegrationInterface).where(
+                    IntegrationInterface.provider == "lingxing",
+                    IntegrationInterface.interface_key == spec.interface_key,
+                )
+            ).one_or_none()
+            if interface is None:
+                self.session.rollback()
+                return False
+            config = self.session.scalars(
+                select(IntegrationSyncConfig).where(
+                    IntegrationSyncConfig.interface_id == interface.id,
+                    IntegrationSyncConfig.source_account_ref == source_account_ref,
+                )
+            ).one_or_none()
+            if config is None:
+                self.session.rollback()
+                return False
+            interface.outbound_enabled = True
+            config.is_enabled = True
+            if not schedule:
+                continue
+            config.schedule_enabled = True
+            config.schedule_cron = config.schedule_cron or spec.schedule_cron
+            config.schedule_timezone = "UTC"
+            config.next_run_at = config.next_run_at or next_cron_instant(
+                config.schedule_cron, datetime.now(UTC)
+            )
+        self.session.commit()
+        return True
 
     def _bootstrap_data_pages_interface(
         self,

@@ -268,37 +268,86 @@ def _event(version: int, **overrides: Any) -> dict[str, Any]:
     return event
 
 
-def test_executor_v2_returns_provider_error_instead_of_failing() -> None:
-    transport = RecordingTransport(400, {"errors": [{"code": "DUPLICATE_ORDER"}]})
-    out = _executor(transport).handle(_event(2, accept="json"))
-    assert out == {
-        "success": True,
-        "status_code": 400,
-        "store_code": STORE,
-        "api_key": "wfs_inbound_shipment_create",
-        "data": None,
-        "provider_error": {"errors": [{"code": "DUPLICATE_ORDER"}]},
-    }
-    # v1 keeps the historical contract: a provider error is an executor failure.
-    out_v1 = _executor(RecordingTransport(400, {"errors": []})).handle(_event(1))
-    assert out_v1 == {"success": False, "status": "WALMART_PROVIDER_ERROR"}
-
-
-def test_executor_requires_approval_and_matching_accept() -> None:
+def test_legacy_executor_refuses_every_write_before_sending() -> None:
+    """v1 / v2 events are read-only even in write mode with write keys approved."""
     transport = RecordingTransport(200, {"ok": True})
-    assert _executor(transport).handle(_event(2, accept="json", approval_ref=None)) == {
-        "success": False,
-        "status": "WALMART_WRITE_APPROVAL_REQUIRED",
-    }
-    assert _executor(transport).handle(_event(2, accept="pdf")) == {
-        "success": False,
-        "status": "WALMART_OPERATION_MISMATCH",
-    }
+    for version, extra in ((1, {}), (2, {"accept": "json"})):
+        for method, key, path in (
+            ("POST", "wfs_inbound_shipment_create", "/v3/fulfillment/inbound-shipments"),
+            ("PUT", "wfs_shipment_quantities", "/v3/fulfillment/shipment-quantities"),
+            ("PATCH", "wfs_shipment_quantities", "/v3/fulfillment/shipment-quantities"),
+            ("DELETE", "wfs_inbound_shipment_cancel", "/v3/fulfillment/inbound-shipments/X"),
+            ("POST", "sem_campaign_create", "/v3/advertising/sem/campaigns"),
+            ("POST", "review_accelerator_items", "/v3/growth/reviews-accelerator/items"),
+        ):
+            out = _executor(transport).handle(
+                _event(version, method=method, api_key=key, path=path, **extra)
+            )
+            assert out == {"success": False, "status": "WALMART_LEGACY_READ_ONLY"}
+    assert transport.requests == []
+    # v1 with a v2-only field is still an invalid event (checked first)
     assert _executor(transport).handle(_event(1, accept="json")) == {
         "success": False,
         "status": "WALMART_EVENT_INVALID",
     }
+
+
+def _read_event(version: int, **overrides: Any) -> dict[str, Any]:
+    extra = {"accept": "json"} if version == 2 else {}
+    return _event(
+        version,
+        method="GET",
+        api_key="wfs_inventory",
+        path="/v3/wfs/inventory",
+        query={"limit": 1},
+        body=None,
+        approval_ref=None,
+        **{**extra, **overrides},
+    )
+
+
+def test_legacy_executor_v2_returns_provider_error_on_reads() -> None:
+    """Restored on a GET (审核 P3-1): v2 hands back Walmart's error body, v1 fails."""
+    transport = RecordingTransport(404, {"errors": [{"code": "NOT_FOUND"}]})
+    out = _executor(transport).handle(_read_event(2))
+    assert out == {
+        "success": True,
+        "status_code": 404,
+        "store_code": STORE,
+        "api_key": "wfs_inventory",
+        "data": None,
+        "provider_error": {"errors": [{"code": "NOT_FOUND"}]},
+    }
+    out_v1 = _executor(RecordingTransport(404, {"errors": []})).handle(_read_event(1))
+    assert out_v1 == {"success": False, "status": "WALMART_PROVIDER_ERROR"}
+
+
+def test_legacy_executor_accept_must_match_the_contract_response_kind() -> None:
+    transport = RecordingTransport(200, {"ok": True})
+    assert _executor(transport).handle(_read_event(2, accept="pdf")) == {
+        "success": False,
+        "status": "WALMART_OPERATION_MISMATCH",
+    }
     assert transport.requests == []
+
+
+def test_legacy_executor_reads_still_work() -> None:
+    transport = RecordingTransport(200, {"elements": {"inventory": []}})
+    for version, extra in ((1, {}), (2, {"accept": "json"})):
+        out = _executor(transport).handle(
+            _event(
+                version,
+                method="GET",
+                api_key="wfs_inventory",
+                path="/v3/wfs/inventory",
+                query={"limit": 1},
+                body=None,
+                approval_ref=None,
+                **extra,
+            )
+        )
+        assert out["success"] is True and out["status_code"] == 200
+    assert [r.method for r in transport.requests] == ["GET", "GET"]
 
 
 def test_runtime_registry_refuses_write_key_in_read_set() -> None:

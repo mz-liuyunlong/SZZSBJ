@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.modules.integration_sync.data_pages_business_rules import (
+    CANCELLED_VERIFIED_SAMPLE_RULE_VERSION,
     CHINA_TZ,
     HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
     DataPagesRealSyncRunner,
@@ -26,6 +27,14 @@ class _ScalarResult:
 
     def first(self) -> None:
         return None
+
+    def one(self) -> dict[str, object]:
+        return {
+            "listing_count": 0,
+            "listing_id": None,
+            "sales_count": 0,
+            "sales_id": None,
+        }
 
 
 class _MappingResult:
@@ -196,14 +205,14 @@ def test_sample_writer_keeps_required_business_fields() -> None:
     assert params["sample_rule_version"] == "candidate-unverified-v5"
 
 
-def test_sample_item_resolution_requires_unique_listing_and_salestat_agreement() -> None:
+def test_sample_item_resolution_requires_unique_listing_and_checks_conflicting_salestat() -> None:
     session = _CaptureSession()
     runner = _runner(session)
 
     unresolved = runner._resolve_sample_items()
 
     assert unresolved == 0
-    assert len(session.calls) == 3
+    assert len(session.calls) == 4
 
     enrich_sql = session.calls[0][0]
     assert "with listing_candidates as" in enrich_sql
@@ -211,14 +220,22 @@ def test_sample_item_resolution_requires_unique_listing_and_salestat_agreement()
     assert "count(distinct l.item_id) as item_count" in enrich_sql
     assert "join fact_walmart_sales_item_daily f" in enrich_sql
     assert "count(distinct f.item_id) as item_count" in enrich_sql
-    assert "l.item_count=1 and f.item_count=1 and l.item_id=f.item_id" in enrich_sql
+    assert "left join sales_candidates f" in enrich_sql
+    assert "l.item_count=1 and (f.id is null or " in enrich_sql
+    assert "f.item_count=1 and l.item_id=f.item_id" in enrich_sql
     assert "set item_id=r.item_id" in enrich_sql
 
-    validate_sql = session.calls[1][0]
-    assert "l.store_id=s.store_id and l.item_id=s.item_id" in validate_sql
-    assert "f.store_id=s.store_id and f.item_id=s.item_id" in validate_sql
-    assert "trim(f.msku)=trim(s.msku)" in validate_sql
-    assert "f.allocation_status='direct'" in validate_sql
+    approval_sql = session.calls[1][0]
+    assert "set is_valid_sample=true" in approval_sql
+    assert "s.order_total_amount=0" in approval_sql
+    assert "dim_walmart_listings" in approval_sql
+    assert "fact_walmart_sales_item_daily" not in approval_sql
+
+    unresolved_sql = session.calls[2][0]
+    assert "l.store_id=s.store_id and l.item_id=s.item_id" in unresolved_sql
+    assert "f.store_id=s.store_id and f.item_id=s.item_id" in unresolved_sql
+    assert "trim(f.msku)=trim(s.msku)" in unresolved_sql
+    assert "f.allocation_status='direct'" in unresolved_sql
 
 
 def test_sample_resolver_enriches_unverified_candidates_without_verifying() -> None:
@@ -230,7 +247,7 @@ def test_sample_resolver_enriches_unverified_candidates_without_verifying() -> N
     assert (
         "sample_rule_version in "
         "(:historical_rule,:verified_rule,'owner-approved-raw-zero-full-discount-v1')"
-    ) in session.calls[2][0]
+    ) in session.calls[3][0]
 
 
 def test_confirmed_sample_replay_is_protected_and_changes_block_mart() -> None:
@@ -623,3 +640,99 @@ def test_raw_sample_is_not_auto_verified_by_environment(monkeypatch: pytest.Monk
         "where fact_walmart_sample_order_items.sample_rule_version "
         "<> 'owner-approved-raw-zero-full-discount-v1'"
     ) in upsert_sql
+
+
+@pytest.mark.parametrize(
+    ("prior_cancelled", "cancel_time", "observed_sku", "should_revoke"),
+    [
+        (False, "1795639001", "SKU-1", True),
+        (True, "1795639001", "SKU-1", True),
+        (False, "1795639001", "DIFFERENT-SKU", False),
+        (False, "unknown", "SKU-1", False),
+        (True, "0", "SKU-1", False),
+    ],
+)
+def test_verified_sample_cancellation_transition(
+    prior_cancelled: bool, cancel_time: str, observed_sku: str, should_revoke: bool
+) -> None:
+    prior = {
+        "business_date_utc_minus_7": date(2026, 9, 1),
+        "source_order_id": "synthetic-order",
+        "platform_order_no": "synthetic-platform",
+        "store_id": "store-a",
+        "platform_code": "10008",
+        "source_order_line_id": "line-1",
+        "item_id": "item-a",
+        "msku": "MSKU-1",
+        "local_sku": "SKU-1",
+        "quantity": Decimal("1"),
+        "unit_price_amount": Decimal("10"),
+        "unit_price_currency_code": "USD",
+        "order_total_amount": Decimal("0"),
+        "order_total_currency_code": "USD",
+        "cancel_time_raw": "1795639001" if prior_cancelled else "0",
+        "is_cancelled": prior_cancelled,
+        "sample_rule_version": (
+            CANCELLED_VERIFIED_SAMPLE_RULE_VERSION
+            if prior_cancelled
+            else "provider-verified-sample-v5"
+        ),
+    }
+
+    class PriorResult:
+        def mappings(self) -> "PriorResult":
+            return self
+
+        def first(self) -> dict[str, object]:
+            return prior
+
+    class VerifiedSession(_CaptureSession):
+        def execute(self, statement: object, params: dict[str, Any] | None = None) -> _ScalarResult:
+            result = super().execute(statement, params)
+            sql = str(statement)
+            if "source_order_line_id=:source_order_line_id" in sql and "for update" in sql:
+                return cast(_ScalarResult, PriorResult())
+            return result
+
+    session = VerifiedSession()
+    runner = _runner(session)
+    runner._hotfix_unique_sample_item_id = lambda *_args: "item-a"  # type: ignore[method-assign]
+    row = {
+        "global_order_no": "synthetic-order",
+        "global_purchase_time": str(int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())),
+        "store_id": "store-a",
+        "status": 9,
+        "amount_currency": "USD",
+        "transaction_info": [{"order_total_amount": "0"}],
+        "platform_info": [{"platform_code": "10008", "cancel_time": cancel_time}],
+        "item_info": [
+            {
+                "order_item_no": "line-1",
+                "platform_order_no": "synthetic-platform",
+                "msku": "MSKU-1",
+                "local_sku": observed_sku,
+                "quantity": "1",
+                "unit_price_amount": "10",
+            }
+        ],
+    }
+    if should_revoke:
+        assert runner._write_sample_orders([row]) == 1
+        sql, params = next(
+            (sql, params) for sql, params in session.calls if "set cancel_time_raw=case" in sql
+        )
+        assert params is not None
+        assert params["cancelled_rule"] == CANCELLED_VERIFIED_SAMPLE_RULE_VERSION
+        assert params["item_id"] == "item-a"
+        assert "is_cancelled=true,is_valid_sample=false" in sql
+        assert "then cancel_time_raw else :cancel_time_raw end" in sql
+        assert not any("insert into fact_walmart_sample_order_items" in s for s, _ in session.calls)
+        assert any(
+            "delete from fact_walmart_sample_order_items" in s
+            and "sample_rule_version<>:cancelled_rule" in s
+            for s, _ in session.calls
+        )
+    else:
+        with pytest.raises(DataPagesMartInvariantError, match="DATA_PAGES_VERIFIED_SAMPLE_CHANGED"):
+            runner._write_sample_orders([row])
+        assert not any("set cancel_time_raw=case" in s for s, _ in session.calls)

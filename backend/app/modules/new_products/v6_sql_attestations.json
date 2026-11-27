@@ -1,0 +1,28 @@
+{
+  "schema": "PR337_LOCAL_READ_ONLY_SQL_ATTESTATION_V6",
+  "reconciliations": [
+    {
+      "verification": "SQL_READ_ONLY_REVIEWED_NO_AMBIGUITY",
+      "verified_at": "2026-11-14",
+      "sku": "YC00656",
+      "store_id": "110711146247224320",
+      "item_id": "20858150090",
+      "start_date": "2026-10-09",
+      "end_date": "2026-10-22",
+      "saved_first": "2026-10-11",
+      "mart_first": "2026-10-11",
+      "fact_first": "2026-10-18",
+      "historical_first": "2026-10-11",
+      "mart_orders": 17,
+      "mart_units": 19,
+      "current_orders": 10,
+      "current_units": 11,
+      "current_singles": 9,
+      "historical_orders": 7,
+      "historical_units": 8,
+      "historical_singles": 6,
+      "ambiguous_orders": 0,
+      "note": "Read-only PostgreSQL validation supplied by the user: 17 orders, 19 units, 15 single-item orders, no ambiguous historical-only order. Prior SQL REVIEW_REQUIRED used current-first-date instead of min(current,historical). Not an automatic rule for other items."
+    }
+  ]
+}

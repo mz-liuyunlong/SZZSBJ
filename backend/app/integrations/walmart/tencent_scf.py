@@ -26,6 +26,7 @@ class TencentScfInvoker:
         function_name: str,
         namespace: str = "default",
         qualifier: str = "stable",
+        result_limit: int = 1024 * 1024,
     ) -> None:
         allowed = r"^[A-Za-z0-9_.-]{1,128}$"
         if not (
@@ -34,6 +35,9 @@ class TencentScfInvoker:
             and re.fullmatch(allowed, qualifier)
         ):
             raise ScfInvokeRejected("SCF_TARGET_INVALID")
+        if not 1 <= result_limit <= 6 * 1024 * 1024:
+            raise ScfInvokeRejected("SCF_RESULT_LIMIT_INVALID")
+        self._result_limit = result_limit
         self._client = client
         self._name = function_name
         self._namespace = namespace
@@ -59,7 +63,7 @@ class TencentScfInvoker:
             if not isinstance(result, dict) or result.get("InvokeResult") != 0:
                 raise ScfInvokeRejected("SCF_INVOKE_FAILED")
             ret = result.get("RetMsg")
-            if not isinstance(ret, str) or len(ret) > 1024 * 1024:
+            if not isinstance(ret, str) or len(ret.encode("utf-8")) > self._result_limit:
                 raise ScfInvokeRejected("SCF_RESULT_INVALID")
             parsed = json.loads(ret)
             if not isinstance(parsed, dict):

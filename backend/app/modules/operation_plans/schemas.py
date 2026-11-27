@@ -104,6 +104,7 @@ class OperationPlanProductRow(BaseModel):
     owner_name: str | None = None
     store_id: str | None = None
     store_name: str | None = None
+    store_names: list[str] = Field(default_factory=list)
     store_count: int = 0
     msku_count: int = 0
     sku_count: int = 0

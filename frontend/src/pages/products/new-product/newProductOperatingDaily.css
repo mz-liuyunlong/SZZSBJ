@@ -1,0 +1,24 @@
+/* Scoped ONLY to NewProductEvaluationData's operations view. Ads tab untouched. */
+.np-ed:has(.np-od-root){height:468px;}
+.np-od-root{min-width:0;overflow:hidden;}
+.np-od-root .np-ed-context{height:37px;}
+.np-od-overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;margin-top:8px;min-height:82px;flex:0 0 82px;padding:13px 4px;}
+.np-od-overview>div{min-width:0;display:flex;flex-direction:column;justify-content:center;padding:0 14px;border-right:1px solid #cad9ef;gap:7px;}
+.np-od-overview>div:last-child{border-right:0;}
+.np-od-overview span{font-size:12px;color:#7288a5;white-space:nowrap;}
+.np-od-overview strong{font-size:20px;font-weight:700;color:#0758e9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums;}
+.np-od-overview strong.np-od-neg,.np-od-neg{color:#df3445!important;}
+.np-od-heading{height:35px;flex-basis:35px;margin-top:6px;}
+.np-od-table{display:flex;flex:1;min-height:0;min-width:0;flex-direction:column;border:1px solid #d9e3f3;border-radius:8px;overflow:hidden;}
+.np-od-grid{display:grid;grid-template-columns:1.22fr .50fr .66fr .91fr .82fr .90fr .92fr .79fr .66fr;align-items:center;column-gap:4px;padding:0 9px;min-width:0;}
+.np-od-grid>*{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums;}
+.np-od-grid>*:not(:first-child){text-align:right;}
+.np-od-head{height:36px;flex:0 0 36px;background:#f0f4fa;color:#647c9b;font-size:11.5px;font-weight:600;border-bottom:1px solid #dbe4f1;}
+.np-od-body{overflow-x:hidden;overflow-y:auto;flex:1;min-height:0;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#c0cee2 transparent;}
+.np-od-row{height:37px;border-bottom:1px solid #e4eaf3;font-size:11.5px;color:#314565;}
+.np-od-row:nth-child(even){background:#f7f9fd;}
+.np-od-row>span:first-child{color:#567292;}
+.np-od-total{height:39px;flex:0 0 39px;border-top:1px solid #bcd1ed;background:#eaf1ff;color:#244b88;font-size:11.5px;font-weight:700;}
+.np-od-empty{padding:22px 12px;text-align:center;color:#8394aa;font-size:12px;}
+.np-od-truncated{color:#8696ae;font-size:10px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+@media(max-width:700px){.np-od-overview strong{font-size:15px;}.np-od-overview>div{padding:0 7px;}.np-od-grid{padding:0 5px;gap:2px;}.np-od-head,.np-od-row,.np-od-total{font-size:10px;}}

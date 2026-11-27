@@ -1,3 +1,5 @@
+import { decodeReportTableTotals, type BackendReportTableTotals, type ReportTableTotals } from "@/pages/sales/reportTotals";
+import { appendSalesReportSort, type SalesReportSort, type SalesSortCurrency } from "@/pages/sales/reportSort";
 import { backendDownload, backendRequest } from "@/api/backendApi";
 import { normalizeReportFilterOptions } from "@/shared/report-filters";
 import type { SalesFilterOptions } from "@/pages/sales/salesFilterOptionsApi";
@@ -58,6 +60,7 @@ interface BackendOrderProfitItem {
 }
 
 interface BackendOrderProfitSummary {
+  table_totals?: BackendReportTableTotals | null;
   sales_qty: string;
   order_count: string;
   sales_amount: string;
@@ -114,6 +117,7 @@ export interface OrderProfitApiMeta {
 }
 
 export interface OrderProfitServerSummary {
+  tableTotals?: ReportTableTotals | null;
   salesQuantity: number;
   orderCount: number;
   salesAmount: number;
@@ -158,6 +162,10 @@ export interface OrderProfitTrendPoint {
 }
 
 interface OrderProfitParams {
+  includeTableTotals?: boolean;
+  summaryOnly?: boolean;
+  sort?: SalesReportSort | null;
+  sortCurrency?: SalesSortCurrency;
   startDate?: string;
   endDate?: string;
   page?: number;
@@ -313,6 +321,7 @@ const toOrderProfitServerSummary = (
   if (!summary) return null;
 
   return {
+    tableTotals: decodeReportTableTotals(summary.table_totals),
     salesQuantity: numberValue(summary.sales_qty),
     orderCount: numberValue(summary.order_count),
     salesAmount: numberValue(summary.sales_amount),
@@ -404,6 +413,7 @@ export async function downloadOrderProfitExportCsv(
   if (params.endDate) search.set("end_date", params.endDate);
   search.set("period", params.period);
   search.set("dimension", params.dimension);
+  appendSalesReportSort(search, params.sort, params.sortCurrency);
 
   if (params.columns.length > 0) {
     search.set("columns", params.columns.join(","));
@@ -430,6 +440,9 @@ export async function fetchOrderProfitRows(
   appendOrderProfitFilters(search, params);
   search.set("page", String(page));
   search.set("page_size", String(pageSize));
+  if (params.includeTableTotals === false) search.set("include_table_totals", "false");
+  if (params.summaryOnly) search.set("summary_only", "true");
+  appendSalesReportSort(search, params.sort, params.sortCurrency);
 
   const requestOptions = params.signal ? { signal: params.signal } : undefined;
 

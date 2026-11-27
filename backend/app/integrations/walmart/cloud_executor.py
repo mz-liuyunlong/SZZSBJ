@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any, Protocol
 
+from app.integrations.walmart.cloud_contracts import builtin_for
 from app.integrations.walmart.contract_signing import RISK_WRITE, ContractVerifier
 from app.integrations.walmart.contracts import ContractError, ContractRegistry
 from app.integrations.walmart.https_transport import TransportRejected
@@ -59,9 +60,12 @@ class WalmartCloudExecutor:
         transport: CloudTransport,
         verifier: ContractVerifier | None = None,
         max_risk: str = "read",
+        builtin_non_get: ContractRegistry | None = None,
     ) -> None:
         if max_risk not in RISK_LEVELS:
             raise ContractError("WALMART_RISK_CEILING_INVALID")
+        # Non-GET v3 calls must equal this package's own contracts (None = the built-in set).
+        self._builtin_non_get = builtin_non_get
         self._registry = registry
         self._stores = store_allowlist
         self._policy = policy
@@ -100,10 +104,16 @@ class WalmartCloudExecutor:
         accept = event.get("accept", "json")
         if version == 1 and "accept" in event:
             raise ContractError("WALMART_EVENT_INVALID")
-        if accept not in ("json", "pdf"):
+        if accept not in ("json", "pdf", "zip"):
             raise ContractError("WALMART_EVENT_INVALID")
         if event.get("operation") != "marketplace_call":
             raise ContractError("WALMART_EVENT_INVALID")
+        if event.get("method") != "GET":
+            # Legacy v1 / v2 events are read-only: POST / PUT / PATCH / DELETE are refused
+            # here, before the contract is prepared and before any token or request. Writes
+            # and read-semantic POSTs only run through signed v3 contracts, which the cloud
+            # pins to its own built-in contracts (cloud_contracts).
+            raise ContractError("WALMART_LEGACY_READ_ONLY")
         store = event.get("store_code")
         key = event.get("api_key")
         if not isinstance(store, str) or store not in self._stores:
@@ -191,12 +201,18 @@ class WalmartCloudExecutor:
             raise ContractError("WALMART_STORE_NOT_AUTHORIZED")
         # Actor shape is validated (and signed) inside the verifier.
         accept = event.get("accept", "json")
-        if accept not in ("json", "pdf"):
+        if accept not in ("json", "pdf", "zip"):
             raise ContractError("WALMART_EVENT_INVALID")
         # Signature, key, freshness, replay, store/function binding, contract shape,
         # hashes and the method-derived risk level.
         verified = self._verifier.verify(event)
         operation = verified.operation
+        if operation.method != "GET" or event.get("method") != "GET":
+            # 审核 #358 P1-1: a POST / PUT / PATCH / DELETE runs only the contract built into
+            # this package (method, path, fields, body schema, mutating, response kind);
+            # a signed contract that differs in any of these is refused before any token.
+            if verified.risk != RISK_WRITE or self._max_risk == "write":
+                operation = builtin_for(event.get("contract"), self._builtin_non_get)
         registry = ContractRegistry((operation,))
         # Same contract code as the server: path/query values are re-validated against the
         # field schemas and the resolved path must equal what the caller claims to call.

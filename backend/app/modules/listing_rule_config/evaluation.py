@@ -235,6 +235,13 @@ def lifecycle_listing(
         if stockout_previous_stage is None:
             return LifecycleResult("断货期", "缺少断货前阶段快照", valid30, consecutive, False)
         previous_stage = stockout_previous_stage
+        # An observed recovery from a short stockout restores the recorded
+        # pre-stockout operating stage. Incomplete sales trends must not keep
+        # a replenished Listing in stockout indefinitely.
+        if previous_stage in {"启动期", "上升期", "稳定期", "下滑期"}:
+            return LifecycleResult(
+                previous_stage, "短期断货已恢复，恢复断货前经营阶段", valid30, consecutive, True
+            )
 
     if previous_stage == "修复期":
         if repair_stock_valid_days is None and "stockout" in repair_reasons:

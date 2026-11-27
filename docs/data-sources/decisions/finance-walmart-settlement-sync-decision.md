@@ -1,4 +1,25 @@
-# 财务 · 领星 Walmart 结算账单 / 回款明细同步 数据源决策
+# 财务 · 沃尔玛账单同步（领星 statement/list）数据源决策
+
+> **2026-11-08 变更（以本节为准，下文 10-31 原文保留作调查记录）**
+>
+> Rocky 2026-11-08 23:09 ~ 23:34 定：
+> 1. 统一叫「沃尔玛账单」，不再叫「结算账单」。
+> 2. **只用一个领星接口 `statement/list`**。`payout/list`（`walmartBillPayoutList`）不登记、不建表；下文 §2 C、§3.2、§6 里关于回款明细的内容作废。
+> 3. 表做两层：明细表 `ods_lingxing_walmart_bill_lines` + 按店铺按期汇总表 `mart_walmart_bill_periods`（取代下文的 ODS 两张 + FACT + MART 四张）；原始响应仍进系统共用的原始层。回款对账、现金利润、结算利润三个板块共用这一层，只拉一次。
+> 4. 领星「账单总额」（`totalPayable`）在 10-26 本地数据里全是空的 → **每期应付金额 = 有效明细合计**；以后领星给了一致的总额就用总额。应付 ≤ 0 标「本期不打款」；整期明细都被删除标「作废」。负数账单和几期合并打款时沃尔玛都不单独出账单，不另做处理。
+> 5. 日期口径已确认：`startDate / endDate` 按**交易日期**（`transactionPostedTimestamp`）筛 —— 10-26 本地数据里每月请求返回的行数 = 按交易日期分月的行数。领星只在账单生成后才给出该期明细。
+> 6. 店铺参数用 `sids`（数组，一次一个店）—— 10-26 拉取时自动探测确认（`sid` 不按店过滤，`sids` 按店过滤）。
+> 7. 每周三上海 03:00 自动拉（重拉最近 35 天，长账单自动往前补），另加「手动同步」（回款对账页面按钮；动作权限 `action:finance:settlement-reconciliation:sync`，有权限的人都能点）。同步开关默认关闭，上线后由部署 AI 按票据打开。
+> 8. 读取接口改为 `GET /api/finance/walmart-bills/periods`；手动同步 `GET` / `POST /api/finance/walmart-bills/sync`。
+> 9. **交易时间时区（2026-11-10 已核对，负责人确认）**：`transactionPostedTimestamp` 领星只给日期，时分秒全是 `00:00:00`，不带时区。用一个店从沃尔玛后台下载的 7 期对账报告（账单日 2026-06-30 ~ 09-22）逐行核对：按平台单号、行号、交易类型、描述、金额类型、金额对上的明细，日期**全部一致**（沃尔玛后台报告的交易日期本身也只有日期）。结论：领星的交易日期就是沃尔玛后台的日期，没有经过时区换算。做法不变：原样存成不带时区的时间（`posted_at`），`posted_date` 取日期部分；带时区偏移的值整店拒收（`SYNC_WALMART_BILL_INVALID_DATE`）；回款对账、结算利润按账单日（`reportDate`）归期。
+> 10. 2026-11-09（#328 审核后）：一个店的明细、missing 标记、期汇总放在一个保存点里，店失败整店回滚（心跳用独立 session 续锁，不提交业务事务；店内提交会被拒绝；锁丢失整个任务中止）；某段领星返回 0 条而库里这段原来有有效明细 → 整店失败（`SYNC_WALMART_BILL_EMPTY_UNEXPECTED`），不做 missing 标记；被标 missing 的明细所在的期一并重算（整期没了 → 作废、金额归 0）；上线时先只开手动、首次手动同步当探测，通过后再单独开每周定时。`totalSum` 探测（2026-11-09，company-ai 只读 3 次）：是对象，键为 amount、chargeSavings、commissionSaving、currency、currencyIcon、originalCharge、originalCommission、shipQty、totalCount、totalPayable、totalWalmartFundedSavingsProgram；同一段用不同 offset / length 请求返回完全相同 → 判断是「整段合计」而不是「本页合计」；但样本段 0 行，`amount` 是否等于明细金额之和**未核实**。金额对平校验暂不实现，等有明细的样本段核实后再加（错误码预留 `SYNC_WALMART_BILL_SUM_MISMATCH`）。
+>
+> 实现见 `PRPs/finance-walmart-settlement-sync-v1.md`（2026-11-08 改写）与 `docs/api/finance-walmart-bills.md`。
+
+---
+
+（以下为 2026-10-31 原文）
+
 
 - 调查日期：2026-10-31
 - 调查人：Rocky 侧代码 AI（财务板块）
