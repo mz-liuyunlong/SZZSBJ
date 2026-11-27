@@ -1,7 +1,7 @@
 import { Alert, Checkbox, Input, InputNumber, Select, Slider, Table } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { ReactNode } from "react";
-import type { Grade, Product } from "./nativeData";
+import type { Grade, Product } from "./newProductModel";
 import { dimensionNames, dimensionKeys, tierNames } from "./NewProductRulesModel";
 import type { RuleDraft, RuleTier, RiskConditionRule } from "./NewProductRulesModel";
 import NewProductConfirmedScoringPanel from "./NewProductConfirmedScoringPanel";

@@ -575,6 +575,8 @@ class ListingManagementFacetBatchData(StrictSchema):
 
 
 class ListingManagementItemRead(StrictSchema):
+    ad_enabled: bool | None = None
+    ad_status_checked_at: datetime | None = None
     id: str
     source_account_ref: str
     platform_code: str | None

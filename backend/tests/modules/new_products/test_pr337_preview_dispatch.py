@@ -6,6 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from app.modules.new_products.schemas import ListingQuery
 from app.modules.new_products.service import NewProductService, local_preview_item_ids
 
 
@@ -62,10 +63,14 @@ def test_preview_route_scope(monkeypatch, flags, expected):
     service = NewProductService.__new__(NewProductService)
     service._list_saved = Mock(return_value="saved")
     service._list_legacy_live = Mock(return_value="legacy")
-    result = service.list(frozenset({"primary"}), object())
+    accounts = frozenset({"primary"})
+    query = ListingQuery()
+    result = service.list(accounts, query)
     assert result == expected
     assert service._list_saved.call_count == int(expected == "saved")
     assert service._list_legacy_live.call_count == int(expected == "legacy")
+    selected = service._list_saved if expected == "saved" else service._list_legacy_live
+    selected.assert_called_once_with(accounts, query, item_keys=None)
 
 
 def test_production_preview_rejected_by_existing_source_guard(monkeypatch):

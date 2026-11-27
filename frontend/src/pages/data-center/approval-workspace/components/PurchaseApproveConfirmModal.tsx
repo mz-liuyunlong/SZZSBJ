@@ -52,11 +52,14 @@ export default function PurchaseApproveConfirmModal({item,onCancel,onSaved}:Prop
     if (!item || saving || loading || !validStore || !validQty || !storeId || quantity === null) return;
     setSaving(true);
     try {
-      await decideNewProductPurchase(item.id,item.version,"approved","",{
+      const result = await decideNewProductPurchase(item.id,item.version,"approved","",{
         purchase_store_id:storeId,
         approved_qty:quantity,
       });
-      message.success("采购审批通过，采购店铺与批准数量已记录");
+      if (!result.updated || !result.lingxing_receipt?.plan_sn) {
+        throw new Error("领星采购计划创建结果未核实，请勿重复提交");
+      }
+      message.success(`领星采购计划已创建：${result.lingxing_receipt.plan_sn}`);
       onSaved();
     } catch(error) {
       message.error(error instanceof Error ? error.message : "采购审批失败，请检查申请状态和店铺权限");
@@ -80,7 +83,7 @@ export default function PurchaseApproveConfirmModal({item,onCancel,onSaved}:Prop
     maskClosable={!saving}
   >
     <Alert type="info" showIcon icon={<InfoCircleOutlined/>}
-      message="请确认采购店铺与采购数量，可根据实际情况进行调整。"/>
+      message="本地真实写入测试：确认后将在领星创建实际采购计划。请勿重复提交。"/>
     <h3 className="np-purchase-approve-confirm__section">采购信息</h3>
     {loading ? <div className="np-purchase-approve-confirm__loading"><Spin/> 正在核实授权店铺…</div> : null}
     {loadError ? <Alert type="error" message={loadError} description="店铺未核实，暂不能批准，请核实当前账号的店铺维度数据。" showIcon/> : null}

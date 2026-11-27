@@ -21,7 +21,7 @@ import {
   type Config,
   type Grade,
   type Product,
-} from "./nativeData";
+} from "./newProductModel";
 import "./performanceBoardRedesign.css";
 
 type Props = {

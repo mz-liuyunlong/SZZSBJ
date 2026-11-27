@@ -1,16 +1,13 @@
-import { Button, Tag } from 'antd';
+import { Alert, Button, Tag } from 'antd';
 import { StarOutlined, BarChartOutlined, RiseOutlined, InboxOutlined, FileTextOutlined, ClockCircleOutlined, DatabaseOutlined } from '@ant-design/icons';
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import type { ApprovalItem } from '../approvalTypes';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import type { ApprovalItem, PurchasePageRead } from '../approvalTypes';
 import type { DemoSeed } from '../approvalDemoData';
 import type { DemoBusinessProfile } from '../approvalDemoPresentation';
-import { backendRequest } from '@/api/backendApi';
 import NewProductEvaluationData from '@/pages/products/new-product/NewProductEvaluationData';
-import { getCachedNewProductDetail, listNewProducts, type Identity } from '@/pages/products/new-product/newProductBusinessApi';
-import { toPersistedProduct } from '@/pages/products/new-product/newProductRealAdapter';
-import type { Product } from '@/pages/products/new-product/nativeData';
-import { fetchListingManagementRows } from '@/pages/products/listingManagementApi';
-import { listProductManagementSkus } from '@/pages/products/productManagementApi';
+import type { Identity } from '@/pages/products/new-product/newProductBusinessApi';
+import { usePurchaseApprovalReadModel } from '../purchaseApprovalReadModel';
+import type { Product } from '@/pages/products/new-product/newProductModel';
 import PurchaseApprovalEvidence from './PurchaseApprovalEvidence';
 import './PurchaseApprovalDecisionDrawer.css';
 
@@ -20,7 +17,8 @@ type Props = {
   seed: DemoSeed;
   profile: DemoBusinessProfile;
   evaluationIdentity?: Identity;
-  preloadedEvaluation?: {id: string; product: Product; daily: unknown};
+  detailState?: 'loading' | 'ready' | 'error';
+  preloadedRead?: PurchasePageRead;
   onClose(): void;
   onAction?: (item: ApprovalItem, action: DecisionAction) => void;
 };
@@ -157,7 +155,7 @@ function ReplenishmentAnalysis({profile, seed}: {profile: DemoBusinessProfile; s
   </>;
 }
 
-export default function PurchaseApprovalDecisionDrawer({record, seed, profile, evaluationIdentity, preloadedEvaluation, onClose, onAction}: Props) {
+export default function PurchaseApprovalDecisionDrawer({record, seed, profile, evaluationIdentity, detailState = 'ready', preloadedRead, onClose, onAction}: Props) {
   const purchaseScrollRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     // Never reopen an approval half-scrolled under the fixed header.
@@ -167,73 +165,21 @@ export default function PurchaseApprovalDecisionDrawer({record, seed, profile, e
   const isInitial = kind === 'initial';
   const isReplenishment = kind === 'replenishment';
   const p = profile.purchaseAnalysis;
-  const account = evaluationIdentity?.source_account_ref;
-  const store = evaluationIdentity?.store_id;
-  const item = evaluationIdentity?.item_id;
-  const sku = profile.sku?.trim();
-  const identityKey = account && store && item ? JSON.stringify([account,store,item]) : null;
-  // PURCHASE_DETAIL_SYNCHRONIZED_V1: the parent validates the saved identity.
-  const warmed = preloadedEvaluation?.id === record.id ? preloadedEvaluation : undefined;
-  const [evaluationState, setEvaluationState] = useState<{
-    identityKey: string;
-    product: Product | null;
-    unitProfitUsd: number | null;
-    unitPurchaseCostCny: number | null;
-  } | null>(null);
-  useEffect(() => {
-    if (!isInitial || !account || !store || !item || !identityKey) return;
-    let active = true;
-    const identity = {source_account_ref:account, store_id:store, item_id:item};
-    // Both existing endpoints are read-only; no new source, rescore, or purchase writes.
-    void Promise.allSettled([
-      warmed ? Promise.resolve({items: []}) : listNewProducts({page:1,pageSize:200,storeId:store,keyword:item,searchField:'item_id'}),
-      warmed ? Promise.resolve({evaluation_operating_daily:warmed.daily}) : getCachedNewProductDetail(identity),
-      // Exact-SKU read via the existing product-management endpoint; backend
-      // redacts purchase costs unless this reviewer has field-level access.
-      sku ? backendRequest<{items:Array<{sku:string|null;purchase_cost_cny:string|null}>}>(
-        `/api/product-management/skus?sku_batch=${encodeURIComponent(sku)}&page=1&page_size=100`
-      ) : Promise.resolve(null),
-    ]).then(([listResult,detailResult,costResult]) => {
-      if (!active) return;
-      const candidates = listResult.status === 'fulfilled'
-        ? listResult.value.items.filter(row =>
-          row.listing.source_account_ref === account &&
-          row.listing.store_id === store && row.listing.item_id === item) : [];
-      // Ambiguous matches must not silently display another account's data.
-      const product = warmed?.product ?? (candidates.length === 1 ? toPersistedProduct(candidates[0]) : null);
-      const detail = detailResult.status === 'fulfilled'
-        ? detailResult.value.evaluation_operating_daily : null;
-      const daily = detail && typeof detail === 'object'
-        ? detail as Record<string,unknown> : null;
-      const totals = daily?.totals && typeof daily.totals === 'object'
-        ? daily.totals as Record<string,unknown> : null;
-      const units = finiteAmount(totals?.sales_units);
-      const profit = finiteAmount(totals?.profit_usd);
-      // Use the original refund/sample-aware testing-profit source. Never
-      // infer profit from selling price, ROI, ACOS or an incomplete evidence set.
-      const unitProfitUsd = daily?.status === 'scored' &&
-        daily.source === 'new_products_testing_profit_full_history_v2' &&
-        daily.policy === 'returns_ignored_samples_excluded_sample_ads_included' &&
-        units !== null && units > 0 && profit !== null ? profit / units : null;
-      const costRows = costResult.status === 'fulfilled'
-        ? costResult.value?.data.items.filter(row => row.sku === sku) ?? [] : [];
-      const unitPurchaseCostCny = costRows.length === 1
-        ? finiteAmount(costRows[0].purchase_cost_cny) : null;
-      setEvaluationState({identityKey, product, unitProfitUsd, unitPurchaseCostCny});
-    });
-    return () => {active = false;};
-  }, [isInitial, account, store, item, identityKey, sku, warmed]);
-  const evaluationReady = evaluationState?.identityKey === identityKey;
-  const evaluationProduct = warmed?.product ?? (evaluationReady ? evaluationState?.product ?? null : null);
-  const evaluationLoading = Boolean(identityKey) && !evaluationReady && !warmed;
-  const canDecide = record.status === 'submitted' && Boolean(onAction) && (record.id.startsWith('DEMO-') || record.can_review);
+  const identityKey = evaluationIdentity ? JSON.stringify([
+    evaluationIdentity.source_account_ref, evaluationIdentity.store_id, evaluationIdentity.item_id,
+  ]) : null;
+  const requestIdentity = isInitial && detailState === 'ready' ? evaluationIdentity : undefined;
+  const readModel = usePurchaseApprovalReadModel(requestIdentity, profile.sku, preloadedRead);
+  const evaluationProduct = readModel.product;
+  const evaluationLoading = detailState === 'loading' || readModel.loading;
+  const canDecide = detailState === 'ready' && record.status === 'submitted' && !readModel.loading && Boolean(onAction) && (record.id.startsWith('DEMO-') || record.can_review);
   const statusNames: Record<string, string> = {submitted: '待审批', approved: '已审批', rejected: '已驳回', info_required: '待补资料'};
   const requestQty = profile.quantity;
   const suggestQty = profile.suggestedQty;
   const purchaseValue = finiteAmount(record.purchase_details?.amount ?? seed.amount);
   const purchaseCurrency = record.purchase_details?.currency_code ??
     record.currency_code ?? (record.id.startsWith('DEMO-') ? 'USD' : null);
-  const currentUnitCost = evaluationReady ? evaluationState?.unitPurchaseCostCny ?? null : null;
+  const currentUnitCost = readModel.unitPurchaseCostCny;
   const estimatedPurchaseCny = currentUnitCost !== null && currentUnitCost >= 0 &&
     requestQty != null && Number.isInteger(requestQty) && requestQty > 0
     ? currentUnitCost * requestQty : null;
@@ -242,103 +188,13 @@ export default function PurchaseApprovalDecisionDrawer({record, seed, profile, e
     : estimatedPurchaseCny !== null ? `CNY ${numberText(estimatedPurchaseCny, 2)}` : '—';
   // Estimate using verified historical net profit per paid unit; it is a forecast,
   // not an approved purchase quote nor the frozen approval scoring snapshot.
-  const estimatedTotalProfit = evaluationReady && evaluationState?.unitProfitUsd != null &&
+  const estimatedTotalProfit = readModel.unitProfitUsd != null &&
     requestQty != null && Number.isInteger(requestQty) && requestQty > 0
-    ? evaluationState.unitProfitUsd * requestQty : null;
-  // PURCHASE_AMOUNT_COST_LOOKUP_V4
-  // Read-only: account + store + Item ID -> SKU -> CNY purchase cost.
-  const costQty = typeof requestQty === 'number' &&
-    Number.isSafeInteger(requestQty) && requestQty > 0
-      ? requestQty : null;
-
-  const costKey = isInitial && account && store && item && costQty !== null
-    ? JSON.stringify([record.id, account, store, item, costQty, profile.sku])
-    : null;
-
-  const [costResult, setCostResult] = useState<{
-    key: string; amount: number | null; reason: string;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!costKey || !account || !store || !item || costQty === null) return;
-    let active = true;
-    const qty = costQty;
-
-    const finish = (amount: number | null, reason: string) => {
-      if (active) setCostResult({key: costKey, amount, reason});
-    };
-
-    void (async () => {
-      try {
-        const listings = await fetchListingManagementRows({
-          stores: [store], searchType: 'productId',
-          keyword: item, page: 1, pageSize: 100,
-        });
-        if (listings.meta.total > listings.rows.length) {
-          finish(null, '商品查询结果不完整'); return;
-        }
-
-        const matches = listings.rows.filter(row =>
-          row.sourceAccountRef === account &&
-          row.storeId === store &&
-          row.productId === item
-        );
-        if (matches.length !== 1) {
-          finish(null, '商品身份未匹配或不唯一'); return;
-        }
-
-        const sku = matches[0].sku?.trim();
-        if (!sku || sku === '-') {
-          finish(null, '商品未关联采购SKU'); return;
-        }
-        if (profile.sku && profile.sku !== '—' &&
-            profile.sku.trim() !== sku) {
-          finish(null, '申请快照与Listing的SKU不一致'); return;
-        }
-
-        const products = await listProductManagementSkus({
-          searchType: 'sku', keyword: sku,
-        }, 1, 100);
-
-        if (products.total > products.rows.length) {
-          finish(null, '采购价查询结果不完整'); return;
-        }
-
-        const exact = products.rows.filter(row => row.sku?.trim() === sku);
-        if (exact.length !== 1) {
-          finish(null, '产品管理SKU未匹配或不唯一'); return;
-        }
-
-        const price = exact[0].purchasePrice?.trim() ?? '';
-        const match = /^¥\s*([\d,]+(?:\.\d+)?)$/.exec(price);
-        const unit = match ? Number(match[1].replace(/,/g, '')) : null;
-
-        if (unit === null || !Number.isFinite(unit) || unit <= 0) {
-          finish(null, '采购价缺失或无成本查看权限'); return;
-        }
-
-        const amount = unit * qty;
-        if (!Number.isFinite(amount) ||
-            amount > Number.MAX_SAFE_INTEGER) {
-          finish(null, '采购金额无效'); return;
-        }
-
-        finish(amount, '产品管理当前采购价 × 申请数量 · CNY');
-      } catch {
-        finish(null, '采购价读取失败或无查看权限');
-      }
-    })();
-
-    return () => {active = false;};
-  }, [costKey, account, store, item, costQty, profile.sku]);
-
-  const matchedCost = costResult?.key === costKey ? costResult : null;
-
-  const resolvedPurchaseAmount = purchaseAmount !== '—'
-    ? purchaseAmount
-    : matchedCost?.amount != null
-      ? `CNY ${numberText(matchedCost.amount, 2)}`
-      : '—';
+    ? readModel.unitProfitUsd * requestQty : null;
+  // The exact-SKU cost is read once from product management. A current Listing
+  // identity comes from the already-needed new-product list (same MART).
+  const resolvedPurchaseAmount = purchaseAmount === '—' &&
+    (detailState === 'loading' || readModel.costLoading) ? '加载中…' : purchaseAmount;
 
   const source = profile.applicationSource === 'system' ? '系统自动申请' : profile.applicationSource === 'operator' ? '运营主动申请' : '来源待确认';
   // PURCHASE_PROFIT_SYSTEM_FX_V1
@@ -392,6 +248,7 @@ export default function PurchaseApprovalDecisionDrawer({record, seed, profile, e
     </header>
 
     <div ref={purchaseScrollRef} className="purchase-decision__scroll">
+      {detailState === 'error' && <Alert type="error" showIcon message="采购审批详情加载失败，请关闭后重新打开。当前不可审批。"/>}
       <div className="purchase-decision__metrics">
         {isInitial ? <>
           <Metric label="综合测评分数" value={profile.scoreTotal == null ? '—' : numberText(profile.scoreTotal, 2)} description={profile.initialGrade ? `${profile.initialGrade} 级 · 申请时评级` : '评级待确认'} extra={<>
@@ -400,7 +257,7 @@ export default function PurchaseApprovalDecisionDrawer({record, seed, profile, e
     </>} />
           <Metric label="申请采购数量" value={requestQty == null ? '—' : `${numberText(requestQty)} 件`} description={`系统建议 ${suggestQty == null ? '—' : `${numberText(suggestQty)} 件`}`} />
           <Metric label="预计采购金额" value={resolvedPurchaseAmount} description="" />
-          <Metric label="预计总利润" value={money(estimatedTotalProfitCny, 'CNY')} description="" />
+          <Metric label="预计总利润" value={estimatedTotalProfitCny === null && (detailState === 'loading' || readModel.profitLoading) ? '加载中…' : money(estimatedTotalProfitCny, 'CNY')} description="" />
         </> : <>
           <Metric label="预计可售天数" value={profile.estimatedSellableDays == null ? '—' : `${numberText(profile.estimatedSellableDays)} 天`} description="申请时库存覆盖" attention={profile.estimatedSellableDays != null && profile.estimatedSellableDays <= 7}/>
           <Metric label="近30天销量" value={profile.sales30Qty == null ? '—' : `${numberText(profile.sales30Qty)} 件`} description={profile.sales30Qty == null ? '待评估' : `日均 ${numberText(profile.sales30Qty / 30, 1)} 件`}/>
@@ -411,7 +268,7 @@ export default function PurchaseApprovalDecisionDrawer({record, seed, profile, e
       <div className="purchase-decision__layout">
         {/* PR337_PURCHASE_DETAIL_GRID_V32: layout classes only */}
         <main className={`purchase-decision__main purchase-decision__main--${isInitial ? 'initial' : isReplenishment ? 'replenishment' : 'unknown'}`}>
-          {isInitial ? <>{/* PURCHASE_APPROVAL_REFERENCE_V1 */}<InitialAnalysis profile={profile} product={evaluationProduct} loading={evaluationLoading} hasIdentity={Boolean(identityKey)} preloadedDaily={warmed?.daily}/><PurchaseApprovalEvidence record={record}/></> : isReplenishment ? <ReplenishmentAnalysis profile={profile} seed={seed}/> : <Panel title="经营分析"><div className="purchase-decision__empty">采购类型尚未确认，无法确定对应的审批评估指标。</div></Panel>}
+          {isInitial ? <>{/* PURCHASE_APPROVAL_REFERENCE_V1 */}<InitialAnalysis profile={profile} product={evaluationProduct} loading={evaluationLoading} hasIdentity={Boolean(identityKey)} preloadedDaily={readModel.daily}/>{detailState !== 'error' && <PurchaseApprovalEvidence record={record}/>}</> : isReplenishment ? <ReplenishmentAnalysis profile={profile} seed={seed}/> : <Panel title="经营分析"><div className="purchase-decision__empty">采购类型尚未确认，无法确定对应的审批评估指标。</div></Panel>}
         </main>
         <aside className="purchase-decision__aside">
           <Panel title="申请基础信息">

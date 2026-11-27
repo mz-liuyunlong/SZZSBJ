@@ -1,6 +1,6 @@
 /** PR337_CONFIRMED_SCORE_RULES_V4 */
 /** PR337_NUMERIC_SCORING_PRESETS_V3 rule data; extracted from React module for Fast Refresh. */
-import type { Config, Grade } from "./nativeData";
+import type { Config, Grade } from "./newProductModel";
 import { initialNumericRules, validateNumericRules, type NumericRules } from "./newProductNumericScoring";
 import { confirmedScoringDefaults, validateScoringParameters, type ScoringParameters } from "./NewProductConfirmedScoring";
 export type RuleDim = "market" | "speed" | "ad" | "profit" | "trust";

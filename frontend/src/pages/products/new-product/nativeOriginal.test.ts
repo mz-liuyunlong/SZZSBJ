@@ -1,5 +1,5 @@
 import {describe,it,expect} from "vitest";
-import {samples,defaultConfig,score,grade,suggestion,bands,categoryStats} from "./nativeData";
+import {samples,defaultConfig,score,grade,suggestion,bands,categoryStats} from "./newProductModel";
 describe("Owner original Demo native page fixture",()=>{
 it("preserves original V4 SKU examples",()=>{expect(samples).toHaveLength(7);expect(samples[0].sku).toBe("YC00738");expect(categoryStats.length).toBeGreaterThan(0)});
 it("blocks final grade until human market score",()=>{const row=samples.find(p=>p.market===null)!;expect(score(row,defaultConfig)).toBeNull();expect(grade(row,defaultConfig)).toBeNull();expect(suggestion(row,defaultConfig)).toBe(0)});

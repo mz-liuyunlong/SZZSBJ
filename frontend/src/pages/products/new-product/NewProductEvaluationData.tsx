@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Product } from "./nativeData";
+import type { Product } from "./newProductModel";
 import NewProductOperatingDaily from "./NewProductOperatingDaily";
 import "./newProductEvaluationData.css";
 

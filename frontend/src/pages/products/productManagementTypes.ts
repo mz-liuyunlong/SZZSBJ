@@ -78,6 +78,7 @@ export interface ProductManagementRow {
   ownerName: string | null;
   developerUid: string | null;
   developerName: string | null;
+  developmentDate?: string | null;
   productGrade: ProductGrade | "异常" | null;
   category: string | null;
   purchasePrice: string | null;
@@ -154,6 +155,7 @@ export const productColumnFields = [
   { key: "productName", title: "产品名称" },
   { key: "ownerName", title: "负责人" },
   { key: "developerName", title: "开发人" },
+  { key: "developmentDate", title: "开发日期" },
   { key: "category", title: "类目" },
   { key: "purchasePrice", title: "产品采购价" },
   { key: "firstLegFreight", title: "头程运费" },

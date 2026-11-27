@@ -2,7 +2,7 @@
 import { Alert, InputNumber, Select, Tabs, Tag, Tooltip } from "antd";
 import { useState } from "react";
 import type { ReactNode } from "react";
-import type { Product } from "./nativeData";
+import type { Product } from "./newProductModel";
 import type { RuleDraft } from "./NewProductRulesModel";
 import { calculateConfirmedScore, confirmedOverallWeights, demoFactsFromProduct, validateScoringParameters,
   type ScoringFacts, type ScoringParameters, type DimensionResult, type Dimension } from "./NewProductConfirmedScoring";

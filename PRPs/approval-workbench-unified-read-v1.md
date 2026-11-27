@@ -1,0 +1,10 @@
+# PRP — approval workbench unified read V1
+
+Scope: local candidate; read-only optimization requested by owner. Source decision: `docs/data-sources/decisions/approval-workbench-unified-read-v1-decision.md`.
+
+- GET `/api/approvals/workbench/read`: existing list filter contract, one current page, all visible real category counts, full display model for each current-page new-product purchase. Preserve source grouping order, stable pagination, demo isolation and existing action routes. Include previously omitted evaluation-review group in All.
+- Reuse existing authorization predicates and existing UI components. Exact account/store/Item ID; cache with application ID/version. Fresh list on refresh; never trust cache for mutation authorization. Existing expected-version check and store options query retained at action time. No localStorage. Logout uses existing server-state clear path.
+- Batch evidence: same historic weights/corrections and as-of audit limit; FX once; current Listing/profit/price bounded to page; batch daily fallback uses existing profit builder and per-key cutoff. No new table, schema migration, external calls or scoring writes.
+- Return unavailable values as null, never zero or invented. Existing non-purchase detail drawers stay unchanged. Existing clearance risk/keyword fields are applied before merged pagination using chunked authorized reads; large filtered clearance histories need SQL performance validation. Not a promise of uniform O(1) DB queries across every source; the visible browser page read is one request.
+- Test: page/offset/count correctness, duplicate browser request coalescing, exact source identity, field redaction, comparison with existing purchase detail (incl frozen/diagnostic daily), permission matrix, clear cache after logout, success/reject refresh, large page size and filtered clearance history. No real provider calls or production mutations in automated tests.
+- Rollback: remove the scoped candidate changes from the local feature branch; retain all earlier purchase-write changes. Do not merge/deploy until full tests, data parity and Network timings pass.

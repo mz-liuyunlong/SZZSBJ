@@ -1,5 +1,5 @@
 /** Tracking dashboard read-only view model. Uses PR337's current Product records; no fabricated statistics. */
-import { grade, type Config, type Grade, type Product } from './nativeData';
+import { grade, type Config, type Grade, type Product } from './newProductModel';
 
 export type TrackingOutcome = '打品成功' | '打品失败' | '继续观察' | '需要优化' | '等待开售' | '未确认';
 export type TrackingCategoryRow = {

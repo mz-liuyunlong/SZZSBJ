@@ -19,6 +19,14 @@ def execute_sync_run(run_id: str) -> None:
     parsed_run_id = UUID(run_id)
     with get_session_factory()() as session:
         SyncRunExecutionService(session).execute(parsed_run_id)
+    # The original run is closed before starting optional extension work.
+    try:
+        from app.modules.new_products.sku_ad_foundation_runtime import after_sku_run
+
+        with get_session_factory()() as projection_session:
+            after_sku_run(projection_session, parsed_run_id)
+    except Exception as exc:
+        logger.warning("foundation_sku_task_failed error_type=%s", type(exc).__name__)
 
 
 @celery_app.task(name="integration_sync.scheduler_tick", ignore_result=True)  # type: ignore[misc]

@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import { defaultConfig, samples, type Product } from './nativeData';
+import { defaultConfig, samples, type Product } from './newProductModel';
 import {isOverdueHumanReview,matchesTrackingBoardDrill,trackingOwner} from './trackingBoardDrilldown';
 const row:Product={...samples[3],arrival:'2026-09-20',tracking:'继续观察',category:'厨房用品',operator:'王宁'};
 describe('PR337 tracking board drill and 45-day human-review reminder',()=>{

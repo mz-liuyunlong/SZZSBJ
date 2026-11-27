@@ -1,10 +1,9 @@
 
 import {
-  fetchWorkbenchList,
   isDemoApproval,
 } from "./approvalDemoData";
 import { decideNewProductPurchase } from "./approvalApi";
-import DemoApprovalDrawer from "./components/DemoApprovalDrawer";
+import ApprovalBusinessDetailDrawer from "./components/ApprovalBusinessDetailDrawer";
 import PurchaseApproveConfirmModal from "./components/PurchaseApproveConfirmModal";
 /** Enterprise approval workbench. Reuses shared table, search and column components. */
 import { Alert, Button, Card, Input, Modal, Popover, Segmented, Select, Space, Spin, Tooltip, message } from "antd";
@@ -42,86 +41,11 @@ import { parseFollowLog } from "./followLog";
 import { approvalBusinesses, approvalBusinessByKey, approvalBusinessLabel, type ApprovalBusinessKey } from "./approvalBusiness";
 import type { NavigationPage } from "@/config/navigation";
 import { hasPermission } from "@/shared/permissions/mockAccess";
-import { backendRequest } from "@/api/backendApi";
+import { createWorkbenchReader } from "./workbenchReadApi";
 import { demoColumnsForBusiness } from "./approvalDemoPresentation";
 import "./ApprovalWorkspacePage.css";
 
-// SZZSBJ_NP_PURCHASE_TABLE_IDENTITY_AMOUNT_V5
-// Same product-management purchase price used by purchase detail; field-level
-// cost permissions are enforced by the existing product-management API.
-// The product-management response exposes account identity within the already
-// authorized source scope. Join account + SKU, never SKU alone.
-type PurchaseCatalogItem = {
-  source_account_ref?: string | null;
-  sku: string | null;
-  owner_name?: string | null;
-  purchase_cost_cny?: number | string | null;
-};
-async function enrichVisiblePurchaseRows(items: ApprovalItem[]): Promise<ApprovalItem[]> {
-  const skus = Array.from(new Set(items
-    .filter(r => r.approval_type === "new_product_purchase")
-    .map(r => r.purchase_details?.sku?.trim())
-    .filter((v): v is string => Boolean(v))));
-  if (skus.length === 0) return items;
-
-  const catalogs: PurchaseCatalogItem[] = [];
-  // Batch read, never issue one request per approval row.
-  for (let i = 0; i < skus.length; i += 25) {
-    const batch = skus.slice(i, i + 25);
-    const search = new URLSearchParams({page: "1", page_size: "100"});
-    for (const sku of batch) search.append("sku_batch", sku);
-    const result = await backendRequest<{items: PurchaseCatalogItem[]}>(
-      `/api/product-management/skus?${search.toString()}`,
-    );
-    const fetched = result.data.items ?? [];
-    // A full page could conceal duplicate product rows; fail closed.
-    if (fetched.length >= 100) return items;
-    catalogs.push(...fetched);
-  }
-
-  const groups = new Map<string, PurchaseCatalogItem[]>();
-  for (const product of catalogs) {
-    const sku = product.sku?.trim();
-    const account = product.source_account_ref?.trim();
-    if (!sku || !account) continue;
-    const key = JSON.stringify([account, sku]);
-    groups.set(key, [...(groups.get(key) ?? []), product]);
-  }
-  const usableName = (value: string | null | undefined): boolean => {
-    if (typeof value !== "string") return false;
-    return Boolean(value.trim() && !["—", "未分配", "负责人待确认"].includes(value.trim()));
-  };
-
-  return items.map(row => {
-    const details = row.purchase_details;
-    if (row.approval_type !== "new_product_purchase" || !details?.sku) return row;
-    const found = groups.get(JSON.stringify([row.source_account_ref, details.sku.trim()]));
-    if (!found || found.length !== 1) return row;
-    const matched = found[0];
-    const owner = usableName(details.owner_name) ? details.owner_name
-      : (usableName(matched.owner_name) ? matched.owner_name : details.owner_name);
-
-    // Preserve a real authoritative amount if the bridge starts supplying one.
-    const existing = details.amount !== null && details.amount !== undefined && details.amount !== "";
-    const price = matched.purchase_cost_cny === null || matched.purchase_cost_cny === undefined ||
-      matched.purchase_cost_cny === "" ? null : Number(matched.purchase_cost_cny);
-    const qty = details.requested_qty;
-    const canEstimate = !existing && price !== null && Number.isFinite(price) && price >= 0 &&
-      typeof qty === "number" && Number.isSafeInteger(qty) && qty > 0;
-    const amount = canEstimate ? Number((price! * qty!).toFixed(2)) : details.amount;
-
-    return {
-      ...row,
-      purchase_details: {
-        ...details,
-        owner_name: owner ?? null,
-        amount,
-        currency_code: canEstimate ? "CNY" : details.currency_code,
-      },
-    };
-  });
-}
-
+// WORKBENCH_UNIFIED_READ_V1: list, counts and purchase display evidence are one response.
 const defaultFilters: ApprovalFilters = {
  tab: "pending", view: "mine", page: 1, page_size: 50,
 };
@@ -154,6 +78,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
 }) {
  const [messageApi, holder] = message.useMessage();
  const [filters, setFilters] = useState<ApprovalFilters>(defaultFilters);
+ const [fetchWorkbenchRead] = useState(createWorkbenchReader);
  const [business, setBusiness] = useState<ApprovalBusinessKey>("all");
  const [businessCounts, setBusinessCounts] = useState<{
   signature: string;
@@ -200,62 +125,18 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
  }, []);
  useEffect(() => {
   let active = true;
-  void fetchWorkbenchList(filters)
+  void fetchWorkbenchRead(filters,reloadToken)
    .then((list) => {
     if (!active) return;
     setLoadError(false);
     setRows(list.data.items);
-    // Enrich only the visible rows, preserving immediate table rendering.
-    void enrichVisiblePurchaseRows(list.data.items).then(enriched => {
-      if (active) setRows(enriched);
-    }).catch(() => {
-      // Permission denial or missing catalog must never block the approval list.
-    });
     setCount(list.meta.total);
+    setBusinessCounts({signature:countSignature,totals:list.data.business_counts});
    }).catch(() => {
-    if (active) { setLoadError(true); setRows([]); setCount(0); void messageApi.error("审批数据加载失败"); }
-   }).finally(() => { if (active) setLoading(false); });
-  return () => { active = false; };
- }, [filters, reloadToken, messageApi]);
- // 仅通过原有列表接口读取各业务总数，不修改审批数据。
- useEffect(() => {
-  let active = true;
-  const supported = approvalBusinesses.filter((item) => item.live && item.key !== "finance");
-
-  void Promise.allSettled(supported.map(async (item) => {
-   const result = await fetchWorkbenchList({
-    tab: filters.tab,
-    view: filters.view,
-    approval_type: item.type,
-    risk_level: filters.risk_level,
-    keyword: filters.keyword,
-    page: 1,
-    page_size: 1,
-   });
-
-   return { key: item.key, total: result.meta.total };
-  })).then((results) => {
-   if (!active) return;
-
-   const totals: Partial<Record<ApprovalBusinessKey, number>> = {};
-
-   for (const result of results) {
-    if (result.status === "fulfilled") {
-     totals[result.value.key] = result.value.total;
-    }
-   }
-
-   setBusinessCounts({ signature: countSignature, totals });
-  });
-
-  return () => { active = false; };
- }, [
-  filters.tab,
-  filters.view,
-  filters.risk_level,
-  filters.keyword,
-  countSignature,
- ]);
+    if (active) {setLoadError(true);setRows([]);setCount(0);setBusinessCounts({signature:countSignature,totals:{}});void messageApi.error("审批数据加载失败");}
+   }).finally(() => {if(active)setLoading(false);});
+  return () => {active=false;};
+ },[filters,reloadToken,countSignature,messageApi,fetchWorkbenchRead]);
  const reload = () => { setLoading(true); setReloadToken((current) => current + 1); };
  const columns = useMemo((): ProColumns<ApprovalItem>[] => {
   // V3: only demo businesses use dedicated fields; WFS and All retain existing columns.
@@ -460,7 +341,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   </div>
   <BulkApprovalModal permissions={permissions} rows={bulkRows} onCancel={() => setBulkRows([])}
    onUpdated={() => {setSelectedBulkKeys([]);reload();}}/>
-  <DemoApprovalDrawer
+  <ApprovalBusinessDetailDrawer
     selected={selected && (isDemoApproval(selected) || selected.approval_type === "clearance_request" || selected.approval_type === "new_product_purchase") ? selected : undefined}
     onClose={() => setSelected(undefined)}
      // PR337_PURCHASE_DECISION_DETAIL_V3_PARENT: reuse existing mock confirmation modal.

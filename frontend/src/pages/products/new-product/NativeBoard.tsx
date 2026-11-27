@@ -1,5 +1,5 @@
 import {useState} from "react";
-import {categoryStats,developerStats,operatorStats,score,grade,suggestion,percent,type Product,type Config,type Grade} from "./nativeData";
+import {categoryStats,developerStats,operatorStats,score,grade,suggestion,percent,type Product,type Config,type Grade} from "./newProductModel";
 import "./nativeBoard.css";
 type Props={mode:"performance"|"tracking";products:Product[];config:Config;open:(which:string,id?:string)=>void;detail:()=>void};
 const categories=categoryStats as Array<{name:string;tested:number;passed:number;rate:number;avg:number;success:number;deep:string;tone:string}>;

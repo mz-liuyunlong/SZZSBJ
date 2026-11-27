@@ -4,7 +4,7 @@
  * the same source, product fields, filters and scoring functions. Not production.
  */
 import dayjs from "dayjs";
-import type { Product } from "./nativeData";
+import type { Product } from "./newProductModel";
 
 const categories = [
   "厨房用品", "收纳整理", "家居耗材", "办公收纳", "清洁工具",
