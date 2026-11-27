@@ -99,3 +99,39 @@ def test_la_t_minus_two_in_summer_and_winter() -> None:
     assert rating_cutoff_la(
         datetime(2026, 12, 25, 22, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
     ) == date(2026, 12, 23)
+
+
+def test_short_stockout_recovers_previous_stage_without_sales_trend() -> None:
+    # Seven contiguous low-stock days, then positive WFS stock again.
+    # No valid sales observations: recovery is still an evidenced transition.
+    days = [BusinessDay(_day(0), Decimal(20), None)] + [
+        BusinessDay(_day(i), Decimal(0), None) for i in range(1, 8)
+    ]
+    result = lifecycle_listing(
+        cutoff=CUTOFF,
+        previous_stage="断货期",
+        days=days,
+        first_effective_stock=True,
+        stockout_previous_stage="稳定期",
+        stockout_days_before_recovery=7,
+        config=CFG,
+    )
+    assert result.stage == "稳定期"
+    assert result.evidence_complete
+
+
+def test_short_stockout_without_previous_stage_stays_blocked() -> None:
+    days = [BusinessDay(_day(0), Decimal(20), None)] + [
+        BusinessDay(_day(i), Decimal(0), None) for i in range(1, 8)
+    ]
+    result = lifecycle_listing(
+        cutoff=CUTOFF,
+        previous_stage="断货期",
+        days=days,
+        first_effective_stock=True,
+        stockout_days_before_recovery=7,
+        stockout_previous_stage=None,
+        config=CFG,
+    )
+    assert result.stage == "断货期"
+    assert not result.evidence_complete

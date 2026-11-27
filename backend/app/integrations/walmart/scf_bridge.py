@@ -31,9 +31,14 @@ class SafeResult:
     provider_error: Any = None
     content_type: str = "application/json"
     pdf: bytes | None = None
+    # On-request report ZIP (response_kind "zip"): decoded bytes plus the report request id.
+    zip_bytes: bytes | None = None
+    report_request_id: str | None = None
+    request_id: str | None = None
 
 
-MAX_PDF_BYTES = 5 * 1024 * 1024
+MAX_PDF_BYTES = 4 * 1024 * 1024
+MAX_ZIP_BYTES = 3 * 1024 * 1024 + 512 * 1024
 
 
 class ProtectedScfBridge:
@@ -113,26 +118,7 @@ class ProtectedScfBridge:
             raise GatewayRejected("WALMART_PROVIDER_NOT_SUCCESSFUL")
         if self._version == 1 and not 200 <= code <= 299:
             raise GatewayRejected("WALMART_PROVIDER_NOT_SUCCESSFUL")
-        data = result.get("data")
-        provider_error = result.get("provider_error")
-        if _contains_secret_key(data) or _contains_secret_key(provider_error):
-            raise GatewayRejected("WALMART_GATEWAY_SECRET_RESPONSE")
-        if not 200 <= code <= 299:
-            return SafeResult(status_code=code, data=None, provider_error=provider_error)
-        if request.response_kind == "pdf":
-            if not isinstance(data, Mapping) or data.get("content_type") != "application/pdf":
-                raise GatewayRejected("WALMART_GATEWAY_RESPONSE_INVALID")
-            encoded = data.get("data_base64")
-            if not isinstance(encoded, str) or len(encoded) > MAX_PDF_BYTES * 4 // 3 + 4:
-                raise GatewayRejected("WALMART_GATEWAY_RESPONSE_INVALID")
-            try:
-                pdf = base64.b64decode(encoded, validate=True)
-            except (ValueError, binascii.Error):
-                raise GatewayRejected("WALMART_GATEWAY_RESPONSE_INVALID") from None
-            if not pdf.startswith(b"%PDF") or len(pdf) > MAX_PDF_BYTES:
-                raise GatewayRejected("WALMART_GATEWAY_RESPONSE_INVALID")
-            return SafeResult(status_code=code, data=None, content_type="application/pdf", pdf=pdf)
-        return SafeResult(status_code=code, data=data)
+        return decode_safe_result(result, code=code, response_kind=request.response_kind)
 
     def _signed_event(
         self,
@@ -179,6 +165,50 @@ class ProtectedScfBridge:
             "actor": {"kind": actor_kind, "uid": actor_uid},
             "auth": auth,
         }
+
+
+def decode_safe_result(result: Mapping[str, Any], *, code: int, response_kind: str) -> SafeResult:
+    """Decode the common bounded JSON/PDF/ZIP result for legacy and generic calls."""
+    data = result.get("data")
+    provider_error = result.get("provider_error")
+    if _contains_secret_key(data) or _contains_secret_key(provider_error):
+        raise GatewayRejected("WALMART_GATEWAY_SECRET_RESPONSE")
+    if not 200 <= code <= 299:
+        return SafeResult(status_code=code, data=None, provider_error=provider_error)
+    if response_kind == "pdf":
+        if not isinstance(data, Mapping) or data.get("content_type") != "application/pdf":
+            raise GatewayRejected("WALMART_GATEWAY_RESPONSE_INVALID")
+        encoded = data.get("data_base64")
+        if not isinstance(encoded, str) or len(encoded) > MAX_PDF_BYTES * 4 // 3 + 4:
+            raise GatewayRejected("WALMART_GATEWAY_RESPONSE_INVALID")
+        try:
+            pdf = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error):
+            raise GatewayRejected("WALMART_GATEWAY_RESPONSE_INVALID") from None
+        if not pdf.startswith(b"%PDF") or len(pdf) > MAX_PDF_BYTES:
+            raise GatewayRejected("WALMART_GATEWAY_RESPONSE_INVALID")
+        return SafeResult(status_code=code, data=None, content_type="application/pdf", pdf=pdf)
+    if response_kind == "zip":
+        if not isinstance(data, Mapping) or data.get("content_type") != "application/zip":
+            raise GatewayRejected("WALMART_GATEWAY_RESPONSE_INVALID")
+        encoded = data.get("data_base64")
+        if not isinstance(encoded, str) or len(encoded) > MAX_ZIP_BYTES * 4 // 3 + 4:
+            raise GatewayRejected("WALMART_GATEWAY_RESPONSE_INVALID")
+        try:
+            blob = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error):
+            raise GatewayRejected("WALMART_GATEWAY_RESPONSE_INVALID") from None
+        if not blob.startswith(b"PK") or len(blob) > MAX_ZIP_BYTES:
+            raise GatewayRejected("WALMART_GATEWAY_RESPONSE_INVALID")
+        request_id = data.get("request_id")
+        return SafeResult(
+            status_code=code,
+            data=None,
+            content_type="application/zip",
+            zip_bytes=blob,
+            report_request_id=request_id if isinstance(request_id, str) else None,
+        )
+    return SafeResult(status_code=code, data=data)
 
 
 def _contains_secret_key(value: Any, depth: int = 0) -> bool:

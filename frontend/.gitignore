@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# 财务本地预览数据（Demo 导出、飞书审批、凭证文件），绝不提交
+public/local-fin-data/

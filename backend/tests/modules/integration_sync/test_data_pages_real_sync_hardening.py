@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import MagicMock
@@ -412,6 +413,43 @@ def test_ad_metric_signature_treats_missing_and_zero_metrics_as_same() -> None:
     }
 
     assert _ad_metric_signature(missing_metrics) == _ad_metric_signature(zero_metrics)
+
+
+def test_write_ads_persists_usd_attribution_currency() -> None:
+    session = _CaptureSession()
+    runner = _ad_writer_runner(session)
+    row = {
+        "advertiserId": "advertiser-us",
+        "key": "usd-attribution",
+        "adSpend": "6.19",
+        "attributedSales": "20.99",
+        "attributedOrders": "1",
+        "advertisedSkuSales": "0",
+        "numAdsClicks": 13,
+    }
+
+    assert runner._write_ads([row]) == 1
+    sql = str(session.calls[-1][0])
+    values = session.calls[-1][1]
+
+    assert values["attributed_sales_amount"] == Decimal("20.99")
+    assert values["attributed_sales_currency_code"] == "USD"
+    assert values["advertised_sku_sales_currency_code"] == "USD"
+    assert ":attributed_sales_currency_code" in sql
+    assert ":advertised_sku_sales_currency_code" in sql
+    assert "attributed_sales_currency_code = excluded.attributed_sales_currency_code" in sql
+
+
+def test_write_ads_preserves_missing_amount_as_null() -> None:
+    session = _CaptureSession()
+    runner = _ad_writer_runner(session)
+
+    assert runner._write_ads([{"advertiserId": "advertiser-us", "key": "missing-amount"}]) == 1
+
+    values = session.calls[-1][1]
+    assert values["attributed_sales_amount"] is None
+    assert values["attributed_sales_currency_code"] is None
+    assert values["advertised_sku_sales_currency_code"] is None
 
 
 def test_write_ads_collapses_duplicate_identity_with_same_metrics() -> None:

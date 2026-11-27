@@ -10,6 +10,7 @@ from typing import Literal
 from sqlalchemy import or_, select, tuple_
 
 from app.modules.data_pages.models import DailySalesItemDayMart, ListingManagementCurrentMart
+from app.modules.data_pages.sales_report_sort import sort_export_rows
 from app.modules.data_pages.service import OrderProfitService
 
 ZERO = Decimal("0")
@@ -457,8 +458,23 @@ def export_order_profit_csv(
         [period_header, *[ORDER_PROFIT_EXPORT_COLUMNS[key] for key in selected_columns]]
     )
 
-    for period_value, group_rows in _group_rows(rows, period=period, dimension=dimension):
-        value_map = _row_value_map(period_value, group_rows, current_inventory)
+    groups = _group_rows(rows, period=period, dimension=dimension)
+    sort_field = getattr(query, "sort_field", None)
+    if sort_field:
+        value_maps = sort_export_rows(
+            [
+                (period_value, _row_value_map(period_value, group_rows, current_inventory))
+                for period_value, group_rows in groups
+            ],
+            sort_field,
+            query.sort_direction,
+        )
+    else:
+        value_maps = (
+            (period_value, _row_value_map(period_value, group_rows, current_inventory))
+            for period_value, group_rows in groups
+        )
+    for period_value, value_map in value_maps:
         writer.writerow(
             [
                 period_value,

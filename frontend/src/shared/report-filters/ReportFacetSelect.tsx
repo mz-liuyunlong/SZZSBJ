@@ -24,8 +24,13 @@ interface ReportFacetSelectProps {
   allowClear?: boolean;
   showSearch?: boolean;
   confirmOnMultiple?: boolean;
+  immediateMultiple?: boolean;
   renderOptionLabel?: (option: ReportFilterOption) => ReactNode;
   onChange: (value: ReportFacetSelectValue) => void;
+  // Optional remote faceting; existing callers retain identical defaults.
+  onOpenChange?: (open: boolean) => void;
+  loading?: boolean;
+  optionsReady?: boolean;
 }
 
 const selectedLabel = (values: string[], unit: string, fallback: string) => {
@@ -74,8 +79,12 @@ function ReportFacetSelect({
   allowClear = true,
   showSearch = true,
   confirmOnMultiple = true,
+  immediateMultiple = false,
   renderOptionLabel = defaultReportFacetOptionLabel,
   onChange,
+  onOpenChange,
+  loading = false,
+  optionsReady = true,
 }: ReportFacetSelectProps) {
   const isMultiple = mode === "multiple";
   const shouldConfirm = isMultiple && confirmOnMultiple;
@@ -83,7 +92,7 @@ function ReportFacetSelect({
   const [open, setOpen] = useState(false);
   const [draftValues, setDraftValues] = useState<string[]>(confirmedValues);
 
-  const activeValues = shouldConfirm && open ? draftValues : confirmedValues;
+  const activeValues = shouldConfirm && open && !immediateMultiple ? draftValues : confirmedValues;
   const mergedOptions = mergeSelectedFilterOptions(activeValues, options);
   const selectableValues = mergedOptions
     .filter((option) => !option.disabled)
@@ -124,11 +133,17 @@ function ReportFacetSelect({
       setDraftValues(confirmedValues);
     }
     setOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+  };
+
+  const updateMultipleValues = (nextValues: string[]) => {
+    setDraftValues(nextValues);
+    if (immediateMultiple) onChange(nextValues);
   };
 
   const handleChange = (nextValue: ReportFacetSelectValue) => {
     if (shouldConfirm) {
-      setDraftValues(normalizeMultipleValue(nextValue));
+      updateMultipleValues(normalizeMultipleValue(nextValue));
       return;
     }
 
@@ -140,6 +155,7 @@ function ReportFacetSelect({
       setDraftValues([]);
       onChange([]);
       setOpen(false);
+      onOpenChange?.(false);
       return;
     }
 
@@ -147,17 +163,27 @@ function ReportFacetSelect({
   };
 
   const toggleSelectAll = (checked: boolean) => {
+    if (immediateMultiple) {
+      const next = checked
+        ? Array.from(new Set([...activeValues, ...selectableValues]))
+        : activeValues.filter(item => !selectableValues.includes(item));
+      updateMultipleValues(next);
+      return;
+    }
     setDraftValues(checked ? selectableValues : []);
   };
 
   const applyDraft = () => {
+    if (!optionsReady) return;
     onChange(draftValues);
     setOpen(false);
+    onOpenChange?.(false);
   };
 
   const cancelDraft = () => {
     setDraftValues(confirmedValues);
     setOpen(false);
+    onOpenChange?.(false);
   };
 
   const popupRender = shouldConfirm
@@ -170,7 +196,7 @@ function ReportFacetSelect({
           <Checkbox
             checked={allChecked}
             indeterminate={partiallyChecked}
-            disabled={selectableValues.length === 0}
+            disabled={!optionsReady || selectableValues.length === 0}
             onChange={(event) => toggleSelectAll(event.target.checked)}
           >
             全选
@@ -183,8 +209,8 @@ function ReportFacetSelect({
               size="small"
               type="link"
               aria-label="清空"
-              disabled={draftValues.length === 0}
-              onClick={() => setDraftValues([])}
+              disabled={(immediateMultiple ? activeValues : draftValues).length === 0}
+              onClick={() => updateMultipleValues([])}
             >
               清空
             </Button>
@@ -198,12 +224,14 @@ function ReportFacetSelect({
           onMouseDown={(event) => event.preventDefault()}
         >
           <Typography.Text type="secondary" className="report-facet-select__summary">
-            {draftValues.length > 0 ? `已选 ${draftValues.length} ${unit}` : "未选择"}
+            {activeValues.length > 0 ? `已选 ${activeValues.length} ${unit}` : "未选择"}
           </Typography.Text>
+          {!immediateMultiple && (
           <Space size={8}>
             <Button size="small" aria-label="取消" onClick={cancelDraft}>取消</Button>
-            <Button size="small" type="primary" aria-label="确定" onClick={applyDraft}>确定</Button>
+            <Button size="small" type="primary" aria-label="确定" disabled={!optionsReady} onClick={applyDraft}>确定</Button>
           </Space>
+          )}
         </div>
       </div>
     )
@@ -237,6 +265,7 @@ function ReportFacetSelect({
       open={shouldConfirm ? open : undefined}
       popupRender={popupRender}
       options={selectOptions}
+      loading={loading}
       optionRender={(option) => {
         const optionValue = String(option.value ?? "");
 

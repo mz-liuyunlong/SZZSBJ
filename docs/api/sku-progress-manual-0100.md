@@ -1,0 +1,5 @@
+# SKU manual progress API (candidate)
+
+PUT `/api/new-products/sku-progress/manual`: authenticated principal, current account scope; preview and separated operational read DB disallowed. Body: source_account_ref (string), sku_identity_id (UUID), version (integer >=0 from list progress_version), progress_status (in_progress/paused/terminated/completed), reason_type (nullable string <=128), remark (required 1–500). Response common envelope; data: progress_status, reason_type, remark, manual_locked, version. List adds `progress_version` and `can_edit_progress`. Status is saved in business row, audit event atomically in same transaction; source tables unchanged.
+
+Errors: SKU_PROGRESS_SCOPE_DENIED / PREVIEW_DENIED / SPLIT_SOURCE_DENIED (403, full prefix SKU_PROGRESS_); SKU_PROGRESS_MANUAL_INVALID / REASON_REQUIRED (422); SKU_PROGRESS_NOT_ELIGIBLE / VERSION_CONFLICT / EXITED / TERMINAL / PURCHASE_PENDING (409). Refresh and review before retrying conflicts. Existing POST `/purchase` unchanged. Batch UI calls it sequentially; each result separate, no retry or new provider request path.

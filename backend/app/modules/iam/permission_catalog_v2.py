@@ -67,18 +67,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
         "dashboard",
         "工作台",
         10,
-        (
-            _page("dashboard", "today_sales", "今日销售", 10),
-            _page("dashboard", "today_profit", "今日利润", 20),
-            _page("dashboard", "ad_spend", "广告花费", 30),
-            _page("dashboard", "refund_rate", "退款率", 40),
-            _page("dashboard", "inventory_alert", "库存预警", 50),
-            _page("dashboard", "review_alert", "Review预警", 60),
-            _page("dashboard", "ads_alert", "广告异常", 70),
-            _page("dashboard", "listing_alert", "Listing异常", 80),
-            _page("dashboard", "wfs_alert", "WFS异常", 90),
-            _page("dashboard", "todo", "待办任务", 100),
-        ),
+        (_page("dashboard", "today_sales", "工作台", 10),),
     ),
     ModuleDefinition(
         "products",
@@ -86,11 +75,10 @@ MODULES: tuple[ModuleDefinition, ...] = (
         20,
         (
             _page("products", "product_management", "产品管理", 10),
+            _page("products", "clearance_center", "清货中心", 15),
             _page("products", "listing_management", "Listing管理", 20),
-            _page("products", "claim_center", "认领中心", 30),
-            _page("products", "new_product_analysis", "新品分析", 40),
-            _page("products", "lifecycle", "产品生命周期", 50),
-            _page("products", "grade", "产品等级", 60),
+            _page("products", "new_product_analysis", "新品表现", 40),
+            _page("products", "launch_tracking", "打品跟踪", 45),
         ),
     ),
     ModuleDefinition(
@@ -159,11 +147,18 @@ MODULES: tuple[ModuleDefinition, ...] = (
         (
             _page("finance", "profit_center", "利润中心", 10),
             _page("finance", "sku_cash_profit", "单品现金利润", 20),
+            _page("finance", "settlement_profit", "结算利润", 25),
             _page("finance", "walmart_settlement", "沃尔玛返还明细", 30),
-            _page("finance", "settlement_reconciliation", "结算对账", 40),
+            _page("finance", "settlement_reconciliation", "回款对账", 40),
+            _page("finance", "wfs_fees", "WFS 费用明细", 45),
             _page("finance", "ad_cost", "广告费用", 50),
             _page("finance", "ad_bill", "广告账单", 60),
             _page("finance", "performance_report", "业绩报表", 70),
+            _page("finance", "balance_sheet", "资产负债表", 75),
+            _page("finance", "cash_flow", "资金流水", 80),
+            _page("finance", "cost_exception", "成本异常处理", 85),
+            _page("finance", "settings", "口径与设置", 90),
+            _page("finance", "data_import", "数据导入", 95),
         ),
     ),
     ModuleDefinition(
@@ -194,6 +189,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
         (
             _page("pmc", "purchase_board", "采购看板", 10),
             _page("pmc", "domestic_warehouse_board", "国内仓看板", 20),
+            _page("pmc", "logistics", "物流", 30),
         ),
     ),
     ModuleDefinition(
@@ -218,6 +214,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
         (
             _page("data_center", "approval_workspace", "审批工作台", 10),
             _page("data_center", "walmart_monitoring", "沃尔玛监控", 20),
+            _page("data_center", "walmart_remote", "沃尔玛采集", 25),
             _page("data_center", "alert_center", "预警中心", 30),
             _page("data_center", "data_import", "数据导入", 40),
             _page("data_center", "data_export", "数据导出", 50),
@@ -262,6 +259,17 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ActionDefinition("ai_center_keyword_rules", "publish", "发布关键词规则", 30, "high"),
     ActionDefinition("pmc_domestic_warehouse_board", "packing-approve", "通过打包审批", 10),
     ActionDefinition("pmc_domestic_warehouse_board", "packing-reject", "驳回打包审批", 20),
+    ActionDefinition("finance_settlement_reconciliation", "sync", "手动同步沃尔玛账单", 10),
+    ActionDefinition(
+        "finance_settlement_reconciliation", "review1", "回款对账初审（确认到账、配对）", 20
+    ),
+    ActionDefinition(
+        "finance_settlement_reconciliation",
+        "review2",
+        "回款对账终审（通过 / 驳回、收款账户映射）",
+        30,
+    ),
+    ActionDefinition("finance_settlement_reconciliation", "follow", "回款对账打款异常跟进", 40),
     ActionDefinition("products_product_management", "view-sync-history", "查看同步历史", 8),
     ActionDefinition("products_product_management", "view-raw-lineage", "查看数据血缘", 9, "high"),
     ActionDefinition("products_product_management", "view-operation-logs", "查看操作日志", 10),
@@ -276,11 +284,22 @@ ACTIONS: tuple[ActionDefinition, ...] = (
         50,
         "high",
     ),
+    # PR337_PHASE2_REAL_API_V1: strictly scoped actions. Assign roles explicitly in IAM.
+    ActionDefinition(
+        "products_new_product_analysis", "configure", "保存并应用新品评分和打品规则", 10, "high"
+    ),
+    ActionDefinition("products_new_product_analysis", "score", "提交新品市场竞争评分", 20),
+    ActionDefinition("products_new_product_analysis", "request", "申请新品采购", 30),
+    ActionDefinition("products_new_product_analysis", "review", "审核新品采购申请", 40, "high"),
+    ActionDefinition("products_new_product_analysis", "tracking", "人工判定打品结果", 50),
     ActionDefinition("products_listing_management", "export", "导出Listing", 10),
     ActionDefinition("products_listing_management", "manage_tags", "管理标签", 20),
     ActionDefinition("products_listing_management", "archive", "归档Listing", 30, "high"),
     ActionDefinition("products_listing_management", "restore", "恢复Listing", 40),
     ActionDefinition("products_listing_management", "edit_analysis_link", "编辑分析链接", 50),
+    ActionDefinition(
+        "products_listing_management", "edit_lifecycle", "人工修改Listing生命周期", 55, "high"
+    ),
     ActionDefinition(
         "products_listing_management", "configure_rules", "配置Listing评级规则", 60, "high"
     ),

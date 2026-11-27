@@ -1,0 +1,377 @@
+/* NP_ASSESSMENT_REFERENCE_EXACT_V5_20261120
+   Reference: blue-white full-width score summary and aligned purchasing form.
+   Scoped: only NewProductPages assessment tab; no market-scoring grid reuse. */
+.np-acceptance-drawer .np-assessment-tabs {
+  display:flex;gap:8px;padding:7px;margin:6px 0 18px;
+  background:#eff4ff;border:1px solid #d3e0fb;border-radius:11px;
+}
+.np-acceptance-drawer .np-assessment-tabs button {
+  appearance:none;background:transparent;border:1px solid transparent;
+  border-radius:8px;padding:9px 19px;color:#435778;font-size:14px;
+  font-weight:650;cursor:pointer;
+}
+.np-acceptance-drawer .np-assessment-tabs button.active {
+  background:#0758e9;color:#fff;border-color:#0758e9;
+}
+.np-acceptance-drawer .np-assessment-pending-action {
+  display:flex;align-items:center;justify-content:space-between;
+  gap:14px;padding:12px 17px;margin:0 0 18px;
+  border:1px solid #d1def5;background:#f5f8ff;border-radius:10px;
+}
+.np-acceptance-drawer .np-assessment-result-heading {
+  display:flex;align-items:center;gap:13px;width:100%;
+  padding:0;margin:8px 0 20px;color:#111a2d;font-size:25px;
+  line-height:1.35;font-weight:800;
+}
+.np-acceptance-drawer .np-assessment-result-heading > span {
+  display:flex;align-items:center;justify-content:center;
+  width:47px;height:47px;flex:none;color:#fff;
+  background:#0758e9;border-radius:9px;
+}
+.np-acceptance-drawer .qty-hero.np-assessment-hero {
+  box-sizing:border-box;display:grid !important;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
+  gap:0 !important;align-items:stretch;width:100%;min-width:0;
+  padding:20px 22px;margin:0 0 24px;
+  background:linear-gradient(108deg,#f9fbff 0%,#ebf2ff 100%);
+  border:1px solid #bad0fa;border-radius:17px;
+  box-shadow:0 3px 12px rgba(7,88,233,.08);
+}
+.np-acceptance-drawer .qty-hero.np-assessment-hero > div {
+  box-sizing:border-box;display:grid;position:relative;min-width:0;
+  grid-template-columns:94px minmax(130px,1fr) minmax(130px,1.15fr);
+  grid-template-rows:32px 53px;column-gap:18px;align-content:center;
+  align-items:center;padding:2px 20px 2px 10px;
+  text-align:left !important;min-height:102px;
+}
+.np-acceptance-drawer .qty-hero.np-assessment-hero > div:first-child {
+  border-right:1px solid #a8c3fa;
+}
+.np-acceptance-drawer .qty-hero.np-assessment-hero > div:last-child {
+  padding-left:36px;
+}
+.np-acceptance-drawer .np-assessment-hero-icon {
+  grid-column:1;grid-row:1 / 3;display:flex;align-items:center;
+  justify-content:center;width:86px;height:86px;border-radius:18px;
+  background:linear-gradient(135deg,#eaf2ff,#d4e3ff);
+  color:#0758e9;
+}
+.np-acceptance-drawer .np-assessment-hero .subline {
+  grid-column:2;grid-row:1;font-size:15px;color:#15223d;
+  font-weight:700;margin:0;white-space:nowrap;
+}
+.np-acceptance-drawer .np-assessment-hero .big {
+  grid-column:2;grid-row:2;font-size:35px;line-height:1.15;
+  font-weight:850;color:#0758e9;white-space:nowrap;margin:0;
+}
+.np-acceptance-drawer .np-assessment-hero .big .grade {
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:31px;min-height:32px;border-radius:7px;
+  margin-left:5px;background:#0758e9;color:#fff;font-size:22px;
+  vertical-align:middle;
+}
+.np-acceptance-drawer .np-assessment-hero .delta {
+  grid-column:3;grid-row:1 / 3;align-self:center;
+  border-left:1px solid #b9c9e8;margin:0;padding:0 0 0 20px;
+  font-size:14px;line-height:1.5;color:#263652;
+}
+.np-acceptance-drawer .np-assessment-panel {
+  box-sizing:border-box;display:block !important;
+  width:100%;min-width:0;height:auto;
+  background:#fff;border:1px solid #c4d6fa;border-radius:17px;
+  padding:25px 28px 26px;margin:0 0 22px;
+  box-shadow:0 4px 13px rgba(7,88,233,.07);
+}
+.np-acceptance-drawer .np-assessment-panel-title {
+  display:flex;align-items:center;gap:14px;
+  margin:0 0 13px;padding:0 0 21px;
+  width:100%;font-size:23px;font-weight:800;color:#121b2e;
+  border-bottom:1px solid #c7d6f4;
+}
+.np-acceptance-drawer .np-assessment-panel-title::before {
+  content:"";display:block;flex:none;width:4px;height:34px;
+  border-radius:3px;background:#0758e9;
+}
+.np-acceptance-drawer .np-assessment-panel-title > span {
+  display:flex;align-items:center;justify-content:center;
+  color:#0758e9;flex:none;
+}
+.np-acceptance-drawer .np-assessment-form {
+  display:block !important;width:100%;min-width:0;
+}
+.np-acceptance-drawer .np-assessment-form > .form-field {
+  display:grid !important;grid-template-columns:296px minmax(0,1fr);
+  grid-template-rows:auto auto;column-gap:16px;row-gap:4px;
+  width:100%;box-sizing:border-box;align-items:start;
+  margin:0;padding:18px 23px 16px;
+  border-bottom:1px solid #e2eafa;
+}
+.np-acceptance-drawer .np-assessment-form > .form-field > .form-label {
+  grid-column:1;grid-row:1 / 3;align-self:start;
+  margin:7px 0 0;font-size:17px;line-height:1.5;
+  color:#111827;font-weight:700;
+}
+.np-acceptance-drawer .np-assessment-form > .form-field > .input,
+.np-acceptance-drawer .np-assessment-form > .form-field > .textarea {
+  grid-column:2;grid-row:1;
+  display:block;box-sizing:border-box;width:100% !important;
+  min-width:0;max-width:none !important;margin:0;
+  border:1px solid #a7bbdf;border-radius:11px;
+  color:#1d2738;background:#fff;font-size:16px;
+  padding:12px 17px;line-height:1.55;
+}
+.np-acceptance-drawer .np-assessment-form > .form-field > .input {
+  min-height:57px;
+}
+.np-acceptance-drawer .np-assessment-form > .form-field > .textarea {
+  min-height:108px;height:108px;resize:vertical;
+}
+.np-acceptance-drawer .np-assessment-form > .form-field > .cell-sub {
+  grid-column:2;grid-row:2;justify-self:end;text-align:right;
+  margin:3px 0 0;font-size:13px;color:#64738a;
+}
+.np-acceptance-drawer .np-assessment-form > .form-field > .cell-sub:not(:last-child) {
+  justify-self:start;text-align:left;
+}
+.np-acceptance-drawer .np-assessment-form > div[style] {
+  display:flex !important;justify-content:center !important;
+  gap:28px !important;flex-wrap:wrap;
+  margin:0 !important;padding:22px 0 0;
+}
+.np-acceptance-drawer .np-assessment-form > div[style] .btn {
+  min-height:53px;min-width:199px;border:1px solid #b3c7e9;
+  border-radius:9px;padding:10px 24px;font-size:16px;
+  font-weight:750;background:#fff;color:#193562;
+}
+.np-acceptance-drawer .np-assessment-form > div[style] .btn.primary {
+  min-width:324px;background:#0758e9;border-color:#0758e9;color:#fff;
+}
+.np-acceptance-drawer .np-assessment-back {
+  display:inline-flex;align-items:center;width:max-content;
+  border:0;background:transparent;color:#0758e9;
+  padding:0;margin:0 0 16px;font-size:13px;
+  font-weight:650;cursor:pointer;
+}
+@media(max-width:1200px) {
+  .np-acceptance-drawer .qty-hero.np-assessment-hero > div {
+    grid-template-columns:70px minmax(85px,1fr) minmax(90px,1fr);
+    gap:10px;padding-left:0;padding-right:12px;
+  }
+  .np-acceptance-drawer .qty-hero.np-assessment-hero > div:last-child {padding-left:16px}
+  .np-acceptance-drawer .np-assessment-hero-icon {width:64px;height:68px}
+  .np-acceptance-drawer .np-assessment-hero-icon svg {width:38px;height:38px}
+  .np-acceptance-drawer .np-assessment-hero .big {font-size:28px}
+  .np-acceptance-drawer .np-assessment-hero .delta {font-size:12px;padding-left:10px}
+  .np-acceptance-drawer .np-assessment-form > .form-field {grid-template-columns:210px minmax(0,1fr)}
+}
+@media(max-width:750px) {
+  .np-acceptance-drawer .qty-hero.np-assessment-hero {grid-template-columns:1fr !important}
+  .np-acceptance-drawer .qty-hero.np-assessment-hero > div:first-child {border-right:0;border-bottom:1px solid #cedcf4}
+  .np-acceptance-drawer .qty-hero.np-assessment-hero > div:last-child {padding-left:0}
+  .np-acceptance-drawer .qty-hero.np-assessment-hero > div {padding:12px 0}
+  .np-acceptance-drawer .np-assessment-form > .form-field {grid-template-columns:1fr;padding:15px 4px}
+  .np-acceptance-drawer .np-assessment-form > .form-field > .form-label {
+    grid-column:1;grid-row:auto;margin:0 0 7px;
+  }
+  .np-acceptance-drawer .np-assessment-form > .form-field > .input,
+  .np-acceptance-drawer .np-assessment-form > .form-field > .textarea {
+    grid-column:1;grid-row:auto;
+  }
+  .np-acceptance-drawer .np-assessment-form > .form-field > .cell-sub {
+    grid-column:1;grid-row:auto;
+  }
+  .np-acceptance-drawer .np-assessment-result-heading {font-size:21px}
+  .np-acceptance-drawer .np-assessment-panel-title {font-size:19px}
+}
+
+/* NP_COMPACT_ANTD_SELECT_V1_20261120
+   Exact scope: only the new-product human-assessment tab. Project section-title = 13px. */
+.np-acceptance-drawer .np-acceptance-content .np-assessment-result-heading,
+.np-acceptance-drawer .np-acceptance-content .np-assessment-panel-title {
+  font-size:13px;
+  font-weight:650;
+  line-height:1.5;
+  gap:8px;
+}
+.np-acceptance-drawer .np-assessment-result-heading {margin:8px 0 10px;padding:0;justify-content:flex-start}
+.np-acceptance-drawer .np-assessment-result-heading > span {
+  width:26px;height:26px;border-radius:5px;
+}
+.np-acceptance-drawer .np-assessment-result-heading > span svg {width:18px;height:18px}
+.np-acceptance-drawer .np-assessment-panel-title {
+  margin:0 0 6px;padding:0 0 12px;
+}
+.np-acceptance-drawer .np-assessment-panel-title::before {height:21px;width:3px}
+.np-acceptance-drawer .np-assessment-panel-title > span svg {width:19px;height:19px}
+.np-acceptance-drawer .qty-hero.np-assessment-hero {
+  padding:12px 14px;margin-bottom:12px;border-radius:10px;
+}
+.np-acceptance-drawer .qty-hero.np-assessment-hero > div {
+  grid-template-columns:52px minmax(90px,1fr) minmax(88px,1fr);
+  grid-template-rows:23px 32px;column-gap:10px;min-height:62px;
+  padding:0 10px 0 0;
+}
+.np-acceptance-drawer .qty-hero.np-assessment-hero > div:last-child {padding-left:14px}
+.np-acceptance-drawer .np-assessment-hero-icon {
+  width:45px;height:45px;border-radius:10px;
+}
+.np-acceptance-drawer .np-assessment-hero-icon svg {width:26px;height:26px}
+.np-acceptance-drawer .np-assessment-hero .subline {font-size:12px}
+.np-acceptance-drawer .np-assessment-hero .big {font-size:23px}
+.np-acceptance-drawer .np-assessment-hero .big .grade {
+  min-width:21px;min-height:22px;font-size:14px;border-radius:4px;
+}
+.np-acceptance-drawer .np-assessment-hero .delta {
+  font-size:11px;padding-left:10px;
+}
+.np-acceptance-drawer .np-assessment-panel {
+  padding:15px 18px 16px;border-radius:10px;
+}
+.np-acceptance-drawer .np-assessment-form > .form-field {
+  grid-template-columns:minmax(145px,28%) minmax(0,1fr);
+  padding:11px 9px;gap:3px 12px;
+}
+.np-acceptance-drawer .np-assessment-form > .form-field > .form-label {
+  font-size:13px;font-weight:650;margin-top:6px;
+}
+.np-acceptance-drawer .np-assessment-form > .form-field > .input,
+.np-acceptance-drawer .np-assessment-form > .form-field > .textarea {
+  font-size:13px;border-radius:7px;padding:7px 10px;
+}
+.np-acceptance-drawer .np-assessment-form > .form-field > .input {min-height:36px;height:36px}
+.np-acceptance-drawer .np-assessment-form > .form-field > .textarea {
+  height:74px;min-height:74px;resize:none !important;
+}
+.np-acceptance-drawer .np-assessment-form > .form-field > .cell-sub {font-size:11px}
+.np-acceptance-drawer .np-assessment-form > .form-field > .np-assessment-choice {
+  grid-column:2;grid-row:1;display:block;width:100%;min-width:0;
+  font-size:13px;
+}
+.np-acceptance-drawer .np-assessment-form .np-assessment-choice .ant-select-selector {
+  min-height:36px !important;height:36px !important;
+  display:flex;align-items:center;
+  border:1px solid #b2c7ef !important;border-radius:7px !important;
+  padding:0 10px !important;
+}
+.np-acceptance-drawer .np-assessment-form > div[style] {
+  gap:12px !important;padding-top:13px;
+}
+.np-acceptance-drawer .np-assessment-form > div[style] .btn {
+  min-height:36px;min-width:130px;font-size:13px;
+  padding:7px 16px;border-radius:7px;
+}
+.np-acceptance-drawer .np-assessment-form > div[style] .btn.primary {min-width:210px}
+@media (max-width:750px) {
+  .np-acceptance-drawer .np-assessment-form > .form-field {
+    grid-template-columns:1fr;
+  }
+  .np-acceptance-drawer .np-assessment-form > .form-field > .np-assessment-choice {
+    grid-column:1;grid-row:auto;
+  }
+}
+
+/* NP_ASSESSMENT_TITLE_ALIGNMENT_V1 */
+.np-acceptance-drawer .np-acceptance-content
+.section-title.np-assessment-panel-title {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  font-size: 13px;
+  font-weight: 650;
+  text-align: left;
+}
+
+.np-acceptance-drawer .np-acceptance-content
+.np-assessment-panel-title > span {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
+/* Confirmed assessment: scoped to current design. */
+.np-acceptance-drawer .np-assessment-confirmed {
+  display: grid;
+  grid-template-columns: minmax(0,1fr);
+  width: 100%;
+  box-sizing: border-box;
+  background: #fff;
+  border: 1px solid #c4d6fa;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.np-acceptance-drawer .np-assessment-confirmed > div {
+  padding: 16px 22px;
+  border-bottom: 1px solid #e2eafa;
+  color: #263652;
+  font-size: 16px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.np-acceptance-drawer .np-assessment-confirmed > div strong {
+  display: inline-block;
+  min-width: 105px;
+  color: #111827;
+  font-weight: 700;
+}
+.np-acceptance-drawer .np-assessment-confirmed > button {
+  justify-self: start;
+  margin: 16px 22px;
+}
+.np-acceptance-drawer .np-assessment-confirmed > .np-market-v3-form {
+  margin: 0 22px 20px;
+}
+
+
+/* NP_GRADE_CONFIRM_BUTTON_RIGHT_V1 */
+.np-acceptance-drawer .np-grade-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+  margin: 12px 0 4px;
+  padding: 14px 0 0;
+  border-top: 1px solid #dce6f7;
+}
+
+.np-acceptance-drawer .np-grade-confirm-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  height: 42px;
+  min-width: 136px;
+  padding: 0 18px;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.np-acceptance-drawer .np-grade-confirm-actions .btn svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+}
+
+.np-acceptance-drawer .np-grade-confirm-actions .np-grade-back-btn {
+  background: #fff;
+  border: 1px solid #b9cbe8;
+  color: #344664;
+}
+
+.np-acceptance-drawer .np-grade-confirm-actions .np-grade-confirm-btn {
+  background: #0758e9;
+  border: 1px solid #0758e9;
+  color: #fff;
+}
+
+.np-acceptance-drawer .np-grade-confirm-actions .np-grade-confirm-btn:hover:not(:disabled) {
+  background: #064bc9;
+  border-color: #064bc9;
+}

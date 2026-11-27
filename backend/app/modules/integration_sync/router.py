@@ -526,6 +526,14 @@ def update_sync_anomaly(
     )
     if row is None:
         raise ApiError(code="SYNC_ANOMALY_NOT_FOUND", status_code=404)
+    if payload.status in {"resolved", "dismissed"} and (
+        row.details.get("sample_isolation_active") is True
+        or (
+            "sample_isolation_active" in row.details
+            and row.details.get("financial_status") == "pending"
+        )
+    ):
+        raise ApiError(code="SYNC_SAMPLE_EVIDENCE_REVALIDATION_REQUIRED", status_code=409)
     previous_status = row.status
     session.add(
         IntegrationSyncAnomalyAudit(
