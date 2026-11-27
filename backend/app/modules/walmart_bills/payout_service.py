@@ -61,7 +61,11 @@ from app.modules.walmart_bills.payout_schemas import (
     PayoutReviewSkipped,
     PayoutStoreOption,
 )
-from app.modules.walmart_bills.recon_payout import account_rows_note, lingxing_payable
+from app.modules.walmart_bills.recon_payout import (
+    account_rows_note,
+    lingxing_payable,
+    period_start_note,
+)
 
 SHANGHAI: Final = ZoneInfo("Asia/Shanghai")
 # 回款对账从 2026-10 起（Rocky 11-10：历史先补 10 月起，之前的以后再说）。
@@ -462,8 +466,19 @@ class PayoutReconService:
                     lingxing_payable=lingxing_payable(row),
                     walmart_total_payable=row.walmart_total_payable,
                     walmart_diff=row.walmart_diff,
-                    walmart_note=account_rows_note(
-                        row.walmart_account_rows, complete=row.walmart_account_rows_complete
+                    walmart_note="；".join(
+                        note
+                        for note in (
+                            period_start_note(
+                                row.period_start_date or row.first_posted_date,
+                                row.walmart_period_start_date,
+                            ),
+                            account_rows_note(
+                                row.walmart_account_rows,
+                                complete=row.walmart_account_rows_complete,
+                            ),
+                        )
+                        if note
                     )
                     or None,
                     period_status=row.status,
