@@ -1,8 +1,7 @@
 /** Read-only as-submitted evidence for initial-purchase approval. Never rescore. */
-import { useState } from 'react';
 import { SafetyCertificateOutlined, BarChartOutlined, CheckSquareOutlined, InboxOutlined, UnorderedListOutlined, FileTextOutlined } from '@ant-design/icons';
 import type { ApprovalItem, PurchaseApprovalEvidenceView } from '../approvalTypes';
-import { Modal } from 'antd';
+import { Tooltip } from 'antd';
 import './PurchaseApprovalEvidence.css';
 
 type Dimension = 'speed' | 'ad' | 'profit' | 'trust' | 'market';
@@ -122,9 +121,24 @@ function ReasonRow({record}: {record:ApprovalItem}) {
   </div>;
 }
 
+// NP_PURCHASE_SCORE_HOVER_HEADER_V2: display only the locked application evidence.
+// eslint-disable-next-line react-refresh/only-export-components
+export function approvalScoreDisplay(evidence: PurchaseApprovalEvidenceView | null | undefined) {
+  if (!evidence?.frozen) return {revised:false,verifiedUnchanged:false,previous:null,gradeChange:null};
+  const keys = ['speed','ad','profit','trust'] as const;
+  const states = keys.map(key=>evidenceDimensionStatus(evidence,key));
+  const previous = asScore(evidence.system_total);
+  const effective = asScore(evidence.effective_total);
+  const gradeChange = evidence.system_grade && evidence.effective_grade && evidence.system_grade!==evidence.effective_grade
+    ? `${evidence.system_grade}级 → ${evidence.effective_grade}级` : null;
+  const totalChanged = previous!==null && effective!==null && previous!==effective;
+  const revised = evidence.correction_history.length>0 || states.some(s=>s.status==='changed') || Boolean(gradeChange) || totalChanged;
+  return {revised,verifiedUnchanged:!revised && states.every(s=>s.status==='unchanged'),
+    previous:totalChanged ? shown(previous) : null, gradeChange};
+}
+
 export default function PurchaseApprovalEvidence({record}: {record: ApprovalItem}) {
   const evidence = record.purchase_details?.approval_evidence;
-  const [expanded, setExpanded] = useState<Dimension|null>(null);
   // PURCHASE_APPROVAL_REFERENCE_V2: preserve frozen proof.
   // The list response intentionally lacks as-of audit details; do not show current data as a substitute.
   if (!evidence?.frozen) return <section className="purchase-evidence purchase-evidence--pending">
@@ -149,6 +163,7 @@ export default function PurchaseApprovalEvidence({record}: {record: ApprovalItem
           const history = evidence.correction_history.filter(item=>item.dimension===key);
           const last = history.length ? history[history.length-1] : undefined;
           const hasHistory = history.length>0;
+          const reason = last?.reason?.trim();
           return <div key={key} className={`purchase-evidence__score-card ${key==='market'?'is-market':''}`}>
             <div className="purchase-evidence__score-head"><strong>{label}</strong><span>权重 {evidence.weights?.[key] == null ? '—' : `${evidence.weights[key]}%`}</span></div>
             <div className={`purchase-evidence__state purchase-evidence__state--${status}`}>
@@ -157,35 +172,22 @@ export default function PurchaseApprovalEvidence({record}: {record: ApprovalItem
               {status==='changed'&&<><b>{shown(original)}</b><span className="purchase-evidence__arrow">→</span></>}
               <strong>{shown(current)}</strong><span>/10</span>
             </div>
-            {status==='changed' ? <>
-              <div className="purchase-evidence__correction-preview"><strong>修正原因</strong><p>{last?.reason || '修正记录缺少原因'}</p></div>
-              {hasHistory && <button type="button" className="purchase-evidence__history-toggle"
-                aria-expanded={expanded===key} onClick={()=>setExpanded(expanded===key?null:key)}>
-                  {expanded===key?'收起':'查看'}修正记录（{history.length}）</button>}
+            {/* NP_PURCHASE_REASON_TOOLTIP_V3: use the existing two-line reason and default Ant Tooltip. */}
+            {status==='changed' || (status==='unchanged' && hasHistory) ? <>
+              {status==='unchanged' && <div className="purchase-evidence__unchanged-caption">已恢复系统原始评分</div>}
+              <div className="purchase-evidence__correction-preview"><strong>修正原因</strong>
+                <Tooltip trigger={['hover','focus']} placement="top" autoAdjustOverflow zIndex={1300}
+                  title={reason ? <span style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{reason}</span> : undefined}>
+                  <p tabIndex={reason ? 0 : undefined}>{reason || '修正记录缺少原因'}</p>
+                </Tooltip>
+              </div>
             </> : <div className="purchase-evidence__unchanged-caption">
-              {status==='manual'?'申请前人工填写的市场评分':status==='missing'?'评分证据未核实':hasHistory?'已恢复系统原始评分':'系统自动评分'}</div>}
+              {status==='manual'?'申请前人工填写的市场评分':status==='missing'?'评分证据未核实':'系统自动评分'}</div>}
+
 
           </div>;
         })}
       </div>
-      {/* Render in Ant Design portal: never clip audit history under scrolling cards. */}
-      <Modal
-        rootClassName="purchase-evidence__history-modal"
-        open={expanded !== null}
-        title={`评分修正记录 · ${dimensions.find(d => d.key === expanded)?.label ?? ''}`}
-        footer={null}
-        width={620}
-        onCancel={() => setExpanded(null)}
-      >
-        <div className="purchase-evidence__history-list">
-          {evidence.correction_history.filter(item => item.dimension === expanded)
-            .map((event, index) => <div key={`${event.dimension}-${event.revision ?? index}`}>
-              <b>{shown(asScore(event.before))} → {shown(asScore(event.after))}</b>
-              <p>{event.reason || '未记录修正说明'}</p>
-              <small>{event.actor_id || '操作人待核实'} · {event.at || '时间待核实'}</small>
-            </div>)}
-        </div>
-      </Modal>
     </section>
     <section className="purchase-evidence__summary" aria-label="审批依据摘要">
       <header className="purchase-evidence__heading"><h3><span className="purchase-evidence__heading-icon" aria-hidden="true"><FileTextOutlined/></span>审批依据摘要</h3><span className="purchase-evidence__caption">申请时留存 · 只读</span></header>

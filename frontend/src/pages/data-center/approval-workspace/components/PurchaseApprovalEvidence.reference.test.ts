@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import PurchaseApprovalEvidence from './PurchaseApprovalEvidence';
+import PurchaseApprovalEvidence, { approvalScoreDisplay } from './PurchaseApprovalEvidence';
 import type { ApprovalItem, PurchaseApprovalEvidenceView } from '../approvalTypes';
 
 function evidence(): PurchaseApprovalEvidenceView {
@@ -55,4 +55,34 @@ describe('reference approval evidence V2',()=>{
     expect(html).toMatch(/purchase-evidence__pill--muted/);
     expect(html).not.toMatch(/purchase-evidence__pill--red[^>]*>\u65e0/);
   });
+});
+
+
+// NP_PURCHASE_SCORE_GRADE_EVIDENCE_V1
+// NP_PURCHASE_SCORE_HOVER_HEADER_V2
+it('uses frozen totals and grade in the top metric only',()=>{
+  const data={...evidence(),system_grade:'D' as const,effective_grade:'C' as const,system_total:'5.40',effective_total:'6.80'};
+  expect(approvalScoreDisplay(data)).toMatchObject({previous:'5.40',gradeChange:'D级 → C级',revised:true});
+  expect(render(data)).not.toContain('等级变化');
+});
+it('does not invent an unknown baseline',()=>{
+  const data={...evidence(),system_grade:null,effective_grade:'C' as const,system_total:null,effective_total:'6.80'};
+  expect(approvalScoreDisplay(data)).toMatchObject({previous:null,gradeChange:null,revised:true});
+});
+// NP_PURCHASE_REASON_TOOLTIP_V3
+it('shows correction reason without a separate history entry or dialog',()=>{
+  const html=render(evidence());
+  expect(html).toContain('sample revised reason');
+  expect(html).toContain('purchase-evidence__correction-preview');
+  expect(html).not.toContain('查看修正记录');
+  expect(html).not.toContain('purchase-evidence__history-toggle');
+  expect(html).not.toContain('评分修正记录 ·');
+});
+it('retains the last reason when the original score has been restored',()=>{
+  const data=evidence();
+  data.effective_dimensions={...data.system_dimensions};
+  const html=render(data);
+  expect(html).toContain('已恢复系统原始评分');
+  expect(html).toContain('sample revised reason');
+  expect(html).not.toContain('查看修正记录');
 });

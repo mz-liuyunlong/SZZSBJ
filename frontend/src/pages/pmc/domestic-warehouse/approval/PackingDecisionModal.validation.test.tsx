@@ -9,7 +9,7 @@ import PackingDecisionModal from "./PackingDecisionModal";
 
 vi.mock("./packingApprovalApi", async () => {
   const actual = await vi.importActual<typeof import("./packingApprovalApi")>("./packingApprovalApi");
-  return { ...actual, getPackingEditOptions: vi.fn().mockResolvedValue({ success: true, data: { listings: [], cross_store_proof_available: false }, error: null, meta: {}, request_id: "test" }) };
+  return { ...actual, searchPackingListings: vi.fn().mockResolvedValue({ success: true, data: { items: [] }, error: null, meta: {}, request_id: "test" }) };
 });
 
 beforeEach(() => {
