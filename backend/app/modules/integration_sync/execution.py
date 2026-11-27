@@ -85,6 +85,7 @@ from app.modules.integration_sync.repository import IntegrationSyncRepository
 from app.modules.integration_sync.wfs_cost_valuation_catalog import (
     WFS_COST_VALUATION_SYNC_SPEC,
 )
+from app.modules.settlement_profit.tasks import dispatch_order_review_recalc
 
 LOCK_LEASE_DURATION = timedelta(minutes=5)
 DATA_PAGES_LA_TZ = ZoneInfo("America/Los_Angeles")
@@ -287,10 +288,13 @@ class SyncRunExecutionService:
 
             if is_walmart_bill:
                 # 沃尔玛账单一个店一个保存点：心跳必须用独立 session 续锁，不能提交业务事务。
-                LingxingWalmartBillSyncHandler(
+                bill_result = LingxingWalmartBillSyncHandler(
                     self.session,
                     heartbeat=lambda: self._heartbeat_data_pages_lock(run.id),
                 ).execute(run, interface)
+                if getattr(bill_result, "status", None) == "succeeded":
+                    # 账单变了 → 订单审核重算受影响的期（§8.1）；投递失败只记日志
+                    dispatch_order_review_recalc(reason="walmart_bill_sync")
                 return
 
             if is_fin and fin_handler is not None:

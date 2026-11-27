@@ -1,0 +1,98 @@
+transaction_type,transaction_description,amount_type,fulfillment_type
+Sale,Purchase,Commission on Product,Walmart-fulfilled(WFS)
+Sale,Purchase,Product Price,Walmart-fulfilled(WFS)
+Adjustment,WFS Fulfillment fee,Fee/Reimbursement,Walmart-fulfilled(WFS)
+Sale,Purchase,Product tax withheld,Walmart-fulfilled(WFS)
+Sale,Purchase,Product tax,Walmart-fulfilled(WFS)
+Sale,Purchase,Commission on Product,Seller Fulfilled
+Sale,Purchase,Product Price,Seller Fulfilled
+Sale,Purchase,Product tax withheld,Seller Fulfilled
+Sale,Purchase,Product tax,Seller Fulfilled
+Adjustment,WFS Return Processing Fee,Fee/Reimbursement,Walmart-fulfilled(WFS)
+Sale,Purchase,Total Walmart Funded Savings,Walmart-fulfilled(WFS)
+Refund,Return Refund,Commission on Product,Walmart-fulfilled(WFS)
+Refund,Return Refund,Product Price,Walmart-fulfilled(WFS)
+Refund,Return Refund,Product tax withheld,Walmart-fulfilled(WFS)
+Refund,Return Refund,Product tax,Walmart-fulfilled(WFS)
+Refund,Keep-it refund,Commission on Product,Walmart-fulfilled(WFS)
+Refund,Keep-it refund,Product Price,Walmart-fulfilled(WFS)
+Refund,Keep-it refund,Product tax withheld,Walmart-fulfilled(WFS)
+Refund,Keep-it refund,Product tax,Walmart-fulfilled(WFS)
+Sale,Purchase,Promo Code,Walmart-fulfilled(WFS)
+Adjustment,WFS Returned Item Disposal Fee,Fee/Reimbursement,Walmart-fulfilled(WFS)
+Campaigns,SEM Marketing,SEM Marketing Fee,
+Sale,Purchase,Other tax (Fees),Walmart-fulfilled(WFS)
+Service Fee,Walmart Product Advertising,Fee/Reimbursement,
+Service Fee,WFS StorageFee,WFS Inventory Fee/Reimbursement,
+Refund,Keep-it refund,Commission on Product,Seller Fulfilled
+Refund,Keep-it refund,Product Price,Seller Fulfilled
+Refund,Seller Initiated Returns,Commission on Product,Seller Fulfilled
+Refund,Seller Initiated Returns,Product Price,Seller Fulfilled
+Refund,Keep-it refund,Product tax withheld,Seller Fulfilled
+Refund,Keep-it refund,Product tax,Seller Fulfilled
+Refund,Seller Initiated Returns,Product tax withheld,Seller Fulfilled
+Refund,Seller Initiated Returns,Product tax,Seller Fulfilled
+Refund,Return Refund,Commission on Product,Seller Fulfilled
+Refund,Return Refund,Product Price,Seller Fulfilled
+Refund,Return Refund,Product tax withheld,Seller Fulfilled
+Refund,Return Refund,Product tax,Seller Fulfilled
+Sale,Purchase,Extra Savings,Walmart-fulfilled(WFS)
+Adjustment,WFS LostInventory,WFS Inventory Fee/Reimbursement,
+Refund,Keep-it refund,Total Walmart Funded Savings,Walmart-fulfilled(WFS)
+Service Fee,WFS InboundTransportationFee,WFS Inbound Fee,
+Adjustment,WFS FoundInventory,WFS Inventory Fee/Reimbursement,
+Adjustment,WFS Refund,WFS Inventory Fee/Reimbursement,
+Service Fee,WFS InventoryTransferFee,WFS Inventory Fee/Reimbursement,
+Other,WFS RC_InventoryDisposalFee,,
+Sale,Purchase,Other tax (Fees),Seller Fulfilled
+Adjustment,WFS DamageInWarehouse,WFS Inventory Fee/Reimbursement,
+Refund,Return Refund,Total Walmart Funded Savings,Walmart-fulfilled(WFS)
+Adjustment,CUSTOMER RETURN REFUND REVERSAL-LOST LATER DELIVERED,Fee/Reimbursement,Seller Fulfilled
+Refund,Seller Triggered Refund,Commission on Product,Seller Fulfilled
+Refund,Seller Triggered Refund,Product Price,Seller Fulfilled
+Service Fee,Review Accelerator,Review Accelerator Fee,
+Other,WFS DiscountAdjustment,Retroactive Discount,
+Refund,Keep-it refund,ExcessRefundAdjustment,Walmart-fulfilled(WFS)
+Service Fee,WFS PrepServiceFee,WFS Inbound Fee,
+Refund,Seller Initiated Returns,Commission on Product,Walmart-fulfilled(WFS)
+Refund,Seller Initiated Returns,Product Price,Walmart-fulfilled(WFS)
+Refund,Seller Triggered Refund,Product tax withheld,Seller Fulfilled
+Refund,Seller Triggered Refund,Product tax,Seller Fulfilled
+Refund,Seller Initiated Returns,Product tax withheld,Walmart-fulfilled(WFS)
+Refund,Seller Initiated Returns,Product tax,Walmart-fulfilled(WFS)
+Refund,Return Refund,Other tax (Fees),Walmart-fulfilled(WFS)
+Service Fee,WFS InventoryDisposalOrder,WFS Inventory Fee/Reimbursement,
+Refund,Return Refund,ExcessRefundAdjustment,Walmart-fulfilled(WFS)
+Adjustment,WFS Charge,WFS Fee/Reimbursement,
+Sale,Purchase,Total Walmart Funded Savings,Seller Fulfilled
+Sale,Purchase,Promo Code,Seller Fulfilled
+Refund,Walmart Customer Care Refund,Commission on Product,Walmart-fulfilled(WFS)
+Service Fee,Walmart Return Shipping Charge,Item Fees,Seller Fulfilled
+Refund,Keep-it refund,Other tax (Fees),Walmart-fulfilled(WFS)
+Service Fee,WFS InventoryRemovalOrder,WFS Inventory Fee/Reimbursement,
+Service Fee,Walmart Product Advertising Credits,Fee/Reimbursement,
+Other,WFS MultiChannelFulfillmentFee,,
+Refund,Keep-it refund,Extra Savings,Walmart-fulfilled(WFS)
+Service Fee,Misc Invoices,Fee/Reimbursement,
+Refund,Return Refund,Other tax (Fees),Seller Fulfilled
+Refund,Return Refund,Extra Savings,Walmart-fulfilled(WFS)
+Refund,Keep-it refund,Total Walmart Funded Savings,Seller Fulfilled
+Refund,Keep-it refund,ExcessRefundAdjustment,Seller Fulfilled
+Refund,Seller Initiated Returns,Other tax (Fees),Seller Fulfilled
+Adjustment,Walmart Failed Return Delivery Processing Charge,Fee/Reimbursement,Seller Fulfilled
+Dispute Settlement,Customer Return Reversal,Fee/Reimbursement,Seller Fulfilled
+Refund,Walmart Customer Care Refund,Commission on Product,Seller Fulfilled
+Refund,Walmart Customer Care Refund,Product tax withheld,Seller Fulfilled
+Refund,Walmart Customer Care Refund,Product tax,Seller Fulfilled
+Refund,Walmart Customer Care Refund,Product Price,Seller Fulfilled
+Refund,Seller Initiated Returns,Total Walmart Funded Savings,Seller Fulfilled
+Refund,Seller Initiated Returns,ExcessRefundAdjustment,Seller Fulfilled
+Refund,Customer Chargeback,Commission on Product,Seller Fulfilled
+Refund,Customer Chargeback,Product tax withheld,Seller Fulfilled
+Refund,Customer Chargeback,Product tax,Seller Fulfilled
+Refund,Customer Chargeback,Product Price,Seller Fulfilled
+Refund,Keep-it refund,Other tax (Fees),Seller Fulfilled
+Refund,Seller Triggered Refund,Commission on Product,Walmart-fulfilled(WFS)
+Refund,Seller Triggered Refund,Product tax withheld,Walmart-fulfilled(WFS)
+Refund,Seller Triggered Refund,Product tax,Walmart-fulfilled(WFS)
+Refund,Seller Triggered Refund,Product Price,Walmart-fulfilled(WFS)

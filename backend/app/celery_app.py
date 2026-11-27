@@ -25,6 +25,7 @@ TASK_IMPORTS = (
     "app.modules.walmart_scf.tasks",
     "app.modules.walmart_remote.tasks",
     "app.modules.walmart_bills.tasks",
+    "app.modules.settlement_profit.tasks",
     "app.modules.operation_logs.tasks",
     "app.modules.business_connectors.tasks",
     "app.modules.listing_rule_config.tasks",
@@ -48,6 +49,7 @@ TASK_ROUTES = {
     "walmart_scf.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "walmart_remote.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "walmart_bills.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
+    "settlement_profit.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "integration_sync.*": {
         "queue": INTEGRATION_QUEUE,
         "routing_key": INTEGRATION_QUEUE,

@@ -147,6 +147,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
         (
             _page("finance", "profit_center", "利润中心", 10),
             _page("finance", "sku_cash_profit", "单品现金利润", 20),
+            _page("finance", "order_review", "订单审核", 24),
             _page("finance", "settlement_profit", "结算利润", 25),
             _page("finance", "walmart_settlement", "沃尔玛返还明细", 30),
             _page("finance", "settlement_reconciliation", "回款对账", 40),
@@ -270,6 +271,10 @@ ACTIONS: tuple[ActionDefinition, ...] = (
         30,
     ),
     ActionDefinition("finance_settlement_reconciliation", "follow", "回款对账打款异常跟进", 40),
+    ActionDefinition("finance_order_review", "cost-entry", "订单审核录成本 / 确认 / 撤销录入", 10),
+    ActionDefinition("finance_order_review", "review1", "订单审核初审", 20),
+    ActionDefinition("finance_order_review", "review2", "订单审核终审", 30),
+    ActionDefinition("finance_order_review", "recalc", "订单审核重算", 40),
     ActionDefinition("products_product_management", "view-sync-history", "查看同步历史", 8),
     ActionDefinition("products_product_management", "view-raw-lineage", "查看数据血缘", 9, "high"),
     ActionDefinition("products_product_management", "view-operation-logs", "查看操作日志", 10),

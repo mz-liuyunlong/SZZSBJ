@@ -34,6 +34,7 @@ const expected = {
   finance: [
     "finance_profit_center",
     "finance_sku_cash_profit",
+    "finance_order_review",
     "finance_settlement_profit",
     "finance_settlement_reconciliation",
     "finance_wfs_fees",

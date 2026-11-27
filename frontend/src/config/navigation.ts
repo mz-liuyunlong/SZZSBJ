@@ -238,6 +238,10 @@ export const navigation: NavigationGroup[] = [
       // 2026-11-02 财务菜单按业务（Rocky）确认的 Demo 10 个标签重排；新增页面的导航与权限点待负责人批准（PR-D），本地预览先行。
       page('finance', 'profit_center', '经营总览', '/finance/profit-center'),
       page('finance', 'sku_cash_profit', '现金利润', '/finance/sku-cash-profit'),
+      // 2026-11-27 Rocky：订单审核（结算利润 V3 PR-OR）：按期审订单行的产品成本，读写 /api/finance/order-review。
+      page('finance', 'order_review', '订单审核', '/finance/order-review', {
+        status: 'building', readOnly: false, viewPermissionKey: 'page:finance:order-review:view',
+      }),
       page('finance', 'settlement_profit', '结算利润', '/finance/settlement-profit'),
       // 2026-11-10 Rocky：回款对账上线（沃尔玛账单同步 + 到账配对 + 初审 / 终审），读写 /api/finance/payout-recon。
       page('finance', 'settlement_reconciliation', '回款对账', '/finance/settlement-reconciliation', {
