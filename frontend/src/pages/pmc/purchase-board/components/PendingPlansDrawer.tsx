@@ -47,6 +47,7 @@ const columns: ColumnsType<PendingPurchasePlan> = [
     render: (_, plan) => (plan.overdueDays > 0 ? <Tag color="red">超时 {plan.overdueDays} 天</Tag> : <Tag>未超时</Tag>),
   },
   { key: "remark", title: "备注 ItemID", dataIndex: "remarkItemId", render: (value: string | null) => value ?? "—" },
+  { key: "draftNo", title: "草稿号", dataIndex: "draftNo", render: (value: string | null) => value ?? "—" },
 ];
 
 function PendingPlansDrawer({

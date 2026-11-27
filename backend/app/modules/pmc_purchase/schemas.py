@@ -20,7 +20,8 @@ Money = Annotated[
 ]
 
 type StatusFilter = Literal["s2", "s3", "s4", "overdue", "s9", "s0", "unattributed"]
-type SearchType = Literal["sku", "item_id", "gtin", "msku", "order_sn"]
+# draft_plan: 8088「草稿号 / 计划号」——匹配草稿号或任一关联计划号。
+type SearchType = Literal["sku", "item_id", "gtin", "msku", "order_sn", "draft_plan"]
 type ItemIdSourceFilter = Literal[
     "from_system_plan",
     "from_plan_remark",
@@ -140,6 +141,12 @@ class ItemIdIdentity(StrictSchema):
     msku: str | None = None
     gtin: str | None = None
     fulfillment_type: str | None = None
+    # Rule v2 (2026-10-31): the listing's local SKU and whether it differs from the line SKU.
+    local_sku: str | None = None
+    sku_mismatch: bool = False
+    # R-9 (2026-11-02): set only on a store-less line whose remark ItemID exists on several
+    # stores — each candidate names its store so the conflict can be settled by a human.
+    store_id: str | None = None
 
 
 class ItemIdRef(StrictSchema):
@@ -325,6 +332,7 @@ class PendingPlanRead(StrictSchema):
     product_name: str | None
     quantity_plan: int | None
     remark_item_id: str | None
+    draft_no: str | None = None
 
 
 class PendingPlanListData(StrictSchema):
@@ -344,6 +352,9 @@ class PurchaseReadMeta(StrictSchema):
     page: int | None = None
     page_size: int | None = None
     total: int | None = None
+    hidden_owner_names: list[str] = Field(
+        default_factory=list, description="页面不显示、不进负责人筛选项的负责人名字（8088 同款）"
+    )
 
 
 # --- manual cycle overrides (7.5, G3-F) --------------------------------------------------------

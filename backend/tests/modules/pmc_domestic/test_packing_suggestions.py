@@ -199,10 +199,28 @@ def test_one_plan_linked_to_two_orders_does_not_duplicate_its_weight():
 
 def test_wfs_guard_revalidates_even_when_listings_are_injected():
     service = PackingService(Session({}))
-    service.listing_rows = lambda _: [Row(store_id="S1", item_id=A, fulfillment_type="0")]
+    listing = Row(
+        store_id="S1",
+        item_id=A,
+        fulfillment_type="0",
+        local_sku="SKU",
+        standard_status="PUBLISHED",
+        item_url="https://www.walmart.com/ip/synthetic",
+        gtin="00000000000000",
+        msku="M1",
+    )
+    service._listings_by_identity = lambda account, store, item: [listing]
+    service._store_names = lambda account: {}
     with pytest.raises(ApiError) as error:
         service.final_candidate(
-            Row(store_id="S1", item_id=A), Row(target_store_id=None, target_item_id=None)
+            Row(
+                store_id="S1",
+                item_id=A,
+                sku="SKU",
+                source_account_ref="primary",
+                available_quantity=1,
+            ),
+            Row(target_store_id=None, target_item_id=None, listing_version=None),
         )
     assert error.value.details["reason"] == "WFS_NOT_CONVERTED"
 
@@ -273,7 +291,8 @@ def test_candidate_and_final_decision_share_listing_link_rules(monkeypatch, item
     assert candidate.can_approve is bool(not missing_link)
     assert candidate.blocked_reasons == missing_link
     service = PackingService(repo.session)
-    service.listing_rows = lambda _: [listing]
+    service._listings_by_identity = lambda account, store, item: [listing]
+    service._store_names = lambda account: {}
     from app.modules.pmc_domestic.packing_schemas import ApproveCommand
 
     final = service.final_candidate(

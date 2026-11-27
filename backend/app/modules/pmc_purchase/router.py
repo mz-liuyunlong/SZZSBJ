@@ -35,7 +35,7 @@ from app.modules.pmc_purchase.schemas import (
     SkuCycleListData,
     SkuCycleQuery,
 )
-from app.modules.pmc_purchase.service import PmcPurchaseReadService
+from app.modules.pmc_purchase.service import PmcPurchaseReadService, hidden_owner_names
 
 PERMISSION_READ = "pmc:purchase:read"
 PERMISSION_OVERRIDE = "pmc:purchase:override"
@@ -77,6 +77,7 @@ def _meta(
         page=page,
         page_size=page_size,
         total=total,
+        hidden_owner_names=list(hidden_owner_names()),
     )
 
 
