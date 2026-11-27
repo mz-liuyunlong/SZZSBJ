@@ -29,6 +29,7 @@ AI 开发新页面前，必须先查看本文件，优先复用已有组件，�
 | EmptyState | Shared | `frontend/src/components/common/EmptyState.tsx` | 空数据状态 | 所有数据页 |
 | ErrorState | Shared | `frontend/src/components/common/ErrorState.tsx` | 错误状态 | 所有数据页 |
 | DateRangeField | Shared | `frontend/src/components/forms/DateRangeField.tsx` | 日期范围筛选 | 报表、列表筛选 |
+| ReportDateRangePicker | Shared | `frontend/src/shared/date/ReportDateRangePicker.tsx` | 中文双月日历、八个快捷日期、未来日期禁选 | 每日销售、新品表现、打品详情；日期业务口径由调用页面决定 |
 | StoreSelect | Shared | `frontend/src/components/forms/StoreSelect.tsx` | 店铺选择 | 多店铺筛选 |
 | SkuSearchInput | Shared | `frontend/src/components/forms/SkuSearchInput.tsx` | SKU 搜索 | 产品、销售、库存 |
 | DataTableToolbar | Shared | `frontend/src/components/tables/DataTableToolbar.tsx` | 表格工具栏 | 有批量操作的表格 |

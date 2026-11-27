@@ -1,0 +1,2865 @@
+{
+  "revision": "20261127_0100_sku_ad_progress_foundation",
+  "parent": "UNRESOLVED_0099",
+  "sku": {
+    "batchGetProductInfo": {
+      "attachment_id": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "attachment_id[]": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "aux_relation_list": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "bg_customs_export_name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_customs_export_name",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "bg_customs_import_name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_customs_import_name",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "bg_customs_import_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_customs_import_price",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "bg_export_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_export_hs_code",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_import_hs_code",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_customs_tax_rate",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "bid": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_brand_id",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "brand_name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_brand_name",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[]": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].br_account_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].br_cfop": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].br_cnpj_sn": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].br_company_name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].br_ncm_sn": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].br_origin_area": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].br_tax_sn": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].br_unit": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].company_id": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].gmt_create": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].gmt_modified": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].is_br_default": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].is_tax_default": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].pbi_id": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].product_id": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].vid": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].v_uuid": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].zid": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "category_full_name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_category_path",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "category_name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_category_name",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_box_height": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_cg_box_height",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_box_length": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_cg_box_length",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_box_pcs": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_cg_box_pcs",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_box_weight": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_cg_box_weight",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_box_width": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_cg_box_width",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_delivery": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_purchase_delivery_days",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_opt_username": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_purchaser_name",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_package_height": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_cg_package_height",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_package_length": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_cg_package_length",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_package_width": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_cg_package_width",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_purchase_price_amount",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_product_gross_weight": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_cg_product_gross_weight",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_product_height": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_cg_product_height",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_product_length": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_cg_product_length",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_product_material": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_purchase_material",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_product_net_weight": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_cg_product_net_weight",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_product_width": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_cg_product_width",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cid": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_category_id",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "clearance": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "clearance.allocation_remark": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "clearance.customs_clearance_brand_type": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "clearance.customs_clearance_en_material": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "clearance.customs_clearance_en_usage": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "clearance.customs_clearance_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "clearance.customs_clearance_internal_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "clearance.customs_clearance_material": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "clearance.customs_clearance_pic_url": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "clearance.customs_clearance_preferential": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "clearance.customs_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "clearance.customs_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "clearance.customs_clearance_product_pattern": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "clearance.customs_clearance_remark": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "clearance.customs_clearance_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "clearance.customs_clearance_usage": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "clearance.weaving_mode": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "combo_product_list": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_currency_raw",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "custom_fields": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.cps_certifier_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.cps_declare_method": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.cps_product_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.cps_version_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.customs_declaration_exempt": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.customs_declaration_extra_quarantine_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.customs_declaration_first_unit": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.customs_declaration_first_unit_rate": {
+        "observed_type": "null",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.customs_declaration_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.customs_declaration_inlands_source": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.customs_declaration_origin_produce": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.customs_declaration_second_unit": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.customs_declaration_second_unit_rate": {
+        "observed_type": "null",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.customs_declaration_spec": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.customs_declaration_unit": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.customs_export_name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.customs_import_name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.customs_import_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.customs_import_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.merchant_pid": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.ns_pid": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.other_declare_element": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.production_and_sales_enterprise_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.production_and_sales_enterprise_name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "declaration.s_pid": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "description": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_description",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "global_tags": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "global_tags[]": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "global_tags[].color": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "global_tags[].global_tag_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "global_tags[].tag_name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "id": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.lingxing_sku_id",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "is_combo": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_is_combo_raw",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "model": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_model",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.pqt_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.qc_image": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.template_item": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.template_item[]": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.template_item[].create_time": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.template_item[].pqti_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.template_item[].qc_content": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.template_item[].qc_item": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.template_item[].sort": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.pqt_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.qc_method": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.qc_method_text": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.pqt_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.qc_image": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.template_item": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.template_item[]": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.template_item[].create_time": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.template_item[].pqti_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.template_item[].qc_content": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.template_item[].qc_item": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.template_item[].sort": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "permission_user_info": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "permission_user_info[]": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "permission_user_info[].permission_uid": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "permission_user_info[].permission_user_name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "picture_list": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "picture_list[]": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "picture_list[].is_primary": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "picture_list[].pic_url": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "pic_url": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_picture_url",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_developer": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_developer_name",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_developer_uid": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_developer_uid",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[]": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].AE_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].AE_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].AE_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].AE_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].AE_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].AE_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].AT_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].AT_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].AT_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].AT_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].AT_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].AT_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].AU_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].AU_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].AU_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].AU_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].AU_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].AU_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].BE_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].BE_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].BE_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].BE_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].BE_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].BE_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].BR_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].BR_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].BR_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].BR_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].BR_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].BR_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].BY_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].BY_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].BY_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].BY_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].BY_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].BY_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CA_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CA_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CA_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CA_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CA_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CA_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CH_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CH_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CH_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CH_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CH_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CH_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CL_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CL_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CL_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CL_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CL_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CL_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CZ_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CZ_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CZ_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CZ_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CZ_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].CZ_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].DE_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].DE_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].DE_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].DE_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].DE_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].DE_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].DK_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].DK_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].DK_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].DK_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].DK_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].DK_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].ES_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].ES_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].ES_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].ES_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].ES_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].ES_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].FR_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].FR_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].FR_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].FR_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].FR_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].FR_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].HU_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].HU_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].HU_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].HU_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].HU_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].HU_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].ID_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].ID_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].ID_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].ID_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].ID_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].ID_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].IE_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].IE_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].IE_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].IE_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].IE_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].IE_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].IN_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].IN_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].IN_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].IN_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].IN_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].IN_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].IT_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].IT_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].IT_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].IT_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].IT_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].IT_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].JP_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].JP_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].JP_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].JP_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].JP_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].JP_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].KR_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].KR_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].KR_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].KR_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].KR_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].KR_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].KZ_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].KZ_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].KZ_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].KZ_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].KZ_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].KZ_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].LB_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].LB_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].LB_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].LB_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].LB_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].LB_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].LU_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].LU_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].LU_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].LU_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].LU_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].LU_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].MX_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].MX_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].MX_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].MX_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].MX_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].MX_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].MY_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].MY_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].MY_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].MY_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].MY_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].MY_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].NL_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].NL_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].NL_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].NL_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].NL_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].NL_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].NO_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].NO_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].NO_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].NO_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].NO_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].NO_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PH_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PH_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PH_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PH_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PH_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PH_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PK_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PK_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PK_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PK_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PK_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PK_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PL_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PL_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PL_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PL_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PL_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PL_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PT_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PT_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PT_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PT_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PT_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].PT_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].RU_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].RU_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].RU_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].RU_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].RU_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].RU_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SA_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SA_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SA_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SA_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SA_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SA_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SE_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SE_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SE_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SE_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SE_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SE_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SG_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SG_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SG_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SG_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SG_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SG_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SK_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SK_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SK_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SK_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SK_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].SK_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].TH_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].TH_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].TH_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].TH_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].TH_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].TH_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].TR_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].TR_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].TR_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].TR_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].TR_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].TR_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].UA_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].UA_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].UA_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].UA_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].UA_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].UA_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].UK_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].UK_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].UK_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].UK_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].UK_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].UK_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].US_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].US_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].US_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].US_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].US_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].US_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].VN_bg_import_hs_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].VN_bg_tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].VN_cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].VN_clearance_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].VN_clearance_price_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_logistics_relation[].VN_currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_country_logistics_ext.payload_json (by source country when identifiable)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_product_name",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_remark": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_product_remark",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "purchase_1688_remark": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_purchase_1688_remark",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "purchase_remark": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_purchase_remark",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "qc_standard": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "qc_standard.custom_qc_template": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "qc_standard.custom_qc_template.qc_image": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "qc_standard.custom_qc_template.qc_images": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "sku": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_sku_code",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "sku_identifier": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_sku_identifier",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "special_attr": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "spec_pack_list": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "status": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_product_status",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[]": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].cg_currency_icon": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].cg_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].is_primary": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].product_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].psq_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].quote_cg_delivery": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].quote_remark": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].quotes": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].quotes[]": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].quotes[].currency": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].quotes[].currency_icon": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].quotes[].is_tax": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].quotes[].step_prices": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].quotes[].step_prices[]": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].quotes[].step_prices[].moq": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].quotes[].step_prices[].price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].quotes[].step_prices[].price_with_tax": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].quotes[].tax_rate": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].supplier_code": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].supplier_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].supplier_name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].supplier_product_url": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote[].supplier_product_url[]": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "unit": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_unit",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      }
+    },
+    "productList": {
+      "attribute": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "aux_relation_list": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "bid": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_brand_id",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "brand_name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_brand_name",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[]": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].br_account_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].br_cfop": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].br_cnpj_sn": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].br_company_name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].br_ncm_sn": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].br_origin_area": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].br_tax_sn": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].br_unit": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].company_id": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].gmt_create": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].gmt_modified": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].is_br_default": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].is_tax_default": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].pbi_id": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].product_id": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].vid": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].v_uuid": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "br_invoice_list[].zid": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "category_name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_category_name",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_delivery": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_purchase_delivery_days",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_opt_uid": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_purchaser_uid",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_opt_username": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_purchaser_name",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_price": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_purchase_price_amount",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cg_transport_costs": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_purchase_transport_amount",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "cid": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_category_id",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "create_time": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_create_time_raw",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "custom_fields": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "global_tags": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "global_tags[]": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "global_tags[].color": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "global_tags[].global_tag_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "global_tags[].tag_name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "id": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.lingxing_sku_id",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "is_combo": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_is_combo_raw",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.pqt_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.qc_image": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.template_item": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.template_item[]": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.template_item[].create_time": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.template_item[].pqti_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.template_item[].qc_content": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.template_item[].qc_item": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.custom_qc_template.template_item[].sort": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.pqt_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.qc_method": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.qc_method_text": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.pqt_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.qc_image": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.template_item": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.template_item[]": {
+        "observed_type": "object",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.template_item[].create_time": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.template_item[].pqti_id": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.template_item[].qc_content": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.template_item[].qc_item": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "new_qc_standard.system_qc_template.template_item[].sort": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "open_status": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_open_status",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "pic_url": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_picture_url",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_developer": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_developer_name",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_developer_uid": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_developer_uid",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_name": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_product_name",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "product_remark": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_product_remark",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "ps_id": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_spu_id",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "purchase_1688_remark": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_purchase_1688_remark",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "purchase_remark": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_purchase_remark",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "sku": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_sku_code",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "sku_identifier": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_sku_identifier",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "spu": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_spu_code",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "status": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_product_status",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "status_text": {
+        "observed_type": "string",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_status_text",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "supplier_quote": {
+        "observed_type": "array",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.payload_json; dwd_lingxing_sku_supplier_quotes_ext.payload_json; dwd_lingxing_sku_supplier_tiers_ext.payload_json (nested tiers when present)",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      },
+      "update_time": {
+        "observed_type": "number",
+        "planned_storage": "dwd_lingxing_sku_source_snapshots.source_update_time_raw",
+        "exact_value_always_in": "dwd_lingxing_sku_source_snapshots.payload_json"
+      }
+    }
+  },
+  "ad": {
+    "acos": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.acos",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "adGroupId": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.ad_group_id",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "adGroupName": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.ad_group_name",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "adGroupStatus": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.ad_group_status_raw",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "adItemId": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.ad_item_id",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "adName": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.ad_name",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "adSpend": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.ad_spend_amount",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "adStatus": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.ad_status_raw",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "addDate": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.add_date_raw",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "advertisedSkuSales": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.advertised_sku_sales_amount",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "advertisedSkuUnits": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.advertised_sku_units",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "advertiserId": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.advertiser_id",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "aov": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily_ext.aov_amount",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "appliedTemplate": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.applied_template_json",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "attributedOrders": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.attributed_orders",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "attributedSales": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.attributed_sales_amount",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "attributedUnits": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.attributed_units",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "benchmarkVal": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.benchmark_value",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "bid": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.bid_amount",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "campaignAndTargetingType": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.campaign_and_targeting_type",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "campaignId": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.campaign_id",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "campaignName": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.campaign_name",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "campaignStatus": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.campaign_status_raw",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "campaignType": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.campaign_type_raw",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "cpa": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily_ext.cpa_amount",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "cpc": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.cpc",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "ctr": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.ctr",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "cvr": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.cvr",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "entityCreateAt": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.entity_created_at_raw",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "isApplyTime": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.is_apply_time_raw",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "itemId": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.item_id",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "itemImageUrl": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.source_image_url",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "itemPageUrl": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.source_item_url",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "key": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.source_key",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "mpAdvertiserName": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.source_advertiser_name",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "mpSellerName": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.source_seller_name",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "ntbOrderRate": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily_ext.ntb_order_rate",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "ntbOrders": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily_ext.ntb_orders",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "ntbOrdersPercent": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily_ext.ntb_orders_percent",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "ntbRevenue": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily_ext.ntb_revenue_amount",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "ntbRevenuePercent": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily_ext.ntb_revenue_percent",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "ntbUnits": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily_ext.ntb_units",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "ntbUnitsPercent": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily_ext.ntb_units_percent",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "numAdsClicks": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.num_ads_clicks",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "numAdsShown": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.num_ads_shown",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "otherSkuSales": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily_ext.other_sku_sales_amount",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "otherSkuUnits": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily_ext.other_sku_units",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "reviewReason": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.review_reason",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "reviewStatus": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.review_status_raw",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "roas": {
+      "planned_storage": "fact_walmart_ad_item_sp_daily.roas",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    },
+    "suggestedBid": {
+      "planned_storage": "dwd_walmart_ad_item_config_ext.suggested_bid_amount",
+      "source_preserving_storage": "biz_walmart_ad_item_history.payload_json; dwd_walmart_ad_item_config_ext.payload_json; fact_walmart_ad_item_sp_daily_ext.payload_json"
+    }
+  },
+  "notes": [
+    "Payload JSON is the source-preserving storage for every field, including new/unknown paths. Typed mappings are planned future parser targets, not implemented in this schema-only package.",
+    "Do not use raw payloads as API runtime data sources.",
+    "No DML / backfill / business logic in this phase."
+  ],
+  "advertiser": {
+    "advertiserId": "dim_walmart_advertisers.advertiser_id",
+    "advertiserName": "dim_walmart_advertisers.advertiser_name",
+    "status": "dim_walmart_advertisers.raw_status"
+  },
+  "tables": [
+    "dwd_lingxing_sku_source_snapshots",
+    "dwd_lingxing_sku_source_current",
+    "dwd_lingxing_sku_supplier_quotes_ext",
+    "dwd_lingxing_sku_supplier_tiers_ext",
+    "dwd_lingxing_sku_country_logistics_ext",
+    "biz_walmart_ad_account_store_mapping",
+    "dwd_walmart_ad_item_config_ext",
+    "fact_walmart_ad_item_sp_daily_ext",
+    "mart_listing_ad_status_current",
+    "biz_new_product_sku_progress",
+    "biz_new_product_sku_purchase_plans",
+    "biz_new_product_independent_site_submissions",
+    "biz_new_product_sku_progress_events",
+    "biz_new_product_sku_progress_milestones",
+    "dwd_walmart_ad_source_observations",
+    "mart_new_product_sku_progress_current"
+  ],
+  "ad_source_observation_storage": "dwd_walmart_ad_source_observations.payload_json"
+}

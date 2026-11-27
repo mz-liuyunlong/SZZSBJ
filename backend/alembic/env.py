@@ -8,9 +8,14 @@ from sqlalchemy.engine import URL, Connection
 import app.models.raw_lingxing_api  # noqa: F401  # Register approved RAW metadata.
 import app.modules.data_pages.business_models  # noqa: F401  # Register sample/refund business models.
 import app.modules.data_pages.models  # noqa: F401  # Register DATA-PAGES DIM/FACT/MART.
+import app.modules.finance_cashflow.models  # noqa: F401  # Register finance cashflow.
+import app.modules.fx_rates.models  # noqa: F401  # Register Lingxing FX rates.
 import app.modules.integration_sync.models  # noqa: F401  # Register sync governance/ODS.
 import app.modules.keyword_planning.models  # noqa: F401
 import app.modules.listing_rule_config.models  # noqa: F401  # Register Listing rule metadata.
+import app.modules.new_products.ad_catalog_models  # noqa: F401  # Walmart ad 0094 catalog
+import app.modules.new_products.models  # noqa: F401  # PR337_PHASE2_REAL_API_V1
+import app.modules.new_products.sku_ad_foundation_models  # noqa: F401  # SKU/ad 0100
 import app.modules.pmc_domestic.inbound_models  # noqa: F401
 import app.modules.pmc_domestic.models  # noqa: F401  # Register domestic warehouse tables.
 import app.modules.pmc_domestic.packing_models  # noqa: F401
@@ -20,8 +25,14 @@ import app.modules.pmc_purchase.gate3_models  # noqa: F401  # Register PMC purch
 import app.modules.pmc_purchase.models  # noqa: F401  # Register PMC purchase ODS.
 import app.modules.product_management.models  # noqa: F401  # Register product management BFF.
 import app.modules.products.models  # noqa: F401  # Register approved model metadata.
+import app.modules.settlement_profit.models  # noqa: F401  # Settlement profit V3 tables.
 import app.modules.sku_detail.models  # noqa: F401  # Register SKU DWD/DWS projections.
+import app.modules.walmart_bills.models  # noqa: F401  # Register Walmart bill lines/periods.
+import app.modules.walmart_bills.payout_models  # noqa: F401  # Register payout reconciliation.
 import app.modules.walmart_monitor.models  # noqa: F401  # Register monitor RAW events.
+import app.modules.warehouse_wfs.inventory_flow_models  # noqa: F401  # WFS cost valuation ODS.
+import app.modules.wfs_fees.models  # noqa: F401  # Register WFS fee files/lines/checks.
+import app.modules.wfs_fees.report_models  # noqa: F401  # WFS report jobs, inbound items.
 from alembic import context
 from app.core.config import AppEnvironment, SettingsError, get_database_url, get_settings
 from app.db.base import Base

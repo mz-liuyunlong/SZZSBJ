@@ -91,6 +91,9 @@ export interface SyncTaskWorkItem {
   responseCount: number | null;
   errorCode: string | null;
   errorMessage: string | null;
+  httpStatus: number | null;
+  providerCode: string | null;
+  providerMessage: string | null;
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string;

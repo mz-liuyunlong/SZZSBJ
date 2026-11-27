@@ -1,7 +1,10 @@
 def register_productlist_sync_models() -> None:
     """Register ProductList ORM metadata; these imports are not business dependencies."""
+    import app.modules.finance_cashflow.models
+    import app.modules.fx_rates.models
     import app.modules.integration_sync.models
     import app.modules.media_assets.models
+    import app.modules.new_products.sku_ad_foundation_models  # noqa: F401
     import app.modules.operation_plans.models
     import app.modules.pmc_domestic.inbound_models
     import app.modules.pmc_domestic.models
@@ -12,7 +15,13 @@ def register_productlist_sync_models() -> None:
     import app.modules.pmc_purchase.models
     import app.modules.product_management.models
     import app.modules.products.models
+    import app.modules.settlement_profit.models
     import app.modules.sku_detail.models
+    import app.modules.walmart_bills.models
+    import app.modules.walmart_bills.payout_models
     import app.modules.walmart_remote.models
     import app.modules.walmart_scf.persistence
-    import app.modules.warehouse_wfs.models  # noqa: F401
+    import app.modules.warehouse_wfs.inventory_flow_models
+    import app.modules.warehouse_wfs.models
+    import app.modules.wfs_fees.models  # noqa: F401
+    import app.modules.wfs_fees.report_models  # noqa: F401

@@ -37,6 +37,11 @@ RECOVERABLE_INTERFACE_KEYS: tuple[str, ...] = (
     "walmartReturnOrderList",
     "walmartAdItemSpList",
     "wfsProfitOrder",
+    "lingxingFxRate",
+    "walmartBillStatementList",
+    "finShippingList",
+    "finShippingDetail",
+    "finWmsOutboundOrders",
 )
 
 
@@ -291,6 +296,8 @@ class IntegrationSyncRepository:
                 "on conflict on constraint uq_gov_sync_anomaly_identity do update set "
                 "run_id=excluded.run_id,last_seen_at=now(),"
                 "occurrence_count=gov_integration_sync_anomalies.occurrence_count+1,"
+                "details=case when excluded.details ? 'sample_isolation_active' "
+                "then excluded.details else gov_integration_sync_anomalies.details end,"
                 "status=case when gov_integration_sync_anomalies.status "
                 "in ('resolved','dismissed') "
                 "then 'pending' else gov_integration_sync_anomalies.status end"

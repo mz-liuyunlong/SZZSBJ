@@ -1,11 +1,12 @@
 
 import {
-  fetchWorkbenchList,
   isDemoApproval,
 } from "./approvalDemoData";
-import DemoApprovalDrawer from "./components/DemoApprovalDrawer";
+import { decideNewProductPurchase } from "./approvalApi";
+import ApprovalBusinessDetailDrawer from "./components/ApprovalBusinessDetailDrawer";
+import PurchaseApproveConfirmModal from "./components/PurchaseApproveConfirmModal";
 /** Enterprise approval workbench. Reuses shared table, search and column components. */
-import { Alert, Button, Card, Popover, Segmented, Select, Space, Spin, message } from "antd";
+import { Alert, Button, Card, Input, Modal, Popover, Segmented, Select, Space, Spin, Tooltip, message } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import {
   ReloadOutlined,
@@ -31,16 +32,20 @@ import EmptyState from "@/shared/states/EmptyState";
 import { formatMoney } from "@/shared/formatters/money";
 
 import ApprovalDetailDrawer from "./components/ApprovalDetailDrawer";
-import BulkApprovalModal from "./components/BulkApprovalModal";
+import ClearanceApprovalDetailDrawer from "./components/ClearanceApprovalDetailDrawer";
+import BulkApprovalModal from "./components/UnifiedBulkApprovalModal";
+import { canBatchApprove } from "./batchApproval";
 import type { ApprovalFilters, ApprovalItem, ApprovalTab } from "./approvalTypes";
 import { approvalColumnFields, approvalTabs, riskNames, statusNames } from "./approvalTypes";
 import { parseFollowLog } from "./followLog";
 import { approvalBusinesses, approvalBusinessByKey, approvalBusinessLabel, type ApprovalBusinessKey } from "./approvalBusiness";
 import type { NavigationPage } from "@/config/navigation";
 import { hasPermission } from "@/shared/permissions/mockAccess";
+import { createWorkbenchReader } from "./workbenchReadApi";
 import { demoColumnsForBusiness } from "./approvalDemoPresentation";
 import "./ApprovalWorkspacePage.css";
 
+// WORKBENCH_UNIFIED_READ_V1: list, counts and purchase display evidence are one response.
 const defaultFilters: ApprovalFilters = {
  tab: "pending", view: "mine", page: 1, page_size: 50,
 };
@@ -64,6 +69,7 @@ const approvalBusinessIcons = {
  disposal: <DeleteOutlined />,
  price: <DollarCircleOutlined />,
  finance: <DollarCircleOutlined />,
+ newProduct: <FileTextOutlined />,
 };
 
 export default function ApprovalWorkspacePage({ page, permissions }: {
@@ -72,6 +78,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
 }) {
  const [messageApi, holder] = message.useMessage();
  const [filters, setFilters] = useState<ApprovalFilters>(defaultFilters);
+ const [fetchWorkbenchRead] = useState(createWorkbenchReader);
  const [business, setBusiness] = useState<ApprovalBusinessKey>("all");
  const [businessCounts, setBusinessCounts] = useState<{
   signature: string;
@@ -82,17 +89,26 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
  const [loading, setLoading] = useState(true);
  const [loadError, setLoadError] = useState(false);
  const [selected, setSelected] = useState<ApprovalItem>();
+  const [clearanceTableAction, setClearanceTableAction] =
+    useState<{
+      item: ApprovalItem;
+      decision: "approved" | "rejected";
+    } | null>(null);
+ const [demoActionIntent, setDemoActionIntent] = useState<"approve" | "reject">();
+ const [demoActionTarget, setDemoActionTarget] = useState<ApprovalItem>();
+ const [demoActionNote, setDemoActionNote] = useState("");
+ const [demoActionError, setDemoActionError] = useState(false);
+ const [purchaseDecisionSaving,setPurchaseDecisionSaving] = useState(false);
+
  const [reviewOnly, setReviewOnly] = useState(false);
  const [directReviewAction, setDirectReviewAction] =
   useState<"approved" | "rejected">();
  const [reloadToken, setReloadToken] = useState(0);
  const [selectedBulkKeys, setSelectedBulkKeys] = useState<React.Key[]>([]);
  const [bulkRows, setBulkRows] = useState<ApprovalItem[]>([]);
- const selectedRows = rows.filter((row) => selectedBulkKeys.includes(row.id));
- const bulkEligible = selectedRows.length > 0 && selectedRows.every((row) =>
-  row.approval_type === "operations_plan_ack" && row.risk_level === "low" &&
-  row.status === "submitted" && row.can_review && !row.case_review
- );
+ const canSelectBulk = (row: ApprovalItem) => canBatchApprove(row, permissions);
+ const selectedRows = rows.filter(row => selectedBulkKeys.includes(row.id) && !isDemoApproval(row));
+ const bulkEligible = !loading && !loadError && selectedRows.length > 0 && selectedRows.every(canSelectBulk);
  const columnKeys = approvalBusinessByKey[business].columns;
  const [widths, setWidths] = useState(defaultWidths);
  const countSignature = [
@@ -109,65 +125,58 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
  }, []);
  useEffect(() => {
   let active = true;
-  void fetchWorkbenchList(filters)
+  void fetchWorkbenchRead(filters,reloadToken)
    .then((list) => {
     if (!active) return;
     setLoadError(false);
     setRows(list.data.items);
     setCount(list.meta.total);
+    setBusinessCounts({signature:countSignature,totals:list.data.business_counts});
    }).catch(() => {
-    if (active) { setLoadError(true); setRows([]); setCount(0); void messageApi.error("审批数据加载失败"); }
-   }).finally(() => { if (active) setLoading(false); });
-  return () => { active = false; };
- }, [filters, reloadToken, messageApi]);
- // 仅通过原有列表接口读取各业务总数，不修改审批数据。
- useEffect(() => {
-  let active = true;
-  const supported = approvalBusinesses.filter((item) => item.live && item.key !== "finance");
-
-  void Promise.allSettled(supported.map(async (item) => {
-   const result = await fetchWorkbenchList({
-    tab: filters.tab,
-    view: filters.view,
-    approval_type: item.type,
-    risk_level: filters.risk_level,
-    keyword: filters.keyword,
-    page: 1,
-    page_size: 1,
-   });
-
-   return { key: item.key, total: result.meta.total };
-  })).then((results) => {
-   if (!active) return;
-
-   const totals: Partial<Record<ApprovalBusinessKey, number>> = {};
-
-   for (const result of results) {
-    if (result.status === "fulfilled") {
-     totals[result.value.key] = result.value.total;
-    }
-   }
-
-   setBusinessCounts({ signature: countSignature, totals });
-  });
-
-  return () => { active = false; };
- }, [
-  filters.tab,
-  filters.view,
-  filters.risk_level,
-  filters.keyword,
-  countSignature,
- ]);
+    if (active) {setLoadError(true);setRows([]);setCount(0);setBusinessCounts({signature:countSignature,totals:{}});void messageApi.error("审批数据加载失败");}
+   }).finally(() => {if(active)setLoading(false);});
+  return () => {active=false;};
+ },[filters,reloadToken,countSignature,messageApi,fetchWorkbenchRead]);
  const reload = () => { setLoading(true); setReloadToken((current) => current + 1); };
  const columns = useMemo((): ProColumns<ApprovalItem>[] => {
   // V3: only demo businesses use dedicated fields; WFS and All retain existing columns.
-  const demoColumns = demoColumnsForBusiness(business, setSelected);
+  const demoColumns = demoColumnsForBusiness(business, setSelected, (item, action) => {
+    // V34: real clearance decisions are not Demo actions.
+    if (item.approval_type === "clearance_request" && !isDemoApproval(item)) {
+      // CLEARANCE_TABLE_ACTION_ISOLATED_V40
+      setSelected(undefined);
+      setDirectReviewAction(undefined);
+      setReviewOnly(false);
+      setClearanceTableAction({
+        item,
+        decision: action === "approve" ? "approved" : "rejected",
+      });
+      return;
+    }
+
+   // PR337_PURCHASE_APPROVAL_ACTIONS_V2: formal purchase requests must use
+   // the standard audited drawer/API, never the demo-only local decision modal.
+   if (item.approval_type === "purchase_exception" && !isDemoApproval(item)) {
+     setDemoActionTarget(undefined);
+     setDemoActionIntent(undefined);
+     setSelected(item);
+     setDirectReviewAction(action === "approve" ? "approved" : "rejected");
+     setReviewOnly(true);
+     return;
+   }
+   setDemoActionTarget(item);
+   setDemoActionIntent(action);
+   setDemoActionNote("");
+   setDemoActionError(false);
+  });
   if (demoColumns) return demoColumns;
   const map: Record<string, ProColumns<ApprovalItem>> = {
    approval_type: { key:"approval_type", render:(_,r) => <div className="approval-list__type"><span className={`approval-list__category approval-list__category--${r.approval_type === "wfs_case_abandon" ? "wfs" : "other"}`}>{approvalBusinessLabel(r.approval_type)}</span><span className="approval-list__reference" title={r.id}>{r.id.slice(0,8)}</span></div> },
-   business_ref: { key:"business_ref", render:(_,r) => <span title={r.business_ref}>{r.business_ref || "—"}</span> },
-   title: { key:"title", dataIndex:"title", render:(_,row) => <div className="approval-list__subject"><button type="button" onClick={() => setSelected(row)}>{row.title}</button><span title={row.reason}>{row.reason || "暂无申请说明"}</span></div> },
+   business_ref: { key:"business_ref", render:(_,r) => <Tooltip title={r.business_ref}><span className="approval-list__single-line">{r.business_ref || "—"}</span></Tooltip> },
+   title: { key:"title", dataIndex:"title", render:(_,row) => <div className="approval-list__subject">
+      <Tooltip title={row.title} placement="topLeft"><button type="button" onClick={() => setSelected(row)}>{row.title}</button></Tooltip>
+      <Tooltip title={row.reason || "暂无申请说明"} placement="topLeft"><span>{row.reason || "暂无申请说明"}</span></Tooltip>
+    </div> },
    follow_log: { key:"follow_log", render:(_,r) => {
     const logs = parseFollowLog(r.follow_log);
     if (!logs.length) return <span style={{ color: "#94a3b8" }}>暂无跟进记录</span>;
@@ -212,10 +221,10 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
    },
   risk_level: { key:"risk_level", render:(_,r) => <span className={`approval-list__risk approval-list__risk--${r.risk_level}`}><span className="approval-list__risk-dot"/>{riskNames[r.risk_level]}</span> },
    amount: { key:"amount", render:(_,r) => <div className="approval-list__money"><strong>{r.amount === null ? "—" : formatMoney(r.amount,{currency:r.currency_code || "USD"})}</strong><span>{r.amount === null ? "非金额事项" : "关联金额"}</span></div> },
-   applicant_id: { key:"applicant_id", render:(_,r) => <div className="approval-list__applicant"><span>{r.applicant_id || "申请人待核实"}</span></div> },
+   applicant_id: { key:"applicant_id", render:(_,r) => <div className="approval-list__applicant"><span>{r.applicant_name || "申请人待核实"}</span></div> },
    submitted_at: { key:"submitted_at", render:(_,r) => <div className="approval-list__time"><span>{r.submitted_at ? new Date(r.submitted_at).toLocaleString("zh-CN", {month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"}</span></div> },
    status: { key:"status", render:(_,r) => <StatusTag label={statusNames[r.status]} semantic={statusTone[r.status]}/> },
-   action: { key:"action", render:(_,r) => <div className="approval-list__actions"><Button size="small" type="text" onClick={() => setSelected(r)}>详情 <ArrowRightOutlined/></Button>{filters.tab === "pending" && r.can_review && (r.approval_type === "wfs_case_abandon" ? hasPermission(permissions,"action:warehouse:wfs-fee-alert:archive-review") : hasPermission(permissions,"*")) && <><Button size="small" onClick={() => {
+   action: { key:"action", render:(_,r) => <div className="approval-list__actions"><Button size="small" type="text" onClick={() => setSelected(r)}>详情 <ArrowRightOutlined/></Button>{filters.tab === "pending" && r.can_review && (r.approval_type === "clearance_request" ? r.can_review : r.approval_type === "wfs_case_abandon" ? hasPermission(permissions,"action:warehouse:wfs-fee-alert:archive-review") : (hasPermission(permissions,"*") || hasPermission(permissions,"internal:approval:administrator"))) && <><Button size="small" onClick={() => {
           setDirectReviewAction("approved");
           setReviewOnly(true);
           setSelected(r);
@@ -245,10 +254,10 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   <div className="approval-workspace">
    <div className="approval-workspace__heading">
     <div><h3>审批工作台</h3><p>统一处理业务审批 · 所有审批结论均留痕</p></div>
-    <Space>{selectedBulkKeys.length>0 && <Button type="primary" onClick={() => {
-      if (!bulkEligible) { void messageApi.warning("所选审批包含不支持批量处理的事项；WFS 请逐条审核"); return; }
+    <Space>{selectedRows.length>0 && <Button type="primary" onClick={() => {
+      if (!bulkEligible) { void messageApi.warning("所选事项含未接入、非待审批或无权限记录，请重新选择"); return; }
       setBulkRows(selectedRows);
-     }}>批量审批（{selectedBulkKeys.length}）</Button>}</Space>
+     }}>批量审批（{selectedRows.length}）</Button>}</Space>
    </div>
    <Card className="approval-workspace__toolbar-card approval-workspace__v3-toolbar" size="small">
     <Segmented
@@ -312,12 +321,17 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
         }),
 
        columnWidth:48,
-       selectedRowKeys:selectedBulkKeys,
-       onChange:(keys)=>setSelectedBulkKeys(keys),
+       selectedRowKeys:selectedRows.map(row=>row.id),
+       onChange:(keys)=>setSelectedBulkKeys(
+          rows.filter(row =>
+            keys.includes(row.id) && !isDemoApproval(row)
+          ).map(row=>row.id)
+        ),
        preserveSelectedRowKeys:false,
       }}
       search={false} options={false} toolBarRender={false} bordered={false} size="small"
-      scroll={{x:"max-content",y:"100%"}} pagination={{
+      tableLayout="fixed"
+       scroll={{x:columns.reduce((sum, col) => sum + (typeof col.width === "number" ? col.width : 125), 48),y:"100%"}} pagination={{
        current:filters.page,pageSize:filters.page_size,total:count,
        showSizeChanger:true,pageSizeOptions:["20","50","100","200"],
        onChange:(p,s)=>change({page:p,page_size:s}),
@@ -325,16 +339,175 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
     }
    </ReportTableShell>
   </div>
-  <BulkApprovalModal rows={bulkRows} onCancel={() => setBulkRows([])}
+  <BulkApprovalModal permissions={permissions} rows={bulkRows} onCancel={() => setBulkRows([])}
    onUpdated={() => {setSelectedBulkKeys([]);reload();}}/>
-  <DemoApprovalDrawer
-    selected={selected && isDemoApproval(selected) ? selected : undefined}
+  <ApprovalBusinessDetailDrawer
+    selected={selected && (isDemoApproval(selected) || selected.approval_type === "clearance_request" || selected.approval_type === "new_product_purchase") ? selected : undefined}
     onClose={() => setSelected(undefined)}
+     // PR337_PURCHASE_DECISION_DETAIL_V3_PARENT: reuse existing mock confirmation modal.
+     onAction={(item, action) => {
+       if (item.approval_type !== "new_product_purchase" && (item.approval_type !== "purchase_exception" || !isDemoApproval(item))) return;
+       if (item.approval_type !== "new_product_purchase") setSelected(undefined);
+       setDemoActionTarget(item);
+       setDemoActionIntent(action);
+       setDemoActionNote("");
+       setDemoActionError(false);
+     }}
    />
-   <ApprovalDetailDrawer reviewOnly={reviewOnly} directReviewAction={directReviewAction}
-   selected={selected && !isDemoApproval(selected) ? selected : undefined}
+  <PurchaseApproveConfirmModal
+    item={demoActionIntent === "approve" && demoActionTarget?.approval_type === "new_product_purchase" ? demoActionTarget : undefined}
+    onCancel={() => {setDemoActionTarget(undefined);setDemoActionIntent(undefined);}}
+    onSaved={() => {setSelected(undefined);setDemoActionTarget(undefined);setDemoActionIntent(undefined);reload();}}
+  />
+ <Modal
+    className="approval-workspace__clearance-action-modal"
+    open={Boolean(demoActionTarget && demoActionIntent && !(demoActionIntent === "approve" && demoActionTarget.approval_type === "new_product_purchase"))}
+    centered
+    width={410}
+    title={demoActionIntent === "approve" ? "审批通过" : "驳回申请"}
+    okText={demoActionIntent === "approve" ? "确认通过" : "确认驳回"}
+    cancelText="取消"
+    okButtonProps={{ danger: demoActionIntent === "reject", loading:purchaseDecisionSaving }}
+    destroyOnHidden
+    onCancel={() => {
+      setDemoActionTarget(undefined);
+      setDemoActionIntent(undefined);
+      setDemoActionNote("");
+      setDemoActionError(false);
+    }}
+    onOk={async () => {
+      if (!demoActionTarget || !demoActionIntent || purchaseDecisionSaving) return;
+
+      const note = demoActionNote.trim();
+
+      if (demoActionIntent === "reject" && !note) {
+        setDemoActionError(true);
+        return;
+      }
+
+      // Real new-product purchase uses the existing transactional purchase decision.
+      if (demoActionTarget.approval_type === "new_product_purchase") {
+        if (!demoActionTarget.can_review) {void messageApi.error("无当前申请的审批权限");return;}
+        if (demoActionIntent === "reject" && note.length < 5) {
+          setDemoActionError(true);return;
+        }
+        setPurchaseDecisionSaving(true);
+        try {
+          await decideNewProductPurchase(
+            demoActionTarget.id,demoActionTarget.version,
+            demoActionIntent === "approve" ? "approved" : "rejected",note
+          );
+          setDemoActionTarget(undefined);
+          setDemoActionIntent(undefined);
+          setDemoActionNote("");
+          setDemoActionError(false);
+          reload();
+          void messageApi.success("正式采购审批已保存");
+        } catch {
+          void messageApi.error("采购审批失败：请检查权限、版本或申请状态");
+        } finally {setPurchaseDecisionSaving(false);}
+        return;
+      }
+
+      const nextStatus =
+        demoActionIntent === "approve" ? "approved" : "rejected";
+
+      if (filters.tab === "pending") {
+        setRows(current => current.filter(
+          row => row.id !== demoActionTarget.id
+        ));
+        setCount(current => Math.max(0, current - 1));
+      } else {
+        setRows(current => current.map(row =>
+          row.id === demoActionTarget.id
+            ? {
+                ...row,
+                status: nextStatus,
+                reviewed_at: new Date().toISOString(),
+                reviewed_by: "演示审批人",
+                can_review: false,
+              }
+            : row
+        ));
+      }
+
+      void messageApi.success(
+        demoActionIntent === "approve"
+          ? "演示审批已通过，列表状态已更新"
+          : "演示申请已驳回，列表状态已更新"
+      );
+
+      setDemoActionTarget(undefined);
+      setDemoActionIntent(undefined);
+      setDemoActionNote("");
+      setDemoActionError(false);
+    }}
+  >
+    <div className="approval-workspace__clearance-action-body">
+      <label htmlFor="clearance-table-action-note">
+        {demoActionIntent === "approve"
+          ? "审批意见（选填）"
+          : "驳回原因 *"}
+      </label>
+
+      <Input.TextArea
+        id="clearance-table-action-note"
+        rows={4}
+        value={demoActionNote}
+        onChange={event => {
+          setDemoActionNote(event.target.value);
+          setDemoActionError(false);
+        }}
+        placeholder={demoActionIntent === "approve"
+          ? "填写审批意见（选填）"
+          : "请填写驳回原因"}
+      />
+
+      {demoActionError
+        ? <div
+            className="approval-workspace__clearance-action-error"
+            role="alert"
+          >
+            请填写驳回原因
+          </div>
+        : null}
+    </div>
+  </Modal>
+
+  {/* CLEARANCE_SINGLE_DRAWER_V42 */}
+  <ClearanceApprovalDetailDrawer
+    selected={
+      clearanceTableAction?.item ??
+      (selected?.approval_type === "clearance_request"
+        ? selected
+        : undefined)
+    }
+    directReviewAction={
+      clearanceTableAction?.decision ??
+      (selected?.approval_type === "clearance_request"
+        ? directReviewAction
+        : undefined)
+    }
+    onClose={() => {
+      setClearanceTableAction(null);
+      setSelected(undefined);
+      setReviewOnly(false);
+      setDirectReviewAction(undefined);
+    }}
+    onUpdated={() => {
+      setClearanceTableAction(null);
+      setSelected(undefined);
+      setReviewOnly(false);
+      setDirectReviewAction(undefined);
+      reload();
+    }}
+  />
+
+  <ApprovalDetailDrawer reviewOnly={reviewOnly} directReviewAction={directReviewAction}
+   selected={selected && !isDemoApproval(selected) && selected.approval_type !== "clearance_request" && selected.approval_type !== "new_product_purchase" ? selected : undefined}
    canReview={hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-review")}
-   canAdmin={hasPermission(permissions, "*")}
+   canAdmin={hasPermission(permissions, "*") || hasPermission(permissions, "internal:approval:administrator")}
+   canNewProductReview={hasPermission(permissions, "action:products:new-product-analysis:review")}
    canSupplement={hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-request")}
    canPurchaseSupplement={hasPermission(permissions, "action:pmc:purchase-board:override")}
    onClose={() => { setSelected(undefined); setReviewOnly(false); setDirectReviewAction(undefined); }}
@@ -342,3 +515,5 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   />
  </PageShell>;
 }
+
+// SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1

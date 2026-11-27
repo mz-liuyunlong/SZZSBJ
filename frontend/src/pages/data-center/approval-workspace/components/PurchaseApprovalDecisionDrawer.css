@@ -1,0 +1,632 @@
+/* SZZSBJ_PURCHASE_APPROVAL_REDESIGN_V2
+ * Replaces PurchaseApprovalDecisionDrawer.css in its entirety.
+ * Affects only Data Center > Approval Workspace > Purchase Approval detail.
+ * Only in this approval drawer, normalize actual text sizes of the reused evaluation UI.
+ * No React, API, scoring, permission, or approval action changes.
+ */
+
+/* Drawer shell: one vertical layout, one actual scroll region. */
+.ant-drawer:has(.approval-demo--purchase) .ant-drawer-content {
+  min-height: 0;
+  background: #f5f7fc;
+}
+.ant-drawer:has(.approval-demo--purchase) .ant-drawer-body {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  min-height: 0;
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: #f5f7fc;
+}
+.approval-demo.approval-demo--purchase {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  background: #f5f7fc;
+}
+.approval-demo--purchase .purchase-decision,
+.approval-demo--purchase .purchase-decision * {
+  box-sizing: border-box;
+}
+.approval-demo--purchase .purchase-decision {
+  --purchase-ink: #182b4a;
+  --purchase-muted: #71849f;
+  --purchase-blue: #0758e9;
+  --purchase-stroke: #dce6f5;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  margin: 0;
+  color: var(--purchase-ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* A focused, self-contained product header. */
+.approval-demo--purchase .purchase-decision__header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 80px;
+  width: 100%;
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--purchase-stroke);
+  background: #fff;
+}
+.approval-demo--purchase .purchase-decision__header-title { min-width: 0; }
+.approval-demo--purchase .purchase-decision__header h2 {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 0 0 7px;
+  color: #112e57;
+  font-size: 24px;
+  font-weight: 720;
+  line-height: 31px;
+  overflow-wrap: anywhere;
+}
+.approval-demo--purchase .purchase-decision__brand-icon {
+  display: block;
+  flex: none;
+  width: 27px;
+  height: 27px;
+  color: var(--purchase-blue);
+}
+.approval-demo--purchase .purchase-decision__header-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 8px;
+  color: var(--purchase-muted);
+  font-size: 13px;
+}
+.approval-demo--purchase .purchase-decision__header-tags .ant-tag {
+  margin: 0;
+  border-radius: 6px;
+  font-size:13px;
+  line-height: 20px;
+}
+
+/* The middle is the ONLY scrolling area; footer stays visible. */
+.approval-demo--purchase .purchase-decision__scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  padding: 16px 20px 24px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #bfcee5 transparent;
+}
+
+/* Four key decision numbers: equal-size cards, stable dimensions. */
+.approval-demo--purchase .purchase-decision__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 16px;
+}
+.approval-demo--purchase .purchase-decision__metric {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 112px;
+  padding: 13px 16px 12px;
+  border: 1px solid var(--purchase-stroke);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 3px 14px rgba(35, 70, 125, .035);
+}
+.approval-demo--purchase .purchase-decision__metric-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: #62799b;
+  font-size:15px;
+  font-weight: 600;
+  line-height: 19px;
+}
+.approval-demo--purchase .purchase-decision__metric-icon,
+.approval-demo--purchase .purchase-decision__panel-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--purchase-blue);
+  font-size:20px;
+}
+.approval-demo--purchase .purchase-decision__metric > strong {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #142d55;
+  font-size: 26px;
+  font-weight: 750;
+  letter-spacing: -.4px;
+  line-height: 34px;
+  font-variant-numeric: tabular-nums;
+}
+.approval-demo--purchase .purchase-decision__metric > small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #8091ab;
+  font-size:14px;
+  line-height: 18px;
+}
+.approval-demo--purchase .purchase-decision__metric:nth-child(2) > strong,
+.approval-demo--purchase .purchase-decision__metric:nth-child(4) > strong {
+  color: var(--purchase-blue);
+}
+.approval-demo--purchase .purchase-decision__metric.is-attention > strong {
+  color: #d97706;
+}
+
+/* Content order is explicit; don't split the nine-column evaluation card. */
+.approval-demo--purchase .purchase-decision__layout,
+.approval-demo--purchase .purchase-decision__main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  width: 100%;
+}
+.approval-demo--purchase .purchase-decision__aside {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 14px;
+  min-width: 0;
+  width: 100%;
+}
+.approval-demo--purchase .purchase-decision__main > *,
+.approval-demo--purchase .purchase-decision__aside > * {
+  min-width: 0;
+}
+
+
+/* Normalized approval-only evaluation typography. No layout/style changes to the
+ * actual New Product module; these selectors never apply outside this drawer.
+ * Main heading: 18px; section headings: 16px; table and controls: 14px;
+ * overview amounts: 22px; total line: 16px; muted helper text: 12px.
+ */
+.approval-demo--purchase .purchase-decision .np-ed {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-title,
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-title > b {
+  font-size: 18px !important;
+  font-weight: 700;
+  line-height: 25px;
+}
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-context,
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-context > b,
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-section-heading,
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-section-heading > b {
+  font-size: 16px !important;
+  font-weight: 700;
+  line-height: 24px;
+}
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-mode > button,
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-ad-tabs > button,
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-compare-button {
+  font-size: 14px !important;
+  line-height: 20px;
+}
+.approval-demo--purchase .purchase-decision .np-ed .np-od-overview > div > span,
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-metric .np-ed-label {
+  font-size: 13px !important;
+  font-weight: 500;
+  line-height: 19px;
+}
+.approval-demo--purchase .purchase-decision .np-ed .np-od-overview > div > strong,
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-highlight .np-ed-metric > strong {
+  font-size: 22px !important;
+  font-weight: 700;
+  line-height: 28px;
+}
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-details .np-ed-metric > strong {
+  font-size: 18px !important;
+  font-weight: 650;
+  line-height: 24px;
+}
+.approval-demo--purchase .purchase-decision .np-ed .np-od-head,
+.approval-demo--purchase .purchase-decision .np-ed .np-od-row,
+.approval-demo--purchase .purchase-decision .np-ed .np-od-head > span,
+.approval-demo--purchase .purchase-decision .np-ed .np-od-row > span,
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-tablehead,
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-tablehead > span,
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-tablehead > b,
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-tableline,
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-tableline > span,
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-tableline > strong {
+  font-size: 14px !important;
+  line-height: 20px;
+}
+.approval-demo--purchase .purchase-decision .np-ed .np-od-total,
+.approval-demo--purchase .purchase-decision .np-ed .np-od-total > b {
+  font-size: 16px !important;
+  font-weight: 700;
+  line-height: 22px;
+}
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-section-heading > small,
+.approval-demo--purchase .purchase-decision .np-ed .np-od-truncated,
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-context > small,
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-count,
+.approval-demo--purchase .purchase-decision .np-ed .np-ed-compare-caption > small {
+  font-size: 12px !important;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+/* Purchase information and history are the only re-styled content cards.
+ * The imported new-product CSS remains completely unchanged. */
+.approval-demo--purchase .purchase-decision__panel {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--purchase-stroke);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 3px 14px rgba(35, 70, 125, .025);
+}
+.approval-demo--purchase .purchase-decision__panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 43px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #e6edf7;
+  background: #fff;
+}
+.approval-demo--purchase .purchase-decision__panel-head > strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #18375f;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 22px;
+}
+.approval-demo--purchase .purchase-decision__panel-head > span {
+  color: #899ab0;
+  font-size: 13px;
+  text-align: right;
+}
+.approval-demo--purchase .purchase-decision__panel-body {
+  min-width: 0;
+  padding: 13px 16px;
+}
+
+/* Three application details with clean dividers. */
+.approval-demo--purchase .purchase-decision__aside > .purchase-decision__panel:first-child .purchase-decision__panel-body {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  min-height: 90px;
+}
+.approval-demo--purchase .purchase-decision__aside > .purchase-decision__panel:first-child .purchase-decision__fact {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 12px;
+  border: 0;
+  border-right: 1px solid #e4ecf7;
+}
+.approval-demo--purchase .purchase-decision__aside > .purchase-decision__panel:first-child .purchase-decision__fact:first-child {
+  padding-left: 0;
+}
+.approval-demo--purchase .purchase-decision__aside > .purchase-decision__panel:first-child .purchase-decision__fact:last-child {
+  border-right: 0;
+}
+.approval-demo--purchase .purchase-decision__fact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid #eef2f8;
+}
+.approval-demo--purchase .purchase-decision__fact:last-child { border-bottom: 0; }
+.approval-demo--purchase .purchase-decision__fact > span {
+  color: var(--purchase-muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+.approval-demo--purchase .purchase-decision__fact > b {
+  min-width: 0;
+  color: #1a3459;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+.approval-demo--purchase .purchase-decision__fact > b.is-emphasized {
+  color: var(--purchase-blue);
+}
+
+/* Approval history, safely wraps long audit IDs. */
+.approval-demo--purchase .purchase-decision__timeline {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  margin: 3px 0 5px 6px;
+  padding-left: 18px;
+  border-left: 2px solid #b8d0fc;
+}
+.approval-demo--purchase .purchase-decision__timeline::before {
+  position: absolute;
+  top: 4px;
+  left: -6px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #0758e9;
+  box-shadow: 0 0 0 1px #88b0ff;
+  content: '';
+}
+.approval-demo--purchase .purchase-decision__timeline > b {
+  color: #25466d;
+  font-size: 16px;
+  font-weight: 680;
+}
+.approval-demo--purchase .purchase-decision__timeline > small,
+.approval-demo--purchase .purchase-decision__timeline > span {
+  color: #8295ae;
+  font-size: 13px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+.approval-demo--purchase .purchase-decision__timeline + .purchase-decision__timeline {
+  margin-top: 12px;
+}
+
+/* Supporting layouts retained for existing replenishment approvals. */
+.approval-demo--purchase .purchase-decision__two-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  min-width: 0;
+}
+.approval-demo--purchase .purchase-decision__decision-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+}
+.approval-demo--purchase .purchase-decision__decision-grid .purchase-decision__fact {
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px;
+  border: 0;
+  border-right: 1px solid #e4ecf7;
+}
+.approval-demo--purchase .purchase-decision__decision-grid .purchase-decision__fact:last-child { border-right: 0; }
+.approval-demo--purchase .purchase-decision__decision-grid .purchase-decision__fact > b {
+  font-size: 20px;
+  color: var(--purchase-blue);
+}
+.approval-demo--purchase .purchase-decision__reason {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: #eff5ff;
+}
+.approval-demo--purchase .purchase-decision__reason > strong {
+  flex: none;
+  font-size: 12px;
+  color: #24518f;
+}
+.approval-demo--purchase .purchase-decision__reason > p {
+  margin: 0;
+  min-width: 0;
+  font-size: 12px;
+  color: #567196;
+  overflow-wrap: anywhere;
+}
+.approval-demo--purchase .purchase-decision__dimensions { display: flex; flex-direction: column; gap: 8px; }
+.approval-demo--purchase .purchase-decision__dimension {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr) 48px 36px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #536b8d;
+}
+.approval-demo--purchase .purchase-decision__track {
+  height: 7px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #e6effd;
+}
+.approval-demo--purchase .purchase-decision__track > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #0758e9;
+}
+.approval-demo--purchase .purchase-decision__dimension > b {
+  color: var(--purchase-blue);
+  font-size: 16px;
+  text-align: right;
+}
+.approval-demo--purchase .purchase-decision__dimension > small {
+  color: #8a99af;
+  text-align: right;
+}
+.approval-demo--purchase .purchase-decision__hint {
+  padding: 7px 0 0;
+  color: #8798b1;
+  font-size: 12px;
+}
+.approval-demo--purchase .purchase-decision__notice {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f0f6ff;
+  color: #37639b;
+  font-size: 12px;
+}
+.approval-demo--purchase .purchase-decision__notice.is-warning {
+  background: #fff4e8;
+  color: #ad6c26;
+}
+.approval-demo--purchase .purchase-decision__sales-bars {
+  display: grid;
+  grid-template-columns: repeat(90, minmax(0, 1fr));
+  align-items: end;
+  gap: 2px;
+  height: 110px;
+  border-bottom: 1px solid #dce6f5;
+}
+.approval-demo--purchase .purchase-decision__sales-column {
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+  min-width: 0;
+}
+.approval-demo--purchase .purchase-decision__sales-column > span {
+  display: block;
+  min-height: 2px;
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  background: #0758e9;
+}
+.approval-demo--purchase .purchase-decision__axis {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 6px;
+  color: #8093b0;
+  font-size: 12px;
+}
+.approval-demo--purchase .purchase-decision__empty {
+  padding: 18px 12px;
+  color: #8698ae;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* Pinned footer; existing onClick/disabled guards are untouched. */
+.approval-demo--purchase .purchase-decision__footer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--purchase-stroke);
+  background: #fff;
+  box-shadow: 0 -3px 16px rgba(20, 51, 93, .035);
+}
+.approval-demo--purchase .purchase-decision__footer > span {
+  color: #8799b0;
+  font-size: 12px;
+  line-height: 18px;
+}
+.approval-demo--purchase .purchase-decision__footer-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.approval-demo--purchase .purchase-decision__footer-actions .ant-btn {
+  min-width: 85px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-size:16px;
+  font-weight: 600;
+}
+.approval-demo--purchase .purchase-decision__footer-actions .ant-btn-primary:not(:disabled) {
+  border-color: #0758e9;
+  background: #0758e9;
+  color: #fff;
+}
+.approval-demo--purchase .purchase-decision__footer-actions .ant-btn-primary:not(:disabled):hover {
+  border-color: #0648c4;
+  background: #0648c4;
+}
+.approval-demo--purchase .purchase-decision__footer-actions .ant-btn:disabled {
+  background: #f2f5fa;
+  border-color: #e4e9f2;
+  color: #a0aec2;
+}
+
+/* Drawer width already follows the existing AntD width prop (1120px / 96vw).
+ * Adapt ONLY our surrounding cards; leave the native evaluation table alone. */
+@media (max-width: 920px) {
+  .approval-demo--purchase .purchase-decision__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .approval-demo--purchase .purchase-decision__aside,
+  .approval-demo--purchase .purchase-decision__two-panels {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 620px) {
+  .approval-demo--purchase .purchase-decision__header { padding: 12px 14px; }
+  .approval-demo--purchase .purchase-decision__header h2 { font-size: 19px; line-height: 27px; }
+  .approval-demo--purchase .purchase-decision__scroll { padding: 12px 10px 18px; }
+  .approval-demo--purchase .purchase-decision__metrics { gap: 8px; }
+  .approval-demo--purchase .purchase-decision__metric {
+    min-height: 100px;
+    padding: 10px 11px;
+  }
+  .approval-demo--purchase .purchase-decision__metric > strong { font-size: 22px; line-height: 29px; }
+  .approval-demo--purchase .purchase-decision__aside > .purchase-decision__panel:first-child .purchase-decision__panel-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .approval-demo--purchase .purchase-decision__aside > .purchase-decision__panel:first-child .purchase-decision__fact {
+    padding: 7px 0;
+    border-right: 0;
+    border-bottom: 1px solid #e4ecf7;
+  }
+  .approval-demo--purchase .purchase-decision__aside > .purchase-decision__panel:first-child .purchase-decision__fact:last-child {
+    border-bottom: 0;
+  }
+  .approval-demo--purchase .purchase-decision__decision-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .approval-demo--purchase .purchase-decision__footer {
+    align-items: flex-end;
+    flex-direction: column;
+    padding: 10px 12px;
+  }
+  .approval-demo--purchase .purchase-decision__footer-actions {
+    width: 100%;
+  }
+}
+
+/* PURCHASE_READABILITY_CONSISTENCY_V4B */
+/* PURCHASE_TYPOGRAPHY_SINGLE_SOURCE_V5 */

@@ -870,6 +870,13 @@ class ListingManagementCurrentMart(Base):
     owner_ref: Mapped[str | None] = mapped_column(String(255))
     product_grade: Mapped[str | None] = mapped_column(String(64))
     tags_json: Mapped[list[dict[str, object]]] = mapped_column(JSONB, default=list)
+    # Provider product labels; never used by Listing custom-tag mutations.
+    product_tags_json: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, default=list, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    product_tags_match_status: Mapped[str] = mapped_column(
+        String(32), default="pending", nullable=False, server_default="pending"
+    )
     strike_price_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     strike_price_currency_code: Mapped[str | None] = mapped_column(String(3))
     sale_price_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))

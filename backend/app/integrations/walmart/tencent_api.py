@@ -23,6 +23,7 @@ _ENDPOINTS = {
     "scf": ("scf.tencentcloudapi.com", "Invoke", "2018-04-16"),
 }
 MAX_BYTES = 1024 * 1024
+MAX_SCF_RESPONSE_BYTES = 12 * 1024 * 1024
 
 
 class TencentApiRejected(RuntimeError):
@@ -105,9 +106,13 @@ class TencentApiClient:
         identity: TemporaryTencentIdentity,
         *,
         transport: httpx.BaseTransport | None = None,
+        scf_response_limit: int = MAX_BYTES,
     ) -> None:
+        if not MAX_BYTES <= scf_response_limit <= MAX_SCF_RESPONSE_BYTES:
+            raise TencentApiRejected("TC_RESPONSE_LIMIT_INVALID")
         self._identity = identity
         self._transport = transport
+        self._scf_response_limit = scf_response_limit
 
     def request(self, service: str, payload: dict[str, Any]) -> dict[str, Any]:
         if service not in _ENDPOINTS:
@@ -123,11 +128,17 @@ class TencentApiClient:
             with httpx.Client(
                 timeout=12.0, transport=self._transport, trust_env=False, follow_redirects=False
             ) as client:
-                response = client.post(f"https://{host}/", content=body, headers=headers)
-                response.raise_for_status()
-                if len(response.content) > MAX_BYTES:
-                    raise TencentApiRejected("TC_RESPONSE_TOO_LARGE")
-                response_data = response.json()
+                limit = self._scf_response_limit if service == "scf" else MAX_BYTES
+                with client.stream(
+                    "POST", f"https://{host}/", content=body, headers=headers
+                ) as response:
+                    response.raise_for_status()
+                    content = bytearray()
+                    for chunk in response.iter_bytes():
+                        if len(content) + len(chunk) > limit:
+                            raise TencentApiRejected("TC_RESPONSE_TOO_LARGE")
+                        content.extend(chunk)
+                    response_data = json.loads(content)
             item = response_data["Response"]
             if not isinstance(item, dict) or "Error" in item:
                 raise TencentApiRejected("TC_REMOTE_REJECTED")

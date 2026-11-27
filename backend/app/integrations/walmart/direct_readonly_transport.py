@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import base64
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 import httpx
 
+from app.integrations.walmart.contract_signing import READ_SEMANTIC_NON_GET_KEYS
 from app.integrations.walmart.contracts import PreparedRequest
 from app.integrations.walmart.https_transport import (
     MAX_ERROR_RESPONSE_BYTES,
@@ -27,6 +29,11 @@ from app.integrations.walmart.https_transport import (
     _bounded_json_or_text,
     _has_sensitive_keys,
 )
+
+# On-request report ZIPs come back inside the function response (base64), so the raw file is
+# capped well under the SCF 6MB response limit: ~1MB per settlement month in 2026-10 probes.
+MAX_ZIP_RESPONSE_BYTES = 3 * 1024 * 1024 + 512 * 1024
+_WALMART_HOSTNAME = urlsplit(WALMART_HOST).hostname
 
 
 class WalmartDirectReadOnlyTransport:
@@ -50,7 +57,18 @@ class WalmartDirectReadOnlyTransport:
             raise TransportRejected("WALMART_STORE_NOT_AUTHORIZED")
         # A signed contract can authorize many reads, but cannot override the
         # operating mode: reject every non-GET even if it claims is_write=False.
-        if request.method != "GET" or request.is_write or request.body is not None:
+        # Reviewed exception (READ_SEMANTIC_NON_GET_KEYS): a POST query whose contract pins
+        # the body to a JSON object of documented filter keys (validated by ``prepare``);
+        # the transport only accepts a dict body for those keys. Any other method, a body on
+        # a GET, a non-dict body or a contract flagged as write is refused.
+        read_semantic_post = (
+            request.method == "POST"
+            and request.key in READ_SEMANTIC_NON_GET_KEYS
+            and isinstance(request.body, dict)
+        )
+        if request.is_write or (
+            not read_semantic_post and (request.method != "GET" or request.body is not None)
+        ):
             raise TransportRejected("WALMART_DIRECT_WRITE_DENIED")
         if (
             not request.path.startswith("/v3/")
@@ -61,7 +79,9 @@ class WalmartDirectReadOnlyTransport:
             raise TransportRejected("WALMART_OPERATION_INVALID")
         if not isinstance(request.query, dict) and not hasattr(request.query, "items"):
             raise TransportRejected("WALMART_OPERATION_INVALID")
-        if request.response_kind not in ("json", "pdf"):
+        if request.response_kind not in ("json", "pdf", "zip"):
+            raise TransportRejected("WALMART_OPERATION_INVALID")
+        if request.response_kind == "zip" and request.method != "GET":
             raise TransportRejected("WALMART_OPERATION_INVALID")
         try:
             credentials = self._secrets.get_store_credentials(store_code)
@@ -91,9 +111,11 @@ class WalmartDirectReadOnlyTransport:
                     raise TransportRejected("WALMART_TOKEN_INVALID")
                 wants_pdf = request.response_kind == "pdf"
                 with client.stream(
-                    "GET",
+                    "POST" if read_semantic_post else "GET",
                     WALMART_HOST + request.path,
                     params=dict(request.query),
+                    # The contract-validated object re-serialized here; never raw caller bytes.
+                    json=dict(request.body) if read_semantic_post else None,
                     headers={
                         "WM_SEC.ACCESS_TOKEN": token,
                         "WM_SVC.NAME": "Walmart Marketplace",
@@ -122,8 +144,44 @@ class WalmartDirectReadOnlyTransport:
                         raise TransportRejected("WALMART_RESPONSE_INVALID")
                     if _has_sensitive_keys(data):
                         raise TransportRejected("WALMART_RESPONSE_SENSITIVE")
+                    if request.response_kind == "zip":
+                        return self._fetch_report_zip(client, response.status_code, data)
                     return response.status_code, data
         except TransportRejected:
             raise
         except Exception:
             raise TransportRejected("WALMART_TRANSPORT_FAILURE") from None
+
+    @staticmethod
+    def _fetch_report_zip(client: httpx.Client, status: int, data: Any) -> tuple[int, Any]:
+        """Follow the ``downloadURL`` Walmart put in the JSON answer and return the ZIP bytes.
+
+        Same host only, https only, under ``/v3/``, no redirects, size-capped, must start with
+        the ZIP magic. The download link is pre-signed by Walmart, so no token header is sent.
+        """
+        url = data.get("downloadURL") if isinstance(data, dict) else None
+        if not isinstance(url, str) or not url:
+            raise TransportRejected("WALMART_REPORT_DOWNLOAD_URL_MISSING")
+        parts = urlsplit(url)
+        if (
+            parts.scheme != "https"
+            or parts.hostname != _WALMART_HOSTNAME
+            or not parts.path.startswith("/v3/")
+            or ".." in parts.path
+        ):
+            raise TransportRejected("WALMART_REPORT_DOWNLOAD_HOST_DENIED")
+        with client.stream(
+            "GET", url, headers={"Accept": "*/*", "WM_QOS.CORRELATION_ID": str(uuid4())}
+        ) as download:
+            if download.status_code != 200:
+                raise TransportRejected("WALMART_REPORT_DOWNLOAD_FAILED")
+            payload = _bounded_bytes(download, MAX_ZIP_RESPONSE_BYTES)
+        if not payload.startswith(b"PK"):
+            raise TransportRejected("WALMART_RESPONSE_INVALID")
+        return status, {
+            "content_type": "application/zip",
+            "request_id": data.get("requestId") if isinstance(data, dict) else None,
+            "download_host": parts.hostname,
+            "payload_bytes": len(payload),
+            "data_base64": base64.b64encode(payload).decode("ascii"),
+        }

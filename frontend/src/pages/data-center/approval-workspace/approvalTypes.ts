@@ -1,3 +1,4 @@
+import type { NewProductListing } from "@/pages/products/new-product/newProductBusinessApi";
 export type ApprovalTab = "pending" | "approved" | "rejected";
 export type ApprovalView = "mine" | "created" | "all";
 export const approvalTabs: { label: string; value: ApprovalTab }[] = [
@@ -5,14 +6,89 @@ export const approvalTabs: { label: string; value: ApprovalTab }[] = [
  { label: "已审批", value: "approved" },
  { label: "驳回记录", value: "rejected" },
 ];
-export type ApprovalRisk = "low" | "medium" | "high";
+export type ApprovalRisk = "low" | "medium" | "high" | "unknown" | "none";
 export type ApprovalStatus = "submitted" | "info_required" | "approved" | "rejected" | "withdrawn" | "legacy_unverified";
 export type Decision = "approved" | "rejected" | "info_required";
+/** 采购审批专用字段，当前后端未提供时保留空值，禁止模拟为真实数据。 */
+/** Evidence frozen at purchase application; never read the latest scoring as its substitute. */
+export interface PurchaseApprovalEvidenceView {
+  frozen: boolean;
+  score_rule_version: number;
+  system_dimensions: Record<'speed'|'ad'|'profit'|'trust'|'market',string|null>;
+  effective_dimensions: Record<'speed'|'ad'|'profit'|'trust'|'market',string|null>;
+  weights: Record<'speed'|'ad'|'profit'|'trust'|'market',number> | null;
+  correction_history: Array<{
+    dimension: string; before: string|null; after: string|null;
+    reason: string|null; actor_id: string|null; at: string|null; revision: number|null;
+  }>;
+  manual_risks: string[] | null;
+  system_risks: string[] | null;
+  competitor_ids: string[] | null;
+  no_competitors: boolean | null;
+  market_reason: string | null;
+  manual_conclusion: {decision:string; reason:string|null} | null;
+}
+export interface PurchaseApprovalDetails {
+  approval_evidence?: PurchaseApprovalEvidenceView | null;
+  purchase_kind?: "initial" | "replenishment" | null;
+  application_source?: "system" | "operator" | null;
+  product_name?: string | null;
+  sku?: string | null;
+  store_name?: string | null;
+  store_id?: string | null;
+  approved_qty?: number | null;
+  owner_name?: string | null;
+  supplier_name?: string | null;
+  required_delivery_date?: string | null;
+  score_total?: number | null;
+  initial_grade?: "S" | "A" | "B" | "C" | "D" | "Pass" | null;
+  estimated_sellable_days?: number | null;
+  sales_30d?: number | null;
+  suggested_qty?: number | null;
+  requested_qty?: number | null;
+  amount?: number | string | null;
+  currency_code?: string | null;
+  profit_fx_month?: string | null;
+  profit_fx_rate?: string | null;
+  profit_fx_source?: "lingxing_my_rate" | null;
+  item_id?: string | null;
+  msku?: string | null;
+  analysis?: {
+    sellingPrice?: number | null;
+    grossMarginPct?: number | null;
+    roi?: number | null;
+    acosPct?: number | null;
+    adSpend?: number | null;
+    adSales?: number | null;
+    adClicks?: number | null;
+    validOrders14?: number | null;
+    firstOrderDays?: number | null;
+  } | null;
+}
+export interface PurchasePageRead {
+  application_id:string;
+  version:number;
+  source_account_ref:string;
+  store_id:string;
+  item_id:string;
+  listing:NewProductListing|null;
+  daily:unknown;
+  unit_purchase_cost_cny:string|null;
+}
 export interface ApprovalItem {
+  purchase_read?: PurchasePageRead|null;
+  purchase_details?: PurchaseApprovalDetails | null;
+ /** Live clearance data supplied by the existing API, never by demo profiles. */
+ clearance_details?: {
+  sku: string | null; msku: string | null; item_id: string;
+  store_id: string; store_name: string | null; owner_ref: string | null;
+  requested_qty: number; methods: string[];
+ };
   case_opened_at?: string | null;
   follow_count?: number | null;
  id: string; version: number; approval_type: string; business_ref: string;
  title: string; source_account_ref: string; applicant_id: string | null;
+ applicant_name?: string | null;
  status: ApprovalStatus; risk_level: ApprovalRisk; amount: string | null;
  currency_code: string | null; submitted_at: string | null;
  reviewed_at: string | null; reviewed_by: string | null;
@@ -56,9 +132,11 @@ export const approvalColumnFields = [
  { key: "status", title: "状态" },
  { key: "action", title: "操作" },
 ];
-export const riskNames: Record<ApprovalRisk, string> = { low: "低风险", medium: "中风险", high: "高风险" };
+export const riskNames: Record<ApprovalRisk, string> = { low: "低风险", medium: "中风险", high: "高风险", unknown: "待评估",none:"无风险" };
 export const statusNames: Record<ApprovalStatus, string> = {
  submitted: "待审批", info_required: "待补资料",
  approved: "已审批", rejected: "已驳回", withdrawn: "已撤回",
  legacy_unverified: "历史待核验",
 };
+
+// SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1
