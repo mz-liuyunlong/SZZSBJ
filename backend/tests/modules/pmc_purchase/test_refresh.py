@@ -704,14 +704,14 @@ def test_remark_item_id_is_trusted_by_store_even_without_listing_local_sku(
     session: Session,
 ) -> None:
     """Owner decision 2026-10-31 rule 1: the buyer's ItemID wins once the store lists it,
-    even when Lingxing never paired that listing with a local SKU (PO261016006 case)."""
+    even when Lingxing never paired that listing with a local SKU (PO990101006 case)."""
 
     session.add(
         WalmartListingDimension(
             id=uuid4(),
             source_account_ref=ACCOUNT,
             store_id=STORE,
-            item_id="21139862520",
+            item_id="19000000101",
             msku="SKU-A-1A",
             local_sku=None,
             gtin="00012345678913",
@@ -719,15 +719,15 @@ def test_remark_item_id_is_trusted_by_store_even_without_listing_local_sku(
             synced_at=NOW,
         )
     )
-    _plan(session, "P1", remark_item_id="21139862520", remark="21139862520")
+    _plan(session, "P1", remark_item_id="19000000101", remark="19000000101")
     _order(session, "PO1")
-    _line(session, "PO1", "L1", remark_item_id="21139862520")
+    _line(session, "PO1", "L1", remark_item_id="19000000101")
     session.commit()
 
     PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
     row = _board(session)[("PO1", "L1", "P1")]
     assert (row.item_id, row.item_id_source, row.item_id_match_status) == (
-        "21139862520",
+        "19000000101",
         "from_plan_remark",
         "matched",
     )
@@ -777,7 +777,7 @@ def test_listing_with_blank_local_sku_is_found_by_the_purchase_line_msku(
             id=uuid4(),
             source_account_ref=ACCOUNT,
             store_id=STORE,
-            item_id="21139862520",
+            item_id="19000000101",
             msku="SKU-A-1A",
             local_sku=None,
             gtin="00012345678913",
@@ -813,7 +813,7 @@ def test_listing_with_blank_local_sku_is_found_by_the_purchase_line_msku(
     PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
     row = _board(session)[("PO1", "L1", "")]
     assert (row.item_id, row.item_id_source, row.msku) == (
-        "21139862520",
+        "19000000101",
         "from_listing",
         "SKU-A-1A",
     )
@@ -943,14 +943,14 @@ def _r9_storeless_line(session: Session, remark: str) -> None:
 def test_r9_storeless_line_takes_store_and_item_from_a_remark_id_listed_on_one_store(
     session: Session,
 ) -> None:
-    _r9_listing(session, STORE, "19990261033", local_sku="JJ8040")
-    _r9_storeless_line(session, "19990261033")
+    _r9_listing(session, STORE, "19000000102", local_sku="TT8040")
+    _r9_storeless_line(session, "19000000102")
     session.commit()
 
     PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
     row = _board(session)[("PO-R9", "LR9", "")]
     assert (row.item_id, row.item_id_source, row.item_id_match_status) == (
-        "19990261033",
+        "19000000102",
         "from_plan_remark",
         "matched",
     )
@@ -961,16 +961,16 @@ def test_r9_storeless_line_takes_store_and_item_from_a_remark_id_listed_on_one_s
     evidence = row.source_lineage_json["item_id_evidence"]
     assert evidence["store_from_remark"] == STORE
     assert evidence["remark_store_conflict"] == []
-    # The listing's local SKU (JJ8040) is not the line SKU (SKU-A): flagged, still attributed.
+    # The listing's local SKU (TT8040) is not the line SKU (SKU-A): flagged, still attributed.
     assert row.source_lineage_json["item_identities"][0]["sku_mismatch"] is True
 
 
 def test_r9_storeless_line_with_a_remark_id_on_several_stores_is_a_conflict(
     session: Session,
 ) -> None:
-    _r9_listing(session, STORE, "19990261033")
-    _r9_listing(session, "999000111", "19990261033")
-    _r9_storeless_line(session, "19990261033")
+    _r9_listing(session, STORE, "19000000102")
+    _r9_listing(session, "999000111", "19000000102")
+    _r9_storeless_line(session, "19000000102")
     session.commit()
 
     PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
@@ -979,14 +979,14 @@ def test_r9_storeless_line_with_a_remark_id_on_several_stores_is_a_conflict(
     assert (row.store_id, row.store_attributed, row.overdue_days) == (None, False, 0)
     identities = row.source_lineage_json["item_identities"]
     assert sorted(item["store_id"] for item in identities) == sorted([STORE, "999000111"])
-    assert all(item["item_id"] == "19990261033" for item in identities)
+    assert all(item["item_id"] == "19000000102" for item in identities)
     assert row.source_lineage_json["item_id_evidence"]["remark_store_conflict"] == sorted(
         [STORE, "999000111"]
     )
 
 
 def test_r9_storeless_line_without_a_listed_remark_id_stays_unattributed(session: Session) -> None:
-    _r9_storeless_line(session, "19990261033")  # no listing carries this id
+    _r9_storeless_line(session, "19000000102")  # no listing carries this id
     session.commit()
 
     PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
@@ -994,23 +994,23 @@ def test_r9_storeless_line_without_a_listed_remark_id_stays_unattributed(session
     assert row.item_id is None
     assert (row.store_id, row.store_attributed, row.overdue_days) == (None, False, 0)
     assert row.source_lineage_json["item_id_evidence"]["store_from_remark"] is None
-    assert row.source_lineage_json["item_id_evidence"]["unverified_ids"] == ["19990261033"]
+    assert row.source_lineage_json["item_id_evidence"]["unverified_ids"] == ["19000000102"]
 
 
 def test_r9a_among_several_stores_only_the_published_wfs_listing_counts(session: Session) -> None:
-    """PO261016016 / JJ8040 on 2026-11-02: 19990261033 is UNPUBLISHED + non-WFS on one store
+    """PO990101016 / TT8040 on 2026-11-02: 19000000102 is UNPUBLISHED + non-WFS on one store
     and PUBLISHED + WFS on another — the sellable one wins, no conflict."""
     _r9_listing(
-        session, "999000111", "19990261033", "JJ8040", status="UNPUBLISHED", fulfillment_type="0"
+        session, "999000111", "19000000102", "TT8040", status="UNPUBLISHED", fulfillment_type="0"
     )
-    _r9_listing(session, STORE, "19990261033", "JJ8040")
-    _r9_storeless_line(session, "19990261033")
+    _r9_listing(session, STORE, "19000000102", "TT8040")
+    _r9_storeless_line(session, "19000000102")
     session.commit()
 
     PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
     row = _board(session)[("PO-R9", "LR9", "")]
     assert (row.item_id, row.item_id_match_status, row.store_id, row.store_attributed) == (
-        "19990261033",
+        "19000000102",
         "matched",
         STORE,
         True,
