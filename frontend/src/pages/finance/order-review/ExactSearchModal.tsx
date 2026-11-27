@@ -1,10 +1,7 @@
 /** 精确搜索弹层：按 ItemID / SKU / MSKU / 订单号 模糊找候选（最多 1000 行），勾选后作为精确多选条件。 */
 import { Checkbox, Input, Modal, Space, Typography } from "antd";
 import { useEffect, useState } from "react";
-import { errorText, lookup } from "./orderReviewApi";
-
-export type LookupKind = "item_id" | "sku" | "msku" | "order_no";
-export const LOOKUP_LABEL: Record<LookupKind, string> = { item_id: "ItemID", sku: "SKU", msku: "MSKU", order_no: "订单号" };
+import { LOOKUP_LABEL, errorText, lookup, type LookupKind } from "./orderReviewApi";
 
 function ExactSearchModal({ kind, open, value, onClose, onApply }: {
   kind: LookupKind; open: boolean; value: string[]; onClose: () => void; onApply: (values: string[]) => void;

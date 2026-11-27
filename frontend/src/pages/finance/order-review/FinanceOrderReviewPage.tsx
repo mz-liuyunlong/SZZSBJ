@@ -19,11 +19,11 @@ import BoardTable from "@/pages/finance/payout-recon/BoardTable";
 import HelpButton, { type HelpSection } from "@/pages/finance/payout-recon/HelpButton";
 import ReportFacetSelect from "@/shared/report-filters";
 import CostEntryDrawer from "./CostEntryDrawer";
-import ExactSearchModal, { LOOKUP_LABEL, type LookupKind } from "./ExactSearchModal";
+import ExactSearchModal from "./ExactSearchModal";
 import {
-  DEFAULT_FILTERS, KIND_TEXT, REASON_TEXT, SOURCE_KIND_TEXT, STATUS_TEXT, errorText, n, postRecalc, postReview,
+  DEFAULT_FILTERS, KIND_TEXT, LOOKUP_LABEL, REASON_TEXT, SOURCE_KIND_TEXT, STATUS_TEXT, errorText, n, postRecalc, postReview,
   useLines, useOrderReviewRefresh, usePeriods, useTransactionTypes,
-  type ApiLine, type ApiMoney, type ApiPeriod, type LineFilters, type LineKind, type Reason, type ReviewStatus,
+  type ApiLine, type ApiMoney, type ApiPeriod, type LineFilters, type LineKind, type LookupKind, type Reason, type ReviewStatus,
 } from "./orderReviewApi";
 import { OR_COLUMN_GROUPS, OR_DEFAULT_KEYS, OR_FIXED_KEYS, readOrderReviewColumns, writeOrderReviewColumns } from "./orderReviewColumns";
 import "@/pages/finance/payout-recon/payout-recon.css";
