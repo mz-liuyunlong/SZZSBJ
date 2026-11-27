@@ -20,6 +20,21 @@ describe("first WFS performance date filters", () => {
     expect(urls[1].searchParams.get("np_statuses")).toBe("测评通过");
     expect(urls[1].searchParams.get("page")).toBe("1");
   });
+  it("passes committed facets and search to the summary, not pagination", async () => {
+    await getNewProductSummary(undefined,["2026-11-01","2026-11-15"],{
+      phase:"pending",npStatuses:"flow:待等级确认",npOwners:"A",npRatings:"C",
+      npOwnerKeyword:"",keyword:"YC001",searchField:"sku",
+    });
+    const url=new URL(vi.mocked(backendRequest).mock.calls[0][0],"https://example.test");
+    expect(url.searchParams.get("np_phase")).toBe("pending");
+    expect(url.searchParams.get("np_statuses")).toBe("flow:待等级确认");
+    expect(url.searchParams.get("np_owners")).toBe("A");
+    expect(url.searchParams.get("np_ratings")).toBe("C");
+    expect(url.searchParams.get("keyword")).toBe("YC001");
+    expect(url.searchParams.get("search_field")).toBe("sku");
+    expect(url.searchParams.has("page")).toBe(false);
+    expect(url.searchParams.get("first_wfs_end_date")).toBe("2026-11-15");
+  });
   it("keeps previous API behavior for a cleared range", async () => {
     await getNewProductSummary();
     await listNewProducts();

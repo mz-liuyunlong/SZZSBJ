@@ -8,7 +8,7 @@ import NewProductEvaluationData from '@/pages/products/new-product/NewProductEva
 import type { Identity } from '@/pages/products/new-product/newProductBusinessApi';
 import { usePurchaseApprovalReadModel } from '../purchaseApprovalReadModel';
 import type { Product } from '@/pages/products/new-product/newProductModel';
-import PurchaseApprovalEvidence from './PurchaseApprovalEvidence';
+import PurchaseApprovalEvidence, { approvalScoreDisplay } from './PurchaseApprovalEvidence';
 import './PurchaseApprovalDecisionDrawer.css';
 
 type DecisionAction = 'approve' | 'reject';
@@ -68,11 +68,11 @@ function panelIcon(title: string) {
   if (title.includes('审批历史')) return <ClockCircleOutlined />;
   return <InboxOutlined />;
 }
-function Metric({label,value,description,attention,extra}: {
-  label: string; value: string; description: string; attention?: boolean; extra?: ReactNode;
+function Metric({label,value,description,attention,extra,previousValue}: {
+  label: string; value: string; description: ReactNode; attention?: boolean; extra?: ReactNode; previousValue?: string|null;
 }) {
-  return <div className={`purchase-decision__metric${attention ? ' is-attention' : ''}`}>
-    <span className="purchase-decision__metric-label"><span className="purchase-decision__metric-icon">{metricIcon(label)}</span>{label}</span><strong>{value.startsWith("CNY ") ? `\u00a5 ${value.slice(4)}` : value}</strong>{description ? <small>{description}</small> : null}{extra ? <div className="purchase-decision__metric-extra">{extra}</div> : null}
+  return <div className={`purchase-decision__metric${attention ? ' is-attention' : ''}${previousValue ? ' purchase-decision__metric--score-transition' : ''}`}>
+    <span className="purchase-decision__metric-label"><span className="purchase-decision__metric-icon">{metricIcon(label)}</span>{label}</span><strong>{previousValue && <><span className="purchase-decision__score-before">{previousValue}</span><span className="purchase-decision__score-arrow">→</span></>}{value.startsWith("CNY ") ? `\u00a5 ${value.slice(4)}` : value}</strong>{description ? <small>{description}</small> : null}{extra ? <div className="purchase-decision__metric-extra">{extra}</div> : null}
   </div>;
 }
 function Panel({title,aside,children}: {title: string; aside?: ReactNode; children: ReactNode}) {
@@ -222,13 +222,17 @@ export default function PurchaseApprovalDecisionDrawer({record, seed, profile, e
 
   // PURCHASE_APPROVAL_REFERENCE_V2: read-only frozen status for the top score card.
   const referenceEvidence = record.purchase_details?.approval_evidence;
-  const referenceHasCorrection = Boolean(referenceEvidence?.frozen &&
-    (['speed','ad','profit','trust'] as const).some(key => {
-      const from = referenceEvidence.system_dimensions[key];
-      const to = referenceEvidence.effective_dimensions[key];
-      return from != null && to != null && Number.isFinite(Number(from)) &&
-        Number.isFinite(Number(to)) && Number(from) !== Number(to);
-    }));
+  // NP_PURCHASE_SCORE_HOVER_HEADER_V2
+  const scoreDisplay = approvalScoreDisplay(referenceEvidence);
+  // NP_PURCHASE_GRADE_INLINE_V4: show the frozen original grade beside the final badge.
+  const previousGrade = scoreDisplay.gradeChange && referenceEvidence?.system_grade
+    && referenceEvidence.effective_grade === profile.initialGrade
+    ? referenceEvidence.system_grade : null;
+  const scoreDescription = previousGrade
+    ? ''
+    : scoreDisplay.revised && !referenceEvidence?.system_grade && profile.initialGrade
+      ? `${profile.initialGrade} 级 · 原始等级未核实`
+      : profile.initialGrade ? `${profile.initialGrade} 级 · 申请时评级` : '评级待确认';
   return <div className="purchase-decision">
     {record.approval_type === 'new_product_purchase' && <div className="purchase-decision__modal-bar">
       <span className="purchase-decision__modal-icon" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"><rect x="7" y="6" width="19" height="23" rx="3"/><path d="M12 4h9v5h-9zM12 15h10M12 20h10"/></svg></span>
@@ -251,9 +255,13 @@ export default function PurchaseApprovalDecisionDrawer({record, seed, profile, e
       {detailState === 'error' && <Alert type="error" showIcon message="采购审批详情加载失败，请关闭后重新打开。当前不可审批。"/>}
       <div className="purchase-decision__metrics">
         {isInitial ? <>
-          <Metric label="综合测评分数" value={profile.scoreTotal == null ? '—' : numberText(profile.scoreTotal, 2)} description={profile.initialGrade ? `${profile.initialGrade} 级 · 申请时评级` : '评级待确认'} extra={<>
-      {profile.initialGrade && <span className="purchase-decision__score-grade">{profile.initialGrade}{"\u7ea7"}</span>}
-      {referenceEvidence?.frozen && <span className={referenceHasCorrection ? "purchase-decision__score-revised" : "purchase-decision__score-untouched"}>{referenceHasCorrection ? "\u5df2\u4fee\u6b63" : "\u672a\u4fee\u6539"}</span>}
+          <Metric label="综合测评分数" value={profile.scoreTotal == null ? '—' : numberText(profile.scoreTotal, 2)} description={scoreDescription} previousValue={scoreDisplay.previous} extra={<>
+      {profile.initialGrade && (previousGrade ? <div className="purchase-decision__score-grade-pair">
+        <span className="purchase-decision__score-before">{previousGrade}级</span>
+        <span className="purchase-decision__score-arrow" aria-hidden="true">→</span>
+        <span className="purchase-decision__score-grade">{profile.initialGrade}级</span>
+      </div> : <span className="purchase-decision__score-grade">{profile.initialGrade}级</span>)}
+      {referenceEvidence?.frozen && <span className={scoreDisplay.revised ? 'purchase-decision__score-revised' : 'purchase-decision__score-untouched'}>{scoreDisplay.revised ? '已修正' : scoreDisplay.verifiedUnchanged ? '未修改' : '未核实'}</span>}
     </>} />
           <Metric label="申请采购数量" value={requestQty == null ? '—' : `${numberText(requestQty)} 件`} description={`系统建议 ${suggestQty == null ? '—' : `${numberText(suggestQty)} 件`}`} />
           <Metric label="预计采购金额" value={resolvedPurchaseAmount} description="" />

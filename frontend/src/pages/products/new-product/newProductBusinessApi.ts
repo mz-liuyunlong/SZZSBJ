@@ -131,11 +131,25 @@ export type PerformanceSummary = {
   owner_options: Array<{value:string;label:string;count:number}>;
   rating_options: Array<{value:string;label:string;count:number}>;
 };
-export async function getNewProductSummary(init?:RequestInit, firstWfsDateRange?:FirstWfsDateRange):Promise<PerformanceSummary> {
+// NP_LINKED_FACETS_V1: only committed filters, never pagination or draft selection.
+export type PerformanceFacetParams = {
+  phase:string; npStatuses:string; npOwners:string; npRatings:string;
+  npOwnerKeyword:string; keyword:string; searchField:"sku"|"msku"|"item_id"|"title";
+};
+export async function getNewProductSummary(init?:RequestInit, firstWfsDateRange?:FirstWfsDateRange, facets?:PerformanceFacetParams):Promise<PerformanceSummary> {
   const params=new URLSearchParams();
   if(firstWfsDateRange){
     params.set("first_wfs_start_date",firstWfsDateRange[0]);
     params.set("first_wfs_end_date",firstWfsDateRange[1]);
+  }
+  if(facets){
+    params.set("np_phase",facets.phase);
+    if(facets.npStatuses) params.set("np_statuses",facets.npStatuses);
+    if(facets.npOwners) params.set("np_owners",facets.npOwners);
+    if(facets.npRatings) params.set("np_ratings",facets.npRatings);
+    if(facets.npOwnerKeyword) params.set("np_owner_keyword",facets.npOwnerKeyword);
+    if(facets.keyword) params.set("keyword",facets.keyword);
+    params.set("search_field",facets.searchField);
   }
   const suffix=params.size?`?${params}`:"";
   return (await backendRequest<PerformanceSummary>(`/api/new-products/summary${suffix}`,init)).data;

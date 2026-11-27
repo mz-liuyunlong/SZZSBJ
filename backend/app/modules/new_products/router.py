@@ -60,13 +60,31 @@ def performance_summary(
     source: Source,
     first_wfs_start_date: date | None = None,
     first_wfs_end_date: date | None = None,
+    np_phase: Literal["all", "evaluating", "pending", "passed", "failed", "approval"] = "all",
+    np_statuses: Annotated[str, Query(max_length=256)] = "",
+    np_owners: Annotated[str, Query(max_length=1024)] = "",
+    np_ratings: Annotated[str, Query(max_length=128)] = "",
+    np_owner_keyword: Annotated[str, Query(max_length=128)] = "",
+    keyword: Annotated[str, Query(max_length=128)] = "",
+    search_field: Literal["sku", "msku", "item_id", "title"] = "sku",
 ):
     from .performance_list_scope import summary
 
     return success_response(
         request,
         data=summary(
-            source, db, accounts, start_date=first_wfs_start_date, end_date=first_wfs_end_date
+            source,
+            db,
+            accounts,
+            start_date=first_wfs_start_date,
+            end_date=first_wfs_end_date,
+            phase=np_phase,
+            statuses=np_statuses,
+            owners=np_owners,
+            ratings=np_ratings,
+            owner_keyword=np_owner_keyword,
+            keyword=keyword,
+            search_field=search_field,
         ),
         meta={"source": "saved_projection"},
     )

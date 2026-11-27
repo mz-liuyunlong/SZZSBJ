@@ -150,8 +150,8 @@ def public_correction(block: dict, *, system=None, effective=None) -> dict:
     )
 
 
-def resolved_system(evaluation: dict, system: dict) -> dict | None:
-    """Attach a later formal market result to a pre-market immutable auto baseline."""
+def resolved_system(evaluation: dict, system: dict, *, exact_total: bool = False) -> dict | None:
+    """Resolve a baseline against an exact snapshot or a NUMERIC(10,4) read."""
     if evaluation.get("rule_version") != system.get("rule_version"):
         return None
     published = evaluation.get("dimensions")
@@ -166,11 +166,15 @@ def resolved_system(evaluation: dict, system: dict) -> dict | None:
             if value is not None and _dec(value) != _dec(current):
                 return None
     if system.get("total") is not None:
+        # NP_GRADE_CONFIRM_EXACT_PRECISION_V1: final JSONB snapshots retain exact precision.
+        # Only persisted list reads use the PostgreSQL NUMERIC(10,4) scale.
+        expected_total = _dec(system["total"])
+        if not exact_total:
+            expected_total = expected_total.quantize(STORAGE, rounding=ROUND_HALF_UP)
         if (
             evaluation.get("total") is None
             or evaluation.get("grade") != system.get("grade")
-            or _dec(evaluation["total"])
-            != _dec(system["total"]).quantize(STORAGE, rounding=ROUND_HALF_UP)
+            or _dec(evaluation["total"]) != expected_total
         ):
             return None
         return deepcopy(system)

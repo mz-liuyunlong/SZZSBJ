@@ -320,28 +320,34 @@
 }
 /* PURCHASE_TYPOGRAPHY_SINGLE_SOURCE_V5 */
 
-/* PURCHASE_APPROVAL_LAYOUT_ALIGNMENT_V1: stable rows, content-width summary, portal-based history. */
-.purchase-evidence__history-modal .ant-modal-content {
-  border-radius:12px;
+/* NP_PURCHASE_SCORE_HOVER_HEADER_V2: local score card and portal hover only. */
+.purchase-evidence__history-popover .ant-popover-inner {border-radius:10px;}
+.purchase-evidence__history-popover .purchase-evidence__history-list {
+  position:static;width:min(320px,calc(100vw - 64px));max-height:320px;
+  overflow-y:auto;overflow-wrap:anywhere;color:#152342;
 }
-.purchase-evidence__history-modal .purchase-evidence__history-list {
-  position:static;
-  top:auto;left:auto;right:auto;z-index:auto;
-  margin:0;padding:12px 14px;
-  max-height:min(58vh,440px);
-  overflow-y:auto;
-  box-shadow:none;
-  border-radius:9px;
-  overflow-wrap:anywhere;
+.purchase-evidence__history-popover .purchase-evidence__history-list > div + div {
+  border-top:1px solid #dce8ff;padding-top:8px;margin-top:8px;
 }
-.purchase-evidence__history-modal .purchase-evidence__history-list > div + div {
-  border-top:1px solid #dce8ff;
-  padding-top:8px;
-  margin-top:8px;
+.purchase-evidence__history-popover .purchase-evidence__history-list b {font-size:15px;}
+.purchase-evidence__history-popover .purchase-evidence__history-list p {
+  font-size:14px;line-height:1.5;margin:4px 0;white-space:pre-wrap;
 }
-.purchase-evidence__history-modal .purchase-evidence__history-list p {
-  white-space:pre-wrap;
-  overflow-wrap:anywhere;
+.purchase-evidence__history-popover .purchase-evidence__history-list small {font-size:12px;color:#697995;}
+.approval-demo--purchase .purchase-decision:has(> .purchase-decision__modal-bar) .purchase-decision__metric--score-transition > strong {
+  display:flex;align-items:baseline;gap:5px;padding-right:64px;
+  font-size:clamp(22px,2.1vw,30px);
+}
+.approval-demo--purchase .purchase-decision__score-before {
+  color:#8291a8;font-size:15px;font-weight:600;text-decoration:line-through;
+}
+.approval-demo--purchase .purchase-decision__score-arrow {color:#8291a8;font-size:15px;}
+/* NP_PURCHASE_GRADE_INLINE_V4: reuse the original-score strike and arrow. */
+.approval-demo--purchase .purchase-decision__score-grade-pair {
+  display:flex;align-items:center;gap:4px;white-space:nowrap;
+}
+.approval-demo--purchase .purchase-decision:has(> .purchase-decision__modal-bar) .purchase-decision__metric--score-transition:has(.purchase-decision__score-grade-pair) > strong {
+  padding-right:100px;
 }
 
 /* PURCHASE_RISK_MARKET_DETAIL_ALIGNMENT_V2 */
