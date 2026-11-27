@@ -899,6 +899,32 @@ class OperationPlanRepository:
             )
         """
 
+    def _listing_store_cte_sql(self) -> str:
+        """Current store membership for item-level plans in the selected period."""
+        return f"""
+            listing_store_memberships as (
+                select
+                    trim(l.item_id::text) as item_id,
+                    trim(l.store_id::text) as store_id,
+                    coalesce(
+                        max(nullif(trim(l.store_name::text), '')),
+                        trim(l.store_id::text)
+                    ) as store_name
+                from {LISTING_TABLE} l
+                where l.source_account_ref in :account_refs
+                  and nullif(trim(l.store_id::text), '') is not null
+                  and exists (
+                      select 1
+                      from ops_operation_product_plans p
+                      where p.period_id = :period_id
+                        and trim(p.item_id::text) = trim(l.item_id::text)
+                  )
+                group by
+                    trim(l.item_id::text),
+                    trim(l.store_id::text)
+            )
+        """
+
     def list_products(
         self,
         *,
@@ -998,9 +1024,21 @@ class OperationPlanRepository:
         if query.owner_ref:
             clauses.append(f"{owner_expr} = :owner_ref")
             params["owner_ref"] = query.owner_ref
-        if query.store_id:
-            clauses.append("p.store_id = :store_id")
-            params["store_id"] = query.store_id
+        store_ids = tuple(
+            dict.fromkeys(
+                value.strip() for value in (query.store_id or "").split(",") if value.strip()
+            )
+        )
+        if store_ids:
+            clauses.append("""
+                exists (
+                    select 1
+                    from listing_store_memberships sm
+                    where sm.item_id = trim(p.item_id::text)
+                      and sm.store_id in :store_ids
+                )
+            """)
+            params["store_ids"] = store_ids
         if query.operation_status:
             clauses.append("p.operation_status = :operation_status")
             params["operation_status"] = query.operation_status
@@ -1093,6 +1131,7 @@ class OperationPlanRepository:
             ),
             {inventory_cte_sql},
             {listing_owner_cte_sql},
+            {self._listing_store_cte_sql()},
             actuals as (
                 select
                     p.id as plan_id,
@@ -1261,6 +1300,9 @@ class OperationPlanRepository:
         if query.batch_values:
             count_statement = count_statement.bindparams(bindparam("batch_values", expanding=True))
 
+        if store_ids:
+            count_statement = count_statement.bindparams(bindparam("store_ids", expanding=True))
+
         total = int(self.session.execute(count_statement, params).scalar_one())
 
         forecast_sales_sql = """
@@ -1336,6 +1378,12 @@ class OperationPlanRepository:
             {actuals_cte}
             select
                 p.*,
+                array(
+                    select sm.store_name
+                    from listing_store_memberships sm
+                    where sm.item_id = trim(p.item_id::text)
+                    order by sm.store_name, sm.store_id
+                ) as resolved_store_names,
                 coalesce(cs.plan_status, p.plan_status) as computed_plan_status,
                 coalesce(
                     p.product_name_snapshot,
@@ -1372,6 +1420,9 @@ class OperationPlanRepository:
 
         if query.batch_values:
             data_statement = data_statement.bindparams(bindparam("batch_values", expanding=True))
+
+        if store_ids:
+            data_statement = data_statement.bindparams(bindparam("store_ids", expanding=True))
 
         rows = list(self.session.execute(data_statement, params).mappings())
         return rows, total
@@ -1771,6 +1822,7 @@ class OperationPlanRepository:
             ),
             {inventory_cte_sql},
             {listing_owner_cte_sql},
+            {self._listing_store_cte_sql()},
             plan_actuals as (
                 select
                     p.id as plan_id,
@@ -1842,6 +1894,7 @@ class OperationPlanRepository:
             computed as (
                 select
                     p.id,
+                    trim(p.item_id::text) as item_id,
                     coalesce(li.owner_ref, 'unassigned') as owner_value,
                     coalesce(li.owner_name, '未分配') as owner_label,
                     p.operation_status,
@@ -1918,6 +1971,18 @@ class OperationPlanRepository:
             select 'stock_status' as kind, stock_status as value, stock_status as label, count(*)::int as count
             from computed
             group by stock_status
+
+            union all
+
+            select
+                'store' as kind,
+                sm.store_id as value,
+                max(sm.store_name) as label,
+                count(distinct c.id)::int as count
+            from computed c
+            join listing_store_memberships sm
+              on sm.item_id = c.item_id
+            group by sm.store_id
             """
         ).bindparams(bindparam("account_refs", expanding=True))
 
@@ -1925,7 +1990,10 @@ class OperationPlanRepository:
 
         return {
             "owners": [row for row in rows if row["kind"] == "owner"],
-            "stores": [],
+            "stores": sorted(
+                (row for row in rows if row["kind"] == "store"),
+                key=lambda row: (str(row["label"]), str(row["value"])),
+            ),
             "operation_status_counts": [row for row in rows if row["kind"] == "operation_status"],
             "plan_status_counts": [row for row in rows if row["kind"] == "plan_status"],
             "stock_status_counts": [row for row in rows if row["kind"] == "stock_status"],

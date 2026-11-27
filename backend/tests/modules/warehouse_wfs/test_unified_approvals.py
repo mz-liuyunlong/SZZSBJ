@@ -541,7 +541,9 @@ def test_current_wfs_case_review_uses_authenticated_actor(monkeypatch: pytest.Mo
     monkeypatch.setattr(
         ApprovalService,
         "review_pending_case",
-        lambda _self, case_id, payload, accounts, actor: calls.append((str(case_id), actor)),
+        lambda _self, case_id, payload, accounts, actor, allow_self=False: calls.append(
+            (str(case_id), actor, allow_self)
+        ),
     )
     client = _approval_client(monkeypatch, {"action:warehouse:wfs-fee-alert:archive-review"})
     res = client.post(
@@ -549,7 +551,7 @@ def test_current_wfs_case_review_uses_authenticated_actor(monkeypatch: pytest.Mo
         json={"decision": "approved", "expected_version": 1},
     )
     assert res.status_code == 200
-    assert calls == [("00000000-0000-0000-0000-000000000001", "synthetic-user")]
+    assert calls == [("00000000-0000-0000-0000-000000000001", "synthetic-user", False)]
 
 
 def test_current_wfs_case_refuses_self_review() -> None:

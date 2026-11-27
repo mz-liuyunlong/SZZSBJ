@@ -7,11 +7,13 @@ from decimal import Decimal, InvalidOperation
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from sqlalchemy import select, tuple_
+from sqlalchemy.orm import load_only
 
 from app.modules.data_pages.models import (
     DailySalesItemDayMart,
     ListingManagementCurrentMart,
 )
+from app.modules.data_pages.sales_report_sort import profit_value, sort_values
 from app.modules.data_pages.schemas import (
     DataPageFilterOptionRead,
     DataPageFilterOptionsData,
@@ -494,6 +496,81 @@ def aggregate_order_profit_rows(
     return projections
 
 
+_SUMMARY_COLUMNS = (
+    DailySalesItemDayMart.source_account_ref,
+    DailySalesItemDayMart.item_id,
+    DailySalesItemDayMart.business_date_la,
+    DailySalesItemDayMart.calculated_at,
+    DailySalesItemDayMart.sales_qty,
+    DailySalesItemDayMart.order_count,
+    DailySalesItemDayMart.sales_amount,
+    DailySalesItemDayMart.sales_currency_code,
+    DailySalesItemDayMart.return_qty,
+    DailySalesItemDayMart.refund_amount,
+    DailySalesItemDayMart.refund_currency_code,
+    DailySalesItemDayMart.commission_rate,
+    DailySalesItemDayMart.gross_profit_amount,
+    DailySalesItemDayMart.gross_profit_currency_code,
+    DailySalesItemDayMart.ad_spend_amount,
+    DailySalesItemDayMart.sem_ad_spend_amount,
+    DailySalesItemDayMart.ad_spend_currency_code,
+)
+
+_RANGE_COLUMNS = (
+    DailySalesItemDayMart.source_account_ref,
+    DailySalesItemDayMart.item_id,
+    DailySalesItemDayMart.business_date_la,
+    DailySalesItemDayMart.calculated_at,
+    DailySalesItemDayMart.sales_qty,
+    DailySalesItemDayMart.order_count,
+    DailySalesItemDayMart.sales_amount,
+    DailySalesItemDayMart.sales_currency_code,
+    DailySalesItemDayMart.return_qty,
+    DailySalesItemDayMart.refund_amount,
+    DailySalesItemDayMart.refund_currency_code,
+    DailySalesItemDayMart.commission_rate,
+    DailySalesItemDayMart.gross_profit_amount,
+    DailySalesItemDayMart.gross_profit_currency_code,
+    DailySalesItemDayMart.ad_spend_amount,
+    DailySalesItemDayMart.sem_ad_spend_amount,
+    DailySalesItemDayMart.ad_spend_currency_code,
+    DailySalesItemDayMart.store_id,
+    DailySalesItemDayMart.store_name,
+    DailySalesItemDayMart.owner_ref,
+    DailySalesItemDayMart.msku,
+    DailySalesItemDayMart.local_name,
+    DailySalesItemDayMart.title,
+    DailySalesItemDayMart.business_timezone,
+    DailySalesItemDayMart.local_sku,
+    DailySalesItemDayMart.sample_qty,
+    DailySalesItemDayMart.sample_amount,
+    DailySalesItemDayMart.return_rate_30d,
+    DailySalesItemDayMart.commission_fee_amount,
+    DailySalesItemDayMart.wfs_fee_unit_amount,
+    DailySalesItemDayMart.wfs_fee_total_amount,
+    DailySalesItemDayMart.wfs_low_price_surcharge_amount,
+    DailySalesItemDayMart.purchase_cost_unit_cny,
+    DailySalesItemDayMart.purchase_cost_total_usd,
+    DailySalesItemDayMart.first_leg_cost_unit_cny,
+    DailySalesItemDayMart.first_leg_cost_total_usd,
+    DailySalesItemDayMart.storage_fee_unit_amount,
+    DailySalesItemDayMart.storage_fee_total_amount,
+    DailySalesItemDayMart.cost_quantity,
+    DailySalesItemDayMart.cost_status,
+    DailySalesItemDayMart.missing_cost_codes_json,
+    DailySalesItemDayMart.calc_version,
+)
+
+_FACET_COLUMNS = (
+    DailySalesItemDayMart.source_account_ref,
+    DailySalesItemDayMart.item_id,
+    DailySalesItemDayMart.platform_code,
+    DailySalesItemDayMart.owner_ref,
+    DailySalesItemDayMart.store_id,
+    DailySalesItemDayMart.store_name,
+)
+
+
 def _filtered_daily_sales_rows(
     service: OrderProfitService,
     *,
@@ -511,9 +588,10 @@ def _filtered_daily_sales_rows(
         keyword=query.keyword,
         batch_values="",
     )
+    columns = _SUMMARY_COLUMNS if getattr(query, "summary_only", False) else _RANGE_COLUMNS
     return list(
         service.daily_sales_repository.session.scalars(
-            statement.order_by(
+            statement.options(load_only(*columns, raiseload=True)).order_by(
                 DailySalesItemDayMart.source_account_ref.asc(),
                 DailySalesItemDayMart.item_id.asc(),
                 DailySalesItemDayMart.business_date_la.asc(),
@@ -579,7 +657,11 @@ def _filtered_daily_sales_rows_for_filter_options(
         keyword=query.keyword,
         batch_values="",
     )
-    return list(service.daily_sales_repository.session.scalars(statement).all())
+    return list(
+        service.daily_sales_repository.session.scalars(
+            statement.options(load_only(*_FACET_COLUMNS, raiseload=True))
+        ).all()
+    )
 
 
 def _order_profit_group_key(row: DailySalesItemDayMart) -> tuple[str, str] | None:
@@ -646,32 +728,24 @@ def _filter_options_from_daily_sales(
     counts item-day rows; Order Profit counts aggregated product/item rows.
     """
 
-    platform_rows = _filtered_daily_sales_rows_for_filter_options(
-        self,
-        query=query,
-        account_refs=account_refs,
-        platform=None,
-        store_id=query.store_id,
-        owner_ref=query.owner_ref,
-    )
+    rows_by_scope = {}
 
-    owner_rows = _filtered_daily_sales_rows_for_filter_options(
-        self,
-        query=query,
-        account_refs=account_refs,
-        platform=query.platform,
-        store_id=query.store_id,
-        owner_ref=None,
-    )
+    def rows_for(platform, store_id, owner_ref):
+        key = (platform, store_id, owner_ref)
+        if key not in rows_by_scope:
+            rows_by_scope[key] = _filtered_daily_sales_rows_for_filter_options(
+                self,
+                query=query,
+                account_refs=account_refs,
+                platform=platform,
+                store_id=store_id,
+                owner_ref=owner_ref,
+            )
+        return rows_by_scope[key]
 
-    store_rows = _filtered_daily_sales_rows_for_filter_options(
-        self,
-        query=query,
-        account_refs=account_refs,
-        platform=query.platform,
-        store_id=None,
-        owner_ref=query.owner_ref,
-    )
+    platform_rows = rows_for(None, query.store_id, query.owner_ref)
+    owner_rows = rows_for(query.platform, query.store_id, None)
+    store_rows = rows_for(query.platform, None, query.owner_ref)
 
     return DataPageFilterOptionsData(
         platforms=_order_profit_filter_option_rows(
@@ -697,9 +771,33 @@ def _list_order_profit_from_daily_sales(
     query: object,
     account_refs: frozenset[str],
 ) -> tuple[OrderProfitListData, int, datetime | None]:
+    # Long ranges are aggregated in PostgreSQL before transferring data.
+    # Keep the existing single-day reader and its exact edge-case fallback.
+    if query.start_date is None or query.end_date is None or query.start_date != query.end_date:
+        from app.modules.data_pages.order_profit_grouped_read import read_grouped_order_profit
+
+        compact_result = read_grouped_order_profit(self, query, account_refs)
+        if compact_result is not None:
+            return compact_result
+
     raw_rows = _filtered_daily_sales_rows(self, query=query, account_refs=account_refs)
+    if getattr(query, "summary_only", False):
+        keys = {_order_profit_group_key(row) for row in raw_rows}
+        keys.discard(None)
+        return (
+            OrderProfitListData(items=[], summary=_summary_from_daily_rows(raw_rows)),
+            len(keys),
+            _latest_calculated_at(raw_rows),
+        )
     current_wfs_inventory = _current_wfs_inventory_map(self, raw_rows, query.store_id)
     grouped_rows = aggregate_order_profit_rows(raw_rows, current_wfs_inventory)
+    if getattr(query, "sort_field", None):
+        grouped_rows = sort_values(
+            grouped_rows,
+            lambda row: profit_value(self._to_read(row), query.sort_field),
+            query.sort_direction,
+            lambda row: (_order_profit_sort_key(row), str(row.id)),
+        )
     offset = (query.page - 1) * query.page_size
     page_rows = grouped_rows[offset : offset + query.page_size]
 

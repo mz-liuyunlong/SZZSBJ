@@ -73,6 +73,7 @@ interface OperationPlanPageProps {
 
 interface ProductFilters {
   owner: string[];
+  store: string[];
   operation: string[];
   planStatus: string[];
   stockStatus: string[];
@@ -132,6 +133,7 @@ const importTemplateGuide = [
 
 const productColumnFields = [
   { key: "product", title: "商品" },
+  { key: "store", title: "店铺" },
   { key: "lastPerformance", title: "上月表现" },
   { key: "salesPlan", title: "销售计划" },
   { key: "profitPlan", title: "毛利润计划" },
@@ -214,7 +216,7 @@ function OperationPlanPage({ page }: OperationPlanPageProps) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabKey>("dashboard");
   const [periodMode, setPeriodMode] = useState<PeriodMode>("月度");
-  const [period, setPeriod] = useState<Dayjs>(dayjs("2026-09-01"));
+  const [period, setPeriod] = useState<Dayjs>(() => dayjs().startOf("month"));
   const [pageNo, setPageNo] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [selectedKeys, setSelectedKeys] = useState<Key[]>([]);
@@ -236,6 +238,7 @@ function OperationPlanPage({ page }: OperationPlanPageProps) {
   const [sortOrder, setSortOrder] = useState<OperationPlanSortOrder>();
   const [filters, setFilters] = useState<ProductFilters>({
     owner: [],
+    store: [],
     operation: [],
     planStatus: [],
     stockStatus: [],
@@ -263,6 +266,7 @@ function OperationPlanPage({ page }: OperationPlanPageProps) {
       periodType,
       periodKey,
       ownerRef: filters.owner[0],
+      storeId: filters.store.join(",") || undefined,
       operationStatus: filters.operation[0] as OperationStatus | undefined,
       planStatus: filters.planStatus[0] as PlanStatus | undefined,
       stockStatus: filters.stockStatus[0] as StockStatus | undefined,
@@ -376,7 +380,7 @@ function OperationPlanPage({ page }: OperationPlanPageProps) {
   };
 
   const clearFilters = () => {
-    setFilters({ owner: [], operation: [], planStatus: [], stockStatus: [], search: "", searchType: "商品ID", batchValues: [] });
+    setFilters({ owner: [], store: [], operation: [], planStatus: [], stockStatus: [], search: "", searchType: "商品ID", batchValues: [] });
     setSourceHint("");
     setSelectedKeys([]);
     setPageNo(1);
@@ -549,6 +553,23 @@ function OperationPlanPage({ page }: OperationPlanPageProps) {
         </div>
       ),
     },
+    store: {
+      key: "store",
+      title: "店铺",
+      width: 150,
+      render: (_, row) => {
+        const stores = row.store_names ?? [];
+        return stores.length ? (
+          <div style={{ overflowWrap: "anywhere" }}>
+            {stores.map((name, index) => (
+              <div key={`${name}-${index}`} title={name}>
+                {name}
+              </div>
+            ))}
+          </div>
+        ) : "-";
+      },
+    },
     lastPerformance: { key: "lastPerformance", title: periodMode === "季度" ? "上季度表现" : "上月表现", width: 150, render: (_, row) => <div className="last-perf-cell"><div><span>销售额</span><b>{money(row.last_sales_amount)}</b></div><div><span>毛利润</span><b>{money(row.last_gross_profit_amount)}</b></div><div className="last-perf-rate">毛利率 {pct(row.last_gross_profit_rate)}</div></div> },
     salesPlan: { key: "salesPlan", title: sortableColumnTitle("销售计划", "sales_completion_rate"), width: 230, render: (_, row) => renderPlanCell(row.sales_actual_amount, row.sales_target_amount, row.sales_forecast_amount, "sales") },
     profitPlan: { key: "profitPlan", title: sortableColumnTitle("毛利润计划", "gross_profit_completion_rate"), width: 230, render: (_, row) => renderPlanCell(row.gross_profit_actual_amount, row.gross_profit_target_amount, row.gross_profit_forecast_amount, "profit") },
@@ -632,6 +653,7 @@ function OperationPlanPage({ page }: OperationPlanPageProps) {
             ) : (
               <>
                 <div className="operation-plan-product-tools">
+                  <ReportFacetSelect mode="multiple" ariaLabel="店铺" placeholder="店铺" value={filters.store} options={optionsQuery.data?.stores ?? []} triggerWidth={128} onChange={(value) => updateFilter({ store: toValues(value) })} />
                   <ReportFacetSelect mode="multiple" ariaLabel="负责人" placeholder="负责人" value={filters.owner} options={optionsQuery.data?.owners ?? []} triggerWidth={128} onChange={(value) => updateFilter({ owner: toValues(value) })} />
                   <ReportFacetSelect mode="multiple" ariaLabel="计划状态" placeholder="计划状态" value={filters.planStatus} options={optionsQuery.data?.plan_statuses ?? []} triggerWidth={136} onChange={(value) => updateFilter({ planStatus: toValues(value) })} />
                   <ReportFacetSelect mode="multiple" ariaLabel="库存状态" placeholder="库存状态" value={filters.stockStatus} options={optionsQuery.data?.stock_statuses ?? []} triggerWidth={136} onChange={(value) => updateFilter({ stockStatus: toValues(value) })} />
@@ -658,7 +680,7 @@ function OperationPlanPage({ page }: OperationPlanPageProps) {
                     bordered
                     size="small"
                     rowSelection={{ selectedRowKeys: selectedKeys, onChange: setSelectedKeys }}
-                    scroll={{ x: 1240 }}
+                    scroll={{ x: 1390 }}
                     pagination={{ current: pageNo, pageSize, total: productsQuery.data?.total ?? 0, showSizeChanger: true, showTotal: (total) => `共 ${total} 个商品`, onChange: (nextPage, nextSize) => { setPageNo(nextPage); setPageSize(nextSize); } }}
                   />
                 </ReportTableShell>

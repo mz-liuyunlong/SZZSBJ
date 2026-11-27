@@ -1,3 +1,4 @@
+import { encodeListingSorts, type ListingSort } from "@/pages/products/listingManagementSort";
 import { backendDownload, backendRequest } from "@/api/backendApi";
 import { getCachedResource, preloadCachedResource, stableCacheKey } from "@/shared/preload/resourceCache";
 import type { ReportFilterOption } from "@/shared/report-filters";
@@ -21,15 +22,31 @@ interface BackendListingItem {
   product_developer_name: string | null;
   product_grade: string | null;
   tags: string[];
+  product_tags?: Array<{ id: string | null; label: string; color: string | null }>;
+  product_tags_match_status?: string;
   strike_price_amount: string | null;
   sale_price_amount: string | null;
   listing_status: string | null;
+  ad_enabled?: boolean | null;
+  ad_status_checked_at?: string | null;
   lifecycle_status: string | null;
   fulfillment_type: string | null;
   fulfillment_type_name: string | null;
   listing_start_at_utc: string | null;
   listing_start_source_raw?: string | null;
   launch_date_cn?: string | null;
+  first_wfs_available_date_la?: string | null;
+  monitor_checked_at?: string | null;
+  monitor_source?: string | null;
+  monitor_has_strikethrough?: boolean | null;
+  monitor_strikethrough_source?: string | null;
+  monitor_seller_names?: string[];
+  monitor_seller_offer_count?: number | null;
+  monitor_other_sellers_present?: boolean | null;
+  monitor_image_urls?: string[];
+  monitor_image_count?: number | null;
+  monitor_key_features?: string[];
+  monitor_review_fetch_status?: string | null;
   category: string | null;
   wfs_available_quantity: string | null;
   inbound_quantity: string | null;
@@ -56,6 +73,7 @@ interface BackendListingSummaryData {
   total: number;
   online: number;
   buybox_exception: number;
+  listing_exception?: number;
   rating_warning: number;
   resold_warning: number;
   strike_price_exception: number;
@@ -77,6 +95,9 @@ interface BackendListingFilterOptionsData {
   product_types: ReportFilterOption[];
   tags?: ReportFilterOption[];
   archive_statuses?: ReportFilterOption[];
+  product_tags?: ReportFilterOption[];
+  lifecycles?: ReportFilterOption[];
+  grades?: ReportFilterOption[];
 }
 
 interface BackendListingTag {
@@ -156,6 +177,7 @@ export interface ListingManagementSummary {
   total: number;
   online: number;
   buyboxException: number;
+  listingException?: number;
   ratingWarning: number;
   resoldWarning: number;
   strikePriceException: number;
@@ -167,18 +189,27 @@ export interface ListingManagementFilterOptions {
   productTypes: ReportFilterOption[];
   tags: ReportFilterOption[];
   archiveStatuses?: ReportFilterOption[];
+  productTags?: ReportFilterOption[];
+  lifecycles?: ReportFilterOption[];
+  grades?: ReportFilterOption[];
 }
 
 export interface ListingManagementParams {
+  sorts?: readonly ListingSort[];
   stores?: string[];
   owners?: string[];
   productTypes?: string[];
   productStatuses?: string[];
   tagValues?: string[];
+  productTagValues?: string[];
+  customTagValues?: string[];
+  lifecycleValues?: string[];
+  gradeValues?: string[];
   archiveStatuses?: string[];
   searchType?: "sku" | "msku" | "productId" | "productName";
   keyword?: string;
   batchValues?: string[];
+  exactFilters?: Record<string, string[]>;
   summaryFilter?: string;
   page?: number;
   pageSize?: number;
@@ -191,34 +222,75 @@ const toDateText = (value: string | null): string => {
   return value.slice(0, 10);
 };
 
-export const toListingStartText = (normalizedValue: string | null): string => {
-  if (normalizedValue) return toDateText(normalizedValue);
-  return "";
+// WFS launch is the first positive inventory date in America/Los_Angeles.
+ // Never substitute the ERP Listing creation timestamp or China date.
+export const toListingStartText = (firstWfsDateLa: string | null): string => {
+  return toDateText(firstWfsDateLa);
 };
 
-const toCheckedText = (value: string): string => value.replace("T", " ").slice(0, 16);
-
-const normalizeListingStatus = (value: string | null) => {
-  const raw = value?.trim();
-  if (!raw) return "待确认";
-  const normalized = raw.toLocaleLowerCase();
-  if (["online", "published", "publish", "在售", "在线"].includes(normalized)) return "在线";
-  if (["offline", "unpublished", "离线"].includes(normalized)) return "离线";
-  return raw;
+const toCheckedText = (value?: string | null): string => {
+  if (!value) return "未检测";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "未检测";
+  // Business operations display China local time, not UTC ISO text.
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).format(date);
 };
 
-const normalizeBuyBoxStatus = (value: string | null) => {
-  const raw = value?.trim();
-  if (!raw) return "待确认";
-  const normalized = raw.toLocaleLowerCase();
-  if (["primary", "won", "winning", "owned", "拥有"].includes(normalized)) return "拥有";
-  if (["lost", "not_owned", "secondary", "other", "未拥有"].includes(normalized)) return "未拥有";
-  return raw;
+// Operational status is the union of three confirmed monitor anomalies.
+const normalizeListingStatus = (
+  cartValue: string | null,
+  hasStrikethrough: boolean | null,
+  isHijacked: boolean | null,
+  wfsAvailable: number,
+): string => {
+  if (!(wfsAvailable > 0)) return "—";
+  const cart = normalizeBuyBoxStatus(cartValue);
+  if (hasStrikethrough === false || isHijacked === true || [
+    "购物车丢失", "未拥有购物车", "未找到购物车", "不可购买",
+  ].includes(cart)) {
+    return "异常";
+  }
+  if (hasStrikethrough === true && isHijacked === false && [
+    "正常", "拥有", "缺货",
+  ].includes(cart)) {
+    return "正常";
+  }
+  return "待确认";
 };
 
-const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
+const normalizeBuyBoxStatus = (value: string | null): string => {
+  const key = value?.trim().toUpperCase() ?? "";
+  const names: Record<string, string> = {
+    NORMAL: "正常",
+    "正常": "正常",
+    PRIMARY: "拥有",
+    WON: "拥有",
+    WINNING: "拥有",
+    OWNED: "拥有",
+    "拥有": "拥有",
+    LOST: "购物车丢失",
+    NOT_OWNED: "未拥有购物车",
+    SECONDARY: "未拥有购物车",
+    OTHER: "未拥有购物车",
+    "未拥有": "未拥有购物车",
+    NOT_FOUND: "未找到购物车",
+    CART_NOT_FOUND: "未找到购物车",
+    OUT_OF_STOCK: "缺货",
+    UNAVAILABLE: "不可购买",
+    FETCH_ERROR: "检测失败",
+    ERROR: "检测失败",
+    TIMEOUT: "检测失败",
+  };
+  return names[key] ?? "待确认";
+};
+
+export const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   id: item.id,
   sourceAccountRef: item.source_account_ref,
+  storeId: item.store_id,
   image: item.picture_url ?? "▤",
   msku: item.msku ?? "-",
   productId: item.item_id,
@@ -228,27 +300,46 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   productName: item.local_name ?? item.title ?? "-",
   title: item.title ?? item.local_name ?? "-",
   productType: item.category ?? "待分类",
-  listPrice: numberValue(item.strike_price_amount),
-  salePrice: numberValue(item.sale_price_amount),
+  listPrice: item.strike_price_amount == null ? null : numberValue(item.strike_price_amount),
+  salePrice: item.sale_price_amount == null ? null : numberValue(item.sale_price_amount),
   productStatus: item.disabled_reason ? "停用" : "启用",
-  lifecycle: item.lifecycle_status ?? "待计算",
+  lifecycle: item.lifecycle_status ?? "待判定",
   fulfillmentMethod: item.fulfillment_type_name?.trim() || item.fulfillment_type?.trim() || "待确认",
-  listedAt: toListingStartText(item.listing_start_at_utc),
+  listedAt: toListingStartText(item.first_wfs_available_date_la ?? null),
   category: item.category ?? "-",
   wfsAvailableInventory: numberValue(item.wfs_available_quantity),
   inboundInventory: numberValue(item.inbound_quantity),
   sales90Days: numberValue(item.sales_30d),
   adSpend30Days: numberValue(item.ad_spend_30d_amount),
   disabledReason: item.disabled_reason ?? "",
-  listingStatus: normalizeListingStatus(item.listing_status),
+  adEnabled: item.ad_enabled ?? null,
+  adStatusCheckedAt: item.ad_status_checked_at ?? null,
+  listingStatus: normalizeListingStatus(
+    item.buybox_status,
+    item.monitor_has_strikethrough ?? null,
+    item.is_hijacked ?? null,
+    numberValue(item.wfs_available_quantity),
+  ),
   buyBoxStatus: normalizeBuyBoxStatus(item.buybox_status),
   walmartSeller: item.walmart_seller ?? "待确认",
-  resold: item.is_hijacked ? "是" : "否",
-  checkedAt: toCheckedText(item.calculated_at),
-  rating: numberValue(item.average_rating),
-  reviewCount: item.review_count ?? 0,
+  resold: item.is_hijacked == null ? "待检测" : item.is_hijacked ? "是" : "否",
+  checkedAt: toCheckedText(item.monitor_checked_at),
+  rating: item.average_rating == null ? null : numberValue(item.average_rating),
+  reviewCount: item.review_count,
+  hasStrikethrough: item.monitor_has_strikethrough ?? null,
+  strikethroughSource: item.monitor_strikethrough_source ?? "",
+  sellerNames: item.monitor_seller_names ?? [],
+  sellerOfferCount: item.monitor_seller_offer_count ?? null,
+  otherSellersPresent: item.monitor_other_sellers_present ?? null,
+  imageUrls: item.monitor_image_urls ?? [],
+  imageCount: item.monitor_image_count ?? null,
+  keyFeatures: item.monitor_key_features ?? [],
+  reviewFetchStatus: item.monitor_review_fetch_status ?? "",
+  monitorSource: item.monitor_source ?? "",
   brand: item.brand ?? "-",
   tags: item.tags,
+  productTags: (item.product_tags ?? []).filter((tag) => Boolean(tag.label?.trim())),
+  productTagMatchStatus: item.product_tags_match_status ?? "pending",
   gtin: item.gtin ?? "-",
   productGrade: item.product_grade ?? "未分级",
   archiveReason: item.archive_reason ?? null,
@@ -271,12 +362,18 @@ const appendMultiParam = (
 };
 
 const appendListingFilters = (search: URLSearchParams, params: ListingManagementParams) => {
+  const exact = Object.fromEntries(Object.entries(params.exactFilters ?? {}).filter(([, values]) => values.length));
+  if (Object.keys(exact).length) search.set("exact_filters", JSON.stringify(exact));
   appendMultiParam(search, "store_id", params.stores);
   appendMultiParam(search, "owner_ref", params.owners);
   appendMultiParam(search, "product_type", params.productTypes);
   appendMultiParam(search, "status", params.productStatuses);
   appendMultiParam(search, "tag", params.tagValues);
   appendMultiParam(search, "archive_status", params.archiveStatuses);
+  if (params.productTagValues?.length) search.set("product_tag", JSON.stringify(params.productTagValues));
+  if (params.customTagValues?.length) search.set("custom_tag", JSON.stringify(params.customTagValues));
+  appendMultiParam(search, "lifecycle", params.lifecycleValues);
+  appendMultiParam(search, "grade", params.gradeValues);
 
   if (params.summaryFilter && params.summaryFilter !== "total") {
     search.set("summary_filter", params.summaryFilter);
@@ -288,12 +385,63 @@ const appendListingFilters = (search: URLSearchParams, params: ListingManagement
     search.set("keyword", keyword);
   }
 
-  const batchValues = (params.batchValues ?? []).map((value) => value.trim()).filter(Boolean);
-  if (batchValues.length > 0) {
+  if ((params.batchValues ?? []).some((value) => value.trim())) {
     search.set("search_field", backendSearchField(params.searchType));
-    search.set("batch_values", batchValues.join(","));
   }
 };
+
+const listingBatchValues = (params: ListingManagementParams): string[] =>
+  (params.batchValues ?? []).map((value) => value.trim()).filter(Boolean);
+
+const listingBatchBody = (search: URLSearchParams, batchValues: string[], columns: string[] = []) =>
+  JSON.stringify({ query: Object.fromEntries(search.entries()), batch_values: batchValues, columns });
+
+export async function fetchListingExactFacetOptions(
+  field: string,
+  params: ListingManagementParams,
+  offset = 0,
+): Promise<{ options: ReportFilterOption[]; has_more: boolean }> {
+  const search = new URLSearchParams();
+  appendListingFilters(search, params);
+  const envelope = await backendRequest<{ options: ReportFilterOption[]; has_more: boolean }>(
+    "/api/listings/walmart/facet-options",
+    { method: "POST", body: JSON.stringify({
+      query: Object.fromEntries(search.entries()), batch_values: listingBatchValues(params),
+      field, offset, limit: 1000,
+    }) },
+  );
+  return envelope.data;
+}
+
+export async function fetchListingExactFacetBatchOptions(
+  fields: Record<string, number>,
+  params: ListingManagementParams,
+  signal?: AbortSignal,
+): Promise<Record<string, { options: ReportFilterOption[]; has_more: boolean }>> {
+  const search = new URLSearchParams();
+  appendListingFilters(search, params);
+  const envelope = await backendRequest<{
+    items: Record<string, { options: ReportFilterOption[]; has_more: boolean }>;
+  }>("/api/listings/walmart/facet-options/batch", {
+    method: "POST", signal, body: JSON.stringify({
+      query: Object.fromEntries(search.entries()), batch_values: listingBatchValues(params),
+      fields, complete: true, compact_labels: true,
+    }),
+  });
+  const items = envelope.data.items;
+  // The server may omit an identical long label in opt-in compact mode.
+  // Reconstruct the original display text, never change the selection token.
+  for (const page of Object.values(items)) {
+    for (const option of page.options) {
+      if (option.label === "" && option.value.startsWith("v:")) {
+        const label: unknown = JSON.parse(option.value.slice(2));
+        if (typeof label !== "string") throw new Error("invalid compact facet label");
+        option.label = label;
+      }
+    }
+  }
+  return items;
+}
 
 async function fetchListingManagementRowsFromApi(
   params: ListingManagementParams = {},
@@ -305,10 +453,18 @@ async function fetchListingManagementRowsFromApi(
   search.set("page", String(page));
   search.set("page_size", String(pageSize));
   appendListingFilters(search, params);
+  const sortBy = encodeListingSorts(params.sorts);
+  if (sortBy) search.set("sort_by", sortBy);
 
-  const envelope = await backendRequest<BackendListingData, ListingManagementApiMeta>(
-    `/api/listings/walmart?${search.toString()}`,
-  );
+  const batchValues = listingBatchValues(params);
+  const envelope = batchValues.length > 0 || search.has("exact_filters")
+    ? await backendRequest<BackendListingData, ListingManagementApiMeta>(
+      search.has("exact_filters") ? "/api/listings/walmart/query" : "/api/listings/walmart/batch-search",
+      { method: "POST", body: listingBatchBody(search, batchValues) },
+    )
+    : await backendRequest<BackendListingData, ListingManagementApiMeta>(
+      `/api/listings/walmart?${search.toString()}`,
+    );
 
   return {
     rows: envelope.data.items.map(toListingRow),
@@ -322,14 +478,21 @@ async function fetchListingManagementSummaryFromApi(
   const search = new URLSearchParams();
   appendListingFilters(search, { ...params, summaryFilter: "total" });
 
-  const envelope = await backendRequest<BackendListingSummaryData>(
-    `/api/listings/walmart/summary?${search.toString()}`,
-  );
+  const batchValues = listingBatchValues(params);
+  const envelope = batchValues.length > 0 || search.has("exact_filters")
+    ? await backendRequest<BackendListingSummaryData>(
+      search.has("exact_filters") ? "/api/listings/walmart/summary/query" : "/api/listings/walmart/summary/batch-search",
+      { method: "POST", body: listingBatchBody(search, batchValues) },
+    )
+    : await backendRequest<BackendListingSummaryData>(
+      `/api/listings/walmart/summary?${search.toString()}`,
+    );
 
   return {
     total: envelope.data.total,
     online: envelope.data.online,
     buyboxException: envelope.data.buybox_exception,
+    listingException: envelope.data.listing_exception,
     ratingWarning: envelope.data.rating_warning,
     resoldWarning: envelope.data.resold_warning,
     strikePriceException: envelope.data.strike_price_exception,
@@ -342,14 +505,24 @@ export async function exportListingManagementRows(
 ): Promise<void> {
   const search = new URLSearchParams();
   appendListingFilters(search, params);
-  if (columns && columns.length > 0) {
-    search.set("columns", columns.join(","));
+  const sortBy = encodeListingSorts(params.sorts);
+  if (sortBy) search.set("sort_by", sortBy);
+  const batchValues = listingBatchValues(params);
+  if (batchValues.length > 0 || search.has("exact_filters")) {
+    await backendDownload(
+      search.has("exact_filters") ? "/api/listings/walmart/export/query" : "/api/listings/walmart/export/batch-search",
+      "listing-management-export.csv",
+      { method: "POST", body: listingBatchBody(search, batchValues, columns ?? []) },
+    );
+  } else {
+    if (columns && columns.length > 0) {
+      search.set("columns", columns.join(","));
+    }
+    await backendDownload(
+      `/api/listings/walmart/export?${search.toString()}`,
+      "listing-management-export.csv",
+    );
   }
-
-  await backendDownload(
-    `/api/listings/walmart/export?${search.toString()}`,
-    "listing-management-export.csv",
-  );
 }
 
 async function fetchListingManagementFilterOptionsFromApi(): Promise<ListingManagementFilterOptions> {
@@ -363,6 +536,9 @@ async function fetchListingManagementFilterOptionsFromApi(): Promise<ListingMana
     productTypes: envelope.data.product_types,
     tags: envelope.data.tags ?? [],
     archiveStatuses: envelope.data.archive_statuses ?? [],
+    productTags: envelope.data.product_tags ?? [],
+    lifecycles: envelope.data.lifecycles ?? [],
+    grades: envelope.data.grades ?? [],
   };
 }
 
@@ -478,7 +654,144 @@ export async function batchSetListingTags({
   });
 }
 
-const cacheKey = (...parts: unknown[]) => "listing-management:" + stableCacheKey(parts);
+// Persisted manual lifecycle. The request never changes Listing creation dates or grades.
+export async function setListingLifecycleBatch(
+  listingIds: string[], stage: string, reason = "运营人工调整",
+): Promise<{ updated_listings: number; unchanged_listings: number; stage: string }> {
+  const response = await backendRequest<{
+    updated_listings: number;
+    unchanged_listings: number;
+    stage: string;
+  }>("/api/listings/walmart/lifecycle/batch-set", {
+    method: "POST",
+    body: JSON.stringify({ listing_ids: listingIds, stage, reason }),
+  });
+  return response.data;
+}
+
+// LISTING_DIAGNOSTIC_PRODUCTION_API_V1
+// The API returns read-only candidate evidence, never a published grade.
+export interface ListingEvaluationPreviewResult {
+  listing_id: string;
+  cutoff_la: string;
+  current_lifecycle: string | null;
+  current_grade: string | null;
+  lifecycle_candidate: string | null;
+  lifecycle_evidence_reason: string | null;
+  first_positive_date_la: string | null;
+  cutoff_wfs_available_quantity: string | null;
+  consecutive_low_stock_days: number;
+  grade_candidate: string | null;
+  valid_short: number;
+  valid_medium: number;
+  weighted_margin_percent: string | null;
+  valid_stock_days_30: number;
+  observed_stock_days_7: number;
+  low_stock_days_7: number;
+  prior_effective_stock: boolean;
+  currently_archived: boolean;
+  rule_version: number;
+  missing_evidence: string[];
+  published: boolean;
+}
+
+export async function fetchListingEvaluationPreviews(
+  listingIds: string[],
+): Promise<ListingEvaluationPreviewResult[]> {
+  if (!listingIds.length) return [];
+  if (listingIds.length > 50) throw new Error("Listing diagnostic API accepts at most 50 IDs");
+  const response = await backendRequest<{ items: ListingEvaluationPreviewResult[]; total: number }>(
+    "/api/listings/evaluation-preview/batch",
+    { method: "POST", body: JSON.stringify({ listing_ids: listingIds }) },
+  );
+  return response.data.items;
+}
+
+const diagnosticReasonCode = (reason: string | null, stage: string | null): string => {
+  if (stage) return "TREND_CONFIRMED";
+  if (!reason) return "OTHER_EVIDENCE_INCOMPLETE";
+  if (reason.includes("HISTORICAL_FIRST_WFS")) return "HISTORICAL_LAUNCH_UNVERIFIED";
+  if (reason.includes("FIRST_WFS_POSITIVE")) return "NO_POSITIVE_WFS_HISTORY";
+  if (reason.includes("CUTOFF_WFS_SNAPSHOT")) return "CUTOFF_WFS_MISSING";
+  if (reason.includes("ARCHIVED") || reason.includes("WORKFLOW_STAGE") || reason.includes("MANUAL_STAGE")) return "WORKFLOW_PROTECTED";
+  if (reason.includes("STOCKOUT")) return "STOCKOUT_EVIDENCE_INCOMPLETE";
+  if (reason.includes("SALES") || reason.includes("趋势") || reason.includes("有效")) return "SALES_VALID_DAYS_INSUFFICIENT";
+  return "OTHER_EVIDENCE_INCOMPLETE";
+};
+
+export function withPendingListingDiagnostics(row: ListingManagementRow): ListingManagementRow {
+  const hasPublishedGrade = !["", "未分级", "待评级"].includes(row.productGrade || "");
+  return {
+    ...row,
+    gradePreviewCandidate: false,
+    lifecycleDiagnostic: {
+      reasonCode: "PREVIEW_NOT_AVAILABLE",
+      reasons: [{ code: "PREVIEW_NOT_AVAILABLE", title: "尚未获取判定数据", detail: "", advice: "" }],
+      evidence: [],
+      cutoffLa: "",
+      ruleVersion: 0,
+    },
+    gradeDiagnostic: {
+      reason: hasPublishedGrade
+        ? "已保存的正式等级保持不变；评级诊断尚未取得。"
+        : "评级诊断尚未取得；正式评级未发布。",
+      cutoffLa: "",
+      sourceVerified: false,
+    },
+  };
+}
+
+export function applyListingEvaluationPreview(
+  row: ListingManagementRow,
+  preview: ListingEvaluationPreviewResult,
+): ListingManagementRow {
+  if (row.id !== preview.listing_id) return row;
+  const candidate = preview.lifecycle_candidate;
+  const reason = preview.lifecycle_evidence_reason;
+  const reasonCode = diagnosticReasonCode(reason, candidate);
+  const evidence = [
+    { label: "截止日WFS可售", value: preview.cutoff_wfs_available_quantity == null ? "缺失" : `${preview.cutoff_wfs_available_quantity} 件` },
+    { label: "近30天有效销量日", value: `${preview.valid_stock_days_30} / 30 天` },
+    { label: "当前连续低库存", value: `${preview.consecutive_low_stock_days} 天` },
+    { label: "历史首次有货观测", value: preview.first_positive_date_la ?? "缺失" },
+  ];
+  const hasPublishedGrade = !["", "未分级", "待评级"].includes(row.productGrade || "");
+  const validCandidate = !preview.published && ["A", "B", "C", "D"].includes(preview.grade_candidate ?? "");
+  const stageExcluded = preview.missing_evidence.includes("LIFECYCLE_EXCLUDED_FROM_GRADING");
+  const gradeReason = hasPublishedGrade
+    ? "正式等级已保存；诊断试算仅供参考，不更改正式结果。"
+    : stageExcluded
+    ? "当前生命周期不参与评级。"
+    : validCandidate
+      ? "仅供诊断：广告、成本与财务数据的正式完整性尚未确认，候选等级未发布。"
+      : "财务有效天数不足、利润率不可计算或正式发布证据未通过。";
+  return {
+    ...row,
+    lifecycleDiagnostic: {
+      reasonCode,
+      candidateStage: candidate,
+      reasons: [{ code: reasonCode, title: reason ?? "暂无可发布生命周期", detail: reason ?? "", advice: "" }],
+      evidence,
+      cutoffLa: preview.cutoff_la,
+      ruleVersion: preview.rule_version,
+    },
+    // Candidate grades appear only inside the diagnostic popover.
+    // The table always displays the officially saved grade.
+    productGrade: row.productGrade,
+    gradePreviewCandidate: !hasPublishedGrade && validCandidate,
+    gradeDiagnostic: {
+      reason: gradeReason,
+      cutoffLa: preview.cutoff_la,
+      candidate: preview.grade_candidate ?? undefined,
+      valid7: preview.valid_short,
+      valid14: preview.valid_medium,
+      weightedMargin: preview.weighted_margin_percent,
+      sourceVerified: false,
+    },
+  };
+}
+
+const cacheKey = (...parts: unknown[]) => "listing-management:exact-v1:" + stableCacheKey(parts);
 
 export function fetchListingManagementRows(
   ...args: Parameters<typeof fetchListingManagementRowsFromApi>

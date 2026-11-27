@@ -18,6 +18,13 @@ def has_any_permission(principal: Principal, permission_keys: tuple[str, ...]) -
     )
 
 
+def is_approval_admin(principal: Principal) -> bool:
+    """Full business-approval capability, never a general super-admin grant."""
+    return (
+        "*" in principal.permissions or "internal:approval:administrator" in principal.permissions
+    )
+
+
 def require_permission(permission_key: str) -> Callable[..., Principal]:
     if not permission_key or permission_key != permission_key.strip():
         raise ValueError("permission_key must be a non-empty canonical value")

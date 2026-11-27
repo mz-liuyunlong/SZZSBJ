@@ -347,24 +347,28 @@ def test_sample_mart_accepts_historical_v3_v5_and_owner_approved_raw() -> None:
         "'owner-approved-raw-zero-full-discount-v1')"
     ) in source
     assert "DATA_PAGES_SAMPLE_RULE_VERSION_UNSUPPORTED" in source
-    assert "DATA_PAGES_CONFIRMED_SAMPLE_EXCEEDS_SALESTAT" in source
+    assert "sample_disputed = sample_qty > gross_qty or sample_amount > gross_sales" in source
+    assert "record_sample_dispute(" in source
+    assert "if not sample_disputed" in source
+    assert "sample_exceeds_salestat_pending_review" in source
     assert "sample_data_not_observed" in source
     assert "sample_verification_pending" in source
 
 
 def test_daily_sales_sem_only_rows_are_attributed_once() -> None:
-    """An SEM-only item is a MART key; store/item matches alone must not duplicate."""
+    """An SEM-only item is a MART key; ambiguous Listing identities stay reserved."""
     source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
-    assert (
-        "sem_resolved as (select sem.sem_date,sem.store_id,sem.item_id,trim(l.msku) msku," in source
-    )
-    assert "on l.source_account_ref=:account and l.store_id=sem.store_id" in source
-    assert "and l.item_id=sem.item_id and nullif(trim(l.msku)" in source
+    assert "sem_resolved as (select sem.sem_date,sem.store_id,sem.item_id,l.msku," in source
+    assert "select store_id,item_id,min(trim(msku)) msku" in source
+    assert "where source_account_ref=:account and nullif(trim(msku),'') is not null" in source
+    assert "group by store_id,item_id having count(distinct trim(msku))=1" in source
+    assert "on l.store_id=sem.store_id and l.item_id=sem.item_id" in source
     assert "select sem_date,:account,store_id,item_id,msku from sem_resolved" in source
     assert "left join sem_resolved sem on sem.sem_date=k.business_date_la" in source
     assert "and sem.msku=k.msku" in source
+    assert "reserve_unallocated_sem_lines(" in source
     assert "DATA_PAGES_SEM_SPEND_UNATTRIBUTED" in source
-    assert 'expected_sem.quantize(Decimal("0.01")) != booked_sem.quantize' in source
+    assert "booked_sem + reserved_sem" in source
     assert "where r.csv_type='sem_daily'" in source
 
 

@@ -59,6 +59,7 @@ export interface OperationPlanProductRow {
   owner_name?: string | null;
   store_id?: string | null;
   store_name?: string | null;
+  store_names?: string[];
   store_count?: number;
   msku_count?: number;
   sku_count?: number;

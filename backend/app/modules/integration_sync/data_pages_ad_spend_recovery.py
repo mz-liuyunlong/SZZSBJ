@@ -78,20 +78,103 @@ def recover_standard_ad_spend(session: Session, account: str, day) -> Decimal:
         params,
     )
 
-    # Preserve every non-advertising financial input and all existing profit
-    # calculation rules. Update only the rollup field derived from Daily Sales.
+    # SEM may still be unattributed, but the already-booked SP costs and
+    # financial results must not contradict one another. Recompute from the
+    # current expense columns, never by subtracting the SP delta from an old
+    # profit (which might itself already be stale).
     session.execute(
         text(
-            "with totals as (select coalesce(nullif(local_sku,''),item_id) sku,"
-            "sum(coalesce(ad_spend_amount,0)) spend "
-            "from mart_daily_sales_item_day "
-            "where source_account_ref=:account and business_date_la=:day "
-            "group by 1) "
-            "update mart_order_profit_sku_day p set "
-            "ad_spend_amount=t.spend,updated_at=now() "
-            "from totals t where p.source_account_ref=:account "
-            "and p.business_date_la=:day and p.local_sku=t.sku "
-            "and p.ad_spend_amount is distinct from t.spend"
+            """
+            WITH base AS (
+                SELECT id, sales_amount,
+                       purchase_cost_total_usd + first_leg_cost_total_usd AS invested,
+                       CASE
+                           WHEN refund_amount IS NOT NULL
+                            AND commission_fee_amount IS NOT NULL
+                            AND purchase_cost_total_usd IS NOT NULL
+                            AND first_leg_cost_total_usd IS NOT NULL
+                            AND wfs_fee_total_amount IS NOT NULL
+                            AND storage_fee_total_amount IS NOT NULL
+                           THEN sales_amount
+                                - COALESCE(ad_spend_amount, 0)
+                                - COALESCE(sem_ad_spend_amount, 0)
+                                - refund_amount
+                                - commission_fee_amount
+                                - purchase_cost_total_usd
+                                - first_leg_cost_total_usd
+                                - wfs_fee_total_amount
+                                - storage_fee_total_amount
+                       END AS profit
+                FROM mart_daily_sales_item_day
+                WHERE source_account_ref = :account
+                  AND business_date_la = :day
+            ), expected AS (
+                SELECT id, profit::numeric(18,4) AS profit,
+                       CASE WHEN profit IS NOT NULL AND sales_amount > 0
+                            THEN (profit / sales_amount)::numeric(18,6)
+                       END AS margin,
+                       CASE WHEN profit IS NOT NULL AND invested > 0
+                            THEN (profit / invested)::numeric(18,6)
+                       END AS roi
+                FROM base
+            )
+            UPDATE mart_daily_sales_item_day AS m
+            SET gross_profit_amount = e.profit,
+                gross_margin = e.margin,
+                roi = e.roi,
+                updated_at = now()
+            FROM expected AS e
+            WHERE m.id = e.id
+              AND (m.gross_profit_amount, m.gross_margin, m.roi)
+                  IS DISTINCT FROM (e.profit, e.margin, e.roi)
+            """
+        ),
+        params,
+    )
+
+    # Roll up the now-consistent Daily Sales financials using the same SKU
+    # grouping and NULL-profit semantics as the normal MART refresh.
+    session.execute(
+        text(
+            """
+            WITH totals AS (
+                SELECT COALESCE(NULLIF(local_sku, ''), item_id) AS sku,
+                       SUM(COALESCE(ad_spend_amount, 0)) AS spend,
+                       CASE WHEN BOOL_AND(gross_profit_amount IS NOT NULL)
+                            THEN SUM(gross_profit_amount)
+                       END AS profit,
+                       SUM(sales_amount) AS sales,
+                       SUM(
+                           COALESCE(purchase_cost_total_usd, 0)
+                           + COALESCE(first_leg_cost_total_usd, 0)
+                       ) AS invested
+                FROM mart_daily_sales_item_day
+                WHERE source_account_ref = :account
+                  AND business_date_la = :day
+                GROUP BY 1
+            ), expected AS (
+                SELECT sku, spend, profit,
+                       CASE WHEN profit IS NOT NULL AND sales > 0
+                            THEN (profit / sales)::numeric(18,6)
+                       END AS margin,
+                       CASE WHEN profit IS NOT NULL AND invested > 0
+                            THEN (profit / invested)::numeric(18,6)
+                       END AS roi
+                FROM totals
+            )
+            UPDATE mart_order_profit_sku_day AS p
+            SET ad_spend_amount = e.spend,
+                gross_profit_amount = e.profit,
+                gross_margin = e.margin,
+                roi = e.roi,
+                updated_at = now()
+            FROM expected AS e
+            WHERE p.source_account_ref = :account
+              AND p.business_date_la = :day
+              AND p.local_sku = e.sku
+              AND (p.ad_spend_amount, p.gross_profit_amount, p.gross_margin, p.roi)
+                  IS DISTINCT FROM (e.spend, e.profit, e.margin, e.roi)
+            """
         ),
         params,
     )

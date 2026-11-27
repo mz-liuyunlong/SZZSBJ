@@ -64,6 +64,9 @@ interface WorkItemDto {
   response_count: number | null;
   error_code: string | null;
   error_message: string | null;
+  http_status?: number | null;
+  provider_code?: string | null;
+  provider_message?: string | null;
   started_at: string | null;
   finished_at: string | null;
   created_at: string;
@@ -164,7 +167,16 @@ const pmcPurchaseInterfaceKeys = new Set([
   "purchaseReceiptOrderList",
 ]);
 
-const moduleForInterface = (item: InterfaceDto): SyncTaskRow["module"] => {
+const financeInterfaceKeys = new Set([
+  "lingxingFxRate",
+  "walmartBillStatementList",
+  "finShippingList",
+  "finShippingDetail",
+  "finWmsOutboundOrders",
+]);
+
+export const moduleForInterface = (item: Pick<InterfaceDto, "interface_key">): SyncTaskRow["module"] => {
+  if (financeInterfaceKeys.has(item.interface_key)) return "财务";
   if (dataPagesInterfaceKeys.has(item.interface_key)) {
     if (
       item.interface_key === "walmartAdvertiserList"
@@ -542,6 +554,9 @@ function workItem(item: WorkItemDto): SyncTaskWorkItem {
     responseCount: item.response_count,
     errorCode: item.error_code,
     errorMessage: item.error_message,
+    httpStatus: item.http_status ?? null,
+    providerCode: item.provider_code ?? null,
+    providerMessage: item.provider_message ?? null,
     startedAt: item.started_at,
     finishedAt: item.finished_at,
     createdAt: item.created_at,

@@ -61,7 +61,9 @@ class Operation:
     body_required: bool = False
     media_supported: bool = True
     mutating: bool | None = None
-    # "json" (default) or "pdf": how the provider answers a successful call.
+    # "json" (default), "pdf" or "zip": how the provider answers a successful call. "zip" is
+    # the on-request report download: Walmart answers JSON with a downloadURL on the same
+    # host and the transport brings the ZIP bytes back base64-encoded.
     response_kind: str = "json"
     # Catalog family (wfs, feeds, ...) and the SZZSBJ business permission a caller needs.
     # Both are filled by the unified registry; the cloud verifier treats them as data.
@@ -204,7 +206,7 @@ def operation_from_contract(contract: Any) -> Operation:
         _expect(type(contract[name]) is bool)
     _expect(contract["request_content_type"] in _SUPPORTED_BODY_TYPES | {"multipart/form-data"})
     _expect(contract["request_schema"] is None or isinstance(contract["request_schema"], Mapping))
-    _expect(contract["response_kind"] in {"json", "pdf"})
+    _expect(contract["response_kind"] in {"json", "pdf", "zip"})
     for name in ("source", "family", "registry_version"):
         _expect(isinstance(contract[name], str) and len(contract[name]) <= 128)
     _expect(contract["family"] == "" or bool(_FAMILY.fullmatch(contract["family"])))

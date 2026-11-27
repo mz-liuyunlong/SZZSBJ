@@ -30,6 +30,7 @@ from app.integrations.walmart.contracts import (
     sha256_hex,
 )
 from app.integrations.walmart.scf_bridge import GatewayRejected, ProtectedScfBridge
+from app.integrations.walmart.sem_catalog import SEM_WRITE_PERMISSION
 from app.integrations.walmart.unified_api import (
     WFS_CANCEL_PERMISSION,
     WFS_WRITE_PERMISSION,
@@ -200,7 +201,11 @@ def test_reviewed_registry_enables_every_builtin_with_permissions():
         operation = registry.get(key)
         assert operation.enabled and operation.permission and operation.family
         if operation.is_write:
-            assert operation.permission in {WFS_WRITE_PERMISSION, WFS_CANCEL_PERMISSION}
+            assert operation.permission in {
+                WFS_WRITE_PERMISSION,
+                WFS_CANCEL_PERMISSION,
+                SEM_WRITE_PERMISSION,
+            }
         else:
             assert operation.permission == f"action:walmart:{operation.family}:read"
         # Reviewer requirement 3: server-side risk must equal the cloud's method-based risk.
@@ -904,3 +909,124 @@ def test_runtime_env_helpers_and_v3_gate(monkeypatch, signer):
         "success": False,
         "status": "WALMART_RUNTIME_UNAVAILABLE",
     }
+
+
+# --- 审核 #358 P1-1: the cloud runs only its own contracts for non-GET calls ---------------
+
+
+def _forged(key: str, **changes: Any) -> tuple[ContractSigner, ContractRegistry]:
+    """A server registry whose ``key`` differs from the package's built-in contract."""
+    from dataclasses import replace as _replace
+
+    forged = _replace(reviewed_registry().get(key), **changes)
+    registry = ContractRegistry((forged,))
+    return ContractSigner.generate(kid="szzsbj-test", registry=registry), registry
+
+
+def test_read_only_post_key_pointed_at_a_write_path_is_refused_before_any_call():
+    signer, registry = _forged("sem_billing_history", path="/v3/advertising/sem/campaigns")
+    event = _event(signer, "sem_billing_history", body={}, registry=registry)
+    assert event["risk"] == "read"  # the key alone would pass the read ceiling
+    transport = FakeTransport()
+    result = _executor(_verifier(signer), transport, max_risk="read").handle(event)
+    assert result == {"success": False, "status": "WALMART_CONTRACT_MISMATCH"}
+    assert transport.calls == []  # refused before the transport (no token, no request)
+
+
+def test_read_only_post_with_a_widened_body_schema_is_refused():
+    schema = dict(reviewed_registry().get("sem_billing_history").request_schema or {})
+    schema["additionalProperties"] = True
+    signer, registry = _forged("sem_billing_history", request_schema=schema)
+    event = _event(signer, "sem_billing_history", body={"dailyBudget": 1}, registry=registry)
+    transport = FakeTransport()
+    result = _executor(_verifier(signer), transport, max_risk="read").handle(event)
+    assert result["status"] == "WALMART_CONTRACT_MISMATCH" and transport.calls == []
+
+
+def test_write_contract_that_differs_from_the_package_is_refused_under_write_ceiling():
+    # same key, but pointed at the campaign update / delete path
+    signer, registry = _forged(
+        "sem_campaign_stop", path="/v3/advertising/sem/campaigns/{campaignId}"
+    )
+    event = _event(
+        signer,
+        "sem_campaign_stop",
+        params={"campaignId": "1"},
+        registry=registry,
+        approval_ref="sem-ticket:1",
+    )
+    transport = FakeTransport()
+    result = _executor(_verifier(signer), transport, max_risk="write").handle(event)
+    assert result["status"] == "WALMART_CONTRACT_MISMATCH" and transport.calls == []
+
+
+def test_built_in_read_only_post_runs_with_the_package_contract(signer):
+    transport = FakeTransport()
+    event = _event(
+        signer,
+        "sem_campaigns_performance_summary",
+        body={"startDate": "2026-10-01", "endDate": "2026-10-31"},
+    )
+    result = _executor(_verifier(signer), transport, max_risk="read").handle(event)
+    assert result["success"] is True and result["risk"] == "read"
+    request = transport.calls[0][1]
+    assert (request.method, request.path) == (
+        "POST",
+        "/v3/advertising/sem/campaigns/performance-summary",
+    )
+    assert request.body == {"startDate": "2026-10-01", "endDate": "2026-10-31"}
+
+
+def test_sem_write_runs_through_the_same_write_gate(signer):
+    event = _event(
+        signer, "sem_campaign_stop", params={"campaignId": "1"}, approval_ref="sem-ticket:1"
+    )
+    denied = _executor(_verifier(signer), FakeTransport(), max_risk="read").handle(event)
+    assert denied["status"] == "WALMART_RISK_CEILING_DENIED"
+    no_approval = _event(
+        signer, "sem_campaign_stop", params={"campaignId": "1"}, request_id="1" * 32
+    )
+    assert (
+        _executor(_verifier(signer), FakeTransport(), max_risk="write").handle(no_approval)[
+            "status"
+        ]
+        == "WALMART_WRITE_APPROVAL_REQUIRED"
+    )
+    transport = FakeTransport()
+    ok = _event(
+        signer,
+        "sem_campaign_stop",
+        params={"campaignId": "1"},
+        approval_ref="sem-ticket:2",
+        request_id="2" * 32,
+    )
+    result = _executor(_verifier(signer), transport, max_risk="write").handle(ok)
+    assert result["success"] is True and result["risk"] == "write"
+    assert transport.calls[0][1].path == "/v3/advertising/sem/campaigns/1/stop"
+
+
+def test_write_factory_accepts_sem_write_keys():
+    from app.integrations.walmart.scf_write_factory import make_walmart_write_api
+
+    class _Identity:
+        def get_identity(self):  # pragma: no cover - never called in construction
+            raise AssertionError
+
+    api = make_walmart_write_api(
+        allowed_stores=frozenset({STORE}),
+        approved_write_keys=frozenset({"sem_campaign_stop", "wfs_inbound_shipment_cancel"}),
+        function_by_store={STORE: FUNCTION},
+        cvm_role="synthetic-role",
+        target_role_arn="qcs::cam::uin/1:roleName/synthetic",
+        identity_provider=_Identity(),
+    )
+    assert api is not None
+    with pytest.raises(ValueError, match="WALMART_APPROVED_OPERATION_UNKNOWN"):
+        make_walmart_write_api(
+            allowed_stores=frozenset({STORE}),
+            approved_write_keys=frozenset({"sem_campaign_launch"}),
+            function_by_store={STORE: FUNCTION},
+            cvm_role="synthetic-role",
+            target_role_arn="qcs::cam::uin/1:roleName/synthetic",
+            identity_provider=_Identity(),
+        )

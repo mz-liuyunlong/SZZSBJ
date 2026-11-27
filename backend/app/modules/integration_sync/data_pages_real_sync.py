@@ -33,6 +33,9 @@ from app.integrations.lingxing.token_manager import (
 from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 from app.modules.integration_sync.catalog import IntegrationCatalogService
 from app.modules.integration_sync.data_pages_catalog import DATA_PAGES_SYNC_INTERFACE_SPECS_BY_KEY
+from app.modules.integration_sync.listing_product_tags_sync import (
+    refresh_listing_product_tags,
+)
 from app.modules.integration_sync.parsers.lingxing_data_pages import DataPagesParserKey
 from app.modules.integration_sync.wfs_first_stock import (
     listing_identity,
@@ -404,6 +407,75 @@ def data_pages_response_succeeded(
     return code in {None, 0, 200}
 
 
+# Scoped provider data correction; RAW responses remain unchanged.
+YC00489_ALIAS_STORE_ID = "110711146247224320"
+YC00489_ALIAS_MSKU = "YC00489-1A"
+YC00489_ALIAS_LOCAL_SKU = "YC00489"
+YC00489_BAD_ITEM_ID = "20738507814"
+YC00489_CANONICAL_ITEM_ID = "20769904287"
+YC00489_ALIAS_START = date(2026, 8, 24)
+
+
+def _normalize_yc00489_sale_rows(
+    rows: Iterable[dict[str, Any]],
+    *,
+    source_account_ref: str,
+    business_date: date,
+) -> list[dict[str, Any]]:
+    """Correct one Lingxing SaleStat identity before the business-fact upsert.
+
+    Do not alter provider RAW. Fail closed if conflicting old/new metric
+    observations would otherwise overwrite each other in the same day.
+    """
+    materialized = list(rows)
+    if source_account_ref != "primary" or business_date < YC00489_ALIAS_START:
+        return materialized
+
+    seen: dict[int, tuple[Decimal | None, bool]] = {}
+    canonical: dict[int, dict[str, Any]] = {}
+    target_indices: set[int] = set()
+    for index, row in enumerate(materialized):
+        stores = _scalar_candidates(row.get("sid"))
+        items = _scalar_candidates(row.get("platform_product_id"))
+        if stores != [YC00489_ALIAS_STORE_ID] or len(items) != 1:
+            continue
+        raw_item_id = items[0]
+        if raw_item_id not in {YC00489_BAD_ITEM_ID, YC00489_CANONICAL_ITEM_ID}:
+            continue
+        if raw_item_id == YC00489_BAD_ITEM_ID:
+            if _single_scalar(row.get("msku")) != YC00489_ALIAS_MSKU:
+                raise DataPagesRealSyncError("DATA_PAGES_YC00489_ALIAS_MSKU_MISMATCH")
+            local_sku = _single_scalar(row.get("sku")) or _single_scalar(row.get("local_sku"))
+            if local_sku not in {None, YC00489_ALIAS_LOCAL_SKU}:
+                raise DataPagesRealSyncError("DATA_PAGES_YC00489_ALIAS_SKU_MISMATCH")
+        elif _single_scalar(row.get("msku")) != YC00489_ALIAS_MSKU:
+            # An unrelated record must not be collapsed into this MSKU.
+            continue
+
+        result_type = _int(row.get("_result_type"))
+        if result_type not in (1, 2, 3):
+            raise DataPagesRealSyncError("DATA_PAGES_YC00489_ALIAS_RESULT_TYPE_INVALID")
+        value = _decimal(row.get("volumeTotal"))
+        if value is None:
+            raise DataPagesRealSyncError("DATA_PAGES_YC00489_ALIAS_METRIC_MISSING")
+        is_main = raw_item_id == YC00489_CANONICAL_ITEM_ID
+        prior = seen.get(result_type)
+        if prior is not None and prior[0] != value:
+            raise DataPagesRealSyncError("DATA_PAGES_YC00489_ALIAS_METRIC_CONFLICT")
+        if prior is None or (is_main and not prior[1]):
+            normalized = dict(row)
+            normalized["platform_product_id"] = YC00489_CANONICAL_ITEM_ID
+            canonical[result_type] = normalized
+            seen[result_type] = (value, is_main)
+        target_indices.add(index)
+
+    # Preserve non-target rows and their original order/behavior. For each
+    # SaleStat metric keep just one observation, preferring the correct ID.
+    output = [row for index, row in enumerate(materialized) if index not in target_indices]
+    output.extend(canonical[k] for k in sorted(canonical))
+    return output
+
+
 class DataPagesRealSyncRunner:
     def __init__(
         self,
@@ -520,7 +592,7 @@ class DataPagesRealSyncRunner:
         if self.heartbeat is not None:
             self.heartbeat()
         self.summary.requested_interfaces.append(spec.interface_key)
-        self._persist_raw_blob(parser_key, response.response_json, response.pulled_at)
+        foundation_blob_id = self._persist_raw_blob(parser_key, response.response_json, response.pulled_at)
         if response.provider_code not in {None, 0, 200}:
             if parser_key == "walmart_return_order_list" and response.provider_code == 403:
                 self.summary.return_permission_403 = True
@@ -529,6 +601,14 @@ class DataPagesRealSyncRunner:
                     self.summary.skipped_interfaces.append(marker)
                 return response
             raise DataPagesRealSyncError(f"DATA_PAGES_PROVIDER_FAILED:{spec.interface_key}")
+        if parser_key in ("walmart_ad_item_sp_list", "walmart_advertiser_list"):
+            try:
+                from app.modules.new_products.sku_ad_foundation_runtime import collect_ad_page
+
+                collect_ad_page(self, parser_key, foundation_blob_id, response)
+            except Exception as exc:
+                self._foundation_ad_capture_failed = True
+                logging.getLogger(__name__).warning("foundation_ad_capture_failed error_type=%s", type(exc).__name__)
         return response
 
     def _fetch_offset_all(
@@ -981,7 +1061,11 @@ class DataPagesRealSyncRunner:
 
     def _write_sales(self, rows: Iterable[dict[str, Any]]) -> int:
         count = 0
-        for row in rows:
+        for row in _normalize_yc00489_sale_rows(
+            rows,
+            source_account_ref=self.source_account_ref,
+            business_date=self.business_date,
+        ):
             item_candidates = _scalar_candidates(row.get("platform_product_id"))
             store_candidates = _scalar_candidates(row.get("sid"))
             if len(item_candidates) != 1 or len(store_candidates) != 1:
@@ -1226,13 +1310,13 @@ class DataPagesRealSyncRunner:
                     "insert into fact_walmart_ad_item_sp_daily "
                     "(id, business_date_la, source_account_ref, advertiser_id, store_id, item_id, msku, "
                     "campaign_id, ad_group_id, ad_item_id, source_line_hash, source_key, ad_spend_amount, "
-                    "ad_spend_currency_code, attributed_sales_amount, attributed_orders, attributed_units, "
-                    "advertised_sku_sales_amount, advertised_sku_units, num_ads_clicks, num_ads_shown, acos, "
+                    "ad_spend_currency_code, attributed_sales_amount, attributed_sales_currency_code, attributed_orders, attributed_units, "
+                    "advertised_sku_sales_amount, advertised_sku_sales_currency_code, advertised_sku_units, num_ads_clicks, num_ads_shown, acos, "
                     "roas, cpc, ctr, cvr, synced_at, created_at, updated_at) values (:id, :business_date_la, "
                     ":source_account_ref, :advertiser_id, :store_id, :item_id, :msku, :campaign_id, "
                     ":ad_group_id, :ad_item_id, :source_line_hash, :source_key, :ad_spend_amount, "
-                    ":ad_spend_currency_code, :attributed_sales_amount, :attributed_orders, :attributed_units, "
-                    ":advertised_sku_sales_amount, :advertised_sku_units, :num_ads_clicks, :num_ads_shown, "
+                    ":ad_spend_currency_code, :attributed_sales_amount, :attributed_sales_currency_code, :attributed_orders, :attributed_units, "
+                    ":advertised_sku_sales_amount, :advertised_sku_sales_currency_code, :advertised_sku_units, :num_ads_clicks, :num_ads_shown, "
                     ":acos, :roas, :cpc, :ctr, :cvr, :synced_at, :created_at, :updated_at) on conflict "
                     "(business_date_la, source_account_ref, advertiser_id, source_line_hash) do update set "
                     "store_id = excluded.store_id, item_id = excluded.item_id, msku = excluded.msku, "
@@ -1240,8 +1324,10 @@ class DataPagesRealSyncRunner:
                     "ad_item_id = excluded.ad_item_id, source_key = excluded.source_key, "
                     "ad_spend_amount = excluded.ad_spend_amount, "
                     "attributed_sales_amount = excluded.attributed_sales_amount, "
+                    "attributed_sales_currency_code = excluded.attributed_sales_currency_code, "
                     "attributed_orders = excluded.attributed_orders, attributed_units = excluded.attributed_units, "
                     "advertised_sku_sales_amount = excluded.advertised_sku_sales_amount, "
+                    "advertised_sku_sales_currency_code = excluded.advertised_sku_sales_currency_code, "
                     "advertised_sku_units = excluded.advertised_sku_units, num_ads_clicks = excluded.num_ads_clicks, "
                     "num_ads_shown = excluded.num_ads_shown, acos = excluded.acos, roas = excluded.roas, "
                     "cpc = excluded.cpc, ctr = excluded.ctr, cvr = excluded.cvr, "
@@ -1263,9 +1349,15 @@ class DataPagesRealSyncRunner:
                     "ad_spend_amount": _decimal(row.get("adSpend")),
                     "ad_spend_currency_code": "USD",
                     "attributed_sales_amount": _decimal(row.get("attributedSales")),
+                    "attributed_sales_currency_code": (
+                        "USD" if _decimal(row.get("attributedSales")) is not None else None
+                    ),
                     "attributed_orders": _decimal(row.get("attributedOrders")),
                     "attributed_units": _decimal(row.get("attributedUnits")),
                     "advertised_sku_sales_amount": _decimal(row.get("advertisedSkuSales")),
+                    "advertised_sku_sales_currency_code": (
+                        "USD" if _decimal(row.get("advertisedSkuSales")) is not None else None
+                    ),
                     "advertised_sku_units": _decimal(row.get("advertisedSkuUnits")),
                     "num_ads_clicks": _int(row.get("numAdsClicks")),
                     "num_ads_shown": _int(row.get("numAdsShown")),
@@ -1614,6 +1706,8 @@ class DataPagesRealSyncRunner:
                 "now": now,
             },
         )
+        # Match exact account+SKU; write provider tags separately from custom tags.
+        refresh_listing_product_tags(self.session, self.source_account_ref)
         return _row_count(
             self.session, "mart_listing_management_current", self.source_account_ref, None
         )
