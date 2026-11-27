@@ -167,7 +167,7 @@ describe("purchaseBoardApi mapping", () => {
     const result = await listPurchaseBoard(createInitialPurchaseBoardFilters(), 1, 50);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/pmc/purchase/board?page=1&page_size=50&sort=order_date_desc");
     expect(result.total).toBe(1);
-    expect(result.meta).toEqual({ freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: 1 });
+    expect(result.meta).toEqual({ freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: 1, hiddenOwnerNames: [] });
     const row = result.rows[0];
     expect(row.id).toBe("PO1::L1::P1");
     expect(row.draftNo).toBe("CG261017-039");
