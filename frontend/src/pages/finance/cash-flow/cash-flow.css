@@ -1,0 +1,32 @@
+/* 资金流水（本组样式，类名以 .fin-cash-flow 开头）。颜色 / 字号全部走 antd token 与公共变量。 */
+.fin-cash-flow__drawer .fin-cash-flow__section { margin-top: 16px; }
+.fin-cash-flow__drawer .fin-cash-flow__approval + .fin-cash-flow__approval { margin-top: 12px; }
+.fin-cash-flow__drawer .fin-cash-flow__thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.fin-cash-flow__drawer .fin-cash-flow__thumb { display: inline-flex; flex-direction: column; gap: 4px; width: 104px; }
+.fin-cash-flow__drawer .fin-cash-flow__thumb .ant-image-img { object-fit: cover; }
+.fin-cash-flow__drawer .fin-cash-flow__footer { display: flex; justify-content: flex-end; gap: 8px; }
+/* 日记账搜索：搜索类型下拉加宽，四个字的选项（摘要备注 / 审批单号）能看全 */
+.fin-cash-flow__search.report-table-connected-search { width: 460px; max-width: 460px; flex: 0 0 460px; }
+.fin-cash-flow__search.report-table-connected-search > .ant-select { width: 116px; flex: 0 0 116px; }
+
+/* 日记账：5 张统计卡；异常段落与找不到对应流水的提示条 */
+.fin-cash-flow__alerts { display: flex; flex-direction: column; gap: var(--ant-margin-sm, 12px); }
+.fin-cash-flow__alert .fin-cash-flow__alert-msg { margin: var(--ant-margin-xxs, 4px) 0; }
+.fin-cash-flow__orphans { margin-bottom: var(--ant-margin-sm, 12px); }
+.fin-cash-flow__orphans ul { margin: 0; padding-left: var(--ant-padding-lg, 24px); }
+.fin-cash-flow__import-table { margin-top: var(--ant-margin-xs, 8px); }
+.fin-cash-flow__import-desc .ant-descriptions-item-label { width: 120px; white-space: nowrap; }
+/* 日记账表格里可直接改的摘要 / 备注：内容占满，后面跟「已改」和铅笔 */
+.fin-cash-flow__cell-text { display: flex; align-items: flex-start; gap: var(--ant-margin-xxs, 4px); min-width: 0; }
+.fin-cash-flow__cell-text .fin-cash-flow__cell-body { flex: 1 1 auto; min-width: 0; }
+.fin-cash-flow__cell-text .fin-cash-flow__cell-edit { flex: none; }
+
+/* 表头固定列、勾选列：统一用 ReportTableShell 的全局规则（reportTable.css「Global report table fixed header」），
+   这里不再单独写 z-index——以前写的 3 / 4 比普通可拖表头的 10 还低，往右拉时「账户」等表头会盖住勾选框（Rocky 11-12）。 */
+.fin-cash-flow__excl-note { color: var(--ant-color-warning-text, #d46b08); white-space: normal; }
+/* 挂审批单选择框：选项右边的「看」（打开审批单，不挂上） */
+.fin-cash-flow__picker-option { display: flex; align-items: center; justify-content: space-between; gap: var(--ant-margin-xs, 8px); }
+.fin-cash-flow__picker-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fin-cash-flow__picker-view { flex: none; }
+.fin-cash-flow__skip-list { margin: 0 0 var(--ant-margin-xs, 8px); padding-left: var(--ant-padding-lg, 24px); }
+.fin-cash-flow__closed { display: flex; justify-content: flex-end; margin-bottom: var(--ant-margin-xxs, 4px); }

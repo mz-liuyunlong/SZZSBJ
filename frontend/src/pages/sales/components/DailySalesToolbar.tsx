@@ -1,15 +1,12 @@
 /** Server-backed facet filters for the daily-sales acceptance shell. */
-import { DatePicker, Radio, Select } from "antd";
-import datePickerZhCN from "antd/es/date-picker/locale/zh_CN";
-import dayjs, { type Dayjs } from "dayjs";
-import "dayjs/locale/zh-cn";
-import updateLocale from "dayjs/plugin/updateLocale";
+import { Radio, Select } from "antd";
+import dayjs from "dayjs";
 import type { ReactNode } from "react";
 import CommittedSearch from "@/components/report-table/CommittedSearch";
 import ResetButton from "@/components/report-table/ResetButton";
 import ReportFacetSelect from "@/shared/report-filters";
 import type { ReportFilterOption } from "@/shared/report-filters";
-import { disableFutureDate } from "@/shared/date/disableFutureDate";
+import ReportDateRangePicker from "@/shared/date/ReportDateRangePicker";
 import {
   dateRangeForPreset,
   type DailySalesCurrency,
@@ -17,9 +14,6 @@ import {
   type DailySalesPlatform,
 } from "@/pages/sales/dailySalesTypes";
 
-dayjs.extend(updateLocale);
-dayjs.locale("zh-cn");
-dayjs.updateLocale("zh-cn", { weekStart: 0 });
 
 export type DatePreset = DailySalesDatePreset;
 export type SearchField = "msku" | "sku" | "productId" | "productName";
@@ -53,29 +47,6 @@ const defaultPlatformOptions: ReportFilterOption[] = [
   { value: "Amazon", label: "Amazon" },
   { value: "TEMU", label: "TEMU" },
 ];
-
-const rangePresets = (): { label: string; value: [Dayjs, Dayjs] }[] => {
-  const today = dayjs();
-  return [
-    { label: "今天", value: [today, today] },
-    { label: "昨天", value: [today.subtract(1, "day"), today.subtract(1, "day")] },
-    { label: "最近7天", value: [today.subtract(6, "day"), today] },
-    { label: "最近30天", value: [today.subtract(29, "day"), today] },
-    { label: "本月", value: [today.startOf("month"), today] },
-    { label: "上月", value: [today.subtract(1, "month").startOf("month"), today.subtract(1, "month").endOf("month")] },
-    { label: "本年", value: [today.startOf("year"), today] },
-    { label: "去年", value: [today.subtract(1, "year").startOf("year"), today.subtract(1, "year").endOf("year")] },
-  ];
-};
-
-const datePickerLocale = {
-  ...datePickerZhCN,
-  lang: {
-    ...datePickerZhCN.lang,
-    monthFormat: "M 月",
-    shortWeekDays: ["日", "一", "二", "三", "四", "五", "六"],
-  },
-};
 
 const actualTodayRange = (): [string, string] => {
   const today = dayjs().format("YYYY-MM-DD");
@@ -157,17 +128,12 @@ function DailySalesToolbar({
             onChange({ ...filters, datePreset, dateRange: shortcutDateRange(datePreset) });
           }}
         />
-        <DatePicker.RangePicker
+        <ReportDateRangePicker
           className="daily-sales__date-range"
           aria-label="日期范围"
-          locale={datePickerLocale}
           value={filters.dateRange
             ? [dayjs(filters.dateRange[0]), dayjs(filters.dateRange[1])]
             : undefined}
-          presets={rangePresets()}
-          format="YYYY-MM-DD"
-          disabledDate={disableFutureDate}
-          separator="~"
           onChange={(dates) => onChange({
             ...filters,
             datePreset: "custom",

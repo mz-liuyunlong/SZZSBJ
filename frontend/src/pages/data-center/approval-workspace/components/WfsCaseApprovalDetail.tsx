@@ -145,7 +145,7 @@ export function WfsCaseApprovalDetail({ detail }: Props) {
     >
       <Section title="申请人">
         <div className="approval-review__copy">
-          {detail.applicant_id || "未记录申请人"}
+          {detail.applicant_name || "申请人待核实"}
         </div>
       </Section>
 

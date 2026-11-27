@@ -3,7 +3,7 @@ from fastapi import Request
 
 from app.core.api import ApiError
 from app.core.auth import Principal
-from app.core.permissions import require_permission
+from app.core.permissions import has_permission, is_approval_admin, require_permission
 
 
 def test_require_permission_allows_exact_permission() -> None:
@@ -56,3 +56,19 @@ def test_legacy_permission_cannot_bypass_canonical_request_action() -> None:
         require_permission("products:read")(principal, request)
 
     assert exc_info.value.status_code == 403
+
+
+def test_approval_admin_marker_does_not_grant_super_admin() -> None:
+    principal = Principal(
+        user_id="normal-admin", permissions=frozenset({"internal:approval:administrator"})
+    )
+    assert is_approval_admin(principal) is True
+    assert has_permission(principal, "*") is False
+    assert has_permission(principal, "action:settings:iam:delete-user") is False
+
+
+def test_normal_reviewer_not_approval_admin() -> None:
+    principal = Principal(
+        user_id="reviewer", permissions=frozenset({"action:products:new-product-analysis:review"})
+    )
+    assert is_approval_admin(principal) is False

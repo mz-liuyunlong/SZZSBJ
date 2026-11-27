@@ -386,6 +386,33 @@ def test_plan_collection_queries_filter_complete_item_scope_before_aggregation(
     assert total_all == 3
     assert {row["item_id"] for row in rows_all} == {"item-a", "item-b", "item-mixed"}
 
+    by_item = {row["item_id"]: row for row in rows_all}
+    assert by_item["item-mixed"]["resolved_store_names"] == ["store-a", "store-b"]
+
+    store_rows, store_total = repository.list_products(
+        period_id=PERIOD_FULL,
+        query=OperationPlanProductQuery(period_key="2099-01", store_id="store-a"),
+        account_refs=scope_all,
+    )
+    assert store_total == 2
+    assert {row["item_id"] for row in store_rows} == {"item-a", "item-mixed"}
+
+    multi_rows, multi_total = repository.list_products(
+        period_id=PERIOD_FULL,
+        query=OperationPlanProductQuery(period_key="2099-01", store_id="store-a,store-b"),
+        account_refs=scope_all,
+    )
+    assert multi_total == 3
+    assert len(multi_rows) == 3
+
+    denied_rows, denied_total = repository.list_products(
+        period_id=PERIOD_FULL,
+        query=OperationPlanProductQuery(period_key="2099-01", store_id="store-b"),
+        account_refs=scope_a,
+    )
+    assert denied_total == 0
+    assert denied_rows == []
+
     batch_query = OperationPlanProductQuery(
         period_key="2099-01",
         search_field="item_id",
@@ -417,6 +444,12 @@ def test_plan_collection_queries_filter_complete_item_scope_before_aggregation(
 
     options_a = repository.list_options(period_id=PERIOD_FULL, account_refs=scope_a)
     options_all = repository.list_options(period_id=PERIOD_FULL, account_refs=scope_all)
+    assert {row["value"]: row["count"] for row in options_a["stores"]} == {"store-a": 1}
+    assert {row["value"]: row["count"] for row in options_all["stores"]} == {
+        "store-a": 2,
+        "store-b": 2,
+    }
+
     assert sum(row["count"] for row in options_a["operation_status_counts"]) == 1
     assert sum(row["count"] for row in options_all["operation_status_counts"]) == 3
 

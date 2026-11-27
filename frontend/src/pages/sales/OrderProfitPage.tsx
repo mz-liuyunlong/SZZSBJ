@@ -1,3 +1,5 @@
+import type { SalesReportSort } from "@/pages/sales/reportSort";
+import { BackendRequestError } from "@/api/backendApi";
 /** Order-profit page backed by DATA-PAGES MART API. */
 import {
   CloudDownloadOutlined,
@@ -105,21 +107,16 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
   const [appliedColumnKeys, setAppliedColumnKeys] = useState(defaultColumnKeys);
   const [columnWidths, setColumnWidths] = useState(defaultColumnWidths);
   const [currentPage, setCurrentPage] = useState(1);
+  const [sort, setSort] = useState<SalesReportSort | null>(null);
+  const sortWarning = useRef(messageApi.warning);
+  useEffect(() => { sortWarning.current = messageApi.warning; }, [messageApi]);
+  const sortCurrency = sort ? filters.currency : undefined;
   const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [analysisSource, setAnalysisSource] = useState<OrderProfitAnalysisSource | null>(null);
   const [isTableRequesting, setIsTableRequesting] = useState(false);
   const [orderProfitTotal, setOrderProfitTotal] = useState(0);
   const [filterOptions, setFilterOptions] = useState<SalesFilterOptions>(emptySalesFilterOptions);
-
-  // ORDER_PROFIT_RESET_FILTERS_ON_MOUNT
-  useEffect(() => {
-    queueMicrotask(() => {
-      setFilters(createInitialFilters());
-      setCurrentPage(1);
-      setSelectedRowKeys([]);
-    });
-  }, []);
 
   const dateRangeStart = filters.dateRange?.[0];
   const dateRangeEnd = filters.dateRange?.[1];
@@ -147,6 +144,8 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
       startDate: dateRangeStart,
       endDate: dateRangeEnd,
       page: currentPage,
+      sort,
+      sortCurrency,
       pageSize,
       platforms: filters.platforms,
       owners: filters.owners,
@@ -160,14 +159,21 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
         setOrderProfitSummary(summary);
         setOrderProfitTotal(Number(meta?.total ?? rows.length ?? 0));
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!active) return;
+        if (sort && error instanceof BackendRequestError && error.status === 403) {
+          setSort(null);
+          void sortWarning.current("当前账号没有该字段的排序权限");
+          return;
+        }
         setOrderProfitRows([]);
         setOrderProfitSummary(null);
         setOrderProfitTotal(0);
       })
       .finally(() => {
-        if (active) setIsTableRequesting(false);
+        if (active) {
+          setIsTableRequesting(false);
+        }
       });
 
     return () => {
@@ -176,6 +182,8 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
     };
   }, [
     currentPage,
+    sort,
+    sortCurrency,
     dateRangeStart,
     dateRangeEnd,
     filters.keyword,
@@ -212,6 +220,8 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
       endDate: previousDateRange.endDate,
       page: 1,
       pageSize: 1,
+      includeTableTotals: false,
+      summaryOnly: true,
       platforms: filters.platforms,
       owners: filters.owners,
       stores: filters.stores,
@@ -342,6 +352,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
   };
 
   const resetFilters = () => {
+    setSort(null);
     setFilters(createInitialFilters());
     setToolbarResetKey((current) => current + 1);
     resetPageAndSelection();
@@ -461,6 +472,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
 
 
             <OrderProfitTable
+          tableTotals={orderProfitSummary?.tableTotals}
           rows={filteredRows}
           total={orderProfitTotal}
           currency={filters.currency}
@@ -474,6 +486,11 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
             [key]: width,
           }))}
           onCurrentPageChange={setCurrentPage}
+          sort={sort}
+          onSortChange={(nextSort) => {
+            setSort(nextSort);
+            resetPageAndSelection();
+          }}
           onPageSizeChange={(nextPageSize) => {
             setPageSize(normalizeReportTablePageSize(nextPageSize));
             resetPageAndSelection();
@@ -497,6 +514,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
         onSaveTemplate={() => void messageApi.info(TEMPLATE_PENDING)}
       />
       <OrderProfitExportModal
+        sort={sort}
         open={exportModalOpen}
         filters={filters}
         onClose={() => setExportModalOpen(false)}

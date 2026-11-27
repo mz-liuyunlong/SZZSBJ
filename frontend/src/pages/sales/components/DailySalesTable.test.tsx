@@ -13,15 +13,16 @@ const row = (warnings: string[], sampleQuantity = 0) => ({
 }) as DailySalesRow;
 
 describe("daily sales sample evidence", () => {
-  it("does not present missing capture evidence as a confirmed zero", () => {
+  it("displays the current recorded quantity as zero when sample capture evidence is absent", () => {
     render(<DailySalesSampleQuantityCell row={row(["sample_data_not_observed"])} />);
-    expect(screen.getByText("未知")).toBeInTheDocument();
-    expect(screen.queryByText("0")).not.toBeInTheDocument();
+    expect(screen.getByText("0")).toBeInTheDocument();
+    expect(screen.queryByText("未知")).not.toBeInTheDocument();
   });
 
-  it("shows unverified candidates as pending", () => {
+  it("shows unverified candidates as numeric quantity without a pending text label", () => {
     render(<DailySalesSampleQuantityCell row={row(["sample_verification_pending"])} />);
-    expect(screen.getByText("待核验")).toBeInTheDocument();
+    expect(screen.getByText("0")).toBeInTheDocument();
+    expect(screen.queryByText("待核验")).not.toBeInTheDocument();
   });
 
   it("shows only the verified quantity as a number", () => {

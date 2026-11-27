@@ -22,7 +22,8 @@ this same module, so a request hashes identically on the server and in the cloud
 
 A signer only signs contracts that belong to the registry it was built with (reviewer
 requirement 2): business code cannot construct an ad-hoc method/path/schema and get it
-signed. No secret, token or Walmart credential is handled here.
+signed in v3. V4 uses a separately domain-separated envelope for trusted internal
+requests. No secret, token or Walmart credential is handled here.
 """
 
 from __future__ import annotations
@@ -47,6 +48,7 @@ from app.integrations.walmart.contracts import (
     ContractError,
     ContractRegistry,
     Operation,
+    PreparedRequest,
     canonical_json,
     operation_from_contract,
     sha256_hex,
@@ -70,16 +72,40 @@ RISK_READ = "read"
 RISK_WRITE = "write"
 
 # Reviewer requirement 3: a non-GET is a write unless the operation was explicitly
-# reviewed as read-semantic. This set is cloud-side code, not configuration, and is
-# empty on purpose (WFS inbound-preview is a POST and is treated as a write).
-READ_SEMANTIC_NON_GET_KEYS: frozenset[str] = frozenset()
+# reviewed as read-semantic. This set is cloud-side code, not configuration (owner
+# authorization 2026-11-24, first and second batch): POST queries that page or filter
+# read-only data, plus creating an on-request report (it creates a report request on
+# Walmart's side and changes no seller data). Every key here has a contract whose body
+# schema pins the allowed keys. WFS inbound-preview is a POST and stays a write.
+READ_SEMANTIC_NON_GET_KEYS: frozenset[str] = frozenset(
+    {
+        # growth
+        "review_accelerator_items",
+        "review_accelerator_categories",
+        "assortment_recommendations",
+        "assortment_categorization_counts",
+        # reports
+        "report_request_create",
+        # insights
+        "insights_listing_quality_items",
+        # items (setup spec query)
+        "items_spec",
+        # SEM queries
+        "sem_billing_history",
+        "sem_campaigns_performance_summary",
+        "sem_item_level_summary",
+        "sem_item_issues_search",
+        "sem_items_eligibility",
+    }
+)
 
 
 def risk_for(method: str, operation_key: str) -> str:
     """Risk level both sides agree on: method decides, with the reviewed-key exception."""
     if method == "GET":
         return RISK_READ
-    if operation_key in READ_SEMANTIC_NON_GET_KEYS:
+    # The reviewed exception is a POST only: a PUT / PATCH / DELETE with the same key is a write.
+    if method == "POST" and operation_key in READ_SEMANTIC_NON_GET_KEYS:
         return RISK_READ
     return RISK_WRITE
 
@@ -193,6 +219,62 @@ class ContractSigner:
             serialization.Encoding.Raw, serialization.PublicFormat.Raw
         )
         return base64.b64encode(raw).decode("ascii")
+
+    def sign_generic(
+        self,
+        *,
+        store_code: str,
+        function_name: str,
+        method: str,
+        path: str,
+        query: Mapping[str, Any] | None = None,
+        body: Any = None,
+        response_kind: str = "json",
+        ttl_seconds: int = DEFAULT_TTL_SECONDS,
+        issued_at: int | None = None,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Sign an internal v4 request, without a business catalog or approval reference."""
+        from app.integrations.walmart.generic_protocol import (
+            OPERATION,
+            VERSION,
+            prepare_generic,
+            signing_bytes,
+        )
+
+        if not _STORE.fullmatch(store_code):
+            raise ContractError("WALMART_STORE_NOT_AUTHORIZED")
+        if not _FUNCTION.fullmatch(function_name):
+            raise ContractError("WALMART_FUNCTION_INVALID")
+        if type(ttl_seconds) is not int or not 1 <= ttl_seconds <= MAX_TTL_SECONDS:
+            raise ContractError("WALMART_SIGNATURE_TTL_INVALID")
+        request = prepare_generic(method, path, {} if query is None else query, body, response_kind)
+        issued = int(time.time()) if issued_at is None else issued_at
+        rid = uuid4().hex if request_id is None else request_id
+        if type(issued) is not int or not isinstance(rid, str) or not _REQUEST_ID.fullmatch(rid):
+            raise ContractError("WALMART_SIGNATURE_INVALID")
+        event: dict[str, Any] = {
+            "version": VERSION,
+            "operation": OPERATION,
+            "store_code": store_code,
+            "function_name": function_name,
+            "method": request.method,
+            "path": request.path,
+            "query": dict(request.query),
+            "body": request.body,
+            "accept": request.response_kind,
+            "auth": {
+                "kid": self.kid,
+                "request_id": rid,
+                "issued_at": issued,
+                "expires_at": issued + ttl_seconds,
+                "sig": "0" * 88,
+            },
+        }
+        event["auth"]["sig"] = base64.b64encode(self._key.sign(signing_bytes(event))).decode(
+            "ascii"
+        )
+        return event
 
     def sign(
         self,
@@ -428,6 +510,48 @@ class ContractVerifier:
                 raise ContractError("WALMART_VERIFY_KEYS_INVALID") from None
         return cls(keys, **kwargs)
 
+    def verify_generic(self, event: Mapping[str, Any]) -> PreparedRequest:
+        """Authenticate v4 before execution; no read/write or endpoint policy."""
+        from app.integrations.walmart.generic_protocol import (
+            AUTH_FIELDS,
+            prepare_generic,
+            signing_bytes,
+        )
+
+        payload = signing_bytes(event)
+        auth = event["auth"]
+        if not isinstance(auth, Mapping) or set(auth) != AUTH_FIELDS:
+            raise ContractError("WALMART_SIGNATURE_INVALID")
+        kid, request_id = auth["kid"], auth["request_id"]
+        issued_at, expires_at, sig = auth["issued_at"], auth["expires_at"], auth["sig"]
+        if not isinstance(kid, str) or kid not in self._keys:
+            raise ContractError("WALMART_SIGNATURE_KEY_UNKNOWN")
+        if not isinstance(request_id, str) or not _REQUEST_ID.fullmatch(request_id):
+            raise ContractError("WALMART_SIGNATURE_INVALID")
+        if type(issued_at) is not int or type(expires_at) is not int:
+            raise ContractError("WALMART_SIGNATURE_INVALID")
+        if not 1 <= expires_at - issued_at <= MAX_TTL_SECONDS:
+            raise ContractError("WALMART_SIGNATURE_TTL_INVALID")
+        now = self._clock()
+        if now > expires_at or issued_at > now + MAX_FUTURE_SKEW_SECONDS:
+            raise ContractError("WALMART_SIGNATURE_EXPIRED")
+        if event["store_code"] != self._store:
+            raise ContractError("WALMART_STORE_NOT_AUTHORIZED")
+        if event["function_name"] != self._function:
+            raise ContractError("WALMART_FUNCTION_MISMATCH")
+        if not isinstance(sig, str) or len(sig) > 128:
+            raise ContractError("WALMART_SIGNATURE_INVALID")
+        try:
+            self._keys[kid].verify(base64.b64decode(sig, validate=True), payload)
+        except (InvalidSignature, ValueError, binascii.Error):
+            raise ContractError("WALMART_SIGNATURE_INVALID") from None
+        request = prepare_generic(
+            event["method"], event["path"], event["query"], event["body"], event["accept"]
+        )
+        if not self._replay.claim(kid, request_id, expires_at, now):
+            raise ContractError("WALMART_SIGNATURE_REPLAYED")
+        return request
+
     def verify(self, event: Mapping[str, Any]) -> VerifiedCall:
         """Signature, key, freshness, replay, binding, contract shape, hashes and risk."""
         auth = event.get("auth")
@@ -471,7 +595,7 @@ class ContractVerifier:
             raise ContractError("WALMART_EVENT_INVALID")
         if params is None:
             params = {}
-        if not isinstance(params, Mapping) or response_kind not in ("json", "pdf"):
+        if not isinstance(params, Mapping) or response_kind not in ("json", "pdf", "zip"):
             raise ContractError("WALMART_EVENT_INVALID")
         # The cloud decides the risk from the method; the server's declaration must agree.
         risk = risk_for(method, operation.key)
