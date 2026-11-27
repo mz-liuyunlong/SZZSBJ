@@ -181,6 +181,21 @@ describe("purchaseBoardApi mapping", () => {
     expect(row.arrivalDate).toBeNull();
   });
 
+  it("maps each identity's local SKU and sku_mismatch flag", async () => {
+    fetchMock.mockResolvedValue(envelope(
+      { items: [{ ...backendRow, item_id: { ...backendRow.item_id, identities: [
+        { item_id: "19051502014", msku: "M1", gtin: null, fulfillment_type: "1", local_sku: "SKU-Z", sku_mismatch: true },
+        { item_id: "33333333333", msku: "M2", gtin: null, fulfillment_type: "1" },
+      ] } }], total: 1 },
+      { source: "new_system_postgresql", source_objects: ["dws_purchase_board"], freshness_at: null, rule_version: 1, total: 1 },
+    ));
+    const result = await listPurchaseBoard(createInitialPurchaseBoardFilters(), 1, 50);
+    expect(result.rows[0].itemId.identities).toEqual([
+      { itemId: "19051502014", msku: "M1", gtin: null, fulfillmentType: "1", localSku: "SKU-Z", skuMismatch: true, storeId: null },
+      { itemId: "33333333333", msku: "M2", gtin: null, fulfillmentType: "1", localSku: null, skuMismatch: false, storeId: null },
+    ]);
+  });
+
   it("maps the summary cards including per-currency month amounts", async () => {
     fetchMock.mockResolvedValue(envelope({
       awaiting_arrival_orders: 3,

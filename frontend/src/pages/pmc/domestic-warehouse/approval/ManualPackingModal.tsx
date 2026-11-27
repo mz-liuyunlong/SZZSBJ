@@ -3,7 +3,7 @@ import PackingCustomsSelect from "./PackingCustomsSelect";
 import { Alert, Button, Descriptions, Form, Input, InputNumber, Modal, Select, message } from "antd";
 import { useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { approvalErrorText, getManualPackingOptions, listManualPackingSources, submitManualPacking, type ApprovalCandidate, type ManualPackingPayload } from "./packingApprovalApi";
+import { approvalErrorText, getManualPackingOptions, listingChoiceLabel, listingSkuMismatchText, listManualPackingSources, submitManualPacking, type ApprovalCandidate, type ManualPackingPayload } from "./packingApprovalApi";
 
 interface Values { source: string; target: string; qty: number; customs: "default" | "declare" | "skip"; reason: string }
 interface Props { open: boolean; scope: string; onCancel: () => void; onSubmitted: () => void }
@@ -34,7 +34,7 @@ export default function ManualPackingModal({ open, scope, onCancel, onSubmitted 
   const error = sources.error ?? options.error;
   return <Modal title="手工添加打包单" open={open} destroyOnHidden okText="提交审批" cancelText="取消" width={680} confirmLoading={mutation.isPending} getContainer={() => document.body}
     onCancel={() => { if (!mutation.isPending) onCancel(); }} closable={!mutation.isPending} cancelButtonProps={{ disabled: mutation.isPending }}
-    okButtonProps={{ disabled: !basis || !target || options.isFetching || !!error }} onOk={() => { void submit().catch(() => undefined); }}>
+    okButtonProps={{ disabled: !basis || !target || !!target.sku_mismatch || options.isFetching || !!error }} onOk={() => { void submit().catch(() => undefined); }}>
     {context}
     {error && <Alert type="error" message={approvalErrorText(error)} action={<Button onClick={() => { void sources.refetch(); if (source) void options.refetch(); }}>重试</Button>} />}
     <Form form={form} layout="vertical" initialValues={{ customs: "default" }}>
@@ -46,9 +46,10 @@ export default function ManualPackingModal({ open, scope, onCancel, onSubmitted 
       {basis && <Descriptions size="small" column={2} items={[{ key: "sku", label: "SKU（固定）", children: basis.sku }, { key: "stock", label: "可用数量", children: basis.available_quantity ?? "未知" }]} />}
       <Form.Item name="target" label="目标店铺 / ItemID" rules={[{ required: true, message: "请选择同SKU的有效商品" }]}>
         <Select disabled={!basis} loading={options.isFetching} showSearch optionFilterProp="label" placeholder="先选入库单，再选商品"
-          options={choices.map((r) => ({ value: choiceKey(r), label: `${r.store_name ?? r.store_id} / ${r.item_id}${r.cross_store ? "（跨店铺）" : ""}` }))} />
+          options={choices.map((r) => ({ value: choiceKey(r), label: listingChoiceLabel(r), disabled: !!r.sku_mismatch }))} />
       </Form.Item>
       <Descriptions size="small" column={2} items={[{ key: "gtin", label: "GTIN", children: target?.gtin ?? "—" }, { key: "msku", label: "MSKU", children: target?.msku ?? "—" }]} />
+      {target?.sku_mismatch && <Alert type="error" showIcon message={listingSkuMismatchText(target, basis?.sku)} />}
       {target?.cross_store && <Alert type="warning" message="目标店铺与来源店铺不同。以所选入库单为分配依据，保留两者快照，不改写领星库存归属。" />}
       <Form.Item name="qty" label="备货数量" rules={[{ required: true, message: "请填写备货数量" }, { type: "integer", min: 1, max: Math.min(basis?.available_quantity ?? 0, 1000000), message: "填写可用范围内的正整数" }]}><InputNumber style={{ width: 190 }} min={1} precision={0} max={basis?.available_quantity ?? 0} /></Form.Item>
       <Form.Item name="customs" label="是否报关"><PackingCustomsSelect row={basis} /></Form.Item>

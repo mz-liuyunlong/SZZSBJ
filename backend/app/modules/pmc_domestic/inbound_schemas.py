@@ -78,6 +78,8 @@ class ItemIdentity(BaseModel):
     model_config = ConfigDict(extra="ignore")
     item_id: str
     gtin: str | None = None
+    # The listing's local SKU is present and differs from this row's SKU (rule 1 note).
+    sku_mismatch: bool = False
 
 
 class ProductOwner(BaseModel):
