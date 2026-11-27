@@ -214,7 +214,7 @@ export interface PurchaseReadMeta {
   freshnessAt: string | null;
   ruleVersion: number | null;
   total: number | null;
-  /** 负责人里不显示的名字（8088 同款，如「小罗」），由后端配置下发。 */
+  /** 负责人里不显示的名字（8088 同款，如领星 API 操作人账号），由后端配置下发。 */
   hiddenOwnerNames: string[];
 }
 

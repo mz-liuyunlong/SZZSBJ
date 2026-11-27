@@ -55,9 +55,10 @@ FOUR_PLACES = Decimal("0.0001")
 DEFAULT_S2_PENDING_DAYS = 7
 
 
-# 8088 采购看板把「小罗」（领星 API 操作人账号）从负责人里隐藏（Rocky 2026-11-02 定：照搬 8088）。
-# 名单可配置：环境变量 PMC_PURCHASE_HIDDEN_OWNER_NAMES，逗号分隔；未设置时默认「小罗」。
-DEFAULT_HIDDEN_OWNER_NAMES: tuple[str, ...] = ("小罗",)
+# 8088 采购看板把领星 API 操作人账号从负责人里隐藏（Rocky 2026-11-02 定：照搬 8088）。
+# 名单可配置：环境变量 PMC_PURCHASE_HIDDEN_OWNER_NAMES，逗号分隔；未设置或为空时不隐藏。
+# 生产名单只写在服务器 app.env，不进仓库。
+DEFAULT_HIDDEN_OWNER_NAMES: tuple[str, ...] = ()
 
 
 def hidden_owner_names() -> tuple[str, ...]:

@@ -50,7 +50,7 @@ def seeded(session: Session) -> Session:  # noqa: F811
         status=2,
         create_date=TODAY - timedelta(days=2),
         sku="SKU-D",
-        remark="ITEMID:20540519308 | 草稿:CG261102-087",
+        remark="ITEMID:20540519308 | 草稿:CG990102-087",
     )
     _plan(
         session,
@@ -257,7 +257,7 @@ def test_pending_plans_drill_down(seeded: Session) -> None:
     assert by_sn["P4"].overdue_days == 0
     assert by_sn["P5"].overdue_days == 0 and by_sn["P5"].store.attributed is False
     assert by_sn["P3"].store.name == "Store A"
-    assert by_sn["P4"].draft_no == "CG261102-087"  # 8088: pending drill-down shows the draft
+    assert by_sn["P4"].draft_no == "CG990102-087"  # 8088: pending drill-down shows the draft
 
     data, total, _ = svc.pending_plans(PendingPlanQuery(overdue_only=True), SCOPE)
     assert [i.plan_sn for i in data.items] == ["P3"]
@@ -270,13 +270,17 @@ def test_pending_plans_drill_down(seeded: Session) -> None:
 def test_hidden_owner_names_default_and_env(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.modules.pmc_purchase.service import _owner_ref, hidden_owner_names
 
+    # Unset: nothing is hidden (the production list lives only in the server app.env).
     monkeypatch.delenv("PMC_PURCHASE_HIDDEN_OWNER_NAMES", raising=False)
-    assert hidden_owner_names() == ("小罗",)
-    assert _owner_ref("10885607", "小罗").name is None  # 8088 hides the API operator account
-    assert _owner_ref("10885607", "小罗").uid is None
-    assert _owner_ref("u-1", "田心怡").name == "田心怡"
-    monkeypatch.setenv("PMC_PURCHASE_HIDDEN_OWNER_NAMES", "小罗, 测试账号 ,")
-    assert hidden_owner_names() == ("小罗", "测试账号")
+    assert hidden_owner_names() == ()
+    assert _owner_ref("u-api", "API账号").name == "API账号"
+    # Configured: listed names are hidden (8088 hides the API operator account), others kept.
+    monkeypatch.setenv("PMC_PURCHASE_HIDDEN_OWNER_NAMES", "API账号, 测试账号 ,")
+    assert hidden_owner_names() == ("API账号", "测试账号")
+    assert _owner_ref("u-api", "API账号").name is None
+    assert _owner_ref("u-api", "API账号").uid is None
+    assert _owner_ref("u-1", "负责人甲").name == "负责人甲"
+    # Empty: nothing hidden.
     monkeypatch.setenv("PMC_PURCHASE_HIDDEN_OWNER_NAMES", "")
     assert hidden_owner_names() == ()
-    assert _owner_ref("10885607", "小罗").name == "小罗"
+    assert _owner_ref("u-api", "API账号").name == "API账号"

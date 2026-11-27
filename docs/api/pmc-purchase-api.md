@@ -25,8 +25,9 @@ All responses use:
 where `freshness_at` is the newest `calculated_at` among the returned DWS rows and
 `rule_version` the `rule_purchase_thresholds` version those rows were calculated with.
 `hidden_owner_names` lists owner names the page must not show or offer as a filter option
-(8088 parity: the Lingxing API operator account 「小罗」). Configured by the
-`PMC_PURCHASE_HIDDEN_OWNER_NAMES` environment variable (comma separated; unset = `小罗`, empty = none);
+(8088 parity: the Lingxing API operator account). Configured by the
+`PMC_PURCHASE_HIDDEN_OWNER_NAMES` environment variable (comma separated; unset or empty = none;
+the production list lives only in the server app.env, not in the repository);
 rows whose owner name is on the list come back with `owner = { uid: null, name: null }`.
 Filtering by `owner_uid[]` still matches on the stored owner, so when a hidden owner's uid is
 used as a filter those rows are still returned, only with the owner shown empty

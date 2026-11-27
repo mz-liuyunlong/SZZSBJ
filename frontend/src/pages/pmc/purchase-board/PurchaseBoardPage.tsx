@@ -117,7 +117,7 @@ function PurchaseBoardPage({ page, preferenceScope = "anonymous" }: PurchaseBoar
   const summaryQuery = usePurchaseBoardSummaryQuery(filters);
   const ownersQuery = usePurchaseBoardOwnerOptionsQuery();
   const hiddenOwnerNames = summaryQuery.data?.meta.hiddenOwnerNames;
-  // 8088 同款：名单里的负责人（如 API 操作人「小罗」）不进负责人筛选项。
+  // 8088 同款：名单里的负责人（如领星 API 操作人账号）不进负责人筛选项。
   const visibleOwners = useMemo(
     () => (ownersQuery.data ?? []).filter((owner) => !(hiddenOwnerNames ?? []).includes(owner.name.trim())),
     [hiddenOwnerNames, ownersQuery.data],
