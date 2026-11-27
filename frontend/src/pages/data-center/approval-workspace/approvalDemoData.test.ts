@@ -2,9 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import type { ApprovalFilters } from "./approvalTypes";
 
 vi.mock("./approvalApi", () => ({
+  fetchNewProductPurchaseApprovals: vi.fn(async (filters: ApprovalFilters) => ({
+    data: { items: [] },
+    meta: {page:filters.page,page_size:filters.page_size,total:0},
+  })),
   fetchApprovals: vi.fn(async (filters: ApprovalFilters) => ({
     data: {
-      items: [{
+      items: filters.approval_type === "purchase_exception" ? [] : [{
         id: "REAL-WFS-001",
         approval_type: "wfs_case_abandon",
         status: "submitted",
@@ -13,8 +17,15 @@ vi.mock("./approvalApi", () => ({
     meta: {
       page: filters.page,
       page_size: filters.page_size,
-      total: 1,
+      total: filters.approval_type === "purchase_exception" ? 0 : 1,
     },
+  })),
+}));
+
+vi.mock("@/pages/products/clearance/clearanceApi", () => ({
+  fetchClearanceApprovals: vi.fn(async (filters: ApprovalFilters) => ({
+    data: { items: [] },
+    meta: { page: filters.page, page_size: filters.page_size, total: 0 },
   })),
 }));
 
@@ -44,12 +55,14 @@ describe("approval workbench demo isolation", () => {
   it("marks demo records as non-reviewable", () => {
     const rows = getFilteredDemoItems({
       ...filters,
-      approval_type: "clearance_request",
+      approval_type: "price_adjustment",
     });
 
     expect(rows).toHaveLength(1);
     expect(isDemoApproval(rows[0])).toBe(true);
     expect(rows[0].can_review).toBe(false);
+    // Clearance records must come from its real API, never from demo seeds.
+    expect(getFilteredDemoItems({...filters, approval_type:"clearance_request"})).toHaveLength(0);
   });
 
   it("never queries the backend for demo-only business", async () => {
@@ -81,7 +94,7 @@ describe("approval workbench demo isolation", () => {
   it("combines real WFS and demo rows only in All", async () => {
     const result = await fetchWorkbenchList(filters);
 
-    expect(result.meta.total).toBe(5);
+    expect(result.meta.total).toBe(3); // real WFS + listing/price demos; purchase demo is no longer active
     expect(result.data.items[0].id).toBe("REAL-WFS-001");
     expect(result.data.items.slice(1).every(isDemoApproval)).toBe(true);
   });

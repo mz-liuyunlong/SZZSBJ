@@ -296,7 +296,7 @@ def assign_owner_mapping(
     user_exists = bool(
         session.scalar(
             text("""
-        select exists(select 1 from app_users where id=:target and is_active=true)
+        select exists(select 1 from app_users where id=:target and is_active=1)
     """),
             params,
         )

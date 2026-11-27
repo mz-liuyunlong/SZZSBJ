@@ -18,7 +18,7 @@
 | 旧页面 | 不适用；本接口无页面。 |
 | 旧 API | 当前监控端曾读取旧商品来源接口；新接口不复用旧接口或旧数据库。 |
 | 旧接口文件位置 | 不读取、不修改 `old-system/**`；仅以监控端当前 client contract 作为消费者证据。 |
-| 读取表 | `mart_listing_management_current`，现有 L9 Listing 当前态读模型。 |
+| 读取表 | `mart_listing_management_current`，现有 L9 Listing 当前态读模型；负责人为空时只读当前 SKU 身份与产品负责人 DWD。 |
 | 表写入方 | 现有 DATA-PAGES Listing MART refresh；本接口不写表。 |
 | cron / 脚本 / 外部 API | MART 由既有同步更新；HTTP 请求期间不调用 Lingxing/Walmart/Decodo，不触发 Celery。 |
 | 人工写库入口 | 无；资格字段 V1 是接口派生常量，不落库。 |
@@ -44,7 +44,7 @@
 | `store_name` | 同上 | 同名 | 原样可空 | 描述字段 |
 | `sku` | 同上 | `local_sku` | 原样可空 | 不从 MSKU/ItemID 推断 |
 | `msku` | 同上 | 同名 | 原样可空 | 不从 SKU 推断 |
-| `owner` | 同上 | `owner_ref` | 原样可空 | 仅批准的来源描述 |
+| `owner` | Listing MART；当前 SKU 身份与产品负责人 DWD | `owner_ref`；`owner_name`/`owner_uid` | Listing 值优先；为空时按同账号+SKU取唯一负责人，歧义保持空 | 不猜测负责人，不扩大监控资格 |
 | `product_name` | 同上 | `local_name` | 原样可空 | 不以页面 title 覆盖本地品名 |
 | `product_category` | 同上 | `category` | 原样可空 | 商品来源类目，不等于页面抓取类目 |
 | `wfs_inventory` | 同上 | `wfs_available_quantity` | Decimal 字符串或 `null` | 不把未知值伪造为 0 |

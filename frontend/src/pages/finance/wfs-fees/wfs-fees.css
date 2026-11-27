@@ -1,0 +1,9 @@
+/* 财务 · WFS 费用明细 */
+.fin-wfs__sub { font-size: 11px; color: var(--ant-color-text-quaternary, #bfbfbf) !important; }
+.fin-wfs__bi { line-height: 1.3; }
+.fin-wfs__checks { margin-bottom: 12px; }
+.fin-wfs__checks .ant-alert-description { margin-top: 8px; }
+.fin-wfs__help-list { margin: 0; padding-left: 18px; }
+.fin-wfs__help-list li { margin: 4px 0; }
+/* 统计卡片 4 张一行（公共卡片默认 6 列） */
+.fin-wfs__cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }

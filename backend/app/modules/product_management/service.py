@@ -177,6 +177,21 @@ class ProductManagementService:
             )
             for row in rows
         ]
+        from app.modules.new_products.sku_ad_foundation_runtime import read_dates
+
+        development_dates = read_dates(
+            self.session, [(row[0].source_account_ref, row[0].id) for row in rows]
+        )
+        items = [
+            item.model_copy(
+                update={
+                    "development_date": development_dates.get(
+                        (row[0].source_account_ref, row[0].id)
+                    )
+                }
+            )
+            for row, item in zip(rows, items, strict=True)
+        ]
         observed_at = [
             row[2].source_observed_at if row[2] is not None else row[0].last_seen_at for row in rows
         ]
@@ -271,7 +286,13 @@ class ProductManagementService:
         )
         sku_rule = self._sku_pricing_rule(effective_rule)
         calculation = self._sku_pricing_calculation(current, profile, len(images), sku_rule)
+        from app.modules.new_products.sku_ad_foundation_runtime import read_dates
+
+        development_date = read_dates(
+            self.session, [(identity.source_account_ref, identity.id)]
+        ).get((identity.source_account_ref, identity.id))
         return ProductManagementDetailData(
+            development_date=development_date,
             sku_id=identity.id,
             core=(
                 ProductCoreRead(
@@ -1069,6 +1090,8 @@ class ProductManagementService:
             manual_grade if manual_grade in {"A", "B", "C", "exception"} else "exception"
         )
         return ProductManagementListItem(
+            # SZZSBJ_NP_PURCHASE_TABLE_IDENTITY_AMOUNT_V5
+            source_account_ref=identity.source_account_ref,
             sku_id=identity.id,
             sku=(product.sku if product is not None else identity.lingxing_sku_code),
             product_name=(

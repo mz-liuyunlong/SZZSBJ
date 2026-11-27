@@ -1,0 +1,77 @@
+/* SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1: confirmation only, no drawer style overrides */
+.np-purchase-approve-confirm .ant-modal-content {
+  padding: 0 24px 14px;
+  border-radius: 18px;
+  overflow: hidden;
+}
+.np-purchase-approve-confirm .ant-modal-header {
+  margin: 0 -24px 20px;
+  padding: 22px 26px;
+  background: linear-gradient(110deg,#f4f7ff,#eaf0ff);
+  border-bottom: 1px solid #dae4fa;
+}
+.np-purchase-approve-confirm__title {
+  display: inline-flex; align-items: center; gap: 15px;
+  color:#081d43; font-size: 24px; font-weight: 750;
+}
+.np-purchase-approve-confirm__title .anticon {color:#0758e9; font-size:30px;}
+.np-purchase-approve-confirm .ant-alert {
+  padding: 10px 16px; border:0; border-radius:12px;
+  background:#eaf1ff;
+}
+.np-purchase-approve-confirm .ant-alert-message {font-size:16px; font-weight:600; color:#183862;}
+.np-purchase-approve-confirm__section {font-size:19px; font-weight:700; color:#0b1d3b; margin:20px 0 16px; padding-left: 20px; position:relative;}
+.np-purchase-approve-confirm__section:before {content:""; position:absolute; inset:1px auto 1px 0; width:5px; border-radius:4px; background:#0758e9;}
+.np-purchase-approve-confirm .ant-form-item {margin-bottom:18px;}
+.np-purchase-approve-confirm .ant-form-item-label>label {font-size:16px; font-weight:600; color:#0f2348;}
+.np-purchase-approve-confirm .ant-select-selector,
+.np-purchase-approve-confirm .ant-input-number {min-height:43px; border-radius:9px; border-color:#bdcdf3; font-size:16px;}
+.np-purchase-approve-confirm .ant-select-selection-item {font-size:16px; font-weight:550;}
+.np-purchase-approve-confirm .ant-input-number {width:175px;}
+.np-purchase-approve-confirm .ant-input-number-input {height:41px; font-size:17px; font-weight:650;}
+.np-purchase-approve-confirm__quantity-line {display:flex; align-items:center; flex-wrap:wrap; gap:14px;}
+.np-purchase-approve-confirm__suggestion {display:inline-flex; align-items:center; gap:7px; padding:8px 11px; border-radius:30px; background:#fff1e2; color:#b05d14; font-size:14px; font-weight:650;}
+.np-purchase-approve-confirm__changed {color:#566c8e; font-size:14px; margin:2px 0 8px 25%;}
+.np-purchase-approve-confirm__loading {margin:16px 0; color:#667997; display:flex; align-items:center; gap:9px;}
+.np-purchase-approve-confirm .ant-modal-footer {border-top:1px solid #e5eaf4; margin-top: 17px; padding-top: 17px; display:flex; justify-content:flex-end; gap:12px;}
+.np-purchase-approve-confirm .ant-modal-footer .ant-btn {height: 42px; min-width: 132px; border-radius:10px; font-size:17px; font-weight:700;}
+.np-purchase-approve-confirm .ant-modal-footer .ant-btn-primary {background:#0758e9;
+  min-width: 168px;
+}
+@media(max-width:620px){
+ .np-purchase-approve-confirm .ant-modal-content {padding:0 16px 18px;}
+ .np-purchase-approve-confirm .ant-modal-header {margin:0 -16px 18px; padding:20px;}
+ .np-purchase-approve-confirm__title {font-size:20px;}
+ .np-purchase-approve-confirm .ant-form-item {display:block;}
+ .np-purchase-approve-confirm .ant-form-item-label, .np-purchase-approve-confirm .ant-form-item-control{max-width:100%;}
+ .np-purchase-approve-confirm__changed {margin-left:0;}
+}
+
+/* SZZSBJ_PURCHASE_CONFIRM_VISUAL_V3 */
+.np-purchase-approve-confirm
+.ant-form-item-label > label.ant-form-item-required {
+  display: inline-flex;
+  align-items: center;
+}
+
+.np-purchase-approve-confirm
+.ant-form-item-label > label.ant-form-item-required::before {
+  order: 1;
+  margin-inline-start: 6px;
+  margin-inline-end: 0;
+}
+
+/* SZZSBJ_PURCHASE_CONFIRM_REFERENCE_PARITY_V4 */
+.np-purchase-approve-confirm .ant-modal-body {
+  padding-top: 14px;
+}
+.np-purchase-approve-confirm .ant-modal-close,
+.np-purchase-approve-confirm .ant-modal-close:hover {
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: #243b65;
+}
+.np-purchase-approve-confirm .ant-modal-footer {
+  padding-right: 0;
+}

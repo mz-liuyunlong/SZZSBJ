@@ -161,10 +161,11 @@ export const navigation: NavigationGroup[] = [
       page('products', 'listing_management', 'Listing管理', '/products/listing-management'),
       page('products', 'clearance_center', '清货中心', '/products/clearance-center', {
         status: 'testing', readOnly: true, migrationMode: 'native',
-        viewPermissionKey: 'page:products:product-management:view',
+        viewPermissionKey: 'page:products:clearance-center:view',
       }),
       page('products', 'claim_center', '认领中心', '/products/claim-center'),
-      page('products', 'new_product_analysis', '新品表现', '/products/new-product-analysis'),
+      page('products', 'new_product_analysis', '新品表现', '/products/new-product-analysis', {status:'testing',migrationMode:'native',source:'pending'}),
+      page('products', 'launch_tracking', '打品跟踪', '/products/launch-tracking', {status:'testing',migrationMode:'native',source:'pending',viewPermissionKey:'page:products:launch-tracking:view'}),
       page('products', 'lifecycle', '产品生命周期', '/products/lifecycle'),
       page('products', 'grade', '产品等级', '/products/grade'),
     ],
@@ -232,14 +233,47 @@ export const navigation: NavigationGroup[] = [
     key: 'finance',
     title: '财务',
     icon: createElement(DollarOutlined, { 'aria-hidden': true }),
+    sidebarSections: [{ key: 'finance-cash', title: '资金流水' }, { key: 'finance-settings', title: '财务设置' }],
     children: [
-      page('finance', 'profit_center', '利润中心', '/finance/profit-center'),
-      page('finance', 'sku_cash_profit', '单品现金利润', '/finance/sku-cash-profit'),
-      page('finance', 'walmart_settlement', '沃尔玛返还明细', '/finance/walmart-settlement'),
-      page('finance', 'settlement_reconciliation', '结算对账', '/finance/settlement-reconciliation'),
-      page('finance', 'ad_cost', '广告费用', '/finance/ad-cost'),
-      page('finance', 'ad_bill', '广告账单', '/finance/ad-bill'),
-      page('finance', 'performance_report', '业绩报表', '/finance/performance-report'),
+      // 2026-11-02 财务菜单按业务（Rocky）确认的 Demo 10 个标签重排；新增页面的导航与权限点待负责人批准（PR-D），本地预览先行。
+      page('finance', 'profit_center', '经营总览', '/finance/profit-center'),
+      page('finance', 'sku_cash_profit', '现金利润', '/finance/sku-cash-profit'),
+      page('finance', 'settlement_profit', '结算利润', '/finance/settlement-profit'),
+      // 2026-11-10 Rocky：回款对账上线（沃尔玛账单同步 + 到账配对 + 初审 / 终审），读写 /api/finance/payout-recon。
+      page('finance', 'settlement_reconciliation', '回款对账', '/finance/settlement-reconciliation', {
+        status: 'building', readOnly: false, viewPermissionKey: 'page:finance:settlement-reconciliation:view',
+      }),
+      // 2026-11-12 Rocky：WFS 费用明细（结算服务费 + 仓储费 + 入库运费，一张表一列费用类型），读写 /api/finance/wfs-fees。
+      page('finance', 'wfs_fees', 'WFS 费用明细', '/finance/wfs-fees', {
+        status: 'building', readOnly: false, viewPermissionKey: 'page:finance:wfs-fees:view',
+      }),
+      page('finance', 'performance_report', '财务报表', '/finance/performance-report'),
+      page('finance', 'balance_sheet', '资产负债表', '/finance/balance-sheet'),
+      page('finance', 'cash_accounts', '账户总览（按月）', '/finance/cash/accounts', {
+        sidebarSection: 'finance-cash', status: 'building', readOnly: true, viewPermissionKey: 'page:finance:cash-flow:view',
+      }),
+      // 2026-11-04 Rocky：「日记账（初审·终审）」改名「日记账」；资金异常并入日记账显示，去掉「异常」页。
+      page('finance', 'cash_journal', '日记账', '/finance/cash/journal', {
+        sidebarSection: 'finance-cash', status: 'building', readOnly: false, viewPermissionKey: 'page:finance:cash-flow:view',
+      }),
+      // 2026-11-05 Rocky：新增账户在页面上做（含现金这种手工录入的账户），不用再改配置文件。
+      page('finance', 'cash_account_admin', '账户管理', '/finance/cash/account-admin', {
+        sidebarSection: 'finance-cash', status: 'building', readOnly: false, viewPermissionKey: 'page:finance:cash-flow:view',
+      }),
+      page('finance', 'cash_stock', '备货资金', '/finance/cash/stock', {
+        sidebarSection: 'finance-cash', status: 'building', readOnly: true, viewPermissionKey: 'page:finance:cash-flow:view',
+      }),
+      // 2026-11-05 Rocky：这次上线新增汇率页面，只读，读领星月汇率。接口只给超管，所以不沿用资金流水的页面权限：
+      // 用自己的权限点 page:finance:fx-rates:view，这个权限点不分配给任何角色，只有超管（*）能看到入口和打开页面。
+      page('finance', 'fx_rates', '资金 汇率', '/finance/fund-settings/fx-rates', {
+        sidebarSection: 'finance-settings', status: 'building', readOnly: true, viewPermissionKey: 'page:finance:fx-rates:view',
+      }),
+      page('finance', 'cost_exception', '成本异常处理', '/finance/cost-exception'),
+      page('finance', 'settings', '口径与设置', '/finance/settings'),
+      page('finance', 'data_import', '数据导入', '/finance/data-import', {
+        status: 'building', readOnly: true,
+        tabs: [{ key: 'tasks', title: '导入任务' }, { key: 'templates', title: '导入模板' }, { key: 'history', title: '导入历史' }, { key: 'failures', title: '失败记录' }],
+      }),
     ],
   },
   {

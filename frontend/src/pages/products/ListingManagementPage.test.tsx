@@ -1,3 +1,4 @@
+import { listingSortFields, mergeListingSorts, nextListingColumnSort } from "@/pages/products/listingManagementSort";
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -10,14 +11,13 @@ import {
   fixedListingColumnKeys,
   listingColumnFields,
   listingManagementMockData,
-  type ListingManagementRow,
 } from "@/pages/products/listingManagementData";
 
 interface CapturedTableProps {
   columns: Array<{
     key?: string;
     fixed?: "left" | "right" | boolean;
-    sorter?: (left: ListingManagementRow, right: ListingManagementRow) => number;
+    sorter?: boolean;
   }>;
   pagination: { pageSizeOptions: string[] };
   scroll?: { x?: number; y?: number | string };
@@ -94,12 +94,15 @@ describe("ListingManagementPage acceptance contract", () => {
     expect(listingManagementMockData).toHaveLength(100);
     expect(new Set(listingManagementMockData.map((row) => row.id)).size).toBe(100);
     expect(listingColumnFields.map((field) => field.title)).toEqual([
-      "图片", "商品ID/品名", "SKU/MSKU", "店铺", "负责人", "标题", "产品类型",
-      "划线价", "在售价", "产品状态", "生命周期", "发货方式", "GPT分析", "上架时间", "类目", "WFS可售库存",
-      "在途库存", "近90天销量", "近30天广告费", "停用原因", "Listing状态", "购物车状态",
-      "Walmart卖家", "是否被跟卖", "检查时间", "评分", "评论数", "品牌", "标签", "GTIN",
-      "产品等级",
-      "归档原因",
+      "图片", "商品ID/品名", "SKU/MSKU", "店铺/负责人",
+      "标题", "图片数量", "划线价", "有无划线价",
+      "在售价", "类目", "WFS可售库存", "在途库存",
+      "上架时间", "近30天销量", "近30天广告费", "生命周期",
+      "listing等级", "停用原因", "Listing状态", "广告状态", "购物车状态",
+      "品牌", "Walmart卖家", "卖家数量", "卖家列表",
+      "是否被跟卖", "监控日期", "评分", "评论数",
+      "五点描述", "标签", "产品标签", "发货方式",
+      "GTIN", "GPT分析", "归档原因"
     ]);
     expect(fixedListingColumnKeys).toEqual(["image", "productIdName", "skuMsku"]);
   });
@@ -112,10 +115,10 @@ describe("ListingManagementPage acceptance contract", () => {
           total: listingManagementMockData.length,
           online: listingManagementMockData.filter((row) => row.listingStatus === "在线").length,
           buyboxException: listingManagementMockData.filter((row) => row.buyBoxStatus === "未拥有").length,
-          ratingWarning: listingManagementMockData.filter((row) => row.rating < 4).length,
+          ratingWarning: listingManagementMockData.filter((row) => row.rating != null && row.rating < 4).length,
           resoldWarning: listingManagementMockData.filter((row) => row.resold === "是").length,
           strikePriceException: listingManagementMockData.filter((row) => (
-            row.listPrice > 0 && row.listPrice <= row.salePrice
+            row.listPrice != null && row.salePrice != null && row.listPrice > 0 && row.listPrice <= row.salePrice
           )).length,
         }}
         onCardClick={onCardClick}
@@ -126,7 +129,7 @@ describe("ListingManagementPage acceptance contract", () => {
     expect(onCardClick).toHaveBeenCalledWith("online");
   });
 
-  it("uses Ant table sorters without changing pagination options", () => {
+  it("exposes all 20 native server sorters without local comparators", () => {
     const rows = listingManagementMockData.slice(0, 2);
     render(
       <ListingManagementTable
@@ -147,22 +150,18 @@ describe("ListingManagementPage acceptance contract", () => {
       />,
     );
 
-    const sorterFor = (key: string) => capturedTableProps?.columns.find((column) => column.key === key)?.sorter;
-    const skuSorter = sorterFor("skuMsku");
-    const priceSorter = sorterFor("salePrice");
-    const dateSorter = sorterFor("checkedAt");
-    expect(skuSorter).toBeTypeOf("function");
-    expect(priceSorter).toBeTypeOf("function");
-    expect(dateSorter).toBeTypeOf("function");
-    expect(skuSorter?.(rows[0], rows[1])).toBeLessThan(0);
-    expect(priceSorter?.(rows[0], rows[1])).toBeLessThan(0);
-    expect(dateSorter?.(rows[0], rows[1])).toBeLessThan(0);
+    const columns = capturedTableProps?.columns ?? [];
+    expect(columns.filter(column => column.sorter).map(column => column.key).sort())
+      .toEqual([...listingSortFields].sort());
+    for (const column of columns.filter(column => column.sorter)) {
+      expect(column.sorter).toBe(true);
+    }
 
     expect(Array.from(screen.getByLabelText("每页条数").querySelectorAll("option"))
       .map((option) => option.textContent)).toEqual(["50", "100", "200", "500", "1000"]);
   });
 
-  it("keeps pinned columns, sorting, selection and actions at 1000 rows with virtual scroll", () => {
+  it.each([50, 100, 200, 500, 1000])("keeps pinned columns, sorting, selection and actions at %i rows with virtual scroll", (size) => {
     const rows = listingManagementMockData.slice(0, 2);
     render(
       <ListingManagementTable
@@ -171,7 +170,7 @@ describe("ListingManagementPage acceptance contract", () => {
         appliedColumnKeys={listingColumnFields.map((field) => field.key)}
         columnWidths={{}}
         currentPage={1}
-        pageSize={1000}
+        pageSize={size}
         virtualScrollY={456}
         selectedRowKeys={[]}
         onColumnWidthChange={() => undefined}
@@ -190,9 +189,57 @@ describe("ListingManagementPage acceptance contract", () => {
     expect(capturedTableProps?.rowSelection?.fixed).toBe(true);
     expect(capturedTableProps?.columns.find((col) => col.key === "productIdName")?.fixed).toBe("left");
     expect(capturedTableProps?.columns.find((col) => col.key === "actions")?.fixed).toBe("right");
-    expect(typeof capturedTableProps?.columns.find((col) => col.key === "skuMsku")?.sorter).toBe("function");
+    expect(capturedTableProps?.columns.find((col) => col.key === "skuMsku")?.sorter).toBe(true);
     expect(Array.from(screen.getByLabelText("每页条数").querySelectorAll("option"))
       .map((option) => option.textContent)).toEqual(["50", "100", "200", "500", "1000"]);
   });
 
+});
+
+it("replaces the previous column sort and supports clearing", () => {
+  const first = mergeListingSorts([], {
+    columnKey: "rating", order: "ascend",
+  });
+  const second = mergeListingSorts(first, {
+    columnKey: "sales90Days", order: "descend",
+  });
+  expect(second).toEqual([
+    { key: "sales90Days", direction: "desc" },
+  ]);
+  expect(mergeListingSorts(second, {
+    columnKey: "sales90Days", order: "ascend",
+  })).toEqual([
+    { key: "sales90Days", direction: "asc" },
+  ]);
+  expect(mergeListingSorts(second, {
+    columnKey: "sales90Days", order: null,
+  })).toEqual([]);
+});
+
+it("switches directly between every supported sorting column", () => {
+  for (const first of listingSortFields) {
+    const active = nextListingColumnSort([], first);
+
+    expect(active).toEqual([{ key: first, direction: "asc" }]);
+
+    const descending = nextListingColumnSort(active, first);
+
+    expect(descending).toEqual([{ key: first, direction: "desc" }]);
+    expect(nextListingColumnSort(descending, first)).toEqual([]);
+
+    for (const second of listingSortFields) {
+      if (second === first) continue;
+
+      expect(nextListingColumnSort(active, second)).toEqual([
+        { key: second, direction: "asc" },
+      ]);
+
+      expect(mergeListingSorts(active, [
+        { columnKey: first, order: null },
+        { columnKey: second, order: "ascend" },
+      ])).toEqual([
+        { key: second, direction: "asc" },
+      ]);
+    }
+  }
 });

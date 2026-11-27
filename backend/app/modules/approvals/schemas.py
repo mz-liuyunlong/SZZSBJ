@@ -13,7 +13,7 @@ ApprovalDecision = Literal["approved", "rejected", "info_required"]
 ApprovalStatus = Literal[
     "submitted", "info_required", "approved", "rejected", "withdrawn", "legacy_unverified"
 ]
-ApprovalRisk = Literal["low", "medium", "high"]
+ApprovalRisk = Literal["low", "medium", "high", "unknown"]
 
 
 class StrictSchema(BaseModel):
@@ -31,6 +31,7 @@ class ApprovalQuery(StrictSchema):
 
 
 class ApprovalItem(StrictSchema):
+    purchase_details: dict[str, Any] | None = None
     id: str
     version: int
     approval_type: str
@@ -38,6 +39,7 @@ class ApprovalItem(StrictSchema):
     title: str
     source_account_ref: str
     applicant_id: str | None
+    applicant_name: str | None = None
     status: ApprovalStatus
     risk_level: ApprovalRisk
     amount: str | None
@@ -95,6 +97,14 @@ class ApprovalDecisionWrite(StrictSchema):
     acknowledge_missing_applicant: bool = False
 
 
+class NewProductPurchaseDecisionWrite(StrictSchema):
+    decision: Literal["approved", "rejected"]
+    note: Annotated[str, StringConstraints(strip_whitespace=True, max_length=4000)] = ""
+    expected_version: int = Field(ge=1)
+    purchase_store_id: str | None = Field(default=None, min_length=1, max_length=128)
+    approved_qty: int | None = Field(default=None, ge=1, le=100000)
+
+
 class ApprovalSupplementWrite(StrictSchema):
     note: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=4000)]
     evidence: Annotated[str, StringConstraints(strip_whitespace=True, max_length=4000)] = ""
@@ -120,3 +130,6 @@ class BulkDecisionWrite(StrictSchema):
     approval_ids: list[str] = Field(min_length=1, max_length=20)
     expected_versions: dict[str, int]
     note: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=4000)]
+
+
+# SZZSBJ_PURCHASE_APPROVE_STORE_QTY_V1
