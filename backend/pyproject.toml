@@ -19,6 +19,7 @@ dependencies = [
     "redis>=8.1.0",
     "sqlalchemy>=2.0.52",
     "uvicorn[standard]>=0.52.4",
+    "xlrd>=2.0.1",
 ]
 
 [dependency-groups]

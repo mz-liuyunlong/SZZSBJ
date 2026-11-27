@@ -21,6 +21,7 @@ from sqlalchemy.pool import NullPool
 from app.core.config import Settings, SettingsError, get_test_database_url
 from app.modules.integration_sync import data_pages_real_sync
 from app.modules.integration_sync.data_pages_business_rules import (
+    CANCELLED_VERIFIED_SAMPLE_RULE_VERSION,
     HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
     VERIFIED_SAMPLE_RULE_VERSION,
 )
@@ -1131,7 +1132,7 @@ def test_verified_v3_v5_samples_reject_evidence_changes_without_mart_loss(
             }
         )
         conflicts.append({**provider_row, "amount_currency": "CNY"})
-        conflicts.append({**provider_row, "status": "cancelled"})
+        conflicts.append({**provider_row, "platform_info": [{"cancel_time": "ambiguous"}]})
 
         for changed in conflicts:
             with pytest.raises(
@@ -1204,6 +1205,44 @@ def test_verified_v3_v5_samples_reject_evidence_changes_without_mart_loss(
             ),
             {"account": _ACCOUNT},
         ).one() == (True, VERIFIED_SAMPLE_RULE_VERSION, "item-a")
+
+        # Cancellation is now an explicitly authorized lifecycle transition.
+        # Other evidence conflicts above still preserve the original fact/MART.
+        cancelled = {
+            **provider_row,
+            "platform_info": [{"platform_code": "10008", "cancel_time": "1795639001"}],
+        }
+        assert runner._write_sample_orders([cancelled]) == 1
+        session.commit()
+        assert runner._refresh_daily_sales_mart() == 1
+        session.commit()
+        assert session.execute(
+            text(
+                "select is_valid_sample,is_cancelled,sample_rule_version,cancel_time_raw "
+                "from fact_walmart_sample_order_items where source_account_ref=:account"
+            ),
+            {"account": _ACCOUNT},
+        ).one() == (False, True, CANCELLED_VERIFIED_SAMPLE_RULE_VERSION, "1795639001")
+        assert session.execute(
+            text(
+                "select sample_order_count,sample_qty,sales_qty "
+                "from mart_daily_sales_item_day where source_account_ref=:account"
+            ),
+            {"account": _ACCOUNT},
+        ).one() == (0, 0, 9)
+        assert runner._write_sample_orders([cancelled]) == 1
+        assert runner._write_sample_orders([]) == 0
+        session.commit()
+        assert (
+            session.execute(
+                text(
+                    "select count(*) from fact_walmart_sample_order_items "
+                    "where source_account_ref=:account and sample_rule_version=:rule"
+                ),
+                {"account": _ACCOUNT, "rule": CANCELLED_VERIFIED_SAMPLE_RULE_VERSION},
+            ).scalar_one()
+            == 1
+        )
 
 
 def test_isolated_database_guard_rejects_application_database() -> None:

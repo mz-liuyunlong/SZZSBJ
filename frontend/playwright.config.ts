@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 export default defineConfig({
+  workers: process.env.CI ? 1 : undefined,
   outputDir: join(tmpdir(), "szzsbj-playwright-test-results"),
   testDir: "./e2e",
   use: {

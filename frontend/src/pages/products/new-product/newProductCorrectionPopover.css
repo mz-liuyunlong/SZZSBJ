@@ -1,0 +1,150 @@
+/* PR337_CORRECTION_POPOVER_V8: maximum 230px tall; spinner-free numeric entry. */
+.np-score-correction-popover .ant-popover-inner {
+  box-sizing: border-box;
+  padding: 0;
+  max-height: 230px;
+  border: 1px solid #d8e1ef;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(31, 55, 90, .15);
+}
+.np-score-correction-popover .ant-popover-arrow::before { background: #fff; }
+.np-score-correction-panel {
+  box-sizing: border-box;
+  width: min(368px, calc(100vw - 28px));
+  max-height: 228px;
+  padding: 10px 13px 9px;
+  color: #152039;
+  font-size: 12px;
+  overflow: hidden;
+}
+.np-score-correction-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  min-height: 25px;
+  margin-bottom: 4px;
+}
+.np-score-correction-head > strong {
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #16213d;
+  line-height: 1.25;
+}
+.np-score-correction-current {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eaf2ff;
+  color: #526581;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.np-score-correction-current b {
+  color: #0762e8;
+  font-size: 16px;
+  font-weight: 700;
+  margin-left: 4px;
+}
+.np-score-correction-current em { font-style: normal; color: #7b8ca9; }
+.np-score-correction-field {
+  display: grid;
+  grid-template-columns: 87px minmax(0,1fr);
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.np-score-correction-field > label { font-size: 12px; font-weight: 600; color: #18233b; }
+.np-score-correction-field > label span { color: #f04438; }
+.np-score-correction-field > input,
+.np-score-correction-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #cbd6e7;
+  border-radius: 7px;
+  outline: none;
+  background: #fff;
+  color: #12203b;
+  font-family: inherit;
+}
+.np-score-correction-field > input {
+  height: 31px;
+  padding: 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+/* Keep type=number and existing validation, but hide Chrome/Safari/Firefox spinner arrows. */
+.np-score-correction-popover input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+.np-score-correction-popover input[type="number"]::-webkit-outer-spin-button,
+.np-score-correction-popover input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.np-score-correction-reason { align-items: start; margin-top: 7px; }
+.np-score-correction-reason > label { padding-top: 7px; }
+.np-score-correction-textarea-wrap { position: relative; min-width: 0; }
+.np-score-correction-field textarea {
+  display: block;
+  resize: none;
+  height: 57px;
+  padding: 7px 10px 19px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.np-score-correction-field input:focus,
+.np-score-correction-field textarea:focus {
+  border-color: #317df7;
+  box-shadow: 0 0 0 2px rgba(49,125,247,.1);
+}
+.np-score-correction-count {
+  position: absolute;
+  right: 10px;
+  bottom: 5px;
+  color: #8a97b0;
+  font-size: 11px;
+  line-height: 1.2;
+}
+.np-score-correction-error {
+  margin: 3px 0 0 95px;
+  max-height: 28px;
+  color: #cf3b36;
+  font-size: 11px;
+  line-height: 14px;
+  overflow: hidden;
+}
+.np-score-correction-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid #e8edf5;
+}
+.np-score-correction-footer button {
+  min-width: 72px;
+  height: 29px;
+  padding: 0 12px;
+  border: 1px solid #c7d2e3;
+  border-radius: 7px;
+  background: #fff;
+  color: #233451;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color .1s ease;
+}
+.np-score-correction-footer .np-score-correction-submit { border-color: #0a63f5; background: #0a63f5; color: #fff; }
+.np-score-correction-footer .np-score-correction-submit:hover { background: #004fda; }
+.np-score-correction-footer .np-score-correction-cancel:hover { background: #f2f6fc; }
+@media (max-width: 520px) {
+  .np-score-correction-panel { padding: 9px 11px 8px; }
+  .np-score-correction-head { gap: 5px; }
+  .np-score-correction-head > strong { font-size: 13px; }
+  .np-score-correction-current { padding: 3px 6px; font-size: 10px; }
+  .np-score-correction-current b { font-size: 13px; }
+  .np-score-correction-field { grid-template-columns: 70px minmax(0, 1fr); gap: 6px; }
+  .np-score-correction-error { margin-left: 76px; }
+}

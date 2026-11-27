@@ -97,6 +97,7 @@ const defaultColumnWidths: Record<string, number> = {
   productName: 240,
   ownerName: 120,
   developerName: 120,
+  developmentDate: 120,
   tags: 132,
   sourceTags: 132,
   productGrade: 116,

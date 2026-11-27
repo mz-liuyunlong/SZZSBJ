@@ -725,6 +725,8 @@ class OperationPlanService:
             owner_name=row.get("resolved_owner_name") or row.get("owner_name_snapshot"),
             store_id=row.get("store_id"),
             store_name=row.get("store_name_snapshot"),
+            store_names=list(row.get("resolved_store_names") or []),
+            store_count=len(row.get("resolved_store_names") or []),
             last_sales_amount=last_sales,
             last_gross_profit_amount=last_profit,
             last_gross_profit_rate=_rate(last_profit, last_sales),

@@ -105,6 +105,12 @@ _RULES: tuple[RequestPermissionRule, ...] = (
     ),
     RequestPermissionRule(
         "POST",
+        "/api/listings/walmart/lifecycle/batch-set",
+        "action:products:listing-management:edit-lifecycle",
+        True,
+    ),
+    RequestPermissionRule(
+        "POST",
         "/api/listings/walmart/",
         "action:products:listing-management:archive",
     ),
