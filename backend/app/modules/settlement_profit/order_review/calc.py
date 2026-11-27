@@ -286,6 +286,7 @@ class DbLookups(Lookups):
                     logistics_fee=row.logistics_fee,
                     currency_code=row.currency_code,
                     items=tuple(_outbound_item(item) for item in row.items or [] if item),
+                    order_status=row.order_status,
                 )
                 for row in rows
             ]

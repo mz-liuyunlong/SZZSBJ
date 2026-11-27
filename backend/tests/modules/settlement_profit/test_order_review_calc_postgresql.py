@@ -499,6 +499,7 @@ def test_outbound_lookup_returns_every_outbound_of_the_order(session: Session) -
                 store_id=STORE,
                 outbound_order_no=number,
                 platform_order_no=ORDER,
+                order_status="已出库",
                 logistics_fee=Decimal(freight),
                 currency_code="USD",
                 outbound_at=datetime(2026, 10, at, tzinfo=UTC),
@@ -518,6 +519,7 @@ def test_outbound_lookup_returns_every_outbound_of_the_order(session: Session) -
     )
     orders = lookups.outbound_orders(ORDER)
     assert [o.outbound_order_no for o in orders] == ["WO1", "WO2"]
+    assert {o.order_status for o in orders} == {"已出库"}  # 状态带到计算层（#373 终审）
     assert [(i.msku, i.count, i.apportion_freight) for i in orders[1].items] == [
         (MSKU, Decimal("1"), Decimal("1.00"))
     ]

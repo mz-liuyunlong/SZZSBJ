@@ -113,6 +113,15 @@ class OutboundOrder:
     logistics_fee: Decimal | None
     currency_code: str | None
     items: tuple[OutboundItem, ...] = ()
+    # 出库单状态原值（#370 同步存 status_name，没有时存 status 编码）
+    order_status: str | None = None
+
+
+# 出库单状态（刘云龙 11-27 终审拍板）：已截单 / 已作废不计运费；只有确认已发出的才计；
+# 其余（空、编码、没见过的名称）一律"待核实"，尾程留空不自动算。
+# 枚举值按领星页面上的状态名先列，首次探测拿到真实取值后再在决策文件里确认、补全。
+OUTBOUND_SHIPPED_STATUSES = frozenset({"已出库", "已发货"})
+OUTBOUND_EXCLUDED_STATUSES = frozenset({"已截单", "已作废", "已取消"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -691,14 +700,14 @@ def _seller_last_leg(
     if not segments:
         return
     msku = line.msku or next((s.msku for s in segments if s.msku), None)
-    unit, total, numbers, note = _msku_freight(
+    unit, total, outbounds, note = _msku_freight(
         msku, lookups.outbound_orders(group.order_no), line.report_date, lookups
     )
     scope = f"{ORDER_SCOPE_PREFIX}{group.order_no}"
     for segment in segments:
         segment.scope_ref = scope
         segment.detail["scope_kind"] = "platform_order"
-        segment.detail["outbound_order_nos"] = numbers
+        segment.detail["outbound_order_nos"] = outbounds  # [{no, status, counted}]
         segment.detail["last_leg_prefill_cny"] = _s(unit)  # 单价，录入抽屉的默认值
         segment.detail["last_leg_msku_total_cny"] = _s(total)  # 本 MSKU 在该订单的运费合计
         if note:
@@ -724,21 +733,39 @@ def _freight_cny(
 
 def _msku_freight(
     msku: str | None, outbounds: list[OutboundOrder], report_date: date, lookups: Lookups
-) -> tuple[Decimal | None, Decimal | None, list[str], str | None]:
-    """返回（单价 ¥、合计 ¥、涉及的出库单号、留空原因）。"""
+) -> tuple[Decimal | None, Decimal | None, list[dict[str, Any]], str | None]:
+    """返回（单价 ¥、合计 ¥、含本 MSKU 的出库单 [{no, status, counted}]、留空原因）。
+
+    只看含本 MSKU 的出库单。已截单 / 已作废跳过；状态确认不了 → 整体留空待核实；
+    本 MSKU 任何一行缺分摊运费或件数 → 整体留空，不按剩余件数半算（#373 终审）。
+    """
     if not msku:
         return None, None, [], "msku_missing"
     total = ZERO
     count = ZERO
-    numbers: list[str] = []
+    listed: list[dict[str, Any]] = []
+    blank: str | None = None
     for outbound in outbounds:
-        for item in outbound.items:
-            if _text(item.msku) != msku:
-                continue
-            if outbound.outbound_order_no not in numbers:
-                numbers.append(outbound.outbound_order_no)
+        mine = [item for item in outbound.items if _text(item.msku) == msku]
+        if not mine:
+            continue
+        status = _text(outbound.order_status)
+        counted = status in OUTBOUND_SHIPPED_STATUSES
+        listed.append(
+            {"no": outbound.outbound_order_no, "status": status or None, "counted": counted}
+        )
+        if status in OUTBOUND_EXCLUDED_STATUSES:
+            continue
+        if not counted:
+            blank = blank or "outbound_status_unverified"
+            continue
+        for item in mine:
             if item.apportion_freight is None:
-                return None, None, numbers, "apportion_freight_missing"
+                blank = blank or "apportion_freight_missing"
+                continue
+            if item.count is None or item.count <= 0:
+                blank = blank or "outbound_count_missing"
+                continue
             cny = _freight_cny(
                 item.apportion_freight,
                 item.currency_code or outbound.currency_code,
@@ -746,14 +773,17 @@ def _msku_freight(
                 lookups,
             )
             if cny is None:
-                return None, None, numbers, "freight_currency_unconverted"
+                blank = blank or "freight_currency_unconverted"
+                continue
             total += cny
-            count += item.count or ZERO
-    if not numbers:
-        return None, None, [], "msku_not_in_outbound"
+            count += item.count
+    if blank is not None:
+        # 半算会误导：单价和合计都不给
+        return None, None, listed, blank
     if count <= 0:
-        return None, money(total), numbers, "outbound_count_missing"
-    return money(total / count), money(total), numbers, None
+        # 含本 MSKU 的出库单都已截单 / 作废（或根本没有）
+        return None, None, listed, "msku_not_in_outbound"
+    return money(total / count), money(total), listed, None
 
 
 def _refund_cost(line: ComputedLine, group: OrderGroup, lookups: Lookups) -> None:

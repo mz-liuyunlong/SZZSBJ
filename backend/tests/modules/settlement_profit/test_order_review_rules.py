@@ -176,9 +176,13 @@ def compute(rows: list[BillRow], lookups: DictLookups, cfg: ReviewSettings | Non
 
 
 def outbound(
-    number: str, *items: tuple[str, int | None, str | None], fee: str = "0", currency: str = "CNY"
+    number: str,
+    *items: tuple[str, int | None, str | None],
+    fee: str = "0",
+    currency: str = "CNY",
+    status: str | None = "已出库",
 ) -> OutboundOrder:
-    """合成出库单：items = (MSKU, 件数, 分摊运费)。"""
+    """合成出库单：items = (MSKU, 件数, 分摊运费)；默认状态已出库。"""
     return OutboundOrder(
         number,
         Decimal(fee),
@@ -192,7 +196,12 @@ def outbound(
             )
             for msku, count, freight in items
         ),
+        status,
     )
+
+
+def shipped(number: str) -> dict[str, object]:
+    return {"no": number, "status": "已出库", "counted": True}
 
 
 # --------------------------------------------------------------------------- 翻译表 / 归类
@@ -411,7 +420,7 @@ def test_seller_fulfilled_prefills_last_leg_from_outbound_in_usd() -> None:
     assert line.cost_total_cny == Decimal("6.0000") + Decimal("7.0000") + Decimal("30.2400")
     assert line.cost_sources[0]["scope_ref"] == f"order:{ORDER}"
     assert line.cost_sources[0]["last_leg_prefill_cny"] == "15.1200"  # 单价
-    assert line.cost_sources[0]["outbound_order_nos"] == ["WO1"]
+    assert line.cost_sources[0]["outbound_order_nos"] == [shipped("WO1")]
     assert line.auto_passed is False
 
 
@@ -454,7 +463,7 @@ def test_seller_one_good_two_outbounds_adds_up() -> None:
     ]
     line = compute(sale_rows(SELLER, qty=2), lookups)
     assert line.last_leg_cny == Decimal("28.8000")  # (3 + 1) × 7.2，拆两个包裹都算上
-    assert line.cost_sources[0]["outbound_order_nos"] == ["WO1", "WO2"]
+    assert line.cost_sources[0]["outbound_order_nos"] == [shipped("WO1"), shipped("WO2")]
     assert line.cost_sources[0]["last_leg_msku_total_cny"] == "28.8000"
 
 
@@ -480,6 +489,65 @@ def test_seller_without_own_msku_freight_leaves_last_leg_empty(
     assert line.reasons == ["self_fulfilled"]
     assert line.cost_sources[0]["last_leg_note"] == note
     assert line.cost_sources[0]["scope_ref"] == f"order:{ORDER}"
+
+
+def test_seller_voided_outbound_is_skipped_only_shipped_one_counts() -> None:
+    # 刘云龙 11-27 终审：已截单 / 已作废不计运费（以前会 5 + 6 = 11）
+    lookups = DictLookups()
+    lookups.flows = [flow()]
+    lookups.outbound[ORDER] = [
+        outbound("WO1", (MSKU, 1, "5.00"), fee="5.00", status="已作废"),
+        outbound("WO2", (MSKU, 1, "6.00"), fee="6.00"),
+    ]
+    line = compute(sale_rows(SELLER), lookups)
+    assert line.last_leg_cny == Decimal("6.0000")
+    assert line.cost_sources[0]["outbound_order_nos"] == [
+        {"no": "WO1", "status": "已作废", "counted": False},
+        shipped("WO2"),
+    ]
+    assert "last_leg_note" not in line.cost_sources[0]
+
+
+@pytest.mark.parametrize("status", [None, "3", "物流下单"])
+def test_seller_outbound_with_unverified_status_leaves_last_leg_pending(
+    status: str | None,
+) -> None:
+    lookups = DictLookups()
+    lookups.flows = [flow()]
+    lookups.details[(CODE, MSKU)] = detail()
+    lookups.outbound[ORDER] = [outbound("WO1", (MSKU, 1, "6.00"), fee="6.00", status=status)]
+    line = compute(sale_rows(SELLER), lookups)
+    # 状态确认不了：不自动算，单独的留空原因，页面显示"出库单状态待核实"
+    assert line.last_leg_cny is None
+    assert line.cost_total_cny is None
+    assert line.reasons == ["self_fulfilled"]
+    assert line.cost_sources[0]["last_leg_note"] == "outbound_status_unverified"
+    assert line.cost_sources[0]["last_leg_msku_total_cny"] is None
+
+
+def test_seller_all_outbounds_voided_is_not_in_outbound() -> None:
+    lookups = DictLookups()
+    lookups.flows = [flow()]
+    lookups.outbound[ORDER] = [outbound("WO1", (MSKU, 1, "5.00"), status="已截单")]
+    line = compute(sale_rows(SELLER), lookups)
+    assert line.last_leg_cny is None
+    assert line.cost_sources[0]["last_leg_note"] == "msku_not_in_outbound"
+
+
+def test_seller_one_package_missing_count_blanks_the_whole_freight() -> None:
+    # 两个包裹 3 + 5，其中一个没填件数：整体留空待审，不是 8 ÷ 1 全摊到一件上
+    lookups = DictLookups()
+    lookups.flows = [flow()]
+    lookups.outbound[ORDER] = [
+        outbound("WO1", (MSKU, 1, "3.00"), fee="3.00"),
+        outbound("WO2", (MSKU, None, "5.00"), fee="5.00"),
+    ]
+    line = compute(sale_rows(SELLER), lookups)
+    assert line.last_leg_cny is None
+    assert line.cost_total_cny is None
+    assert line.cost_sources[0]["last_leg_note"] == "outbound_count_missing"
+    assert line.cost_sources[0]["last_leg_msku_total_cny"] is None  # 合计也不给，免得误导
+    assert line.cost_sources[0]["last_leg_prefill_cny"] is None
 
 
 def test_cost_entry_on_platform_order_scope_covers_seller_line() -> None:

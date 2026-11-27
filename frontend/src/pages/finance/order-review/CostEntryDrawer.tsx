@@ -6,10 +6,12 @@
  */
 import { Alert, Button, Drawer, Form, Input, InputNumber, Radio, Select, Space, Typography, message } from "antd";
 import { useEffect, useMemo, useState } from "react";
-import { SOURCE_KIND_TEXT, errorText, getCostEntry, postCostEntry, revokeCostEntry, type ApiCostSource, type ApiLine } from "./orderReviewApi";
+import { LAST_LEG_NOTE_TEXT, SOURCE_KIND_TEXT, errorText, getCostEntry, postCostEntry, revokeCostEntry, type ApiCostSource, type ApiLine } from "./orderReviewApi";
 
 interface Scope { msku: string; shipping_list_code?: string | null; outbound_order_no?: string | null; platform_order_no?: string | null; label: string; source: ApiCostSource }
 
+/** 已截单 / 已作废的出库单不计运费（与后端 OUTBOUND_EXCLUDED_STATUSES 一致） */
+const OUTBOUND_EXCLUDED = new Set(["已截单", "已作废", "已取消"]);
 const SCOPE_LABEL: Record<string, string> = { shipping: "发货单", outbound: "出库单", order: "平台订单" };
 
 function scopesOf(line: ApiLine): Scope[] {
@@ -118,7 +120,7 @@ function CostEntryDrawer({ line, onClose, onDone }: { line?: ApiLine; onClose: (
           <Form.Item label="范围（MSKU × 单据，一次录入覆盖范围内所有订单行，含跨期）">
             <Select value={scopeIndex} onChange={setScopeIndex} options={scopes.map((s, index) => ({ value: index, label: s.label }))} />
           </Form.Item>
-          {scope?.source.outbound_order_nos && <Typography.Paragraph type="secondary">出库单：{scope.source.outbound_order_nos.length ? scope.source.outbound_order_nos.join("、") : "没找到本 MSKU 的出库单"}{scope.source.last_leg_msku_total_cny ? ` · 本 MSKU 运费合计 ¥${scope.source.last_leg_msku_total_cny}` : ""}{scope.source.last_leg_note ? "（尾程没法预填，请手填）" : ""}</Typography.Paragraph>}
+          {scope?.source.outbound_order_nos && <Typography.Paragraph type="secondary">出库单：{scope.source.outbound_order_nos.length ? scope.source.outbound_order_nos.map((o) => `${o.no}（${o.status ?? "状态未知"}${o.counted ? "" : o.status && OUTBOUND_EXCLUDED.has(o.status) ? "，不计" : "，待核实"}）`).join("、") : "没找到本 MSKU 的出库单"}{scope.source.last_leg_msku_total_cny ? ` · 本 MSKU 运费合计 ¥${scope.source.last_leg_msku_total_cny}` : ""}{scope.source.last_leg_note ? `（尾程没法预填：${LAST_LEG_NOTE_TEXT[scope.source.last_leg_note] ?? scope.source.last_leg_note}，请核实后手填）` : ""}</Typography.Paragraph>}
           {scope?.source.logistics_provider_name && <Typography.Paragraph type="secondary">物流商：{scope.source.logistics_provider_name}{scope.source.logistics_way ? ` · ${scope.source.logistics_way}` : ""}</Typography.Paragraph>}
           {scope?.source.prefill && (
             <Typography.Paragraph type="secondary">

@@ -24,7 +24,7 @@ import ReportFacetSelect from "@/shared/report-filters";
 import CostEntryDrawer from "./CostEntryDrawer";
 import ExactSearchModal from "./ExactSearchModal";
 import {
-  BATCH_CONFIRM_THRESHOLD, CHANGED_AFTER_REVIEW, DEFAULT_FILTERS, KIND_TEXT, LOOKUP_LABEL, PERMISSIONS, REASON_TEXT, SOURCE_KIND_TEXT, STATUS_TEXT, errorText, n, postRecalc, postReview,
+  BATCH_CONFIRM_THRESHOLD, CHANGED_AFTER_REVIEW, DEFAULT_FILTERS, KIND_TEXT, LAST_LEG_NOTE_TEXT, LOOKUP_LABEL, PERMISSIONS, REASON_TEXT, SOURCE_KIND_TEXT, STATUS_TEXT, errorText, n, postRecalc, postReview,
   useLines, useOrderReviewRefresh, usePeriods, useTransactionTypes,
   type ApiLine, type ApiMoney, type ApiPeriod, type LineFilters, type LineKind, type LookupKind, type Reason, type ReviewStatus,
 } from "./orderReviewApi";
@@ -168,6 +168,7 @@ function Workbench({ periods }: { periods: ApiPeriod[] }) {
     reasons: { key: "reasons", title: "待审原因", width: 220, render: (_, r) => (
       <>
         {r.review_reasons.includes(CHANGED_AFTER_REVIEW) && <Tooltip title="审核后计算值有变，请撤销后重审"><Tag color="red" bordered={false}>审核后数据有变</Tag></Tooltip>}
+        {Array.from(new Set(r.cost_sources.map((s) => s.last_leg_note).filter((x): x is string => !!x))).map((note) => <Tooltip key={note} title="自发货尾程没法自动算，请核实出库单后在「录成本」里手填"><Tag color="gold" bordered={false}>{LAST_LEG_NOTE_TEXT[note] ?? note}</Tag></Tooltip>)}
         {r.reasons.length ? r.reasons.map((x) => <Tag key={x} color="orange" bordered={false}>{REASON_TEXT[x] ?? x}</Tag>) : r.auto_passed ? <Tag color="green" bordered={false}>自动通过</Tag> : r.review_reasons.length ? null : EMPTY}
       </>
     ) },

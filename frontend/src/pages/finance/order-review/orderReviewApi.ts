@@ -26,7 +26,7 @@ export interface ApiCostSource {
   purchase_cny?: string | null; head_cny?: string | null; last_leg_cny?: string | null;
   reasons?: string[]; entry_id?: string | null; entry_kind?: string | null;
   shipping_list_code?: string | null; outbound_order_no?: string | null; business_number?: string | null;
-  outbound_order_nos?: string[] | null; last_leg_msku_total_cny?: string | null; last_leg_note?: string | null; scope_kind?: string | null;
+  outbound_order_nos?: { no: string; status: string | null; counted: boolean }[] | null; last_leg_msku_total_cny?: string | null; last_leg_note?: string | null; scope_kind?: string | null;
   logistics_provider_name?: string | null; logistics_way?: string | null; cost_source?: string | null;
   prefill?: Record<string, string | null> | null; last_leg_prefill_cny?: string | null; note?: string | null;
   returned?: boolean;
@@ -199,6 +199,15 @@ export const REASON_TEXT: Record<Reason, string> = {
   shipment_detail_invalid: "发货单明细不完整",
   owner_missing: "商品无负责人",
   cancelled_refund: "同期卖出又取消（确认无成本）",
+};
+/** 自发货尾程留空的原因（cost_sources[].last_leg_note） */
+export const LAST_LEG_NOTE_TEXT: Record<string, string> = {
+  outbound_status_unverified: "出库单状态待核实",
+  outbound_count_missing: "出库单缺件数",
+  apportion_freight_missing: "出库单缺分摊运费",
+  freight_currency_unconverted: "运费币种无法折算",
+  msku_not_in_outbound: "出库单里没有本 MSKU（或都已截单 / 作废）",
+  msku_missing: "缺 MSKU",
 };
 export const KIND_TEXT: Record<LineKind, string> = { sale: "销售", refund: "退款", mcf: "MCF" };
 /** 审核行上的差异提示（不是订单行的待审原因）：已初审 / 终审后计算值变了 */
