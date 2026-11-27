@@ -31,6 +31,7 @@ const columns = (onOpenOrder: (orderSn: string) => void): ColumnsType<PurchaseOv
         : row.docSn
     ),
   },
+  { key: "draftNo", title: "草稿号", dataIndex: "draftNo", width: 130, render: (value: string | null) => value ?? dash },
   { key: "sku", title: "SKU", dataIndex: "sku", width: 110, render: (value: string | null) => value ?? dash },
   { key: "productName", title: "产品名", dataIndex: "productName", ellipsis: true, width: 200, render: (value: string | null) => value ?? dash },
   {

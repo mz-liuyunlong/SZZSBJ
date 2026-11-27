@@ -398,6 +398,9 @@ describe("PurchaseBoardPage", () => {
     expect(screen.getByText("待下单采购单")).toBeInTheDocument();
     expect(screen.getByText("超时 7 天")).toBeInTheDocument();
     expect(screen.getByText(/共 2 条待采购超时/)).toBeInTheDocument();
+    // 8088 草稿号 column: the plan row from its remark, the order line from the board row.
+    expect(screen.getByText("CG261102-087")).toBeInTheDocument();
+    expect(screen.getAllByText("CG261017-039").length).toBeGreaterThan(0);
     expect(screen.queryByRole("switch", { name: "仅看超时" })).not.toBeInTheDocument();
     expect(screen.queryByText("待采购计划（已审批未转单）")).not.toBeInTheDocument();
     // Reviewer notes 3 + 4: lines vs. card count, and plans ignore the board filters.

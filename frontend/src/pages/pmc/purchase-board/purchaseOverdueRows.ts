@@ -25,6 +25,8 @@ export interface PurchaseOverdueRow {
   overdueDays: number;
   ownerName: string | null;
   remarkItemId: string | null;
+  /** 8088 草稿号：计划行取计划备注，采购单行取看板行（计划备注优先、其次采购单行备注）。 */
+  draftNo: string | null;
 }
 
 const businessDay = new Intl.DateTimeFormat("en-CA", {
@@ -64,6 +66,7 @@ export function overdueRowFromOrder(row: PurchaseBoardRow, today = new Date()): 
     overdueDays: row.stage.overdueDays,
     ownerName: row.owner.name,
     remarkItemId: null,
+    draftNo: row.draftNo,
   };
 }
 
@@ -83,6 +86,7 @@ export function overdueRowFromPlan(plan: PendingPurchasePlan): PurchaseOverdueRo
     overdueDays: plan.overdueDays,
     ownerName: null,
     remarkItemId: plan.remarkItemId,
+    draftNo: plan.draftNo,
   };
 }
 
