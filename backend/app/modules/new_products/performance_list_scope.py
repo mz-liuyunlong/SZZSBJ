@@ -14,7 +14,7 @@ from collections import Counter
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select, text, tuple_
+from sqlalchemy import func, or_, select, text, tuple_
 
 from app.core.api import ApiError
 from app.modules.data_pages.models import ListingManagementCurrentMart
@@ -71,6 +71,9 @@ def scoped_projection(
     historical_keys=(),
     include_owners=True,
     include_board_details=True,
+    include_effective_grades=False,
+    keyword="",
+    search_field="sku",
 ) -> list[dict]:
     """Base assessment projection; approval states are loaded separately on demand."""
     if not accounts:
@@ -85,6 +88,20 @@ def scoped_projection(
         m.local_sku,
         m.listing_start_at_utc,
     ).where(m.source_account_ref.in_(accounts), listing_scope(m, historical_keys))
+    if keyword.strip():
+        pattern = f"%{keyword.strip()}%"
+        column = {
+            "sku": m.local_sku,
+            "msku": m.msku,
+            "item_id": m.item_id,
+            "title": m.title,
+        }[search_field]
+        predicate = (
+            or_(m.local_name.ilike(pattern), column.ilike(pattern))
+            if search_field == "title"
+            else column.ilike(pattern)
+        )
+        stmt = stmt.add_columns(func.coalesce(predicate, False).label("keyword_match"))
     if include_board_details:
         stmt = stmt.add_columns(
             m.local_name,
@@ -132,6 +149,18 @@ def scoped_projection(
         if include_board_details
         else ""
     )
+    correction_fields = (
+        """
+          CASE WHEN p.data_coverage_json #>> '{evaluation_grade_confirmation_v1,status}'
+            = 'pending' THEN p.data_coverage_json -> 'operator_score_correction_v1'
+          END AS score_correction,
+          CASE WHEN p.data_coverage_json #>> '{evaluation_grade_confirmation_v1,status}'
+            = 'pending' THEN p.data_coverage_json -> 'evaluation_final_snapshot'
+          END AS correction_final,
+        """
+        if include_effective_grades
+        else ""
+    )
     decision = (
         db.execute(
             text(
@@ -146,6 +175,7 @@ def scoped_projection(
           p.data_coverage_json -> 'evaluation_grade_confirmation_v1' AS grade_confirmation,
           """
                 + board_fields
+                + correction_fields
                 + """
           p.data_coverage_json #>> '{evaluation_formal_trigger,status}' AS formal_status,
           p.data_coverage_json ? 'auto_dimension_scores' AS has_auto,
@@ -200,6 +230,13 @@ def scoped_projection(
 
     owner_ms = int((time.monotonic() - owner_started) * 1000)
     result = []
+    correction_config = None
+    if include_effective_grades and any(
+        isinstance(p.get("score_correction"), dict) for p in proofs.values()
+    ):
+        from .evaluation_workflow import _config
+
+        correction_config, _ = _config(db)
     for r in rows:
         key = (str(r["source_account_ref"]), str(r["store_id"]), str(r["item_id"]))
         p = proofs.get(key) or {}
@@ -234,6 +271,8 @@ def scoped_projection(
             if p.get("grade") in _GRADES and p.get("score") is not None
             else "pending"
         )
+        if correction_config is not None and isinstance(p.get("score_correction"), dict):
+            grade = _pending_effective_grade(p, correction_config) or grade
         owner_row = owners.get((key[0], str(r["local_sku"]))) if r["local_sku"] else None
         owner_name = owner_row["owner_name"] if owner_row else None
         developer_name = owner_row["product_developer_name"] if owner_row else None
@@ -246,6 +285,7 @@ def scoped_projection(
                 "_recheck_required": p.get("recheck_status")
                 == "awaiting_verified_source_correction",
                 "grade": grade,
+                "keyword_match": bool(r.get("keyword_match")) if keyword.strip() else True,
                 "owner": str(owner_name) if owner_name else "未分配",
                 "developer": str(developer_name) if developer_name else "未分配",
                 "first_wfs": first_wfs,
@@ -352,7 +392,16 @@ def _validate_first_wfs_range(start_date: date | None, end_date: date | None) ->
 
 
 def _first_wfs_projection(
-    source, db, accounts, start_date=None, end_date=None, *, include_owners=True
+    source,
+    db,
+    accounts,
+    start_date=None,
+    end_date=None,
+    *,
+    include_owners=True,
+    include_effective_grades=False,
+    keyword="",
+    search_field="sku",
 ):
     """Filter the same scoped LA-date evidence used by the performance board.
 
@@ -361,7 +410,14 @@ def _first_wfs_projection(
     """
     _validate_first_wfs_range(start_date, end_date)
     rows = scoped_projection(
-        source, db, accounts, include_owners=include_owners, include_board_details=False
+        source,
+        db,
+        accounts,
+        include_owners=include_owners,
+        include_board_details=False,
+        include_effective_grades=include_effective_grades,
+        keyword=keyword,
+        search_field=search_field,
     )
     if start_date is None:
         return rows
@@ -372,9 +428,100 @@ def _first_wfs_projection(
     ]
 
 
-def summary(source, db, accounts: frozenset[str], *, start_date=None, end_date=None) -> dict:
+# NP_LINKED_FACETS_V1: use the same saved correction overlay as decorate_page.
+def _pending_effective_grade(proof, config):
+    from .score_corrections import overlay
+
+    original = proof.get("grade")
+    block = proof.get("score_correction")
+    final = proof.get("correction_final")
+    if (
+        not isinstance(block, dict)
+        or not isinstance(final, dict)
+        or final.get("grade") != original
+        or proof.get("score") is None
+    ):
+        return original
+    row = {
+        "evaluation": {
+            "grade": original,
+            "total": str(proof["score"]),
+            "dimensions": final.get("dimensions"),
+            "rule_version": final.get("rule_version"),
+            "observation_state": "scored",
+        }
+    }
+    if overlay(row, block, config, risk_evaluation=final.get("risk_evaluation"), require_risk=True):
+        return row["evaluation"]["grade"]
+    return original
+
+
+def _split_filter(value):
+    return {part.strip() for part in value.split(",") if part.strip()}
+
+
+def _row_flow(row):
+    return row.get("flow_status") or flow_status(row["status"], first_wfs=row.get("first_wfs"))
+
+
+def _matches_status(row, selected):
+    return not selected or row["status"] in selected or _FLOW_PREFIX + _row_flow(row) in selected
+
+
+def _facet_counts(rows, *, phase, statuses, owners, ratings, owner_keyword):
+    selected_statuses = _split_filter(statuses)
+    selected_owners = _split_filter(owners)
+    selected_ratings = _split_filter(ratings)
+    needle = owner_keyword.strip().casefold()
+    allowed_flow = set(_FLOW_GROUPS.get(phase, _FLOW_STATUSES))
+    flow_counts, owner_counts, grade_counts = Counter(), Counter(), Counter()
+    for row in rows:
+        flow = _row_flow(row)
+        if flow not in allowed_flow or not row.get("keyword_match", True):
+            continue
+        if needle and needle not in row["owner"].casefold():
+            continue
+        status_ok = _matches_status(row, selected_statuses)
+        owner_ok = not selected_owners or row["owner"] in selected_owners
+        rating_ok = not selected_ratings or row["grade"] in selected_ratings
+        if owner_ok and rating_ok:
+            flow_counts[flow] += 1
+        if status_ok and rating_ok:
+            owner_counts[row["owner"]] += 1
+        if status_ok and owner_ok:
+            grade_counts[row["grade"]] += 1
+    # Keep selected zero-match values available for deselection.
+    for owner in selected_owners:
+        owner_counts.setdefault(owner, 0)
+    return flow_counts, owner_counts, grade_counts
+
+
+def summary(
+    source,
+    db,
+    accounts: frozenset[str],
+    *,
+    start_date=None,
+    end_date=None,
+    phase="all",
+    statuses="",
+    owners="",
+    ratings="",
+    owner_keyword="",
+    keyword="",
+    search_field="sku",
+) -> dict:
     started = time.monotonic()
-    rows = _first_wfs_projection(source, db, accounts, start_date, end_date)
+    rows = _first_wfs_projection(
+        source,
+        db,
+        accounts,
+        start_date,
+        end_date,
+        include_effective_grades=True,
+        keyword=keyword,
+        search_field=search_field,
+    )
     flow_started = time.monotonic()
     _attach_flow_statuses(db, rows)
     _LOGGER.info(
@@ -387,8 +534,14 @@ def summary(source, db, accounts: frozenset[str], *, start_date=None, end_date=N
     flow_counts = Counter(
         r.get("flow_status") or flow_status(r["status"], first_wfs=r.get("first_wfs")) for r in rows
     )
-    owners = Counter(r["owner"] for r in rows)
-    grades = Counter(r["grade"] for r in rows)
+    facet_flows, facet_owners, grades = _facet_counts(
+        rows,
+        phase=phase,
+        statuses=statuses,
+        owners=owners,
+        ratings=ratings,
+        owner_keyword=owner_keyword,
+    )
     return {
         "counts": {
             "all": len(rows),
@@ -408,12 +561,14 @@ def summary(source, db, accounts: frozenset[str], *, start_date=None, end_date=N
             "failed": states["测评未通过"],
         },
         "flow_status_options": [
-            {"value": s, "label": s, "count": flow_counts[s]} for s in _FLOW_STATUSES
+            {"value": s, "label": s, "count": facet_flows[s]} for s in _FLOW_STATUSES
         ],
         "status_options": [
             {"value": s, "label": s, "count": states[s]} for s in _STATUSES if states[s] > 0
         ],
-        "owner_options": [{"value": o, "label": o, "count": c} for o, c in sorted(owners.items())],
+        "owner_options": [
+            {"value": o, "label": o, "count": c} for o, c in sorted(facet_owners.items())
+        ],
         "rating_options": [
             {"value": g, "label": ("待评分" if g == "pending" else g + " 级"), "count": grades[g]}
             for g in (*_GRADES, "pending")
@@ -447,7 +602,13 @@ def matching_identities(
     rows = [
         r
         for r in _first_wfs_projection(
-            source, db, accounts, start_date, end_date, include_owners=bool(owner_set or needle)
+            source,
+            db,
+            accounts,
+            start_date,
+            end_date,
+            include_owners=bool(owner_set or needle),
+            include_effective_grades=bool(rating_set),
         )
         if (not owner_set or r["owner"] in owner_set)
         and (not rating_set or r["grade"] in rating_set)

@@ -713,7 +713,7 @@ class NewProductService:
                 row["suggested_qty"] = self._suggested_quantity(row["evaluation"], config)
 
     def save_score_correction(self, accounts, body, actor):
-        from .evaluation_workflow import _protected
+        from .evaluation_workflow import _protected, _stored_grade_matches_snapshot
 
         a, store, item = ident(body)
         self._listing(accounts, a, store, item)
@@ -775,10 +775,8 @@ class NewProductService:
                     or current.get("observation_state") == "frozen"
                 ):
                     problem("NP_CORRECTION_UNVERIFIED", 409, "评分规则尚未核实或商品已冻结")
-                if perf.score is not None and (
-                    current.get("total") is None
-                    or current.get("grade") != perf.grade
-                    or Decimal(str(current["total"])) != Decimal(str(perf.score))
+                if perf.score is not None and not _stored_grade_matches_snapshot(
+                    perf.grade, perf.score, current
                 ):
                     problem("NP_CORRECTION_UNVERIFIED", 409, "正式原始评分不一致")
                 source_block = coverage.get("auto_dimension_scores")
@@ -849,6 +847,9 @@ class NewProductService:
                 "delta": str(after - before),
                 "reason": body.reason.strip(),
                 "system_total": system["total"],
+                "before_total": block["effective"].get("total"),
+                "before_grade": block["effective"].get("grade"),
+                "system_grade": system.get("grade"),
                 "effective_total": effective["total"],
                 "effective_grade": effective["grade"],
             }
@@ -1775,6 +1776,7 @@ class NewProductService:
                             "ad_excluded": system.get("ad_excluded", False),
                         },
                         system,
+                        exact_total=True,
                     )
                     if resolved is None:
                         raise ValueError("CORRECTION_BASELINE_MISMATCH")
@@ -2062,6 +2064,32 @@ class NewProductService:
                 "manual_assessment": dict(manual),
                 "risk_conditions": list(risks or []),
             }
+
+            # NP_PURCHASE_SCORE_GRADE_EVIDENCE_V1: snapshot the locked evidence,
+            # not a live score. Historical applications remain immutable.
+            correction = coverage.get("operator_score_correction_v1")
+            original = final.get("grade_before_confirmation_v1")
+            if isinstance(original, dict):
+                current["grade_before_confirmation"] = deepcopy(original)
+            if isinstance(correction, dict):
+                current["score_correction"] = deepcopy(correction)
+            elif isinstance(confirmation, dict) and confirmation.get("correction_revision") == 0:
+                # An explicit confirmed zero revision is evidence of no corrections.
+                baseline = {
+                    "dimensions": deepcopy(evaluation["dimensions"]),
+                    "grade": grade,
+                    "total": evaluation["total"],
+                    "rule_version": rule_version,
+                }
+                current["score_correction"] = {
+                    "revision": 0,
+                    "system": deepcopy(baseline),
+                    "effective": deepcopy(baseline),
+                    "history": [],
+                    "overrides": {},
+                }
+            if isinstance(confirmation, dict):
+                current["grade_confirmation"] = deepcopy(confirmation)
 
             row = PurchaseApplication(
                 id=uuid4(),

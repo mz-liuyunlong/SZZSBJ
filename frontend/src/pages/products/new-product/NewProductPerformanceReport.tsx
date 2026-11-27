@@ -27,6 +27,7 @@ export type PerformanceRemote = {
   loading:boolean; total:number; error?:string;
   statusOptions:ReportFilterOption[];
   initialQuery?:PerformanceReportQuery;
+  optionsReady?:boolean;
   ownerOptions:ReportFilterOption[];
   ratingOptions:ReportFilterOption[];
   firstWfsDateRange?:FirstWfsDateRange;
@@ -785,13 +786,13 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
   return <section className={phase==="approved"?"np-performance-report np-approved-report":"np-performance-report"} aria-label="新品表现明细">
     <div className="np-performance-toolbar" role="search" aria-label="新品表现筛选">
       <ReportFacetSelect mode="multiple" ariaLabel="流程状态" placeholder="全部状态"
-        unit="项" value={statuses} options={visibleStatusOptions}
+        unit="项" value={statuses} options={visibleStatusOptions} optionsReady={remote?.optionsReady ?? true}
         onChange={(value) => { setStatuses(Array.isArray(value) ? value : []); setCurrentPage(1); }} />
       <ReportFacetSelect mode="multiple" ariaLabel="负责人" placeholder="全部负责人"
-        unit="人" value={owners} options={remote?.ownerOptions ?? ownerOptions}
+        unit="人" value={owners} options={remote?.ownerOptions ?? ownerOptions} optionsReady={remote?.optionsReady ?? true}
         onChange={(value) => { setOwners(Array.isArray(value) ? value : []); setCurrentPage(1); }} />
       <ReportFacetSelect mode="multiple" ariaLabel="评级" placeholder="全部评级"
-        unit="项" value={ratings} options={remote?.ratingOptions ?? ratingOptions}
+        unit="项" value={ratings} options={remote?.ratingOptions ?? ratingOptions} optionsReady={remote?.optionsReady ?? true}
         onChange={(value) => { setRatings(Array.isArray(value) ? value : []); setCurrentPage(1); }} />
       <ReportDateRangePicker
         aria-label="WFS首次可售日期范围"

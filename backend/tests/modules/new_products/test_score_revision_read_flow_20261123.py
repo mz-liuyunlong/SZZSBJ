@@ -286,3 +286,104 @@ def test_strictest_saved_cap_wins():
     }
     revised = calculate_effective(baseline, {"profit": "9.02"}, CONFIG, risk_evaluation=strict)
     assert revised["grade"] == "C"
+
+
+# NP_GRADE_CONFIRM_EXACT_PRECISION_V1
+@pytest.mark.parametrize("total", ["6.873456789", "6.123450000", "6.8735", "0.00000000"])
+def test_confirm_exact_snapshot_preserves_original_precision(total):
+    baseline = deepcopy(BASE) | {"total": total}
+    assert resolved_system(deepcopy(baseline), baseline, exact_total=True) == baseline
+
+
+@pytest.mark.parametrize("total", ["6.873456788", "6.8735", "6.8734"])
+def test_confirm_exact_snapshot_rejects_changed_total_even_in_same_storage_bucket(total):
+    row = deepcopy(BASE) | {"total": total}
+    assert resolved_system(row, BASE, exact_total=True) is None
+
+
+def test_confirm_exact_snapshot_does_not_bypass_grade_dimension_or_rule_checks():
+    for row in (
+        deepcopy(BASE) | {"grade": "B"},
+        deepcopy(BASE) | {"rule_version": 3},
+        deepcopy(BASE) | {"dimensions": BASE["dimensions"] | {"profit": "4.03"}},
+    ):
+        assert resolved_system(row, BASE, exact_total=True) is None
+
+
+def test_confirm_grade_with_exact_snapshot_and_rounded_database_score(monkeypatch):
+    from decimal import Decimal
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from uuid import uuid4
+
+    from app.modules.new_products import evaluation_workflow as workflow
+    from app.modules.new_products.service import NewProductService
+
+    baseline = deepcopy(BASE)
+    risk = deepcopy(ROI_B) | {"base_grade": "C", "effective_grade": "C"}
+    history = [{"revision": 1, "dimension": "profit", "reason": "verified correction"}]
+    overrides = {"profit": "9.02"}
+    correction = {
+        "system": baseline,
+        "revision": 1,
+        "overrides": overrides,
+        "history": history,
+        "effective": calculate_effective(baseline, overrides, CONFIG, risk_evaluation=risk),
+    }
+    perf = SimpleNamespace(
+        grade="C",
+        score=Decimal("6.8735"),
+        data_coverage_json={
+            "evaluation_grade_confirmation_v1": {
+                "status": "pending",
+                "rule_version": 2,
+                "market_version": 3,
+            },
+            "evaluation_final_snapshot": deepcopy(baseline)
+            | {
+                "risk_evaluation": risk,
+                "system_risk_display": {"rules": [{"enabled": True, "status": "clear"}]},
+            },
+            "operator_score_correction_v1": correction,
+        },
+    )
+    db = Mock()
+    db.scalar.side_effect = [SimpleNamespace(id=uuid4()), perf]
+    svc = NewProductService.__new__(NewProductService)
+    svc.db = db
+    svc.write_repo = Mock()
+    svc.write_repo.market.return_value = SimpleNamespace(version=3)
+    svc._listing = Mock()
+    svc._config = Mock(return_value=(CONFIG, 2))
+    svc._event = Mock()
+    monkeypatch.setattr(workflow, "_protected", lambda *_: False)
+    body = SimpleNamespace(
+        source_account_ref="account",
+        store_id="store",
+        item_id="item",
+        expected_revision=1,
+    )
+    result = svc.confirm_grade(frozenset({"account"}), body, "actor")
+    assert result["status"] == "confirmed"
+    assert result["effective_grade"] == "B"  # Frozen risk cap still applies.
+    assert perf.grade == "B"
+    assert perf.score == Decimal(correction["effective"]["total"])
+    coverage = perf.data_coverage_json
+    assert coverage["operator_score_correction_v1"]["history"] == history
+    assert coverage["operator_score_correction_v1"]["overrides"] == overrides
+    assert (
+        coverage["evaluation_final_snapshot"]["grade_before_confirmation_v1"]["total"]
+        == BASE["total"]
+    )
+    db.commit.assert_called_once()
+    db.rollback.assert_not_called()
+
+
+def test_first_pending_correction_uses_existing_numeric_storage_guard():
+    import inspect
+
+    from app.modules.new_products.service import NewProductService
+
+    source = inspect.getsource(NewProductService.save_score_correction)
+    assert "not _stored_grade_matches_snapshot(" in source
+    assert 'Decimal(str(current["total"])) != Decimal(str(perf.score))' not in source
