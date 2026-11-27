@@ -50,7 +50,7 @@ decision status: READY_FOR_PRP
 dataset classifications: REBUILD_SYNC + NEW_SYSTEM_OWNED
 contains NEED_OWNER_DECISION: no
 owner approval status: approved for local implementation
-short-term strategy: read mart_listing_management_current
+short-term strategy: read mart_listing_management_current; when owner_ref is blank, use the unique current product owner for the same account and SKU
 long-term strategy: separate approved eligibility rule when required
 legacy exit criteria: switch monitor PRODUCT_SOURCE_URL after deployment and validation
 old-system reference: no
@@ -67,7 +67,7 @@ path: /api/integrations/walmart-monitor/targets
 query: page >= 1; page_size 1..500 (default 200)
 response data: {items, total, page, page_size}
 meta.source: listing_management
-meta.source_tables: [mart_listing_management_current, listing_archive_states]
+meta.source_tables: [mart_listing_management_current, listing_archive_states, dwd_lingxing_sku_identity_index, dwd_lingxing_sku_product_info_current]
 errors: UNAUTHORIZED, FORBIDDEN, VALIDATION_ERROR, INTERNAL_ERROR
 request_id: required
 ```
@@ -76,7 +76,7 @@ request_id: required
 
 1. Add exact-path machine auth with an independent secret setting; fail closed.
 2. Add repository count/page query ordered by the stable business key, excluding current archived Listings in both queries.
-3. Add service mapping without fallback inference; V1 eligibility constant true.
+3. Add service mapping; V1 eligibility is constant true. Owner uses Listing owner first and only falls back to one unambiguous current product owner for the same account and SKU.
 4. Register router, docs, catalog/registry/task/handoff.
 5. Add synthetic tests proving auth, pagination, null/category mapping and no write/external calls.
 

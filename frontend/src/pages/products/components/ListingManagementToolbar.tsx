@@ -7,15 +7,22 @@ import { Button, Popover, Space, Typography, Input } from "antd";
 import { useState } from "react";
 import ConnectedSearch from "@/components/report-table/ConnectedSearch";
 import ResetButton from "@/components/report-table/ResetButton";
-import ReportFacetSelect from "@/shared/report-filters";
+import ListingExactFacetSelect from "@/pages/products/components/ListingExactFacetSelect";
+import { listingMainFacets, listingMoreFacetGroups, visibleListingExactFilters, listingMoreDraft, mergeListingMoreDraft, useListingMoreFacetOptions } from "@/pages/products/listingExactFacetLogic";
+import type { ListingManagementParams } from "@/pages/products/listingManagementApi";
 import type { ReportFilterOption } from "@/shared/report-filters";
 
 export interface ListingManagementFilters {
   stores: string[];
+  exactFilters?: Record<string, string[]>;
   owners?: string[];
   productTypes?: string[];
   productStatuses?: string[];
   tagValues?: string[];
+  productTagValues?: string[];
+  customTagValues?: string[];
+  lifecycleValues?: string[];
+  gradeValues?: string[];
   archiveStatuses?: string[];
 
   /** Legacy cached single-value filters. Kept only to migrate older page-state cache safely. */
@@ -30,11 +37,16 @@ export interface ListingManagementFilters {
 
 interface ListingManagementToolbarProps {
   filters: ListingManagementFilters;
-  stores: ReportFilterOption[];
-  owners: ReportFilterOption[];
-  productTypes: ReportFilterOption[];
-  tags: ReportFilterOption[];
+  stores?: ReportFilterOption[];
+  owners?: ReportFilterOption[];
+  productTags?: ReportFilterOption[];
+  customTags?: ReportFilterOption[];
+  lifecycles?: ReportFilterOption[];
+  grades?: ReportFilterOption[];
   archiveStatuses?: ReportFilterOption[];
+  facetQuery?: ListingManagementParams;
+  facetRevision?: number;
+  facetPrefetchReady?: boolean;
   statisticsVisible: boolean;
   onChange: (filters: ListingManagementFilters) => void;
   onReset: () => void;
@@ -49,31 +61,11 @@ interface ListingManagementToolbarProps {
   downloadLoading?: boolean;
 }
 
-const normalizeSelected = (values?: string[], legacyValue?: string) => (
-  values && values.length > 0 ? values : legacyValue ? [legacyValue] : []
-);
-
-const archiveStatusOptions: ReportFilterOption[] = [
-  { value: "active", label: "未归档" },
-  { value: "archived", label: "已归档" },
-];
-
-const listingStatusOptions: ReportFilterOption[] = [
-  "启用",
-  "停用",
-  "在线",
-  "离线",
-  "拥有",
-  "未拥有",
-].map((value) => ({ value, label: value }));
-
 function ListingManagementToolbar({
   filters,
-  stores,
-  owners,
-  productTypes,
-  tags,
-  archiveStatuses = [],
+  facetQuery = {},
+  facetRevision = 0,
+  facetPrefetchReady = true,
   statisticsVisible,
   onChange,
   onReset,
@@ -86,7 +78,47 @@ function ListingManagementToolbar({
   downloadDisabled = false,
   downloadLoading = false,
 }: ListingManagementToolbarProps) {
+  const [moreOpen, setMoreOpen] = useState(false);
   const [batchOpen, setBatchOpen] = useState(false);
+  const exact = visibleListingExactFilters(filters.exactFilters);
+  const moreFields = listingMoreFacetGroups.flatMap<string>(group => group.fields.map(([field]) => field));
+  const moreCount = moreFields.filter(field => exact[field]?.length).length;
+  const [moreDraft, setMoreDraft] = useState<Record<string, string[]>>({});
+  const moreDraftCount = moreFields.filter(field => moreDraft[field]?.length).length;
+  const draftQuery = {
+    ...facetQuery,
+    exactFilters: moreOpen ? mergeListingMoreDraft(exact, moreDraft) : exact,
+  };
+  const moreOptions = useListingMoreFacetOptions(draftQuery, facetRevision, onMessage, facetPrefetchReady || moreOpen);
+  const moreLoading = moreOpen && (
+    Object.keys(moreOptions).length === 0 || Object.values(moreOptions).some(item => item.loading)
+  );
+  const changeMoreOpen = (next: boolean) => {
+    if (next) setMoreDraft(listingMoreDraft(exact));
+    setMoreOpen(next);
+  };
+  const changeMoreDraft = (field: string, values: string[]) => {
+    setMoreDraft(previous => {
+      const next = { ...previous };
+      if (values.length) next[field] = values;
+      else delete next[field];
+      return next;
+    });
+  };
+  const applyMoreSearch = () => {
+    onChange({ ...filters, exactFilters: mergeListingMoreDraft(exact, moreDraft) });
+    setMoreOpen(false);
+  };
+  const setExact = (field: string, values: string[]) => {
+    const next = { ...exact };
+    if (values.length) next[field] = values;
+    else delete next[field];
+    onChange({ ...filters, exactFilters: next });
+  };
+  const renderFacet = (field: string, label: string, fullWidth = false) => <ListingExactFacetSelect
+    key={field} field={field} label={label} query={facetQuery} revision={facetRevision} fullWidth={fullWidth}
+    value={exact[field] ?? []} onChange={values => setExact(field, values)} onError={onMessage}
+  />;
   const [batchText, setBatchText] = useState("");
   const [searchTypeDraft, setSearchTypeDraft] = useState<ListingManagementFilters["searchType"]>(filters.searchType);
   const [keywordDraft, setKeywordDraft] = useState(filters.keyword);
@@ -147,81 +179,9 @@ function ListingManagementToolbar({
   );
 
   return (
+    <>
     <div className="listing-management__toolbar" role="search" aria-label="Listing 管理筛选">
-      <ReportFacetSelect
-        mode="multiple"
-        ariaLabel="产品类型"
-        placeholder="产品类型"
-        unit="个类型"
-        value={normalizeSelected(filters.productTypes, filters.productType)}
-        options={productTypes}
-        onChange={(value) => onChange({
-          ...filters,
-          productTypes: value as string[],
-          productType: undefined,
-        })}
-      />
-      <ReportFacetSelect
-        mode="multiple"
-        ariaLabel="负责人"
-        placeholder="负责人"
-        unit="人"
-        value={normalizeSelected(filters.owners, filters.owner)}
-        options={owners}
-        onChange={(value) => onChange({
-          ...filters,
-          owners: value as string[],
-          owner: undefined,
-        })}
-      />
-      <ReportFacetSelect
-        mode="multiple"
-        ariaLabel="产品状态"
-        placeholder="产品状态"
-        unit="个状态"
-        value={normalizeSelected(filters.productStatuses, filters.productStatus)}
-        options={listingStatusOptions}
-        onChange={(value) => onChange({
-          ...filters,
-          productStatuses: value as string[],
-          productStatus: undefined,
-        })}
-      />
-      <ReportFacetSelect
-        mode="multiple"
-        ariaLabel="归档状态"
-        placeholder="归档状态"
-        unit="个状态"
-        value={filters.archiveStatuses ?? []}
-        options={(archiveStatuses ?? []).length > 0 ? archiveStatuses : archiveStatusOptions}
-        onChange={(value) => onChange({
-          ...filters,
-          archiveStatuses: value as string[],
-        })}
-      />
-      <ReportFacetSelect
-        mode="multiple"
-        ariaLabel="标签"
-        placeholder="标签"
-        unit="个标签"
-        value={filters.tagValues ?? []}
-        options={tags}
-        popupWidth={320}
-        onChange={(value) => onChange({
-          ...filters,
-          tagValues: value as string[],
-        })}
-      />
-      <ReportFacetSelect
-        mode="multiple"
-        ariaLabel="店铺"
-        placeholder="全部店铺"
-        unit="个店铺"
-        value={filters.stores}
-        options={stores}
-        popupWidth={360}
-        onChange={(value) => onChange({ ...filters, stores: value as string[] })}
-      />
+      {listingMainFacets.map(([field, label]) => renderFacet(field, label))}
       <ConnectedSearch
         className="listing-management__search"
         typeAriaLabel="搜索类型"
@@ -248,6 +208,44 @@ function ListingManagementToolbar({
           onMessage("已应用搜索条件");
         }}
       />
+      <Popover
+        trigger="click"
+        placement="bottomRight"
+        open={moreOpen}
+        onOpenChange={next => { if (!next) changeMoreOpen(false); }}
+        destroyOnHidden
+        content={(
+          <section className="listing-management__more-filters" aria-label="更多筛选">
+      <div className="listing-management__more-filter-grid">
+        {listingMoreFacetGroups.map(group =>
+          group.fields.map(([field, label]) => (
+            <div className="listing-management__more-filter-item" key={field}>
+              <span className="listing-management__more-filter-title">
+                {label}
+              </span>
+              {<ListingExactFacetSelect
+                field={field} label={label} query={draftQuery} revision={facetRevision} fullWidth
+                preloaded={moreOptions[field] ?? { options: [], ready: false, loading: false }}
+                value={moreDraft[field] ?? []}
+                onChange={values => changeMoreDraft(field, values)} onError={onMessage}
+              />}
+            </div>
+          ))
+        )}
+      </div>
+      <div className="listing-management__more-filter-actions">
+        {moreLoading && <Typography.Text type="secondary" style={{ marginRight: "auto", fontSize: 12 }} role="status">正在加载筛选选项…</Typography.Text>}
+        <Button size="small" disabled={!moreDraftCount} onClick={() => setMoreDraft({})}>清空更多筛选</Button>
+        <Button size="small" onClick={() => setMoreOpen(false)}>关闭</Button>
+        <Button size="small" type="primary" onClick={applyMoreSearch}>搜索</Button>
+      </div>
+    </section>
+        )}
+      >
+        <Button aria-expanded={moreOpen} onClick={() => changeMoreOpen(!moreOpen)}>
+          更多筛选{moreCount > 0 ? ` (${moreCount})` : ""}
+        </Button>
+      </Popover>
       <ResetButton
         onClick={() => {
           setSearchTypeDraft("sku");
@@ -283,6 +281,8 @@ function ListingManagementToolbar({
         />
       </Space>
     </div>
+
+    </>
   );
 }
 

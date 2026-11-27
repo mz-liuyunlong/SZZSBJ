@@ -15,6 +15,7 @@ const minColumnWidths: Record<string, number> = {
   productName: 220,
   ownerName: 120,
   developerName: 120,
+  developmentDate: 120,
   tags: 120,
   sourceTags: 120,
   productGrade: 110,
@@ -182,6 +183,19 @@ function ProductManagementTable({
       width: columnWidths.ownerName,
       onHeaderCell: headerCell,
       render: (_, row) => row.ownerName ?? empty,
+    },
+    developmentDate: {
+      key: "developmentDate",
+      dataIndex: "developmentDate",
+      title: title("developmentDate", fieldTitle.developmentDate),
+      width: columnWidths.developmentDate ?? 120,
+      onHeaderCell: headerCell,
+      render: (_, row) => {
+        if (!row.developmentDate) return empty;
+        const date = new Date(row.developmentDate);
+        if (!Number.isFinite(date.getTime())) return empty;
+        return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+      },
     },
     developerName: {
       key: "developerName",

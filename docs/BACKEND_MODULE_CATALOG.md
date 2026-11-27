@@ -28,6 +28,54 @@
 
 新增通用后端模块后，AI 必须更新本文件。
 
+## Finance Walmart Bills V1
+
+| 项目 | 内容 |
+|---|---|
+| Module name | Finance Walmart Bills V1（沃尔玛账单同步） |
+| Module key | `finance-walmart-bills-v1` |
+| Status | `in_review`；Rocky 2026-11-08 定口径；未上线，同步默认关闭 |
+| Purpose | 领星沃尔玛账单（statement/list）同步：明细表 + 每期汇总表，回款对账 / 现金利润 / 结算利润共用 |
+| Backend files | `backend/app/modules/walmart_bills/`；`backend/app/modules/integration_sync/walmart_bill_catalog.py`、`handlers/lingxing_walmart_bill_sync.py`；`backend/scripts/bootstrap_walmart_bill_governance.py`、`enable_walmart_bill_sync.py`；Alembic `20261108_0084_finance_walmart_bills`；回款对账 `payout_*.py` + Alembic `20261110_0085_finance_payout_recon` |
+| Permission | 看：`page:finance:settlement-reconciliation:view`；手动同步：`action:finance:settlement-reconciliation:sync`（新增） |
+| Documentation | `docs/api/finance-walmart-bills.md`、`docs/api/finance-payout-recon.md`；契约 `docs/integrations/lingxing/contracts/finance-lx-727003cff7b4.md` |
+| PRP / Decision | `PRPs/finance-walmart-settlement-sync-v1.md`；`docs/data-sources/decisions/finance-walmart-settlement-sync-decision.md` |
+| PR | TBD |
+| Frontend | 回款对账页面另提 PR-2（含「手动同步」按钮） |
+| Not in scope | 领星 payout/list；对账匹配、配对、审核；利润计算 |
+
+## Lingxing FX Rate V1
+
+| 项目 | 内容 |
+|---|---|
+| Module name | Lingxing FX Rate V1 |
+| Module key | `lingxing-fx-rate-v1` |
+| Status | `approved_for_implementation`；Rocky 2026-11-05 批准；未上线 |
+| Purpose | 全系统统一汇率来源：领星月汇率表、任务中心同步、公共读取函数 |
+| Backend files | `backend/app/modules/fx_rates/`；`backend/app/modules/integration_sync/fx_catalog.py`、`handlers/lingxing_fx_rate_sync.py`；`backend/scripts/bootstrap_fx_governance.py`、`enable_fx_sync.py`；一个 additive Alembic revision |
+| Permission | 沿用任务中心权限；不新增权限点 |
+| Documentation | `docs/integrations/lingxing/contracts/finance-lx-c6759b059e67.md` |
+| PRP / Decision | `PRPs/lingxing-fx-rate-v1.md`；`docs/data-sources/decisions/lingxing-fx-rate-source-decision.md` |
+| PR | TBD |
+| Frontend | 另提前端 PR：财务 → 财务设置 → 资金 汇率（只读）；任务中心归到财务分组 |
+| Not in scope | 产品定价、日销利润、WFS、结算利润改读（PR-2）；页面改汇率 |
+
+## Finance Journal Backend V1
+
+| 项目 | 内容 |
+|---|---|
+| Module name | Finance Journal Backend V1 |
+| Module key | `finance-journal-backend-v1` |
+| Status | `approved_for_implementation`；Rocky 2026-11-04 批准 PRP；未上线 |
+| Purpose | 银行 / 平台流水文件导入、去重，日记账分类、内部转账配对、手填审批单号、剔除、初审终审、异常、折人民币 |
+| Backend files | `backend/app/modules/finance_cashflow/`；`backend/scripts/finance_cash_deploy_load.py`；一个 additive Alembic revision |
+| Permission | 全部接口 `require_super_admin`；不新增权限点、数据范围、字段权限 |
+| Storage | 原件存 `MEDIA_STORAGE_ROOT/finance/cashflow/`；账户和带名字的规则上线时导入，不进仓库 |
+| Documentation | `docs/api/finance-cashflow-import.md` |
+| PRP / Decision | `PRPs/finance-journal-backend-v1.md`；`docs/data-sources/decisions/finance-cashflow-statement-import-decision.md` |
+| PR | TBD |
+| Not in scope | 飞书审批同步、自动挂单、拆分、结账锁月、规则版本化和维护页、导出、账户总览、备货资金、Demo 历史迁移、PDF |
+
 ## WFS Fee Anomaly Auto Detection V1
 
 | 项目 | 内容 |
@@ -295,7 +343,7 @@
 | Directory | `backend/app/modules/walmart_monitor_targets/` |
 | Purpose | 通过专用只读 machine contract 向 Walmart 监控程序稳定分页提供未归档 Listing 目标 |
 | API | `GET /api/integrations/walmart-monitor/targets`；统一 envelope、response model 与 OpenAPI metadata |
-| Data source | `mart_listing_management_current`；用 `listing_archive_states` 排除归档商品；`REBUILD_SYNC`；不读取 RAW、旧系统或外部 provider |
+| Data source | `mart_listing_management_current`；用 `listing_archive_states` 排除归档商品；负责人为空时从当前 SKU 身份/产品负责人 DWD 唯一匹配；`REBUILD_SYNC`；不读取 RAW、旧系统或外部 provider |
 | Stable key | `source_account_ref + store_id + item_id`，同时作为稳定分页顺序 |
 | Fields | 店铺、SKU/MSKU、负责人、来源商品名、来源类目、可空 WFS 库存、V1 固定 `monitoring_eligible=true` |
 | Permission | 专用 principal + `integrations:walmart-monitor:read`；独立 Bearer Token；普通用户会话不可用 |

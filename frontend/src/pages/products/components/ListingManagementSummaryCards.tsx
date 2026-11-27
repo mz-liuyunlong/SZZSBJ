@@ -7,6 +7,7 @@ import type { ListingManagementSummary } from "@/pages/products/listingManagemen
 export type ListingManagementSummaryCardKey =
   | "total"
   | "online"
+  | "listing_exception"
   | "buybox"
   | "rating"
   | "resold"
@@ -31,6 +32,15 @@ function OnlineIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="m5 12 4 4L19 6" />
+    </svg>
+  );
+}
+
+function ListingExceptionIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 7v6M12 16h.01" />
     </svg>
   );
 }
@@ -96,6 +106,15 @@ const cardsFromSummary = (
     icon: icon(<OnlineIcon />),
   },
   {
+    key: "listing_exception",
+    title: "Listing异常",
+    ariaLabel: "Listing异常",
+    subtitle: "无划线价 / 购物车异常 / 跟卖",
+    value: summary.listingException ?? "—",
+    tone: "danger",
+    icon: icon(<ListingExceptionIcon />),
+  },
+  {
     key: "buybox",
     title: "购物车异常",
     ariaLabel: "购物车异常",
@@ -108,7 +127,7 @@ const cardsFromSummary = (
     key: "rating",
     title: "评分预警",
     ariaLabel: "评分预警",
-    subtitle: "评分低于预警值",
+    subtitle: "评分低于4.0分",
     value: summary.ratingWarning,
     tone: "warning",
     icon: icon(<RatingIcon />),
@@ -126,7 +145,7 @@ const cardsFromSummary = (
     key: "strike",
     title: "划线价异常",
     ariaLabel: "划线价异常",
-    subtitle: "划线价失效或异常",
+    subtitle: "无划线价商品",
     value: summary.strikePriceException,
     tone: "warning",
     icon: icon(<StrikeIcon />),

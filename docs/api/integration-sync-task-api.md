@@ -107,3 +107,17 @@ The ProductInfo executor is a controlled write pipeline: after all production ga
 persist ODS references, ProductInfo DWD snapshot/current/images/source tags, the DWS base profile,
 and the identity SKU code. This task API only reads the resulting governance run/config/interface
 metadata. Neither this API nor its page invokes ProductInfo outbound execution.
+
+## 7. Verified sample anomaly review
+
+The existing account-scoped anomaly GET, history GET and PATCH routes under
+`/api/integrations/sync-anomalies` are reused. The anomaly record's existing
+`details` JSON carries allowlisted business evidence: affected product
+identities, source order and line, previous/observed values of changed
+verified sample fields, `sample_isolation_active`, and `financial_status`.
+The frontend shows named business evidence, not raw provider responses.
+Missing values remain unknown. An active sample isolation or pending financial
+review cannot be marked resolved/dismissed by PATCH; it returns
+`SYNC_SAMPLE_EVIDENCE_REVALIDATION_REQUIRED` (409).
+Use the existing authorized task center backfill for the affected LA day.
+No new endpoint, permission, or database migration is required.

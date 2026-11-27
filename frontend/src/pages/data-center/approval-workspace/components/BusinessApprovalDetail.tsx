@@ -10,6 +10,17 @@ const display = (value: unknown): string => {
 };
 
 const detailSpecs: Record<string, { heading: string; fields: { field: string; label: string }[]; limitation: string }> = {
+  new_product_evaluation_review: {
+    heading: "新品表现 · 测评复核",
+    fields: [
+      { field: "item_id", label: "Walmart Item ID" },
+      { field: "store_id", label: "店铺 ID" },
+      { field: "grade", label: "原始评级（不可篡改）" },
+      { field: "score", label: "原始总分（不可篡改）" },
+      { field: "review_reason_type", label: "复核类型" },
+    ],
+    limitation: "纠错通过先保留原分并等待真实证据修复；特殊情况特批不修改系统D/Pass评级。",
+  },
   purchase_exception: {
     heading: "采购审批 · 采购业务依据",
     fields: [
@@ -36,7 +47,7 @@ export default function BusinessApprovalDetail({ detail }: { detail: ApprovalDet
   const raw = detail.snapshot as Record<string, unknown>;
   const source = raw.source && typeof raw.source === "object"
     ? raw.source as Record<string, unknown>
-    : {};
+    : detail.approval_type === "new_product_evaluation_review" ? raw : {};
   const policy = raw.approval_policy && typeof raw.approval_policy === "object"
     ? raw.approval_policy as Record<string, unknown>
     : {};
@@ -55,7 +66,7 @@ export default function BusinessApprovalDetail({ detail }: { detail: ApprovalDet
       </Card>
       <Card size="small" title="02 / 申请依据与说明">
         <Space direction="vertical" size={12} style={{width:"100%"}}>
-          <div><Tag color="blue">申请人</Tag>{detail.applicant_id ?? "身份待核实"}</div>
+          <div><Tag color="blue">申请人</Tag>{detail.applicant_name ?? "身份待核实"}</div>
           <Typography.Text strong>申请理由</Typography.Text>
           <Typography.Paragraph style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{detail.reason || "未提供"}</Typography.Paragraph>
           <Typography.Text strong>申请证据</Typography.Text>

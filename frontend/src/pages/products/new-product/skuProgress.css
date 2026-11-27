@@ -1,0 +1,74 @@
+/* SKU-progress local layout only. Reuse report shell, stat cards and cells. */
+.np-original-v4 .sku-p { min-width:0; display:flex; flex-direction:column; gap:10px; padding:12px 0; line-height:1.5; font-size:14px; }
+.np-original-v4 .sku-p .sku-p-stats {grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:0;gap:12px}
+@media(max-width:1200px){.np-original-v4 .sku-p .sku-p-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.np-original-v4 .sku-p .sku-p-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.sku-p-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.np-original-v4 .sku-p-filters .report-table-connected-search{width:400px;flex:0 1 400px;min-width:280px;max-width:100%}
+.np-original-v4 .sku-p-filters .ant-select,.np-original-v4 .sku-p-filters .ant-input,.np-original-v4 .sku-p-filters .ant-picker,.np-original-v4 .sku-p-filters .ant-btn{font-size:14px}
+/* Mirror the existing np-performance-report flex chain. Only the SKU tab is affected.
+   The footer is a sibling of ProTable, so it must never compete with a viewport-based table height. */
+.np-original-v4:has(.sku-p){display:flex;flex-direction:column;flex:1 1 0;height:100%;min-height:0;overflow:hidden}
+.np-original-v4:has(.sku-p) > .content{display:flex;flex-direction:column;flex:1 1 0;height:100%;min-height:0;overflow:hidden}
+.np-original-v4:has(.sku-p) .np-workspace-title,
+.np-original-v4:has(.sku-p) .np-workspace-bar{flex:0 0 auto}
+.np-original-v4:has(.sku-p) .np-workspace-panel,
+.np-original-v4:has(.sku-p) .np-workspace-body,
+.np-original-v4:has(.sku-p) .sku-p{display:flex;flex-direction:column;flex:1 1 0;height:0;min-height:0;min-width:0;overflow:hidden}
+.np-original-v4 .sku-p > :not(.sku-p-table){flex:0 0 auto}
+.np-original-v4 .sku-p .sku-p-table{min-width:0;display:flex;flex-direction:column;flex:1 1 0;height:0;min-height:0;overflow:hidden}
+.np-original-v4 .sku-p-table .ant-pro-table,
+.np-original-v4 .sku-p-table .ant-pro-card,
+.np-original-v4 .sku-p-table .ant-pro-card-body,
+.np-original-v4 .sku-p-table .ant-table-wrapper,
+.np-original-v4 .sku-p-table .ant-spin-nested-loading,
+.np-original-v4 .sku-p-table .ant-spin-container,
+.np-original-v4 .sku-p-table .ant-table,
+.np-original-v4 .sku-p-table .ant-table-container{display:flex;flex-direction:column;flex:1 1 0;width:100%;height:100%;min-height:0;min-width:0;overflow:hidden}
+.np-original-v4 .sku-p-table > .ant-pro-table{height:0}
+.np-original-v4 .sku-p-table .ant-table-header{flex:0 0 auto}
+.np-original-v4 .sku-p-table .ant-table-body{display:block;flex:1 1 0;min-height:0;height:auto!important;max-height:100%!important;overflow:auto!important}
+.np-original-v4 .sku-p-table .ant-pro-card-body{padding:0;min-height:0;overflow:hidden}
+.np-original-v4 .sku-p-table .ant-table-thead > tr > th{font-size:14px;line-height:1.35;white-space:nowrap;padding:9px 9px!important}
+.np-original-v4 .sku-p-table .ant-table-tbody > tr > td{font-size:14px;line-height:1.45;height:44px;vertical-align:middle;padding:6px 8px!important}
+.np-original-v4 .sku-p-table .ant-table-tbody > tr > td.ant-table-cell-fix-left{background:var(--ant-color-bg-container,#fff)}
+.np-original-v4 .sku-p-table .ant-table-tbody > tr:hover > td.ant-table-cell-fix-left{background:var(--sku-hover)}
+.sku-p-ellipsis,.sku-p-sub{display:block;max-width:100%;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sku-p-sub{font-size:12px;color:var(--sku-muted);line-height:1.6}
+.sku-p-store{font-weight:500}
+.sku-p-product{display:flex;gap:9px;align-items:center;min-width:0;max-width:100%}
+.sku-p-product>.report-table-image{flex:none}
+.sku-p-producttext,.sku-p-identity{display:flex;flex-direction:column;align-items:flex-start;min-width:0;max-width:100%;flex:1}
+.np-original-v4 .sku-p-table .report-table-copyable,.np-original-v4 .sku-p-table .report-table-product-id-cell{width:100%;min-width:0;max-width:100%;display:flex;align-items:center}
+.np-original-v4 .sku-p-table .report-table-copyable__text,.np-original-v4 .sku-p-table .report-table-copyable__link{flex:1;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;font-size:14px}
+.np-original-v4 .sku-p-table .report-table-copyable__button{flex:0 0 auto}
+.np-original-v4 .sku-p-table .sku-p-sku .report-table-copyable__text{font-weight:600}
+.np-original-v4 .sku-p-table .sku-p-product-name .report-table-copyable__text,.np-original-v4 .sku-p-table .sku-p-msku .report-table-copyable__text{font-size:12px;color:var(--sku-muted)}
+.np-original-v4 .sku-p-table .sku-p-money .report-table-metric{font-size:14px;font-weight:600}
+.sku-p-note{display:flex;align-items:center;gap:4px}.sku-p-notetext{min-width:0;flex:1}
+.np-original-v4 .sku-p-table > .sku-p-footer{display:flex;gap:12px;justify-content:space-between;align-items:center;padding:5px 10px;border-top:1px solid var(--sku-border);flex-wrap:wrap;flex:0 0 auto;min-height:42px}
+.np-original-v4 .sku-p-table .sku-p-footer .ant-pagination{padding:0;border:0;margin:0!important;min-height:0}
+
+/* Listing-management-style confirmation popover; scoped to this feature. */
+.sku-p-more-filters{width:min(680px,calc(100vw - 48px));max-width:100%;padding:4px;box-sizing:border-box}
+.sku-p-more-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 12px}
+.sku-p-more-item{display:flex;flex-direction:column;gap:6px;min-width:0}
+.sku-p-more-title{display:flex;align-items:center;justify-content:space-between;gap:4px;font-size:13px;font-weight:500;line-height:1.5}
+.sku-p-more-pending{color:var(--ant-color-text-tertiary,#98a2b3);font-size:12px;font-weight:400;white-space:nowrap}
+.sku-p-more-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid var(--ant-color-border-secondary,#f0f0f0);flex-wrap:wrap}
+@media(max-width:720px){.sku-p-more-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* V6: ReportFacetSelect uses its width as flex-basis. Inside a column that
+   becomes a height. A block wrapper preserves full width without vertical flex sizing. */
+.sku-p-more-filters .sku-p-more-grid{align-items:start;row-gap:16px}
+.sku-p-more-filters .sku-p-more-item{display:grid;grid-template-rows:auto auto;align-content:start;min-width:0;min-height:0;gap:6px}
+.sku-p-more-filters .sku-p-more-control{display:block;min-width:0;width:100%;min-height:32px}
+.sku-p-more-filters .sku-p-more-control > .report-facet-select{display:flex;flex:none!important;width:100%!important;min-width:0!important;max-width:100%!important;height:32px;min-height:32px;max-height:32px}
+.sku-p-more-filters .sku-p-more-control > .report-facet-select .ant-select-selector{height:32px!important;min-height:32px!important;max-height:32px!important;align-items:center}
+.sku-p-more-filters .sku-p-more-title{min-height:20px;line-height:20px}
+.sku-p-more-filters .sku-p-more-actions{margin-top:16px;padding-top:12px}
+/* Purchase action is unavailable until the real write contract is ready. Keep
+   one aligned Ant button; do not fabricate a submission status or enable it. */
+.np-original-v4 .sku-p-table .sku-p-purchase-entry{display:inline-flex;align-items:center;max-width:100%;vertical-align:middle}
+.np-original-v4 .sku-p-table .sku-p-purchase-button.ant-btn{display:inline-flex;align-items:center;justify-content:flex-start;gap:4px;height:28px;padding:0 2px;font-size:14px;line-height:1.5;white-space:nowrap}
+.np-original-v4 .sku-p-table .sku-p-purchase-button.ant-btn .anticon{font-size:12px}

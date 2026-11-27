@@ -13,8 +13,8 @@ Walmart 监控目标分页查询。
 | 认证 | 独立 machine Bearer Token；配置项 `WALMART_MONITOR_TARGETS_TOKEN` |
 | permissionKey | `integrations:walmart-monitor:read` |
 | 数据权限 | 专用只读 machine principal 可读取当前 Listing MART；不向普通用户会话开放 |
-| 数据来源 | `mart_listing_management_current`；用 `listing_archive_states` 排除已归档 Listing |
-| sourceTables | `mart_listing_management_current`、`listing_archive_states` |
+| 数据来源 | `mart_listing_management_current`；用 `listing_archive_states` 排除已归档 Listing；负责人为空时从当前产品负责人 DWD 做唯一匹配兜底 |
+| sourceTables | `mart_listing_management_current`、`listing_archive_states`、`dwd_lingxing_sku_identity_index`、`dwd_lingxing_sku_product_info_current` |
 | 是否只读 | 是 |
 | 是否审计 | 使用既有 request ID、认证失败与服务日志；不记录 Token 或商品字段值 |
 | 是否高危 | 否；不会写库、触发同步或调用外部 API |
@@ -40,7 +40,7 @@ Walmart 监控目标分页查询。
 | `store_name` | string/null | Listing MART 店铺名称 |
 | `sku` | string/null | `local_sku` |
 | `msku` | string/null | Listing MART MSKU |
-| `owner` | string/null | `owner_ref` |
+| `owner` | string/null | 优先使用 Listing `owner_ref`；为空时按同账号、本地 SKU 从当前产品负责人 DWD 取唯一负责人名称（名称缺失时 UID）；缺失或歧义保持 `null` |
 | `product_name` | string/null | `local_name`，不以页面标题替代 |
 | `product_category` | string/null | Listing 来源类目 `category` |
 | `wfs_inventory` | decimal/null | `wfs_available_quantity`；未知时为 `null`，不会因此取消监控资格 |
@@ -107,5 +107,6 @@ Authorization: Bearer <machine-token>
 
 - 接口读取新系统当前 Listing MART，不读取 `old-system/`，不调用 Lingxing、Walmart 或 Decodo。
 - `product_category` 是商品来源类目；监控页面实际观察到的类目应写入统一 RAW 事件，两者语义不同。
+- `owner` 的 DWD 兜底只接受同账号、同 SKU 的唯一非空负责人；多人或多身份歧义不会猜测，也不会复制 Listing 行。
 - 当前没有持久化资格规则；V1 仅对未归档 Listing 返回 `monitoring_eligible=true`。后续其他资格筛选必须另开任务。
 - 回滚只需移除 router 注册和专用认证路径，或不配置 Token 使接口 fail closed；没有数据库 migration。

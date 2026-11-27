@@ -1,4 +1,6 @@
 import { backendRequest } from "@/api/backendApi";
+import { navigation } from "@/config/navigation";
+import { getPagePermissionKey } from "@/shared/permissions/mockAccess";
 import type {
   PermissionGroup,
   RoleAuditEvent,
@@ -82,6 +84,7 @@ export interface RolePermissionCatalog {
   permissionLabels: Record<string, string>;
   permissionDescriptions: Record<string, string>;
   highRiskPermissions: ReadonlySet<string>;
+  activeBackendPermissionKeys: ReadonlySet<string>;
 }
 
 export const emptyRolePermissionCatalog: RolePermissionCatalog = {
@@ -91,6 +94,7 @@ export const emptyRolePermissionCatalog: RolePermissionCatalog = {
   permissionLabels: {},
   permissionDescriptions: {},
   highRiskPermissions: new Set<string>(),
+  activeBackendPermissionKeys: new Set<string>(),
 };
 
 function makeRoleKey(name: string): string {
@@ -133,66 +137,79 @@ function catalogPermissionKeys(catalog: RolePermissionCatalog) {
 export function buildRolePermissionCatalog(
   backendCatalog: BackendPermissionCatalog,
 ): RolePermissionCatalog {
+  // Navigation is the sole current route registry. One existing grant can cover
+  // several routes (e.g. new-product/launch-tracking and product/clearance).
+  const liveRoutes = new Map<string, string[]>();
+  // The current Dashboard and Products modules have only these real pages.
+  // Do not expose retired placeholders as page permissions.
+  const currentPageKeys: Readonly<Record<string, readonly string[]>> = {
+    dashboard: ["dashboard_today_sales"],
+    products: [
+      "products_product_management", "products_clearance_center",
+      "products_listing_management", "products_new_product_analysis",
+      "products_launch_tracking",
+    ],
+  };
+  navigation.forEach((group) => group.children.forEach((page) => {
+    const allowed = currentPageKeys[group.key];
+    if (allowed && !allowed.includes(page.key)) return;
+    if (page.status === "hidden" || page.status === "disabled") return;
+    const key = getPagePermissionKey(page);
+    // The exchange-rate route is intentionally super-admin-only.
+    if (key === "page:finance:fx-rates:view") return;
+    const titles = liveRoutes.get(key) ?? [];
+    if (!titles.includes(page.title)) titles.push(page.title);
+    liveRoutes.set(key, titles);
+  }));
+
   const permissionLabels: Record<string, string> = {};
   const permissionDescriptions: Record<string, string> = {};
   const highRiskPermissions = new Set<string>();
+  const activeBackendPermissionKeys = new Set<string>();
   const pagePermissionGroups: PermissionGroup[] = [];
   const actionPermissionGroups: PermissionGroup[] = [];
   const fieldPermissionGroups: PermissionGroup[] = [];
 
   backendCatalog.modules.forEach((module) => {
     const pageItems: string[] = [];
-
     module.pages.forEach((page) => {
+      activeBackendPermissionKeys.add(page.permission_key);
+      page.actions.forEach((item) => activeBackendPermissionKeys.add(item.permission_key));
+      page.fields.forEach((item) => activeBackendPermissionKeys.add(item.permission_key));
+      const titles = liveRoutes.get(page.permission_key);
+      if (!titles) return; // Retired page: hide it, do not revoke historic grants.
+      const displayName = titles.join(" / ");
       pageItems.push(page.permission_key);
-      permissionLabels[page.permission_key] = page.name;
-      permissionDescriptions[page.permission_key] = `允许进入并查看「${page.name}」页面`;
+      permissionLabels[page.permission_key] = displayName;
+      permissionDescriptions[page.permission_key] = `允许进入并查看「${titles.join("、")}」页面`;
 
       if (page.actions.length > 0) {
         const items = page.actions.map((action) => {
           permissionLabels[action.permission_key] = action.name;
           permissionDescriptions[action.permission_key] =
-            action.description || `${page.name}：${action.name}`;
-          if (action.risk_level === "high") {
-            highRiskPermissions.add(action.permission_key);
-          }
+            action.description || `${displayName}：${action.name}`;
+          if (action.risk_level === "high") highRiskPermissions.add(action.permission_key);
           return action.permission_key;
         });
-        actionPermissionGroups.push({
-          title: `${module.name} / ${page.name}`,
-          items,
-        });
+        actionPermissionGroups.push({title: `${module.name} / ${displayName}`, items});
       }
-
       if (page.fields.length > 0) {
         const items = page.fields.map((field) => {
           permissionLabels[field.permission_key] = field.name;
           permissionDescriptions[field.permission_key] =
-            field.description || `${page.name}字段：${field.name}`;
-          if (field.risk_level === "high") {
-            highRiskPermissions.add(field.permission_key);
-          }
+            field.description || `${displayName}字段：${field.name}`;
+          if (field.risk_level === "high") highRiskPermissions.add(field.permission_key);
           return field.permission_key;
         });
-        fieldPermissionGroups.push({
-          title: `${module.name} / ${page.name}`,
-          items,
-        });
+        fieldPermissionGroups.push({title: `${module.name} / ${displayName}`, items});
       }
     });
-
-    if (pageItems.length > 0) {
-      pagePermissionGroups.push({ title: module.name, items: pageItems });
-    }
+    if (pageItems.length > 0) pagePermissionGroups.push({title: module.name, items: pageItems});
   });
-
   return {
-    pagePermissionGroups,
-    actionPermissionGroups,
-    fieldPermissionGroups,
-    permissionLabels,
-    permissionDescriptions,
-    highRiskPermissions,
+    pagePermissionGroups, actionPermissionGroups, fieldPermissionGroups,
+    permissionLabels, permissionDescriptions, highRiskPermissions,
+    activeBackendPermissionKeys,
   };
 }
 
@@ -286,12 +303,20 @@ export async function saveRolePermissions(
   permissions: RolePermissionState,
   catalog: RolePermissionCatalog,
 ): Promise<RoleManagementRow> {
+  const visibleKeys = catalogPermissionKeys(catalog);
+  const retainedKeys = role.permissionKeys.filter((key) =>
+    catalog.activeBackendPermissionKeys.has(key) && !visibleKeys.has(key),
+  );
+  const permissionKeys = [...new Set([
+    ...retainedKeys,
+    ...stateToPermissionKeys(permissions, catalog),
+  ])].sort();
   const response = await backendRequest<BackendRole>(
     `/api/settings/rbac/roles/${role.roleKey}`,
     {
       method: "PATCH",
       body: JSON.stringify({
-        permission_keys: stateToPermissionKeys(permissions, catalog),
+        permission_keys: permissionKeys,
         expected_version: role.version,
       }),
     },

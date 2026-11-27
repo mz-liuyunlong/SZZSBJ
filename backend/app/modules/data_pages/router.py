@@ -19,7 +19,10 @@ from app.modules.data_pages.field_access import (
     filter_order_profit_export_columns,
     filter_order_profit_list_data,
     filter_order_profit_trend_data,
+    require_sales_sort_access,
 )
+from app.modules.data_pages.lifecycle_manual import set_manual_lifecycle
+from app.modules.data_pages.listing_exact_facets import compact_facet_label
 from app.modules.data_pages.order_profit_export import (
     ORDER_PROFIT_EXPORT_COLUMNS,
     export_order_profit_csv,
@@ -37,6 +40,14 @@ from app.modules.data_pages.schemas import (
     ListingArchiveRequest,
     ListingGptAnalysisLinkRead,
     ListingGptAnalysisLinkUpdateRequest,
+    ListingLifecycleBatchSetData,
+    ListingLifecycleBatchSetRequest,
+    ListingManagementBatchSearchRequest,
+    ListingManagementExactRequest,
+    ListingManagementFacetBatchData,
+    ListingManagementFacetBatchRequest,
+    ListingManagementFacetData,
+    ListingManagementFacetRequest,
     ListingManagementFilterOptionsData,
     ListingManagementListData,
     ListingManagementQuery,
@@ -135,7 +146,10 @@ def _listing_meta(
     total: int,
 ) -> ListingManagementReadMeta:
     return ListingManagementReadMeta(
-        source_objects=registry_source_objects("listing_management"),
+        source_objects=[
+            *registry_source_objects("listing_management"),
+            "mart_listing_ad_status_current",
+        ],
         latest_calculated_at=latest_calculated_at,
         page=page,
         page_size=page_size,
@@ -203,6 +217,11 @@ def export_daily_sales(
     dimension: Annotated[Literal["item_id", "sku", "msku"], Query()] = "item_id",
     columns: Annotated[str | None, Query()] = None,
 ) -> Response:
+    require_sales_sort_access(
+        query.sort_field,
+        can_view_gross_profit=has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION),
+        can_view_profit_margin=has_permission(principal, ORDER_PROFIT_MARGIN_PERMISSION),
+    )
     columns = filter_order_profit_export_columns(
         columns,
         can_view_gross_profit=has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION),
@@ -239,6 +258,11 @@ def list_daily_sales(
     principal: daily_sales_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[DailySalesListData, DailySalesReadMeta]:
+    require_sales_sort_access(
+        query.sort_field,
+        can_view_gross_profit=has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION),
+        can_view_profit_margin=has_permission(principal, ORDER_PROFIT_MARGIN_PERMISSION),
+    )
     data, total, latest_calculated_at = DailySalesService(session).list_daily_sales(
         query,
         account_refs,
@@ -275,6 +299,11 @@ def list_order_profit(
     principal: order_profit_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[OrderProfitListData, OrderProfitReadMeta]:
+    require_sales_sort_access(
+        query.sort_field,
+        can_view_gross_profit=has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION),
+        can_view_profit_margin=has_permission(principal, ORDER_PROFIT_MARGIN_PERMISSION),
+    )
     data, total, latest_calculated_at = OrderProfitService(session).list_order_profit(
         query=query,
         account_refs=account_refs,
@@ -312,6 +341,11 @@ def export_order_profit(
     dimension: Annotated[Literal["item_id", "sku", "msku"], Query()] = "item_id",
     columns: Annotated[str | None, Query()] = None,
 ) -> Response:
+    require_sales_sort_access(
+        query.sort_field,
+        can_view_gross_profit=has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION),
+        can_view_profit_margin=has_permission(principal, ORDER_PROFIT_MARGIN_PERMISSION),
+    )
     columns = filter_order_profit_export_columns(
         columns,
         can_view_gross_profit=has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION),
@@ -361,6 +395,31 @@ def order_profit_trend(
         request,
         data=data,
         meta=None,
+    )
+
+
+@router.post(
+    f"{_LISTING_REGISTRY.route_path}/export/batch-search",
+    response_class=Response,
+    responses=ERRORS,
+)
+def export_listing_management_batch_search(
+    payload: ListingManagementBatchSearchRequest,
+    session: db_session,
+    _: listing_principal,
+    account_refs: source_scope,
+) -> Response:
+    """Read-only CSV export using a validated JSON batch instead of a long GET URL."""
+    csv_text = ListingManagementService(session).export_listing_csv(
+        payload.as_query(),
+        account_refs,
+        columns=",".join(payload.columns) if payload.columns else None,
+    )
+    filename = f"listing-management-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv"
+    return Response(
+        content=csv_text.encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -508,6 +567,25 @@ def listing_summary(
     )
 
 
+@router.post(
+    f"{_LISTING_REGISTRY.route_path}/summary/batch-search",
+    response_model=SuccessEnvelope[ListingManagementSummaryData, Any],
+    responses=ERRORS,
+)
+def listing_summary_batch_search(
+    request: Request,
+    payload: ListingManagementBatchSearchRequest,
+    session: db_session,
+    _: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingManagementSummaryData, Any]:
+    return success_response(
+        request,
+        data=ListingManagementService(session).listing_summary(payload.as_query(), account_refs),
+        meta=None,
+    )
+
+
 @router.get(
     f"{_LISTING_REGISTRY.route_path}/filter-options",
     response_model=SuccessEnvelope[ListingManagementFilterOptionsData, Any],
@@ -522,6 +600,44 @@ def listing_filter_options(
     return success_response(
         request,
         data=ListingManagementService(session).listing_filter_options(account_refs),
+        meta=None,
+    )
+
+
+# The data-page view permission is insufficient for manual lifecycle writes.
+@router.post(
+    f"{_LISTING_REGISTRY.route_path}/lifecycle/batch-set",
+    response_model=SuccessEnvelope[ListingLifecycleBatchSetData, Any],
+    responses=ERRORS,
+)
+def set_listing_lifecycle_batch(
+    request: Request,
+    payload: ListingLifecycleBatchSetRequest,
+    session: db_session,
+    principal: Annotated[
+        Principal,
+        Depends(require_permission("action:products:listing-management:edit-lifecycle")),
+    ],
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingLifecycleBatchSetData, Any]:
+    try:
+        updated, unchanged = set_manual_lifecycle(
+            session=session,
+            listing_ids=payload.listing_ids,
+            stage=payload.stage,
+            reason=payload.reason,
+            actor_ref=str(principal.user_id),
+            account_refs=account_refs,
+        )
+    except PermissionError as exc:
+        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return success_response(
+        request,
+        data=ListingLifecycleBatchSetData(
+            updated_listings=updated, unchanged_listings=unchanged, stage=payload.stage
+        ),
         meta=None,
     )
 
@@ -621,6 +737,34 @@ def update_listing_gpt_analysis(
     return success_response(request, data=data, meta=None)
 
 
+@router.post(
+    f"{_LISTING_REGISTRY.route_path}/batch-search",
+    response_model=SuccessEnvelope[ListingManagementListData, ListingManagementReadMeta],
+    responses=ERRORS,
+)
+def list_walmart_listings_batch_search(
+    request: Request,
+    payload: ListingManagementBatchSearchRequest,
+    session: db_session,
+    _: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingManagementListData, ListingManagementReadMeta]:
+    query = payload.as_query()
+    data, total, latest_calculated_at = ListingManagementService(session).list_listings(
+        query, account_refs
+    )
+    return success_response(
+        request,
+        data=data,
+        meta=_listing_meta(
+            latest_calculated_at=latest_calculated_at,
+            page=query.page,
+            page_size=query.page_size,
+            total=total,
+        ),
+    )
+
+
 @router.get(
     _LISTING_REGISTRY.route_path,
     response_model=SuccessEnvelope[ListingManagementListData, ListingManagementReadMeta],
@@ -647,3 +791,102 @@ def list_walmart_listings(
             total=total,
         ),
     )
+
+
+@router.post(
+    f"{_LISTING_REGISTRY.route_path}/query",
+    response_model=SuccessEnvelope[ListingManagementListData, ListingManagementReadMeta],
+    responses=ERRORS,
+)
+def query_listing_exact(
+    request: Request,
+    payload: ListingManagementExactRequest,
+    session: db_session,
+    principal: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingManagementListData, ListingManagementReadMeta]:
+    return list_walmart_listings_batch_search(request, payload, session, principal, account_refs)
+
+
+@router.post(
+    f"{_LISTING_REGISTRY.route_path}/summary/query",
+    response_model=SuccessEnvelope[ListingManagementSummaryData, Any],
+    responses=ERRORS,
+)
+def summary_listing_exact(
+    request: Request,
+    payload: ListingManagementExactRequest,
+    session: db_session,
+    principal: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingManagementSummaryData, Any]:
+    return listing_summary_batch_search(request, payload, session, principal, account_refs)
+
+
+@router.post(
+    f"{_LISTING_REGISTRY.route_path}/export/query",
+    response_class=Response,
+    responses=ERRORS,
+)
+def export_listing_exact(
+    payload: ListingManagementExactRequest,
+    session: db_session,
+    principal: listing_principal,
+    account_refs: source_scope,
+) -> Response:
+    return export_listing_management_batch_search(payload, session, principal, account_refs)
+
+
+@router.post(
+    f"{_LISTING_REGISTRY.route_path}/facet-options",
+    response_model=SuccessEnvelope[ListingManagementFacetData, Any],
+    responses=ERRORS,
+)
+def listing_exact_facet_options(
+    request: Request,
+    payload: ListingManagementFacetRequest,
+    session: db_session,
+    _: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingManagementFacetData, Any]:
+    result = ListingManagementService(session).listing_exact_facet_options(
+        payload.as_query(), account_refs, payload.field, payload.offset, payload.limit
+    )
+    return success_response(request, data=result, meta=None)
+
+
+@router.post(
+    f"{_LISTING_REGISTRY.route_path}/facet-options/batch",
+    response_model=SuccessEnvelope[ListingManagementFacetBatchData, Any],
+    responses=ERRORS,
+)
+def listing_exact_facet_batch_options(
+    request: Request,
+    payload: ListingManagementFacetBatchRequest,
+    session: db_session,
+    _: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingManagementFacetBatchData, Any]:
+    # Sequential reads on the same scoped session; never parallelize a Session.
+    service = ListingManagementService(session)
+    query = payload.as_query()
+    if payload.complete:
+        if any(payload.fields.values()):
+            raise HTTPException(status_code=422, detail="Complete facet offsets must be zero")
+        try:
+            items = service.listing_complete_facet_batch(query, account_refs, list(payload.fields))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    else:
+        items = {
+            field: service.listing_exact_facet_options(
+                query, account_refs, field, offset, payload.limit
+            )
+            for field, offset in payload.fields.items()
+        }
+    if payload.complete and payload.compact_labels:
+        for page in items.values():
+            for option in page.options:
+                if compact_facet_label(option.value, option.label) == "":
+                    option.label = ""
+    return success_response(request, data=ListingManagementFacetBatchData(items=items), meta=None)
