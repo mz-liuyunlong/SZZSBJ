@@ -52,26 +52,26 @@ def test_store_row_uses_its_own_remark_then_listing_gtin():
 
 
 def test_remark_item_id_is_trusted_when_the_listing_has_no_local_sku():
-    """PO261016006 case: Lingxing never paired the listing; the remark still wins."""
-    lines = [("HK2613", ["10.14已分配采购", "21139862520"], [])]
-    listings = [("HK2613", "21139862520", None, "00046001636422", "YC01291-1A")]
+    """PO990101006 case: Lingxing never paired the listing; the remark still wins."""
+    lines = [("HK2613", ["10.14已分配采购", "19000000101"], [])]
+    listings = [("HK2613", "19000000101", None, "00046001636422", "TT01291-1A")]
     assert resolve_store_item_ids(
-        store_id="HK2613", sku="YC01291", lines=lines, plans={}, listings=listings
-    ) == [("21139862520", "00046001636422")]
+        store_id="HK2613", sku="TT01291", lines=lines, plans={}, listings=listings
+    ) == [("19000000101", "00046001636422")]
     # Without the remark the same listing is found through the purchase line MSKU.
     assert resolve_store_item_ids(
         store_id="HK2613",
-        sku="YC01291",
+        sku="TT01291",
         lines=[("HK2613", [None], [])],
         plans={},
         listings=listings,
-        line_mskus=["YC01291-1A"],
-    ) == [("21139862520", "00046001636422")]
+        line_mskus=["TT01291-1A"],
+    ) == [("19000000101", "00046001636422")]
     # ...and not without an MSKU to go on.
     assert (
         resolve_store_item_ids(
             store_id="HK2613",
-            sku="YC01291",
+            sku="TT01291",
             lines=[("HK2613", [None], [])],
             plans={},
             listings=listings,
