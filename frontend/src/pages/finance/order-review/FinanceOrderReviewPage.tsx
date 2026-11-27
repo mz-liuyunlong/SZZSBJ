@@ -8,20 +8,23 @@
 import { ReloadOutlined, SearchOutlined, SettingOutlined } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
 import { Alert, Button, Dropdown, Input, Modal, Space, Tag, Tooltip, Typography, message } from "antd";
+import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState, type ReactNode } from "react";
 import { MoneyCell } from "@/components/report-table/cells";
 import ResetButton from "@/components/report-table/ResetButton";
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
 import PageShell from "@/components/page/PageShell";
 import type { NavigationPage } from "@/config/navigation";
+import { fetchCurrentUser } from "@/pages/auth/authApi";
 import FinanceBoardFrame from "@/pages/finance/FinanceBoardFrame";
+import { hasPermission } from "@/shared/permissions/mockAccess";
 import BoardTable from "@/pages/finance/payout-recon/BoardTable";
 import HelpButton, { type HelpSection } from "@/pages/finance/payout-recon/HelpButton";
 import ReportFacetSelect from "@/shared/report-filters";
 import CostEntryDrawer from "./CostEntryDrawer";
 import ExactSearchModal from "./ExactSearchModal";
 import {
-  DEFAULT_FILTERS, KIND_TEXT, LOOKUP_LABEL, REASON_TEXT, SOURCE_KIND_TEXT, STATUS_TEXT, errorText, n, postRecalc, postReview,
+  BATCH_CONFIRM_THRESHOLD, CHANGED_AFTER_REVIEW, DEFAULT_FILTERS, KIND_TEXT, LOOKUP_LABEL, PERMISSIONS, REASON_TEXT, SOURCE_KIND_TEXT, STATUS_TEXT, errorText, n, postRecalc, postReview,
   useLines, useOrderReviewRefresh, usePeriods, useTransactionTypes,
   type ApiLine, type ApiMoney, type ApiPeriod, type LineFilters, type LineKind, type LookupKind, type Reason, type ReviewStatus,
 } from "./orderReviewApi";
@@ -33,9 +36,9 @@ const HELP: HelpSection[] = [
   { title: "货本怎么来", body: "订单行按订单号 + GTIN 查领星成本计价流水，定位到发货单；发货单明细里的采购价、出库头程、头程费用、税就是货本（单位成本 = 四项之和）。WFS 订单的尾程 = 结算单配送费，只展示、不计入货本；自发货订单的尾程 = 销售出库单物流费用，计入货本。" },
   { title: "自动通过", body: "发货单来源、物流商不是 WFS 承运（按设置里的 WFS 承运商清单）、发货单明细四项齐全且之和等于单位成本、币种人民币、商品有负责人 → 自动通过，不用人审。" },
   { title: "待审原因", body: "WFS 承运货件（确认头程）、自发货（录采购价 / 头程 / 尾程）、固定值、最近签收成本、没有成本来源、发货单明细不完整、商品无负责人、同期卖出又取消。一行可以有多个原因。" },
-  { title: "录成本", body: "点行上的「录成本」：范围 = MSKU × 发货单（或出库单），一次录入覆盖范围内所有订单行（含跨期）。「确认」= 接受领星发货单的值；「修正」= 改值，原因必填，系统不回写领星，请同时去领星改。录入后进初审；撤销录入退回待审。" },
+  { title: "录成本", body: "点行上的「录成本」：范围 = MSKU × 发货单（或出库单），一次录入覆盖范围内所有订单行（含跨期）。「确认」= 接受领星发货单的值；「修正」= 改值，原因必填，系统不回写领星，请同时去领星改。录入后不自动通过，进待审 → 初审 → 终审；撤销录入退回待审。批量审核 20 行以上要二次确认。" },
   { title: "审核", body: "初审、终审分开授权；同一人不能既初审又终审；退回要写原因；终审通过后要先撤销终审才能改。自动通过的行不用审。" },
-  { title: "重算", body: "账单、发货单、出库单同步后会自动重算受影响的期；也可以点「重算」。内容没变不写新版本；已初审 / 终审的行计算值变了不自动改状态，版本号 +1 提醒刷新。已结账的月不重算。" },
+  { title: "重算", body: "账单、发货单、出库单同步后会自动重算受影响的期；也可以点「重算」。内容没变不写新版本；已初审 / 终审的行计算值变了不自动改状态，版本号 +1 并红字提示「审核后数据有变」，请撤销后重审。已结账的月不重算。" },
 ];
 
 const EMPTY = "—";
@@ -64,6 +67,14 @@ function sourceCell(line: ApiLine): ReactNode {
 function Workbench({ periods }: { periods: ApiPeriod[] }) {
   const refresh = useOrderReviewRefresh();
   const [messageApi, holder] = message.useMessage();
+  const [modal, modalHolder] = Modal.useModal();
+  const me = useQuery({ queryKey: ["auth", "current-user"], queryFn: fetchCurrentUser, staleTime: 5 * 60 * 1000 });
+  const can = useMemo(() => ({
+    costEntry: hasPermission(me.data?.permissions, PERMISSIONS.costEntry),
+    review1: hasPermission(me.data?.permissions, PERMISSIONS.review1),
+    review2: hasPermission(me.data?.permissions, PERMISSIONS.review2),
+    recalc: hasPermission(me.data?.permissions, PERMISSIONS.recalc),
+  }), [me.data?.permissions]);
   const latest = periods[0]?.period_key;
   const [filters, setFilters] = useState<LineFilters>({ ...DEFAULT_FILTERS, periodKeys: latest ? [latest] : [] });
   const lines = useLines(filters);
@@ -99,12 +110,24 @@ function Workbench({ periods }: { periods: ApiPeriod[] }) {
       setBusy(false);
     }
   };
-  const review = (stage: "first" | "final", decision: "pass" | "reject" | "revert", comment?: string) =>
-    act(() => postReview(selectedRows.map((r) => r.review_id), stage, decision, comment), (result) => {
+  const reviewNow = (stage: "first" | "final", decision: "pass" | "reject" | "revert", comment: string | undefined, confirmed: boolean) =>
+    act(() => postReview(selectedRows.map((r) => r.review_id), stage, decision, comment, confirmed), (result) => {
       const r = result as { succeeded: number; failed: number; items: { message: string | null }[] };
       const firstError = r.items.find((i) => i.message)?.message;
       return `${stage === "first" ? "初审" : "终审"}${decision === "pass" ? "通过" : decision === "reject" ? "退回" : "撤销"} ${r.succeeded} 行${r.failed ? `，${r.failed} 行未成功${firstError ? `（${firstError}）` : ""}` : ""}`;
     });
+  /** PRP §5：≥ 20 行先二次确认，再带 confirm_token 提交 */
+  const review = (stage: "first" | "final", decision: "pass" | "reject" | "revert", comment?: string) => {
+    const count = selectedRows.length;
+    if (count < BATCH_CONFIRM_THRESHOLD) return reviewNow(stage, decision, comment, false);
+    modal.confirm({
+      title: `批量${stage === "first" ? "初审" : "终审"}${decision === "pass" ? "通过" : decision === "reject" ? "退回" : "撤销"} ${count} 行`,
+      content: `一次操作 ${count} 行（≥ ${BATCH_CONFIRM_THRESHOLD} 行），确认后提交。`,
+      okText: "确认提交",
+      onOk: () => reviewNow(stage, decision, comment, true),
+    });
+    return Promise.resolve();
+  };
   const recalc = () => act(() => postRecalc(filters.storeIds, filters.periodKeys), (result) => {
     const r = result as { periods_total: number; items: { status: string }[] };
     const skipped = r.items.filter((i) => i.status === "skipped_closed").length;
@@ -142,31 +165,42 @@ function Workbench({ periods }: { periods: ApiPeriod[] }) {
     costUsd: { key: "costUsd", title: "货本 $", width: 90, align: "right", render: (_, r) => (r.fx_status === "missing" ? <Tag color="gold" bordered={false}>汇率缺失</Tag> : r.cost_total_usd ? usd(r.cost_total_usd) : EMPTY) },
     fx: { key: "fx", title: "汇率", width: 80, render: (_, r) => r.fx_rate ?? EMPTY },
     profit: { key: "profit", title: "利润 $", width: 90, align: "right", render: (_, r) => (r.profit_usd ? <MoneyCell value={n(r.profit_usd)} tone="profit" /> : EMPTY) },
-    reasons: { key: "reasons", title: "待审原因", width: 220, render: (_, r) => (r.reasons.length ? r.reasons.map((x) => <Tag key={x} color="orange" bordered={false}>{REASON_TEXT[x] ?? x}</Tag>) : r.auto_passed ? <Tag color="green" bordered={false}>自动通过</Tag> : EMPTY) },
+    reasons: { key: "reasons", title: "待审原因", width: 220, render: (_, r) => (
+      <>
+        {r.review_reasons.includes(CHANGED_AFTER_REVIEW) && <Tooltip title="审核后计算值有变，请撤销后重审"><Tag color="red" bordered={false}>审核后数据有变</Tag></Tooltip>}
+        {r.reasons.length ? r.reasons.map((x) => <Tag key={x} color="orange" bordered={false}>{REASON_TEXT[x] ?? x}</Tag>) : r.auto_passed ? <Tag color="green" bordered={false}>自动通过</Tag> : r.review_reasons.length ? null : EMPTY}
+      </>
+    ) },
     version: { key: "version", title: "版本", width: 70, render: (_, r) => `${r.version} / 算 ${r.calc_version}` },
     status: { key: "status", title: "状态", width: 150, fixed: "right", render: (_, r) => (
       <Space size={4}>
         {statusTag(r)}
-        {r.line_kind !== "refund" && r.review_status !== "final_passed" && <Button size="small" type="link" onClick={(e) => { e.stopPropagation(); setEntryLine(r); }}>录成本</Button>}
+        {can.costEntry && r.line_kind !== "refund" && r.review_status !== "final_passed" && <Button size="small" type="link" onClick={(e) => { e.stopPropagation(); setEntryLine(r); }}>录成本</Button>}
       </Space>
     ) },
   };
   const shown = columnKeys.flatMap((key) => (all[key] ? [all[key]] : []));
   const sortable = ["posted_date", "platform_order_no", "item_id", "msku", "sales_usd", "settlement_amount_usd", "cost_total_cny", "quantity", "review_status"];
 
+  // PRP §7A：无 action 权限的按钮不显示（后端仍按权限 403）
   const batch = [
-    { key: "first_pass", label: "批量初审通过", onClick: () => void review("first", "pass") },
-    { key: "final_pass", label: "批量终审通过", onClick: () => void review("final", "pass") },
-    { key: "first_reject", label: "退回（初审）", danger: true, onClick: () => setRejectOpen("first") },
-    { key: "final_reject", label: "退回（终审）", danger: true, onClick: () => setRejectOpen("final") },
-    { key: "first_revert", label: "撤销初审", onClick: () => void review("first", "revert") },
-    { key: "final_revert", label: "撤销终审", onClick: () => void review("final", "revert") },
+    ...(can.review1 ? [
+      { key: "first_pass", label: "批量初审通过", onClick: () => void review("first", "pass") },
+      { key: "first_reject", label: "退回（初审）", danger: true, onClick: () => setRejectOpen("first") },
+      { key: "first_revert", label: "撤销初审", onClick: () => void review("first", "revert") },
+    ] : []),
+    ...(can.review2 ? [
+      { key: "final_pass", label: "批量终审通过", onClick: () => void review("final", "pass") },
+      { key: "final_reject", label: "退回（终审）", danger: true, onClick: () => setRejectOpen("final") },
+      { key: "final_revert", label: "撤销终审", onClick: () => void review("final", "revert") },
+    ] : []),
   ];
   const missingTranslation = (types.data ?? []).filter((t) => !t.translated);
 
   return (
     <>
       {holder}
+      {modalHolder}
       {missingTranslation.length > 0 && <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={`有 ${missingTranslation.length} 种交易类型还没有中文名（${missingTranslation.map((t) => t.name_en).join("、")}），请通知代码维护补翻译`} />}
       {lines.error && <Alert type="error" showIcon style={{ marginBottom: 12 }} message={errorText(lines.error)} />}
       <FinanceBoardFrame
@@ -195,8 +229,8 @@ function Workbench({ periods }: { periods: ApiPeriod[] }) {
           <Input.Search allowClear placeholder="订单号 / ItemID / MSKU / GTIN" style={{ width: 220 }} onSearch={(v) => set({ keyword: v })} />
           <ResetButton onClick={() => { setFilters({ ...DEFAULT_FILTERS, periodKeys: latest ? [latest] : [] }); setSelected([]); }} />
           <Space className="finance-board__toolbar-actions" size={8}>
-            <Tooltip title="按当前选的期 / 店铺重算（要重算权限；已结账的月跳过）"><Button icon={<ReloadOutlined aria-hidden="true" />} loading={busy} onClick={() => void recalc()}>重算</Button></Tooltip>
-            <Dropdown menu={{ items: batch }} disabled={!selectedRows.length}><Button loading={busy}>批量审核（{selectedRows.length}）</Button></Dropdown>
+            {can.recalc && <Tooltip title="按当前选的期 / 店铺重算（已结账的月跳过）"><Button icon={<ReloadOutlined aria-hidden="true" />} loading={busy} onClick={() => void recalc()}>重算</Button></Tooltip>}
+            {batch.length > 0 && <Dropdown menu={{ items: batch }} disabled={!selectedRows.length}><Button loading={busy}>批量审核（{selectedRows.length}）</Button></Dropdown>}
             <Button aria-label="列配置" icon={<SettingOutlined aria-hidden="true" />} onClick={() => setColumnOpen(true)} />
           </Space>
         </>}

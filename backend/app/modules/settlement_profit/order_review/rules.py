@@ -67,6 +67,8 @@ class FlowSegment:
     other_total: Decimal | None
     currency_code: str | None
     row_hash: str
+    # 领星 businessType 原值，只记录不判定（订单发货的编码待首次探测后再收紧）
+    business_type: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -400,6 +402,7 @@ def _shipment_segment(
         reasons=[],
         detail={
             "shipping_list_code": code,
+            "business_type": flow.business_type,
             "logistics_provider_id": header.logistics_provider_id if header else None,
             "logistics_provider_name": header.logistics_provider_name if header else None,
             "logistics_way": detail.logistics_way if detail else None,
@@ -468,6 +471,7 @@ def _config_segment(
         reasons=[reason],
         detail={
             "cost_source": flow.cost_source,
+            "business_type": flow.business_type,
             "business_number": flow.business_number,
             "flow_row_hash": flow.row_hash,
             "prefill": {"purchase_cny": _s(purchase), "head_cny": _s(head)},
@@ -502,7 +506,8 @@ def compute_line(
 ) -> ComputedLine:
     totals, types, quantity, kind = _amounts(group)
     first = group.rows[0]
-    fulfillment = fulfillment_of(first.fulfillment_type)
+    # MCF 行账单里没有履约类型：按 §0.3 走 WFS 同一规则（经 costSource 定位发货单），不当自发货
+    fulfillment = "wfs" if kind == "mcf" else fulfillment_of(first.fulfillment_type)
     item_id = next((_text(r.partner_item_id) for r in group.rows if _text(r.partner_item_id)), None)
     report_date = first.report_date
     line = ComputedLine(
@@ -598,7 +603,9 @@ def _sale_cost(
                 head=None,
                 last_leg=None,
                 reasons=["cost_missing"],
-                detail={"note": "flow_not_covering"},
+                # 没有任何单据可挂：范围退化为 MSKU × 平台订单号，
+                # 写在 outbound 前缀下（见接口文档 §2）
+                detail={"note": "flow_not_covering", "scope_kind": "platform_order"},
             )
         )
         if missing_msku and not seller:
@@ -645,10 +652,11 @@ def _sale_cost(
         line.msku = next((s.msku for s in segments if s.msku), None)
     if seller:
         line.reasons.append("self_fulfilled")
+    # 自动通过只认发货单来源；套用了人工录入（entry）的段要走初审 / 终审（#373 复审 P1）
     line.auto_passed = (
         not seller
         and bool(segments)
-        and all(s.kind in {"shipment", "entry"} for s in segments)
+        and all(s.kind == "shipment" for s in segments)
         and all(not s.reasons for s in segments)
         and covered >= sold
     )
@@ -691,12 +699,17 @@ def _refund_cost(line: ComputedLine, group: OrderGroup, lookups: Lookups) -> Non
     )
     original = lookups.original_line(group.order_no, group.line_no, group.gtin)
     line.cost_sources = [{"kind": "refund", "returned": returned}]
-    if not returned or original is None or original.quantity <= 0:
+    if not returned:
         line.purchase_cny = line.head_cny = line.last_leg_cny = ZERO
         line.cost_total_cny = ZERO
         line.auto_passed = True
         if original is not None and original.msku and line.msku is None:
             line.msku = original.msku
+        return
+    if original is None or original.quantity <= 0:
+        # 退货入库却找不到原订单行（如 10 月前卖出 10 月退货）：货本冲不了，待审（#373 复审 P3-6）
+        line.reasons.append("cost_missing")
+        line.cost_sources[0]["note"] = "original_line_missing"
         return
     units = abs(line.quantity)
     if line.msku is None:

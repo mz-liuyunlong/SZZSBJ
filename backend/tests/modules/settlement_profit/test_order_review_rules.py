@@ -437,7 +437,8 @@ def test_cost_entry_on_shipping_scope_clears_shipment_reasons() -> None:
     assert line.reasons == []
     assert line.cost_entry_ids == ["entry-2"]
     assert line.cost_total_cny == Decimal("6.5000")
-    assert line.auto_passed is True
+    # 套用了人工录入的段不自动通过，要走初审 / 终审（#373 复审 P1）
+    assert line.auto_passed is False
     revoked = CostEntry("entry-2", MSKU, f"shipping:{CODE}", None, None, None, "confirm", "revoked")
     lookups.entries[(MSKU, f"shipping:{CODE}")] = revoked
     line = compute(sale_rows(), lookups)
@@ -465,7 +466,10 @@ def test_refund_line_reverses_original_cost_only_when_goods_came_back() -> None:
     lookups = DictLookups()
     line = compute(refund, lookups)
     assert line.line_kind == "refund"
-    assert line.cost_total_cny == Decimal("0")  # 原行还没算出来：不冲
+    # 退货入库却找不到原订单行：货本冲不了，待审（#373 复审 P3-6）
+    assert line.reasons == ["cost_missing"]
+    assert line.cost_total_cny is None
+    assert line.auto_passed is False
     lookups.originals[(ORDER, "1", GTIN)] = OriginalLine(
         Decimal("2"), Decimal("6"), Decimal("7"), None, True, MSKU
     )
@@ -479,6 +483,43 @@ def test_refund_line_reverses_original_cost_only_when_goods_came_back() -> None:
     keep = [row("Refund", "Keep-it refund", "Product Price", "-20.00", qty=1)]
     line = compute(keep, lookups)
     assert line.cost_total_cny == Decimal("0")
+
+
+def test_mcf_line_follows_wfs_rules_not_seller() -> None:
+    rows = [
+        row("Other", "WFS MultiChannelFulfillmentFee", "", "-6.00", qty=None, fulfillment=""),
+        row("Sale", "Purchase", "Product Price", "20.00", qty=1, fulfillment=""),
+    ]
+    lookups = DictLookups()
+    lookups.flows = [flow()]
+    lookups.details[(CODE, MSKU)] = detail()
+    lookups.headers[CODE] = ShipmentHeader(CODE, "1234", "x")
+    lookups.outbound[ORDER] = OutboundOrder("WO1", Decimal("30"), "CNY")
+    line = compute(rows, lookups)
+    assert line.line_kind == "sale"  # 同组里有 Product Price 销售行
+    mcf_only = compute(rows[:1], lookups)
+    assert mcf_only.line_kind == "mcf"
+    assert mcf_only.fulfillment_type == "wfs"
+    assert mcf_only.mcf_fee_usd == Decimal("-6.00")
+    assert "self_fulfilled" not in mcf_only.reasons
+    assert mcf_only.last_leg_cny is None
+    assert mcf_only.cost_sources[0]["scope_ref"] == f"shipping:{CODE}"
+
+
+def test_refund_reversal_goes_to_refund_column() -> None:
+    assert (
+        categorize("Dispute Settlement", "Customer Return Reversal", "Fee/Reimbursement")
+        == "refund"
+    )
+    assert (
+        categorize(
+            "Adjustment",
+            "CUSTOMER RETURN REFUND REVERSAL-LOST LATER DELIVERED",
+            "Fee/Reimbursement",
+        )
+        == "refund"
+    )
+    assert categorize("Service Fee", "Walmart Return Shipping Charge", "Item Fees") == "return_fee"
 
 
 def test_fx_missing_leaves_usd_cost_empty() -> None:

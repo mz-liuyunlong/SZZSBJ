@@ -1,6 +1,6 @@
 # PRP：财务 · 结算利润 V3 —— 订单审核（按期）+ 结算利润（店铺×月）+ 成本来源规则 + WFS 减免/调拨/MCF + 设置项
 
-- Status: Rev 9（Rev 9：随 PR-2 入库。改动四处：① §10 合并顺序 —— 业务负责人 2026-11-26 定「订单审核要提前」，原 PR-3 / PR-4 / PR-5 按板块纵切为 PR-OR 订单审核、PR-SP 结算利润；② §10 PR-2 范围收窄：SB / SV 广告与评价加速器快照同步移出 PR-2；③ §9 PR-2 交付项同步；④ §11「迁移回滚不删业务数据」一段的 PR-3 改为 PR-OR / PR-SP。其余不动。Rev 8（Rev 8：按 #358 复审 P2-2，§3 / §6.4 / §10 / §12 / §15 同步业务负责人 2026-11-24 13:46～14:00「探测通过的沃尔玛接口全部开放」；Rev 7 审核 AI 09:39 复核通过。Rev 7：按审核 AI 2026-11-24 第四轮意见改 §8.10 公式一处；Rev 6：按审核 AI 2026-11-24 第三轮意见 P2 ×1、P3 ×2 修订；Rev 5：按审核 AI 2026-11-24 复核意见 P1 ×1、P2 ×2、P3 ×4 修订；Rev 4：2026-11-24 09:08 业务负责人定评价加速器快照走云函数、授权放开 `POST /v3/growth/reviews-accelerator/items`（只此一路径、只读），§16 清空；Rev 3：按审核 AI 2026-11-24 意见 P1 ×5、P2 ×9、P3 ×1 修订，自成一体、不再依赖 v2；Rev 2：业务负责人 2026-11-24 02:07 答复 §16 五项；Rev 1：代码 AI 2026-11-24 按业务负责人 2026-11-09 ~ 11-24 拍板整理）。审核 AI 正式复核通过的是 Rev 7（2026-11-24 09:39）；Rev 8 只同步 11-24 13:46～14:00 的授权口径，没有单独复核，以 #365 复审为准。随 PR-1 入库（2026-11-25）
+- Status: Rev 10（Rev 10：随 PR-OR 入库，只改 §5 订单审核的动作 key —— 按 #347 已有命名用 `review1` / `review2`（与回款对账一致），另加 `recalc`；§7 `/review` 补 confirm_token。Rev 9：随 PR-2 入库。改动四处：① §10 合并顺序 —— 业务负责人 2026-11-26 定「订单审核要提前」，原 PR-3 / PR-4 / PR-5 按板块纵切为 PR-OR 订单审核、PR-SP 结算利润；② §10 PR-2 范围收窄：SB / SV 广告与评价加速器快照同步移出 PR-2；③ §9 PR-2 交付项同步；④ §11「迁移回滚不删业务数据」一段的 PR-3 改为 PR-OR / PR-SP。其余不动。Rev 8（Rev 8：按 #358 复审 P2-2，§3 / §6.4 / §10 / §12 / §15 同步业务负责人 2026-11-24 13:46～14:00「探测通过的沃尔玛接口全部开放」；Rev 7 审核 AI 09:39 复核通过。Rev 7：按审核 AI 2026-11-24 第四轮意见改 §8.10 公式一处；Rev 6：按审核 AI 2026-11-24 第三轮意见 P2 ×1、P3 ×2 修订；Rev 5：按审核 AI 2026-11-24 复核意见 P1 ×1、P2 ×2、P3 ×4 修订；Rev 4：2026-11-24 09:08 业务负责人定评价加速器快照走云函数、授权放开 `POST /v3/growth/reviews-accelerator/items`（只此一路径、只读），§16 清空；Rev 3：按审核 AI 2026-11-24 意见 P1 ×5、P2 ×9、P3 ×1 修订，自成一体、不再依赖 v2；Rev 2：业务负责人 2026-11-24 02:07 答复 §16 五项；Rev 1：代码 AI 2026-11-24 按业务负责人 2026-11-09 ~ 11-24 拍板整理）。审核 AI 正式复核通过的是 Rev 7（2026-11-24 09:39）；Rev 8 只同步 11-24 13:46～14:00 的授权口径，没有单独复核，以 #365 复审为准。随 PR-1 入库（2026-11-25）
 - 取代：`PRPs/finance-settlement-profit-v2.md`（Rev 4.6）。本文自成一体：v2 仍有效的条款已原文并入（§5、§7、§8.1、§8.11 ~ §8.13、§11 ~ §14）。**v2 不入库，本文取代 v2**（v2 只留本地草稿）。
 - Owner Approval Required: No（业务负责人 2026-11-24 已拍板，§16 无未决项）
 - Implementation authorization state: Yes（Rev 7 审核 AI 2026-11-24 复核通过；Rev 8 以 #365 复审为准；按 §10 顺序开发）
@@ -95,8 +95,8 @@
 
 | 角色 | permissionKey | 数据范围 | 可见字段 |
 |---|---|---|---|
-| 财务专员 | `page:finance:order-review:view`、`action:finance:order-review:cost-entry`、`action:finance:order-review:review-first`；`page:finance:settlement-profit:view`、`action:finance:settlement-profit:adjust`、`action:finance:settlement-profit:review-first` | 全部店铺 | 全部 |
-| 财务主管 | 以上 + `action:finance:order-review:review-final`、`action:finance:settlement-profit:review-final`、`action:finance:settlement-profit:close-month`（含解锁）、`action:finance:settlement-profit:config` | 全部店铺 | 全部 |
+| 财务专员 | `page:finance:order-review:view`、`action:finance:order-review:cost-entry`、`action:finance:order-review:review1`；`page:finance:settlement-profit:view`、`action:finance:settlement-profit:adjust`、`action:finance:settlement-profit:review-first` | 全部店铺 | 全部 |
+| 财务主管 | 以上 + `action:finance:order-review:review2`、`action:finance:order-review:recalc`、`action:finance:settlement-profit:review-final`、`action:finance:settlement-profit:close-month`（含解锁）、`action:finance:settlement-profit:config` | 全部店铺 | 全部 |
 | 管理层 | 两个 page view | 全部店铺 | 全部，只读 |
 | 运营负责人 | 两个 page view（data scope = owner） | 只看自己负责的商品 | 结算利润与纯利；公司级费用总额、他人数据、货本单价不可见 |
 
@@ -167,7 +167,7 @@ sensitive or critical domains: 财务 / 利润 / 成本 / 结算 / 库存 / 广�
 | GET `/api/finance/order-review/lookup` | kind=item_id / sku / msku、q、limit≤1000 | 精确搜索弹层候选 |
 | GET `/api/finance/order-review/transaction-types` | — | 生产账单实际出现的交易类型清单（code、中文名、英文原名） |
 | POST `/api/finance/order-review/cost-entries` | Idempotency-Key；body：scope（msku + shipping_list_code 或 outbound_order_no）、purchase_cny、head_cny、last_leg_cny、reason、expected_version | 录入记录；影响的订单行数 |
-| POST `/api/finance/order-review/review` | line_ids[]≤500、stage、decision、comment | 每行结果 |
+| POST `/api/finance/order-review/review` | Idempotency-Key；review_ids[]≤500、stage、decision、comment、confirm_token（≥ 20 行必填） | 每行结果 |
 | GET `/api/finance/settlement-profit/summary` | months[]、store_ids[]、owner_ids[]、view、currency、item_ids[]、skus[]、mskus[]、sort_by、sort_order、page、page_size | rows[] + totals（店铺合计含「WFS 费用返还」单独一行） |
 | GET `/api/finance/settlement-profit/store-items` | months[]、store_ids[]、kind=review_accelerator / discount_back / transfer_fee / mcf / company_cost | 店铺级项目与审核状态 |
 | POST `/api/finance/settlement-profit/store-items/review` | ids[]、stage、decision、comment | 每条结果 |

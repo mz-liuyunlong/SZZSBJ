@@ -100,6 +100,7 @@ class LineRead(BaseModel):
     reasons: list[str]
     auto_passed: bool
     review_status: str
+    review_reasons: list[str] = Field(default_factory=list)
     first_reviewed_by: str | None
     first_reviewed_at: datetime | None
     final_reviewed_by: str | None
@@ -214,6 +215,8 @@ class ReviewRequest(BaseModel):
     stage: ReviewStage
     decision: ReviewDecision
     comment: str | None = Field(default=None, max_length=2000)
+    # ≥ 20 行时必填（PRP §5），值固定为 CONFIRM_BATCH_REVIEW，前端二次确认后带上
+    confirm_token: str | None = Field(default=None, max_length=64)
 
 
 class ReviewLineResult(BaseModel):

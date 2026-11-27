@@ -1,4 +1,7 @@
-"""结算利润 V3 PR-OR：订单审核页面与动作权限登记（按 #347 RBAC），不建表。
+"""结算利润 V3 PR-OR：订单审核页面与动作权限登记（按 #347 RBAC）+ 两个幂等键列。
+
+- manual_settlement_review_actions.idempotency_key（批量审核请求的 Idempotency-Key）
+- manual_settlement_cost_entries.revoke_idempotency_key（撤销录入请求的 Idempotency-Key）
 
 Revision ID: 20261127_0101_finance_order_review_permissions
 Revises: 20261127_0100_sku_ad_progress_foundation
@@ -31,7 +34,14 @@ PERMISSIONS = (
 )
 
 
+REVIEW_ACTIONS = "manual_settlement_review_actions"
+COST_ENTRIES = "manual_settlement_cost_entries"
+
+
 def upgrade() -> None:
+    op.add_column(REVIEW_ACTIONS, sa.Column("idempotency_key", sa.String(128), nullable=True))
+    op.create_index("ix_manual_settlement_review_idem", REVIEW_ACTIONS, ["idempotency_key"])
+    op.add_column(COST_ENTRIES, sa.Column("revoke_idempotency_key", sa.String(128), nullable=True))
     bind = op.get_bind()
     for key, kind, action, name, sort in PERMISSIONS:
         bind.execute(
@@ -62,6 +72,17 @@ def downgrade() -> None:
         {"keys": keys},
     ):
         raise RuntimeError("rollback blocked: order review permissions are assigned to roles")
+    # 先做完全部检查再动表：两列只要有值就拒绝回滚、不删数据
+    for table, column in (
+        (REVIEW_ACTIONS, "idempotency_key"),
+        (COST_ENTRIES, "revoke_idempotency_key"),
+    ):
+        found = bind.execute(sa.text(f"select 1 from {table} where {column} is not null limit 1"))
+        if found.first() is not None:
+            raise RuntimeError(f"rollback blocked: {table}.{column} has data")
     bind.execute(
         sa.text("DELETE FROM app_permissions WHERE permission_key = ANY(:keys)"), {"keys": keys}
     )
+    op.drop_index("ix_manual_settlement_review_idem", table_name=REVIEW_ACTIONS)
+    op.drop_column(REVIEW_ACTIONS, "idempotency_key")
+    op.drop_column(COST_ENTRIES, "revoke_idempotency_key")

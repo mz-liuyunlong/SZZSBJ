@@ -15,6 +15,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import cast, func, or_, select, true
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.settlement_profit.models import (
@@ -25,6 +26,7 @@ from app.modules.settlement_profit.models import (
     SettlementReviewAction,
 )
 from app.modules.settlement_profit.order_review.calc import (
+    CHANGED_AFTER_REVIEW,
     OrderReviewCalculator,
     RecalcResult,
     month_is_closed,
@@ -66,6 +68,11 @@ ERR_ALREADY_REVOKED: Final = "ALREADY_REVOKED"
 ERR_ENTRY_EXISTS: Final = "COST_ENTRY_EXISTS"
 ERR_COST_MISSING: Final = "COST_MISSING"
 ERR_ALREADY_PASSED: Final = "ALREADY_PASSED"
+ERR_CONFIRM_REQUIRED: Final = "CONFIRM_REQUIRED"
+
+# PRP §5：批量审核 ≥ 20 行要前端二次确认 + 后端 confirm_token（沿用仓库固定令牌写法）
+BATCH_CONFIRM_THRESHOLD: Final = 20
+BATCH_CONFIRM_TOKEN: Final = "CONFIRM_BATCH_REVIEW"
 
 SORTABLE: Final[dict[str, Any]] = {
     "posted_date": SettlementOrderLine.posted_date,
@@ -328,6 +335,7 @@ def line_read(line: SettlementOrderLine, review: SettlementOrderReview) -> LineR
         reasons=list(line.reasons),
         auto_passed=line.auto_passed,
         review_status=review.review_status,
+        review_reasons=list(review.reasons or []),
         first_reviewed_by=review.first_reviewed_by,
         first_reviewed_at=review.first_reviewed_at,
         final_reviewed_by=review.final_reviewed_by,
@@ -524,7 +532,14 @@ def create_cost_entry(
         request_id=request_id,
     )
     session.add(entry)
-    session.flush()
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        # 两个请求同时通过了上面的检查：撞部分唯一索引的那个转成 409（#373 复审 P3-7）
+        session.rollback()
+        raise OrderReviewError(
+            409, ERR_ENTRY_EXISTS, "这个范围已有未撤销的录入，先撤销再录"
+        ) from exc
     periods = _recalc_lines(session, lines)
     session.commit()
     return CostEntryResult(
@@ -547,12 +562,18 @@ def revoke_cost_entry(
     actor: str,
     actor_role: str,
     request_id: str | None,
+    idempotency_key: str | None = None,
 ) -> CostEntryResult:
     del actor_role, request_id
     entry = session.get(SettlementCostEntry, entry_id)
     if entry is None:
         raise OrderReviewError(404, ERR_NOT_FOUND, "没有这条录入")
+    key = (idempotency_key or "").strip() or None
     if entry.status == "revoked":
+        if key and entry.revoke_idempotency_key == key:
+            return CostEntryResult(
+                entry=entry_read(entry), affected_lines=0, recalculated_periods=0, replayed=True
+            )
         raise OrderReviewError(409, ERR_ALREADY_REVOKED, "这条录入已经撤销")
     if entry.version != payload.expected_version:
         raise OrderReviewError(409, ERR_STALE_VERSION, "数据已被他人修改，请刷新")
@@ -566,6 +587,7 @@ def revoke_cost_entry(
     entry.revoked_by = actor
     entry.revoked_at = utc_now()
     entry.revoke_reason = payload.reason.strip()
+    entry.revoke_idempotency_key = key
     entry.version += 1
     session.flush()
     # 撤销后订单行回到待审：已初审 / 终审的行也退回（§8.4 撤销回到待审）
@@ -579,6 +601,9 @@ def revoke_cost_entry(
         ).one_or_none()
         if review is not None and review.review_status in {"first_passed", "final_passed"}:
             review.review_status = "pending"
+            review.first_reviewed_by = review.first_reviewed_at = None
+            review.final_reviewed_by = review.final_reviewed_at = None
+            review.reasons = [r for r in review.reasons if r != CHANGED_AFTER_REVIEW]
             review.version += 1
     periods = _recalc_lines(session, lines)
     session.commit()
@@ -597,9 +622,22 @@ def review_lines(
     actor: str,
     actor_role: str,
     request_id: str | None,
+    idempotency_key: str | None = None,
 ) -> ReviewResultData:
     if payload.decision in {"reject"} and not (payload.comment or "").strip():
         raise OrderReviewError(422, ERR_VALIDATION, "退回必须填原因")
+    if (
+        len(payload.review_ids) >= BATCH_CONFIRM_THRESHOLD
+        and payload.confirm_token != BATCH_CONFIRM_TOKEN
+    ):
+        raise OrderReviewError(
+            409, ERR_CONFIRM_REQUIRED, f"批量审核 {BATCH_CONFIRM_THRESHOLD} 行以上要二次确认"
+        )
+    key = (idempotency_key or "").strip() or None
+    if key:
+        replay = _replay_review(session, key)
+        if replay is not None:
+            return replay
     reviews = {
         row.id: row
         for row in session.scalars(
@@ -635,7 +673,7 @@ def review_lines(
             continue
         line = lines.get((review.store_id, review.period_key, review.line_key))
         try:
-            _apply_review(session, review, line, payload, actor, actor_role, request_id)
+            _apply_review(session, review, line, payload, actor, actor_role, request_id, key)
         except OrderReviewError as exc:
             items.append(
                 ReviewLineResult(
@@ -663,6 +701,56 @@ def review_lines(
     return ReviewResultData(items=items, succeeded=succeeded, failed=len(items) - succeeded)
 
 
+def _replay_review(session: Session, key: str) -> ReviewResultData | None:
+    """同一个 Idempotency-Key 已经处理过：按当时写下的审核记录重放结果，不再改任何状态。"""
+    actions = session.scalars(
+        select(SettlementReviewAction)
+        .where(SettlementReviewAction.idempotency_key == key)
+        .order_by(SettlementReviewAction.acted_at)
+    ).all()
+    if not actions:
+        return None
+    items = [
+        ReviewLineResult(
+            review_id=action.target_id or uuid4(),
+            line_key=action.line_key,
+            ok=True,
+            review_status=str(action.after.get("review_status", "")),
+            version=int(action.after.get("version", 0)),
+        )
+        for action in actions
+    ]
+    return ReviewResultData(items=items, succeeded=len(items), failed=0)
+
+
+def _sync_entry_status(session: Session, line: SettlementOrderLine | None, status: str) -> None:
+    """审核结论同步到这一行用到的录入记录（§8.4 录入后进初审 / 终审；撤销回到待初审）。"""
+    if line is None or not line.cost_entry_ids:
+        return
+    ids: list[UUID] = []
+    for raw in line.cost_entry_ids:
+        try:
+            ids.append(UUID(str(raw)))
+        except ValueError:
+            continue
+    if not ids:
+        return
+    for entry in session.scalars(
+        select(SettlementCostEntry).where(
+            SettlementCostEntry.id.in_(ids), SettlementCostEntry.status != "revoked"
+        )
+    ).all():
+        entry.status = status
+
+
+_ENTRY_STATUS_BY_REVIEW: Final[dict[str, str]] = {
+    "pending": "pending_first",
+    "first_passed": "first_passed",
+    "final_passed": "final_passed",
+    "rejected": "rejected",
+}
+
+
 def _apply_review(
     session: Session,
     review: SettlementOrderReview,
@@ -671,6 +759,7 @@ def _apply_review(
     actor: str,
     actor_role: str,
     request_id: str | None,
+    idempotency_key: str | None = None,
 ) -> None:
     if month_is_closed(session, store_id=review.store_id, bill_month=review.bill_month):
         raise OrderReviewError(409, ERR_MONTH_CLOSED, "该月已结账，先解锁")
@@ -723,12 +812,16 @@ def _apply_review(
     review.review_status = new_status
     review.version += 1
     review.updated_at = utc_now()
+    # 任何一次审核动作都算「财务看过了」：清掉差异提示
+    review.reasons = [r for r in review.reasons if r != CHANGED_AFTER_REVIEW]
+    _sync_entry_status(session, line, _ENTRY_STATUS_BY_REVIEW[new_status])
     session.add(
         SettlementReviewAction(
             id=uuid4(),
             store_id=review.store_id,
             bill_month=review.bill_month,
             period_key=review.period_key,
+            idempotency_key=idempotency_key,
             target_kind="order_line",
             target_id=review.id,
             line_key=review.line_key,

@@ -245,6 +245,7 @@ def post_cost_entry_revoke(
     principal: cost_writer,
     entry_id: UUID,
     payload: CostEntryRevoke,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key", max_length=128)] = None,
 ) -> SuccessEnvelope[CostEntryResult, None]:
     try:
         data = service.revoke_cost_entry(
@@ -254,6 +255,7 @@ def post_cost_entry_revoke(
             actor=principal.user_id,
             actor_role=COST_ENTRY_PERMISSION,
             request_id=get_request_id(request),
+            idempotency_key=idempotency_key,
         )
     except service.OrderReviewError as exc:
         raise _api_error(exc) from exc
@@ -264,13 +266,14 @@ def post_cost_entry_revoke(
     "/review",
     responses=ERRORS,
     operation_id="reviewFinanceOrderReviewLines",
-    summary="批量初审 / 终审 / 退回 / 撤销（≤ 500 行，逐行返回结果）",
+    summary="批量初审 / 终审 / 退回 / 撤销（≤ 500 行，≥ 20 行要 confirm_token，逐行返回结果）",
 )
 def post_review(
     request: Request,
     session: db_session,
     principal: reader,
     payload: ReviewRequest,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key", max_length=128)] = None,
 ) -> SuccessEnvelope[ReviewResultData, None]:
     needed = REVIEW1_PERMISSION if payload.stage == "first" else REVIEW2_PERMISSION
     if not has_permission(principal, needed):
@@ -282,6 +285,7 @@ def post_review(
             actor=principal.user_id,
             actor_role=needed,
             request_id=get_request_id(request),
+            idempotency_key=idempotency_key,
         )
     except service.OrderReviewError as exc:
         raise _api_error(exc) from exc

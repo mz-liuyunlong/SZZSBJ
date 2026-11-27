@@ -51,6 +51,8 @@ from app.modules.walmart_bills.models import WalmartBillLine, WalmartBillPeriod
 from app.modules.warehouse_wfs.inventory_flow_models import WfsCostValuationFlowOds
 
 DEFAULT_CUTOFF_DAY = 5
+# 审核行上的差异提示（不是订单行的待审原因）：已初审 / 终审后计算值变了
+CHANGED_AFTER_REVIEW = "changed_after_review"
 
 
 class OrderReviewCalcError(RuntimeError):
@@ -151,10 +153,13 @@ class DbLookups(Lookups):
         numbers = [n for n in order_nos if n]
         if not numbers:
             return []
+        # 只取出库方向（quantity < 0）：流水表全类型入库，客户退货入库行也带订单号，
+        # 不能当成第二段发货（#373 复审 P2-1）。订单发货的 businessType 编码待首次探测后再收紧。
         statement = select(WfsCostValuationFlowOds).where(
             WfsCostValuationFlowOds.source_account_ref == self.account,
             WfsCostValuationFlowOds.is_current.is_(True),
             WfsCostValuationFlowOds.order_number.in_(numbers),
+            WfsCostValuationFlowOds.quantity < 0,
             or_(
                 WfsCostValuationFlowOds.store_id == self.store_id,
                 WfsCostValuationFlowOds.store_id.is_(None),
@@ -177,6 +182,7 @@ class DbLookups(Lookups):
                 gtin=row.gtin,
                 quantity=qty(abs(row.quantity)),
                 business_number=row.business_number,
+                business_type=row.business_type,
                 purchase_total=row.purchase_total_amount,
                 logistics_total=row.logistics_total_amount,
                 other_total=row.other_total_amount,
@@ -434,7 +440,16 @@ class OrderReviewCalculator:
     def recalc_period(
         self, store_id: str, period_key: str, *, run_ids: Iterable[str] = ()
     ) -> RecalcResult:
-        period = self.session.get(WalmartBillPeriod, (self.account, store_id, period_key))
+        # 锁住这一期：页面「重算」和账单同步后的任务可能同时跑同一期，串行化免得撞当前版本唯一索引
+        period = self.session.scalars(
+            select(WalmartBillPeriod)
+            .where(
+                WalmartBillPeriod.source_account_ref == self.account,
+                WalmartBillPeriod.store_id == store_id,
+                WalmartBillPeriod.report_key == period_key,
+            )
+            .with_for_update()
+        ).one_or_none()
         if period is None:
             return RecalcResult(store_id=store_id, period_key=period_key, status="no_period")
         settings = load_settings(self.session, bill_month=period.report_date)
@@ -538,6 +553,7 @@ class OrderReviewCalculator:
             seen.add(line.line_key)
             row = existing.get(line.line_key)
             computed_status = "auto" if line.auto_passed else "pending"
+            flagged = row is not None and CHANGED_AFTER_REVIEW in (row.reasons or [])
             if row is None:
                 row = SettlementOrderReview(
                     id=uuid4(),
@@ -557,9 +573,13 @@ class OrderReviewCalculator:
                     row.review_status = computed_status
                 elif changed and row.review_status == "rejected":
                     row.review_status = computed_status
-                # first_passed / final_passed 保持；计算值变了只更新展示字段，版本号 +1 让前端刷新
+                # first_passed / final_passed 保持；计算值变了版本号 +1，并加差异提示
+                # changed_after_review（§8.4：已确认 / 修正的行不自动改，写差异提示；
+                # 撤销或重审后清掉）
                 if changed:
                     row.version += 1
+                    if row.review_status in {"first_passed", "final_passed"}:
+                        flagged = True
                 row.calc_version = result.calc_version
                 row.content_hash = line.content_hash
                 row.bill_month = bill_month
@@ -569,7 +589,7 @@ class OrderReviewCalculator:
             row.msku = line.msku
             row.owner_id = line.owner_id
             row.transaction_types = list(line.transaction_types)
-            row.reasons = list(line.reasons)
+            row.reasons = list(line.reasons) + ([CHANGED_AFTER_REVIEW] if flagged else [])
             row.settlement_amount_usd = line.settlement_amount_usd
             row.cost_total_cny = line.cost_total_cny
             row.updated_at = utc_now()

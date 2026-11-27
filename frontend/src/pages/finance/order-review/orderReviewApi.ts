@@ -40,7 +40,7 @@ export interface ApiLine {
   purchase: ApiMoney | null; head: ApiMoney | null; last_leg: ApiMoney | null; cost_total: ApiMoney | null;
   cost_total_usd: ApiMoney | null; profit_usd: ApiMoney | null; fx_rate: string | null; fx_status: "final" | "missing";
   cost_sources: ApiCostSource[]; cost_entry_ids: string[]; reasons: Reason[]; auto_passed: boolean;
-  review_status: ReviewStatus; first_reviewed_by: string | null; first_reviewed_at: string | null;
+  review_status: ReviewStatus; review_reasons: string[]; first_reviewed_by: string | null; first_reviewed_at: string | null;
   final_reviewed_by: string | null; final_reviewed_at: string | null; version: number; calc_version: number;
 }
 export interface ApiLineMeta { total: number; page: number; page_size: number }
@@ -142,9 +142,16 @@ export const postCostEntry = (input: CostEntryInput, idempotencyKey: string) =>
   post<ApiCostEntryResult>(`${BASE}/cost-entries`, input, { "Idempotency-Key": idempotencyKey });
 export const getCostEntry = async (entryId: string) => (await backendRequest<ApiCostEntry>(`${BASE}/cost-entries/${entryId}`)).data;
 export const revokeCostEntry = (entryId: string, reason: string, expectedVersion: number) =>
-  post<ApiCostEntryResult>(`${BASE}/cost-entries/${entryId}/revoke`, { reason, expected_version: expectedVersion });
-export const postReview = (reviewIds: string[], stage: "first" | "final", decision: "pass" | "reject" | "revert", comment?: string) =>
-  post<ApiReviewResult>(`${BASE}/review`, { review_ids: reviewIds, stage, decision, comment: comment ?? null });
+  post<ApiCostEntryResult>(`${BASE}/cost-entries/${entryId}/revoke`, { reason, expected_version: expectedVersion }, { "Idempotency-Key": crypto.randomUUID() });
+/** ≥ 20 行时后端要 confirm_token（PRP §5），前端二次确认后带固定值 */
+export const BATCH_CONFIRM_THRESHOLD = 20;
+export const BATCH_CONFIRM_TOKEN = "CONFIRM_BATCH_REVIEW";
+export const postReview = (reviewIds: string[], stage: "first" | "final", decision: "pass" | "reject" | "revert", comment?: string, confirmed = false) =>
+  post<ApiReviewResult>(
+    `${BASE}/review`,
+    { review_ids: reviewIds, stage, decision, comment: comment ?? null, confirm_token: confirmed ? BATCH_CONFIRM_TOKEN : null },
+    { "Idempotency-Key": crypto.randomUUID() },
+  );
 export const postRecalc = (storeIds: string[], periodKeys: string[]) =>
   post<ApiRecalcResult>(`${BASE}/recalc`, { store_ids: storeIds, period_keys: periodKeys });
 
@@ -157,6 +164,7 @@ const CODE_TEXT: Record<string, string> = {
   COST_ENTRY_EXISTS: "这个范围已有未撤销的录入，先撤销再录",
   ALREADY_REVOKED: "这条录入已经撤销",
   ALREADY_PASSED: "自动通过的行不需要审核",
+  CONFIRM_REQUIRED: "批量审核 20 行以上要二次确认",
   VALIDATION_ERROR: "填写的内容不符合要求",
   NOT_FOUND: "没有这条数据",
 };
@@ -192,6 +200,15 @@ export const REASON_TEXT: Record<Reason, string> = {
   cancelled_refund: "同期卖出又取消（确认无成本）",
 };
 export const KIND_TEXT: Record<LineKind, string> = { sale: "销售", refund: "退款", mcf: "MCF" };
+/** 审核行上的差异提示（不是订单行的待审原因）：已初审 / 终审后计算值变了 */
+export const CHANGED_AFTER_REVIEW = "changed_after_review";
+export const PERMISSIONS = {
+  view: "page:finance:order-review:view",
+  costEntry: "action:finance:order-review:cost-entry",
+  review1: "action:finance:order-review:review1",
+  review2: "action:finance:order-review:review2",
+  recalc: "action:finance:order-review:recalc",
+} as const;
 export const SOURCE_KIND_TEXT: Record<string, string> = {
   shipment: "发货单", entry: "人工录入", fixed_value: "固定值", last_received: "最近签收", missing: "无来源",
   outbound: "出库单", refund: "退款冲回", cancelled_refund: "取消退款",

@@ -143,19 +143,57 @@ def test_cost_entry_confirm_then_review_flow(session: Session) -> None:
     session.refresh(review)
     line = base.current_lines(session)[0]
     assert line.reasons == [] and line.cost_entry_ids == [str(result.entry.id)]
-    assert review.review_status == "auto"  # 录入后没有任何原因 → 自动通过
+    # 录入后不自动通过，进初审 / 终审（§8.4；#373 复审 P1）
+    assert review.review_status == "pending"
+    version_before = review.version  # 录入触发重算，内容变了版本已 +1
+    first = service.review_lines(
+        session,
+        ReviewRequest(review_ids=[review.id], stage="first", decision="pass"),
+        actor="u-first",
+        actor_role="r1",
+        request_id=None,
+        idempotency_key="rev-1",
+    )
+    assert first.items[0].review_status == "first_passed"
+    entry = session.get(SettlementCostEntry, result.entry.id)
+    assert entry is not None and entry.status == "first_passed"  # 录入记录状态同步
+    # 同一个 Idempotency-Key 重放：按当时的记录返回，不再改状态
+    replayed = service.review_lines(
+        session,
+        ReviewRequest(review_ids=[review.id], stage="first", decision="pass"),
+        actor="u-first",
+        actor_role="r1",
+        request_id=None,
+        idempotency_key="rev-1",
+    )
+    assert replayed.items[0].review_status == "first_passed"
+    session.refresh(review)
+    # 首次初审 +1；同 key 重放不再 +1
+    assert review.review_status == "first_passed" and review.version == version_before + 1
 
-    # 把它改成待审再走审核链：用修正录入（override）模拟财务改值后的人工审核路径
-    service.revoke_cost_entry(
+    # 撤销录入：已初审的行退回待审、录入记录撤销；同 key 重放返回首次结果
+    revoked = service.revoke_cost_entry(
         session,
         result.entry.id,
         CostEntryRevoke(reason="重录", expected_version=1),
         actor="u-cost",
         actor_role="cost",
         request_id=None,
+        idempotency_key="revoke-1",
     )
+    assert revoked.replayed is False
     session.refresh(review)
     assert review.review_status == "pending"
+    again = service.revoke_cost_entry(
+        session,
+        result.entry.id,
+        CostEntryRevoke(reason="重录", expected_version=2),
+        actor="u-cost",
+        actor_role="cost",
+        request_id=None,
+        idempotency_key="revoke-1",
+    )
+    assert again.replayed is True
 
 
 def test_review_stage_order_same_reviewer_and_revert(session: Session) -> None:
@@ -225,6 +263,29 @@ def test_review_stage_order_same_reviewer_and_revert(session: Session) -> None:
         request_id=None,
     )
     assert missing.items[0].error_code == service.ERR_NOT_FOUND
+    # ≥ 20 行要 confirm_token（PRP §5）
+    many = [uuid4() for _ in range(service.BATCH_CONFIRM_THRESHOLD)]
+    with pytest.raises(service.OrderReviewError, match="二次确认"):
+        service.review_lines(
+            session,
+            ReviewRequest(review_ids=many, stage="first", decision="pass"),
+            actor="u1",
+            actor_role="r1",
+            request_id=None,
+        )
+    confirmed = service.review_lines(
+        session,
+        ReviewRequest(
+            review_ids=many,
+            stage="first",
+            decision="pass",
+            confirm_token=service.BATCH_CONFIRM_TOKEN,
+        ),
+        actor="u1",
+        actor_role="r1",
+        request_id=None,
+    )
+    assert confirmed.failed == len(many)
     actions = session.scalars(
         select(SettlementReviewAction).order_by(SettlementReviewAction.acted_at)
     ).all()

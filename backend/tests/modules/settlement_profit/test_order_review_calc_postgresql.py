@@ -68,6 +68,8 @@ def session() -> Iterator[Session]:
 
 
 FLOWS: dict[str, list[FlowSegment]] = {}
+# 打桩前留一份真实实现，给「只取出库方向」的 SQL 断言用
+ORIGINAL_FLOW_SEGMENTS = DbLookups.flow_segments
 
 
 @pytest.fixture(autouse=True)
@@ -334,6 +336,12 @@ def test_changed_input_flips_old_version_and_keeps_manual_review(session: Sessio
     assert review.review_status == "first_passed"  # 已初审的行不自动改
     assert review.version == 2  # 计算值变了，版本 +1
     assert review.cost_total_cny == Decimal("6.6")
+    assert "changed_after_review" in review.reasons  # 差异提示（§8.4）
+    # 再算一次内容没变：提示保留，版本不动
+    calculator.recalc_period(STORE, PERIOD)
+    session.refresh(review)
+    assert "changed_after_review" in review.reasons
+    assert review.version == 2
 
 
 def test_line_gone_from_bill_is_retired(session: Session) -> None:
@@ -401,7 +409,9 @@ def test_cost_entry_is_picked_up_on_recalc(session: Session) -> None:
     line = current_lines(session)[0]
     assert line.reasons == []
     assert len(line.cost_entry_ids) == 1
-    assert (result.auto_passed, result.calc_version) == (1, 2)
+    # 人工录入的段不自动通过：留在待审，等初审 / 终审（#373 复审 P1）
+    assert line.auto_passed is False
+    assert (result.auto_passed, result.pending, result.calc_version) == (0, 1, 2)
 
 
 def test_closed_month_is_skipped(session: Session) -> None:
@@ -450,6 +460,30 @@ def test_refund_in_later_period_reverses_the_original_line(session: Session) -> 
     assert refund.quantity == Decimal("-1")
     assert refund.cost_total_cny == Decimal("-6.5")
     assert refund.auto_passed is True
+
+
+def test_flow_lookup_only_takes_outbound_rows() -> None:
+    """流水表全类型入库：退货入库行（quantity > 0）带同一个订单号，不能当成发货段。"""
+    from sqlalchemy.dialects import postgresql
+
+    captured: list[str] = []
+
+    class Empty:
+        def all(self) -> list[Any]:
+            return []
+
+    class Capture:
+        def scalars(self, statement: Any) -> Empty:
+            captured.append(str(statement.compile(dialect=postgresql.dialect())))
+            return Empty()
+
+    lookups = DbLookups.__new__(DbLookups)
+    lookups.session = Capture()  # type: ignore[assignment]
+    lookups.account = ACCOUNT
+    lookups.store_id = STORE
+    assert ORIGINAL_FLOW_SEGMENTS(lookups, [ORDER], GTIN) == []
+    assert captured and "ods_lingxing_wfs_cost_valuation_flow.quantity < " in captured[0]
+    assert "is_current IS true" in captured[0]
 
 
 def test_periods_for_recalc_defaults_to_october_onwards(session: Session) -> None:

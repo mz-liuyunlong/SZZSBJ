@@ -37,6 +37,7 @@ ODS 公共列：`synced_at`、`row_hash`、`raw_row`（原始行 JSON）。
 | 表 | 业务键 | 内容 |
 |---|---|---|
 | `fact_settlement_order_lines` | store_id, period_key, calc_version, line_key | 订单审核的订单行，一期一行一订单行。`line_kind`：sale / refund / mcf；`fulfillment_type`：wfs / seller。收入与订单费用（USD，结算单口径）、广告分摊（只展示）、货本三项（CNY：采购、头程、尾程；WFS 订单的尾程 = 配送费，只展示、不计入 `cost_total_cny`）、`cost_sources`（可多段）、`reasons`（待审原因）、`auto_passed`；`is_current` 标当前版本，同店同期同一 `line_key` 只能有一个当前版本（部分唯一索引） |
+> 订单行货本三项的口径（PR-OR）：`purchase_cny` = 发货单明细采购价；`head_cny` = 出库头程 + 头程费用 + 税（采购价 + 头程 = 单位成本 `wfsStockPrice`）；`last_leg_cny` 只在自发货订单计入。`manual_settlement_review_actions.idempotency_key`、`manual_settlement_cost_entries.revoke_idempotency_key`（迁移 0101）用于写接口的 Idempotency-Key 重放。
 | `fact_settlement_store_month_items` | store_id, bill_month, source_kind, source_ref | 店铺级项目：`review_accelerator`、`discount_back`（WFS 费用返还，不分摊）、`transfer_fee`、`mcf`、`storage_fee`、`other_wfs_service`、`company_cost`，以及待指定 `unassigned_bill`（来自结算单行，参与对平）/ `unassigned_wfs`（来自 WFS 费用表，不参与对平但挡结账）。`allocation` 存分到 ItemID 的结果，`assign_status`、`review_status`、`version` |
 | `fact_settlement_post_close_diffs` | store_id, bill_month, line_key, detected_at | 结账后源数据变化：旧值 / 新值，不改冻结数；状态 open / acknowledged / resolved_by_unlock |
 

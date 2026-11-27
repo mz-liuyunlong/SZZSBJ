@@ -126,6 +126,11 @@ _RETURN_FEE_DESCRIPTIONS: Final[frozenset[str]] = frozenset(
     {
         "Walmart Return Shipping Charge",
         "Walmart Failed Return Delivery Processing Charge",
+    }
+)
+# 退款冲回（钱回到卖家）：归退款列，正数抵减退款，不是费用（#373 复审 P3-1）
+_REFUND_REVERSAL_DESCRIPTIONS: Final[frozenset[str]] = frozenset(
+    {
         "CUSTOMER RETURN REFUND REVERSAL-LOST LATER DELIVERED",
         "Customer Return Reversal",
     }
@@ -149,6 +154,8 @@ def categorize(
         return "mcf_fee"
     if desc in _RETURN_FEE_DESCRIPTIONS:
         return "return_fee"
+    if desc in _REFUND_REVERSAL_DESCRIPTIONS:
+        return "refund"
     if ttype in {"Sale", "Refund"}:
         if atype == "Product Price":
             return "sales" if ttype == "Sale" else "refund"

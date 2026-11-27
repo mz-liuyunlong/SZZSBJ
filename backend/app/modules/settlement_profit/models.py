@@ -674,6 +674,8 @@ class SettlementCostEntry(_Actor, _Timestamps, Base):
     revoked_by: Mapped[str | None] = mapped_column(String(255))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoke_reason: Mapped[str | None] = mapped_column(Text)
+    # 撤销请求的 Idempotency-Key（PR-OR 迁移 0101）：同 key 重放返回首次结果
+    revoke_idempotency_key: Mapped[str | None] = mapped_column(String(128))
 
 
 class SettlementSemMonth(_Timestamps, Base):
@@ -742,6 +744,7 @@ class SettlementReviewAction(_Actor, Base):
     __table_args__ = (
         Index("ix_manual_settlement_review_line", "line_key", "acted_at"),
         Index("ix_manual_settlement_review_month", "store_id", "bill_month"),
+        Index("ix_manual_settlement_review_idem", "idempotency_key"),
         CheckConstraint(_first_of_month("bill_month"), name="bill_month_first_day"),
         CheckConstraint(_in("target_kind", REVIEW_TARGETS), name="target_kind"),
         CheckConstraint(_in("stage", REVIEW_STAGES), name="stage"),
@@ -755,6 +758,8 @@ class SettlementReviewAction(_Actor, Base):
     store_id: Mapped[str] = mapped_column(String(32), nullable=False)
     bill_month: Mapped[date] = mapped_column(Date, nullable=False)
     period_key: Mapped[str | None] = mapped_column(String(64))
+    # 批量审核请求的 Idempotency-Key（PR-OR 迁移 0101）：一次请求里每行一条记录共用同一个 key
+    idempotency_key: Mapped[str | None] = mapped_column(String(128))
     target_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     target_id: Mapped[UUID | None] = mapped_column()
     line_key: Mapped[str] = mapped_column(LINE_KEY, nullable=False)

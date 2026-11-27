@@ -1,7 +1,8 @@
 """结算利润 V3：订单审核重算的 Celery 任务（§8.1 触发）。
 
-沃尔玛账单同步成功后（执行层投递）重算受影响的期；发货单 / 明细 / 出库单 / 成本计价流水同步成功后
-的触发下一步接入。页面「重算」走接口同步执行，不经这里。不排 Beat，没有真实外部调用。
+沃尔玛账单同步成功后由执行层投递，只重算本次同步店铺有明细的期（内容没变不写新版本）；
+发货单 / 明细 / 出库单 / 成本计价流水同步成功后的触发下一步接入。
+页面「重算」走接口同步执行，不经这里。不排 Beat，没有真实外部调用。
 """
 
 from __future__ import annotations
@@ -45,18 +46,26 @@ def order_review_recalc_task(store_ids: list[str] | None = None, reason: str = "
             session, source_account_ref=SOURCE_REF, store_ids=store_ids or []
         )
         calculator = OrderReviewCalculator(session, source_account_ref=SOURCE_REF)
-        done = skipped = 0
+        done = skipped = failed = 0
         for store_id, period_key in pairs:
-            result = calculator.recalc_period(store_id, period_key)
-            session.commit()
+            # 一期出错不拖垮整个任务：回滚这一期、记日志、继续下一期
+            try:
+                result = calculator.recalc_period(store_id, period_key)
+                session.commit()
+            except Exception:
+                session.rollback()
+                failed += 1
+                log.exception("order review recalc failed for one period (%s)", period_key)
+                continue
             if result.status == "calculated":
                 done += 1
             else:
                 skipped += 1
     log.info(
-        "order review recalc (%s): periods=%s calculated=%s skipped=%s",
+        "order review recalc (%s): periods=%s calculated=%s skipped=%s failed=%s",
         reason or "-",
         len(pairs),
         done,
         skipped,
+        failed,
     )

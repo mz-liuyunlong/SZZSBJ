@@ -14,6 +14,10 @@ from app.db.base import Base
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
 REVISION = "20261125_0096_settlement_profit_v3_tables"
 MIGRATION = BACKEND_ROOT / "alembic" / "versions" / f"{REVISION}.py"
+# 0101 给 manual_settlement_review_actions 补了 Idempotency-Key 索引（#373 复审 P2-4）
+ORDER_REVIEW_MIGRATION = (
+    BACKEND_ROOT / "alembic" / "versions" / "20261127_0101_finance_order_review_permissions.py"
+)
 
 # PRP §6.2 的 18 张表与各自的业务键
 PRP_KEYS: dict[str, tuple[str, ...]] = {
@@ -236,9 +240,12 @@ def test_quantities_do_not_reuse_the_money_type() -> None:
 def test_index_count_matches_migration() -> None:
     orm = sum(len(_table(name).indexes) for name in m.SETTLEMENT_PROFIT_TABLES)
     source = MIGRATION.read_text(encoding="utf-8")
-    assert orm == 15
+    later = ORDER_REVIEW_MIGRATION.read_text(encoding="utf-8")
+    assert orm == 16
     assert source.count("op.create_index(") == 15
     assert source.count("op.drop_index(") == 15
+    assert later.count("op.create_index(") == 1
+    assert later.count("op.drop_index(") == 1
 
 
 def test_manual_tables_reference_line_key_not_uuid() -> None:
