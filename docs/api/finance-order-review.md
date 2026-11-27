@@ -33,7 +33,10 @@ PRP：`PRPs/finance-settlement-profit-v3.md` §7、§7A、§8.1～§8.4；表结
 - 订单行这次重算不在账单里了（账单重新同步后暂时消失）：订单行 FACT 退役；审核行如果**审核过**（初审 / 终审 / 退回，或有审核人），**不删**，加标记 `line_not_in_bill` 保留审核人、时间、结论，列表和期计数不显示、不能再审（`LINE_NOT_IN_BILL`）；完整的审核历史另在 `manual_settlement_review_actions`（只增不改）。没人审过的待审 / 自动通过行直接删。行回到账单时沿用同一条审核行，标记自动清掉、原结论保留（内容变了照常加 `changed_after_review`）。重算结果里 `lines_kept_for_audit` 是这次保留下来的行数。
 - 写表：内容 hash 不变不写新版本；变了同一事务把旧版本 `is_current=false` 再插新版本；已初审 / 终审的行不自动改状态，计算值变了版本号 +1 并在审核行 `reasons` 加差异提示 `changed_after_review`（页面红字「审核后数据有变，请撤销后重审」；任何一次审核动作或撤销录入后清掉）。
 - 自动重算：沃尔玛账单同步后，执行层只对本次同步成功的店铺投递重算（部分店失败时成功的店照样重算；一个店都没成功不投递）；任务逐期隔离错误，重算前锁该期账单行，避免页面重算和任务重算同时写同一期。
+- 成本数据同步后也自动重算：成本计价流水批次成功且有写入、发货单 / 明细 / 出库单任一接口有写入（部分店失败时成功店已落库也算）→ 投递全店重算（空店铺清单 = 全部店；内容没变不写新版本）。
 - 审核：终审前须初审；同一人不能既初审又终审（`SAME_REVIEWER`）；退回要原因；自动通过的行不接受审核（`ALREADY_PASSED`）；已结账的月拒绝一切写（`MONTH_CLOSED`）。
+
+三个写接口（录成本、撤销录入、审核）的 `Idempotency-Key` 请求头**必填**，缺失返回 422（PRP §5）。
 
 错误码：`VALIDATION_ERROR`（422）、`NOT_FOUND`（404）、`MONTH_CLOSED`、`STALE_VERSION`、`STAGE_ORDER`、`SAME_REVIEWER`、`COST_MISSING`（待审行没录成本不能初审）、`IDEMPOTENCY_KEY_REUSED`、`LINE_NOT_IN_BILL`、`COST_ENTRY_EXISTS`（含并发录入撞唯一索引）、`ALREADY_REVOKED`、`ALREADY_PASSED`、`CONFIRM_REQUIRED`（均 409）。
 

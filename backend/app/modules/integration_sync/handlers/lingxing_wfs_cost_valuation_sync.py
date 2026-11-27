@@ -21,7 +21,7 @@ import logging
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Protocol
 from uuid import UUID, uuid4
@@ -142,6 +142,16 @@ def wfs_cost_valuation_client() -> Iterator[LingxingReadonlyClient]:
         yield client
     finally:
         client.close()
+
+
+def window_date(value: date | datetime) -> date:
+    """运行窗口的日期：带时区的先转 UTC 再取日期，不依赖数据库连接的时区（#375 审核 P3）。
+
+    定时 / 手动 / 回填都把窗口存成 UTC 零点，所以 UTC 日期就是本意的日期。
+    """
+    if isinstance(value, datetime):
+        return value.astimezone(UTC).date() if value.tzinfo is not None else value.date()
+    return value
 
 
 def _require_runtime(settings: Settings) -> None:
@@ -353,10 +363,8 @@ class LingxingWfsCostValuationSyncHandler:
             raise WfsCostValuationSyncError("SYNC_WFS_FLOW_RETENTION_POLICY_MISSING")
         if run.window_start is None or run.window_end is None:
             raise WfsCostValuationSyncError("SYNC_WFS_FLOW_WINDOW_REQUIRED")
-        start = (
-            run.window_start.date() if isinstance(run.window_start, datetime) else run.window_start
-        )
-        end = run.window_end.date() if isinstance(run.window_end, datetime) else run.window_end
+        start = window_date(run.window_start)
+        end = window_date(run.window_end)
         try:
             validate_wfs_cost_valuation_window(start, end)
         except WfsCostValuationContractError:

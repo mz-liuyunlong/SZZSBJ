@@ -110,6 +110,17 @@ FIN_SHIPPING_HANDLERS: dict[str, type[FinSyncHandlerType]] = {
 }
 
 
+def order_review_recalc_due(result: Any, *, require_success: bool) -> bool:
+    """成本数据同步之后要不要投递订单审核重算（PRP §8.1：发货单 / 出库单同步 → 重算）。
+
+    这两类同步按账号拉全部店铺、按日期窗口取数，影响哪些订单行算不准，所以投递全店重算
+    （空店铺清单 = 全部店；内容 hash 没变的行不写新版本，代价只是查询）。没写入就不投递。
+    """
+    if require_success and getattr(result, "status", None) != "succeeded":
+        return False
+    return int(getattr(result, "records_written", 0) or 0) > 0
+
+
 class SyncRunExecutionService:
     """Durable governed execution for supported integration runs."""
 
@@ -300,17 +311,23 @@ class SyncRunExecutionService:
                 return
 
             if is_fin and fin_handler is not None:
-                fin_handler(
+                fin_result = fin_handler(
                     self.session,
                     heartbeat=lambda: self._heartbeat_lock(run.id),
                 ).execute(run, interface)
+                # 发货单 / 明细 / 出库单有写入（部分店失败时成功店的数据也已落库）→ 订单审核重算
+                if order_review_recalc_due(fin_result, require_success=False):
+                    dispatch_order_review_recalc((), reason=f"{run.interface_key}_sync")
                 return
 
             if is_wfs_cost_flow:
-                LingxingWfsCostValuationSyncHandler(
+                flow_result = LingxingWfsCostValuationSyncHandler(
                     self.session,
                     heartbeat=lambda: self._heartbeat_lock(run.id),
                 ).execute(run, interface)
+                # 成本计价流水整段替换只在批次成功时生效 → 成功且有写入才重算
+                if order_review_recalc_due(flow_result, require_success=True):
+                    dispatch_order_review_recalc((), reason="wfs_cost_flow_sync")
                 return
 
             if is_fx:

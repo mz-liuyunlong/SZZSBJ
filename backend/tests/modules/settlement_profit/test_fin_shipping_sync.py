@@ -938,3 +938,41 @@ def test_task_centre_refuses_a_disabled_config(session: Session) -> None:
     SyncRunExecutionService(session).execute(run.id)
     session.refresh(run)
     assert (run.status, run.error_code) == ("failed", "SYNC_CONFIG_DISABLED")
+
+
+@pytest.mark.parametrize(("written", "expected"), [(3, 1), (0, 0)])
+def test_fin_sync_with_writes_dispatches_order_review_recalc(
+    session: Session, monkeypatch: pytest.MonkeyPatch, written: int, expected: int
+) -> None:
+    from app.modules.integration_sync import execution as execution_module
+    from app.modules.integration_sync.handlers.lingxing_fin_sync_base import FinSyncResult
+
+    interface = governed(session, FIN_SHIPPING_DETAIL_SYNC_SPEC)
+    run = queued_run(session, interface)
+    recalcs: list[tuple[tuple[str, ...], str]] = []
+
+    class StubHandler:
+        handler_key = FIN_SHIPPING_HANDLERS[interface.interface_key].handler_key
+
+        def __init__(self, _session: Session, *, heartbeat: Any) -> None:
+            self.heartbeat = heartbeat
+
+        def execute(self, run_: Any, _interface: Any) -> FinSyncResult:
+            # 部分店失败也算：成功店的数据已落库
+            return FinSyncResult(
+                run_id=run_.id,
+                status="failed",
+                stores_total=2,
+                stores_failed=1,
+                records_written=written,
+            )
+
+    def fake_dispatch(stores: tuple[str, ...], *, reason: str) -> bool:
+        recalcs.append((tuple(stores), reason))
+        return True
+
+    monkeypatch.setitem(FIN_SHIPPING_HANDLERS, interface.interface_key, StubHandler)
+    monkeypatch.setattr(execution_module, "dispatch_order_review_recalc", fake_dispatch)
+    monkeypatch.setattr(SyncRunExecutionService, "_heartbeat_lock", lambda _self, run_id: None)
+    SyncRunExecutionService(session).execute(run.id)
+    assert recalcs == [((), f"{interface.interface_key}_sync")] * expected

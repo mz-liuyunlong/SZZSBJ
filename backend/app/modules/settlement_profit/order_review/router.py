@@ -197,7 +197,8 @@ def post_cost_entry(
     session: db_session,
     principal: cost_writer,
     payload: CostEntryCreate,
-    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key", max_length=128)] = None,
+    # 写接口一律要求 Idempotency-Key（PRP §5；#373 复核 P3）：缺失 → 422
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)],
 ) -> SuccessEnvelope[CostEntryResult, None]:
     try:
         data = service.create_cost_entry(
@@ -245,7 +246,8 @@ def post_cost_entry_revoke(
     principal: cost_writer,
     entry_id: UUID,
     payload: CostEntryRevoke,
-    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key", max_length=128)] = None,
+    # 写接口一律要求 Idempotency-Key（PRP §5；#373 复核 P3）：缺失 → 422
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)],
 ) -> SuccessEnvelope[CostEntryResult, None]:
     try:
         data = service.revoke_cost_entry(
@@ -273,7 +275,8 @@ def post_review(
     session: db_session,
     principal: reader,
     payload: ReviewRequest,
-    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key", max_length=128)] = None,
+    # 写接口一律要求 Idempotency-Key（PRP §5；#373 复核 P3）：缺失 → 422
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)],
 ) -> SuccessEnvelope[ReviewResultData, None]:
     needed = REVIEW1_PERMISSION if payload.stage == "first" else REVIEW2_PERMISSION
     if not has_permission(principal, needed):

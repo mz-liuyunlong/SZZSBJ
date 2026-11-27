@@ -416,6 +416,15 @@ def test_execution_layer_path_releases_lease_and_lock_and_clears_expired_lease(
 
     monkeypatch.setattr(module, "_require_runtime", lambda settings: None)
     monkeypatch.setattr(module, "wfs_cost_valuation_client", fake_client)
+    from app.modules.integration_sync import execution as execution_module
+
+    recalcs: list[tuple[tuple[str, ...], str]] = []
+
+    def fake_dispatch(stores: tuple[str, ...], *, reason: str) -> bool:
+        recalcs.append((tuple(stores), reason))
+        return True
+
+    monkeypatch.setattr(execution_module, "dispatch_order_review_recalc", fake_dispatch)
 
     def lock_free() -> bool:
         with engine.connect() as probe:
@@ -440,6 +449,8 @@ def test_execution_layer_path_releases_lease_and_lock_and_clears_expired_lease(
     assert first_row is not None
     assert first_row.status == "succeeded", first_row.error_code
     assert lease_rows() == 0 and lock_free()
+    # 成功且有写入 → 投递订单审核全店重算（空店铺清单 = 全部店）
+    assert recalcs == [((), "wfs_cost_flow_sync")]
 
     # ② a crashed run holding an expired lease: the execution layer fails it and runs the new one
     crashed = new_run(session, config, interface)
@@ -464,6 +475,8 @@ def test_execution_layer_path_releases_lease_and_lock_and_clears_expired_lease(
     third_row = session.get(IntegrationSyncRun, third.id)
     assert third_row is not None and third_row.status == "failed"
     assert lease_rows() == 0 and lock_free()
+    # 失败批次不整段替换，不投递重算（①②各一次）
+    assert len(recalcs) == 2
 
 
 def test_store_mapping_by_sid_by_store_code_and_unmapped(session: Session) -> None:

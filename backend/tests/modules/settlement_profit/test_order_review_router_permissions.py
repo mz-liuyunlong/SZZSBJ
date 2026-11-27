@@ -54,7 +54,10 @@ def client_for(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., TestCl
         app = create_app()
         app.dependency_overrides[get_optional_principal] = lambda: principal
         app.dependency_overrides[get_db_session] = lambda: MagicMock()
-        return TestClient(app, raise_server_exceptions=False)
+        client = TestClient(app, raise_server_exceptions=False)
+        # 写接口必须带 Idempotency-Key；单独的测试验证缺失时 422
+        client.headers.update({"Idempotency-Key": "synthetic-key"})
+        return client
 
     yield build
     get_settings.cache_clear()
@@ -209,3 +212,13 @@ def test_validation_errors_are_422(client_for) -> None:
 
 def test_router_module_has_no_db_access_without_dependency() -> None:
     assert order_router.router.prefix == BASE
+
+
+def test_write_endpoints_require_idempotency_key(client_for) -> None:
+    client = client_for(user(READ, COST, REVIEW1))
+    del client.headers["Idempotency-Key"]
+    assert client.post(f"{BASE}/cost-entries", json=COST_BODY).status_code == 422
+    assert client.post(f"{BASE}/review", json=REVIEW_BODY).status_code == 422
+    revoke = {"reason": "x", "expected_version": 1}
+    entry = "00000000-0000-0000-0000-000000000001"
+    assert client.post(f"{BASE}/cost-entries/{entry}/revoke", json=revoke).status_code == 422
