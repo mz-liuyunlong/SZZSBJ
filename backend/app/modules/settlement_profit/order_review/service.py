@@ -228,8 +228,16 @@ def _line_query(filters: LineFilters) -> Any:
             raise OrderReviewError(422, ERR_VALIDATION, "审核状态不合法")
         statement = statement.where(SettlementOrderReview.review_status.in_(list(filters.statuses)))
     if filters.reasons:
+        # changed_after_review 在审核行上，其余原因在订单行上（#373 复审第 2 轮 P3-2）
         statement = statement.where(
-            or_(*[SettlementOrderLine.reasons.contains([r]) for r in filters.reasons])
+            or_(
+                *[
+                    SettlementOrderReview.reasons.contains([r])
+                    if r == CHANGED_AFTER_REVIEW
+                    else SettlementOrderLine.reasons.contains([r])
+                    for r in filters.reasons
+                ]
+            )
         )
     if filters.transaction_types:
         statement = statement.where(
@@ -635,7 +643,7 @@ def review_lines(
         )
     key = (idempotency_key or "").strip() or None
     if key:
-        replay = _replay_review(session, key)
+        replay = _replay_review(session, key, actor)
         if replay is not None:
             return replay
     reviews = {
@@ -701,11 +709,14 @@ def review_lines(
     return ReviewResultData(items=items, succeeded=succeeded, failed=len(items) - succeeded)
 
 
-def _replay_review(session: Session, key: str) -> ReviewResultData | None:
-    """同一个 Idempotency-Key 已经处理过：按当时写下的审核记录重放结果，不再改任何状态。"""
+def _replay_review(session: Session, key: str, actor: str) -> ReviewResultData | None:
+    """同一人同一个 Idempotency-Key 已经处理过：按当时的审核记录重放结果，不再改任何状态。"""
     actions = session.scalars(
         select(SettlementReviewAction)
-        .where(SettlementReviewAction.idempotency_key == key)
+        .where(
+            SettlementReviewAction.idempotency_key == key,
+            SettlementReviewAction.actor_id == actor,
+        )
         .order_by(SettlementReviewAction.acted_at)
     ).all()
     if not actions:

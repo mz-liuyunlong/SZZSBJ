@@ -216,7 +216,7 @@ function Workbench({ periods }: { periods: ApiPeriod[] }) {
           <ReportFacetSelect mode="multiple" ariaLabel="状态" placeholder="状态" unit="项" value={filters.statuses}
             options={(Object.keys(STATUS_TEXT) as ReviewStatus[]).map((value) => ({ value, label: STATUS_TEXT[value].text }))} onChange={(v) => set({ statuses: (v as ReviewStatus[] | undefined) ?? [] })} />
           <ReportFacetSelect mode="multiple" ariaLabel="原因" placeholder="待审原因" unit="项" value={filters.reasons}
-            options={(Object.keys(REASON_TEXT) as Reason[]).map((value) => ({ value, label: REASON_TEXT[value] }))} onChange={(v) => set({ reasons: (v as Reason[] | undefined) ?? [] })} />
+            options={[...(Object.keys(REASON_TEXT) as Reason[]).map((value) => ({ value: value as string, label: REASON_TEXT[value] })), { value: CHANGED_AFTER_REVIEW, label: "审核后数据有变" }]} onChange={(v) => set({ reasons: (v as Reason[] | undefined) ?? [] })} />
           <ReportFacetSelect mode="multiple" ariaLabel="类型" placeholder="销售 / 退款 / MCF" unit="项" value={filters.lineKinds} showSearch={false}
             options={(Object.keys(KIND_TEXT) as LineKind[]).map((value) => ({ value, label: KIND_TEXT[value] }))} onChange={(v) => set({ lineKinds: (v as LineKind[] | undefined) ?? [] })} />
           <ReportFacetSelect mode="multiple" ariaLabel="交易类型" placeholder="交易类型" unit="种" value={filters.transactionTypes}

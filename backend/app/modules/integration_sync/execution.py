@@ -292,9 +292,11 @@ class SyncRunExecutionService:
                     self.session,
                     heartbeat=lambda: self._heartbeat_data_pages_lock(run.id),
                 ).execute(run, interface)
-                if getattr(bill_result, "status", None) == "succeeded":
-                    # 账单变了 → 订单审核重算受影响的期（§8.1）；投递失败只记日志
-                    dispatch_order_review_recalc(reason="walmart_bill_sync")
+                # 账单变了 → 只对本次同步成功的店重算（§8.1；部分店失败时成功的店照样重算）。
+                # 没有成功的店就不投递：空清单在任务里表示"全部店"。投递失败只记日志。
+                synced = tuple(getattr(bill_result, "succeeded_store_ids", ()) or ())
+                if synced:
+                    dispatch_order_review_recalc(synced, reason="walmart_bill_sync")
                 return
 
             if is_fin and fin_handler is not None:

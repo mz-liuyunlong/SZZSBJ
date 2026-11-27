@@ -196,6 +196,44 @@ def test_cost_entry_confirm_then_review_flow(session: Session) -> None:
     assert again.replayed is True
 
 
+def test_changed_after_review_filter_and_replay_is_per_actor(session: Session) -> None:
+    review = prepare_pending(session)
+    service.review_lines(
+        session,
+        ReviewRequest(review_ids=[review.id], stage="first", decision="pass"),
+        actor="u1",
+        actor_role="r1",
+        request_id=None,
+        idempotency_key="same-key",
+    )
+    # 模拟重算写下的差异提示：它在审核行上，筛选要查审核行（#373 第 2 轮 P3-2）
+    review.reasons = [service.CHANGED_AFTER_REVIEW]
+    session.flush()
+    _, flagged = service.list_lines(
+        session,
+        filters=service.LineFilters(reasons=[service.CHANGED_AFTER_REVIEW]),
+        page=1,
+        page_size=10,
+    )
+    assert flagged == 1
+    _, other = service.list_lines(
+        session, filters=service.LineFilters(reasons=["cost_missing"]), page=1, page_size=10
+    )
+    assert other == 0
+    # 另一个人用了同一个 key：不当重放，照常终审（重放按 操作人 + key，P3-4）
+    final = service.review_lines(
+        session,
+        ReviewRequest(review_ids=[review.id], stage="final", decision="pass"),
+        actor="u2",
+        actor_role="r2",
+        request_id=None,
+        idempotency_key="same-key",
+    )
+    assert final.items[0].review_status == "final_passed"
+    session.refresh(review)
+    assert service.CHANGED_AFTER_REVIEW not in review.reasons
+
+
 def test_review_stage_order_same_reviewer_and_revert(session: Session) -> None:
     review = prepare_pending(session)
     # 待审且没录成本：货本不为空（预填了四项）→ 允许初审

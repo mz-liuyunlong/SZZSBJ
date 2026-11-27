@@ -112,6 +112,8 @@ class WalmartBillSyncResult:
     stores_total: int
     stores_failed: int
     periods_refreshed: int
+    # 本次同步成功的店铺：执行层只对这些店触发订单审核重算（#373 复审 P3-5）
+    succeeded_store_ids: tuple[str, ...] = ()
 
 
 class _LeaseLost(Exception):  # noqa: N818 - 内部信号，不对外
@@ -293,6 +295,7 @@ class LingxingWalmartBillSyncHandler:
 
         failed = 0
         periods = 0
+        succeeded: list[str] = []
         guard = self._refuse_commit_inside_store
         event.listen(self.session, "before_commit", guard)
         try:
@@ -305,6 +308,7 @@ class LingxingWalmartBillSyncHandler:
                         failed += 1
                     else:
                         periods += written
+                        succeeded.append(store.store_id)
         finally:
             event.remove(self.session, "before_commit", guard)
             self._in_store = False
@@ -327,6 +331,7 @@ class LingxingWalmartBillSyncHandler:
             stores_total=len(stores),
             stores_failed=failed,
             periods_refreshed=periods,
+            succeeded_store_ids=tuple(succeeded),
         )
 
     def _client_context(self) -> AbstractContextManager[WalmartBillPageClient]:

@@ -25,6 +25,7 @@ from app.modules.integration_sync.execution import SyncRunExecutionService
 from app.modules.integration_sync.handlers.lingxing_walmart_bill_sync import (
     LingxingWalmartBillSyncHandler,
     WalmartBillSyncError,
+    WalmartBillSyncResult,
 )
 from app.modules.integration_sync.models import (
     ApiRawRequestRef,
@@ -452,6 +453,21 @@ def test_total_changing_mid_paging_fails_only_that_store(session: Session) -> No
     assert period(session, STORE_B, "rk-b1").status == "normal"
 
 
+def test_result_lists_only_the_stores_that_succeeded(session: Session) -> None:
+    add_stores(session)
+    interface = governed(session)
+    client = FakeLingxing(base_rows())
+    client.total_bump[(STORE_A, 2)] = 1
+    run = queued_run(session, interface)
+    run.status = "running"
+    result = LingxingWalmartBillSyncHandler(session, client=client, now=lambda: NOW).execute(
+        run, interface
+    )
+    # 订单审核只对成功的店重算（#373 复审 P3-5）
+    assert result.status == "failed"
+    assert result.succeeded_store_ids == (STORE_B,)
+
+
 def test_row_outside_requested_dates_fails_the_store_and_keeps_old_data(session: Session) -> None:
     add_stores(session)
     interface = governed(session)
@@ -850,6 +866,50 @@ def test_task_centre_renews_the_lock_on_a_separate_session(
     SyncRunExecutionService(session).execute(run.id)
     assert ("separate", run.id) in calls
     assert all(kind != "same" for kind, _ in calls)
+
+
+@pytest.mark.parametrize(
+    ("synced", "expected"),
+    [((STORE_B,), [((STORE_B,), "walmart_bill_sync")]), ((), [])],
+)
+def test_bill_sync_dispatches_order_review_recalc_for_synced_stores_only(
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    synced: tuple[str, ...],
+    expected: list[tuple[tuple[str, ...], str]],
+) -> None:
+    add_stores(session)
+    run = queued_run(session, governed(session))
+    sent: list[tuple[tuple[str, ...], str]] = []
+
+    class StubHandler:
+        handler_key = LingxingWalmartBillSyncHandler.handler_key
+
+        def __init__(self, _session: Session, *, heartbeat: Any) -> None:
+            self.heartbeat = heartbeat
+
+        def execute(self, run_: IntegrationSyncRun, _interface: IntegrationInterface) -> Any:
+            return WalmartBillSyncResult(
+                run_id=run_.id,
+                status="failed" if synced else "succeeded",
+                stores_total=2,
+                stores_failed=2 - len(synced),
+                periods_refreshed=len(synced),
+                succeeded_store_ids=synced,
+            )
+
+    def fake_dispatch(stores: tuple[str, ...], *, reason: str) -> bool:
+        sent.append((tuple(stores), reason))
+        return True
+
+    monkeypatch.setattr(execution_module, "LingxingWalmartBillSyncHandler", StubHandler)
+    monkeypatch.setattr(
+        SyncRunExecutionService, "_heartbeat_data_pages_lock", staticmethod(lambda run_id: None)
+    )
+    monkeypatch.setattr(execution_module, "dispatch_order_review_recalc", fake_dispatch)
+    SyncRunExecutionService(session).execute(run.id)
+    # 部分店失败时成功的店照样重算；一个店都没成功就不投递（空清单在任务里表示全部店）
+    assert sent == expected
 
 
 def test_lost_lock_stops_the_whole_run_before_the_next_store(session: Session) -> None:
