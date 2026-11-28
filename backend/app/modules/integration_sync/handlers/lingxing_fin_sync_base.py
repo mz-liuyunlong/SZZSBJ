@@ -11,7 +11,7 @@ import logging
 import re
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any, cast
@@ -41,6 +41,7 @@ from app.modules.integration_sync.models import (
 )
 from app.modules.integration_sync.product_info_runner import ProductInfoOneTimeRunError
 from app.modules.integration_sync.repository import IntegrationSyncRepository
+from app.modules.settlement_profit.order_review.recalc_scope import AffectedKeys
 from app.modules.warehouse_wfs.store_discovery import (
     WfsSettlementStore,
     WfsStoreDiscoveryError,
@@ -81,6 +82,8 @@ class FinSyncResult:
     stores_total: int
     stores_failed: int
     records_written: int
+    # 内容真的变了的行换算成的订单行键（只含已提交的页；失败店当页回滚的不算）
+    affected: AffectedKeys = field(default_factory=AffectedKeys)
 
 
 def fin_response_succeeded(endpoint: str, response: object, payload: JsonValue) -> bool:
@@ -198,6 +201,9 @@ class FinSyncHandlerBase:
         self._client = client
         self.heartbeat = heartbeat or (lambda: None)
         self._now = now
+        # 当页变了的行先记在 _page_keys，当页提交后才并进 _affected；当页回滚就丢掉
+        self._page_keys = AffectedKeys()
+        self._affected = AffectedKeys()
 
     # ------------------------------------------------------------------ 入口
 
@@ -220,12 +226,14 @@ class FinSyncHandlerBase:
                     raise
                 except FinSyncError as exc:
                     failed += 1
+                    self._page_keys.clear()
                     self.session.rollback()
                     self._record_store_failure(run, store.store_id, str(exc))
                 except Exception as exc:
                     # 不是处理器自己抛的错（如写 ODS 时数据库出错）：当页工作项还是 running，
                     # 这里一并记失败，不留悬着的工作项。
                     failed += 1
+                    self._page_keys.clear()
                     self.session.rollback()
                     self._fail_running_work_items(run, "SYNC_FIN_STORE_FAILED")
                     self._record_store_failure(run, store.store_id, "SYNC_FIN_STORE_FAILED")
@@ -248,6 +256,7 @@ class FinSyncHandlerBase:
             stores_total=len(stores),
             stores_failed=failed,
             records_written=run.records_written,
+            affected=self._affected,
         )
 
     def _sync_store(
@@ -435,6 +444,8 @@ class FinSyncHandlerBase:
         run.records_seen += seen
         run.records_written += written
         self.session.commit()
+        self._affected.merge(self._page_keys)
+        self._page_keys.clear()
 
     def _fail_work(
         self, run: IntegrationSyncRun, work: IntegrationSyncRunWorkItem, code: str

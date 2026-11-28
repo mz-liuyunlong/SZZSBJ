@@ -11,6 +11,7 @@ from datetime import date
 from functools import partial
 from typing import Any, Protocol
 
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -33,6 +34,7 @@ from app.modules.integration_sync.models import (
     RawRetentionPolicy,
 )
 from app.modules.settlement_profit.models import FinWmsOutboundOrder
+from app.modules.settlement_profit.order_review.recalc_scope import AffectedKeys
 from app.modules.warehouse_wfs.store_discovery import WfsSettlementStore
 
 # 明细只留计算要用的键；其余在原始层里。
@@ -187,7 +189,11 @@ class LingxingFinWmsOutboundSyncHandler(FinSyncHandlerBase):
                 self._fail_work(run, work, "SYNC_FIN_WMS_INCOMPLETE")
                 raise FinSyncError("SYNC_FIN_WMS_INCOMPLETE")
             written = _upsert_wms_orders(
-                self.session, [value for value in values if value is not None], run, ref
+                self.session,
+                [value for value in values if value is not None],
+                run,
+                ref,
+                keys=self._page_keys,
             )
             self._finish_work(run, work, ref, seen=len(rows), written=written)
             seen_total += len(rows)
@@ -196,16 +202,63 @@ class LingxingFinWmsOutboundSyncHandler(FinSyncHandlerBase):
         raise FinSyncError("SYNC_FIN_WMS_TOO_MANY_PAGES")
 
 
+def _item_mskus(items: object) -> list[object]:
+    if not isinstance(items, list):
+        return []
+    return [item.get("seller_sku") for item in items if isinstance(item, dict)]
+
+
+def note_wms_order_changes(
+    session: Session, values: list[dict[str, Any]], keys: AffectedKeys
+) -> None:
+    """新增或内容变了的出库单：新旧两份的明细 MSKU 和平台订单号都记上。
+
+    自发货订单行按平台订单号找出库单，所以订单号也要记。
+    """
+    first = values[0]
+    existing = {
+        order_no: (digest, platform_order_no, items)
+        for order_no, digest, platform_order_no, items in session.execute(
+            select(
+                FinWmsOutboundOrder.outbound_order_no,
+                FinWmsOutboundOrder.row_hash,
+                FinWmsOutboundOrder.platform_order_no,
+                FinWmsOutboundOrder.items,
+            ).where(
+                FinWmsOutboundOrder.source_account_ref == first["source_account_ref"],
+                FinWmsOutboundOrder.store_id == first["store_id"],
+                FinWmsOutboundOrder.outbound_order_no.in_(
+                    [value["outbound_order_no"] for value in values]
+                ),
+            )
+        ).all()
+    }
+    for value in values:
+        old = existing.get(value["outbound_order_no"])
+        if old is not None and old[0] == value["row_hash"]:
+            continue
+        mskus = _item_mskus(value.get("items"))
+        orders: list[object] = [value.get("platform_order_no")]
+        if old is not None:
+            mskus += _item_mskus(old[2])
+            orders.append(old[1])
+        keys.add(value["store_id"], mskus=mskus, orders=orders)
+
+
 def _upsert_wms_orders(
     session: Session,
     values: list[dict[str, Any]],
     run: IntegrationSyncRun,
     ref: ApiRawRequestRef,
+    *,
+    keys: AffectedKeys | None = None,
 ) -> int:
     if not values:
         return 0
     # 同一页里同一张出库单出现两次（接口翻页抖动）只留最后一条，避免 ON CONFLICT 撞自己。
     unique: dict[str, dict[str, Any]] = {value["outbound_order_no"]: value for value in values}
+    if keys is not None:
+        note_wms_order_changes(session, list(unique.values()), keys)
     now = utc_now()
     statement = pg_insert(FinWmsOutboundOrder).values(
         [

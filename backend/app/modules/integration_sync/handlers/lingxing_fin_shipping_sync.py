@@ -42,6 +42,7 @@ from app.modules.integration_sync.models import (
     RawRetentionPolicy,
 )
 from app.modules.settlement_profit.models import FinShippingDetailItem, FinShippingList
+from app.modules.settlement_profit.order_review.recalc_scope import AffectedKeys
 from app.modules.warehouse_wfs.store_discovery import WfsSettlementStore
 
 logger = logging.getLogger(__name__)
@@ -242,14 +243,58 @@ class LingxingFinShippingListSyncHandler(FinSyncHandlerBase):
                 # 领星说还有，却给了空页：数据没拉齐，这页和这家店都不能记成功。
                 self._fail_work(run, work, "SYNC_FIN_SHIPPING_INCOMPLETE")
                 raise FinSyncError("SYNC_FIN_SHIPPING_INCOMPLETE")
-            written = _upsert_shipping_lists(
-                self.session, [value for value in values if value is not None], run, ref
+            kept = [value for value in values if value is not None]
+            note_shipping_list_changes(
+                self.session,
+                kept,
+                source_account_ref=run.source_account_ref,
+                store_id=store.store_id,
+                keys=self._page_keys,
             )
+            written = _upsert_shipping_lists(self.session, kept, run, ref)
             self._finish_work(run, work, ref, seen=len(rows), written=written)
             offset += len(rows)
             if not rows or (total is not None and offset >= total):
                 return
         raise FinSyncError("SYNC_FIN_SHIPPING_TOO_MANY_PAGES")
+
+
+def note_shipping_list_changes(
+    session: Session,
+    values: list[dict[str, Any]],
+    *,
+    source_account_ref: str,
+    store_id: str,
+    keys: AffectedKeys,
+) -> None:
+    """发货单抬头新增或内容变了（物流商、渠道会影响审核）：按它当前的明细记 (店铺, MSKU)。
+
+    还没有明细的新发货单不记：明细同步拉到后会自己记。
+    """
+    hashes = {value["shipping_list_code"]: value["row_hash"] for value in values}
+    if not hashes:
+        return
+    existing = {
+        code: digest
+        for code, digest in session.execute(
+            select(FinShippingList.shipping_list_code, FinShippingList.row_hash).where(
+                FinShippingList.source_account_ref == source_account_ref,
+                FinShippingList.store_id == store_id,
+                FinShippingList.shipping_list_code.in_(list(hashes)),
+            )
+        ).all()
+    }
+    changed = [code for code, digest in hashes.items() if existing.get(code) != digest]
+    if not changed:
+        return
+    rows = session.execute(
+        select(FinShippingDetailItem.store_id, FinShippingDetailItem.msku).where(
+            FinShippingDetailItem.source_account_ref == source_account_ref,
+            FinShippingDetailItem.shipping_list_code.in_(changed),
+        )
+    ).all()
+    for item_store, msku in rows:
+        keys.add(item_store, mskus=[msku])
 
 
 def _upsert_shipping_lists(
@@ -374,6 +419,7 @@ class LingxingFinShippingDetailSyncHandler(FinSyncHandlerBase):
                 source_account_ref=run.source_account_ref,
                 store_id=store.store_id,
                 shipping_list_code=code,
+                keys=self._page_keys,
             )
             self._finish_work(run, work, ref, seen=len(items), written=written)
 
@@ -417,9 +463,35 @@ def _replace_detail_items(
     source_account_ref: str,
     store_id: str,
     shipping_list_code: str,
+    keys: AffectedKeys | None = None,
 ) -> int:
-    """同一事务：upsert 新明细、删掉这张单不在新集合里的 MSKU 行、在发货单上记 detail_synced_at。"""
+    """同一事务：upsert 新明细、删掉这张单不在新集合里的 MSKU 行、在发货单上记 detail_synced_at。
+
+    keys：新增、内容变了、被删掉的明细行记 (店铺, MSKU)，给订单审核按范围重算。
+    """
     now = utc_now()
+    if keys is not None:
+        before = {
+            msku: (item_store, digest)
+            for msku, item_store, digest in session.execute(
+                select(
+                    FinShippingDetailItem.msku,
+                    FinShippingDetailItem.store_id,
+                    FinShippingDetailItem.row_hash,
+                ).where(
+                    FinShippingDetailItem.source_account_ref == source_account_ref,
+                    FinShippingDetailItem.shipping_list_code == shipping_list_code,
+                )
+            ).all()
+        }
+        after = {value["msku"]: (value["store_id"], value["row_hash"]) for value in values}
+        for msku in before.keys() | after.keys():
+            old, new = before.get(msku), after.get(msku)
+            if old == new:
+                continue
+            for entry in (old, new):
+                if entry is not None:
+                    keys.add(entry[0], mskus=[msku])
     mskus = [value["msku"] for value in values]
     stale = delete(FinShippingDetailItem).where(
         FinShippingDetailItem.source_account_ref == source_account_ref,
