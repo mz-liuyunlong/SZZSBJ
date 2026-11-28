@@ -59,7 +59,7 @@ ODS 公共列：`synced_at`、`row_hash`、`raw_row`（原始行 JSON）。
 | `manual_settlement_order_adjustments` | id | 调整：`kind` = amount（改金额，必须带金额）/ assign_item（指定商品，必须带 ItemID）/ note；原因必填、可撤销、`version`、初审 / 终审状态 |
 | `manual_settlement_review_actions` | id | 初审 / 终审 / 退回记录，只增不改；`target_kind` = order_line / store_item / cost_entry / adjustment；退回必须写意见；存 before / after |
 | `manual_settlement_review_requests` | id；`(actor_id, idempotency_key)` 唯一 | 批量审核请求的幂等记录（迁移 0101，不在 PRP 的 18 张表里）：请求摘要 `request_hash`（行 id 排序 + 道 + 结论 + 意见的 sha256）和第一次的完整结果 `response`；重试原样返回，同一 key 换请求拒绝 |
-| `settlement_recalc_queue` | id；`(source_account_ref, store_id, period_key)` 唯一 | 订单审核重算队列（迁移 0105，不在 PRP 的 18 张表里）：`status`（queued / running / done / failed）、`generation`（每次投递 + 1）、`claimed_generation`（任务取走时的值）、`claim_token`（每次领取一个新标识，被重取后旧 worker 改不了这行）、`requested_count`、`reason`、`requested_at` / `started_at` / `finished_at`、`last_error`（只存异常类名）。可重建的工作记录，回滚只删表。 |
+| `settlement_recalc_queue` | id；`(source_account_ref, store_id, period_key)` 唯一 | 订单审核重算队列（迁移 0105，不在 PRP 的 18 张表里）：`status`（queued / running / done / failed）、`generation`（每次投递 + 1）、`claimed_generation`（任务取走时的值）、`claim_token`（每次领取一个新标识，被重取后旧 worker 改不了这行）、`requested_count`、`reason`、`requested_at` / `started_at` / `finished_at`、`last_error`（只存异常类名）。回滚前检查：还有 queued / running 的期（还没算完的欠账）就拒绝回滚，先扫空队列或手动重算这些期；只剩 done / failed 才删表。 |
 | `manual_settlement_month_close` | store_id, bill_month, seq | 店铺 × 账单月 结账 / 解锁记录，只增不改，最后一条决定当前状态；解锁必须写原因；记冻结的 calc_version 与合计 |
 
 ## CFG（财务主管维护）

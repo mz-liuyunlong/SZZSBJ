@@ -308,3 +308,12 @@ def test_recalc_queue_is_registered_outside_the_prp_tables() -> None:
     text_ = migration.read_text(encoding="utf-8")
     assert "uq_settlement_recalc_queue" in text_
     assert "op.drop_table(TABLE)" in text_
+    # 回滚前检查还有没算完的期：有就拒绝，不做 DELETE / TRUNCATE（#377 终审）
+    tree = ast.parse(text_)
+    downgrade = next(
+        node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "downgrade"
+    )
+    code = (ast.get_source_segment(text_, downgrade) or "").upper()
+    assert "ROLLBACK BLOCKED" in code
+    assert "'QUEUED', 'RUNNING'" in code
+    assert "DELETE" not in code and "TRUNCATE" not in code

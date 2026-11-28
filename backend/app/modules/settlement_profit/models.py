@@ -808,7 +808,7 @@ class SettlementRecalcQueue(_Timestamps, Base):
     任务取一行置 running、写一个新的 claim_token 并记下取走时的 generation，算完再比：
     变了说明算的时候又有新数据，回到 queued 再算一次；没变置 done。running 超过租约
     （worker 中途退出）视为可重取，重取会换 claim_token；旧 worker 的 token 对不上，不能再改这行。
-    不属于 PRP 的 18 张表，单独登记；队列可以随时重建，回滚只删表。
+    不属于 PRP 的 18 张表，单独登记；回滚前还有 queued / running 的期就拒绝（迁移 0105）。
     """
 
     __tablename__ = "settlement_recalc_queue"
