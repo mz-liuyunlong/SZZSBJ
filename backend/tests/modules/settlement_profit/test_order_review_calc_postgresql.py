@@ -384,7 +384,6 @@ def test_pending_reason_and_owner_from_tag_rule(session: Session) -> None:
     assert review.review_status == "pending"
 
 
-
 def test_owner_comes_from_product_info_by_local_sku(
     session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -418,6 +417,7 @@ def test_bill_sku_without_listing_keeps_sku_as_msku_and_marks_owner_missing(
     assert (line.item_id, line.sku, line.msku, line.owner_id) == (None, None, BILL_SKU, None)
     assert "owner_missing" in line.reasons
     assert line.auto_passed is False
+
 
 def test_cost_entry_is_picked_up_on_recalc(session: Session) -> None:
     seed_all(session)

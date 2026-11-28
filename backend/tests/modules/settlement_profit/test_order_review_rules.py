@@ -612,7 +612,6 @@ def test_cost_entry_on_shipping_scope_clears_shipment_reasons() -> None:
     assert "shipment_detail_invalid" in line.reasons
 
 
-
 def test_bill_store_sku_resolves_walmart_item_id_and_local_sku_via_listing() -> None:
     # 账单 Partner Item Id 是店铺 SKU；沃尔玛 ItemID、本地 SKU、MSKU、负责人都按它经 Listing 查
     lookups = DictLookups()
@@ -622,6 +621,7 @@ def test_bill_store_sku_resolves_walmart_item_id_and_local_sku_via_listing() -> 
     lookups.local_skus["SYN-ITEM-1"] = "SYN-L001"
     line = compute(sale_rows(), lookups)
     assert (line.item_id, line.sku) == ("30000000001", "SYN-L001")
+
 
 def test_cancelled_refund_is_pending_with_zero_cost() -> None:
     rows = sale_rows(SELLER) + [
