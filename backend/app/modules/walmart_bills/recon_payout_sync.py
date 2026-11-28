@@ -177,23 +177,26 @@ def _period_is_in_review(session: Session, row: WalmartBillPeriod) -> bool:
     return rules.stage_of(kinds) != rules.STAGE_TODO
 
 
+# 账期结束日期允许的差（天）；起始日期不比，见 apply_summary
+PERIOD_END_TOLERANCE_DAYS = 3
+
+
 def apply_summary(
     session: Session, row: WalmartBillPeriod, summary: PaymentSummary, *, now: datetime
 ) -> bool:
     """写到这一期：应付 = 沃尔玛打款额，差额 = 沃尔玛 − 领星，状态按沃尔玛金额重算。
 
-    账期起止、币种和领星对不上就拒绝（ReconPayoutError）。返回是否追加了 reset 事件。
+    结束日期（差 > 3 天）或币种和领星对不上就拒绝（ReconPayoutError）。起始日期不比：
+    领星按账单里最早一笔交易定起始日，对账单带了计费区间更早的广告服务费时会比沃尔玛早，
+    同一张对账单不该因此被拒（Rocky 2026-11-27）；两边起始日都存着，页面备注里写明。
+    返回是否追加了 reset 事件。
     """
     if row.currency_code and summary.currency_code and row.currency_code != summary.currency_code:
         raise ReconPayoutError("WALMART_RECON_CURRENCY_MISMATCH")
     if (
-        row.period_start_date
-        and summary.period_start_date
-        and abs((row.period_start_date - summary.period_start_date).days) > 3
-    ) or (
         row.period_end_date
         and summary.period_end_date
-        and abs((row.period_end_date - summary.period_end_date).days) > 3
+        and abs((row.period_end_date - summary.period_end_date).days) > PERIOD_END_TOLERANCE_DAYS
     ):
         raise ReconPayoutError("WALMART_RECON_PERIOD_MISMATCH")
     before = row.payable_amount
