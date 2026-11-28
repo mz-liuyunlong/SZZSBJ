@@ -16,6 +16,7 @@ Registry Status: `draft; approved only after owner review and merge`
 | `ai_center_keyword_launch` | 关键词投放 | AI中心 | 关键词投放 | `/ai-center/keyword-launch` | `testing` / `mock_only` | PageShell, ProTable, ReportTableShell, KeywordTextCell, Upload | 无真实API | 内存mock | `ai_center.keyword_launch.view` | Owner-approved keyword demo PRPs 2026-10-22 | TBD | 保留原四步页面；规则配置在页面内切换，无独立路由；本地解析卖家精灵Excel，非真实广告执行 |
 | `ads_keyword_library` | 词库 | 广告 | 词库 | `/ads/keyword-library` | `testing` / `mock_only` | PageShell, ProTable, ReportTableShell, ConnectedSearch | 无真实API | 内存mock | `ads.keyword_library.view` | 同上 | TBD | 原导航原路径，跨SKU演示、计划对账与人工录入 |
 
+| `settings_system_config` | System Config | Settings | System Config | `/settings/system-config` | `testing` | PageShell, Tabs, WooCommerceIntegrationPanel, Ant Design Table/Form/Modal | `GET/POST/PUT /api/system-config/woocommerce/stores`, `POST /{store_id}/test` | `sys_woocommerce_stores` | `page:settings:system-config:view`; all API operations are super-admin only | `PRPs/system-config-woocommerce-integration.md` | TBD | Local implementation patch only; migration and API tests pending; ERP, logistics, API policy and system parameters are local UI design previews only; no read or write APIs; notification rules remain in Business Config. |
 
 ## Rules
 

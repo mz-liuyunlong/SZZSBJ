@@ -1,0 +1,3 @@
+# 数据源决策：新品 Listing 首批采购（0103）
+
+负责人于 2026-11-28 确认方案一：同一店铺同一 SKU 的不同 Item ID 各采购20件，当前行店铺固定，批量每 Listing 独立，三列拆分。来源延续 PRPs/sku-progress-list-purchase-0100.md、PRPs/sku-progress-list-facets-frontend-0100.md 及 docs/data-sources/decisions/pmc-purchase-board-decision.md。NEW_SYSTEM_OWNED：biz_new_product_sku_purchase_plans 增加 item_id，关联 biz_new_product_sku_progress_events 的同一 plan UUID 的 purchase_attempt 审计事件；只回填唯一、同 progress、同 store、合法 Item ID 的记录。无证据 NULL，冻结新提交，绝不复制历史采购。REBUILD_SYNC：既有 dws_purchase_board 的 plan_sn/plan_sns_json、source_account_ref、store_id、sku、item_id、stage_code，用于独立采购进度。Listing 使用已有 scoped MART 和负责人修复；不读 RAW，不改同步。国内发货仍 NEED_OWNER_DECISION，null 待确认；不阻塞本次展示与采购粒度调整。无新外部接口、无新权限。未授权生产迁移或真实调用。

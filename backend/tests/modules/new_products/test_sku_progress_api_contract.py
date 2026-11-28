@@ -169,7 +169,7 @@ def test_unlisted_never_calls_provider(fake_transport):
 
 def test_unknown_attempt_never_calls_provider(fake_transport):
     with pytest.raises(Exception) as e:
-        submit(FakeDB(existing={"submission_status": "unknown"}))
+        submit(FakeDB(existing={"submission_status": "unknown", "item_id": "12345678901"}))
     assert error_code(e) == "SKU_PURCHASE_ALREADY_ATTEMPTED"
 
 
@@ -179,6 +179,8 @@ def test_confirmed_duplicate_returns_receipt_without_post(fake_transport):
             existing={
                 "id": uuid4(),
                 "submission_status": "submitted",
+                "item_id": "12345678901",
+                "cancellation_status": None,
                 "lingxing_plan_sn": "PP1",
                 "quantity": 20,
             }
@@ -226,8 +228,58 @@ def test_claim_commit_failure_never_posts(fake_transport):
         submit(FakeDB(fail_commit=True))
 
 
-def test_claim_key_store_and_account_isolation():
+def test_claim_key_listing_store_and_account_isolation():
     sku = uuid4()
-    k = purchase.claim_key("A", sku, "S")
-    assert k == purchase.claim_key("A", sku, "S")
-    assert k != purchase.claim_key("B", sku, "S") != purchase.claim_key("A", sku, "T")
+    k = purchase.claim_key("A", sku, "S", "12345678901")
+    assert k == purchase.claim_key("A", sku, "S", "12345678901")
+    assert k != purchase.claim_key("A", sku, "S", "22345678901")
+    assert k != purchase.claim_key("B", sku, "S", "12345678901")
+    assert k != purchase.claim_key("A", sku, "T", "12345678901")
+
+
+def test_unresolved_legacy_claim_never_posts(fake_transport):
+    with pytest.raises(Exception) as e:
+        submit(FakeDB(existing={"submission_status": "submitted", "item_id": None}))
+    assert error_code(e) == "SKU_PURCHASE_LEGACY_UNRESOLVED"
+
+
+def test_cancelled_exact_claim_does_not_report_duplicate_success(fake_transport):
+    with pytest.raises(Exception) as e:
+        submit(
+            FakeDB(
+                existing={
+                    "submission_status": "submitted",
+                    "item_id": "12345678901",
+                    "cancellation_status": "confirmed",
+                }
+            )
+        )
+    assert error_code(e) == "SKU_PURCHASE_ALREADY_ATTEMPTED"
+
+
+def test_claim_queries_include_item_identity(fake_transport):
+    db = FakeDB()
+    fake_transport.create_purchase_plan = lambda *_: {
+        "plan_sn": "PP1",
+        "ppg_sn": "B1",
+        "request_id": "R1",
+    }
+    submit(db)
+    assert any("(item_id=:item OR item_id IS NULL)" in sql for sql in db.trace)
+    assert any("store_id,item_id,quantity" in sql for sql in db.trace)
+
+
+def test_missing_listing_schema_blocks_before_any_purchase_work(fake_transport):
+    db = FakeDB()
+    checks = []
+
+    def no_schema(stmt, *args, **kwargs):
+        checks.append(str(stmt))
+        return False
+
+    db.scalar = no_schema
+    with pytest.raises(ApiError) as e:
+        submit(db)
+    assert error_code(e) == "SKU_PURCHASE_SCHEMA_NOT_READY"
+    assert len(checks) == 1 and "pg_catalog.pg_attribute" in checks[0]
+    assert db.trace == []

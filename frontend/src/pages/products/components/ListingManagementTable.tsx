@@ -1,3 +1,5 @@
+import { WooListingLinkBadge } from "@/pages/products/woocommerce/WooListingLinks";
+import { useWooListingLinks, wooIdentity } from "@/pages/products/woocommerce/useWooListingLinks";
 import type { MouseEvent as HeaderMouseEvent, KeyboardEvent as HeaderKeyboardEvent } from "react";
 import { isListingSortField, mergeListingSorts, nextListingColumnSort, type ListingSort } from "@/pages/products/listingManagementSort";
 import { useState as useLifecycleEditState } from "react";
@@ -435,6 +437,7 @@ function ListingManagementTable({
   lifecycleSaving = false,
   exporting = false,
 }: ListingManagementTableProps) {
+  const wooLinks = useWooListingLinks(rows.map(row=>wooIdentity(row.sourceAccountRef,row.storeId,row.productId)));
   // Only the large pages need row virtualization. Original columns, pinned columns,
   // sorters, selection and all per-row actions are kept unchanged in both modes.
   const virtual = pageSize >= 50;
@@ -486,10 +489,9 @@ function ListingManagementTable({
       fixed: "left",
       onHeaderCell: headerCell,
       render: (_, row) => (
-        <ProductIdentityCell
-          productId={row.productId}
-          productName={row.productName}
-        />
+        <div><ProductIdentityCell productId={row.productId} productName={row.productName} />
+          <WooListingLinkBadge links={wooLinks(wooIdentity(row.sourceAccountRef,row.storeId,row.productId))} />
+        </div>
       ),
     },
     skuMsku: {

@@ -569,6 +569,11 @@ class IntegrationSyncService:
         interface = self.repository.get_interface(config.interface_id)
         if interface is None:
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
+        from app.modules.woocommerce_products.task_center import is_woo_interface
+
+        is_woo = is_woo_interface(interface)
+        if is_woo and trigger is TriggerType.BACKFILL:
+            raise ApiError(code="WOO_BACKFILL_NOT_SUPPORTED", status_code=409)
         is_data_pages = (
             interface.provider == "lingxing"
             and interface.interface_key in DATA_PAGES_EXECUTABLE_INTERFACE_KEYS
@@ -640,6 +645,7 @@ class IntegrationSyncService:
             or is_walmart_bill
             or is_wfs_cost_flow
             or is_fin_shipping
+            or is_woo
         ):
             raise ApiError(code=SYNC_PRODUCTLIST_ONLY, status_code=409)
         if is_pmc_purchase and (trigger is not TriggerType.MANUAL or config.schedule_enabled):

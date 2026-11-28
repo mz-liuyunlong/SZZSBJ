@@ -1,0 +1,22 @@
+/* Layout only: table, pagination, search and facet appearance are shared. */
+.woo-products { min-width: 0; min-height: 0; flex: 1 1 0; display: flex; flex-direction: column; }
+.woo-products > .ant-card-body { padding: 12px; min-height: 0; display: flex; flex: 1 1 0; flex-direction: column; }
+.woo-products__heading { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom: 8px; }
+.woo-products__heading h1 { font-size:20px; line-height:28px; margin:0; font-weight:600; }
+.woo-products__summary { display:flex; align-items:stretch; flex-wrap:wrap; gap: 10px; border-bottom:1px solid rgba(128,128,128,.20); margin-bottom: 10px; flex-shrink:0; }
+.woo-products__summary .woo-products__metric { display:flex; align-items:center; gap:8px; height:36px; padding: 2px 12px 6px; border-radius:0; border-bottom:2px solid transparent; font-size:14px; }
+.woo-products__metric strong { font-size:20px; font-variant-numeric:tabular-nums; font-weight:600; }
+.woo-products__summary .woo-products__metric--active { color:#1677ff; border-bottom-color:#1677ff; }
+.woo-products__toolbar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; flex-shrink:0; }
+.woo-products__table-shell { min-height: 180px; }
+.woo-products__name { min-width:0; }
+.woo-products__title { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.4; font-weight:500; }
+.woo-products__subline { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:3px; font-size:12px; color:#667085; }
+.woo-products__muted { font-size:12px; color:#667085; margin-top:3px; }
+.woo-products__status { display:inline-flex; align-items:center; gap:6px; color:#667085; white-space:nowrap; }
+.woo-products__status i { width:7px; height:7px; background:currentColor; border-radius:50%; }
+.woo-products__status--published { color:#23834a; }
+.woo-products__image-pending { display:flex; align-items:center; justify-content:center; width:48px; height:48px; background:#f4f7fb; color:#98a2b3; border:1px solid #e5eaf3; border-radius:4px; }
+.woo-products__description summary { cursor:pointer; color:inherit; }
+.woo-products__description ol { margin:6px 0; padding-left:18px; overflow-wrap:anywhere; }
+.woo-products__description li { margin-bottom:6px; }

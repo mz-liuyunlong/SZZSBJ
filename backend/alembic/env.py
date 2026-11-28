@@ -33,6 +33,8 @@ import app.modules.walmart_monitor.models  # noqa: F401  # Register monitor RAW 
 import app.modules.warehouse_wfs.inventory_flow_models  # noqa: F401  # WFS cost valuation ODS.
 import app.modules.wfs_fees.models  # noqa: F401  # Register WFS fee files/lines/checks.
 import app.modules.wfs_fees.report_models  # noqa: F401  # WFS report jobs, inbound items.
+import app.modules.woocommerce_config.models  # noqa: F401  # WooCommerce credential config.
+import app.modules.woocommerce_products.models  # noqa: F401  # WooCommerce storage foundation.
 from alembic import context
 from app.core.config import AppEnvironment, SettingsError, get_database_url, get_settings
 from app.db.base import Base
