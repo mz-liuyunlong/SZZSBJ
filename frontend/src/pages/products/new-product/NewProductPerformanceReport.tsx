@@ -1,4 +1,5 @@
-import { WooListingLinkBadge, useWooListingLinks } from "@/pages/products/woocommerce/WooListingLinks";
+import { WooListingLinkBadge } from "@/pages/products/woocommerce/WooListingLinks";
+import { useWooListingLinks } from "@/pages/products/woocommerce/useWooListingLinks";
 /* PR337_APPROVED_CARD_FILTER_V53 */
 // PR337_APPROVAL_ITEM_FILTER_20261111
 import { useEffect, useMemo, useRef, useState } from "react";

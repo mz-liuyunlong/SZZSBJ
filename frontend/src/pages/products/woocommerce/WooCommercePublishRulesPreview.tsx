@@ -21,21 +21,32 @@ type Mapping = BrandRule & { key: string };
 type Submission = SubmissionRule & { key: string };
 type Draft = Omit<Rules, "mappings" | "submission_stores"> & { mappings: Mapping[]; submission_stores: Submission[] };
 const makeDraft = (rules: Rules): Draft => ({ ...rules, mappings: rules.mappings.map(row => ({ ...row, key: rowKey() })), submission_stores: rules.submission_stores.map(row => ({ ...row, key: rowKey() })) });
-const payloadOf = (draft: Draft): Rules => ({ ...draft, mappings: draft.mappings.map(({ key: _key, ...row }) => row), submission_stores: draft.submission_stores.map(({ key: _key, ...row }) => row) });
+const payloadOf = (draft: Draft): Rules => ({
+  ...draft,
+  mappings: draft.mappings.map(({ source_brand, target_store_id, target_brand_id, target_category_id, enabled }) => ({ source_brand, target_store_id, target_brand_id, target_category_id, enabled })),
+  submission_stores: draft.submission_stores.map(({ source_account_ref, source_store_id, submission_store_id }) => ({ source_account_ref, source_store_id, submission_store_id })),
+});
 
 export default function WooCommercePublishRulesPreview({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [saved, setSaved] = useState<Draft | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [data, setData] = useState<RulesData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(open);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [reload, setReload] = useState(0);
+  const [previousRequest, setPreviousRequest] = useState({ open, reload });
+  // Reset the draft before rendering a new open/retry session, not inside the effect.
+  if (previousRequest.open !== open || previousRequest.reload !== reload) {
+    setPreviousRequest({ open, reload });
+    if (open) {
+      setLoading(true); setError(""); setNotice(""); setDraft(null); setSaved(null); setData(null);
+    }
+  }
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
-    setLoading(true); setError(""); setNotice(""); setDraft(null); setSaved(null); setData(null);
     void fetchWooRules(controller.signal).then(value => {
       if (controller.signal.aborted) return;
       const next = makeDraft(value.rules);

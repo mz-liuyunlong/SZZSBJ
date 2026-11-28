@@ -1,4 +1,5 @@
-import { WooListingLinkBadge, useWooListingLinks, wooIdentity } from "@/pages/products/woocommerce/WooListingLinks";
+import { WooListingLinkBadge } from "@/pages/products/woocommerce/WooListingLinks";
+import { useWooListingLinks, wooIdentity } from "@/pages/products/woocommerce/useWooListingLinks";
 import type { MouseEvent as HeaderMouseEvent, KeyboardEvent as HeaderKeyboardEvent } from "react";
 import { isListingSortField, mergeListingSorts, nextListingColumnSort, type ListingSort } from "@/pages/products/listingManagementSort";
 import { useState as useLifecycleEditState } from "react";
