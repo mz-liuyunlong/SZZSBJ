@@ -17,6 +17,7 @@ import OnboardingGuidePage from "@/pages/help/OnboardingGuidePage";
 import LoginPage from "@/pages/auth/LoginPage";
 import NotFoundPage from "@/pages/errors/NotFoundPage";
 import ListingManagementPage from "@/pages/products/ListingManagementPage";
+import WooCommerceProductManagementPage from "@/pages/products/woocommerce/WooCommerceProductManagementPage";
 import NewProductPages from "@/pages/products/new-product/NewProductPages";
 import ClearanceCenterPage from "@/pages/products/ClearanceCenterPage";
 import ProductManagementPage from "@/pages/products/ProductManagementPage";
@@ -42,6 +43,7 @@ import UserManagementPage from "@/pages/settings/UserManagementPage";
 import RoleManagementPage from "@/pages/settings/RoleManagementPage";
 import FeeRulesPage from "@/pages/settings/FeeRulesPage";
 import BusinessConfigPage from "@/pages/settings/BusinessConfigPage";
+import SystemConfigPage from "@/pages/settings/SystemConfigPage";
 import { navigation, navigationRedirects } from "@/config/navigation";
 import { DEFAULT_BUSINESS_PATH, resolveRoute } from "@/router/routeResolver";
 import { DEFAULT_AUTH_USER, type AuthUser } from "@/pages/auth/authTypes";
@@ -178,6 +180,8 @@ function BusinessRoute({
           <DashboardHomePage page={page} user={activeUser} />
         ) : page.key === "products_product_management" ? (
           <ProductManagementPage page={page} preferenceScope={activeUser.username} />
+        ) : page.key === "products_woocommerce_product_management" ? (
+          <WooCommerceProductManagementPage page={page} />
         ) : page.key === "products_listing_management" ? (
           <ListingManagementPage page={page} />
         ) : page.key === "products_new_product_analysis" ? (
@@ -227,6 +231,8 @@ function BusinessRoute({
           <UserManagementPage page={page} />
         ) : page.key === "settings_role_management" ? (
           <RoleManagementPage page={page} />
+        ) : page.key === "settings_system_config" ? (
+          <SystemConfigPage page={page} />
         ) : page.key === "settings_business_config" ? (
           <BusinessConfigPage page={page} />
         ) : page.key === "settings_fee_rules" ? (

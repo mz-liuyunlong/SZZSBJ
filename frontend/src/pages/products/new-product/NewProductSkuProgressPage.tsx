@@ -3,7 +3,7 @@ import dayjs from "dayjs";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Form, Input, InputNumber, Modal, Pagination, Popover, Segmented, Tooltip, message, theme } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
-import { EditOutlined, PlusOutlined } from "@ant-design/icons";
+import { EditOutlined, ShoppingCartOutlined } from "@ant-design/icons";
 import ReportTableShell from "@/components/report-table/ReportTableShell";
 import { CopyableTextCell, ImageCell, MoneyCell, WalmartProductIdCell } from "@/components/report-table/cells";
 import ManagementStatCards, { type ManagementStatCardItem } from "@/components/report-table/ManagementStatCards";
@@ -12,11 +12,11 @@ import ReportFacetSelect from "@/shared/report-filters";
 import ReportDateRangePicker from "@/shared/date/ReportDateRangePicker";
 import CommittedSearch from "@/components/report-table/CommittedSearch";
 import ResetButton from "@/components/report-table/ResetButton";
-import { emptyListing, loadSkuProgress, loadProgressSummary, loadProgressFacets, submitSkuPurchase, submitSkuPurchaseBatch, saveSkuProgress, type BatchPurchaseResult, type ProgressCode, type ListingProgress, type SkuProgressRow, type Facet, type Filters, type Card, type Sort, type Criteria } from "./skuProgressApi";
+import { emptyListing, loadSkuProgress, loadProgressSummary, loadProgressFacets, submitSkuPurchase, submitSkuPurchaseBatch, saveSkuProgress, batchPurchaseKey, type BatchPurchaseResult, type BatchPurchaseTarget, type ProgressCode, type ListingProgress, type SkuProgressRow, type Facet, type Filters, type Card, type Sort, type Criteria } from "./skuProgressApi";
 import "./skuProgress.css";
 
 type Flat={key:string;r:SkuProgressRow;l:ListingProgress;span:number};
-const moreKeys:Facet[]=["listing","strike","plan","site","ad","proc","ship","progress"];
+const moreKeys:Facet[]=["strike","plan","site","ad","proc","ship","progress"];
 function mergeMoreFilters(committed:Filters,draft:Filters):Filters {
   const result={...committed};
   for(const key of moreKeys){
@@ -29,17 +29,15 @@ function moreDraftFrom(filters:Filters):Filters {
   return Object.fromEntries(moreKeys.map(k=>[k,[...(filters[k]??[])]]));
 }
 const emptyRows:SkuProgressRow[]=[];
-type SkuProgressDialogKind="purchase"|"remark";
-type SkuProgressDialog={kind:SkuProgressDialogKind;row:SkuProgressRow};
+type SkuProgressDialog={kind:"purchase";row:SkuProgressRow;listing:ListingProgress}|{kind:"remark";row:SkuProgressRow};
 const remarkReasons=["采购起批量过高","专利 / 侵权风险","平台上架限制","采购成本过高","供应商问题","产品质量问题","市场竞争过大","暂无合适店铺","其他原因"];
 // Form state is local to the dialog, so typing does not rerender the whole table.
 // Only a confirmed provider receipt is treated as purchase success.
 function SkuProgressEditDialog({dialog,onClose,onPurchaseSettled}:{dialog:SkuProgressDialog;onClose:()=>void;onPurchaseSettled:()=>Promise<void>}){
   const purchase=dialog.kind==="purchase";
   const row=dialog.row;
-  const matchedListings=row.ls.filter(l=>l.candidate);
-  const [store,setStore]=useState(matchedListings.length===1?matchedListings[0].key:undefined);
-  const chosen=matchedListings.find(l=>l.key===store);
+  const targetKey=dialog.kind==="purchase"?dialog.listing.key:undefined;
+  const chosen=targetKey?row.ls.find(l=>l.key===targetKey&&l.candidate):undefined;
   const submittingRef=useRef(false);
   const [submitting,setSubmitting]=useState(false);
   const [attempted,setAttempted]=useState(false);
@@ -68,10 +66,9 @@ function SkuProgressEditDialog({dialog,onClose,onPurchaseSettled}:{dialog:SkuPro
     finally{submittingRef.current=false;setSubmitting(false);await onPurchaseSettled();}
   };
   const [noteTouched,setNoteTouched]=useState(false);
-  const storeOptions=matchedListings.map(l=>({value:l.key,label:matchedListings.filter(x=>x.storeId===l.storeId).length>1?`${l.store} / ${l.id}`:l.store}));
   const footer=<div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
     <Button onClick={onClose} disabled={submitting}>取消</Button>
-    <Tooltip title={purchase?(attempted?"已发送请求，请核对刷新后的采购状态":!chosen?"请选择符合采购条件的店铺":undefined):!row.canEditProgress?"当前环境或账号不可保存":!canSave?"请填写必填项":undefined}><span><Button type="primary" disabled={purchase?(!chosen||attempted):!canSave} loading={submitting} onClick={()=>void (purchase?submit():save())}>{purchase?"提交采购计划":"保存"}</Button></span></Tooltip>
+    <Tooltip title={purchase?(attempted?"已发送请求，请核对刷新后的采购状态":!chosen?"当前 Listing 不符合采购条件":undefined):!row.canEditProgress?"当前环境或账号不可保存":!canSave?"请填写必填项":undefined}><span><Button type="primary" disabled={purchase?(!chosen||attempted):!canSave} loading={submitting} onClick={()=>void (purchase?submit():save())}>{purchase?"提交采购计划":"保存"}</Button></span></Tooltip>
   </div>;
   return <Modal open title={purchase?"提交采购计划":"修改推进状态 / 备注"} width={460} onCancel={()=>{if(!submitting)onClose();}} footer={footer} maskClosable={false}>
     <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:16,overflow:"hidden"}}>
@@ -79,9 +76,9 @@ function SkuProgressEditDialog({dialog,onClose,onPurchaseSettled}:{dialog:SkuPro
     </div>
     <Form layout="vertical" component="div" requiredMark>
       {purchase?<div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:12}}>
-        <Form.Item label="采购店铺" required style={{minWidth:0,marginBottom:12}}>
-          <div style={{display:"block",minWidth:0}}><ReportFacetSelect ariaLabel="采购店铺" placeholder="请选择店铺" triggerWidth="100%" popupWidth={320} options={storeOptions} value={store} allowClear={false} onChange={v=>setStore(typeof v==="string"?v:undefined)}/></div>
-        </Form.Item>
+        <Form.Item label="采购店铺" style={{minWidth:0,marginBottom:12}}><Input aria-label="采购店铺" disabled value={chosen?.store||"—"}/></Form.Item>
+        <Form.Item label="Item ID" style={{minWidth:0,marginBottom:12}}><Input aria-label="Item ID" disabled value={chosen?.id||"—"}/></Form.Item>
+        <Form.Item label="MSKU" style={{minWidth:0,marginBottom:12}}><Input aria-label="MSKU" disabled value={chosen?.msku||"—"}/></Form.Item>
         <Form.Item label="采购数量" required style={{minWidth:0,marginBottom:12}}>
           <InputNumber aria-label="采购数量" disabled controls={false} value={qty} addonAfter="件" style={{width:"100%"}}/>
         </Form.Item>
@@ -98,26 +95,27 @@ function SkuProgressEditDialog({dialog,onClose,onPurchaseSettled}:{dialog:SkuPro
     <Alert type="info" showIcon message={purchase?"采购数量固定20件，提交后请勿重复操作。":"备注必填，暂停或终止推进时必须选择原因。"}/>
   </Modal>;
 }
-function BatchPurchaseDialog({rows,onClose,onSettled}:{rows:SkuProgressRow[];onClose:()=>void;onSettled:()=>Promise<void>}){
-  const [choices,setChoices]=useState<Record<string,string>>(()=>Object.fromEntries(rows.flatMap(r=>{const ls=r.ls.filter(l=>l.candidate);return ls.length===1?[[r.key,ls[0].key]]:[];})));
+function BatchPurchaseDialog({rows,onClose,onSettled}:{rows:BatchPurchaseTarget[];onClose:()=>void;onSettled:()=>Promise<void>}){
   const [results,setResults]=useState<BatchPurchaseResult[]>([]);
   const [busy,setBusy]=useState(false);
   const attempted=useRef(false);
   const [hasAttempted,setHasAttempted]=useState(false);
   const mounted=useRef(true);
   useEffect(()=>{mounted.current=true;return ()=>{mounted.current=false;};},[]);
-  const selected=rows.map(row=>({row,listing:row.ls.find(l=>l.candidate&&l.key===choices[row.key])}));
+  const valid=rows.length>0&&rows.length<=100&&rows.every(({row,listing})=>row.ls.some(l=>l.key===listing.key&&l.candidate));
   const submit=async()=>{
-    if(attempted.current||selected.some(i=>!i.listing))return;
+    if(attempted.current||!valid)return;
     attempted.current=true;setHasAttempted(true);setBusy(true);
-    try{await submitSkuPurchaseBatch(selected.map(i=>({row:i.row,listing:i.listing!})),r=>{if(mounted.current)setResults(old=>[...old,r]);},()=>mounted.current);}
+    try{await submitSkuPurchaseBatch(rows,r=>{if(mounted.current)setResults(old=>[...old,r]);},()=>mounted.current);}
     catch(e){void message.error(e instanceof Error?e.message:"批量采购异常");}
     finally{setBusy(false);await onSettled();}
   };
-  return <Modal open title="批量提交采购计划" width={460} maskClosable={false} closable={!busy} onCancel={()=>{if(!busy)onClose();}} footer={<><Button disabled={busy} onClick={onClose}>{hasAttempted?"关闭":"取消"}</Button><Button type="primary" loading={busy} disabled={hasAttempted||selected.some(i=>!i.listing)} onClick={()=>void submit()}>提交采购计划</Button></>}>
-    <Alert type="info" showIcon message={`共 ${rows.length} 个 SKU，每个固定20件；逐个提交，不自动重试。`}/>
-    <div style={{maxHeight:380,overflowY:"auto"}}><Form layout="vertical" component="div">{rows.map(row=>{const result=results.find(r=>r.key===row.key);return <Form.Item key={row.key} label={`${row.sku} / ${row.name}`} required>
-      {result?<Alert type={result.ok?"success":"warning"} message={result.ok?`已提交：${result.detail}`:`未确认或失败：${result.detail}`} />:<ReportFacetSelect ariaLabel={`采购店铺 ${row.sku}`} placeholder="请选择店铺" triggerWidth="100%" value={choices[row.key]} allowClear={false} options={row.ls.filter(l=>l.candidate).map(l=>({value:l.key,label:`${l.store} / ${l.id}`}))} onChange={v=>{if(!attempted.current&&typeof v==="string")setChoices(old=>({...old,[row.key]:v}));}}/>}
+  return <Modal open title="批量提交采购计划" width={460} maskClosable={false} closable={!busy} onCancel={()=>{if(!busy)onClose();}} footer={<><Button disabled={busy} onClick={onClose}>{hasAttempted?"关闭":"取消"}</Button><Button type="primary" loading={busy} disabled={hasAttempted||!valid} onClick={()=>void submit()}>提交采购计划</Button></>}>
+    <Alert type="info" showIcon message={`共 ${rows.length} 个 Listing，每个固定20件，合计 ${rows.length*20} 件；逐个提交，不自动重试。`}/>
+    {!valid&&<Alert type="warning" showIcon message="请选择1至100个符合采购条件的 Listing"/>}
+    <div style={{maxHeight:380,overflowY:"auto"}}><Form layout="vertical" component="div">{rows.map(target=>{const {row,listing}=target,key=batchPurchaseKey(target),result=results.find(r=>r.key===key);return <Form.Item key={key} label={`${row.sku} / ${row.name}`}>
+      <div>{listing.store} · {listing.id} · {listing.msku||"—"}</div>
+      {result&&<Alert type={result.ok?"success":"warning"} message={result.ok?`已提交：${result.detail}`:`未确认或失败：${result.detail}`}/>}
     </Form.Item>;})}</Form></div>
   </Modal>;
 }
@@ -127,13 +125,13 @@ function renderMoney(text:string) {
   if (!match) return <span className="report-table-metric">{text || "—"}</span>;
   return <MoneyCell value={Number(match[2])} currency={match[1]==="¥"?"¥":"$"}/>;
 }
-const columnMin:Record<string,number>={product:200,progress:100,date:108,dev:90,listing:105,identity:150,store:168,plan:110,proc:100,ship:90,site:86,strike:100,price:90,ad:90,note:160};
+const columnMin:Record<string,number>={product:200,progress:100,date:108,dev:90,listing:105,identity:150,store:168,plan:110,proc:100,ship:90,site:86,strike:100,price:90,note:160};
 export default function NewProductSkuProgressPage(){
   const {token}=theme.useToken();
   const queryClient=useQueryClient();
   const [dialog,setDialog]=useState<SkuProgressDialog|null>(null);
   const [selectedKeys,setSelectedKeys]=useState<Key[]>([]);
-  const [batchRows,setBatchRows]=useState<SkuProgressRow[]|null>(null);
+  const [batchRows,setBatchRows]=useState<BatchPurchaseTarget[]|null>(null);
   const [filters,setFilters]=useState<Filters>({});
   const [keyword,setKeyword]=useState("");
   const [searchField,setSearchField]=useState("all");
@@ -180,7 +178,7 @@ export default function NewProductSkuProgressPage(){
     setPreviousSelectionScope(selectionScope);
     setSelectedKeys([]);
   }
-  const selectedRows=flat.filter(f=>f.span>0&&selectedKeys.includes(f.key)&&f.r.ls.some(l=>l.candidate)).map(f=>f.r);
+  const selectedRows=flat.filter(f=>selectedKeys.includes(f.key)&&f.l.candidate).map(f=>({row:f.r,listing:f.l}));
   const refreshAfterPurchase=async()=>{setSelectedKeys([]);await queryClient.invalidateQueries({queryKey:["np-sku-progress"]});};
   const color=(s:string)=>["已上架","已生效","已提交"].includes(s)?token.colorSuccess:["未上架","未生效","未提交"].includes(s)?token.colorError:token.colorTextSecondary;
   const status=(s:string)=><span style={{color:color(s),fontWeight:s?500:400,whiteSpace:"nowrap"}}>{s||"—"}</span>;
@@ -193,14 +191,13 @@ export default function NewProductSkuProgressPage(){
     {title:"开品时间",key:"date",width:120,onCell:shared,render:(_,x)=>x.r.developmentDate||"—"},
     {title:"Item ID / MSKU",key:"identity",width:186,render:(_,x)=><div className="sku-p-identity">{x.l.id?<WalmartProductIdCell productId={x.l.id} containerStyle={{width:"100%",maxWidth:"100%"}}/>:blank()}{x.l.msku&&<CopyableTextCell text={x.l.msku} label="MSKU" className="sku-p-msku"/>}</div>},
     {title:"店铺 / 负责人",key:"store",width:220,render:(_,x)=><><div className="sku-p-ellipsis sku-p-store" title={x.l.store}>{x.l.store||"—"}</div>{sub(x.l.id?x.l.owner:x.r.owner)}</>},
-    {title:"上架状态",key:"listing",width:115,render:(_,x)=><>{status(x.l.listing)}{sub(x.l.date)}{!x.l.id&&sub(x.r.unmatchedListingStatus?"未匹配 Listing":"Listing 待确认")}</>},
-    {title:"采购计划",key:"plan",width:120,onCell:shared,render:(_,x)=> <div>{status(x.r.purchasePlan)}<div><span className="sku-p-purchase-entry"><Button type="link" size="small" icon={<PlusOutlined aria-hidden="true"/>} className="sku-p-purchase-button" disabled={!x.r.ls.some(l=>l.candidate)} title={x.r.ls.some(l=>l.candidate)?undefined:"未上架、未满足采购校验或已有采购记录"} onClick={()=>setDialog({kind:"purchase",row:x.r})}>提交采购</Button></span></div></div>},
-    {title:"采购进度",key:"proc",width:105,onCell:shared,render:(_,x)=>status(x.r.purchaseProgress)},
-    {title:"国内发货",key:"ship",width:96,onCell:shared,render:(_,x)=>status(x.r.shipping)},
+    {title:"上架状态",key:"listing",width:115,render:(_,x)=>status(x.l.listing)},
+    {title:"采购计划",key:"plan",width:120,render:(_,x)=><span style={{display:"inline-flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>{status(x.l.purchasePlan)}{x.l.purchasePlan==="未提交"&&<Button type="link" size="small" aria-label={`提交采购计划 ${x.l.id||x.r.sku}`} title={x.l.candidate?"提交采购计划":"未上架、未满足采购校验或已有采购记录"} icon={<ShoppingCartOutlined aria-hidden="true" style={{fontSize:18}}/>} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:24,minWidth:24,height:24,minHeight:24,padding:0}} disabled={!x.l.candidate} onClick={()=>setDialog({kind:"purchase",row:x.r,listing:x.l})}/>}</span>},
+    {title:"采购进度",key:"proc",width:105,render:(_,x)=>status(x.l.purchaseProgress)},
+    {title:"国内发货",key:"ship",width:96,render:(_,x)=>status(x.l.shipping)},
     {title:"独立站",key:"site",width:90,render:(_,x)=>status(x.l.site)},
     {title:"划线价",key:"strike",width:112,render:(_,x)=><div className="sku-p-money">{renderMoney(x.l.strike)}{x.l.effect&&<div>{status(x.l.effect)}</div>}</div>},
     {title:"售价",key:"price",width:100,render:(_,x)=><div className="sku-p-money">{renderMoney(x.l.price)}</div>},
-    {title:"广告状态",key:"ad",width:100,render:(_,x)=>status(x.l.ad)},
     {title:"备注",key:"note",width:230,onCell:shared,render:(_,x)=> <div className="sku-p-note"><div className="sku-p-notetext" title={x.r.remark}>{x.r.remark||"—"}</div><Button type="text" size="small" aria-label={`编辑备注 ${x.r.sku}`} icon={<EditOutlined/>} onClick={()=>setDialog({kind:"remark",row:x.r})}/></div>},
     {title:"推进状态",key:"progress",width:108,onCell:shared,render:(_,x)=>status(x.r.progress)},
   ];
@@ -231,14 +228,13 @@ export default function NewProductSkuProgressPage(){
       ] satisfies ManagementStatCardItem[]}
       onCardClick={key=>{setCard(key as Card);setPage(1);}}/>
     <div className="sku-p-filters">
-      {select("store","店铺")}{select("owner","负责人")}{select("developer","开发人员")}
+      {select("listing","上架状态")}{select("store","店铺")}{select("owner","负责人")}{select("developer","开发人员")}
       <Tooltip title={dates?.min&&dates?.max?`可选日期：${dates.min} ~ ${dates.max}`:"暂无已确认开发日期"}><span><ReportDateRangePicker aria-label="开品时间范围" disabled={facetQuery.isError||!dates?.min&&!dateRange} placeholder={["开品开始日期","开品结束日期"]} value={dateRange?[dayjs(dateRange[0]),dayjs(dateRange[1])]:null} minDate={dates?.min?dayjs(dates.min):undefined} maxDate={dates?.max?dayjs(dates.max):undefined} onChange={(_,values)=>{setDateRange(values[0]&&values[1]?[values[0],values[1]]:null);setPage(1);}} style={{width:290,flex:"0 0 auto"}}/></span></Tooltip>
       <CommittedSearch key={searchRev} typeAriaLabel="搜索类型" typeOptions={[{label:"全部",value:"all"},{label:"SKU",value:"sku"},{label:"品名",value:"name"},{label:"ID / MSKU",value:"item"}]} typeValue={searchField} inputAriaLabel="搜索 SKU、品名、Item ID、MSKU" inputPlaceholder="搜索 SKU、品名、Item ID、MSKU" inputValue={keyword} onCommit={({searchField,keyword})=>{setSearchField(searchField);setKeyword(keyword);setPage(1);}}/>
       <Popover trigger="click" placement="bottomRight" open={moreOpen}
         onOpenChange={next=>{if(!next)changeMoreOpen(false);}} destroyOnHidden
         content={<section className="sku-p-more-filters" aria-label="更多筛选">
           <div className="sku-p-more-grid">
-            {renderMoreFacet("listing","上架状态")}
             {renderMoreFacet("plan","采购计划")}
             {renderMoreFacet("site","独立站")}
             {renderMoreFacet("ad","广告状态")}
@@ -257,15 +253,15 @@ export default function NewProductSkuProgressPage(){
       </Popover>
       <ResetButton onClick={reset}/>
     </div>
-    <ReportTableShell label="SKU进度表格" className="sku-p-table">
+    <ReportTableShell label="新品管理表格" className="sku-p-table">
       <ProTable<Flat> className="sku-p-protable" rowKey="key" size="middle" bordered tableLayout="fixed"
         columns={columns} dataSource={query.isError?[]:flat} loading={query.isPending} onChange={(_,__,sorter)=>{const next=Array.isArray(sorter)?sorter[0]:sorter;const key=String(next?.columnKey??"");if(["product","dev","date","listing","progress"].includes(key)&&next?.order)setSort({key:key as Sort["key"],order:next.order==="ascend"?"asc":"desc"});else setSort({key:"date",order:"desc"});setPage(1);}}
         search={false} options={false} toolBarRender={false} pagination={false}
-        rowSelection={{selectedRowKeys:selectedKeys,onChange:keys=>setSelectedKeys(keys),getCheckboxProps:r=>({disabled:r.span===0||!r.r.ls.some(l=>l.candidate)}),columnWidth:44,fixed:true,onCell:shared}}
-        scroll={{x:scrollWidth,y:"100%"}} locale={{emptyText:query.isError?"读取失败，请重新进入 SKU进度":"暂无符合条件的真实 SKU"}}/>
-      <div className="sku-p-footer"><span><Button size="small" disabled={!ready||!selectedRows.length} onClick={()=>setBatchRows(selectedRows)}>批量采购{selectedRows.length?` (${selectedRows.length})`:""}</Button> {ready?`共 ${total} 个 SKU · ${query.data?.listing_count??0} 个匹配 Listing`:"—"}</span><Pagination current={page} pageSize={pageSize} total={ready?total:0} showSizeChanger pageSizeOptions={[10,20,50,100]} onChange={(p,s)=>{setPageSize(s);setPage(s!==pageSize?1:p);}}/></div>
+        rowSelection={{selectedRowKeys:selectedKeys,onChange:keys=>setSelectedKeys(keys),getCheckboxProps:r=>({disabled:!r.l.candidate}),columnWidth:44,fixed:true}}
+        scroll={{x:scrollWidth,y:"100%"}} locale={{emptyText:query.isError?"读取失败，请重新进入新品管理":"暂无符合条件的真实 SKU"}}/>
+      <div className="sku-p-footer"><span><Button size="small" disabled={!ready||!selectedRows.length||selectedRows.length>100} onClick={()=>setBatchRows(selectedRows)}>批量采购{selectedRows.length?` (${selectedRows.length})`:""}</Button> {ready?`共 ${total} 个 SKU · ${query.data?.listing_count??0} 个匹配 Listing`:"—"}</span><Pagination current={page} pageSize={pageSize} total={ready?total:0} showSizeChanger pageSizeOptions={[10,20,50,100]} onChange={(p,s)=>{setPageSize(s);setPage(s!==pageSize?1:p);}}/></div>
     </ReportTableShell>
     {batchRows&&<BatchPurchaseDialog rows={batchRows} onClose={()=>setBatchRows(null)} onSettled={refreshAfterPurchase}/>}
-    {dialog&&<SkuProgressEditDialog key={JSON.stringify([dialog.kind,dialog.row.key])} dialog={dialog} onClose={()=>setDialog(null)} onPurchaseSettled={refreshAfterPurchase}/>}
+    {dialog&&<SkuProgressEditDialog key={JSON.stringify([dialog.kind,dialog.row.key,dialog.kind==="purchase"?dialog.listing.key:null])} dialog={dialog} onClose={()=>setDialog(null)} onPurchaseSettled={refreshAfterPurchase}/>}
   </div>;
 }

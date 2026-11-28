@@ -2768,6 +2768,24 @@
   z-index: 12;
 }
 
+/* Shared fixed-selection-column protection (2026-11-28).
+   Keep the leading selection control aligned with its body cells. The split
+   Ant Table header may not inherit the body selection cell's fixed marker;
+   in that case use the fixed body cell as evidence, not a blanket sticky rule.
+   Normal (non-fixed) selection columns must remain horizontally scrollable. */
+.report-table-shell .ant-table-thead > tr > th.ant-table-selection-column:first-child,
+.report-table-shell .ant-table-tbody > tr > td.ant-table-selection-column:first-child {
+  text-align: center !important;
+}
+
+.report-table-shell .ant-table-thead > tr > th.ant-table-selection-column:first-child:is(.ant-table-cell-fix-left, .ant-table-cell-fix-left-last),
+.report-table-shell .ant-table-container:has(> .ant-table-body .ant-table-tbody > tr > td.ant-table-selection-column:first-child:is(.ant-table-cell-fix-left, .ant-table-cell-fix-left-last)) > .ant-table-header .ant-table-thead > tr > th.ant-table-selection-column:first-child {
+  position: sticky !important;
+  inset-inline-start: 0 !important;
+  z-index: 14;
+  background: #f4f7fb;
+}
+
 /* WalmartItemLink: shared ItemID link, opens the Walmart item page in a new tab. */
 .report-table-walmart-item-link {
   font-variant-numeric: tabular-nums;

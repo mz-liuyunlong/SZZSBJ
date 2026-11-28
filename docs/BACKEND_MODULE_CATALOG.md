@@ -28,6 +28,18 @@
 
 新增通用后端模块后，AI 必须更新本文件。
 
+## WooCommerce Store Credential Configuration (local acceptance candidate)
+
+| Item | Value |
+|---|---|
+| Module | `backend/app/modules/woocommerce_config/` |
+| Layers | Router, Pydantic schemas, service, repository, pinned HTTPS probe client, SQLAlchemy model |
+| Storage | `sys_woocommerce_stores`; Fernet ciphertext only; audit reuses `biz_config_audit` |
+| Permission | all endpoints require super-admin |
+| External boundary | Explicit super-admin read-only connection probe; no product sync or payload persistence |
+| PRP | `PRPs/system-config-woocommerce-integration.md` |
+| Status | Local acceptance candidate; not merged or deployed |
+
 ## Finance Walmart Bills V1
 
 | 项目 | 内容 |

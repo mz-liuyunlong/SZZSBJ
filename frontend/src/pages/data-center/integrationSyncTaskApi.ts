@@ -432,6 +432,17 @@ function row(
   };
 }
 
+let wooSyncLabelCache: {expiresAt:number; values:Map<string,string>} | undefined;
+async function wooSyncLabels() {
+  if (wooSyncLabelCache && wooSyncLabelCache.expiresAt > Date.now()) return wooSyncLabelCache.values;
+  try {
+    const response = await backendRequest<Array<{value:string;label:string}>>("/api/woocommerce/products/sync-stores");
+    const values = new Map(response.data.map(item=>[item.value,item.label]));
+    wooSyncLabelCache = {expiresAt:Date.now()+60000,values};
+    return values;
+  } catch { return new Map<string,string>(); }
+}
+
 export async function listIntegrationSyncTasks() {
   async function fetchAllPages<T>(endpoint: string): Promise<T[]> {
     const items: T[] = [];
@@ -471,7 +482,11 @@ export async function listIntegrationSyncTasks() {
     const counts = todayTotals.get(`${task.interfaceId}:${task.source ?? ""}`);
     return { ...task, todaySuccess: counts?.success ?? 0, todayFailed: counts?.failed ?? 0, todayRuns: counts?.runs ?? 0 };
   });
-  const visibleRows = foldProductDetailDependencyRows(withTodayCounts).filter(shouldDisplayTaskRow);
+  const wooLabels = withTodayCounts.some(task=>task.provider==="woocommerce") ? await wooSyncLabels() : new Map<string,string>();
+  const namedRows = withTodayCounts.map(task => task.provider==="woocommerce" && task.source
+    ? {...task, taskName:`WooCommerce商品同步 · ${wooLabels.get(task.source) ?? task.source.slice(4,12)}`}
+    : task);
+  const visibleRows = foldProductDetailDependencyRows(namedRows).filter(shouldDisplayTaskRow);
   const logs: SyncTaskLog[] = runs.data.items.map((run) => ({
     id: run.id,
     taskId: run.config_id ?? run.id,

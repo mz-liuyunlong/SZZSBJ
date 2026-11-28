@@ -1,3 +1,5 @@
+import { WooListingLinkBadge } from "@/pages/products/woocommerce/WooListingLinks";
+import { useWooListingLinks } from "@/pages/products/woocommerce/useWooListingLinks";
 /* PR337_APPROVED_CARD_FILTER_V53 */
 // PR337_APPROVAL_ITEM_FILTER_20261111
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -434,6 +436,7 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
     store?: string | null;
   };
 
+  const wooLinks = useWooListingLinks(filtered.map(row=>row.backend?.identity));
   const columns: ProColumns<Product>[] = [
     {
       title: "图片",
@@ -458,10 +461,9 @@ function NewProductPerformanceReportBody({ items, config, phase, onOpen, onReset
       dataIndex: "item",
       width: 245,
       render: (_value, row) => (
-        <ProductIdentityCell
-          productId={row.item}
-          productName={row.name}
-        />
+        <div><ProductIdentityCell productId={row.item} productName={row.name} />
+          <WooListingLinkBadge links={wooLinks(row.backend?.identity)} />
+        </div>
       ),
     },
     {

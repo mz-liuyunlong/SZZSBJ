@@ -1,5 +1,34 @@
 # Data Interface Registry
 
+## 2026-11-28 新品管理 Listing 独立首批采购（0103，本地候选）
+
+读取兼容：旧采购结构缺 item_id 时保留未知历史归属；实际采购须验证 0102 字段、唯一索引及约束，未就绪禁止提交。
+
+| 既有接口/数据 | 变更 |
+|---|---|
+| GET `/api/new-products/sku-progress/list` | Listing 增加 plan_label/proc_label/domestic_shipping_status；原 owner_display 保留；SKU 分页不变 |
+| GET `/api/new-products/sku-progress/summary`、`/facets` | plan/proc 值取 Listing 独立状态，按 SKU 去重；ship 仍未知 |
+| POST `/api/new-products/sku-progress/purchase` | 请求不变，独立 Listing claim；固定20，旧未知身份阻塞，沿用权限与签名 |
+| biz_new_product_sku_purchase_plans | 0103 增加 item_id、按 Listing 唯一索引、旧事件可证回填，不丢历史 |
+| 新品管理前端 | 当前行固定店铺/Item/MSKU，独立勾选及回执，保留原筛选与统计 |
+
+来源：[数据源决策](../data-sources/decisions/sku-progress-listing-purchase-0103-decision.md)，[API](../api/sku-progress-listing-purchase-0103.md)，[SOP](../sop/sku-progress-listing-purchase-0103.md)。未执行迁移、真实采购、数据库验收或 CI。
+
+## 2026-11-28 WooCommerce store credential configuration (approved for local acceptance)
+
+| Interface/data set | Source/boundary | Status |
+|---|---|---|
+| `sys_woocommerce_stores` | NEW_SYSTEM_OWNED store metadata and Fernet-encrypted Consumer Key/Secret; audit reuses `biz_config_audit` | approved |
+| `GET/POST/PUT /api/system-config/woocommerce/stores` | Protected store configuration APIs; secrets are never returned | approved |
+| `POST /api/system-config/woocommerce/stores/{store_id}/test` | Explicit super-admin, bounded read-only WooCommerce products-list probe; no provider payload is persisted | approved |
+| System Config WooCommerce panel | `/settings/system-config` -> Integrations tab; super-admin only | testing |
+
+## 2026-11-28 新品管理负责人解析修复（本地候选）
+
+既有 `GET /api/new-products/sku-progress/list`、`/summary`、`/facets` 共用账号范围内的 SKU 负责人解析：保留原 Listing `owner_ref`；缺失时通过已核实的 SKU 身份读取当前 ProductInfo `owner_name` / `owner_uid`，不跨账号、不猜测店铺负责人。列表增加可空 `owner_display`，筛选 label 使用同一解析结果，value 使用账号加已核实负责人 UID 或来源值。仅只读查询，不写 MART、不新增接口/表/任务。真实数据、性能与 CI 尚待验收。
+
+[数据源决策](../data-sources/decisions/sku-progress-owner-resolution-20261128.md)。
+
 ## 2026-11-27 SKU进度列表、统计及筛选接入（candidate）
 
 | 接口/数据集 | 来源/边界 | 状态 |
@@ -435,3 +464,30 @@ Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源�
 | /api/new-products/sku-progress/purchase | POST | existing durable per-SKU/store claim; sequential batch UI; no new provider path | NewProductSkuProgressPage | Existing gates unchanged |
 
 Source decision: docs/data-sources/decisions/sku-progress-manual-0100-decision.md. API: docs/api/sku-progress-manual-0100.md. SOP: docs/sop/sku-progress-manual-batch-0100.md.
+
+## WooCommerce product storage foundation (0104)
+
+| Dataset | Layer / authority | Status |
+|---|---|---|
+| raw_woocommerce_products | RAW / sanitized source observations | local schema only |
+| dim_woocommerce_products | DIM / WooCommerce observed current product | local schema only |
+| map_woocommerce_listing | L6 / confirmed existing Walmart identity | local schema only |
+| biz_woo_publish_brand_rules | New-system configuration | local schema only |
+| biz_woo_publish_settings | New-system versioned configuration | local schema only |
+| biz_woo_submission_store_configs | New-system external submission ID mapping | local schema only |
+
+No API, scheduler, or export activated. See PRPs/woocommerce-products-storage-foundation.md.
+
+## WooCommerce real catalog and rules (local acceptance)
+
+| Interface | Authority | Access |
+|---|---|---|
+| GET /api/woocommerce/products | DIM + exact Listing mapping, SQL pagination/count/filter | authenticated |
+| GET /api/woocommerce/products/rules | Current local config | authenticated |
+| PUT /api/woocommerce/products/rules | Versioned new-system config | authenticated |
+| POST /api/woocommerce/products/listing-links | Exact confirmed mapping batch lookup (read only) | authenticated |
+| GET /api/woocommerce/products/sync-stores | Store labels and task-account refs, no secrets | authenticated |
+| Task Center: woocommerce/woocommerceProducts | Verified stored credential; read-only upstream -> RAW / DIM | existing task-center permissions and account scope |
+| Manual CLI woocommerce_products.sync | Verified saved credentials; read-only upstream -> RAW / DIM | explicit operator |
+
+Automatic upstream catalog read scheduling is opt-in via the existing Task Center; default off. No publishing, submission, export, or notifications. See `docs/data-sources/decisions/woocommerce-products-catalog-rules-decision.md`.

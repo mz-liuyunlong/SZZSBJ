@@ -3,6 +3,7 @@ import { listingSortFields, mergeListingSorts, nextListingColumnSort } from "@/p
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ListingManagementTable from "@/pages/products/components/ListingManagementTable";
 import ListingManagementSummaryCards from "@/pages/products/components/ListingManagementSummaryCards";
@@ -28,6 +29,14 @@ interface CapturedTableProps {
 }
 
 let capturedTableProps: CapturedTableProps | undefined;
+
+// The app provides this context in main.tsx. Keep the real hook available in isolated table tests.
+function renderWithQueryClient(ui: ReactNode) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(ui, {
+    wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+  });
+}
 
 vi.mock("@ant-design/pro-components", () => ({
   ProTable: (props: CapturedTableProps) => {
@@ -131,7 +140,7 @@ describe("ListingManagementPage acceptance contract", () => {
 
   it("exposes all 20 native server sorters without local comparators", () => {
     const rows = listingManagementMockData.slice(0, 2);
-    render(
+    renderWithQueryClient(
       <ListingManagementTable
         rows={rows}
         total={listingManagementMockData.length}
@@ -163,7 +172,7 @@ describe("ListingManagementPage acceptance contract", () => {
 
   it.each([50, 100, 200, 500, 1000])("keeps pinned columns, sorting, selection and actions at %i rows with virtual scroll", (size) => {
     const rows = listingManagementMockData.slice(0, 2);
-    render(
+    renderWithQueryClient(
       <ListingManagementTable
         rows={rows}
         total={1000}

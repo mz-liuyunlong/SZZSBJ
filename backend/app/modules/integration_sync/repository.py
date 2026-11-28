@@ -878,8 +878,16 @@ class IntegrationSyncRepository:
                 select(IntegrationSyncRun.id)
                 .where(
                     IntegrationSyncRun.status == "queued",
-                    IntegrationSyncRun.provider == "lingxing",
-                    IntegrationSyncRun.interface_key.in_(RECOVERABLE_INTERFACE_KEYS),
+                    (
+                        (
+                            (IntegrationSyncRun.provider == "lingxing")
+                            & IntegrationSyncRun.interface_key.in_(RECOVERABLE_INTERFACE_KEYS)
+                        )
+                        | (
+                            (IntegrationSyncRun.provider == "woocommerce")
+                            & (IntegrationSyncRun.interface_key == "woocommerceProducts")
+                        )
+                    ),
                     IntegrationSyncRun.queued_at <= queued_before,
                 )
                 .order_by(IntegrationSyncRun.queued_at, IntegrationSyncRun.id)

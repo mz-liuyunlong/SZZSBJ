@@ -37,7 +37,8 @@ export function hasPermission(
 // SZZSBJ_NP_PERMISSIONS_V3
 function isOpenNewProductPage(page: NavigationPage) {
   return page.key === "products_new_product_analysis"
-    || page.key === "products_launch_tracking";
+    || page.key === "products_launch_tracking"
+    || page.key === "products_woocommerce_product_management";
 }
 
 export function isMockPageVisibleForRole(

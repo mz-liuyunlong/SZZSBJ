@@ -159,6 +159,7 @@ export const navigation: NavigationGroup[] = [
     children: [
       page('products', 'product_management', '产品管理', '/products/management'),
       page('products', 'listing_management', 'Listing管理', '/products/listing-management'),
+      page('products', 'woocommerce_product_management', 'WooCommerce产品管理', '/products/woocommerce-product-management', { status: 'testing', readOnly: true, migrationMode: 'native', source: 'pending' }),
       page('products', 'clearance_center', '清货中心', '/products/clearance-center', {
         status: 'testing', readOnly: true, migrationMode: 'native',
         viewPermissionKey: 'page:products:clearance-center:view',
@@ -421,7 +422,12 @@ export const navigation: NavigationGroup[] = [
       }),
       page('settings', 'business_config', '业务配置', '/settings/business-config'),
       page('settings', 'system_config', '系统配置', '/settings/system-config', {
-        tabs: [{ key: 'base', title: '基础配置' }, { key: 'integrations', title: '集成配置' }, { key: 'notifications', title: '通知规则' }, { key: 'feature-flags', title: '功能开关' }],
+        status: 'testing',
+        source: 'new_postgres',
+        migrationMode: 'native',
+        readOnly: false,
+        viewPermissionKey: 'page:settings:system-config:view',
+        tabs: [{ key: 'integrations', title: '平台集成' }, { key: 'erp', title: 'ERP 集成' }, { key: 'logistics', title: '物流集成' }, { key: 'api-policy', title: '接口策略' }, { key: 'parameters', title: '系统参数' }],
       }),
       page('settings', 'logs', '日志', '/settings/logs', {
         tabs: [{ key: 'operation', title: '操作日志' }, { key: 'system', title: '系统日志' }, { key: 'api', title: '接口日志' }, { key: 'permission', title: '权限变更日志' }, { key: 'fee-rule', title: '费用规则日志' }],
