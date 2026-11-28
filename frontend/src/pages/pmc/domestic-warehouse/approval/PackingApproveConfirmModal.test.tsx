@@ -13,14 +13,14 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-const row = { pk: "PK261007123", sku: "YC00217", inbound_order_sn: "IB261007008", item_id: "20365620212", gtin: "00730654548398", msku: "YC00217-1U", purchase_order_sns: ["PO260916024"], arrival_purchased: 300, arrival_received: 300, arrival_pending: 0, default_quantity: 300, store_name: "HK2613-李思成(拓美恒)", manual_rwh: "美中1号仓TX", manual_customs: "default", customs_default: false, customs_default_src: "purchase_remark" } as ApprovalCandidate;
+const row = { pk: "PK991007123", sku: "TT00217", inbound_order_sn: "IB991007008", item_id: "20900000005", gtin: "00099000000007", msku: "TT00217-1U", purchase_order_sns: ["PO990916024"], arrival_purchased: 300, arrival_received: 300, arrival_pending: 0, default_quantity: 300, store_name: "HK9901-店A(测试公司)", manual_rwh: "美中1号仓TX", manual_customs: "default", customs_default: false, customs_default_src: "purchase_remark" } as ApprovalCandidate;
 
 test("approve confirm asks for a name and passphrase in Chinese", async () => {
   const onSubmit = vi.fn();
   render(<PackingApproveConfirmModal row={row} busy={false} onCancel={vi.fn()} onSubmit={onSubmit} />);
-  expect(screen.getByText("审批通过 · PK261007123 · YC00217")).toBeInTheDocument();
+  expect(screen.getByText("审批通过 · PK991007123 · TT00217")).toBeInTheDocument();
   expect(screen.getByText("当前登录用户")).toBeInTheDocument();
-  expect(screen.getByText(/入库单 IB261007008/)).toBeInTheDocument();
+  expect(screen.getByText(/入库单 IB991007008/)).toBeInTheDocument();
   expect(screen.queryByText(/采购单/)).not.toBeInTheDocument();
   expect(screen.queryByText(/备货数量/)).not.toBeInTheDocument();
   expect(screen.queryByText(/填 OWS 号/)).not.toBeInTheDocument();

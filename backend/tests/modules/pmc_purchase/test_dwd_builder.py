@@ -133,8 +133,8 @@ def test_versions_are_scoped_per_source_account() -> None:
 
 def test_plans_normalised_and_aux_combo_excluded() -> None:
     plans = [
-        Plan(RUN_1, T1, plan_sn="P1", remark="补货 ITEMID: 19051502014"),
-        Plan(RUN_1, T1, plan_sn="P2", sid="0", plan_remark="ITEMID:19051502099"),
+        Plan(RUN_1, T1, plan_sn="P1", remark="补货 ITEMID: 19500000014"),
+        Plan(RUN_1, T1, plan_sn="P2", sid="0", plan_remark="ITEMID:19500000099"),
         Plan(RUN_1, T1, plan_sn="P3", is_aux=1),
         Plan(RUN_1, T1, plan_sn="P4", is_combo=1),
     ]
@@ -143,9 +143,9 @@ def test_plans_normalised_and_aux_combo_excluded() -> None:
     p1, p2 = rows
     assert p1.create_date.isoformat() == "2026-08-03"  # type: ignore[union-attr]
     assert p1.store_id == "110652398125259264" and p1.store_attributed
-    assert p1.remark_item_id == "19051502014"
+    assert p1.remark_item_id == "19500000014"
     assert p2.store_id is None and not p2.store_attributed
-    assert p2.remark_item_id == "19051502099"  # falls back to plan_remark
+    assert p2.remark_item_id == "19500000099"  # falls back to plan_remark
 
 
 # --- orders and lines ----------------------------------------------------------------------
@@ -153,9 +153,9 @@ def test_plans_normalised_and_aux_combo_excluded() -> None:
 
 def test_single_plan_line_keeps_quantity_and_amount_and_inherits_plan_itemid() -> None:
     plans_by_sn = {
-        p.plan_sn: p for p in build_plans([Plan(RUN_1, T1, remark="ITEMID:19051502014")])[0]
+        p.plan_sn: p for p in build_plans([Plan(RUN_1, T1, remark="ITEMID:19500000014")])[0]
     }
-    plan_row = Plan(RUN_1, T1, remark="ITEMID:19051502014")
+    plan_row = Plan(RUN_1, T1, remark="ITEMID:19500000014")
     orders, lines, counts = build_orders(
         [Order(RUN_1, T1)],
         [Item(RUN_1, T1)],
@@ -168,16 +168,16 @@ def test_single_plan_line_keeps_quantity_and_amount_and_inherits_plan_itemid() -
     assert (line.plan_sn, line.plan_count, line.is_merged) == ("P1", 1, False)
     assert (line.quantity_allocated, line.amount_allocated) == (100, Decimal("500.0000"))
     assert line.allocation_ratio == Decimal("1.0000")
-    assert line.remark_item_id == "19051502014" and line.plan_found
+    assert line.remark_item_id == "19500000014" and line.plan_found
     assert counts["lines_split_from_merged"] == 0
 
 
 def test_order_line_parses_draft_no_from_purchase_remark() -> None:
-    remark = "ITEMID:20540519308 | 草稿:CG261017-039"
+    remark = "ITEMID:20900000011 | 草稿:CG991017-039"
     plans_by_sn = {
-        p.plan_sn: p for p in build_plans([Plan(RUN_1, T1, remark="ITEMID:19051502014")])[0]
+        p.plan_sn: p for p in build_plans([Plan(RUN_1, T1, remark="ITEMID:19500000014")])[0]
     }
-    plan_row = Plan(RUN_1, T1, remark="ITEMID:19051502014")
+    plan_row = Plan(RUN_1, T1, remark="ITEMID:19500000014")
     _, lines, _ = build_orders(
         [Order(RUN_1, T1)],
         [Item(RUN_1, T1, remark=remark)],
@@ -185,7 +185,7 @@ def test_order_line_parses_draft_no_from_purchase_remark() -> None:
         ods_plans_by_sn=_ods_plans(plan_row),
     )
     assert len(lines) == 1
-    assert lines[0].draft_no == "CG261017-039"
+    assert lines[0].draft_no == "CG991017-039"
     assert (
         lines[0].remark_item_id is None
     )  # Both remarks are retained for DWS; scalar cannot pick one.
@@ -193,7 +193,7 @@ def test_order_line_parses_draft_no_from_purchase_remark() -> None:
 
 def test_draft_no_prefers_linked_plan_remark_like_8088() -> None:
     # 8088: the draft number lives in the Lingxing plan remark; the order line usually has none.
-    plan_row = Plan(RUN_1, T1, remark="ITEMID:19051502014 | 草稿:CG990102-087")
+    plan_row = Plan(RUN_1, T1, remark="ITEMID:19500000014 | 草稿:CG990102-087")
     plans_by_sn = {p.plan_sn: p for p in build_plans([plan_row])[0]}
     _, [line], _ = build_orders(
         [Order(RUN_1, T1)],
@@ -209,7 +209,7 @@ def test_draft_no_plan_remark_wins_over_line_remark() -> None:
     plans_by_sn = {p.plan_sn: p for p in build_plans([plan_row])[0]}
     _, [line], _ = build_orders(
         [Order(RUN_1, T1)],
-        [Item(RUN_1, T1, remark="草稿:CG261017-039")],
+        [Item(RUN_1, T1, remark="草稿:CG991017-039")],
         plans_by_sn,
         ods_plans_by_sn=_ods_plans(plan_row),
     )
@@ -217,7 +217,7 @@ def test_draft_no_plan_remark_wins_over_line_remark() -> None:
 
 
 def test_draft_no_none_when_neither_remark_has_one() -> None:
-    plan_row = Plan(RUN_1, T1, remark="ITEMID:19051502014")
+    plan_row = Plan(RUN_1, T1, remark="ITEMID:19500000014")
     plans_by_sn = {p.plan_sn: p for p in build_plans([plan_row])[0]}
     _, [line], _ = build_orders(
         [Order(RUN_1, T1)],

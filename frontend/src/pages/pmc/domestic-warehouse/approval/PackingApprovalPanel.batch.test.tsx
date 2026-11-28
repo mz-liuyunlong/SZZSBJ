@@ -34,8 +34,8 @@ vi.mock("./packingApprovalQueries", () => ({
 function candidate(id: string, overrides: Partial<ApprovalCandidate> = {}): ApprovalCandidate {
   return {
     id, candidate_version: `v-${id}`, source_account_ref: "primary", warehouse_id: "16168", warehouse_name: "美中1号仓TX", publication_id: "p", board_id: "b",
-    inbound_order_sn: `IB-${id}`, sku: "YC00236", product_name: null, store_id: "1", store_name: "HK2614", item_id: "19000000105",
-    gtin: "00000000000000", msku: "YC00236-1A", purchase_order_sns: [], draft_nos: [], arrival_purchased: null, arrival_received: null,
+    inbound_order_sn: `IB-${id}`, sku: "TT00236", product_name: null, store_id: "1", store_name: "HK2614", item_id: "19000000105",
+    gtin: "00000000000000", msku: "TT00236-1A", purchase_order_sns: [], draft_nos: [], arrival_purchased: null, arrival_received: null,
     arrival_pending: null, arrival_status: "unknown", candidate_created_on: "2026-10-06", overdue: false, stock_balance: 10,
     available_quantity: 10, default_quantity: 10, can_approve: true, blocked_reasons: [], source_observed_at: "2026-10-06T00:00:00Z",
     ...overrides,
@@ -62,7 +62,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 test("batch approval approves each selected row in turn and skips blocked rows", async () => {
-  vi.mocked(decidePacking).mockImplementation(async (id) => (id === "a" ? order("PK261101-001") : order("PK261101-002", ["PK261101-002", "PK261101-003"])));
+  vi.mocked(decidePacking).mockImplementation(async (id) => (id === "a" ? order("PK991101-001") : order("PK991101-002", ["PK991101-002", "PK991101-003"])));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<MemoryRouter><QueryClientProvider client={client}>
     <PackingApprovalPanel preferenceScope="test" storeOptions={[]} optionsLoading={false} />
@@ -89,7 +89,7 @@ test("batch approval approves each selected row in turn and skips blocked rows",
   const resultTitle = await screen.findByText("批量审批结果");
   const result = resultTitle.closest<HTMLElement>('[role="dialog"]')!;
   expect(result).not.toBeNull();
-  expect(within(result).getByText(/成功 2 张：PK261101-001、PK261101-002、PK261101-003/)).toBeInTheDocument();
-  expect(within(result).getByText(/跳过 1 张：IB-c \/ YC00236（待补资料：该 ItemID 尚未完成 WFS 转换/)).toBeInTheDocument();
+  expect(within(result).getByText(/成功 2 张：PK991101-001、PK991101-002、PK991101-003/)).toBeInTheDocument();
+  expect(within(result).getByText(/跳过 1 张：IB-c \/ TT00236（待补资料：该 ItemID 尚未完成 WFS 转换/)).toBeInTheDocument();
   expect(refresh).toHaveBeenCalled();
 });

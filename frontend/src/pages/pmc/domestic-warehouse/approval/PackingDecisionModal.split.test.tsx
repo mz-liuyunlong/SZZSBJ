@@ -13,12 +13,12 @@ vi.mock("./packingApprovalApi", async () => {
 });
 
 const hit = (overrides: Partial<ListingHit> = {}): ListingHit => ({
-  store_id: "s1", store_name: "HK2614", item_id: "19000000103", gtin: "00462402942522", msku: "TT01165-1U", local_sku: "TT01165",
+  store_id: "s1", store_name: "HK2614", item_id: "19000000103", gtin: "00099000000002", msku: "TT01165-1U", local_sku: "TT01165",
   listing_version: "a".repeat(64), cross_store: false, wfs_converted: true, usable: true, blocked_reasons: [], ...overrides,
 });
 const ok = (items: ListingHit[]) => ({ success: true, data: { items }, error: null, meta: {}, request_id: "test" }) as unknown as Awaited<ReturnType<typeof searchPackingListings>>;
 const row = {
-  id: "c1", source_account_ref: "primary", warehouse_id: "16168", candidate_version: "v", inbound_order_sn: "IB261023004", sku: "TT01165",
+  id: "c1", source_account_ref: "primary", warehouse_id: "16168", candidate_version: "v", inbound_order_sn: "IB991023004", sku: "TT01165",
   store_id: null, item_id: null, gtin: null, available_quantity: 50, default_quantity: 50, manual_customs: null, split_lines: [],
 } as unknown as ApprovalCandidate;
 
@@ -51,16 +51,16 @@ const saveButton = () => screen.getByRole("button", { name: /保\s*存/ });
 test("ItemID search lists Listing hits and fills store / MSKU / GTIN", async () => {
   vi.mocked(searchPackingListings).mockResolvedValue(ok([hit()]));
   renderModal();
-  await pick(1, "20987", "HK2614 / 19000000103 / TT01165-1U / TT01165");
-  expect(searchPackingListings).toHaveBeenCalledWith(row, "20987", expect.any(AbortSignal));
+  await pick(1, "19000", "HK2614 / 19000000103 / TT01165-1U / TT01165");
+  expect(searchPackingListings).toHaveBeenCalledWith(row, "19000", expect.any(AbortSignal));
   expect(screen.getByText("TT01165-1U")).toBeInTheDocument();
-  expect(screen.getByText("00462402942522")).toBeInTheDocument();
+  expect(screen.getByText("00099000000002")).toBeInTheDocument();
 });
 
 test("an ItemID not converted to WFS cannot be saved", async () => {
   vi.mocked(searchPackingListings).mockResolvedValue(ok([hit({ wfs_converted: false, usable: false, blocked_reasons: ["WFS_NOT_CONVERTED"] })]));
   renderModal();
-  await pick(1, "20987", "HK2614 / 19000000103 / TT01165-1U / TT01165");
+  await pick(1, "19000", "HK2614 / 19000000103 / TT01165-1U / TT01165");
   fireEvent.change(screen.getByPlaceholderText("例：客户要求分两批 / 换店铺发"), { target: { value: "换店铺发" } });
   expect(await screen.findByText("该 ItemID 尚未完成 WFS 转换，需完成 WFS 转换才能使用")).toBeInTheDocument();
   expect(saveButton()).toBeDisabled();
@@ -69,7 +69,7 @@ test("an ItemID not converted to WFS cannot be saved", async () => {
 test("an ItemID that belongs to another SKU cannot be saved", async () => {
   vi.mocked(searchPackingListings).mockResolvedValue(ok([hit({ local_sku: "TT01166", usable: false, blocked_reasons: ["SKU_MISMATCH"] })]));
   renderModal();
-  await pick(1, "20987", "HK2614 / 19000000103 / TT01165-1U / TT01166");
+  await pick(1, "19000", "HK2614 / 19000000103 / TT01165-1U / TT01166");
   fireEvent.change(screen.getByPlaceholderText("例：客户要求分两批 / 换店铺发"), { target: { value: "换店铺发" } });
   expect(await screen.findByText("该 ItemID 在 Listing 管理里属于其他 SKU，不能用于本打包单")).toBeInTheDocument();
   expect(saveButton()).toBeDisabled();
@@ -79,7 +79,7 @@ test("splitting into two lines within the available stock sends both lines; reas
   const second = hit({ store_id: "s2", store_name: "CN2602", item_id: "19000000104", msku: "TT01165-1A", listing_version: "b".repeat(64), cross_store: true });
   vi.mocked(searchPackingListings).mockImplementation(async (_row, itemId) => ok(itemId.startsWith("2116") ? [second] : [hit()]));
   const onSubmit = renderModal();
-  await pick(1, "20987", "HK2614 / 19000000103 / TT01165-1U / TT01165");
+  await pick(1, "19000", "HK2614 / 19000000103 / TT01165-1U / TT01165");
   fireEvent.change(screen.getByRole("spinbutton", { name: "第 1 行数量" }), { target: { value: "30" } });
   fireEvent.click(screen.getByRole("button", { name: "添加一行（拆单）" }));
   await pick(2, "21168", "CN2602 / 19000000104 / TT01165-1A / TT01165");
@@ -100,7 +100,7 @@ test("splitting into two lines within the available stock sends both lines; reas
 test("a split over the available stock cannot be saved", async () => {
   vi.mocked(searchPackingListings).mockResolvedValue(ok([hit()]));
   renderModal();
-  await pick(1, "20987", "HK2614 / 19000000103 / TT01165-1U / TT01165");
+  await pick(1, "19000", "HK2614 / 19000000103 / TT01165-1U / TT01165");
   fireEvent.change(screen.getByRole("spinbutton", { name: "第 1 行数量" }), { target: { value: "60" } });
   fireEvent.change(screen.getByPlaceholderText("例：客户要求分两批 / 换店铺发"), { target: { value: "多发一点" } });
   expect(await screen.findByText("拆单数量合计超过可用库存")).toBeInTheDocument();

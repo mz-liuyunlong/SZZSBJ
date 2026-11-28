@@ -80,7 +80,7 @@ const page = navigation
 const row: PurchaseBoardRow = {
   id: "PO1::L1::P1",
   purchaseOrderSn: "PO1",
-  draftNo: "CG261017-039",
+  draftNo: "CG991017-039",
   orderItemId: "L1",
   planSn: "P1",
   planSns: ["P1"],
@@ -99,7 +99,7 @@ const row: PurchaseBoardRow = {
   sku: "SKU-A",
   productName: "Widget",
   itemId: {
-    itemId: "19051502014",
+    itemId: "19500000014",
     source: "from_plan_remark",
     sourceRef: "P1",
     matchedAt: "2026-09-23T03:00:00Z",
@@ -210,7 +210,7 @@ beforeEach(() => {
     stage: row.stage,
     lines: [row],
     receipts: [{ receiptOrderSn: "R1", isArrivalReceipt: false }],
-    plans: [{ planSn: "P1", planStatus: 3, planCreateDate: "2026-08-29", quantityPlan: 100, remarkItemId: "19051502014", storeId: "110652398125259264" }],
+    plans: [{ planSn: "P1", planStatus: 3, planCreateDate: "2026-08-29", quantityPlan: 100, remarkItemId: "19500000014", storeId: "110652398125259264" }],
     skuCycles: [{
       sku: "SKU-A",
       valueDays: 12,
@@ -249,7 +249,7 @@ it("shows every verified remark identity without calling multiple values a confl
   vi.mocked(listPurchaseBoard).mockResolvedValue({
     rows: [{ ...row, itemId: { ...row.itemId, itemId: null, matchStatus: "matched",
       identities: [
-        { itemId: "19051502014", msku: "SKU-A", gtin: "00012345678905", fulfillmentType: "1" },
+        { itemId: "19500000014", msku: "SKU-A", gtin: "00012345678905", fulfillmentType: "1" },
         { itemId: "33333333333", msku: "SKU-B", gtin: "00012345678906", fulfillmentType: "1" },
       ] } }], total: 1, meta: { freshnessAt: "2026-10-27T00:00:00Z", ruleVersion: 1, total: 1, hiddenOwnerNames: [] },
   });
@@ -266,7 +266,7 @@ it("flags an identity whose listing local SKU differs from the purchase SKU (rul
     rows: [
       { ...row, itemId: { ...row.itemId, itemId: null, matchStatus: "matched",
         identities: [
-          { itemId: "19051502014", msku: "SKU-A", gtin: "00012345678905", fulfillmentType: "1", localSku: "SKU-A", skuMismatch: false },
+          { itemId: "19500000014", msku: "SKU-A", gtin: "00012345678905", fulfillmentType: "1", localSku: "SKU-A", skuMismatch: false },
           { itemId: "33333333333", msku: "SKU-B", gtin: "00012345678906", fulfillmentType: "1", localSku: "SKU-Z", skuMismatch: true },
         ] } },
     ],
@@ -283,9 +283,9 @@ it("flags an identity whose listing local SKU differs from the purchase SKU (rul
 it("flags a single remark ItemID whose listing local SKU differs", async () => {
   vi.mocked(listPurchaseBoard).mockResolvedValue({
     rows: [
-      { ...row, itemId: { ...row.itemId, itemId: "19051502014", matchStatus: "matched",
+      { ...row, itemId: { ...row.itemId, itemId: "19500000014", matchStatus: "matched",
         identities: [
-          { itemId: "19051502014", msku: "SKU-A", gtin: "00012345678905", fulfillmentType: "1", localSku: "SKU-Z", skuMismatch: true },
+          { itemId: "19500000014", msku: "SKU-A", gtin: "00012345678905", fulfillmentType: "1", localSku: "SKU-Z", skuMismatch: true },
         ] } },
     ],
     total: 1,
@@ -356,8 +356,8 @@ describe("PurchaseBoardPage", () => {
     ]);
 
     const tableRow = screen.getByTestId("board-row");
-    const link = within(tableRow).getByRole("link", { name: /19051502014/ });
-    expect(link).toHaveAttribute("href", "https://www.walmart.com/ip/19051502014");
+    const link = within(tableRow).getByRole("link", { name: /19500000014/ });
+    expect(link).toHaveAttribute("href", "https://www.walmart.com/ip/19500000014");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
     expect(within(tableRow).getByText("采购备注")).toBeInTheDocument();
@@ -416,7 +416,7 @@ describe("PurchaseBoardPage", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("采购单详情 PO1")).toBeInTheDocument();
     expect(within(dialog).getByText("R1")).toBeInTheDocument();
-    expect(within(dialog).getByText("19051502014", { selector: "td" })).toBeInTheDocument();
+    expect(within(dialog).getByText("19500000014", { selector: "td" })).toBeInTheDocument();
     expect(within(dialog).getByText("PO-1 1 天").tagName).toBe("DEL");
     expect(within(dialog).getByText("PO0 12 天")).toBeInTheDocument();
   });
@@ -441,7 +441,7 @@ describe("PurchaseBoardPage", () => {
     expect(screen.getByText(/共 2 条待采购超时/)).toBeInTheDocument();
     // 8088 草稿号 column: the plan row from its remark, the order line from the board row.
     expect(screen.getByText("CG990102-087")).toBeInTheDocument();
-    expect(screen.getAllByText("CG261017-039").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("CG991017-039").length).toBeGreaterThan(0);
     expect(screen.queryByRole("switch", { name: "仅看超时" })).not.toBeInTheDocument();
     expect(screen.queryByText("待采购计划（已审批未转单）")).not.toBeInTheDocument();
     // Reviewer notes 3 + 4: lines vs. card count, and plans ignore the board filters.

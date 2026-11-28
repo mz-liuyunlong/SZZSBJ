@@ -15,25 +15,25 @@ from app.modules.pmc_purchase.calculations import parse_itemid_remark
 
 
 def test_parse_prefers_prefixed_item_id_then_the_first_bare_eleven_digits():
-    assert parse_itemid_remark("ITEMID:20540519308 草稿") == "20540519308"
-    assert parse_itemid_remark("20347351964 报关") == "20347351964"
-    assert parse_itemid_remark("00464039347084") is None
+    assert parse_itemid_remark("ITEMID:20900000011 草稿") == "20900000011"
+    assert parse_itemid_remark("20900000004 报关") == "20900000004"
+    assert parse_itemid_remark("00099000000003") is None
 
 
 def test_extract_keeps_every_eleven_digits_and_skips_gtin():
     assert extract_remark_item_ids(
-        ["ITEMID:20403609913 | 草稿:CG261017-039 20347351964", "00465313943732"]
-    ) == ["20403609913", "20347351964"]
+        ["ITEMID:20900000008 | 草稿:CG991017-039 20900000004", "00099000000006"]
+    ) == ["20900000008", "20900000004"]
 
 
 def test_store_row_uses_its_own_remark_then_listing_gtin():
-    lines = [("S1", ["ITEMID:20403609913 20347351964"], ["PP1"])]
+    lines = [("S1", ["ITEMID:20900000008 20900000004"], ["PP1"])]
     plans = {"PP1": ("S1", ["11111111111"])}
     listings = [
-        ("S1", "20403609913", "YC1", "00465313943732"),
-        ("S1", "20347351964", "YC1", None),
+        ("S1", "20900000008", "YC1", "00099000000006"),
+        ("S1", "20900000004", "YC1", None),
         ("S1", "11111111111", "OTHER", "000"),
-        ("S2", "20403609913", "YC1", "999"),
+        ("S2", "20900000008", "YC1", "999"),
     ]
     found = resolve_store_item_ids(
         store_id="S1", sku="YC1", lines=lines, plans=plans, listings=listings
@@ -42,8 +42,8 @@ def test_store_row_uses_its_own_remark_then_listing_gtin():
     # listing's local SKU differs (it is flagged, see sku_mismatch_ids), so the plan's
     # 11111111111 now counts alongside the line's two ids.
     assert found == [
-        ("20403609913", "00465313943732"),
-        ("20347351964", None),
+        ("20900000008", "00099000000006"),
+        ("20900000004", None),
         ("11111111111", "000"),
     ]
     assert sku_mismatch_ids(
@@ -54,10 +54,10 @@ def test_store_row_uses_its_own_remark_then_listing_gtin():
 def test_remark_item_id_is_trusted_when_the_listing_has_no_local_sku():
     """PO990101006 case: Lingxing never paired the listing; the remark still wins."""
     lines = [("HK2613", ["10.14已分配采购", "19000000101"], [])]
-    listings = [("HK2613", "19000000101", None, "00046001636422", "TT01291-1A")]
+    listings = [("HK2613", "19000000101", None, "00099000000001", "TT01291-1A")]
     assert resolve_store_item_ids(
         store_id="HK2613", sku="TT01291", lines=lines, plans={}, listings=listings
-    ) == [("19000000101", "00046001636422")]
+    ) == [("19000000101", "00099000000001")]
     # Without the remark the same listing is found through the purchase line MSKU.
     assert resolve_store_item_ids(
         store_id="HK2613",
@@ -66,7 +66,7 @@ def test_remark_item_id_is_trusted_when_the_listing_has_no_local_sku():
         plans={},
         listings=listings,
         line_mskus=["TT01291-1A"],
-    ) == [("19000000101", "00046001636422")]
+    ) == [("19000000101", "00099000000001")]
     # ...and not without an MSKU to go on.
     assert (
         resolve_store_item_ids(
@@ -84,22 +84,22 @@ def test_same_purchase_order_keeps_each_store_on_its_own_row():
     cn = [("CN", [None], ["PP1"])]
     hk = [("HK", [None], ["PP2"])]
     plans = {
-        "PP1": ("CN", ["GTIN：00465313943732"]),
-        "PP2": ("HK", ["GTIN：00465271337932"]),
+        "PP1": ("CN", ["GTIN：00099000000006"]),
+        "PP2": ("HK", ["GTIN：00099000000005"]),
     }
     listings = [
-        ("CN", "20068662815", "YC00092", "00465313943732"),
-        ("HK", "20067107122", "YC00092", "00465271337932"),
-        ("OTHER", "20067107122", "YC00092", "00465271337932"),
+        ("CN", "20900000003", "TT00092", "00099000000006"),
+        ("HK", "20900000002", "TT00092", "00099000000005"),
+        ("OTHER", "20900000002", "TT00092", "00099000000005"),
     ]
     cn_ids = resolve_store_item_ids(
-        store_id="CN", sku="YC00092", lines=cn, plans=plans, listings=listings
+        store_id="CN", sku="TT00092", lines=cn, plans=plans, listings=listings
     )
     hk_ids = resolve_store_item_ids(
-        store_id="HK", sku="YC00092", lines=hk, plans=plans, listings=listings
+        store_id="HK", sku="TT00092", lines=hk, plans=plans, listings=listings
     )
-    assert cn_ids == [("20068662815", "00465313943732")]
-    assert hk_ids == [("20067107122", "00465271337932")]
+    assert cn_ids == [("20900000003", "00099000000006")]
+    assert hk_ids == [("20900000002", "00099000000005")]
 
 
 def test_several_listings_on_one_store_stay_on_one_row():
@@ -148,7 +148,7 @@ def test_attach_reads_current_remarks_for_the_row_store():
         new_payload = json.dumps(
             {
                 "update_time": "2026-02-01",
-                "item_purchase_remark": "20347351964",
+                "item_purchase_remark": "20900000004",
                 "relation_purchase_plan": ["PP1"],
             }
         )
@@ -156,7 +156,7 @@ def test_attach_reads_current_remarks_for_the_row_store():
             text(
                 "insert into ods_lingxing_purchase_order_items values "
                 "('primary','PO1','YC1','L1','PP1','S1',:old,:payload,0,'2026-01-01','old'),"
-                "('primary','PO1','YC1','L1','PP1','S1','ITEMID:20403609913',:new_payload,0,'2026-02-01','new'),"
+                "('primary','PO1','YC1','L1','PP1','S1','ITEMID:20900000008',:new_payload,0,'2026-02-01','new'),"
                 "('primary','PO1','YC1','L2','PP2','S2',null,null,0,'2026-02-01','hk'),"
                 "('other','PO1','YC1','L9',null,'S1','12345678901',null,0,'2026-02-01','other')"
             ),
@@ -171,10 +171,10 @@ def test_attach_reads_current_remarks_for_the_row_store():
         conn.execute(
             text(
                 "insert into dim_walmart_listings values "
-                "('primary','S1','20403609913','YC1','004','YC1-1A'),"
-                "('primary','S1','20347351964','YC1',null,'YC1-1B'),"
+                "('primary','S1','20900000008','YC1','004','YC1-1A'),"
+                "('primary','S1','20900000004','YC1',null,'YC1-1B'),"
                 "('primary','S1','22222222222','YC1','005','YC1-1C'),"
-                "('primary','S2','20067107122','YC1','006','YC1-1D')"
+                "('primary','S2','20900000002','YC1','006','YC1-1D')"
             )
         )
     row = type("Row", (), {})()
@@ -187,8 +187,8 @@ def test_attach_reads_current_remarks_for_the_row_store():
     with Session(engine) as session:
         attach_board_item_ids(session, [row], frozenset({"primary"}))
     assert [item.item_id for item in row.item_identities] == [
-        "20403609913",
-        "20347351964",
+        "20900000008",
+        "20900000004",
         "22222222222",
     ]
     assert row.item_identities[0].gtin == "004"
