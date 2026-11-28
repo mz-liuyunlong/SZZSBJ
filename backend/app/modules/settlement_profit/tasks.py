@@ -37,12 +37,11 @@ log = logging.getLogger(__name__)
 
 TASK_NAME = "settlement_profit.order_review_recalc"
 SWEEP_TASK_NAME = "settlement_profit.order_review_recalc_sweep"
-SWEEP_INTERVAL_SECONDS = 600.0
 SOURCE_REF = "primary"
 
 
 def kick_order_review_recalc(*, reason: str = "") -> bool:
-    """踢一下扫队列的任务；投递失败只记日志（队列里的行留着，下一次投递或任务会扫到）。"""
+    """踢一下扫队列的任务；投递失败只记日志（队列行已提交，Beat 的 sweep 最迟 10 分钟内扫到）。"""
     from app.celery_app import INTEGRATION_QUEUE
 
     try:

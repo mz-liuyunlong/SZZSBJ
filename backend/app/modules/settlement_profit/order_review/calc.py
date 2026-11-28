@@ -158,13 +158,26 @@ def _outbound_item(item: dict[str, Any]) -> OutboundItem:
 
 
 @dataclass(frozen=True, slots=True)
+class ListingRef:
+    """计算要用的 Listing 字段值。只存值、不存数据库对象：每期提交后对象会过期，
+    再读属性会逐个回库重查，缓存就白做了。"""
+
+    source_account_ref: str
+    item_id: str
+    msku: str | None
+    local_sku: str | None
+    owner_ref: str | None
+    tags_json: list[Any]
+
+
+@dataclass(frozen=True, slots=True)
 class StoreListingIndex:
     """一个店铺的 Listing（按归一后的 MSKU）和这些 Listing 本地 SKU 的产品负责人。
 
     开算前一次装好，不再逐个商品查（#377 终审）。
     """
 
-    by_msku: dict[str, ListingManagementCurrentMart]
+    by_msku: dict[str, ListingRef]
     owners: dict[str, str]
 
 
@@ -177,16 +190,30 @@ def load_store_listings(
     负责人 = max(nullif(btrim(owner_name), ''))，按账号 + 本地 SKU。
     """
     listing = ListingManagementCurrentMart
-    rows = session.scalars(
-        select(listing)
+    rows = session.execute(
+        select(
+            listing.source_account_ref,
+            listing.item_id,
+            listing.msku,
+            listing.local_sku,
+            listing.owner_ref,
+            listing.tags_json,
+        )
         .where(listing.source_account_ref == source_account_ref, listing.store_id == store_id)
         .order_by(listing.item_id)
     ).all()
-    by_msku: dict[str, ListingManagementCurrentMart] = {}
-    for row in rows:
-        key = norm_msku(row.msku)
+    by_msku: dict[str, ListingRef] = {}
+    for account, item_id, msku, local_sku, owner_ref, tags in rows:
+        key = norm_msku(msku)
         if key is not None and key not in by_msku:
-            by_msku[key] = row
+            by_msku[key] = ListingRef(
+                source_account_ref=account,
+                item_id=item_id,
+                msku=msku,
+                local_sku=local_sku,
+                owner_ref=owner_ref,
+                tags_json=list(tags or []),
+            )
     local_skus = sorted({(row.local_sku or "").strip() for row in by_msku.values()} - {""})
     owners: dict[str, str] = {}
     if local_skus:
@@ -385,7 +412,7 @@ class DbLookups(Lookups):
             )
         return self._listings
 
-    def _listing_for(self, store_sku: str | None) -> ListingManagementCurrentMart | None:
+    def _listing_for(self, store_sku: str | None) -> ListingRef | None:
         """账单店铺 SKU → 同店铺 Listing（按 MSKU，忽略大小写和首尾空格）。"""
         key = norm_msku(store_sku)
         if key is None:

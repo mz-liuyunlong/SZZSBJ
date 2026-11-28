@@ -481,6 +481,8 @@ def test_listing_and_owner_are_loaded_once_per_store_not_per_line(session: Sessi
         calculator = OrderReviewCalculator(session, source_account_ref=ACCOUNT)
         for period in (PERIOD, second_period):
             assert calculator.recalc_period(STORE, period).lines_total == 150
+            # 和队列任务 / 页面重算一样每期提交：提交后缓存不能退回逐个查
+            session.commit()
     finally:
         event.remove(engine, "before_cursor_execute", record)
 
