@@ -802,7 +802,7 @@ RECALC_QUEUE_STATUSES = ("queued", "running", "done", "failed")
 
 
 class SettlementRecalcQueue(_Timestamps, Base):
-    """订单审核重算队列（迁移 0102，刘云龙 #377 终审）：一个 (店铺, 账期) 一行，去重并串行。
+    """订单审核重算队列（迁移 0105，刘云龙 #377 终审）：一个 (店铺, 账期) 一行，去重并串行。
 
     投递 = upsert：已在队列里只把 generation + 1、更新 requested_at，不新增；
     任务取一行置 running 并记下取走时的 generation，算完再比：变了说明算的时候又有新数据，

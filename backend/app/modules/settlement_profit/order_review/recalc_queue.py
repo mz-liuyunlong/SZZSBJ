@@ -1,4 +1,4 @@
-"""订单审核重算队列（settlement_recalc_queue，迁移 0102）。
+"""订单审核重算队列（settlement_recalc_queue，迁移 0105）。
 
 投递去重、同一期串行、算的时候进来的新数据不漏：
 
