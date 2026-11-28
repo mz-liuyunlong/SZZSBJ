@@ -13,7 +13,7 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-const row = { pk: "PK991007123", sku: "TT00217", inbound_order_sn: "IB991007008", item_id: "20900000005", gtin: "00099000000007", msku: "TT00217-1U", purchase_order_sns: ["PO990916024"], arrival_purchased: 300, arrival_received: 300, arrival_pending: 0, default_quantity: 300, store_name: "HK2613-李思成(拓美恒)", manual_rwh: "美中1号仓TX", manual_customs: "default", customs_default: false, customs_default_src: "purchase_remark" } as ApprovalCandidate;
+const row = { pk: "PK991007123", sku: "TT00217", inbound_order_sn: "IB991007008", item_id: "20900000005", gtin: "00099000000007", msku: "TT00217-1U", purchase_order_sns: ["PO990916024"], arrival_purchased: 300, arrival_received: 300, arrival_pending: 0, default_quantity: 300, store_name: "HK9901-店A(测试公司)", manual_rwh: "美中1号仓TX", manual_customs: "default", customs_default: false, customs_default_src: "purchase_remark" } as ApprovalCandidate;
 
 test("approve confirm asks for a name and passphrase in Chinese", async () => {
   const onSubmit = vi.fn();
