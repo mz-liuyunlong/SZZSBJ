@@ -161,7 +161,7 @@ def _outbound_item(item: dict[str, Any]) -> OutboundItem:
 class StoreListingIndex:
     """一个店铺的 Listing（按归一后的 MSKU）和这些 Listing 本地 SKU 的产品负责人。
 
-    开算前一次装好，不再逐个商品查（刘云龙 #377 终审）。
+    开算前一次装好，不再逐个商品查（#377 终审）。
     """
 
     by_msku: dict[str, ListingManagementCurrentMart]

@@ -10,7 +10,7 @@
 4. 负责人标签规则：`cfg_finance_owner_tag_rules`（标签名 → 负责人），只在生产库。
 5. 首次重算：有重算权限的人在页面点「重算」（或 `POST /api/finance/order-review/recalc`），从 2026-10-01 起的期；看期列表的待审 / 自动通过数量是否合理。
 6. 前置数据：沃尔玛账单（已上线）、成本计价流水（#369）、发货单 / 明细 / 出库单（#370）三个同步都要先打开并回填，否则订单行全部 `cost_missing`。
-7. 日常自动重算只算受影响的期（见接口文档「自动重算」）。同步运行事件里出现 `ORDER_REVIEW_RECALC_MANUAL_NEEDED`（有行拿不到 MSKU 和订单号），或队列里有 `failed` 的期：在页面「重算」按店铺 / 账期补算。查队列：`settlement_recalc_queue` 按 `status` 看（queued / running / done / failed）。
+7. 日常自动重算只算受影响的期（见接口文档「自动重算」）。同步运行事件里出现 `ORDER_REVIEW_RECALC_MANUAL_NEEDED`（有行拿不到 MSKU 和订单号），或队列里有 `failed` 的期：在页面「重算」按店铺 / 账期补算。查队列：`settlement_recalc_queue` 按 `status` 看（queued / running / done / failed）。queued 的行正常最迟 10 分钟内被 Beat 的 sweep 扫掉；长时间 queued 不动，先查 Celery Beat 和 worker 是否在跑。
 
 ## 2. 录成本 SOP（财务）
 

@@ -1,4 +1,4 @@
-"""结算利润 V3：订单审核重算队列 settlement_recalc_queue（刘云龙 #377 终审）。
+"""结算利润 V3：订单审核重算队列 settlement_recalc_queue（#377 终审）。
 
 成本数据同步之后只重算受影响的 (店铺, 账期)，经这张表去重、串行：同一期同一时刻只有一个在算，
 连续几次投递合并成一次，算的时候进来的新数据算完再补一次。只建这一张表，不碰 0104 及以前的任何对象。
@@ -32,6 +32,7 @@ def upgrade() -> None:
         sa.Column("status", sa.String(16), nullable=False),
         sa.Column("generation", sa.Integer(), nullable=False),
         sa.Column("claimed_generation", sa.Integer(), nullable=True),
+        sa.Column("claim_token", sa.Uuid(), nullable=True),
         sa.Column("requested_count", sa.Integer(), nullable=False),
         sa.Column("reason", sa.String(128), nullable=True),
         sa.Column("requested_at", sa.DateTime(timezone=True), nullable=False),

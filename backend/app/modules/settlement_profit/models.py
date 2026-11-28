@@ -802,11 +802,12 @@ RECALC_QUEUE_STATUSES = ("queued", "running", "done", "failed")
 
 
 class SettlementRecalcQueue(_Timestamps, Base):
-    """订单审核重算队列（迁移 0105，刘云龙 #377 终审）：一个 (店铺, 账期) 一行，去重并串行。
+    """订单审核重算队列（迁移 0105，#377 终审）：一个 (店铺, 账期) 一行，去重并串行。
 
     投递 = upsert：已在队列里只把 generation + 1、更新 requested_at，不新增；
-    任务取一行置 running 并记下取走时的 generation，算完再比：变了说明算的时候又有新数据，
-    回到 queued 再算一次；没变置 done。running 超过租约（worker 中途退出）视为可重取。
+    任务取一行置 running、写一个新的 claim_token 并记下取走时的 generation，算完再比：
+    变了说明算的时候又有新数据，回到 queued 再算一次；没变置 done。running 超过租约
+    （worker 中途退出）视为可重取，重取会换 claim_token；旧 worker 的 token 对不上，不能再改这行。
     不属于 PRP 的 18 张表，单独登记；队列可以随时重建，回滚只删表。
     """
 
@@ -827,6 +828,7 @@ class SettlementRecalcQueue(_Timestamps, Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     generation: Mapped[int] = mapped_column(Integer, nullable=False)
     claimed_generation: Mapped[int | None] = mapped_column(Integer)
+    claim_token: Mapped[UUID | None] = mapped_column()
     requested_count: Mapped[int] = mapped_column(Integer, nullable=False)
     reason: Mapped[str | None] = mapped_column(String(128))
     requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

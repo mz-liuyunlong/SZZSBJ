@@ -303,6 +303,7 @@ def test_recalc_queue_is_registered_outside_the_prp_tables() -> None:
     checks = _checks(table)
     assert "status IN ('queued', 'running', 'done', 'failed')" in checks["status"]
     assert checks["generation_positive"] == "generation >= 1"
+    assert "claim_token" in table.c  # 每次领取一个新标识，被重取后旧 worker 改不了这行
     migration = BACKEND_ROOT / "alembic" / "versions" / "20261128_0105_settlement_recalc_queue.py"
     text_ = migration.read_text(encoding="utf-8")
     assert "uq_settlement_recalc_queue" in text_

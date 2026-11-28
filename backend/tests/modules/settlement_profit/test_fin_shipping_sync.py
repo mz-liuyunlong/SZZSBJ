@@ -1021,7 +1021,7 @@ def stub_fin_handler(interface: IntegrationInterface, result: FinSyncResult) -> 
     return StubHandler
 
 
-@pytest.mark.parametrize("shape", ["changed", "unchanged", "unresolved"])
+@pytest.mark.parametrize("shape", ["changed", "unchanged", "unresolved", "kick_failed"])
 def test_fin_sync_enqueues_only_affected_periods(
     session: Session, monkeypatch: pytest.MonkeyPatch, shape: str
 ) -> None:
@@ -1032,7 +1032,7 @@ def test_fin_sync_enqueues_only_affected_periods(
     interface = governed(session, FIN_SHIPPING_DETAIL_SYNC_SPEC)
     run = queued_run(session, interface)
     keys = AffectedKeys()
-    if shape == "changed":
+    if shape in ("changed", "kick_failed"):
         keys.add(STORE_A, mskus=["SYN-001"])
     elif shape == "unresolved":
         keys.add(STORE_A)  # 拿不到 MSKU 也拿不到订单号
@@ -1052,9 +1052,10 @@ def test_fin_sync_enqueues_only_affected_periods(
         scopes.append(keys)
         return [(STORE_A, "2026-11-03")]
 
-    def fake_enqueue(_session: Session, pairs: Any, *, reason: str) -> int:
+    def fake_enqueue(_session: Session, pairs: Any, *, reason: str) -> tuple[int, bool]:
         enqueued.append((list(pairs), reason))
-        return len(pairs)
+        # kick_failed：队列行已提交，但踢 Celery 任务失败
+        return len(pairs), shape != "kick_failed"
 
     def no_full_recalc(*args: Any, **kwargs: Any) -> bool:
         raise AssertionError("cost sync must never dispatch a store-wide recalc")
@@ -1074,9 +1075,23 @@ def test_fin_sync_enqueues_only_affected_periods(
             IntegrationSyncRunEvent.message_code == "ORDER_REVIEW_RECALC_MANUAL_NEEDED",
         )
     ).all()
+    kick_events = session.scalars(
+        select(IntegrationSyncRunEvent).where(
+            IntegrationSyncRunEvent.run_id == run.id,
+            IntegrationSyncRunEvent.message_code == "ORDER_REVIEW_RECALC_KICK_FAILED",
+        )
+    ).all()
+    reason = f"{interface.interface_key}_sync"
+    if shape == "kick_failed":
+        # 入队照样做；只多记一条事件，sweep 会补上
+        assert enqueued == [([(STORE_A, "2026-11-03")], reason)]
+        assert [event.safe_details for event in kick_events] == [{"reason": reason}]
+        assert events == []
+        return
+    assert kick_events == []
     if shape == "changed":
         assert [k.mskus for k in scopes] == [{(STORE_A, "syn-001")}]
-        assert enqueued == [([(STORE_A, "2026-11-03")], f"{interface.interface_key}_sync")]
+        assert enqueued == [([(STORE_A, "2026-11-03")], reason)]
         assert events == []
     elif shape == "unchanged":
         assert (scopes, enqueued, events) == ([], [], [])

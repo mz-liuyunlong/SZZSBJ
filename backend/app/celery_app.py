@@ -157,6 +157,11 @@ def create_celery_app(
                 "task": "integration_sync.scheduler_tick",
                 "schedule": 60.0,
             },
+            # 订单审核重算队列兜底（#377）：有可取的行才扫，空队列只一条 SELECT
+            "settlement-order-review-recalc-sweep": {
+                "task": "settlement_profit.order_review_recalc_sweep",
+                "schedule": 600.0,
+            },
         },
     )
     # 0097 沃尔玛对账报表打款额：只有生产 + SZZSBJ_WALMART_RECON_PAYOUT_ENABLED=1 才排期；

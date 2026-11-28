@@ -1,18 +1,22 @@
-"""订单审核按范围重算 + 重算队列（刘云龙 #377 终审）。合成数据；没配隔离库就跳过。
+"""订单审核按范围重算 + 重算队列（#377 终审）。合成数据；没配隔离库就跳过。
 
 - affected_periods：只返回当前版本订单行里对得上 (店铺, MSKU) / (店铺, 订单号) 的期。
 - 队列：连续投递合并成一次；算的时候又投递会再算一次、不漏；出错置 failed、再投递回到 queued；
-  running 超过租约可重取。
+  running 超过租约可重取；被重取后旧 worker 的 claim_token 对不上，不能再改这行。
+- 真实并发：两条独立连接各自提交，SKIP LOCKED 下不会拿到同一行；两个线程同时扫，每期只算一次。
 """
 
 from __future__ import annotations
 
+import threading
+import time
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy import create_engine, select
+from sqlalchemy import Engine, create_engine, delete, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
@@ -28,18 +32,23 @@ P1, P2 = "2026-11-03", "2026-11-17"
 
 
 @pytest.fixture
-def session() -> Iterator[Session]:
+def engine() -> Iterator[Engine]:
     try:
         url = get_test_database_url(Settings())  # type: ignore[call-arg]
     except (SettingsError, ValidationError):
         pytest.skip("isolated PostgreSQL test database is not configured")
     engine = create_engine(url, poolclass=NullPool, hide_parameters=True)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture
+def session(engine: Engine) -> Iterator[Session]:
     with engine.connect() as connection:
         transaction = connection.begin()
         with Session(bind=connection, join_transaction_mode="create_savepoint") as db:
             yield db
         transaction.rollback()
-    engine.dispose()
 
 
 def add_line(
@@ -180,3 +189,130 @@ def test_stale_running_row_can_be_claimed_again(session: Session) -> None:
     later = now + recalc_queue.RUNNING_LEASE + timedelta(minutes=1)
     again = recalc_queue.claim_next(session, source_account_ref=ACCOUNT, now=later)
     assert again is not None and again.queue_id in {first.queue_id, second.queue_id}
+
+
+def test_takeover_after_lease_leaves_the_row_to_the_new_worker(session: Session) -> None:
+    enqueue(session, [(STORE_A, P1)])
+    start = datetime(2026, 11, 28, 10, 0, tzinfo=UTC)
+    worker_a = recalc_queue.claim_next(session, source_account_ref=ACCOUNT, now=start)
+    assert worker_a is not None
+    later = start + recalc_queue.RUNNING_LEASE + timedelta(minutes=1)
+    worker_b = recalc_queue.claim_next(session, source_account_ref=ACCOUNT, now=later)
+    assert worker_b is not None
+    assert worker_b.queue_id == worker_a.queue_id and worker_b.token != worker_a.token
+    # A 其实没死、算完了：认领权已丢，不改任何字段
+    assert recalc_queue.finish(session, worker_a) == "lost"
+    row = queue_row(session)
+    assert (row.status, row.claim_token) == ("running", worker_b.token)
+    assert recalc_queue.finish(session, worker_b) == "done"
+    assert queue_row(session).status == "done"
+
+
+def test_request_after_takeover_is_recalculated_by_the_new_worker(session: Session) -> None:
+    enqueue(session, [(STORE_A, P1)])
+    start = datetime(2026, 11, 28, 10, 0, tzinfo=UTC)
+    worker_a = recalc_queue.claim_next(session, source_account_ref=ACCOUNT, now=start)
+    later = start + recalc_queue.RUNNING_LEASE + timedelta(minutes=1)
+    worker_b = recalc_queue.claim_next(session, source_account_ref=ACCOUNT, now=later)
+    assert worker_a is not None and worker_b is not None
+    enqueue(session, [(STORE_A, P1)], "arrived_while_b_running")
+    assert queue_row(session).generation == 2
+    assert recalc_queue.finish(session, worker_a) == "lost"
+    assert queue_row(session).status == "running"
+    # B 取走时 generation 还是 1：算完发现变了，回到 queued 再算一次
+    assert recalc_queue.finish(session, worker_b) == "requeued"
+    assert queue_row(session).status == "queued"
+
+
+def test_drain_stops_at_the_limit_and_reports_it(session: Session) -> None:
+    enqueue(session, [(STORE_A, P1), (STORE_A, P2), (STORE_B, P1)])
+    calls: list[str] = []
+    result = recalc_queue.drain(
+        session,
+        source_account_ref=ACCOUNT,
+        recalc=lambda store, period: calls.append(period),
+        max_items=2,
+    )
+    assert (len(calls), result.hit_limit) == (2, True)
+    assert recalc_queue.has_pending(session, source_account_ref=ACCOUNT)
+    rest = recalc_queue.drain(session, source_account_ref=ACCOUNT, recalc=lambda s, p: None)
+    assert (rest.calculated, rest.hit_limit) == (1, False)
+    assert not recalc_queue.has_pending(session, source_account_ref=ACCOUNT)
+
+
+def _committed_account(engine: Engine, pairs: list[tuple[str, str]]) -> str:
+    """真实并发要两条独立连接各自提交：用一次性账号，测试完删掉自己的行。"""
+    account = f"concurrency-{uuid4().hex[:12]}"
+    with Session(engine) as db:
+        recalc_queue.enqueue(db, source_account_ref=account, pairs=pairs, reason="test")
+        db.commit()
+    return account
+
+
+def _cleanup(engine: Engine, account: str) -> None:
+    with Session(engine) as db:
+        db.execute(
+            delete(SettlementRecalcQueue).where(SettlementRecalcQueue.source_account_ref == account)
+        )
+        db.commit()
+
+
+def test_two_connections_never_claim_the_same_row(engine: Engine) -> None:
+    account = _committed_account(engine, [(STORE_A, P1), (STORE_A, P2)])
+    try:
+        with Session(engine) as first, Session(engine) as second:
+            # 第一条连接锁住一行但还没提交，第二条连接 SKIP LOCKED 跳过它
+            row = first.scalars(
+                select(SettlementRecalcQueue)
+                .where(SettlementRecalcQueue.source_account_ref == account)
+                .order_by(SettlementRecalcQueue.period_key)
+                .limit(1)
+                .with_for_update(skip_locked=True)
+            ).one()
+            other = recalc_queue.claim_next(second, source_account_ref=account)
+            assert other is not None and other.queue_id != row.id
+            assert recalc_queue.claim_next(second, source_account_ref=account) is None
+            first.rollback()
+            mine = recalc_queue.claim_next(first, source_account_ref=account)
+            assert mine is not None and mine.queue_id == row.id
+            assert recalc_queue.claim_next(first, source_account_ref=account) is None
+    finally:
+        _cleanup(engine, account)
+
+
+def test_two_threads_draining_together_recalc_each_period_once(engine: Engine) -> None:
+    pairs = [(STORE_A, f"2026-11-{day:02d}") for day in range(1, 11)]
+    account = _committed_account(engine, pairs)
+    seen: list[tuple[str, str]] = []
+    lock = threading.Lock()
+    errors: list[Exception] = []
+
+    def recalc(store: str, period: str) -> None:
+        with lock:
+            seen.append((store, period))
+        time.sleep(0.05)  # 让两个线程的取行交错
+
+    def worker() -> None:
+        try:
+            with Session(engine) as db:
+                recalc_queue.drain(db, source_account_ref=account, recalc=recalc)
+        except Exception as exc:  # 线程里的异常带回主线程断言
+            errors.append(exc)
+
+    try:
+        threads = [threading.Thread(target=worker) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=60)
+        assert errors == []
+        assert sorted(seen) == sorted(pairs)  # 每期只算一次
+        with Session(engine) as db:
+            statuses = db.scalars(
+                select(SettlementRecalcQueue.status).where(
+                    SettlementRecalcQueue.source_account_ref == account
+                )
+            ).all()
+        assert sorted(statuses) == ["done"] * len(pairs)
+    finally:
+        _cleanup(engine, account)

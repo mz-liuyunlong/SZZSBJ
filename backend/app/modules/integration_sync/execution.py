@@ -1107,11 +1107,12 @@ class SyncRunExecutionService:
         self.session.commit()
 
     def _recalc_affected(self, run: IntegrationSyncRun, keys: AffectedKeys, reason: str) -> None:
-        """成本数据同步后只重算受影响的期（刘云龙 #377 终审）。
+        """成本数据同步后只重算受影响的期（#377 终审）。
 
         键为空 = 内容没变，不投递；有拿不到 MSKU / 订单号的行：不投递那部分、不退回全量，
         记日志和运行事件 ORDER_REVIEW_RECALC_MANUAL_NEEDED，财务在页面「重算」补。
-        出错只记日志，不影响同步结果。
+        入队成功但踢任务失败：队列行已提交，记运行事件 ORDER_REVIEW_RECALC_KICK_FAILED，
+        由 Beat 的 sweep 最迟 10 分钟内补上。出错只记日志，不影响同步结果。
         """
         try:
             if keys.unresolved:
@@ -1120,28 +1121,33 @@ class SyncRunExecutionService:
                     reason,
                     keys.unresolved,
                 )
-                self.repository.add_event(
-                    IntegrationSyncRunEvent(
-                        run_id=run.id,
-                        sequence_no=self.repository.next_event_sequence(run.id),
-                        event_type="order_review_recalc",
-                        from_status=None,
-                        to_status=None,
-                        message_code="ORDER_REVIEW_RECALC_MANUAL_NEEDED",
-                        safe_details=keys.summary(),
-                        occurred_at=utc_now(),
-                        actor_ref="worker",
-                    )
-                )
-                self.session.commit()
+                self._recalc_event(run, "ORDER_REVIEW_RECALC_MANUAL_NEEDED", keys.summary())
             if not keys.mskus and not keys.orders:
                 return
             account = run.source_account_ref
             pairs = affected_periods(self.session, source_account_ref=account, keys=keys)
-            enqueue_affected(self.session, pairs, reason=reason)
+            count, kicked = enqueue_affected(self.session, pairs, reason=reason)
+            if count and not kicked:
+                self._recalc_event(run, "ORDER_REVIEW_RECALC_KICK_FAILED", {"reason": reason})
         except Exception:
             self.session.rollback()
             logger.warning("order review recalc enqueue failed (%s)", reason)
+
+    def _recalc_event(self, run: IntegrationSyncRun, code: str, details: dict[str, object]) -> None:
+        self.repository.add_event(
+            IntegrationSyncRunEvent(
+                run_id=run.id,
+                sequence_no=self.repository.next_event_sequence(run.id),
+                event_type="order_review_recalc",
+                from_status=None,
+                to_status=None,
+                message_code=code,
+                safe_details=details,
+                occurred_at=utc_now(),
+                actor_ref="worker",
+            )
+        )
+        self.session.commit()
 
     def _event(
         self,

@@ -424,9 +424,9 @@ def test_execution_layer_path_releases_lease_and_lock_and_clears_expired_lease(
         recalcs.append((set(keys.mskus), "periods"))  # type: ignore[attr-defined]
         return [("store-x", "2026-10-07")]
 
-    def fake_enqueue(_session: Session, pairs: object, *, reason: str) -> int:
+    def fake_enqueue(_session: Session, pairs: object, *, reason: str) -> tuple[int, bool]:
         recalcs[-1] = (recalcs[-1][0], reason)
-        return 1
+        return 1, True
 
     def no_full_recalc(*args: object, **kwargs: object) -> bool:
         raise AssertionError("cost flow sync must never dispatch a store-wide recalc")
