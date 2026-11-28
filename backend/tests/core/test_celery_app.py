@@ -58,6 +58,11 @@ def test_celery_app_declares_only_expected_queues() -> None:
         "task": "integration_sync.scheduler_tick",
         "schedule": 60.0,
     }
+    # 订单审核重算队列兜底（#377）：每 10 分钟，有可取的行才扫
+    assert celery.conf.beat_schedule["settlement-order-review-recalc-sweep"] == {
+        "task": "settlement_profit.order_review_recalc_sweep",
+        "schedule": 600.0,
+    }
 
 
 def test_task_modules_are_importable() -> None:

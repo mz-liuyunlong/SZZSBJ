@@ -59,6 +59,7 @@ SKU_AD_PROGRESS_0100_REVISION = "20261127_0100_sku_ad_progress_foundation"
 ORDER_REVIEW_PERMISSIONS_0101_REVISION = "20261127_0101_finance_order_review_permissions"
 WOOCOMMERCE_CONFIG_0102_REVISION = "20261128_0102_woocommerce_store_config"
 WOOCOMMERCE_PRODUCTS_0104_REVISION = "20261128_0104_woocommerce_products"
+SETTLEMENT_RECALC_QUEUE_0105_REVISION = "20261128_0105_settlement_recalc_queue"
 FINANCE_0083_REVISION = "20261109_0083_finance_sem_unallocated_lines"
 WFS_DETECTION_HEAD_REVISION = "20261026_0061_wfs_fee_detection_evidence"
 SYNC_ANOMALY_HEAD_REVISION = "20261027_0062_sync_anomaly_center"
@@ -106,7 +107,11 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20261026_0055_purchase_board_draft_no",
         LISTING_INTEGRATION_HEAD_REVISION,
     }
-    assert script.get_heads() == [WOOCOMMERCE_PRODUCTS_0104_REVISION]
+    assert script.get_heads() == [SETTLEMENT_RECALC_QUEUE_0105_REVISION]
+    assert (
+        script.get_revision(SETTLEMENT_RECALC_QUEUE_0105_REVISION).down_revision
+        == WOOCOMMERCE_PRODUCTS_0104_REVISION
+    )
     assert (
         script.get_revision(WOOCOMMERCE_PRODUCTS_0104_REVISION).down_revision
         == "20261128_0103_sku_purchase_listing_identity"
@@ -482,7 +487,7 @@ def test_revision_files_have_unique_ids_and_form_one_connected_graph() -> None:
                     revisions.append(ast.literal_eval(node.value))
     assert len(revisions) == len(set(revisions)), "duplicate full Alembic revision ID"
     script = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
-    assert script.get_heads() == [WOOCOMMERCE_PRODUCTS_0104_REVISION]
+    assert script.get_heads() == [SETTLEMENT_RECALC_QUEUE_0105_REVISION]
     assert (
         script.get_revision("20261128_0103_sku_purchase_listing_identity").down_revision
         == "20261128_0102_woocommerce_store_config"

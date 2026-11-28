@@ -20,14 +20,14 @@ import hashlib
 import logging
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
-from datetime import date, datetime
+from dataclasses import dataclass, field
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Protocol
 from uuid import UUID, uuid4
 
 from pydantic import JsonValue
-from sqlalchemy import Connection, func, select, text, update
+from sqlalchemy import Connection, func, select, text, union, update
 from sqlalchemy.orm import Session
 
 from app.core.config import AppEnvironment, Settings, get_settings
@@ -57,6 +57,7 @@ from app.modules.integration_sync.models import (
 )
 from app.modules.integration_sync.repository import IntegrationSyncRepository
 from app.modules.integration_sync.wfs_cost_valuation_catalog import WFS_COST_VALUATION_SYNC_SPEC
+from app.modules.settlement_profit.order_review.recalc_scope import AffectedKeys
 from app.modules.warehouse_wfs.inventory_flow_models import WfsCostValuationFlowOds
 
 logger = logging.getLogger("app.integration_sync.wfs_cost_valuation")
@@ -113,6 +114,8 @@ class WfsCostValuationSyncResult:
     error_code: str | None
     records_written: int
     records_superseded: int
+    # 和被替换的旧行相比内容真的变了的行（新增 / 变了 / 消失），换算成订单行键；只有成功批次有
+    affected: AffectedKeys = field(default_factory=AffectedKeys)
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +145,16 @@ def wfs_cost_valuation_client() -> Iterator[LingxingReadonlyClient]:
         yield client
     finally:
         client.close()
+
+
+def window_date(value: date | datetime) -> date:
+    """运行窗口的日期：带时区的先转 UTC 再取日期，不依赖数据库连接的时区（#375 审核 P3）。
+
+    定时 / 手动 / 回填都把窗口存成 UTC 零点，所以 UTC 日期就是本意的日期。
+    """
+    if isinstance(value, datetime):
+        return value.astimezone(UTC).date() if value.tzinfo is not None else value.date()
+    return value
 
 
 def _require_runtime(settings: Settings) -> None:
@@ -353,10 +366,8 @@ class LingxingWfsCostValuationSyncHandler:
             raise WfsCostValuationSyncError("SYNC_WFS_FLOW_RETENTION_POLICY_MISSING")
         if run.window_start is None or run.window_end is None:
             raise WfsCostValuationSyncError("SYNC_WFS_FLOW_WINDOW_REQUIRED")
-        start = (
-            run.window_start.date() if isinstance(run.window_start, datetime) else run.window_start
-        )
-        end = run.window_end.date() if isinstance(run.window_end, datetime) else run.window_end
+        start = window_date(run.window_start)
+        end = window_date(run.window_end)
         try:
             validate_wfs_cost_valuation_window(start, end)
         except WfsCostValuationContractError:
@@ -659,7 +670,33 @@ class LingxingWfsCostValuationSyncHandler:
             error_code=None,
             records_written=written,
             records_superseded=int(retired or 0),
+            affected=self._changed_keys(run.id),
         )
+
+    def _changed_keys(self, run_id: UUID) -> AffectedKeys:
+        """本批次新行 和 本批次替换掉的旧行 逐行（店铺、MSKU、订单号、行 hash）比对，只记不一样的。
+
+        滚动窗口每天整段替换，绝大部分行内容没变；只按变了的行重算。比对出错不影响同步结果，
+        记成 1 行 unresolved，由执行层记日志、提示手动重算。
+        """
+        flow = WfsCostValuationFlowOds
+        columns = (flow.store_id, flow.msku, flow.order_number, flow.row_hash)
+        new = select(*columns).where(flow.run_id == run_id)
+        old = select(*columns).where(flow.superseded_by_run_id == run_id)
+        changed = union(new.except_all(old), old.except_all(new)).subquery()
+        keys = AffectedKeys()
+        try:
+            rows = self.session.execute(
+                select(changed.c.store_id, changed.c.msku, changed.c.order_number).distinct()
+            ).all()
+        except Exception:
+            self.session.rollback()
+            logger.warning("wfs_cost_valuation_changed_keys_failed run_id=%s", run_id)
+            keys.unresolved = 1
+            return keys
+        for store_id, msku, order_number in rows:
+            keys.add(store_id, mskus=[msku], orders=[order_number])
+        return keys
 
     # --------------------------------------------------------------- failure
     def _recover_and_fail(

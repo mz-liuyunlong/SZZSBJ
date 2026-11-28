@@ -174,11 +174,20 @@ class Lookups:
     def cost_entry(self, msku: str, scope_ref: str) -> CostEntry | None:
         raise NotImplementedError
 
+    # 下面四个查表的参数都是账单的 Partner Item Id：它是店铺 SKU（MSKU），不是沃尔玛 ItemID。
     def owner_for_item(self, item_id: str | None) -> str | None:
         raise NotImplementedError
 
     def msku_for_item(self, item_id: str | None) -> str | None:
         raise NotImplementedError
+
+    def listing_item_id(self, item_id: str | None) -> str | None:
+        """店铺 SKU 对应 Listing 的沃尔玛 ItemID；查不到返回 None。"""
+        return None
+
+    def local_sku_for_item(self, item_id: str | None) -> str | None:
+        """店铺 SKU 对应 Listing 的本地 SKU；查不到返回 None。"""
+        return None
 
     def fx_rate(self, month: date) -> Decimal | None:
         raise NotImplementedError
@@ -535,7 +544,10 @@ def compute_line(
     first = group.rows[0]
     # MCF 行账单里没有履约类型：按 §0.3 走 WFS 同一规则（经 costSource 定位发货单），不当自发货
     fulfillment = "wfs" if kind == "mcf" else fulfillment_of(first.fulfillment_type)
-    item_id = next((_text(r.partner_item_id) for r in group.rows if _text(r.partner_item_id)), None)
+    # 账单 Partner Item Id = 店铺 SKU；沃尔玛 ItemID、本地 SKU、负责人都经 Listing 查
+    store_sku = next(
+        (_text(r.partner_item_id) for r in group.rows if _text(r.partner_item_id)), None
+    )
     report_date = first.report_date
     line = ComputedLine(
         line_key=line_key_of(store_id, first.report_key, group.order_no, group.line_no, group.gtin),
@@ -544,10 +556,10 @@ def compute_line(
         platform_order_no=group.order_no,
         order_line_no=group.line_no,
         gtin=group.gtin,
-        item_id=item_id,
-        sku=None,
-        msku=lookups.msku_for_item(item_id),
-        owner_id=lookups.owner_for_item(item_id),
+        item_id=lookups.listing_item_id(store_sku),
+        sku=lookups.local_sku_for_item(store_sku),
+        msku=lookups.msku_for_item(store_sku),
+        owner_id=lookups.owner_for_item(store_sku),
         posted_date=min((r.posted_date for r in group.rows if r.posted_date), default=None),
         period_key=first.report_key,
         report_date=report_date,

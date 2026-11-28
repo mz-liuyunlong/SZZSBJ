@@ -416,6 +416,24 @@ def test_execution_layer_path_releases_lease_and_lock_and_clears_expired_lease(
 
     monkeypatch.setattr(module, "_require_runtime", lambda settings: None)
     monkeypatch.setattr(module, "wfs_cost_valuation_client", fake_client)
+    from app.modules.integration_sync import execution as execution_module
+
+    recalcs: list[tuple[set[tuple[str | None, str]], str]] = []
+
+    def fake_periods(_session: Session, *, source_account_ref: str, keys: object) -> object:
+        recalcs.append((set(keys.mskus), "periods"))  # type: ignore[attr-defined]
+        return [("store-x", "2026-10-07")]
+
+    def fake_enqueue(_session: Session, pairs: object, *, reason: str) -> tuple[int, bool]:
+        recalcs[-1] = (recalcs[-1][0], reason)
+        return 1, True
+
+    def no_full_recalc(*args: object, **kwargs: object) -> bool:
+        raise AssertionError("cost flow sync must never dispatch a store-wide recalc")
+
+    monkeypatch.setattr(execution_module, "affected_periods", fake_periods)
+    monkeypatch.setattr(execution_module, "enqueue_affected", fake_enqueue)
+    monkeypatch.setattr(execution_module, "dispatch_order_review_recalc", no_full_recalc)
 
     def lock_free() -> bool:
         with engine.connect() as probe:
@@ -440,6 +458,8 @@ def test_execution_layer_path_releases_lease_and_lock_and_clears_expired_lease(
     assert first_row is not None
     assert first_row.status == "succeeded", first_row.error_code
     assert lease_rows() == 0 and lock_free()
+    # 成功 → 只按变了的行投递（店铺没认出 = 任何店铺；MSKU 归一成小写）
+    assert recalcs == [({(None, "syn-msku-1")}, "wfs_cost_flow_sync")]
 
     # ② a crashed run holding an expired lease: the execution layer fails it and runs the new one
     crashed = new_run(session, config, interface)
@@ -464,6 +484,31 @@ def test_execution_layer_path_releases_lease_and_lock_and_clears_expired_lease(
     third_row = session.get(IntegrationSyncRun, third.id)
     assert third_row is not None and third_row.status == "failed"
     assert lease_rows() == 0 and lock_free()
+    # ② 用 record(2) 整段替换 record(1)：新旧两边的 MSKU 都算受影响
+    assert recalcs[1] == ({(None, "syn-msku-1"), (None, "syn-msku-2")}, "wfs_cost_flow_sync")
+    # 失败批次不整段替换，不投递重算（①②各一次）
+    assert len(recalcs) == 2
+
+
+def test_affected_keys_only_cover_rows_that_really_changed(session: Session) -> None:
+    window = (date(2026, 10, 1), date(2026, 10, 31))
+    # 测试配置一页最多 2 行：两行正好一页
+    rows = [record(1), record(2)]
+    first, _, result = run_sync(session, [page(rows, 2, 1)], window=window)
+    assert first.status == "succeeded", first.error_code
+    affected = result.affected  # type: ignore[attr-defined]
+    assert affected.mskus == {(None, "syn-msku-1"), (None, "syn-msku-2")}
+    assert affected.orders == {(None, "SYN-ORDER-1"), (None, "SYN-ORDER-2")}
+    # 同样的数据再拉一次：整段替换了，但内容一行没变 → 没有受影响的键
+    again, _, same = run_sync(session, [page(rows, 2, 1)], window=window)
+    assert again.status == "succeeded", again.error_code
+    assert same.affected.is_empty()  # type: ignore[attr-defined]
+    # 只改 record(2) 的数量：只记它的 MSKU 和订单号
+    changed = [record(1), record(2, quantity=-2)]
+    third, _, diff = run_sync(session, [page(changed, 2, 1)], window=window)
+    assert third.status == "succeeded", third.error_code
+    assert diff.affected.mskus == {(None, "syn-msku-2")}  # type: ignore[attr-defined]
+    assert diff.affected.orders == {(None, "SYN-ORDER-2")}  # type: ignore[attr-defined]
 
 
 def test_store_mapping_by_sid_by_store_code_and_unmapped(session: Session) -> None:

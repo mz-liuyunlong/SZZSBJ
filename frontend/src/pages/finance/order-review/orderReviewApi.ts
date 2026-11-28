@@ -118,7 +118,7 @@ export function useTransactionTypes() {
 }
 
 export type LookupKind = "item_id" | "sku" | "msku" | "order_no";
-export const LOOKUP_LABEL: Record<LookupKind, string> = { item_id: "ItemID", sku: "SKU", msku: "MSKU", order_no: "订单号" };
+export const LOOKUP_LABEL: Record<LookupKind, string> = { item_id: "ItemID", sku: "本地SKU", msku: "MSKU", order_no: "订单号" };
 
 export async function lookup(kind: LookupKind, q: string, limit = 1000) {
   const params = new URLSearchParams({ kind, q, limit: String(limit) });

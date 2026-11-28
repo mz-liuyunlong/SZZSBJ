@@ -31,6 +31,7 @@ from app.modules.settlement_profit.models import (
     SettlementOrderReview,
     SettlementSetting,
 )
+from app.modules.settlement_profit.order_review.recalc_scope import norm_msku
 from app.modules.settlement_profit.order_review.rules import (
     BillRow,
     ComputedLine,
@@ -48,6 +49,7 @@ from app.modules.settlement_profit.order_review.rules import (
     group_order_rows,
     qty,
 )
+from app.modules.sku_detail.models import LingxingSkuProductInfoCurrent
 from app.modules.walmart_bills.models import WalmartBillLine, WalmartBillPeriod
 from app.modules.warehouse_wfs.inventory_flow_models import WfsCostValuationFlowOds
 
@@ -155,6 +157,83 @@ def _outbound_item(item: dict[str, Any]) -> OutboundItem:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class ListingRef:
+    """计算要用的 Listing 字段值。只存值、不存数据库对象：每期提交后对象会过期，
+    再读属性会逐个回库重查，缓存就白做了。"""
+
+    source_account_ref: str
+    item_id: str
+    msku: str | None
+    local_sku: str | None
+    owner_ref: str | None
+    tags_json: list[Any]
+
+
+@dataclass(frozen=True, slots=True)
+class StoreListingIndex:
+    """一个店铺的 Listing（按归一后的 MSKU）和这些 Listing 本地 SKU 的产品负责人。
+
+    开算前一次装好，不再逐个商品查（#377 终审）。
+    """
+
+    by_msku: dict[str, ListingRef]
+    owners: dict[str, str]
+
+
+def load_store_listings(
+    session: Session, *, source_account_ref: str, store_id: str
+) -> StoreListingIndex:
+    """两条查询：店铺全部 Listing；这些 Listing 本地 SKU 的产品负责人（IN 一次）。
+
+    匹配规则和逐条查询时一样：同账号同店铺，lower(btrim(msku)) 相等，多条按 item_id 取第一条；
+    负责人 = max(nullif(btrim(owner_name), ''))，按账号 + 本地 SKU。
+    """
+    listing = ListingManagementCurrentMart
+    rows = session.execute(
+        select(
+            listing.source_account_ref,
+            listing.item_id,
+            listing.msku,
+            listing.local_sku,
+            listing.owner_ref,
+            listing.tags_json,
+        )
+        .where(listing.source_account_ref == source_account_ref, listing.store_id == store_id)
+        .order_by(listing.item_id)
+    ).all()
+    by_msku: dict[str, ListingRef] = {}
+    for account, item_id, msku, local_sku, owner_ref, tags in rows:
+        key = norm_msku(msku)
+        if key is not None and key not in by_msku:
+            by_msku[key] = ListingRef(
+                source_account_ref=account,
+                item_id=item_id,
+                msku=msku,
+                local_sku=local_sku,
+                owner_ref=owner_ref,
+                tags_json=list(tags or []),
+            )
+    local_skus = sorted({(row.local_sku or "").strip() for row in by_msku.values()} - {""})
+    owners: dict[str, str] = {}
+    if local_skus:
+        product = LingxingSkuProductInfoCurrent
+        for sku, name in session.execute(
+            select(
+                product.lingxing_sku_code,
+                func.max(func.nullif(func.btrim(product.owner_name), "")),
+            )
+            .where(
+                product.source_account_ref == source_account_ref,
+                product.lingxing_sku_code.in_(local_skus),
+            )
+            .group_by(product.lingxing_sku_code)
+        ).all():
+            if sku and name:
+                owners[sku] = name
+    return StoreListingIndex(by_msku=by_msku, owners=owners)
+
+
 class DbLookups(Lookups):
     def __init__(
         self,
@@ -164,6 +243,7 @@ class DbLookups(Lookups):
         store_id: str,
         period_key: str,
         report_date: date,
+        listings: StoreListingIndex | None = None,
     ) -> None:
         self.session = session
         self.account = source_account_ref
@@ -171,7 +251,8 @@ class DbLookups(Lookups):
         self.period_key = period_key
         self.report_date = report_date
         self._rates = load_usd_cny_rates(session)
-        self._listing: dict[str, ListingManagementCurrentMart | None] = {}
+        # 计算器按店铺预载后传进来；单独构造（测试）时第一次用到再装
+        self._listings = listings
         self._tag_rules: dict[str, str] | None = None
         self._details: dict[tuple[str, str], ShipmentDetail | None] = {}
         self._headers: dict[str, ShipmentHeader | None] = {}
@@ -324,20 +405,25 @@ class DbLookups(Lookups):
             )
         return self._entries[key]
 
-    def _listing_for(self, item_id: str | None) -> ListingManagementCurrentMart | None:
-        if not item_id:
+    def _index(self) -> StoreListingIndex:
+        if self._listings is None:
+            self._listings = load_store_listings(
+                self.session, source_account_ref=self.account, store_id=self.store_id
+            )
+        return self._listings
+
+    def _listing_for(self, store_sku: str | None) -> ListingRef | None:
+        """账单店铺 SKU → 同店铺 Listing（按 MSKU，忽略大小写和首尾空格）。"""
+        key = norm_msku(store_sku)
+        if key is None:
             return None
-        if item_id not in self._listing:
-            self._listing[item_id] = self.session.scalars(
-                select(ListingManagementCurrentMart)
-                .where(
-                    ListingManagementCurrentMart.source_account_ref == self.account,
-                    ListingManagementCurrentMart.store_id == self.store_id,
-                    ListingManagementCurrentMart.item_id == item_id,
-                )
-                .limit(1)
-            ).one_or_none()
-        return self._listing[item_id]
+        return self._index().by_msku.get(key)
+
+    def _product_owner(self, account: str, local_sku: str) -> str | None:
+        """领星产品资料的产品负责人（和 Listing 管理页同一来源：账号 + 本地 SKU）。"""
+        if account != self.account:
+            return None
+        return self._index().owners.get(local_sku)
 
     def _rules(self) -> dict[str, str]:
         if self._tag_rules is None:
@@ -350,9 +436,15 @@ class DbLookups(Lookups):
         return self._tag_rules
 
     def owner_for_item(self, item_id: str | None) -> str | None:
+        """负责人：领星产品资料（本地 SKU）→ Listing 业务填写的负责人 → 标签规则。"""
         listing = self._listing_for(item_id)
         if listing is None:
             return None
+        local_sku = (listing.local_sku or "").strip()
+        if local_sku:
+            owner = self._product_owner(listing.source_account_ref, local_sku)
+            if owner:
+                return owner
         owner = (listing.owner_ref or "").strip()
         if owner:
             return owner
@@ -369,8 +461,18 @@ class DbLookups(Lookups):
         return None
 
     def msku_for_item(self, item_id: str | None) -> str | None:
+        """MSKU：Listing 上的写法；Listing 没有这个商品时，账单的店铺 SKU 本身就是 MSKU。"""
         listing = self._listing_for(item_id)
         value = (listing.msku or "").strip() if listing else ""
+        return value or ((item_id or "").strip() or None)
+
+    def listing_item_id(self, item_id: str | None) -> str | None:
+        listing = self._listing_for(item_id)
+        return listing.item_id if listing else None
+
+    def local_sku_for_item(self, item_id: str | None) -> str | None:
+        listing = self._listing_for(item_id)
+        value = (listing.local_sku or "").strip() if listing else ""
         return value or None
 
     def fx_rate(self, month: date) -> Decimal | None:
@@ -470,6 +572,15 @@ class OrderReviewCalculator:
     def __init__(self, session: Session, *, source_account_ref: str) -> None:
         self.session = session
         self.account = source_account_ref
+        # 同一个计算器（一次接口重算 / 一次队列任务）里每个店铺的 Listing 和负责人只装一次
+        self._store_listings: dict[str, StoreListingIndex] = {}
+
+    def _listings(self, store_id: str) -> StoreListingIndex:
+        if store_id not in self._store_listings:
+            self._store_listings[store_id] = load_store_listings(
+                self.session, source_account_ref=self.account, store_id=store_id
+            )
+        return self._store_listings[store_id]
 
     def recalc_period(
         self, store_id: str, period_key: str, *, run_ids: Iterable[str] = ()
@@ -500,6 +611,7 @@ class OrderReviewCalculator:
             store_id=store_id,
             period_key=period_key,
             report_date=period.report_date,
+            listings=self._listings(store_id),
         )
         lines = [
             compute_line(group, store_id=store_id, lookups=lookups, settings=settings)

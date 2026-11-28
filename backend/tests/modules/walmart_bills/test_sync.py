@@ -908,7 +908,7 @@ def test_bill_sync_dispatches_order_review_recalc_for_synced_stores_only(
     )
     monkeypatch.setattr(execution_module, "dispatch_order_review_recalc", fake_dispatch)
     SyncRunExecutionService(session).execute(run.id)
-    # 部分店失败时成功的店照样重算；一个店都没成功就不投递（空清单在任务里表示全部店）
+    # 部分店失败时成功的店照样重算；一个店都没成功就不投递（空清单不投递，不表示全部店）
     assert sent == expected
 
 

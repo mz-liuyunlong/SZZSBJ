@@ -313,3 +313,19 @@ def test_migration_is_single_head_on_settlement_profit_and_touches_only_its_tabl
     body = (ast.get_source_segment(source, downgrade) or "").upper()
     assert "ROLLBACK BLOCKED" in body
     assert "DELETE" not in body and "TRUNCATE" not in body
+
+
+def test_window_date_uses_utc_regardless_of_connection_timezone() -> None:
+    from datetime import UTC, timedelta, timezone
+
+    from app.modules.integration_sync.handlers.lingxing_wfs_cost_valuation_sync import (
+        window_date,
+    )
+
+    utc_midnight = datetime(2026, 11, 1, tzinfo=UTC)
+    # 同一时刻用 UTC 以西的时区读回来，日期也不能往前漂（#375 审核 P3）
+    west = utc_midnight.astimezone(timezone(timedelta(hours=-7)))
+    assert west.date() == date(2026, 10, 31)
+    assert window_date(west) == date(2026, 11, 1)
+    assert window_date(utc_midnight) == date(2026, 11, 1)
+    assert window_date(date(2026, 11, 1)) == date(2026, 11, 1)
