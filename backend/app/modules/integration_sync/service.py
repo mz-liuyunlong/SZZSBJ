@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
+from app.modules.integration_sync.fin_shipping_catalog import FIN_SHIPPING_SYNC_SPECS
 from app.modules.integration_sync.finance_approval_catalog import (
     FINANCE_APPROVAL_PROVIDER,
     FINANCE_APPROVAL_SYNC_SPEC,
@@ -61,6 +62,10 @@ from app.modules.integration_sync.schemas import (
     WorkItemRead,
 )
 from app.modules.integration_sync.walmart_bill_catalog import WALMART_BILL_SYNC_SPEC
+from app.modules.integration_sync.wfs_cost_valuation_catalog import WFS_COST_VALUATION_SYNC_SPEC
+from app.modules.integration_sync.wfs_cost_valuation_window import (
+    wfs_cost_valuation_rolling_window,
+)
 
 SYNC_INTERFACE_DISABLED = "SYNC_INTERFACE_DISABLED"
 SYNC_RUN_NOT_RETRYABLE = "SYNC_RUN_NOT_RETRYABLE"
@@ -614,6 +619,17 @@ class IntegrationSyncService:
             and interface.endpoint_path == WALMART_BILL_SYNC_SPEC.endpoint_path
             and interface.handler_key == WALMART_BILL_SYNC_SPEC.handler_key
         )
+        is_wfs_cost_flow = (
+            interface.provider == "lingxing"
+            and interface.interface_key == WFS_COST_VALUATION_SYNC_SPEC.interface_key
+            and interface.endpoint_path == WFS_COST_VALUATION_SYNC_SPEC.endpoint_path
+            and interface.handler_key == WFS_COST_VALUATION_SYNC_SPEC.handler_key
+        )
+        is_fin_shipping = interface.provider == "lingxing" and any(
+            interface.interface_key == spec.interface_key
+            and interface.handler_key == spec.handler_key
+            for spec in FIN_SHIPPING_SYNC_SPECS
+        )
         if productlist_only and not (
             is_productlist
             or is_productinfo
@@ -622,6 +638,8 @@ class IntegrationSyncService:
             or is_finance_approval
             or is_fx
             or is_walmart_bill
+            or is_wfs_cost_flow
+            or is_fin_shipping
         ):
             raise ApiError(code=SYNC_PRODUCTLIST_ONLY, status_code=409)
         if is_pmc_purchase and (trigger is not TriggerType.MANUAL or config.schedule_enabled):
@@ -639,6 +657,9 @@ class IntegrationSyncService:
             and interface.interface_key == "walmartReturnOrderList"
         ):
             window_start, window_end = refund_window(utc_now(), config.max_pages)
+        # 成本计价流水每次必须带窗口：手动同步也按最近 60 天，入队前定死，重试不漂移
+        if trigger is TriggerType.MANUAL and is_wfs_cost_flow:
+            window_start, window_end = wfs_cost_valuation_rolling_window(utc_now())
         run = self._new_run(
             config_id=config.id,
             interface_id=interface.id,

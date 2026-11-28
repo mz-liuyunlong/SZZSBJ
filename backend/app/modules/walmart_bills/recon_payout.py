@@ -163,6 +163,15 @@ def account_rows_note(rows: list[dict[str, Any]], *, complete: bool = True) -> s
     return note
 
 
+def period_start_note(lingxing_start: date | None, walmart_start: date | None) -> str:
+    """起始日两边差 > 3 天时给页面的一句话（写入沃尔玛口径时不再因起始日拒绝）。"""
+    if lingxing_start is None or walmart_start is None:
+        return ""
+    if abs((lingxing_start - walmart_start).days) <= 3:
+        return ""
+    return f"起始日不一致：领星 {lingxing_start.isoformat()} / 沃尔玛 {walmart_start.isoformat()}"
+
+
 def lingxing_payable(row: Any) -> Decimal:
     """领星口径的应付：账单总额（有给时）否则明细合计；periods.refresh_periods 同一规则。"""
     stated = getattr(row, "total_payable", None)

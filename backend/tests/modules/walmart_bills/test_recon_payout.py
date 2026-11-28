@@ -480,6 +480,34 @@ def test_period_or_currency_mismatch_and_duplicate_dates_are_skipped(session: Se
     assert set(sources.values()) == {"lingxing"}
 
 
+def test_earlier_lingxing_start_date_is_written_with_note(session: Session) -> None:
+    # 对账单带了计费区间更早的广告服务费：领星起始日比沃尔玛早 9 天、结束日差 1 天，
+    # 同一张对账单照写沃尔玛口径，不再按起始日拒绝（Rocky 2026-11-27）
+    period = add_period(
+        session, STORE_A, "rk-early", D1103, "12", start=date(2026, 9, 17), end=date(2026, 10, 30)
+    )
+    fake = FakeWalmart(
+        dates={"SYN01": ["11032026"], "SYN02": []},
+        pages={("SYN01", "11032026"): page("9", start="09/26/2026", end="10/31/2026")},
+    )
+    result = run(session, fake)
+    assert result.stores[0].failed_periods == []
+    session.refresh(period)
+    assert period.payable_source == "walmart"
+    assert period.payable_amount == Decimal("9.0000")
+    assert period.walmart_period_start_date == date(2026, 9, 26)
+    assert period.period_start_date == date(2026, 9, 17)  # 领星的起始日不改
+
+
+def test_period_start_note() -> None:
+    assert rp.period_start_note(date(2026, 9, 17), date(2026, 9, 26)) == (
+        "起始日不一致：领星 2026-09-17 / 沃尔玛 2026-09-26"
+    )
+    assert rp.period_start_note(date(2026, 10, 15), date(2026, 10, 17)) == ""  # 3 天内不提
+    assert rp.period_start_note(None, date(2026, 9, 26)) == ""
+    assert rp.period_start_note(date(2026, 9, 17), None) == ""
+
+
 def test_not_payable_and_voided_on_both_paths(session: Session) -> None:
     neg = add_period(session, STORE_A, "rk-neg", D1103, "5", start=date(2026, 10, 15), end=D1103)
     void = add_period(session, STORE_A, "rk-void", D1117, "7", line_count=0)

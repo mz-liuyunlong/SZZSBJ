@@ -173,6 +173,8 @@ const financeInterfaceKeys = new Set([
   "finShippingList",
   "finShippingDetail",
   "finWmsOutboundOrders",
+  // #369 WFS 成本计价流水：订单审核货本来源，归到财务
+  "wfsCostValuationFlow",
 ]);
 
 export const moduleForInterface = (item: Pick<InterfaceDto, "interface_key">): SyncTaskRow["module"] => {
