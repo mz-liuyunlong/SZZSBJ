@@ -173,7 +173,7 @@ def test_fx_columns_and_missing_status_without_fallback() -> None:
 
 
 def test_reason_and_status_vocabularies_match_prp() -> None:
-    assert len(m.ORDER_LINE_REASONS) + len(m.STORE_ITEM_REASONS) == 9
+    assert len(m.ORDER_LINE_REASONS) + len(m.STORE_ITEM_REASONS) == 10
     # §0.5 六项 + §8.3 WFS 承运商清单，正好 7 项
     assert set(m.SETTING_KEYS) == {
         "review_accelerator_price_formula",

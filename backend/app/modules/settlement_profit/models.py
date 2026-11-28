@@ -58,7 +58,7 @@ SCOPE_REF_MATCHES = (
 ONE_SCOPE = "num_nonnulls(shipping_list_code, outbound_order_no, platform_order_no) = 1"
 
 FX_STATUSES = ("final", "missing")
-# 订单行待审原因（§8.4，订单行 8 个）；店铺级项目只有 price_missing（§8.6）。
+# 订单行待审原因（§8.4 的 8 个 + 退款原行成本不全）；店铺级项目只有 price_missing（§8.6）。
 ORDER_LINE_REASONS = (
     "wfs_carrier_shipment",
     "self_fulfilled",
@@ -68,6 +68,7 @@ ORDER_LINE_REASONS = (
     "shipment_detail_invalid",
     "owner_missing",
     "cancelled_refund",
+    "original_cost_incomplete",
 )
 STORE_ITEM_REASONS = ("price_missing",)
 LINE_KINDS = ("sale", "refund", "mcf")

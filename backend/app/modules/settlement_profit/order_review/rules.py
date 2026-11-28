@@ -821,18 +821,28 @@ def _refund_cost(line: ComputedLine, group: OrderGroup, lookups: Lookups) -> Non
     if line.msku is None:
         line.msku = original.msku
 
-    def reverse(value: Decimal | None) -> Decimal | None:
-        if value is None:
-            return None
-        return money(-(value / original.quantity) * units)
-
-    line.purchase_cny = reverse(original.purchase_cny)
-    line.head_cny = reverse(original.head_cny)
-    line.last_leg_cny = reverse(original.last_leg_cny)
-    parts = [p for p in (line.purchase_cny, line.head_cny, line.last_leg_cny) if p is not None]
-    line.cost_total_cny = money(sum(parts, ZERO)) if parts else None
-    line.auto_passed = original.auto_passed
     line.cost_sources[0]["original_quantity"] = str(original.quantity)
+    seller = line.fulfillment_type == "seller"
+    purchase, head = original.purchase_cny, original.head_cny
+    # WFS 没有尾程（原行本来就是空），自发货三项都要有
+    last_leg = original.last_leg_cny if seller else ZERO
+    if purchase is None or head is None or last_leg is None:
+        # 原行成本不全：不能只冲有值的部分，各项和合计都留空，待审（刘云龙 11-28 P1）
+        line.purchase_cny = line.head_cny = line.last_leg_cny = None
+        line.cost_total_cny = None
+        line.auto_passed = False
+        line.reasons.append("original_cost_incomplete")
+        line.cost_sources[0]["note"] = "original_cost_incomplete"
+        return
+
+    def reverse(value: Decimal) -> Decimal:
+        return money(-(value / original.quantity) * units) or ZERO
+
+    line.purchase_cny = reverse(purchase)
+    line.head_cny = reverse(head)
+    line.last_leg_cny = reverse(last_leg) if seller else None
+    line.cost_total_cny = money(line.purchase_cny + line.head_cny + (line.last_leg_cny or ZERO))
+    line.auto_passed = original.auto_passed
 
 
 def _fx(line: ComputedLine, lookups: Lookups) -> None:

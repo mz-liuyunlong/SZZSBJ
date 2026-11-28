@@ -663,6 +663,50 @@ def test_refund_line_reverses_original_cost_only_when_goods_came_back() -> None:
     assert line.cost_total_cny == Decimal("0")
 
 
+def test_wfs_refund_with_incomplete_original_cost_is_blank_and_pending() -> None:
+    # 刘云龙 11-28 P1：原单采购价有、头程缺 → 不能只冲采购价
+    refund = [row("Refund", "Return Refund", "Product Price", "-20.00", qty=1)]
+    lookups = DictLookups()
+    lookups.originals[(ORDER, "1", GTIN)] = OriginalLine(
+        Decimal("1"), Decimal("3"), None, None, True, MSKU
+    )
+    line = compute(refund, lookups)
+    assert line.line_kind == "refund"
+    assert (line.purchase_cny, line.head_cny, line.last_leg_cny) == (None, None, None)
+    assert line.cost_total_cny is None
+    assert line.reasons == ["original_cost_incomplete"]
+    assert line.auto_passed is False
+    assert line.cost_sources[0]["note"] == "original_cost_incomplete"
+
+
+def test_seller_refund_needs_all_three_original_costs() -> None:
+    refund = [row("Refund", "Return Refund", "Product Price", "-20.00", qty=1, fulfillment=SELLER)]
+    lookups = DictLookups()
+    # 自发货原单尾程缺失 → 三项和合计都留空、待审
+    lookups.originals[(ORDER, "1", GTIN)] = OriginalLine(
+        Decimal("1"), Decimal("3"), Decimal("2"), None, True, MSKU
+    )
+    line = compute(refund, lookups)
+    assert line.fulfillment_type == "seller"
+    assert (line.purchase_cny, line.head_cny, line.last_leg_cny) == (None, None, None)
+    assert line.cost_total_cny is None
+    assert line.reasons == ["original_cost_incomplete"]
+    assert line.auto_passed is False
+    # 三项都有 → 按件冲回，合计含尾程
+    lookups.originals[(ORDER, "1", GTIN)] = OriginalLine(
+        Decimal("1"), Decimal("3"), Decimal("2"), Decimal("5"), True, MSKU
+    )
+    line = compute(refund, lookups)
+    assert (line.purchase_cny, line.head_cny, line.last_leg_cny) == (
+        Decimal("-3.0000"),
+        Decimal("-2.0000"),
+        Decimal("-5.0000"),
+    )
+    assert line.cost_total_cny == Decimal("-10.0000")
+    assert line.reasons == []
+    assert line.auto_passed is True
+
+
 def test_mcf_line_follows_wfs_rules_not_seller() -> None:
     rows = [
         row("Other", "WFS MultiChannelFulfillmentFee", "", "-6.00", qty=None, fulfillment=""),
