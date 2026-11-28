@@ -492,18 +492,21 @@ def test_execution_layer_path_releases_lease_and_lock_and_clears_expired_lease(
 
 def test_affected_keys_only_cover_rows_that_really_changed(session: Session) -> None:
     window = (date(2026, 10, 1), date(2026, 10, 31))
-    rows = [record(1), record(2), record(3)]
-    first, _, result = run_sync(session, [page(rows, 3, 1)], window=window)
-    assert first.status == "succeeded"
+    # 测试配置一页最多 2 行：两行正好一页
+    rows = [record(1), record(2)]
+    first, _, result = run_sync(session, [page(rows, 2, 1)], window=window)
+    assert first.status == "succeeded", first.error_code
     affected = result.affected  # type: ignore[attr-defined]
-    assert affected.mskus == {(None, "syn-msku-1"), (None, "syn-msku-2"), (None, "syn-msku-0")}
-    assert (None, "SYN-ORDER-1") in affected.orders
+    assert affected.mskus == {(None, "syn-msku-1"), (None, "syn-msku-2")}
+    assert affected.orders == {(None, "SYN-ORDER-1"), (None, "SYN-ORDER-2")}
     # 同样的数据再拉一次：整段替换了，但内容一行没变 → 没有受影响的键
-    _, _, same = run_sync(session, [page(rows, 3, 1)], window=window)
+    again, _, same = run_sync(session, [page(rows, 2, 1)], window=window)
+    assert again.status == "succeeded", again.error_code
     assert same.affected.is_empty()  # type: ignore[attr-defined]
     # 只改 record(2) 的数量：只记它的 MSKU 和订单号
-    changed = [record(1), record(2, quantity=-2), record(3)]
-    _, _, diff = run_sync(session, [page(changed, 3, 1)], window=window)
+    changed = [record(1), record(2, quantity=-2)]
+    third, _, diff = run_sync(session, [page(changed, 2, 1)], window=window)
+    assert third.status == "succeeded", third.error_code
     assert diff.affected.mskus == {(None, "syn-msku-2")}  # type: ignore[attr-defined]
     assert diff.affected.orders == {(None, "SYN-ORDER-2")}  # type: ignore[attr-defined]
 
