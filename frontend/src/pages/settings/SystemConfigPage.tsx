@@ -66,7 +66,7 @@ function SystemConfigPage({ page }: SystemConfigPageProps) {
     <PageShell page={page}>
       <Tabs activeKey={activeKey} onChange={setActiveKey} items={(page.tabs ?? []).map((tab) => ({
         key: tab.key,
-        label: <Space>{tab.key === "integrations" ? <CloudServerOutlined /> : tab.key === "api-policy" ? <ApiOutlined /> : tab.key === "parameters" ? <SettingOutlined /> : sections[tab.key]?.icon}{tab.title}</Space>,
+        label: <Space><span aria-hidden="true">{tab.key === "integrations" ? <CloudServerOutlined /> : tab.key === "api-policy" ? <ApiOutlined /> : tab.key === "parameters" ? <SettingOutlined /> : sections[tab.key]?.icon}</span>{tab.title}</Space>,
         children: tab.key === "integrations" ? <WooCommerceIntegrationPanel /> : tab.key === "api-policy" ? <ApiPolicyPanel /> : tab.key === "parameters" ? <SystemParametersPanel /> : sections[tab.key] ? <ConfigSection key={tab.key} section={sections[tab.key]} /> : null,
       }))} />
     </PageShell>

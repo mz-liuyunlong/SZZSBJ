@@ -10,6 +10,7 @@ const expected = {
   products: [
     "products_product_management",
     "products_listing_management",
+    "products_woocommerce_product_management",
     "products_clearance_center",
     "products_new_product_analysis",
     "products_launch_tracking",
