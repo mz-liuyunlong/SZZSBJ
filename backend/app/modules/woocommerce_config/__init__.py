@@ -1,0 +1,1 @@
+"""WooCommerce store credential configuration."""

@@ -888,7 +888,7 @@ export default function NewProductPages({page,mode}:Props){
         onClick={()=>{if(mode==="tracking")setTrackingDrill(null);setTab("list");}}>
         {mode==="performance"?"新品详情":"打品详情"}
       </button>
-      {skuProgressEnabled&&<button type="button" role="tab" aria-selected={tab==="sku-progress"} className={tab==="sku-progress"?"active":""} onClick={()=>setTab("sku-progress")}>SKU进度</button>}
+      {skuProgressEnabled&&<button type="button" role="tab" aria-selected={tab==="sku-progress"} className={tab==="sku-progress"?"active":""} onClick={()=>setTab("sku-progress")}>新品管理</button>}
     </div>
     <div className="np-workspace-actions">
       {tab==="list"&&

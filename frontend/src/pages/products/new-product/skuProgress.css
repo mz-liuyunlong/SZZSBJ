@@ -72,3 +72,14 @@
 .np-original-v4 .sku-p-table .sku-p-purchase-entry{display:inline-flex;align-items:center;max-width:100%;vertical-align:middle}
 .np-original-v4 .sku-p-table .sku-p-purchase-button.ant-btn{display:inline-flex;align-items:center;justify-content:flex-start;gap:4px;height:28px;padding:0 2px;font-size:14px;line-height:1.5;white-space:nowrap}
 .np-original-v4 .sku-p-table .sku-p-purchase-button.ant-btn .anticon{font-size:12px}
+
+/* Listing identity only: Ant link button flex content must align to MSKU. */
+.np-original-v4 .sku-p-table .sku-p-identity .report-table-copyable__link.ant-btn {
+  justify-content:flex-start;text-align:left;min-width:0;padding:0;
+}
+.np-original-v4 .sku-p-table .sku-p-identity .report-table-copyable__link.ant-btn > span {
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;
+}
+.np-original-v4 .sku-p-table .sku-p-identity .report-table-copyable__text {
+  justify-content:flex-start;text-align:left;
+}

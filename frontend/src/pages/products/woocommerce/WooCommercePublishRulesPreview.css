@@ -1,0 +1,27 @@
+.woo-rules { min-width:0; display:flex; flex-direction:column; gap:0; font-size:14px; }
+.woo-rules__footer,.woo-rules__actions,.woo-rules__section-title,.woo-rules__field,.woo-rules__inline,.woo-rules__checks,.woo-rules__example { display:flex; align-items:center; gap:10px; }
+.woo-rules__footer,.woo-rules__section-title,.woo-rules__field,.woo-rules__example { justify-content:space-between; }
+.woo-rules__footer { flex-wrap:wrap; }
+.woo-rules__footer .woo-rules__actions { margin-left:auto; }
+.woo-rules h2 { margin:0; font-size:16px; font-weight:600; line-height:1.5; }
+.woo-rules__master { padding:0 0 14px; border-bottom:1px solid #e5eaf3; }
+.woo-rules__section { min-width:0; display:flex; flex-direction:column; gap:12px; padding:15px 0; border-bottom:1px solid #e5eaf3; }
+.woo-rules__grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:32px; }
+.woo-rules__control { width:64%; min-width:0; }
+.woo-rules__checks { flex-wrap:wrap; gap:8px 14px; }
+.woo-rules__inline .ant-input-number { width:112px; }
+.woo-rules__example { padding:8px 12px; background:#f5f7fa; border-radius:4px; flex-wrap:wrap; }
+.woo-rules__example strong { color:#1677ff; font-size:16px; }
+.woo-rules__snapshot { border-bottom:0; }
+/* Shared report shell normally fills a fixed-height reporting page. Here it is an intrinsic-height configuration table. */
+.woo-rules .woo-rules__table { display:block; flex:none; height:auto; min-height:82px; }
+.woo-rules .woo-rules__table .ant-pro-table,
+.woo-rules .woo-rules__table .ant-pro-card,
+.woo-rules .woo-rules__table .ant-pro-card-body,
+.woo-rules .woo-rules__table .ant-table-wrapper,
+.woo-rules .woo-rules__table .ant-spin-nested-loading,
+.woo-rules .woo-rules__table .ant-spin-container,
+.woo-rules .woo-rules__table .ant-table,
+.woo-rules .woo-rules__table .ant-table-container { display:block; flex:none; height:auto; min-height:0; }
+.woo-rules .woo-rules__table .ant-table-tbody > tr > td { padding:6px 8px !important; }
+@media(max-width:760px) { .woo-rules__grid { grid-template-columns:1fr; } .woo-rules__control { width:60%; } }

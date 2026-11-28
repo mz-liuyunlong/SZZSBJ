@@ -61,6 +61,8 @@ from app.modules.walmart_remote.router import router as walmart_remote_router
 from app.modules.walmart_scf.router import router as walmart_scf_router
 from app.modules.warehouse_wfs.router import router as warehouse_wfs_router
 from app.modules.wfs_fees.router import router as wfs_fees_router
+from app.modules.woocommerce_config.router import router as woocommerce_config_router
+from app.modules.woocommerce_products.router import router as woocommerce_products_router
 
 
 class HealthData(BaseModel):
@@ -93,6 +95,8 @@ def create_app() -> FastAPI:
     application.include_router(business_rules_router)
     application.include_router(notification_rules_router)
     application.include_router(business_connectors_router)
+    application.include_router(woocommerce_config_router)
+    application.include_router(woocommerce_products_router)
     application.include_router(decodo_settings_router)
     application.include_router(decodo_research_router)
     application.include_router(data_pages_router)

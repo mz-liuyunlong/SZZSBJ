@@ -13,6 +13,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from .sku_progress_projection import BASE
+from .sku_progress_purchase import LISTING_PURCHASE_SCHEMA_READY_SQL
 
 FACETS = (
     "store",
@@ -53,6 +54,28 @@ SORTS = {
     "listing": "listing_status",
 }
 
+# SKU_PROGRESS_OWNER_RESOLUTION_V1_20261128
+# Listing owner wins; the verified current SKU owner fills only a missing owner
+# or resolves a matching name/UID. Never replace a different Listing owner.
+_LISTING_OWNER = "NULLIF(btrim(j->>'owner_ref'),'')"
+_SKU_OWNER_NAME = "NULLIF(btrim(o.owner_name),'')"
+_SKU_OWNER_UID = "NULLIF(btrim(o.owner_uid),'')"
+_OWNER_MATCH = (
+    f"({_LISTING_OWNER} IS NULL OR {_LISTING_OWNER} = {_SKU_OWNER_UID} "
+    f"OR {_LISTING_OWNER} = {_SKU_OWNER_NAME})"
+)
+OWNER_DISPLAY_SQL = (
+    f"CASE WHEN {_OWNER_MATCH} THEN "
+    f"COALESCE({_SKU_OWNER_NAME},{_LISTING_OWNER},{_SKU_OWNER_UID}) "
+    f"ELSE {_LISTING_OWNER} END"
+)
+OWNER_KEY_SQL = (
+    f"CASE WHEN {_OWNER_MATCH} THEN "
+    f"COALESCE({_SKU_OWNER_UID},{_LISTING_OWNER},{_SKU_OWNER_NAME}) "
+    f"ELSE {_LISTING_OWNER} END"
+)
+
+
 # Source statuses and user-owned states are evaluated once per query, on the
 # account-scoped projection. PMC matches the exact plan + SKU + store/account,
 # not historical procurement for another SKU under the same plan number.
@@ -62,18 +85,24 @@ CTE = (
     + (
         "),\n"
         "plans AS MATERIALIZED (\n"
-        " SELECT q.id,q.sku_progress_id,q.store_id,q.quantity,q.submission_status,\n"
+        " SELECT q.id,q.sku_progress_id,q.store_id,claim_item.item_id,q.quantity,\n"
+        " q.submission_status,\n"
         " q.lingxing_plan_sn,q.submitted_at,q.cancellation_status,\n"
         " CASE WHEN q.submission_status <> 'submitted' OR q.cancellation_status IN "
         "('requested','unknown','confirmed') THEN NULL\n"
-        "      WHEN b.n=0 THEN NULL\n"
+        "      WHEN b.n=0 OR b.unresolved THEN NULL\n"
         "      WHEN b.waiting THEN 'purchasing'\n"
         "      WHEN b.in_transit THEN 'domestic_not_arrived'\n"
         "      WHEN b.done THEN 'purchased' ELSE NULL END AS purchase_progress\n"
         " FROM scoped s JOIN biz_new_product_sku_purchase_plans q ON "
         "q.sku_progress_id=s.progress_id\n"
+        # SKU_PURCHASE_READ_COMPAT_20261128: missing JSON keys are NULL,
+        # including on the old table shape. Do not infer an Item ID.
+        " CROSS JOIN LATERAL (SELECT to_jsonb(q)->>'item_id' AS item_id) claim_item\n"
         " LEFT JOIN LATERAL (\n"
-        "   SELECT count(*) AS n, bool_or(x.stage_code IN ('S1','S2')) AS waiting,\n"
+        "   SELECT count(*) FILTER(WHERE x.item_id=claim_item.item_id) AS n,\n"
+        "    bool_or(x.item_id IS DISTINCT FROM claim_item.item_id) AS unresolved,\n"
+        "    bool_or(x.stage_code IN ('S1','S2')) AS waiting,\n"
         "    bool_or(x.stage_code IN ('S3','S4')) AS in_transit,\n"
         "    bool_and(x.stage_code='S9') AS done\n"
         "   FROM dws_purchase_board x\n"
@@ -97,6 +126,21 @@ CTE = (
         "count(purchase_progress)=count(*) THEN '已采购'\n"
         "       ELSE '待确认' END AS proc_label\n"
         " FROM plans p GROUP BY sku_progress_id\n"
+        "), listing_plan_groups AS MATERIALIZED (\n"
+        " SELECT sku_progress_id,store_id,item_id,\n"
+        "  CASE WHEN item_id IS NULL THEN '待确认'\n"
+        "       WHEN bool_or(submission_status='submitted' AND (cancellation_status IS "
+        "NULL OR cancellation_status='failed')) THEN '已提交'\n"
+        "       WHEN bool_or(submission_status IN ('submitting','unknown') OR "
+        "cancellation_status IN ('requested','unknown')) THEN '待确认'\n"
+        "       ELSE '未提交' END AS plan_label,\n"
+        "  CASE WHEN item_id IS NULL THEN '待确认'\n"
+        "       WHEN bool_or(purchase_progress='purchasing') THEN '采购中'\n"
+        "       WHEN bool_or(purchase_progress='domestic_not_arrived') THEN '国内未到货'\n"
+        "       WHEN bool_and(purchase_progress='purchased') AND "
+        "count(purchase_progress)=count(*) THEN '已采购'\n"
+        "       ELSE '待确认' END AS proc_label\n"
+        " FROM plans GROUP BY sku_progress_id,store_id,item_id\n"
         "), sites AS MATERIALIZED (\n"
         " SELECT t.sku_progress_id,t.target_scope,t.store_id,t.item_id,t.submission_sta"
         "tus,t.submitted_at\n"
@@ -117,8 +161,11 @@ CTE = (
         "      WHEN jsonb_array_length(s.listings_json)>0 THEN 'listed' ELSE "
         "'unlisted' END AS listing_status,\n"
         " COALESCE(p.purchase_plans,'[]'::jsonb) AS purchase_plans,\n"
-        " COALESCE(p.plan_label,'未提交') AS plan_label,COALESCE(p.proc_label,'待确认') AS "
-        "proc_label,\n"
+        " CASE WHEN jsonb_array_length(s.listings_json)=0 THEN "
+        "CASE WHEN p.sku_progress_id IS NULL AND s.identity_verified THEN '未提交' "
+        "ELSE '待确认' END ELSE COALESCE(p.plan_label,'未提交') END AS plan_label,\n"
+        " CASE WHEN jsonb_array_length(s.listings_json)=0 THEN '待确认' "
+        "ELSE COALESCE(p.proc_label,'待确认') END AS proc_label,\n"
         " COALESCE(t.independent_site_submissions,'[]'::jsonb) AS "
         "independent_site_submissions,\n"
         " COALESCE(l.listings,'[]'::jsonb) AS listings,\n"
@@ -126,6 +173,9 @@ CTE = (
         " COALESCE(l.owner_values,'[]'::jsonb) AS owner_values,\n"
         " COALESCE(l.strike_values,'[]'::jsonb) AS strike_values,\n"
         " COALESCE(l.ad_values,'[]'::jsonb) AS ad_values,\n"
+        " COALESCE(l.plan_values,jsonb_build_array(CASE WHEN p.sku_progress_id IS NULL "
+        "AND s.identity_verified THEN '未提交' ELSE '待确认' END)) AS plan_values,\n"
+        " COALESCE(l.proc_values,'[\"待确认\"]'::jsonb) AS proc_values,\n"
         " COALESCE(l.site_values, jsonb_build_array(CASE WHEN EXISTS(\n"
         "  SELECT 1 FROM sites x WHERE x.sku_progress_id=s.progress_id AND "
         "x.target_scope='sku'\n"
@@ -134,31 +184,46 @@ CTE = (
         " NULL::text AS domestic_shipping_status,20 AS purchase_quantity\n"
         " FROM scoped s LEFT JOIN plan_groups p ON p.sku_progress_id=s.progress_id\n"
         " LEFT JOIN site_groups t ON t.sku_progress_id=s.progress_id\n"
+        " LEFT JOIN dwd_lingxing_sku_identity_index oi ON s.identity_verified\n"
+        "  AND oi.id=s.sku_identity_id AND oi.source_account_ref=s.source_account_ref\n"
+        "  AND oi.provider='lingxing' AND oi.is_active AND oi.lingxing_sku_code=s.sku\n"
+        " LEFT JOIN dwd_lingxing_sku_product_info_current o ON o.identity_id=oi.id\n"
+        "  AND o.source_account_ref=oi.source_account_ref AND o.provider=oi.provider\n"
+        "  AND o.lingxing_sku_id=oi.lingxing_sku_id AND o.lingxing_sku_code=s.sku\n"
         " LEFT JOIN LATERAL (\n"
         "   SELECT jsonb_agg(j || jsonb_build_object('ad_enabled',effective_ad,'site_la"
         "bel',site_label,\n"
-        "        'store_filter',store_filter,'owner_filter',owner_filter) ORDER BY "
+        "        'store_filter',store_filter,'owner_filter',owner_filter,"
+        "'owner_display',owner_display,'plan_label',listing_plan_label,"
+        "'proc_label',listing_proc_label,'domestic_shipping_status',NULL::text) ORDER BY "
         "j->>'store_id',j->>'item_id') AS listings,\n"
         "    jsonb_agg(DISTINCT jsonb_build_object('value',store_filter,'label',COALESC"
         "E(NULLIF(j->>'store_name',''),j->>'store_id')))\n"
         "       FILTER (WHERE NULLIF(j->>'store_id','') IS NOT NULL) AS store_values,\n"
-        "    jsonb_agg(DISTINCT jsonb_build_object('value',owner_filter,'label',j->>'ow"
-        "ner_ref'))\n"
+        "    jsonb_agg(DISTINCT jsonb_build_object('value',owner_filter,'label',"
+        "owner_display))\n"
         "       FILTER (WHERE owner_filter IS NOT NULL) AS owner_values,\n"
         "    jsonb_agg(DISTINCT CASE j->>'strike_effect' WHEN 'effective' THEN '已生效' "
         "WHEN 'ineffective' THEN '未生效' ELSE '待确认' END) AS strike_values,\n"
         "    jsonb_agg(DISTINCT CASE effective_ad WHEN true THEN '已开启' WHEN false THEN "
         "'未开启' ELSE '待确认' END) AS ad_values,\n"
-        "    jsonb_agg(DISTINCT site_label) AS site_values\n"
+        "    jsonb_agg(DISTINCT site_label) AS site_values,\n"
+        "    jsonb_agg(DISTINCT listing_plan_label) AS plan_values,\n"
+        "    jsonb_agg(DISTINCT listing_proc_label) AS proc_values\n"
         "   FROM (\n"
         "     SELECT j,\n"
+        "      CASE WHEN legacy.sku_progress_id IS NOT NULL THEN '待确认' "
+        "ELSE COALESCE(lp.plan_label,'未提交') END AS listing_plan_label,\n"
+        "      CASE WHEN legacy.sku_progress_id IS NOT NULL THEN '待确认' "
+        "ELSE COALESCE(lp.proc_label,'待确认') END AS listing_proc_label,\n"
         "      CASE WHEN (j->>'ad_source_observed_at')::timestamptz BETWEEN "
         "now()-interval '48 hours' AND now()\n"
         "           THEN (j->>'ad_enabled')::boolean ELSE NULL END AS effective_ad,\n"
         "      jsonb_build_array(s.source_account_ref,j->>'store_id')::text AS "
         "store_filter,\n"
-        "      CASE WHEN NULLIF(btrim(j->>'owner_ref'),'') IS NOT NULL THEN "
-        "jsonb_build_array(s.source_account_ref,j->>'owner_ref')::text END AS "
+        f"      {OWNER_DISPLAY_SQL} AS owner_display,\n"
+        f"      CASE WHEN ({OWNER_KEY_SQL}) IS NOT NULL THEN "
+        f"jsonb_build_array(s.source_account_ref,({OWNER_KEY_SQL}))::text END AS "
         "owner_filter,\n"
         "      CASE COALESCE((SELECT x.submission_status FROM sites x WHERE "
         "x.sku_progress_id=s.progress_id\n"
@@ -170,6 +235,10 @@ CTE = (
         "THEN '未提交'\n"
         "        WHEN 'not_submitted' THEN '未提交' ELSE '待确认' END AS site_label\n"
         "     FROM jsonb_array_elements(s.listings_json) j\n"
+        "     LEFT JOIN listing_plan_groups lp ON lp.sku_progress_id=s.progress_id\n"
+        "       AND lp.store_id=j->>'store_id' AND lp.item_id=j->>'item_id'\n"
+        "     LEFT JOIN listing_plan_groups legacy ON legacy.sku_progress_id=s.progress_id\n"
+        "       AND legacy.store_id=j->>'store_id' AND legacy.item_id IS NULL\n"
         "   ) listings\n"
         " ) l ON true\n"
         "), ready AS MATERIALIZED (\n"
@@ -183,8 +252,7 @@ CTE = (
         "      'label',COALESCE(NULLIF(developer_name,''),developer_uid))) END,\n"
         "  'listing',jsonb_build_array(CASE listing_status WHEN 'listed' THEN '已上架' "
         "WHEN 'unlisted' THEN '未上架' ELSE '待确认' END),\n"
-        "  'plan',jsonb_build_array(plan_label),'proc',jsonb_build_array(proc_label),'s"
-        "ite',site_values,\n"
+        "  'plan',plan_values,'proc',proc_values,'site',site_values,\n"
         "  'ad',CASE WHEN jsonb_array_length(ad_values)=0 THEN '[\"待确认\"]'::jsonb ELSE "
         "ad_values END,\n"
         "  'strike',CASE WHEN jsonb_array_length(strike_values)=0 THEN "
@@ -404,6 +472,7 @@ PURCHASE_EVIDENCE = text(
     "JOIN biz_new_product_registry r ON r.source_account_ref=k.account AND "
     "r.store_id=k.store_id AND r.item_id=k.item_id\n"
     "JOIN biz_new_product_performance_current f ON f.registry_id=r.id\n"
+    f"WHERE ({LISTING_PURCHASE_SCHEMA_READY_SQL})\n"
 )
 
 
@@ -429,7 +498,7 @@ def attach_purchase_options(db: Session, data: dict, authorized: bool) -> None:
     keys = []
     candidates = []
     for row in data["items"]:
-        blocked = {p["store_id"] for p in row["purchase_plans"]}
+        blocked = {(p["store_id"], p.get("item_id")) for p in row["purchase_plans"]}
         for listing in row["listings"]:
             listing["purchase_candidate"] = False
             if (
@@ -437,7 +506,8 @@ def attach_purchase_options(db: Session, data: dict, authorized: bool) -> None:
                 and row["identity_verified"]
                 and row["progress_status"] == "in_progress"
                 and row.get("exited_at") is None
-                and listing["store_id"] not in blocked
+                and (listing["store_id"], None) not in blocked
+                and (listing["store_id"], listing["item_id"]) not in blocked
                 and re.fullmatch(r"[0-9]{11}", str(listing.get("item_id") or ""))
                 and re.fullmatch(
                     r"(?:[0-9]{8}|[0-9]{12}|[0-9]{13}|[0-9]{14})", str(listing.get("gtin") or "")

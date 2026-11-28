@@ -206,3 +206,133 @@ def test_purchase_options_only_saved_grade_evidence(monkeypatch):
         data = candidate_data()
         q.attach_purchase_options(DB([{**evidence, **change}]), data, True)
         assert data["items"][0]["listings"][0]["purchase_candidate"] is False
+
+
+def test_owner_source_is_scoped_and_shared_by_all_three_queries():
+    for statement in (
+        q.list_statement("date", "desc"),
+        q.summary_statement(),
+        q.facet_statement(),
+    ):
+        sql = str(statement.compile(dialect=postgresql.dialect()))
+        assert "oi.id=s.sku_identity_id" in sql
+        assert "oi.source_account_ref=s.source_account_ref" in sql
+        assert "oi.provider='lingxing' AND oi.is_active" in sql
+        assert "o.identity_id=oi.id" in sql
+        assert "o.source_account_ref=oi.source_account_ref" in sql
+        assert "o.lingxing_sku_id=oi.lingxing_sku_id" in sql
+        assert "o.lingxing_sku_code=s.sku" in sql
+        assert "ON s.identity_verified" in sql
+        assert "'owner_display',owner_display" in sql
+        assert "'value',owner_filter,'label',owner_display" in sql
+        assert "'store_filter',store_filter,'owner_filter',owner_filter" in sql
+        assert "raw_walmart_monitor_events" not in sql
+        assert "INSERT INTO" not in sql and "UPDATE " not in sql
+
+
+@pytest.mark.parametrize(
+    "listing_ref,sku_uid,sku_name,expected_display,expected_key",
+    [
+        (None, "U1", "Alice", "Alice", "U1"),
+        ("  ", "U1", "Alice", "Alice", "U1"),
+        ("U1", "U1", "Alice", "Alice", "U1"),
+        ("Alice", "U1", "Alice", "Alice", "U1"),
+        ("Bob", "U1", "Alice", "Bob", "Bob"),
+        ("U2", "U1", "Alice", "U2", "U2"),
+        (None, None, "Alice", "Alice", "Alice"),
+        (None, "U1", None, "U1", "U1"),
+        ("Bob", None, None, "Bob", "Bob"),
+        (None, None, None, None, None),
+        (" ", " ", " ", None, None),
+    ],
+)
+def test_owner_resolution_expression(
+    listing_ref, sku_uid, sku_name, expected_display, expected_key
+):
+    # Exercise the actual SQL CASE expressions using only synthetic values.
+    # SQLite's JSON ->> operator, CASE, COALESCE and NULLIF have the required
+    # semantics here; btrim is a local compatibility function. No app DB.
+    import json
+    import sqlite3
+
+    with sqlite3.connect(":memory:") as conn:
+        conn.create_function("btrim", 1, lambda x: x.strip(" ") if x is not None else None)
+        sql = (
+            f"SELECT {q.OWNER_DISPLAY_SQL}, {q.OWNER_KEY_SQL} "
+            "FROM (SELECT ? AS j) "
+            "CROSS JOIN (SELECT ? AS owner_uid, ? AS owner_name) o"
+        )
+        actual = conn.execute(
+            sql, (json.dumps({"owner_ref": listing_ref}), sku_uid, sku_name)
+        ).fetchone()
+    assert actual == (expected_display, expected_key)
+
+
+def test_listing_claim_does_not_block_sibling_listing(monkeypatch):
+    monkeypatch.setenv("SZZSBJ_SKU_PROGRESS_PURCHASE_ENABLED", "YES")
+    monkeypatch.delenv("NEW_PRODUCTS_READ_DATABASE_URL", raising=False)
+    data = candidate_data([{"store_id": "S", "item_id": "12345678901"}])
+    row = data["items"][0]
+    sibling = {**row["listings"][0], "item_id": "22345678901"}
+    row["listings"].append(sibling)
+    coverage = {
+        "evaluation_grade_confirmation_v1": {
+            "status": "confirmed",
+            "effective_grade": "A",
+            "rule_version": 1,
+        },
+        "operator_assessment_v1": {"decision": "passed"},
+        "evaluation_final_snapshot": {
+            "grade": "A",
+            "rule_version": 1,
+            "risk_evaluation": {"recommend_not_pass": False},
+        },
+    }
+    evidence = {
+        "account": "A",
+        "store_id": "S",
+        "item_id": sibling["item_id"],
+        "grade": "A",
+        "data_coverage_json": coverage,
+        "existing_approval": False,
+    }
+    db = DB([evidence])
+    q.attach_purchase_options(db, data, True)
+    assert not row["listings"][0]["purchase_candidate"]
+    assert sibling["purchase_candidate"]
+    assert len(db.calls) == 1
+    data = candidate_data([{"store_id": "S", "item_id": None}])
+    data["items"][0]["listings"].append(dict(sibling))
+    db = DB([])
+    q.attach_purchase_options(db, data, True)
+    assert not any(listing["purchase_candidate"] for listing in data["items"][0]["listings"])
+    assert not db.calls
+
+
+def test_listing_purchase_status_and_facets_use_exact_item():
+    for stmt in (q.list_statement("date", "desc"), q.summary_statement(), q.facet_statement()):
+        sql = str(stmt.compile(dialect=postgresql.dialect()))
+        assert "x.item_id=claim_item.item_id" in sql
+        assert "x.item_id IS DISTINCT FROM claim_item.item_id" in sql
+        assert "GROUP BY sku_progress_id,store_id,item_id" in sql
+        assert "lp.item_id=j->>'item_id'" in sql
+        assert "legacy.item_id IS NULL" in sql
+        assert "'plan',plan_values,'proc',proc_values" in sql
+        assert "owner_display" in sql
+        assert "'domestic_shipping_status',NULL::text" in sql
+
+
+def test_listing_read_does_not_require_new_physical_item_column():
+    # All three read paths must parse against the old purchase table shape.
+    for stmt in (q.list_statement("date", "desc"), q.summary_statement(), q.facet_statement()):
+        sql = str(stmt.compile(dialect=postgresql.dialect()))
+        assert "to_jsonb(q)->>'item_id' AS item_id" in sql
+        assert "q.item_id" not in sql
+        assert "claim_item.item_id" in sql
+        assert "legacy.item_id IS NULL" in sql
+    # Eligibility stays closed without the 0102 protections. No extra read query.
+    sql = str(q.PURCHASE_EVIDENCE.compile(dialect=postgresql.dialect()))
+    assert "pg_catalog.pg_attribute" in sql
+    assert "uq_sku_purchase_active_listing" in sql
+    assert "uq_sku_purchase_active_legacy_store" in sql
+    assert "ck_sku_purchase_listing_identity" in sql

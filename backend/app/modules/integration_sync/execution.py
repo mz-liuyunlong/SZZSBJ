@@ -131,6 +131,19 @@ class SyncRunExecutionService:
         ):
             FeishuFinanceApprovalSyncHandler(self.session).execute(run, interface)
             return
+        from app.modules.woocommerce_products.task_center import is_woo_interface
+
+        is_woo = (
+            run.provider == "woocommerce"
+            and run.interface_key == "woocommerceProducts"
+            and is_woo_interface(interface)
+        )
+        if run.provider == "woocommerce" and not is_woo:
+            self._fail(run, "WOO_TASK_CONTRACT_CONFLICT")
+            return
+        if is_woo and not interface.outbound_enabled:
+            self._fail(run, "SYNC_INTERFACE_DISABLED")
+            return
         is_data_pages = (
             run.provider == "lingxing"
             and run.interface_key in DATA_PAGES_EXECUTABLE_INTERFACE_KEYS
@@ -212,7 +225,15 @@ class SyncRunExecutionService:
             self._fail(run, "SYNC_INTERFACE_DISABLED")
             return
 
-        if is_data_pages or is_wfs or is_fx or is_walmart_bill or is_wfs_cost_flow or is_fin:
+        if (
+            is_woo
+            or is_data_pages
+            or is_wfs
+            or is_fx
+            or is_walmart_bill
+            or is_wfs_cost_flow
+            or is_fin
+        ):
             if run.trigger_type not in {"manual", "schedule", "retry", "backfill"}:
                 self._fail(run, "SYNC_TRIGGER_NOT_EXECUTABLE")
                 return
@@ -282,6 +303,11 @@ class SyncRunExecutionService:
             return
 
         try:
+            if is_woo:
+                from app.modules.woocommerce_products.task_center import execute_woo
+
+                execute_woo(self, run)
+                return
             if is_data_pages:
                 self._execute_data_pages_run(run)
                 return
