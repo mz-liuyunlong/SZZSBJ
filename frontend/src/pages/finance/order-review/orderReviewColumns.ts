@@ -12,7 +12,7 @@ export const OR_DEFAULT_KEYS = [
 export const OR_COLUMN_GROUPS: RuntimeColumnGroup[] = [
   { title: "订单", fields: [
     { key: "order", title: "订单号 / 行" }, { key: "store", title: "店铺" }, { key: "period", title: "期（账单日）" },
-    { key: "item", title: "ItemID" }, { key: "sku", title: "SKU" }, { key: "msku", title: "MSKU" }, { key: "gtin", title: "GTIN" },
+    { key: "item", title: "ItemID" }, { key: "sku", title: "本地SKU" }, { key: "msku", title: "MSKU" }, { key: "gtin", title: "GTIN" },
     { key: "owner", title: "负责人" }, { key: "kind", title: "类型" }, { key: "fulfillment", title: "履约" }, { key: "qty", title: "件数" },
     { key: "posted", title: "结算时间" }, { key: "types", title: "交易类型" },
   ] },

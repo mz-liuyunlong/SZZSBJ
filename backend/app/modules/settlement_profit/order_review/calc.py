@@ -48,6 +48,7 @@ from app.modules.settlement_profit.order_review.rules import (
     group_order_rows,
     qty,
 )
+from app.modules.sku_detail.models import LingxingSkuProductInfoCurrent
 from app.modules.walmart_bills.models import WalmartBillLine, WalmartBillPeriod
 from app.modules.warehouse_wfs.inventory_flow_models import WfsCostValuationFlowOds
 
@@ -173,6 +174,7 @@ class DbLookups(Lookups):
         self._rates = load_usd_cny_rates(session)
         self._listing: dict[str, ListingManagementCurrentMart | None] = {}
         self._tag_rules: dict[str, str] | None = None
+        self._product_owners: dict[tuple[str, str], str | None] = {}
         self._details: dict[tuple[str, str], ShipmentDetail | None] = {}
         self._headers: dict[str, ShipmentHeader | None] = {}
         self._outbound: dict[str, list[OutboundOrder]] = {}
@@ -324,20 +326,36 @@ class DbLookups(Lookups):
             )
         return self._entries[key]
 
-    def _listing_for(self, item_id: str | None) -> ListingManagementCurrentMart | None:
-        if not item_id:
+    def _listing_for(self, store_sku: str | None) -> ListingManagementCurrentMart | None:
+        """账单店铺 SKU → 同店铺 Listing（按 MSKU，忽略大小写和首尾空格）。"""
+        key = (store_sku or "").strip()
+        if not key:
             return None
-        if item_id not in self._listing:
-            self._listing[item_id] = self.session.scalars(
+        if key not in self._listing:
+            self._listing[key] = self.session.scalars(
                 select(ListingManagementCurrentMart)
                 .where(
                     ListingManagementCurrentMart.source_account_ref == self.account,
                     ListingManagementCurrentMart.store_id == self.store_id,
-                    ListingManagementCurrentMart.item_id == item_id,
+                    func.lower(func.btrim(ListingManagementCurrentMart.msku)) == key.lower(),
                 )
+                .order_by(ListingManagementCurrentMart.item_id)
                 .limit(1)
             ).one_or_none()
-        return self._listing[item_id]
+        return self._listing[key]
+
+    def _product_owner(self, account: str, local_sku: str) -> str | None:
+        """领星产品资料的产品负责人（和 Listing 管理页同一来源：账号 + 本地 SKU）。"""
+        key = (account, local_sku)
+        if key not in self._product_owners:
+            product = LingxingSkuProductInfoCurrent
+            self._product_owners[key] = self.session.scalar(
+                select(func.max(func.nullif(func.btrim(product.owner_name), ""))).where(
+                    product.source_account_ref == account,
+                    product.lingxing_sku_code == local_sku,
+                )
+            )
+        return self._product_owners[key]
 
     def _rules(self) -> dict[str, str]:
         if self._tag_rules is None:
@@ -350,9 +368,15 @@ class DbLookups(Lookups):
         return self._tag_rules
 
     def owner_for_item(self, item_id: str | None) -> str | None:
+        """负责人：领星产品资料（本地 SKU）→ Listing 业务填写的负责人 → 标签规则。"""
         listing = self._listing_for(item_id)
         if listing is None:
             return None
+        local_sku = (listing.local_sku or "").strip()
+        if local_sku:
+            owner = self._product_owner(listing.source_account_ref, local_sku)
+            if owner:
+                return owner
         owner = (listing.owner_ref or "").strip()
         if owner:
             return owner
@@ -369,8 +393,18 @@ class DbLookups(Lookups):
         return None
 
     def msku_for_item(self, item_id: str | None) -> str | None:
+        """MSKU：Listing 上的写法；Listing 没有这个商品时，账单的店铺 SKU 本身就是 MSKU。"""
         listing = self._listing_for(item_id)
         value = (listing.msku or "").strip() if listing else ""
+        return value or ((item_id or "").strip() or None)
+
+    def listing_item_id(self, item_id: str | None) -> str | None:
+        listing = self._listing_for(item_id)
+        return listing.item_id if listing else None
+
+    def local_sku_for_item(self, item_id: str | None) -> str | None:
+        listing = self._listing_for(item_id)
+        value = (listing.local_sku or "").strip() if listing else ""
         return value or None
 
     def fx_rate(self, month: date) -> Decimal | None:

@@ -139,7 +139,7 @@ function Workbench({ periods }: { periods: ApiPeriod[] }) {
     store: { key: "store", title: "店铺", width: 90, render: (_, r) => stores.find(([id]) => id === r.store_id)?.[1] ?? r.store_id },
     period: { key: "period", title: "期", width: 100, render: (_, r) => r.period_key },
     item: { key: "item", title: "ItemID", width: 120, render: (_, r) => r.item_id ?? EMPTY },
-    sku: { key: "sku", title: "SKU", width: 110, render: (_, r) => r.sku ?? EMPTY },
+    sku: { key: "sku", title: "本地SKU", width: 110, render: (_, r) => r.sku ?? EMPTY },
     msku: { key: "msku", title: "MSKU", width: 130, render: (_, r) => r.msku ?? EMPTY },
     gtin: { key: "gtin", title: "GTIN", width: 130, render: (_, r) => r.gtin ?? EMPTY },
     owner: { key: "owner", title: "负责人", width: 90, render: (_, r) => r.owner_id ?? EMPTY },

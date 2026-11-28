@@ -127,6 +127,8 @@ class DictLookups(Lookups):
         self.entries: dict[tuple[str, str], CostEntry] = {}
         self.owners: dict[str, str] = {"SYN-ITEM-1": "owner-a"}
         self.mskus: dict[str, str] = {"SYN-ITEM-1": MSKU}
+        self.item_ids: dict[str, str] = {}
+        self.local_skus: dict[str, str] = {}
         self.rates: dict[str, Decimal] = {"2026-11": Decimal("7.2")}
         self.originals: dict[tuple[str, str, str], OriginalLine] = {}
         self.entry_calls: list[tuple[str, str]] = []
@@ -153,6 +155,12 @@ class DictLookups(Lookups):
 
     def msku_for_item(self, item_id: str | None) -> str | None:
         return self.mskus.get(item_id or "")
+
+    def listing_item_id(self, item_id: str | None) -> str | None:
+        return self.item_ids.get(item_id or "")
+
+    def local_sku_for_item(self, item_id: str | None) -> str | None:
+        return self.local_skus.get(item_id or "")
 
     def fx_rate(self, month: date) -> Decimal | None:
         return self.rates.get(f"{month.year:04d}-{month.month:02d}")
@@ -603,6 +611,17 @@ def test_cost_entry_on_shipping_scope_clears_shipment_reasons() -> None:
     line = compute(sale_rows(), lookups)
     assert "shipment_detail_invalid" in line.reasons
 
+
+
+def test_bill_store_sku_resolves_walmart_item_id_and_local_sku_via_listing() -> None:
+    # 账单 Partner Item Id 是店铺 SKU；沃尔玛 ItemID、本地 SKU、MSKU、负责人都按它经 Listing 查
+    lookups = DictLookups()
+    line = compute(sale_rows(), lookups)
+    assert (line.item_id, line.sku, line.msku, line.owner_id) == (None, None, MSKU, "owner-a")
+    lookups.item_ids["SYN-ITEM-1"] = "30000000001"
+    lookups.local_skus["SYN-ITEM-1"] = "SYN-L001"
+    line = compute(sale_rows(), lookups)
+    assert (line.item_id, line.sku) == ("30000000001", "SYN-L001")
 
 def test_cancelled_refund_is_pending_with_zero_cost() -> None:
     rows = sale_rows(SELLER) + [

@@ -48,6 +48,9 @@ ORDER = "900000000000000001"
 GTIN = "00000000000001"
 ITEM = "30000000001"
 MSKU = "SYN-001"
+# 账单 Partner Item Id 是店铺 SKU：故意小写，验证按 MSKU 忽略大小写匹配 Listing
+BILL_SKU = "syn-001"
+LOCAL_SKU = "SYN-L001"
 CODE = "SP2026T0001"
 PERIOD = "2026-11-03"
 REPORT = date(2026, 11, 3)
@@ -136,7 +139,7 @@ def seed_bill(
                 purchase_order_no=order,
                 purchase_order_line_no="1",
                 partner_gtin=GTIN,
-                partner_item_id=ITEM,
+                partner_item_id=BILL_SKU,
                 fulfillment_type=fulfillment,
                 delete_flag=0,
                 row_hash=f"h{report_key}{index}",
@@ -196,6 +199,7 @@ def seed_listing(
             store_id=STORE,
             item_id=ITEM,
             msku=MSKU,
+            local_sku=LOCAL_SKU,
             owner_ref=owner,
             tags_json=tags or [],
             calculated_at=NOW,
@@ -300,7 +304,10 @@ def test_recalc_writes_fact_and_review_and_skips_unchanged(session: Session) -> 
         Decimal("6.5"),
     )
     assert line.cost_total_usd == Decimal("0.9028")
+    # 产品资料里没有这个本地 SKU（查询照常执行、返回空）→ 退到 Listing 业务填写的负责人
     assert line.owner_id == "owner-a"
+    # 店铺 SKU → Listing：沃尔玛 ItemID、本地 SKU、Listing 上的 MSKU 写法
+    assert (line.item_id, line.sku, line.msku) == (ITEM, LOCAL_SKU, MSKU)
     assert line.auto_passed is True
     assert line.source_run_ids == ["run-1"]
     review = session.scalars(select(SettlementOrderReview)).one()
@@ -376,6 +383,41 @@ def test_pending_reason_and_owner_from_tag_rule(session: Session) -> None:
     review = session.scalars(select(SettlementOrderReview)).one()
     assert review.review_status == "pending"
 
+
+
+def test_owner_comes_from_product_info_by_local_sku(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 产品资料表带多层外键，这里不造；只换掉"按账号 + 本地 SKU 取负责人"这一步
+    calls: list[tuple[str, str]] = []
+
+    def product_owner(self: DbLookups, account: str, local_sku: str) -> str | None:
+        calls.append((account, local_sku))
+        return "owner-product"
+
+    monkeypatch.setattr(DbLookups, "_product_owner", product_owner)
+    seed_all(session)
+    OrderReviewCalculator(session, source_account_ref=ACCOUNT).recalc_period(STORE, PERIOD)
+    line = current_lines(session)[0]
+    assert calls == [(ACCOUNT, LOCAL_SKU)]
+    assert line.owner_id == "owner-product"  # 优先于 Listing 业务填写的 owner-a
+
+
+def test_bill_sku_without_listing_keeps_sku_as_msku_and_marks_owner_missing(
+    session: Session,
+) -> None:
+    seed_period(session)
+    seed_bill(session, SALE)
+    seed_shipment(session)
+    seed_fx(session)
+    seed_settings(session)
+    FLOWS[ORDER] = [flow()]
+    session.flush()
+    OrderReviewCalculator(session, source_account_ref=ACCOUNT).recalc_period(STORE, PERIOD)
+    line = current_lines(session)[0]
+    assert (line.item_id, line.sku, line.msku, line.owner_id) == (None, None, BILL_SKU, None)
+    assert "owner_missing" in line.reasons
+    assert line.auto_passed is False
 
 def test_cost_entry_is_picked_up_on_recalc(session: Session) -> None:
     seed_all(session)
