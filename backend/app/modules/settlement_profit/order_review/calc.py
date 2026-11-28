@@ -31,6 +31,7 @@ from app.modules.settlement_profit.models import (
     SettlementOrderReview,
     SettlementSetting,
 )
+from app.modules.settlement_profit.order_review.recalc_scope import norm_msku
 from app.modules.settlement_profit.order_review.rules import (
     BillRow,
     ComputedLine,
@@ -156,6 +157,56 @@ def _outbound_item(item: dict[str, Any]) -> OutboundItem:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class StoreListingIndex:
+    """一个店铺的 Listing（按归一后的 MSKU）和这些 Listing 本地 SKU 的产品负责人。
+
+    开算前一次装好，不再逐个商品查（刘云龙 #377 终审）。
+    """
+
+    by_msku: dict[str, ListingManagementCurrentMart]
+    owners: dict[str, str]
+
+
+def load_store_listings(
+    session: Session, *, source_account_ref: str, store_id: str
+) -> StoreListingIndex:
+    """两条查询：店铺全部 Listing；这些 Listing 本地 SKU 的产品负责人（IN 一次）。
+
+    匹配规则和逐条查询时一样：同账号同店铺，lower(btrim(msku)) 相等，多条按 item_id 取第一条；
+    负责人 = max(nullif(btrim(owner_name), ''))，按账号 + 本地 SKU。
+    """
+    listing = ListingManagementCurrentMart
+    rows = session.scalars(
+        select(listing)
+        .where(listing.source_account_ref == source_account_ref, listing.store_id == store_id)
+        .order_by(listing.item_id)
+    ).all()
+    by_msku: dict[str, ListingManagementCurrentMart] = {}
+    for row in rows:
+        key = norm_msku(row.msku)
+        if key is not None and key not in by_msku:
+            by_msku[key] = row
+    local_skus = sorted({(row.local_sku or "").strip() for row in by_msku.values()} - {""})
+    owners: dict[str, str] = {}
+    if local_skus:
+        product = LingxingSkuProductInfoCurrent
+        for sku, name in session.execute(
+            select(
+                product.lingxing_sku_code,
+                func.max(func.nullif(func.btrim(product.owner_name), "")),
+            )
+            .where(
+                product.source_account_ref == source_account_ref,
+                product.lingxing_sku_code.in_(local_skus),
+            )
+            .group_by(product.lingxing_sku_code)
+        ).all():
+            if sku and name:
+                owners[sku] = name
+    return StoreListingIndex(by_msku=by_msku, owners=owners)
+
+
 class DbLookups(Lookups):
     def __init__(
         self,
@@ -165,6 +216,7 @@ class DbLookups(Lookups):
         store_id: str,
         period_key: str,
         report_date: date,
+        listings: StoreListingIndex | None = None,
     ) -> None:
         self.session = session
         self.account = source_account_ref
@@ -172,9 +224,9 @@ class DbLookups(Lookups):
         self.period_key = period_key
         self.report_date = report_date
         self._rates = load_usd_cny_rates(session)
-        self._listing: dict[str, ListingManagementCurrentMart | None] = {}
+        # 计算器按店铺预载后传进来；单独构造（测试）时第一次用到再装
+        self._listings = listings
         self._tag_rules: dict[str, str] | None = None
-        self._product_owners: dict[tuple[str, str], str | None] = {}
         self._details: dict[tuple[str, str], ShipmentDetail | None] = {}
         self._headers: dict[str, ShipmentHeader | None] = {}
         self._outbound: dict[str, list[OutboundOrder]] = {}
@@ -326,36 +378,25 @@ class DbLookups(Lookups):
             )
         return self._entries[key]
 
+    def _index(self) -> StoreListingIndex:
+        if self._listings is None:
+            self._listings = load_store_listings(
+                self.session, source_account_ref=self.account, store_id=self.store_id
+            )
+        return self._listings
+
     def _listing_for(self, store_sku: str | None) -> ListingManagementCurrentMart | None:
         """账单店铺 SKU → 同店铺 Listing（按 MSKU，忽略大小写和首尾空格）。"""
-        key = (store_sku or "").strip()
-        if not key:
+        key = norm_msku(store_sku)
+        if key is None:
             return None
-        if key not in self._listing:
-            self._listing[key] = self.session.scalars(
-                select(ListingManagementCurrentMart)
-                .where(
-                    ListingManagementCurrentMart.source_account_ref == self.account,
-                    ListingManagementCurrentMart.store_id == self.store_id,
-                    func.lower(func.btrim(ListingManagementCurrentMart.msku)) == key.lower(),
-                )
-                .order_by(ListingManagementCurrentMart.item_id)
-                .limit(1)
-            ).one_or_none()
-        return self._listing[key]
+        return self._index().by_msku.get(key)
 
     def _product_owner(self, account: str, local_sku: str) -> str | None:
         """领星产品资料的产品负责人（和 Listing 管理页同一来源：账号 + 本地 SKU）。"""
-        key = (account, local_sku)
-        if key not in self._product_owners:
-            product = LingxingSkuProductInfoCurrent
-            self._product_owners[key] = self.session.scalar(
-                select(func.max(func.nullif(func.btrim(product.owner_name), ""))).where(
-                    product.source_account_ref == account,
-                    product.lingxing_sku_code == local_sku,
-                )
-            )
-        return self._product_owners[key]
+        if account != self.account:
+            return None
+        return self._index().owners.get(local_sku)
 
     def _rules(self) -> dict[str, str]:
         if self._tag_rules is None:
@@ -504,6 +545,15 @@ class OrderReviewCalculator:
     def __init__(self, session: Session, *, source_account_ref: str) -> None:
         self.session = session
         self.account = source_account_ref
+        # 同一个计算器（一次接口重算 / 一次队列任务）里每个店铺的 Listing 和负责人只装一次
+        self._store_listings: dict[str, StoreListingIndex] = {}
+
+    def _listings(self, store_id: str) -> StoreListingIndex:
+        if store_id not in self._store_listings:
+            self._store_listings[store_id] = load_store_listings(
+                self.session, source_account_ref=self.account, store_id=store_id
+            )
+        return self._store_listings[store_id]
 
     def recalc_period(
         self, store_id: str, period_key: str, *, run_ids: Iterable[str] = ()
@@ -534,6 +584,7 @@ class OrderReviewCalculator:
             store_id=store_id,
             period_key=period_key,
             report_date=period.report_date,
+            listings=self._listings(store_id),
         )
         lines = [
             compute_line(group, store_id=store_id, lookups=lookups, settings=settings)

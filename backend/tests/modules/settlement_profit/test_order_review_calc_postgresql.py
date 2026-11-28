@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
@@ -36,6 +36,7 @@ from app.modules.settlement_profit.order_review.calc import (
     DbLookups,
     OrderReviewCalculator,
     load_settings,
+    load_store_listings,
     periods_for_recalc,
 )
 from app.modules.settlement_profit.order_review.rules import FlowSegment
@@ -116,6 +117,7 @@ def seed_bill(
     report_date: date = REPORT,
     fulfillment: str = "Walmart-fulfilled(WFS)",
     order: str = ORDER,
+    item: str = BILL_SKU,
 ) -> None:
     for index, (ttype, desc, atype, amount, qty) in enumerate(rows):
         session.add(
@@ -139,7 +141,7 @@ def seed_bill(
                 purchase_order_no=order,
                 purchase_order_line_no="1",
                 partner_gtin=GTIN,
-                partner_item_id=BILL_SKU,
+                partner_item_id=item,
                 fulfillment_type=fulfillment,
                 delete_flag=0,
                 row_hash=f"h{report_key}{index}",
@@ -417,6 +419,80 @@ def test_bill_sku_without_listing_keeps_sku_as_msku_and_marks_owner_missing(
     assert (line.item_id, line.sku, line.msku, line.owner_id) == (None, None, BILL_SKU, None)
     assert "owner_missing" in line.reasons
     assert line.auto_passed is False
+
+
+def test_store_listing_index_keeps_the_per_item_matching_rule(session: Session) -> None:
+    # 同一 MSKU 多条 Listing（大小写 / 空格不同）：按 item_id 取第一条，和逐条查询时一样
+    for item_id, msku in (("30000000009", "syn-001 "), ("30000000002", "SYN-001")):
+        session.add(
+            ListingManagementCurrentMart(
+                source_account_ref=ACCOUNT,
+                store_id=STORE,
+                item_id=item_id,
+                msku=msku,
+                local_sku=LOCAL_SKU,
+                calculated_at=NOW,
+            )
+        )
+    session.flush()
+    index = load_store_listings(session, source_account_ref=ACCOUNT, store_id=STORE)
+    assert list(index.by_msku) == ["syn-001"]
+    assert index.by_msku["syn-001"].item_id == "30000000002"
+    assert index.owners == {}  # 产品资料里没有这个本地 SKU
+
+
+def test_listing_and_owner_are_loaded_once_per_store_not_per_line(session: Session) -> None:
+    second_period, second_date = "2026-11-17", date(2026, 11, 17)
+    for n in range(30):
+        session.add(
+            ListingManagementCurrentMart(
+                source_account_ref=ACCOUNT,
+                store_id=STORE,
+                item_id=f"3{n:010d}",
+                msku=f"SYN-{n:03d}",
+                local_sku=f"SYN-L{n:03d}",
+                calculated_at=NOW,
+            )
+        )
+    seed_period(session)
+    seed_period(session, report_key=second_period, report_date=second_date)
+    for i in range(300):
+        first = i % 2 == 0
+        seed_bill(
+            session,
+            SALE[:1],
+            report_key=PERIOD if first else second_period,
+            report_date=REPORT if first else second_date,
+            order=f"9{i:017d}",
+            item=f"syn-{i % 30:03d}",
+        )
+    seed_fx(session)
+    seed_settings(session)
+    session.flush()
+
+    statements: list[str] = []
+
+    def record(_conn: Any, _cursor: Any, statement: str, *_args: Any) -> None:
+        statements.append(statement)
+
+    engine = session.get_bind().engine
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        calculator = OrderReviewCalculator(session, source_account_ref=ACCOUNT)
+        for period in (PERIOD, second_period):
+            assert calculator.recalc_period(STORE, period).lines_total == 150
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+
+    listing_reads = [s for s in statements if "FROM mart_listing_management_current" in s]
+    owner_reads = [s for s in statements if "FROM dwd_lingxing_sku_product_info_current" in s]
+    # 300 行订单、30 个 MSKU、两期：Listing 和产品负责人各只查 1 次（一个店一次）
+    assert (len(listing_reads), len(owner_reads)) == (1, 1)
+    lines = current_lines(session)
+    assert len(lines) == 300
+    assert {line.msku for line in lines} == {f"SYN-{n:03d}" for n in range(30)}
+    assert {line.sku for line in lines} == {f"SYN-L{n:03d}" for n in range(30)}
+    assert all(line.item_id is not None for line in lines)
 
 
 def test_cost_entry_is_picked_up_on_recalc(session: Session) -> None:
