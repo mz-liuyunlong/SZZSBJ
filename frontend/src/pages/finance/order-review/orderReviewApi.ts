@@ -12,7 +12,7 @@ export type ReviewStatus = "pending" | "auto" | "first_passed" | "final_passed" 
 export type LineKind = "sale" | "refund" | "mcf";
 export type Reason =
   | "wfs_carrier_shipment" | "self_fulfilled" | "fixed_value" | "last_received"
-  | "cost_missing" | "shipment_detail_invalid" | "owner_missing" | "cancelled_refund";
+  | "cost_missing" | "shipment_detail_invalid" | "owner_missing" | "cancelled_refund" | "original_cost_incomplete";
 
 export interface ApiMoney { amount: string; currency_code: string }
 export interface ApiPeriod {
@@ -147,11 +147,36 @@ export const revokeCostEntry = (entryId: string, reason: string, expectedVersion
 /** ≥ 20 行时后端要 confirm_token（PRP §5），前端二次确认后带固定值 */
 export const BATCH_CONFIRM_THRESHOLD = 20;
 export const BATCH_CONFIRM_TOKEN = "CONFIRM_BATCH_REVIEW";
-export const postReview = (reviewIds: string[], stage: "first" | "final", decision: "pass" | "reject" | "revert", comment?: string, confirmed = false) =>
+export type ReviewStage = "first" | "final";
+export type ReviewDecision = "pass" | "reject" | "revert";
+/** 一次批量审核的内容（选中行 + 阶段 + 动作 + 意见），和后端幂等校验的口径一致 */
+export const reviewSignature = (reviewIds: string[], stage: ReviewStage, decision: ReviewDecision, comment?: string) =>
+  JSON.stringify([[...reviewIds].sort(), stage, decision, (comment ?? "").trim()]);
+/**
+ * 批量审核的请求编号：同一内容在成功前一直复用（超时 / 失败后重试是同一个编号，后端返回第一次的结果）；
+ * 成功后、或者选中行 / 动作 / 意见变了，才换新编号。
+ */
+export class ReviewRequestKey {
+  private current: { signature: string; key: string } | null = null;
+  private readonly newKey: () => string;
+  constructor(newKey: () => string = () => crypto.randomUUID()) {
+    this.newKey = newKey;
+  }
+  take(signature: string): string {
+    if (!this.current || this.current.signature !== signature) this.current = { signature, key: this.newKey() };
+    return this.current.key;
+  }
+  done(): void {
+    this.current = null;
+  }
+}
+export const postReview = (
+  reviewIds: string[], stage: ReviewStage, decision: ReviewDecision, comment: string | undefined, confirmed: boolean, idempotencyKey: string,
+) =>
   post<ApiReviewResult>(
     `${BASE}/review`,
     { review_ids: reviewIds, stage, decision, comment: comment ?? null, confirm_token: confirmed ? BATCH_CONFIRM_TOKEN : null },
-    { "Idempotency-Key": crypto.randomUUID() },
+    { "Idempotency-Key": idempotencyKey },
   );
 export const postRecalc = (storeIds: string[], periodKeys: string[]) =>
   post<ApiRecalcResult>(`${BASE}/recalc`, { store_ids: storeIds, period_keys: periodKeys });
@@ -201,6 +226,7 @@ export const REASON_TEXT: Record<Reason, string> = {
   shipment_detail_invalid: "发货单明细不完整",
   owner_missing: "商品无负责人",
   cancelled_refund: "同期卖出又取消（确认无成本）",
+  original_cost_incomplete: "退货原订单成本不全（货本留空）",
 };
 /** 自发货尾程留空的原因（cost_sources[].last_leg_note） */
 export const LAST_LEG_NOTE_TEXT: Record<string, string> = {

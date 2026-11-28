@@ -2,7 +2,7 @@
  * 财务 · 订单审核（结算利润 V3 PR-OR，PRP §7A）：
  * - 粒度：期（= 回款对账的期）× 店铺 × 订单行；只显示已出账单的期，2026-10-01 起。
  * - 审产品成本三项：采购价、头程、尾程（WFS 订单尾程 = 结算单配送费，只展示不入货本）。
- * - 待审原因 8 种；录成本按 MSKU × 发货单（或出库单）；初审 → 终审，退回要原因，同一人不能既初审又终审。
+ * - 待审原因 9 种；录成本按 MSKU × 发货单（或出库单）；初审 → 终审，退回要原因，同一人不能既初审又终审。
  * 全部读写 /api/finance/order-review，没有本地预览数据。
  */
 import { ReloadOutlined, SearchOutlined, SettingOutlined } from "@ant-design/icons";
@@ -24,7 +24,7 @@ import ReportFacetSelect from "@/shared/report-filters";
 import CostEntryDrawer from "./CostEntryDrawer";
 import ExactSearchModal from "./ExactSearchModal";
 import {
-  BATCH_CONFIRM_THRESHOLD, CHANGED_AFTER_REVIEW, DEFAULT_FILTERS, KIND_TEXT, LAST_LEG_NOTE_TEXT, LOOKUP_LABEL, PERMISSIONS, REASON_TEXT, SOURCE_KIND_TEXT, STATUS_TEXT, errorText, n, postRecalc, postReview,
+  BATCH_CONFIRM_THRESHOLD, CHANGED_AFTER_REVIEW, ReviewRequestKey, DEFAULT_FILTERS, KIND_TEXT, LAST_LEG_NOTE_TEXT, LOOKUP_LABEL, PERMISSIONS, REASON_TEXT, SOURCE_KIND_TEXT, STATUS_TEXT, errorText, n, postRecalc, postReview, reviewSignature,
   useLines, useOrderReviewRefresh, usePeriods, useTransactionTypes,
   type ApiLine, type ApiMoney, type ApiPeriod, type LineFilters, type LineKind, type LookupKind, type Reason, type ReviewStatus,
 } from "./orderReviewApi";
@@ -87,6 +87,7 @@ function Workbench({ periods }: { periods: ApiPeriod[] }) {
   const [rejectOpen, setRejectOpen] = useState<"first" | "final">();
   const [rejectReason, setRejectReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [reviewKey] = useState(() => new ReviewRequestKey());
 
   const set = (patch: Partial<LineFilters>) => { setFilters((f) => ({ ...f, ...patch, page: 1 })); setSelected([]); };
   const rows = lines.data?.items ?? [];
@@ -111,7 +112,14 @@ function Workbench({ periods }: { periods: ApiPeriod[] }) {
     }
   };
   const reviewNow = (stage: "first" | "final", decision: "pass" | "reject" | "revert", comment: string | undefined, confirmed: boolean) =>
-    act(() => postReview(selectedRows.map((r) => r.review_id), stage, decision, comment, confirmed), (result) => {
+    act(async () => {
+      const ids = selectedRows.map((r) => r.review_id);
+      // 失败 / 超时后再点，内容没变就复用同一个请求编号；成功后才换（刘云龙 11-28 P2）
+      const key = reviewKey.take(reviewSignature(ids, stage, decision, comment));
+      const result = await postReview(ids, stage, decision, comment, confirmed, key);
+      reviewKey.done();
+      return result;
+    }, (result) => {
       const r = result as { succeeded: number; failed: number; items: { message: string | null }[] };
       const firstError = r.items.find((i) => i.message)?.message;
       return `${stage === "first" ? "初审" : "终审"}${decision === "pass" ? "通过" : decision === "reject" ? "退回" : "撤销"} ${r.succeeded} 行${r.failed ? `，${r.failed} 行未成功${firstError ? `（${firstError}）` : ""}` : ""}`;
