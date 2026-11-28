@@ -9,6 +9,10 @@ from app.core.config import Settings, get_settings
 from app.modules.integration_sync.models import IntegrationSyncRun, IntegrationSyncRunEvent
 from app.modules.integration_sync.refund_window import refund_window
 from app.modules.integration_sync.repository import IntegrationSyncRepository
+from app.modules.integration_sync.wfs_cost_valuation_window import (
+    WFS_COST_VALUATION_INTERFACE_KEY,
+    wfs_cost_valuation_rolling_window,
+)
 
 CRON_SEARCH_DAYS = 40 * 366
 QUEUED_RECOVERY_GRACE = timedelta(minutes=1)
@@ -233,6 +237,12 @@ class IntegrationSchedulerService:
                         and interface.provider == "lingxing"
                     ):
                         window_start, window_end = refund_window(current, config.max_pages)
+                    if (
+                        interface.interface_key == WFS_COST_VALUATION_INTERFACE_KEY
+                        and interface.provider == "lingxing"
+                    ):
+                        # 成本计价流水每次必须带窗口：定时按最近 60 天滚动
+                        window_start, window_end = wfs_cost_valuation_rolling_window(current)
                     run = IntegrationSyncRun(
                         config_id=config.id,
                         interface_id=interface.id,

@@ -21,6 +21,8 @@
 - 唯一键：`(raw_request_ref_id, source_item_ordinal)`，即「哪一页请求的第几行」。
 - `serial_number` 只用于追溯，**不唯一**：同一次拉取里会重复，跨批次还会指向别的商品。
 - 每次同步覆盖一个出入库日期窗口（`dateType = 0`）和全部店铺，不过滤 businessType。
+- 窗口必须有，单次最多 92 天：定时和任务中心「手动同步」= 最近 60 天（上海日期，含当天；入队时定死，重试沿用同一窗口，见 `backend/app/modules/integration_sync/wfs_cost_valuation_window.py`）；回填 = 调用方给的起止日期（存 UTC 零点，起止都含）。
+- 开启顺序（每一步须 rocky 同意）：登记（`IntegrationCatalogService.bootstrap_wfs_cost_valuation_governance`，只跑一次，重跑会把配置重置为关闭）→ 打开接口 `outbound_enabled` 和配置 `is_enabled` → 回填 2026-05-01 起，每批 ≤ 92 天、同账号一次一批 → 任务中心打开定时，推荐 cron `30 19 * * *`（UTC，上海每天 03:30，错开发货单三个接口周三 04:00–05:00 的定时）。
 - 整段替换：全部页成功、且行数等于 `data.page.total` 之后，在一个事务里把窗口内旧的 `is_current = true` 行改成 false，并写 `superseded_by_run_id`；同时把新批次的行置为 true。
 - 失败批次（页失败、total 变化、行数不符、行无法解析）：批次标 failed，已暂存的行保持 `is_current = false`，旧数据不动。
 - 每次同步行 id 都会换新。下游按 `is_current = true` 取数；按结算日期取时，先过滤 `is_current` 再看 `settlement_date`。
