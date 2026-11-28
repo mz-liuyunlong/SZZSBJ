@@ -57,7 +57,8 @@ describe("SystemConfigPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "编辑预览" }));
     const input = screen.getByRole("spinbutton", { name: "单次上传大小上限" });
     fireEvent.change(input, { target: { value: "50" } });
-    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    // Ant Design inserts a visual space between two Chinese characters.
+    fireEvent.click(screen.getByRole("button", { name: /^取\s*消$/ }));
     expect((input as HTMLInputElement).value).toBe("");
     expect(input).toBeDisabled();
   });
