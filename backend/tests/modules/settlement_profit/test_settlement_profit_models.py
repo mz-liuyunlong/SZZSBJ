@@ -14,6 +14,10 @@ from app.db.base import Base
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
 REVISION = "20261125_0096_settlement_profit_v3_tables"
 MIGRATION = BACKEND_ROOT / "alembic" / "versions" / f"{REVISION}.py"
+# 0101 给 manual_settlement_review_actions 补了 Idempotency-Key 索引（#373 复审 P2-4）
+ORDER_REVIEW_MIGRATION = (
+    BACKEND_ROOT / "alembic" / "versions" / "20261127_0101_finance_order_review_permissions.py"
+)
 
 # PRP §6.2 的 18 张表与各自的业务键
 PRP_KEYS: dict[str, tuple[str, ...]] = {
@@ -169,7 +173,7 @@ def test_fx_columns_and_missing_status_without_fallback() -> None:
 
 
 def test_reason_and_status_vocabularies_match_prp() -> None:
-    assert len(m.ORDER_LINE_REASONS) + len(m.STORE_ITEM_REASONS) == 9
+    assert len(m.ORDER_LINE_REASONS) + len(m.STORE_ITEM_REASONS) == 10
     # §0.5 六项 + §8.3 WFS 承运商清单，正好 7 项
     assert set(m.SETTING_KEYS) == {
         "review_accelerator_price_formula",
@@ -190,7 +194,10 @@ def test_reason_and_status_vocabularies_match_prp() -> None:
 def test_cost_entry_scope_rules() -> None:
     table = _table("manual_settlement_cost_entries")
     checks = _checks(table)
-    assert "(shipping_list_code IS NULL) <> (outbound_order_no IS NULL)" in checks["one_scope"]
+    assert (
+        "num_nonnulls(shipping_list_code, outbound_order_no, platform_order_no) = 1"
+        in checks["one_scope"]
+    )
     assert "override" in checks["override_reason"]
     active = next(
         index
@@ -202,6 +209,7 @@ def test_cost_entry_scope_rules() -> None:
     assert "revoked" in str(active.dialect_options["postgresql"]["where"])
     assert "'shipping:' || shipping_list_code" in checks["scope_ref_matches"]
     assert "'outbound:' || outbound_order_no" in checks["scope_ref_matches"]
+    assert "'order:' || platform_order_no" in checks["scope_ref_matches"]  # 迁移 0101
 
 
 def test_one_current_version_per_order_line() -> None:
@@ -236,9 +244,12 @@ def test_quantities_do_not_reuse_the_money_type() -> None:
 def test_index_count_matches_migration() -> None:
     orm = sum(len(_table(name).indexes) for name in m.SETTLEMENT_PROFIT_TABLES)
     source = MIGRATION.read_text(encoding="utf-8")
-    assert orm == 15
+    later = ORDER_REVIEW_MIGRATION.read_text(encoding="utf-8")
+    assert orm == 16
     assert source.count("op.create_index(") == 15
     assert source.count("op.drop_index(") == 15
+    assert later.count("op.create_index(") == 1
+    assert later.count("op.drop_index(") == 1
 
 
 def test_manual_tables_reference_line_key_not_uuid() -> None:

@@ -103,6 +103,8 @@ def test_walmart_recon_payout_beat_only_in_production_with_switch(
     key = "walmart-bills-recon-payout-weekly"
     assert "app.modules.walmart_bills.tasks" in TASK_IMPORTS
     assert TASK_ROUTES["walmart_bills.*"]["queue"] == INTEGRATION_QUEUE
+    assert "app.modules.settlement_profit.tasks" in TASK_IMPORTS
+    assert TASK_ROUTES["settlement_profit.*"]["queue"] == INTEGRATION_QUEUE
     monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.setenv("SZZSBJ_WALMART_RECON_PAYOUT_ENABLED", "1")
     assert key not in create_celery_app(broker_url="memory://").conf.beat_schedule

@@ -46,9 +46,12 @@ def recon_payout_sync_task() -> None:
             session, call=production_call(), store_codes=production_store_codes()
         )
     log.info(
-        "walmart recon payout sync: written=%s failed_stores=%s reset=%s failed_periods=%s",
+        "walmart recon payout sync: written=%s failed_stores=%s store_errors=%s reset=%s "
+        "failed_periods=%s",
         result.written,
         ",".join(result.failed) or "-",
+        # 店级错误码（稳定码，不含凭据）：2026-11-27 首跑 9 店全失败却只看到店铺代码，补上
+        ";".join(f"{s.store_code}:{s.error}" for s in result.stores if s.error) or "-",
         ";".join(f"{code}:{day.isoformat()}" for code, day in result.reset) or "-",
         ";".join(
             f"{s.store_code}:{day.isoformat()}:{err}"

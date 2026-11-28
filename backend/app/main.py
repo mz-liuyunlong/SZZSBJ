@@ -51,6 +51,7 @@ from app.modules.pmc_domestic.warehouse_router import (
 from app.modules.pmc_purchase.router import router as pmc_purchase_router
 from app.modules.product_management.router import router as product_management_router
 from app.modules.products.router import router as products_router
+from app.modules.settlement_profit.order_review.router import router as order_review_router
 from app.modules.sku_detail.router import router as sku_detail_router
 from app.modules.walmart_bills.payout_router import router as payout_recon_router
 from app.modules.walmart_bills.router import router as walmart_bills_router
@@ -108,6 +109,7 @@ def create_app() -> FastAPI:
     application.include_router(operation_logs_router)
     application.include_router(finance_cashflow_router)
     application.include_router(walmart_bills_router)
+    application.include_router(order_review_router)
     application.include_router(payout_recon_router)
     application.include_router(wfs_fees_router)
     application.include_router(operation_plans_router)

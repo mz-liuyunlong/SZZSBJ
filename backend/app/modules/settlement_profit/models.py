@@ -47,14 +47,18 @@ QTY = Numeric(18, 4)
 LINE_KEY = String(320)
 # 汇率齐（final）时必须有汇率，缺汇率（missing）时汇率必须为空，不兜底
 FX_RATE_MATCHES_STATUS = "(fx_status = 'final') = (fx_rate IS NOT NULL)"
-# 成本录入的范围标识必须由发货单号 / 出库单号推出，写入方拼错会被数据库拒绝
+# 成本录入的范围标识必须由发货单号 / 出库单号 / 平台订单号推出，写入方拼错会被数据库拒绝
+# （平台订单号一种是迁移 0101 加的：自发货订单与流水没覆盖的差额段，#373 P1）
 SCOPE_REF_MATCHES = (
     "scope_ref = CASE WHEN shipping_list_code IS NOT NULL "
-    "THEN 'shipping:' || shipping_list_code ELSE 'outbound:' || outbound_order_no END"
+    "THEN 'shipping:' || shipping_list_code "
+    "WHEN outbound_order_no IS NOT NULL THEN 'outbound:' || outbound_order_no "
+    "ELSE 'order:' || platform_order_no END"
 )
+ONE_SCOPE = "num_nonnulls(shipping_list_code, outbound_order_no, platform_order_no) = 1"
 
 FX_STATUSES = ("final", "missing")
-# 订单行待审原因（§8.4，订单行 8 个）；店铺级项目只有 price_missing（§8.6）。
+# 订单行待审原因（§8.4 的 8 个 + 退款原行成本不全）；店铺级项目只有 price_missing（§8.6）。
 ORDER_LINE_REASONS = (
     "wfs_carrier_shipment",
     "self_fulfilled",
@@ -64,6 +68,7 @@ ORDER_LINE_REASONS = (
     "shipment_detail_invalid",
     "owner_missing",
     "cancelled_refund",
+    "original_cost_incomplete",
 )
 STORE_ITEM_REASONS = ("price_missing",)
 LINE_KINDS = ("sale", "refund", "mcf")
@@ -628,7 +633,7 @@ class SettlementNoOrderFlag(_Calc, _Timestamps, Base):
 
 
 class SettlementCostEntry(_Actor, _Timestamps, Base):
-    """订单审核录成本 / 确认（§8.4）：范围 = MSKU × 发货单（或 MSKU × 出库单），一次录入覆盖
+    """订单审核录成本 / 确认（§8.4）：范围 = MSKU × 发货单 / 出库单 / 平台订单号，一次录入覆盖
     范围内所有订单行（含跨期）；不回写领星。同一范围同时只有一条未撤销的录入。"""
 
     __tablename__ = "manual_settlement_cost_entries"
@@ -644,9 +649,7 @@ class SettlementCostEntry(_Actor, _Timestamps, Base):
         UniqueConstraint("idempotency_key", name="uq_manual_settlement_cost_entry_idem"),
         CheckConstraint(_in("entry_kind", COST_ENTRY_KINDS), name="entry_kind"),
         CheckConstraint(_in("status", MANUAL_STATUSES), name="status"),
-        CheckConstraint(
-            "(shipping_list_code IS NULL) <> (outbound_order_no IS NULL)", name="one_scope"
-        ),
+        CheckConstraint(ONE_SCOPE, name="one_scope"),
         CheckConstraint(SCOPE_REF_MATCHES, name="scope_ref_matches"),
         CheckConstraint(
             "entry_kind <> 'override' OR coalesce(reason, '') <> ''", name="override_reason"
@@ -658,7 +661,9 @@ class SettlementCostEntry(_Actor, _Timestamps, Base):
     msku: Mapped[str] = mapped_column(Text, nullable=False)
     shipping_list_code: Mapped[str | None] = mapped_column(String(64))
     outbound_order_no: Mapped[str | None] = mapped_column(String(64))
-    # scope_ref = 'shipping:<发货单号>' 或 'outbound:<出库单号>'，给唯一索引用
+    # 范围 MSKU × 平台订单号（迁移 0101）：自发货订单、流水没覆盖的差额段
+    platform_order_no: Mapped[str | None] = mapped_column(String(64))
+    # scope_ref = 'shipping:<发货单号>' / 'outbound:<出库单号>' / 'order:<平台订单号>'，给唯一索引用
     scope_ref: Mapped[str] = mapped_column(String(80), nullable=False)
     purchase_cny: Mapped[Decimal | None] = mapped_column(MONEY)
     head_cny: Mapped[Decimal | None] = mapped_column(MONEY)
@@ -674,6 +679,8 @@ class SettlementCostEntry(_Actor, _Timestamps, Base):
     revoked_by: Mapped[str | None] = mapped_column(String(255))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoke_reason: Mapped[str | None] = mapped_column(Text)
+    # 撤销请求的 Idempotency-Key（PR-OR 迁移 0101）：同 key 重放返回首次结果
+    revoke_idempotency_key: Mapped[str | None] = mapped_column(String(128))
 
 
 class SettlementSemMonth(_Timestamps, Base):
@@ -742,6 +749,7 @@ class SettlementReviewAction(_Actor, Base):
     __table_args__ = (
         Index("ix_manual_settlement_review_line", "line_key", "acted_at"),
         Index("ix_manual_settlement_review_month", "store_id", "bill_month"),
+        Index("ix_manual_settlement_review_idem", "idempotency_key"),
         CheckConstraint(_first_of_month("bill_month"), name="bill_month_first_day"),
         CheckConstraint(_in("target_kind", REVIEW_TARGETS), name="target_kind"),
         CheckConstraint(_in("stage", REVIEW_STAGES), name="stage"),
@@ -755,6 +763,8 @@ class SettlementReviewAction(_Actor, Base):
     store_id: Mapped[str] = mapped_column(String(32), nullable=False)
     bill_month: Mapped[date] = mapped_column(Date, nullable=False)
     period_key: Mapped[str | None] = mapped_column(String(64))
+    # 批量审核请求的 Idempotency-Key（PR-OR 迁移 0101）：一次请求里每行一条记录共用同一个 key
+    idempotency_key: Mapped[str | None] = mapped_column(String(128))
     target_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     target_id: Mapped[UUID | None] = mapped_column()
     line_key: Mapped[str] = mapped_column(LINE_KEY, nullable=False)
@@ -766,6 +776,26 @@ class SettlementReviewAction(_Actor, Base):
     acted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+
+
+class SettlementReviewRequest(_Created, Base):
+    """批量审核请求的幂等记录（PR-OR 迁移 0101，刘云龙终审）。
+
+    同一操作人同一个 Idempotency-Key 只处理一次：存请求摘要和第一次的完整结果（成功、失败都在），
+    重试原样返回；同一个 key 换了一批订单或换了动作 → 拒绝。不属于 PRP 的 18 张表，单独登记。
+    """
+
+    __tablename__ = "manual_settlement_review_requests"
+    __table_args__ = (
+        UniqueConstraint("actor_id", "idempotency_key", name="uq_manual_settlement_review_request"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    actor_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    # 请求摘要：review_ids（排序）+ stage + decision + comment 的 sha256
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    response: Mapped[dict[str, Any]] = _json_dict()
 
 
 class SettlementMonthClose(_Actor, Base):

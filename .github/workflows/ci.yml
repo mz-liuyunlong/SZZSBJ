@@ -116,7 +116,7 @@ jobs:
           grep -F "Forward-only permission catalog migration: do not revoke role grants automatically" /tmp/role-rollback-check.log
           test "$role_before" = "$(uv run python -c "$read_head")"
           uv run alembic upgrade head
-          test "$(uv run python -c "$read_head")" = "20261127_0100_sku_ad_progress_foundation"
+          test "$(uv run python -c "$read_head")" = "20261127_0101_finance_order_review_permissions"
           uv run pytest -q -rs tests/modules/ai_runtime/test_postgresql_acceptance.py
 
   frontend-if-present:
@@ -398,7 +398,7 @@ jobs:
 
           engine = create_engine(get_test_database_url(Settings()))
           with engine.connect() as connection:
-              assert connection.scalar(text("select version_num from alembic_version")) == "20261127_0100_sku_ad_progress_foundation"
+              assert connection.scalar(text("select version_num from alembic_version")) == "20261127_0101_finance_order_review_permissions"
               assert connection.scalar(text("select to_regclass('public.audit_walmart_order_item_conflicts')")) is not None
               assert connection.scalar(text("select to_regclass('public.biz_finance_sample_disputes')")) is not None
               assert connection.scalar(text("select to_regclass('public.biz_finance_unallocated_sem_lines')")) is not None

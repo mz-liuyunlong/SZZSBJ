@@ -37,6 +37,7 @@ ODS 公共列：`synced_at`、`row_hash`、`raw_row`（原始行 JSON）。
 | 表 | 业务键 | 内容 |
 |---|---|---|
 | `fact_settlement_order_lines` | store_id, period_key, calc_version, line_key | 订单审核的订单行，一期一行一订单行。`line_kind`：sale / refund / mcf；`fulfillment_type`：wfs / seller。收入与订单费用（USD，结算单口径）、广告分摊（只展示）、货本三项（CNY：采购、头程、尾程；WFS 订单的尾程 = 配送费，只展示、不计入 `cost_total_cny`）、`cost_sources`（可多段）、`reasons`（待审原因）、`auto_passed`；`is_current` 标当前版本，同店同期同一 `line_key` 只能有一个当前版本（部分唯一索引） |
+> 订单行货本三项的口径（PR-OR）：`purchase_cny` = 发货单明细采购价；`head_cny` = 出库头程 + 头程费用 + 税（采购价 + 头程 = 单位成本 `wfsStockPrice`）；`last_leg_cny` 只在自发货订单计入。`manual_settlement_review_actions.idempotency_key`、`manual_settlement_cost_entries.revoke_idempotency_key`（迁移 0101）用于写接口的 Idempotency-Key 重放。
 | `fact_settlement_store_month_items` | store_id, bill_month, source_kind, source_ref | 店铺级项目：`review_accelerator`、`discount_back`（WFS 费用返还，不分摊）、`transfer_fee`、`mcf`、`storage_fee`、`other_wfs_service`、`company_cost`，以及待指定 `unassigned_bill`（来自结算单行，参与对平）/ `unassigned_wfs`（来自 WFS 费用表，不参与对平但挡结账）。`allocation` 存分到 ItemID 的结果，`assign_status`、`review_status`、`version` |
 | `fact_settlement_post_close_diffs` | store_id, bill_month, line_key, detected_at | 结账后源数据变化：旧值 / 新值，不改冻结数；状态 open / acknowledged / resolved_by_unlock |
 
@@ -53,10 +54,11 @@ ODS 公共列：`synced_at`、`row_hash`、`raw_row`（原始行 JSON）。
 
 | 表 | 键 | 内容 |
 |---|---|---|
-| `manual_settlement_cost_entries` | id；同一 店铺 × MSKU × 范围 只能有一条未撤销的录入（部分唯一索引；`scope_ref` 由数据库约束必须等于 `shipping:<发货单号>` 或 `outbound:<出库单号>`，拼错被拒） | 录成本 / 确认：范围 = MSKU × 发货单，或 MSKU × 出库单，二选一（CHECK）；`entry_kind` confirm / override（override 必须写原因）；`prefilled` 存当时领星预填值；初审 / 终审状态、`version`、撤销信息；不回写领星 |
+| `manual_settlement_cost_entries` | id；同一 店铺 × MSKU × 范围 只能有一条未撤销的录入（部分唯一索引；`scope_ref` 由数据库约束必须等于 `shipping:<发货单号>`、`outbound:<出库单号>` 或 `order:<平台订单号>`，拼错被拒） | 录成本 / 确认：范围 = MSKU × 发货单 / 出库单 / 平台订单号，三选一（CHECK，平台订单号一种和 `platform_order_no` 列由迁移 0101 加）；`entry_kind` confirm / override（override 必须写原因）；`prefilled` 存当时领星预填值；初审 / 终审状态、`version`、撤销信息；不回写领星 |
 | `manual_settlement_sem_month` | store_id, item_id, bill_month | SEM 月值（旧系统下线前人工导入） |
 | `manual_settlement_order_adjustments` | id | 调整：`kind` = amount（改金额，必须带金额）/ assign_item（指定商品，必须带 ItemID）/ note；原因必填、可撤销、`version`、初审 / 终审状态 |
 | `manual_settlement_review_actions` | id | 初审 / 终审 / 退回记录，只增不改；`target_kind` = order_line / store_item / cost_entry / adjustment；退回必须写意见；存 before / after |
+| `manual_settlement_review_requests` | id；`(actor_id, idempotency_key)` 唯一 | 批量审核请求的幂等记录（迁移 0101，不在 PRP 的 18 张表里）：请求摘要 `request_hash`（行 id 排序 + 道 + 结论 + 意见的 sha256）和第一次的完整结果 `response`；重试原样返回，同一 key 换请求拒绝 |
 | `manual_settlement_month_close` | store_id, bill_month, seq | 店铺 × 账单月 结账 / 解锁记录，只增不改，最后一条决定当前状态；解锁必须写原因；记冻结的 calc_version 与合计 |
 
 ## CFG（财务主管维护）
