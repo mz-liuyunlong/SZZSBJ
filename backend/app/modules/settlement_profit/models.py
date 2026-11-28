@@ -798,6 +798,43 @@ class SettlementReviewRequest(_Created, Base):
     response: Mapped[dict[str, Any]] = _json_dict()
 
 
+RECALC_QUEUE_STATUSES = ("queued", "running", "done", "failed")
+
+
+class SettlementRecalcQueue(_Timestamps, Base):
+    """订单审核重算队列（迁移 0102，刘云龙 #377 终审）：一个 (店铺, 账期) 一行，去重并串行。
+
+    投递 = upsert：已在队列里只把 generation + 1、更新 requested_at，不新增；
+    任务取一行置 running 并记下取走时的 generation，算完再比：变了说明算的时候又有新数据，
+    回到 queued 再算一次；没变置 done。running 超过租约（worker 中途退出）视为可重取。
+    不属于 PRP 的 18 张表，单独登记；队列可以随时重建，回滚只删表。
+    """
+
+    __tablename__ = "settlement_recalc_queue"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_account_ref", "store_id", "period_key", name="uq_settlement_recalc_queue"
+        ),
+        Index("ix_settlement_recalc_queue_status", "status", "requested_at"),
+        CheckConstraint(_in("status", RECALC_QUEUE_STATUSES), name="status"),
+        CheckConstraint("generation >= 1", name="generation_positive"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    source_account_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    store_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    period_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    claimed_generation: Mapped[int | None] = mapped_column(Integer)
+    requested_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(128))
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(String(64))
+
+
 class SettlementMonthClose(_Actor, Base):
     """店铺 × 账单月 结账 / 解锁记录（只增不改；seq 递增，最后一条决定当前状态）。"""
 

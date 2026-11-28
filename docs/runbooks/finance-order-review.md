@@ -4,12 +4,13 @@
 
 ## 1. 上线步骤（负责人授权后由部署 AI 按票据执行）
 
-1. 迁移：`uv run alembic upgrade head`（到 `20261127_0101_finance_order_review_permissions`：登记订单审核权限；加 3 列：审核动作表 `idempotency_key`，录入表 `revoke_idempotency_key`、`platform_order_no`（并改范围约束）；新建 `manual_settlement_review_requests` 表存批量审核的请求编号和结果。回滚前先检查，权限已分配、新列有值、或请求表有数据，就拒绝回滚）。
+1. 迁移：`uv run alembic upgrade head`（到 `20261128_0102_settlement_recalc_queue`。0102 只新建重算队列表 `settlement_recalc_queue`，回滚只删这张表，没算完的期在页面「重算」补。0101 `20261127_0101_finance_order_review_permissions`：登记订单审核权限；加 3 列：审核动作表 `idempotency_key`，录入表 `revoke_idempotency_key`、`platform_order_no`（并改范围约束）；新建 `manual_settlement_review_requests` 表存批量审核的请求编号和结果。回滚前先检查，权限已分配、新列有值、或请求表有数据，就拒绝回滚）。
 2. 分配权限：`page:finance:order-review:view`（看）、`action:finance:order-review:cost-entry`（录成本）、`action:finance:order-review:review1`（初审）、`action:finance:order-review:review2`（终审）、`action:finance:order-review:recalc`（重算）。初审与终审分给不同的人。
 3. 设置项（生产库写入，仓库里不出现数字）：`cfg_finance_settlement_settings` 里 `wfs_carrier_provider_ids`（`{"provider_ids": [...]}`，按生产库 `ods_lingxing_fin_shipping_detail_items.logistics_way` 以 `WFS` 开头的物流商 id 配置）；没配置前所有发货单来源的行都按 WFS 承运待审。`bill_month_cutoff_day` 不配默认 5 号。
 4. 负责人标签规则：`cfg_finance_owner_tag_rules`（标签名 → 负责人），只在生产库。
 5. 首次重算：有重算权限的人在页面点「重算」（或 `POST /api/finance/order-review/recalc`），从 2026-10-01 起的期；看期列表的待审 / 自动通过数量是否合理。
 6. 前置数据：沃尔玛账单（已上线）、成本计价流水（#369）、发货单 / 明细 / 出库单（#370）三个同步都要先打开并回填，否则订单行全部 `cost_missing`。
+7. 日常自动重算只算受影响的期（见接口文档「自动重算」）。同步运行事件里出现 `ORDER_REVIEW_RECALC_MANUAL_NEEDED`（有行拿不到 MSKU 和订单号），或队列里有 `failed` 的期：在页面「重算」按店铺 / 账期补算。查队列：`settlement_recalc_queue` 按 `status` 看（queued / running / done / failed）。
 
 ## 2. 录成本 SOP（财务）
 

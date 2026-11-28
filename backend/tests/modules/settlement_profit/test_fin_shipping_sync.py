@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import pytest
 from pydantic import JsonValue, ValidationError
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, func, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
@@ -35,6 +35,7 @@ from app.modules.integration_sync.handlers.lingxing_fin_shipping_sync import (
 )
 from app.modules.integration_sync.handlers.lingxing_fin_sync_base import (
     FinSyncError,
+    FinSyncResult,
     lx_datetime,
     response_total,
     rolling_window,
@@ -940,17 +941,74 @@ def test_task_centre_refuses_a_disabled_config(session: Session) -> None:
     assert (run.status, run.error_code) == ("failed", "SYNC_CONFIG_DISABLED")
 
 
-@pytest.mark.parametrize(("written", "expected"), [(3, 1), (0, 0)])
-def test_fin_sync_with_writes_dispatches_order_review_recalc(
-    session: Session, monkeypatch: pytest.MonkeyPatch, written: int, expected: int
-) -> None:
-    from app.modules.integration_sync import execution as execution_module
-    from app.modules.integration_sync.handlers.lingxing_fin_sync_base import FinSyncResult
-
-    interface = governed(session, FIN_SHIPPING_DETAIL_SYNC_SPEC)
+def wms_result(
+    session: Session, interface: IntegrationInterface, client: FakeLingxing
+) -> FinSyncResult:
     run = queued_run(session, interface)
-    recalcs: list[tuple[tuple[str, ...], str]] = []
+    run.status = "running"
+    handler = LingxingFinWmsOutboundSyncHandler(session, client=client, now=lambda: NOW)
+    return handler.execute(run, interface)
 
+
+def test_wms_sync_reports_only_changed_rows_as_affected(session: Session) -> None:
+    add_stores(session)
+    interface = governed(session, FIN_WMS_OUTBOUND_SYNC_SPEC)
+    client = FakeLingxing()
+    client.wms_pages[(STORE_A, 1)] = wms_body([wms_row("WO1"), wms_row("WO2")])
+    first = wms_result(session, interface, client)
+    # 新出库单：明细 MSKU（归一成小写）和平台订单号都记上
+    assert first.affected.mskus == {(STORE_A, "syn-001")}
+    assert first.affected.orders == {(STORE_A, "PWO1"), (STORE_A, "PWO2")}
+    # 内容没变再同步一次：一个键都没有
+    second = wms_result(session, interface, client)
+    assert second.affected.is_empty()
+    # 只改 WO2 的运费：只记 WO2
+    client.wms_pages[(STORE_A, 1)] = wms_body([wms_row("WO1"), wms_row("WO2", fee="9.90")])
+    third = wms_result(session, interface, client)
+    assert third.affected.orders == {(STORE_A, "PWO2")}
+    assert third.affected.unresolved == 0
+
+
+def test_partial_store_failure_keeps_affected_keys_of_the_successful_store(
+    session: Session,
+) -> None:
+    add_stores(session, STORE_A, STORE_B)
+    interface = governed(session, FIN_WMS_OUTBOUND_SYNC_SPEC)
+    client = FakeLingxing()
+    client.wms_pages[(STORE_A, 1)] = {"code": 1, "message": "synthetic failure", "data": None}
+    client.wms_pages[(STORE_B, 1)] = wms_body([{**wms_row("WOB1"), "sid": int(STORE_B)}])
+    result = wms_result(session, interface, client)
+    assert (result.status, result.stores_failed) == ("failed", 1)
+    assert result.affected.orders == {(STORE_B, "PWOB1")}
+    assert result.affected.mskus == {(STORE_B, "syn-001")}
+
+
+def test_detail_sync_reports_changed_and_removed_mskus(session: Session) -> None:
+    add_stores(session)
+    seed_shipping_list(session, "SP2026T0001")
+    interface = governed(session, FIN_SHIPPING_DETAIL_SYNC_SPEC)
+    client = FakeLingxing()
+    client.details["SP2026T0001"] = detail_body([detail_item("SYN-001"), detail_item("SYN-002")])
+    run = queued_run(session, interface)
+    run.status = "running"
+    handler = LingxingFinShippingDetailSyncHandler(session, client=client, now=lambda: NOW)
+    first = handler.execute(run, interface)
+    assert first.affected.mskus == {(STORE_A, "syn-001"), (STORE_A, "syn-002")}
+    # 同一张单再拉一次：SYN-001 价格变了，SYN-002 不在了 → 两个都记
+    client.details["SP2026T0001"] = detail_body([detail_item("SYN-001", purchase="3.50")])
+    session.execute(
+        update(FinShippingList)
+        .where(FinShippingList.shipping_list_code == "SP2026T0001")
+        .values(detail_synced_at=None)
+    )
+    run = queued_run(session, interface)
+    run.status = "running"
+    handler = LingxingFinShippingDetailSyncHandler(session, client=client, now=lambda: NOW)
+    second = handler.execute(run, interface)
+    assert second.affected.mskus == {(STORE_A, "syn-001"), (STORE_A, "syn-002")}
+
+
+def stub_fin_handler(interface: IntegrationInterface, result: FinSyncResult) -> type:
     class StubHandler:
         handler_key = FIN_SHIPPING_HANDLERS[interface.interface_key].handler_key
 
@@ -958,21 +1016,72 @@ def test_fin_sync_with_writes_dispatches_order_review_recalc(
             self.heartbeat = heartbeat
 
         def execute(self, run_: Any, _interface: Any) -> FinSyncResult:
-            # 部分店失败也算：成功店的数据已落库
-            return FinSyncResult(
-                run_id=run_.id,
-                status="failed",
-                stores_total=2,
-                stores_failed=1,
-                records_written=written,
-            )
+            return result
 
-    def fake_dispatch(stores: tuple[str, ...], *, reason: str) -> bool:
-        recalcs.append((tuple(stores), reason))
-        return True
+    return StubHandler
 
-    monkeypatch.setitem(FIN_SHIPPING_HANDLERS, interface.interface_key, StubHandler)
-    monkeypatch.setattr(execution_module, "dispatch_order_review_recalc", fake_dispatch)
+
+@pytest.mark.parametrize("shape", ["changed", "unchanged", "unresolved"])
+def test_fin_sync_enqueues_only_affected_periods(
+    session: Session, monkeypatch: pytest.MonkeyPatch, shape: str
+) -> None:
+    from app.modules.integration_sync import execution as execution_module
+    from app.modules.integration_sync.models import IntegrationSyncRunEvent
+    from app.modules.settlement_profit.order_review.recalc_scope import AffectedKeys
+
+    interface = governed(session, FIN_SHIPPING_DETAIL_SYNC_SPEC)
+    run = queued_run(session, interface)
+    keys = AffectedKeys()
+    if shape == "changed":
+        keys.add(STORE_A, mskus=["SYN-001"])
+    elif shape == "unresolved":
+        keys.add(STORE_A)  # 拿不到 MSKU 也拿不到订单号
+    # 部分店失败也算：成功店已提交的页照样投递
+    result = FinSyncResult(
+        run_id=run.id,
+        status="failed",
+        stores_total=2,
+        stores_failed=1,
+        records_written=3,
+        affected=keys,
+    )
+    scopes: list[AffectedKeys] = []
+    enqueued: list[tuple[list[tuple[str, str]], str]] = []
+
+    def fake_periods(_session: Session, *, source_account_ref: str, keys: AffectedKeys) -> Any:
+        scopes.append(keys)
+        return [(STORE_A, "2026-11-03")]
+
+    def fake_enqueue(_session: Session, pairs: Any, *, reason: str) -> int:
+        enqueued.append((list(pairs), reason))
+        return len(pairs)
+
+    def no_full_recalc(*args: Any, **kwargs: Any) -> bool:
+        raise AssertionError("cost sync must never dispatch a store-wide recalc")
+
+    monkeypatch.setitem(
+        FIN_SHIPPING_HANDLERS, interface.interface_key, stub_fin_handler(interface, result)
+    )
+    monkeypatch.setattr(execution_module, "affected_periods", fake_periods)
+    monkeypatch.setattr(execution_module, "enqueue_affected", fake_enqueue)
+    monkeypatch.setattr(execution_module, "dispatch_order_review_recalc", no_full_recalc)
     monkeypatch.setattr(SyncRunExecutionService, "_heartbeat_lock", lambda _self, run_id: None)
     SyncRunExecutionService(session).execute(run.id)
-    assert recalcs == [((), f"{interface.interface_key}_sync")] * expected
+
+    events = session.scalars(
+        select(IntegrationSyncRunEvent).where(
+            IntegrationSyncRunEvent.run_id == run.id,
+            IntegrationSyncRunEvent.message_code == "ORDER_REVIEW_RECALC_MANUAL_NEEDED",
+        )
+    ).all()
+    if shape == "changed":
+        assert [k.mskus for k in scopes] == [{(STORE_A, "syn-001")}]
+        assert enqueued == [([(STORE_A, "2026-11-03")], f"{interface.interface_key}_sync")]
+        assert events == []
+    elif shape == "unchanged":
+        assert (scopes, enqueued, events) == ([], [], [])
+    else:
+        # 拿不到键：不投递、不退回全量，记运行事件提示手动重算
+        assert (scopes, enqueued) == ([], [])
+        assert len(events) == 1
+        assert events[0].safe_details == {"msku_keys": 0, "order_keys": 0, "unresolved_rows": 1}

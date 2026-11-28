@@ -1,4 +1,5 @@
 import hashlib
+import logging
 from datetime import date, datetime, time, timedelta
 from typing import Any
 from uuid import UUID, uuid4
@@ -85,7 +86,10 @@ from app.modules.integration_sync.repository import IntegrationSyncRepository
 from app.modules.integration_sync.wfs_cost_valuation_catalog import (
     WFS_COST_VALUATION_SYNC_SPEC,
 )
-from app.modules.settlement_profit.tasks import dispatch_order_review_recalc
+from app.modules.settlement_profit.order_review.recalc_scope import AffectedKeys, affected_periods
+from app.modules.settlement_profit.tasks import dispatch_order_review_recalc, enqueue_affected
+
+logger = logging.getLogger(__name__)
 
 LOCK_LEASE_DURATION = timedelta(minutes=5)
 DATA_PAGES_LA_TZ = ZoneInfo("America/Los_Angeles")
@@ -108,17 +112,6 @@ FIN_SHIPPING_HANDLERS: dict[str, type[FinSyncHandlerType]] = {
     LingxingFinShippingDetailSyncHandler.spec.interface_key: LingxingFinShippingDetailSyncHandler,
     LingxingFinWmsOutboundSyncHandler.spec.interface_key: LingxingFinWmsOutboundSyncHandler,
 }
-
-
-def order_review_recalc_due(result: Any, *, require_success: bool) -> bool:
-    """成本数据同步之后要不要投递订单审核重算（PRP §8.1：发货单 / 出库单同步 → 重算）。
-
-    这两类同步按账号拉全部店铺、按日期窗口取数，影响哪些订单行算不准，所以投递全店重算
-    （空店铺清单 = 全部店；内容 hash 没变的行不写新版本，代价只是查询）。没写入就不投递。
-    """
-    if require_success and getattr(result, "status", None) != "succeeded":
-        return False
-    return int(getattr(result, "records_written", 0) or 0) > 0
 
 
 class SyncRunExecutionService:
@@ -304,7 +297,7 @@ class SyncRunExecutionService:
                     heartbeat=lambda: self._heartbeat_data_pages_lock(run.id),
                 ).execute(run, interface)
                 # 账单变了 → 只对本次同步成功的店重算（§8.1；部分店失败时成功的店照样重算）。
-                # 没有成功的店就不投递：空清单在任务里表示"全部店"。投递失败只记日志。
+                # 没有成功的店就不投递（空清单不投递，不表示全部店）。投递失败只记日志。
                 synced = tuple(getattr(bill_result, "succeeded_store_ids", ()) or ())
                 if synced:
                     dispatch_order_review_recalc(synced, reason="walmart_bill_sync")
@@ -315,9 +308,9 @@ class SyncRunExecutionService:
                     self.session,
                     heartbeat=lambda: self._heartbeat_lock(run.id),
                 ).execute(run, interface)
-                # 发货单 / 明细 / 出库单有写入（部分店失败时成功店的数据也已落库）→ 订单审核重算
-                if order_review_recalc_due(fin_result, require_success=False):
-                    dispatch_order_review_recalc((), reason=f"{run.interface_key}_sync")
+                # 发货单 / 明细 / 出库单内容变了的行（部分店失败时，成功店已提交的页也算）
+                # → 只重算这些行所在的期
+                self._recalc_affected(run, fin_result.affected, f"{run.interface_key}_sync")
                 return
 
             if is_wfs_cost_flow:
@@ -325,9 +318,9 @@ class SyncRunExecutionService:
                     self.session,
                     heartbeat=lambda: self._heartbeat_lock(run.id),
                 ).execute(run, interface)
-                # 成本计价流水整段替换只在批次成功时生效 → 成功且有写入才重算
-                if order_review_recalc_due(flow_result, require_success=True):
-                    dispatch_order_review_recalc((), reason="wfs_cost_flow_sync")
+                # 成本计价流水整段替换只在批次成功时生效；失败批次的 affected 为空
+                if flow_result.status == "succeeded":
+                    self._recalc_affected(run, flow_result.affected, "wfs_cost_flow_sync")
                 return
 
             if is_fx:
@@ -1086,6 +1079,43 @@ class SyncRunExecutionService:
         run.error_message = "同步执行失败"
         self._event(run.id, from_status, "failed", error_code)
         self.session.commit()
+
+    def _recalc_affected(self, run: IntegrationSyncRun, keys: AffectedKeys, reason: str) -> None:
+        """成本数据同步后只重算受影响的期（刘云龙 #377 终审）。
+
+        键为空 = 内容没变，不投递；有拿不到 MSKU / 订单号的行：不投递那部分、不退回全量，
+        记日志和运行事件 ORDER_REVIEW_RECALC_MANUAL_NEEDED，财务在页面「重算」补。
+        出错只记日志，不影响同步结果。
+        """
+        try:
+            if keys.unresolved:
+                logger.warning(
+                    "order review recalc needs manual run (%s): unresolved_rows=%s",
+                    reason,
+                    keys.unresolved,
+                )
+                self.repository.add_event(
+                    IntegrationSyncRunEvent(
+                        run_id=run.id,
+                        sequence_no=self.repository.next_event_sequence(run.id),
+                        event_type="order_review_recalc",
+                        from_status=None,
+                        to_status=None,
+                        message_code="ORDER_REVIEW_RECALC_MANUAL_NEEDED",
+                        safe_details=keys.summary(),
+                        occurred_at=utc_now(),
+                        actor_ref="worker",
+                    )
+                )
+                self.session.commit()
+            if not keys.mskus and not keys.orders:
+                return
+            account = run.source_account_ref
+            pairs = affected_periods(self.session, source_account_ref=account, keys=keys)
+            enqueue_affected(self.session, pairs, reason=reason)
+        except Exception:
+            self.session.rollback()
+            logger.warning("order review recalc enqueue failed (%s)", reason)
 
     def _event(
         self,

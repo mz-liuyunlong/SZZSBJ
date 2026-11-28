@@ -293,3 +293,17 @@ def test_migration_only_creates_and_guards_its_own_tables() -> None:
     assert "ROLLBACK BLOCKED" in code
     assert "DELETE" not in code
     assert "TRUNCATE" not in code
+
+
+def test_recalc_queue_is_registered_outside_the_prp_tables() -> None:
+    # 迁移 0102：重算队列一 (账号, 店铺, 账期) 一行；不属于 PRP 的 18 张表
+    table = _table("settlement_recalc_queue")
+    assert table.name not in m.SETTLEMENT_PROFIT_TABLES
+    assert ("source_account_ref", "store_id", "period_key") in _uniques(table)
+    checks = _checks(table)
+    assert "status IN ('queued', 'running', 'done', 'failed')" in checks["status"]
+    assert checks["generation_positive"] == "generation >= 1"
+    migration = BACKEND_ROOT / "alembic" / "versions" / "20261128_0102_settlement_recalc_queue.py"
+    text_ = migration.read_text(encoding="utf-8")
+    assert "uq_settlement_recalc_queue" in text_
+    assert "op.drop_table(TABLE)" in text_
